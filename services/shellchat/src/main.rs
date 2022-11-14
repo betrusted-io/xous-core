@@ -32,12 +32,16 @@ Check for more detailed docs under Modules/cmds "Shell Chat" below
 use log::info;
 
 use core::fmt::Write;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use gam::UxRegistration;
 use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, PixelColor};
 use graphics_server::api::GlyphStyle;
 use xous::MessageEnvelope;
 use xous_ipc::Buffer;
+
+use std::thread;
+use std::sync::Arc;
 
 #[doc = include_str!("../README.md")]
 mod cmds;
@@ -49,7 +53,6 @@ mod oqc_test;
 #[cfg(feature="nettest")]
 mod nettests;
 
-#[cfg(feature="tts")]
 use locales::t;
 #[cfg(feature="tts")]
 use tts_frontend::*;
@@ -64,7 +67,7 @@ use std::alloc::System;
 #[global_allocator]
 static GLOBAL: Allocator<System> = Allocator::system();
 #[cfg(feature="tracking-alloc")]
-use core::sync::atomic::{AtomicIsize, Ordering};
+use core::sync::atomic::AtomicIsize;
 #[cfg(feature="tracking-alloc")]
 struct StdoutTracker {
     pub total: AtomicIsize,
@@ -202,7 +205,7 @@ impl Repl{
     }
 
     /// update the loop, in response to various inputs
-    fn update(&mut self, was_callback: bool) -> Result<(), xous::Error> {
+    fn update(&mut self, was_callback: bool, init_done: bool) -> Result<(), xous::Error> {
         let debug1 = false;
         // if we had an input string, do something
         if let Some(local) = &self.input {
@@ -219,7 +222,7 @@ impl Repl{
 
         // redraw UI once upon accepting all input
         if !was_callback { // don't need to redraw on a callback, save some cycles
-            self.redraw().expect("can't redraw");
+            self.redraw(init_done).expect("can't redraw");
         }
 
         let mut dirty = true;
@@ -265,7 +268,7 @@ impl Repl{
         self.msg = None;
         // redraw UI now that we've responded
         if dirty {
-            self.redraw().expect("can't redraw");
+            self.redraw(init_done).expect("can't redraw");
         }
 
         if debug1 {
@@ -286,9 +289,26 @@ impl Repl{
             }
         )).expect("can't clear content area");
     }
-    fn redraw(&mut self) -> Result<(), xous::Error> {
+    fn redraw(&mut self, init_done: bool) -> Result<(), xous::Error> {
         log::trace!("going into redraw");
         self.clear_area();
+
+        if !init_done {
+            let mut init_tv = TextView::new(
+                self.content,
+                TextBounds::CenteredTop(
+                    Rectangle::new(
+                        Point::new(0, self.screensize.y / 3 - 64),
+                        Point::new(self.screensize.x, self.screensize.y / 3)
+                    )
+                )
+            );
+            init_tv.style = GlyphStyle::Bold;
+            init_tv.draw_border = false;
+            write!(init_tv.text, "{}", t!("shellchat.bootwait", xous::LANG)).ok();
+            self.gam.post_textview(&mut init_tv).expect("couldn't render wait text");
+            self.gam.redraw().expect("couldn't redraw screen");
+        }
 
         // this defines the bottom border of the text bubbles as they stack up wards
         let mut bubble_baseline = self.screensize.y - self.margin.y;
@@ -352,6 +372,8 @@ enum ShellOpcode {
     Line = 0, // make sure we occupy opcodes with discriminants < 1000, as the rest are used for callbacks
     /// redraw our UI
     Redraw,
+    /// Used by the automounter to clear the "please wait..." message
+    ForceRedraw,
     /// change focus
     ChangeFocus,
     /// exit the application
@@ -393,8 +415,22 @@ fn wrapped_main() -> ! {
     let mut was_callback = false;
 
     let mut allow_redraw = true;
-    log::trace!("starting main loop");
+    let pddb_init_done = Arc::new(AtomicBool::new(false));
+    repl.redraw(pddb_init_done.load(Ordering::SeqCst)).ok();
+    thread::spawn({
+        let pddb_init_done = pddb_init_done.clone();
+        let main_conn = xous::connect(shch_sid).unwrap();
+        move || {
+            let pddb = pddb::Pddb::new();
+            pddb.mount_attempted_blocking();
+            pddb_init_done.store(true, Ordering::SeqCst);
+            xous::send_message(main_conn,
+                xous::Message::new_scalar(ShellOpcode::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
+            ).ok();
+        }
+    });
 
+    log::trace!("starting main loop");
     #[cfg(feature = "autobasis-ci")]
     {
         log::info!("starting autobasis CI launcher");
@@ -420,8 +456,13 @@ fn wrapped_main() -> ! {
             }
             Some(ShellOpcode::Redraw) => {
                 if allow_redraw {
-                    repl.redraw().expect("REPL couldn't redraw");
+                    repl.redraw(pddb_init_done.load(Ordering::SeqCst)).expect("REPL couldn't redraw");
                 }
+            }
+            // Force a redraw without the "please wait" note.
+            Some(ShellOpcode::ForceRedraw) => {
+                repl.redraw(true).expect("REPL couldn't redraw");
+                xous::return_scalar(msg.sender, 0).ok();
             }
             Some(ShellOpcode::ChangeFocus) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
                 let new_state = gam::FocusState::convert_focus_change(new_state_code);
@@ -446,7 +487,7 @@ fn wrapped_main() -> ! {
             }
         }
         if update_repl {
-            repl.update(was_callback).expect("REPL had problems updating");
+            repl.update(was_callback, pddb_init_done.load(Ordering::SeqCst)).expect("REPL had problems updating");
             update_repl = false;
         }
         log::trace!("reached bottom of main loop");

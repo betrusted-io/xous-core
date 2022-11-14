@@ -2,7 +2,13 @@
 
 This is a simple Matrix chat application.
 
-![screenshot](mtxcli_screenshot.png)
+Here you see **mtxcli** running in hosted mode:
+
+```
+cargo xtask run mtxcli
+```
+
+![screenshot](mtxcli-emulator.gif)
 
 ## Background
 
@@ -40,6 +46,21 @@ The following commands are available in **mtxcli**:
 
 Any line not starting with a slash ('/') will be sent to the current room.
 New messages from the current room will be displayed.
+
+## mtxcli on the Precursor device
+
+Here are some images of runing **mtxcli** on the Precursor.
+_NOTE_: this Precusor has the [Pi HAT](https://github.com/betrusted-io/betrusted-wiki/wiki/Updates-for-Advanced-Users#failsafe-method) installed.
+
+![screenshot](mtxcli-precursor.gif)
+
+## mtxcli in French
+
+I recently added the French localization to Xous -- including
+translating all of **mtxcli**. For more about locales and
+Xous please see the [locales README](https://github.com/betrusted-io/xous-core/blob/main/locales/README.md)
+
+![screenshot](xous-french.png)
 
 ## Acknowledgements
 

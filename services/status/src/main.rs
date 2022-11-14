@@ -691,8 +691,12 @@ fn wrapped_main() -> ! {
     // spawn a thread to auto-mount the PDDB
     let _ = thread::spawn({
         move || {
+            let xns = xous_names::XousNames::new().unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
-            tt.sleep_ms(2000).unwrap(); // a brief pause, to allow the other startup bits to finish running
+            let gam = gam::Gam::new(&xns).unwrap();
+            while !gam.trusted_init_done().unwrap() {
+                tt.sleep_ms(100).ok();
+            }
             loop {
                 let (no_retry_failure, count) = pddb::Pddb::new().try_mount();
                 if no_retry_failure {
@@ -700,7 +704,6 @@ fn wrapped_main() -> ! {
                     break;
                 } else {
                     // this indicates system was guttered due to a retry failure
-                    let xns = xous_names::XousNames::new().unwrap();
                     let susres = susres::Susres::new_without_hook(&xns).unwrap();
                     let llio = llio::Llio::new(&xns);
                     if ((llio.adc_vbus().unwrap() as u32) * 503) < 150_000 {

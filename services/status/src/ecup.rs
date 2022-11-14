@@ -97,65 +97,75 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
         match FromPrimitive::from_usize(msg.body.id()) {
             #[cfg(feature="dbg-ecupdate")]
             Some(UpdateOp::UpdateGateware) => { // blocking scalar
-                netmgr.connection_manager_stop().unwrap();
-                com.wlan_leave().ok();
-                ticktimer.sleep_ms(4000).unwrap(); // give a few seconds for any packets/updates to clear so we don't tigger panics as the EC is about to disappear...
-
                 let package = unsafe{ core::slice::from_raw_parts(ec_package.as_ptr() as *const u8, xous::EC_FW_PKG_LEN as usize)};
                 if !validate_package(package,PackageType::Ec) {
                     log::error!("firmware package did not pass validation");
                     modals.show_notification(
                         &format!("{} gateware", t!("ecup.invalid", xous::LANG)), None).unwrap();
                 } else {
+                    log::info!("updating GW");
+                    netmgr.connection_manager_stop().ok();
+                    llio.com_event_enable(false).ok();
                     susres.set_suspendable(false).unwrap(); // block suspend/resume operations
-                    do_update(&mut com, &modals, package, CTRL_PAGE_LEN, EC_GATEWARE_BASE, EC_GATEWARE_LEN, "gateware");
+                    if !do_update(&mut com, &modals, package, CTRL_PAGE_LEN, EC_GATEWARE_BASE,
+                    EC_GATEWARE_LEN,
+                    "gateware") {
+                        xous::return_scalar(msg.sender, UpdateResult::Abort.to_usize().unwrap()).unwrap();
+                        continue;
+                    }
                     susres.set_suspendable(true).unwrap(); // resume suspend/resume operations
                 }
                 xous::return_scalar(msg.sender, 0).unwrap();
             },
             #[cfg(feature="dbg-ecupdate")]
             Some(UpdateOp::UpdateFirmware) => { // blocking scalar
-                netmgr.connection_manager_stop().unwrap();
-                com.wlan_leave().ok();
-                ticktimer.sleep_ms(4000).unwrap(); // give a few seconds for any packets/updates to clear so we don't tigger panics as the EC is about to disappear...
-
                 let package = unsafe{ core::slice::from_raw_parts(ec_package.as_ptr() as *const u8, xous::EC_FW_PKG_LEN as usize)};
-                let mut temp: [u8; 4] = Default::default();
-                temp.copy_from_slice(&package[0x28..0x2c]);
-                let length = u32::from_le_bytes(temp); // total length of package
-
                 if !validate_package(package,PackageType::Ec) {
                     log::error!("firmware package did not pass validation");
                     modals.show_notification(
                         &format!("{} firmware", t!("ecup.invalid", xous::LANG)), None).unwrap();
                 } else {
+                    let length = u32::from_le_bytes(package[0x28..0x2c].try_into().unwrap());
+                    if length == 0xffff_ffff { // nothing was staged at all
+                        xous::return_scalar(msg.sender, UpdateResult::PackageInvalid.to_usize().unwrap()).unwrap();
+                        continue;
+                    }
+                    log::info!("updating FW");
+                    netmgr.connection_manager_stop().unwrap();
+                    llio.com_event_enable(false).ok();
                     susres.set_suspendable(false).unwrap(); // block suspend/resume operations
-                    do_update(&mut com, &modals, package, EC_GATEWARE_LEN + CTRL_PAGE_LEN,
-                        EC_FIRMWARE_BASE, length - (EC_GATEWARE_LEN), "firmware");
+                    if !do_update(&mut com, &modals, package, EC_GATEWARE_LEN + CTRL_PAGE_LEN,
+                    EC_FIRMWARE_BASE, length - (EC_GATEWARE_LEN),
+                    "firmware") {
+                        xous::return_scalar(msg.sender, UpdateResult::Abort.to_usize().unwrap()).unwrap();
+                        continue;
+                    }
                     susres.set_suspendable(true).unwrap(); // resume suspend/resume operations
                 }
                 xous::return_scalar(msg.sender, 0).unwrap();
             },
             #[cfg(feature="dbg-ecupdate")]
             Some(UpdateOp::UpdateWf200) => { // blocking scalar
-                netmgr.connection_manager_stop().unwrap();
-                com.wlan_leave().ok();
-                ticktimer.sleep_ms(4000).unwrap(); // give a few seconds for any packets/updates to clear so we don't tigger panics as the EC is about to disappear...
-
                 let package = unsafe{ core::slice::from_raw_parts(wf_package.as_ptr() as *const u8, xous::EC_WF200_PKG_LEN as usize)};
-                let mut temp: [u8; 4] = Default::default();
-                temp.copy_from_slice(&package[0x28..0x2c]);
-                let length = u32::from_le_bytes(temp); // total length of package
-
-                if !validate_package(package,PackageType::Wf200) {
-                    log::error!("WF200 firmware package did not pass validation");
-                    modals.show_notification(
-                        &format!("{} wf200", t!("ecup.invalid", xous::LANG)), None).unwrap();
-                } else {
+                if validate_package(package,PackageType::Wf200) {
+                    log::info!("updating Wf200");
+                    netmgr.connection_manager_stop().unwrap();
+                    llio.com_event_enable(false).ok();
+                    let length = u32::from_le_bytes(package[0x28..0x2c].try_into().unwrap());
                     susres.set_suspendable(false).unwrap(); // block suspend/resume operations
-                    do_update(&mut com, &modals, package, CTRL_PAGE_LEN,
-                        WF200_FIRMWARE_BASE, length, "wf200");
+                    if !do_update(&mut com, &modals, package, CTRL_PAGE_LEN,
+                    WF200_FIRMWARE_BASE, length,
+                    "WF200") {
+                        xous::return_scalar(msg.sender, UpdateResult::Abort.to_usize().unwrap()).unwrap();
+                        continue;
+                    }
                     susres.set_suspendable(true).unwrap(); // resume suspend/resume operations
+                } else {
+                    log::error!("wf200 package did not pass validation");
+                    modals.show_notification(
+                        &format!("{} WF200", t!("ecup.invalid", xous::LANG)), None).unwrap();
+                    xous::return_scalar(msg.sender, UpdateResult::PackageInvalid.to_usize().unwrap()).unwrap();
+                    continue;
                 }
 
                 xous::return_scalar(msg.sender, 0).unwrap();

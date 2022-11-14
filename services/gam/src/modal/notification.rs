@@ -18,6 +18,7 @@ pub struct Notification {
     pub manual_dismiss: bool,
     pub qrcode: Vec<bool>,
     pub qrwidth: usize,
+    gam: crate::Gam,
 }
 impl Notification {
     pub fn new(action_conn: xous::CID, action_opcode: u32) -> Self {
@@ -28,6 +29,7 @@ impl Notification {
             manual_dismiss: true,
             qrcode: Vec::new(),
             qrwidth: 0,
+            gam: crate::Gam::new(&xous_names::XousNames::new().unwrap()).unwrap(),
         }
     }
     pub fn set_is_password(&mut self, setting: bool) {
@@ -184,23 +186,29 @@ impl ActionApi for Notification {
             )
             .expect("couldn't draw entry line");
     }
-    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
+    fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
         log::trace!("key_action: {}", k);
         match k {
             '\u{0}' => {
                 // ignore null messages
             }
             _ => {
+                // relinquish focus before returning the result
+                if self.manual_dismiss {
+                    self.gam.relinquish_focus().unwrap();
+                    xous::yield_slice();
+                }
+
                 send_message(
                     self.action_conn,
                     xous::Message::new_scalar(self.action_opcode as usize, k as u32 as usize, 0, 0, 0),
                 )
                 .expect("couldn't pass on dismissal");
                 if self.manual_dismiss {
-                    return (None, true);
+                    return None;
                 }
             }
         }
-        (None, false)
+        None
     }
 }

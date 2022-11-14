@@ -30,13 +30,6 @@ def bytes_to_semverstr(b):
     else:
         return "v{}.{}.{}-{}".format(maj, min, rev, extra)
 
-def get_key(index, keyrom, length):
-    ret = []
-    for offset in range(length // 4):
-        word = int.from_bytes(keyrom[(index + offset) * 4: (index + offset) * 4 + 4], 'big')
-        ret += list(word.to_bytes(4, 'little'))
-    return ret
-
 def main():
     global MBBB_PAGES
     FSCB_PAGES = 16
@@ -44,7 +37,7 @@ def main():
     KEY_PAGES = 1
     global PAGE_SIZE
     global VPAGE_SIZE
-    MAX_DICTS = 16384
+    MAX_DICTS = 16383
     # this is for an older set of CI tests from the pddbg.py script, that are not set up for this implementation
     set_ci_tests_flag(False)
 
@@ -249,101 +242,11 @@ def main():
                 exit(1)
 
             keyrom = pt_data[i:i+1024]
-            user_key_enc = get_key(40, keyrom, 32)
-            pepper = get_key(248, keyrom, 16)
-            pepper[0] = pepper[0] ^ 1 # encodes the "boot" password type into the pepper
+            keys = extract_keys(keyrom, backup[4096:], args.pin, basis_credentials=basis_credentials)
 
-            # acquire and massage the password so that we can decrypt the encrypted user key
-            boot_pw = args.pin
-            boot_pw_array = [0] * 73
-            pw_len = 0
-            for b in bytes(boot_pw.encode('utf-8')):
-                boot_pw_array[pw_len] = b
-                pw_len += 1
-            pw_len += 1 # null terminate, so even the null password is one character long
-            bcrypter = bcrypt.BCrypt()
-            # logging.debug("{}".format(boot_pw_array[:pw_len]))
-            logging.debug("user_key_enc: {}".format(list(user_key_enc)))
-            logging.debug("private_key_enc: {}".format(list(get_key(8, keyrom, 32))))
-            logging.debug("salt: {}".format(list(pepper)))
-            hashed_pw = bcrypter.crypt_raw(boot_pw_array[:pw_len], pepper, 7)
-            logging.debug("hashed_pw: {}".format(list(hashed_pw)))
-            hasher = SHA512.new(truncate="256")
-            hasher.update(hashed_pw)
-            user_pw = hasher.digest()
-
-            user_key = []
-            for (a, b) in zip(user_key_enc, user_pw):
-                user_key += [a ^ b]
-            logging.debug("user_key: {}".format(user_key))
-
-            rollback_limit = 255 - int.from_bytes(keyrom[254 * 4 : 254 * 4 + 4], 'little')
-            logging.info("rollback limit: {}".format(rollback_limit))
-            for i in range(rollback_limit):
-                hasher = SHA512.new(truncate="256")
-                hasher.update(bytes(user_key))
-                user_key = hasher.digest()
-
-            logging.debug("hashed_key: {}".format(list(user_key)))
-
-            pddb = backup[4096:]
-        else:
-            dna_int = 0
-            user_key = bytes([0] * 32)
-            pddb = backup
-
+        pddb = backup[4096:]
         pddb_len = len(pddb)
         pddb_size_pages = pddb_len // PAGE_SIZE
-        logging.info("Database size: 0x{:x}".format(pddb_len))
-
-        pt_len = pddb_size_pages * 16
-        static_crypto_data = pddb[pt_len:pt_len + 0x1000]
-        scd_ver = int.from_bytes(static_crypto_data[:4], 'little')
-        if scd_ver != 2:
-            logging.error("Static crypto data has wrong version {}", 2)
-            exit(1)
-
-        wrapped_key_pt = static_crypto_data[4:4+40]
-        wrapped_key_data = static_crypto_data[4+40:4+40+40]
-        pddb_salt = static_crypto_data[4+40+40:]
-
-        # extract the .System key
-        key_pt = aes_key_unwrap_with_padding(bytes(user_key), bytes(wrapped_key_pt))
-        key_data = aes_key_unwrap_with_padding(bytes(user_key), bytes(wrapped_key_data))
-
-        logging.debug("key_pt {}".format(key_pt))
-        logging.debug("key_data {}".format(key_data))
-        keys = {}
-        keys[SYSTEM_BASIS] = [key_pt, key_data]
-
-        # extract the secret basis keys
-        for name, pw in basis_credentials.items():
-            bname_copy = [0]*64
-            plaintext_pw = [0]*73
-            i = 0
-            for c in list(name.encode('utf-8')):
-                bname_copy[i] = c
-                i += 1
-            pw_len = 0
-            for c in list(pw.encode('utf-8')):
-                plaintext_pw[pw_len] = c
-                pw_len += 1
-            pw_len += 1 # null terminate
-            # print(bname_copy)
-            # print(plaintext_pw)
-            hasher = SHA512.new(truncate="256")
-            hasher.update(pddb_salt[32:])
-            hasher.update(bytes(bname_copy))
-            hasher.update(bytes(plaintext_pw))
-            derived_salt = hasher.digest()
-
-            bcrypter = bcrypt.BCrypt()
-            hashed_pw = bcrypter.crypt_raw(plaintext_pw[:pw_len], derived_salt[:16], 7)
-            hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=pddb_salt[:32], info=b"pddb page table key")
-            pt_key = hkdf.derive(hashed_pw)
-            hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=pddb_salt[:32], info=b"pddb data key")
-            data_key = hkdf.derive(hashed_pw)
-            keys[name] = [pt_key, data_key]
 
         # data_aad = SYSTEM_BASIS + PDDB_VERSION + dna
 

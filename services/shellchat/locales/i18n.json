@@ -1,14 +1,23 @@
 {
     "shellchat.input-tts": {
         "en": "",
+        "en-tts": "got ",
+        "fr": "",
         "ja": "",
-        "zh": "",
-        "en-tts": "got "
+        "zh": ""
     },
     "shellchat.output-tts": {
         "en": "",
+        "en-tts": "response ",
+        "fr": "",
         "ja": "",
-        "zh": "",
-        "en-tts": "response "
+        "zh": ""
+    },
+    "shellchat.bootwait": {
+        "en": "Please wait...",
+        "en-tts": "Please wait...",
+        "fr": "S'il vous plaît, attendez*MT*",
+        "ja": "お待ちください...",
+        "zh": "请稍等..."
     }
 }

@@ -171,7 +171,7 @@ namespace Antmicro.Renode.Peripherals.I2C.Betrusted
         private void FinishTransaction()
         {
             // this.Log(LogLevel.Error, "I2C: Removing clock entry for {0}",this.irqTimeoutCallback);
-            machine.ClockSource.RemoveClockEntry(FinishTransaction);
+            machine.ClockSource.TryRemoveClockEntry(FinishTransaction);
             irqTimeoutCallbackQueued = 0;
             if (shouldSendTxRxIrq)
             {

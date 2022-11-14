@@ -180,6 +180,7 @@ pub(crate) fn ntp_updater(time_conn: xous::CID) {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             let mut now = SystemTime::now();
             let mut force_update = true;
+            tt.sleep_ms(1000 * 60 * 2).ok(); // initial delay of 2 minutes before polling. This gives plenty of time for network to come up.
             loop {
                 if force_update || now.elapsed().unwrap().as_secs() > 3600 * 24 { // once a day in real time
                     // check if we have a network connection. if not, repeat the loop, after a short delay

@@ -7,6 +7,7 @@ pub struct Image {
     pub action_conn: xous::CID,
     pub action_opcode: u32,
     pub bitmap: Option<Bitmap>,
+    gam: crate::Gam,
 }
 
 impl Image {
@@ -15,6 +16,7 @@ impl Image {
             action_conn,
             action_opcode,
             bitmap: None,
+            gam: crate::Gam::new(&xous_names::XousNames::new().unwrap()).unwrap(),
         }
     }
     pub fn set_bitmap(&mut self, setting: Option<Bitmap>) {
@@ -48,21 +50,25 @@ impl ActionApi for Image {
                 .expect("couldn't draw bitmap");
         }
     }
-    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
+    fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
         log::trace!("key_action: {}", k);
         match k {
             '\u{0}' => {
                 // ignore null messages
             }
             _ => {
+                // relinquish focus before returning the result
+                self.gam.relinquish_focus().unwrap();
+                xous::yield_slice();
+
                 send_message(
                     self.action_conn,
                     xous::Message::new_scalar(self.action_opcode as usize, 0, 0, 0, 0),
                 )
                 .expect("couldn't pass on dismissal");
-                return (None, true);
+                return None;
             }
         }
-        (None, false)
+        None
     }
 }

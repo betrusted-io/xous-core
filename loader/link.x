@@ -1,9 +1,9 @@
 MEMORY
 {
-  RAM : ORIGIN = 0x40000000, LENGTH = 16M
   FLASH : ORIGIN = 0x20501000, LENGTH = 188k
   FONTS : ORIGIN = 0x20530000, LENGTH = 4352k
-  MEMLCD: ORIGIN = 0xB0000000, LENGTH = 32k
+  RAM : ORIGIN = 0x40000000, LENGTH = 16M
+  MEMLCD : ORIGIN = 0xB0000000, LENGTH = 32k
 }
 /*
 Fonts go from 0x2053_0000 to 0x2097_0000
@@ -51,7 +51,7 @@ SECTIONS
   .text.dummy (NOLOAD) :
   {
     /* This section is intended to make _stext address work */
-    . = _stext;
+    . = ABSOLUTE(_stext);
   } > REGION_TEXT
 
   .text _stext :
@@ -91,7 +91,7 @@ SECTIONS
     _edata = .;
   } > REGION_DATA AT > REGION_RODATA
 
-  .fonts ALIGN(65536) : SUBALIGN(65536)
+  .fonts : ALIGN(65536)
   {
       KEEP(*(.fontdata));
   } > FONTS

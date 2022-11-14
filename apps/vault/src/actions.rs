@@ -29,6 +29,7 @@ pub(crate) const VAULT_ALLOC_HINT: usize = 256;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 const VAULT_TOTP_REC_VERSION: u32 = 1;
 /// time allowed between dialog box swaps for background operations to redraw
+#[cfg(feature="ux-swap-delay")]
 const SWAP_DELAY_MS: usize = 300;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -202,6 +203,7 @@ impl<'a> ActionManager<'a> {
             (*self.mode.lock().unwrap()).clone()
         };
         self.action_active.store(true, Ordering::SeqCst);
+        #[cfg(feature="ux-swap-delay")]
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap(); // allow calling menu to close
     }
     pub(crate) fn deactivate(&self) {
@@ -226,6 +228,7 @@ impl<'a> ActionManager<'a> {
                     },
                     _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                 };
+                #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let username = match self.modals
                     .alert_builder(t!("vault.newitem.username", xous::LANG))
@@ -235,6 +238,7 @@ impl<'a> ActionManager<'a> {
                     Ok(text) => text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string(),
                     _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                 };
+                #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let mut approved = false;
                 // Security note about PasswordGenerator. This is a 3rd party crate. It relies on `rand`'s implementation
@@ -294,6 +298,7 @@ impl<'a> ActionManager<'a> {
                         },
                         _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                     };
+                    #[cfg(feature="ux-swap-delay")]
                     self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                     password = if maybe_password.len() == 0 {
                         let length = match self.modals
@@ -304,6 +309,7 @@ impl<'a> ActionManager<'a> {
                             Ok(entry) => entry.content()[0].content.as_str().unwrap().parse::<u32>().unwrap(),
                             _ => {log::error!("Length entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                         };
+                        #[cfg(feature="ux-swap-delay")]
                         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                         let mut upper = false;
                         let mut number = false;
@@ -324,6 +330,7 @@ impl<'a> ActionManager<'a> {
                             }
                             _ => {log::error!("Modal selection error"); self.action_active.store(false, Ordering::SeqCst); return}
                         }
+                        #[cfg(feature="ux-swap-delay")]
                         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                         let pg2 = PasswordGenerator {
                             length: length as usize,
@@ -376,6 +383,7 @@ impl<'a> ActionManager<'a> {
                     _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                 };
 
+                #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 self.modals
                     .add_list(vec![
@@ -394,6 +402,7 @@ impl<'a> ActionManager<'a> {
                     _ => {log::error!("Modal selection error"); self.action_active.store(false, Ordering::SeqCst); return}
                 }
 
+                #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let secret = match self.modals
                     .alert_builder(t!("vault.newitem.totp_ss", xous::LANG))
@@ -405,6 +414,7 @@ impl<'a> ActionManager<'a> {
                     },
                     _ => {log::error!("TOTP ss entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                 };
+                #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let ss = secret.to_uppercase();
                 let ss_vec = if let Some(ss) = base32::decode(base32::Alphabet::RFC4648 { padding: false }, &ss) {
@@ -425,6 +435,7 @@ impl<'a> ActionManager<'a> {
 
                 let timestep = if !is_totp {
                     // get the initial count if it's an HOTP record
+                    #[cfg(feature="ux-swap-delay")]
                     self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                     match self.modals
                         .alert_builder(t!("vault.hotp.count", xous::LANG))
@@ -736,262 +747,161 @@ impl<'a> ActionManager<'a> {
                 }
                 #[cfg(feature="vaultperf")]
                 self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 1, std::line!());
-
-                /* DELETEME: kept around for quick debugging without having to look through commit history
-                once we have confidence in the new method, we can drop this code right away.
-
-                #[cfg(feature="vaultperf")]
-                self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 1, std::line!());
-                let keylist = match self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None) {
-                    Ok(keylist) => keylist,
-                    Err(e) => {
-                        match e.kind() {
-                            std::io::ErrorKind::NotFound => {
-                                log::debug!("Password dictionary not yet created");
-                            }
-                            _ => {
-                                log::error!("Dictionary error accessing password database");
-                                self.report_err("Dictionary error accessing password database", Some(e))
-                            },
-                        }
-                        Vec::new()
-                    }
-                };
-                #[cfg(feature="vaultperf")]
-                self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 1, std::line!());
-                log::info!("listing took {} ms", self.tt.elapsed_ms() - start);
-                let start = self.tt.elapsed_ms();
-                let klen = keylist.len();
-                #[cfg(feature="vaultperf")]
-                self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 2, std::line!());
-                let pddb = self.pddb.borrow();
-                for key in keylist {
-                    #[cfg(feature="vaultperf")]
-                    self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 3, std::line!());
-                    match pddb.get(
-                        VAULT_PASSWORD_DICT,
-                        &key,
-                        None,
-                        false, false, None,
-                        Some(crate::basis_change)
-                    ) {
-                        Ok(mut record) => {
-                            // determine the exact length of the record and read it in one go.
-                            // read_to_end() performs ~5x read calls to do the same thing, because it
-                            // has to "guess" the total record length starting with a 32-byte increment
-                            let len = record.attributes().unwrap().len;
-                            let mut data = Vec::<u8>::with_capacity(len);
-                            data.resize(len, 0);
-                            #[cfg(feature="vaultperf")]
-                            self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                            match record.read_exact(&mut data) {
-                                Ok(_len) => {
-                                    if let Some(pw) = storage::PasswordRecord::try_from(data).ok() {
-                                        #[cfg(feature="vaultperf")]
-                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                                        let extra = format!("{}; {}{}",
-                                            crate::ux::atime_to_str(pw.atime),
-                                            t!("vault.u2f.appinfo.authcount", xous::LANG),
-                                            pw.count,
-                                        );
-                                        let desc = format!("{}/{}", pw.description, pw.username);
-                                        let li = ListItem {
-                                            name: desc,
-                                            extra,
-                                            dirty: true,
-                                            guid: key,
-                                        };
-                                        il.push(li);
-                                        #[cfg(feature="vaultperf")]
-                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                                    } else {
-                                        log::error!("Couldn't deserialize password");
-                                        self.report_err("Couldn't deserialize password:", Some(key));
-                                    }
-                                }
-                                Err(e) => {
-                                    log::error!("Couldn't access password key");
-                                    self.report_err("Couldn't access password key", Some(e))
-                                },
-                            }
-                        }
-                        Err(e) => {
-                            log::error!("Couldn't access password key");
-                            self.report_err("Couldn't access password key", Some(e))
-                        },
-                    }
-                    #[cfg(feature="vaultperf")]
-                    self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 3, std::line!());
-                    #[cfg(feature="vaultperf")]
-                    self.pm.flush().ok();
-                }
-                #[cfg(feature="vaultperf")]
-                self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 2, std::line!());
-                */
                 log::info!("readout took {} ms for {} elements", self.tt.elapsed_ms() - start, klen);
             }
             VaultMode::Fido => {
                 // first assemble U2F records
                 log::debug!("listing in {}", U2F_APP_DICT);
-                let keylist = match self.pddb.borrow().list_keys(U2F_APP_DICT, None) {
-                    Ok(keylist) => keylist,
+                match self.pddb.borrow().read_dict(U2F_APP_DICT, None, Some(256 * 1024)) {
+                    Ok(keys) => {
+                        let mut oom_keys = 0;
+                        il.reserve(keys.len());
+                        for key in keys {
+                            if let Some(data) = key.data {
+                                if let Some(ai) = deserialize_app_info(data) {
+                                    let extra = format!("{}; {}{}",
+                                        crate::ux::atime_to_str(ai.atime),
+                                        t!("vault.u2f.appinfo.authcount", xous::LANG),
+                                        ai.count,
+                                    );
+                                    let desc = format!("{}", ai.name);
+                                    let li = ListItem {
+                                        name: desc,
+                                        extra,
+                                        dirty: true,
+                                        guid: key.name,
+                                    };
+                                    il.push(li);
+                                } else {
+                                    let err = format!("{}:{}:{}: ({})[moved data]...",
+                                        key.basis, U2F_APP_DICT, key.name, key.len
+                                    );
+                                    self.report_err("Couldn't deserialize U2F key:", Some(err));
+                                }
+                            } else {
+                                oom_keys += 1;
+                            }
+                        }
+                        if oom_keys != 0 {
+                            log::warn!("Ran out of cache space handling U2F tokens. {} tokens are not loaded.", oom_keys);
+                            self.report_err(&format!("Ran out of cache space handling U2F entries. {} tokens not loaded", oom_keys), None::<crate::storage::Error>);
+                        }
+                    }
                     Err(e) => {
                         match e.kind() {
-                            std::io::ErrorKind::NotFound => {
-                                log::debug!("U2F dictionary not yet created");
+                            ErrorKind::NotFound => {
+                                // this is fine, it just means no entries have been entered yet
+                            },
+                            _ => {
+                                log::error!("Error opening U2F dictionary");
+                                self.report_err("Error opening U2F dictionary", Some(e))
                             }
-                            _ => self.report_err("Dictionary error accessing U2F database", Some(e)),
                         }
-                        Vec::new()
-                    }
-                };
-                log::debug!("list: {:?}", keylist);
-                for key in keylist {
-                    match self.pddb.borrow().get(
-                        U2F_APP_DICT,
-                        &key,
-                        None,
-                        false, false, None,
-                        Some(crate::basis_change)
-                    ) {
-                        Ok(mut record) => {
-                            let len = record.attributes().unwrap().len;
-                            let mut data = Vec::<u8>::with_capacity(len);
-                            data.resize(len, 0);
-                            match record.read_exact(&mut data) {
-                                Ok(_len) => {
-                                    if let Some(ai) = deserialize_app_info(data) {
-                                        let extra = format!("{}; {}{}",
-                                            crate::ux::atime_to_str(ai.atime),
-                                            t!("vault.u2f.appinfo.authcount", xous::LANG),
-                                            ai.count,
-                                        );
-                                        let desc = format!("{}", ai.name);
+                    },
+                }
+
+                log::debug!("listing in {}", FIDO_CRED_DICT);
+                match self.pddb.borrow().read_dict(FIDO_CRED_DICT, None, Some(256 * 1024)) {
+                    Ok(keys) => {
+                        let mut oom_keys = 0;
+                        il.reserve(keys.len());
+                        for key in keys {
+                            if let Some(data) = key.data {
+                                match crate::ctap::storage::deserialize_credential(&data) {
+                                    Some(result) => {
+                                        let name = if let Some(display_name) = result.user_display_name {
+                                            display_name
+                                        } else {
+                                            String::from_utf8(result.user_handle).unwrap_or("".to_string())
+                                        };
+                                        let desc = format!("{} / {}", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
+                                        let extra = format!("FIDO2 {}", name);
                                         let li = ListItem {
                                             name: desc,
                                             extra,
                                             dirty: true,
-                                            guid: key,
+                                            guid: key.name,
                                         };
                                         il.push(li);
-                                    } else {
-                                        self.report_err("Couldn't deserialize U2F:", Some(key));
                                     }
+                                    None => {
+                                        let err = format!("{}:{}:{}: ({}){:x?}...",
+                                            key.basis, FIDO_CRED_DICT, key.name, key.len, &data[..16]
+                                        );
+                                        self.report_err("Couldn't deserialize FIDO2:", Some(err))
+                                    },
                                 }
-                                Err(e) => self.report_err("Couldn't access U2F key", Some(e)),
+                            } else {
+                                oom_keys += 1;
                             }
                         }
-                        Err(e) => self.report_err("Couldn't access U2F key", Some(e)),
+                        if oom_keys != 0 {
+                            log::warn!("Ran out of cache space handling FIDO2 tokens. {} tokens are not loaded.", oom_keys);
+                            self.report_err(&format!("Ran out of cache space handling FIDO2 entries. {} tokens not loaded", oom_keys), None::<crate::storage::Error>);
+                        }
                     }
-                }
-                log::debug!("listing in {}", FIDO_CRED_DICT);
-                let keylist = match self.pddb.borrow().list_keys(FIDO_CRED_DICT, None) {
-                    Ok(keylist) => keylist,
                     Err(e) => {
                         match e.kind() {
-                            std::io::ErrorKind::NotFound => {
-                                log::debug!("FIDO2 dictionary not yet created");
-                            }
-                            _ => self.report_err("Dictionary error accessing FIDO2 database", Some(e)),
-                        }
-                        Vec::new()
-                    }
-                };
-                log::debug!("keylist: {:?}", keylist);
-                // now merge in the FIDO2 records
-                for key in keylist {
-                    match self.pddb.borrow().get(
-                        FIDO_CRED_DICT,
-                        &key,
-                        None,
-                        false, false, None,
-                        Some(crate::basis_change)
-                    ) {
-                        Ok(mut record) => {
-                            let len = record.attributes().unwrap().len;
-                            let mut data = Vec::<u8>::with_capacity(len);
-                            data.resize(len, 0);
-                            match record.read_exact(&mut data) {
-                                Ok(_len) => {
-                                    match crate::ctap::storage::deserialize_credential(&data) {
-                                        Some(result) => {
-                                            let name = if let Some(display_name) = result.user_display_name {
-                                                display_name
-                                            } else {
-                                                String::from_utf8(result.user_handle).unwrap_or("".to_string())
-                                            };
-                                            let desc = format!("{} / {}", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
-                                            let extra = format!("FIDO2 {}", name);
-                                            let li = ListItem {
-                                                name: desc,
-                                                extra,
-                                                dirty: true,
-                                                guid: key,
-                                            };
-                                            il.push(li);
-                                        }
-                                        None => self.report_err("Couldn't deserialize FIDO2:", Some(key)),
-                                    }
-                                }
-                                Err(e) => self.report_err("Couldn't access FIDO2 key", Some(e)),
+                            ErrorKind::NotFound => {
+                                // this is fine, it just means no entries have been entered yet
+                            },
+                            _ => {
+                                log::error!("Error opening FIDO2 dictionary");
+                                self.report_err("Error opening FIDO2 dictionary", Some(e))
                             }
                         }
-                        Err(e) => self.report_err("Couldn't access FIDO2 key", Some(e)),
-                    }
+                    },
                 }
             }
             VaultMode::Totp => {
-                let keylist = match self.pddb.borrow().list_keys(VAULT_TOTP_DICT, None) {
-                    Ok(keylist) => keylist,
+                match self.pddb.borrow().read_dict(VAULT_TOTP_DICT, None, Some(256 * 1024)) {
+                    Ok(keys) => {
+                        let mut oom_keys = 0;
+                        il.reserve(keys.len());
+                        for key in keys {
+                            if let Some(data) = key.data {
+                                if let Some(totp) = storage::TotpRecord::try_from(data).ok() {
+                                    let extra = format!("{}:{}:{}:{}:{}",
+                                        totp.secret,
+                                        totp.digits,
+                                        totp.timestep,
+                                        totp.algorithm,
+                                        if totp.is_hotp {"HOTP"} else {"TOTP"}
+                                    );
+                                    let desc = format!("{}", totp.name);
+                                    let li = ListItem {
+                                        name: desc,
+                                        extra,
+                                        dirty: true,
+                                        guid: key.name,
+                                    };
+                                    il.push(li);
+                                } else {
+                                    let err = format!("{}:{}:{}: ({})[moved data]...",
+                                        key.basis, VAULT_TOTP_DICT, key.name, key.len
+                                    );
+                                    self.report_err("Couldn't deserialize TOTP:", Some(err));
+                                }
+                            } else {
+                                oom_keys += 1;
+                            }
+                        }
+                        if oom_keys != 0 {
+                            log::warn!("Ran out of cache space handling FIDO2 tokens. {} tokens are not loaded.", oom_keys);
+                            self.report_err(&format!("Ran out of cache space handling FIDO2 entries. {} tokens not loaded", oom_keys), None::<crate::storage::Error>);
+                        }
+                    }
                     Err(e) => {
                         match e.kind() {
-                            std::io::ErrorKind::NotFound => {
-                                log::debug!("TOTP dictionary not yet created");
-                            }
-                            _ => self.report_err("Dictionary error accessing TOTP database", Some(e)),
-                        }
-                        Vec::new()
-                    }
-                };
-                for key in keylist {
-                    match self.pddb.borrow().get(
-                        VAULT_TOTP_DICT,
-                        &key,
-                        None,
-                        false, false, None,
-                        Some(crate::basis_change)
-                    ) {
-                        Ok(mut record) => {
-                            let len = record.attributes().unwrap().len;
-                            let mut data = Vec::<u8>::with_capacity(len);
-                            data.resize(len, 0);
-                            match record.read_exact(&mut data) {
-                                Ok(_len) => {
-                                    if let Some(totp) = storage::TotpRecord::try_from(data).ok() {
-                                        let extra = format!("{}:{}:{}:{}:{}",
-                                            totp.secret,
-                                            totp.digits,
-                                            totp.timestep,
-                                            totp.algorithm,
-                                            if totp.is_hotp {"HOTP"} else {"TOTP"}
-                                        );
-                                        let desc = format!("{}", totp.name);
-                                        let li = ListItem {
-                                            name: desc,
-                                            extra,
-                                            dirty: true,
-                                            guid: key,
-                                        };
-                                        il.push(li);
-                                    } else {
-                                        self.report_err("Couldn't deserialize TOTP:", Some(key));
-                                    }
-                                }
-                                Err(e) => self.report_err("Couldn't access TOTP key", Some(e)),
+                            ErrorKind::NotFound => {
+                                // this is fine, it just means no entries have been entered yet
+                            },
+                            _ => {
+                                log::error!("Error opening FIDO2 dictionary");
+                                self.report_err("Error opening FIDO2 dictionary", Some(e))
                             }
                         }
-                        Err(e) => self.report_err("Couldn't access TOTP key", Some(e)),
-                    }
+                    },
                 }
             }
         }
@@ -1032,6 +942,7 @@ impl<'a> ActionManager<'a> {
             },
             _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
         };
+        #[cfg(feature="ux-swap-delay")]
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
         match self.pddb.borrow().unlock_basis(&name, Some(BasisRetentionPolicy::Persist)) {
             Ok(_) => log::debug!("Basis {} unlocked", name),
@@ -1076,6 +987,7 @@ impl<'a> ActionManager<'a> {
                 },
                 Err(e) => {self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); return}
             };
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
             match self.pddb.borrow().create_basis(&name) {
                 Ok(_) => {
@@ -1117,9 +1029,10 @@ impl<'a> ActionManager<'a> {
         self.modals.dynamic_notification(Some("Creating test entries..."), None).ok();
         let words = [
             "bunnie", "foo", "turtle.net", "Fox.ng", "Bear", "dog food", "Cat.com", "FUzzy", "1off", "www_test_site_com/long_name/stupid/foo.htm",
-            "._weird~yy%\":'test", "//WHYwhyWHY", "Xyz|zy", "foo:bar", "f🍕🍔🍟🌭d", "💎🙌", "some ノート", "笔录4u", "@u", "sane text", "Käsesoßenrührlöffel"];
+            "._weird~yy%\":'test", "//WHYwhyWHY", "Xyz|zy", "foo:bar", "f🍕🍔🍟🌭d", "💎🙌", "some ノート", "笔录4u", "@u", "sane text", "Käsesoßenrührlöffel",
+            "entropy", "👀", "mysite.com", "hax", "1336", "yo", "b", "mando", "Grogu", "zebra", "aws"];
         let weights = [1; 21];
-        const TARGET_ENTRIES: usize = 15;
+        const TARGET_ENTRIES: usize = 12;
         const TARGET_ENTRIES_PW: usize = 200;
         // for each database, populate up to TARGET_ENTRIES
         // as this is testing code, it's written a bit more fragile in terms of error handling (fail-panic, rather than fail-dialog)
@@ -1180,8 +1093,8 @@ impl<'a> ActionManager<'a> {
                     name,
                     id,
                     notes,
-                    ctime: 0,
-                    atime: 0,
+                    ctime: 1, // zero ctime is disallowed
+                    atime: 1,
                     count: 0,
                 };
                 let ser = serialize_app_info(&record);

@@ -1,6 +1,6 @@
 [package]
 name = "xous"
-version = "0.9.21"
+version = "0.9.24"
 authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -20,6 +20,7 @@ default = []
 lang-ja = []
 lang-zh = []
 lang-en-tts = []
+lang-fr = []
 
 # If this is set, then the "Drop" feature of MemoryMessage structs
 # will not be implemented.  This should only be set by the kernel.

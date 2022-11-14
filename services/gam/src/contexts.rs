@@ -100,6 +100,8 @@ pub(crate) struct ContextManager {
     /// for internal generation of deface states
     pub trng: trng::Trng,
     tt: ticktimer_server::Ticktimer,
+    /// used to suppress the main menu from activating until the boot PIN has been requested
+    allow_mainmenu: bool,
 }
 impl ContextManager {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -122,6 +124,7 @@ impl ContextManager {
             main_menu_app_token: None,
             trng: trng::Trng::new(&xns).expect("couldn't connect to trng"),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
+            allow_mainmenu: false,
         }
     }
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
@@ -327,6 +330,7 @@ impl ContextManager {
         token: [u32; 4],
         clear: bool,
     ) -> Result<(), xous::Error> {
+        //log::set_max_level(log::LevelFilter::Trace);
         self.notify_app_switch(token).ok();
 
         let mut leaving_visibility: bool = false;
@@ -360,6 +364,7 @@ impl ContextManager {
                         } else if // app covering an app
                         (context.layout.behavior()                 == LayoutBehavior::App) &&
                         (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
+                            log::debug!("resolved: app covering app");
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = false;
                             self.context_stack.pop();
@@ -367,16 +372,25 @@ impl ContextManager {
                         } else if // alert covering an app
                         (context.layout.behavior()                 == LayoutBehavior::Alert) &&
                         (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
+                            log::debug!("resolved: alert covering app");
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = true;
                             self.context_stack.push(token);
                         } else if // app covering an alert
                         (context.layout.behavior()                 == LayoutBehavior::App) &&
                         (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
+                            log::debug!("resolved: app covering alert");
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = false;
                             self.context_stack.pop();
                         }
+                    } else {
+                        log::warn!("resolved: staying in same context. This is not an expected case.");
+                        // this path "shouldn't" happen because the discipline is that every pop-up must
+                        // return control back to the main thread (you can't chain pop-ups).
+                        // thus, kick out a warning if this happens, but also, try to do something reasonable.
+                        self.redraw().expect("couldn't redraw the currently focused app");
+                        return Ok(());
                     }
                 } else {
                     // there was no current focus, just make the activation visible
@@ -480,6 +494,7 @@ impl ContextManager {
                 self.redraw().expect("couldn't redraw the currently focused app");
             }
         }
+        //log::set_max_level(log::LevelFilter::Info);
         Ok(())
     }
     pub(crate) fn set_pred_api_token(&mut self, at: ApiToken) {
@@ -582,6 +597,9 @@ impl ContextManager {
         }
         Err(xous::Error::ServerNotFound)
     }
+    pub(crate) fn allow_mainmenu(&mut self) {
+        self.allow_mainmenu = true;
+    }
     pub(crate) fn key_event(&mut self, keys: [char; 4],
         gfx: &graphics_server::Gfx,
         canvases: &mut HashMap<Gid, Canvas>,
@@ -591,13 +609,19 @@ impl ContextManager {
         if keys[0] == '∴' {
             if let Some(context) = self.get_context_by_token(self.focused_context.unwrap()) {
                 if context.layout.behavior() == LayoutBehavior::App {
-                    if let Some(menu_token) = self.find_app_token_by_name(MAIN_MENU_NAME) {
-                        // set the menu to the active context
-                        match self.activate(gfx, canvases, menu_token, false) {
-                            Ok(_) => (),
-                            Err(_) => log::warn!("Couldn't raise menu, user will have to try again."),
+                    log::info!("allow_mainmenu: {:?}", self.allow_mainmenu);
+                    if self.allow_mainmenu {
+                        if let Some(menu_token) = self.find_app_token_by_name(MAIN_MENU_NAME) {
+                            // set the menu to the active context
+                            match self.activate(gfx, canvases, menu_token, false) {
+                                Ok(_) => (),
+                                Err(_) => log::warn!("Couldn't raise menu, user will have to try again."),
+                            }
+                            // don't pass the initial key hit back to the menu app, just eat it and return
+                            return;
                         }
-                        // don't pass the initial key hit back to the menu app, just eat it and return
+                    } else {
+                        // eat the key and return if it is hit before the boot PIN was entered
                         return;
                     }
                 }

@@ -305,11 +305,13 @@ impl BasisCache {
             // allocate a vpage offset for the dictionary
             let dict_index = basis.dict_get_free_offset(hw);
             let dict_offset = VirtAddr::new(dict_index as u64 * DICT_VSIZE).unwrap();
+            log::debug!("dict_add at VA 0x{:x?}", dict_offset);
             let pp = basis.v2p_map.entry(dict_offset).or_insert_with(|| {
                 let mut ap = hw.try_fast_space_alloc().expect("No free space to allocate dict");
                 ap.set_valid(true);
                 ap
             });
+            log::debug!("dict_add at PA 0x {:x?}", pp);
             assert!(pp.valid(), "v2p returned an invalid page");
 
             // create the cache entry
@@ -739,7 +741,9 @@ impl BasisCache {
                             index: kcache.descriptor_index,
                         })
                     } else {
-                        return Err(Error::new(ErrorKind::NotFound, "key not found"));
+                        // this is not a hard error, it just means that the key wasn't in this basis.
+                        // that's alright, it could be in one of the other ones!
+                        continue;
                     }
                 }
             }
@@ -1568,6 +1572,7 @@ impl BasisCacheEntry {
                         }
                     }
                     // generate nonce and write out
+                    log::debug!("patching pp {:x?} with aad {:x?}, data {:x?}", pp, self.aad, &page[..256]);
                     hw.data_encrypt_and_patch_page(&self.cipher, &self.aad, &mut page, &pp);
 
                     // 4. Check for dirty keys, if there are still some, update vpage_num to target them; otherwise
@@ -1592,6 +1597,7 @@ impl BasisCacheEntry {
             }
             Ok(())
         } else {
+            log::error!("dict sync could not happen, dictionary name invalid!");
             Err(Error::new(ErrorKind::NotFound, "dict_sync called with an invalid dictionary name"))
         }
     }

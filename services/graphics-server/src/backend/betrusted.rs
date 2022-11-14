@@ -68,7 +68,6 @@ impl XousDisplay {
         display
             .susres
             .push(RegOrField::Field(utra::memlcd::PRESCALER_PRESCALER), None);
-        display.sync_clear();
 
         /*
         use log::{error, info};
@@ -255,6 +254,7 @@ impl XousDisplay {
 
     /// "synchronous clear" -- must be called on init, so that the state of the LCD
     /// internal memory is consistent with the state of the frame buffer
+    /*
     fn sync_clear(&mut self) {
         let framebuffer = self.fb.as_mut_ptr() as *mut u32;
         for words in 0..FB_SIZE {
@@ -267,6 +267,7 @@ impl XousDisplay {
         self.update_all(); // because we force an all update here
         while self.busy() {}
     }
+    */
 
     fn busy(&self) -> bool {
         self.csr.rf(utra::memlcd::BUSY_BUSY) == 1

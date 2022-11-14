@@ -590,6 +590,7 @@ fn wrapped_main() -> ! {
 
     // track processes that want a notification of a mount event
     let mut mount_notifications = Vec::<xous::MessageSender>::new();
+    let mut attempt_notifications = Vec::<xous::MessageSender>::new();
 
     // track heap usage
     let mut initial_heap: usize = 0;
@@ -649,6 +650,17 @@ fn wrapped_main() -> ! {
                     mount_notifications.push(msg.sender); // defer response until later
                 }
             }),
+            Opcode::MountAttempted => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                #[cfg(not(target_os = "xous"))] // hosted mode always passes
+                xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
+
+                #[cfg(target_os = "xous")]
+                if basis_cache.basis_count() > 0 { // if there's anything in the cache, we're mounted; by definition it was attempted
+                    xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
+                } else {
+                    attempt_notifications.push(msg.sender); // defer response until later
+                }
+            }),
             // The return code from this is a scalar2 with the following meanings:
             // (code, count):
             //    - code = 0 -> successful mount
@@ -662,6 +674,9 @@ fn wrapped_main() -> ! {
                     if !pddb_os.rootkeys_initialized() {
                         // can't mount if we have no root keys
                         log::info!("{}PDDB.SKIPMOUNT,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        // allow the main menu to be used in this case
+                        let gam = gam::Gam::new(&xns).unwrap();
+                        gam.allow_mainmenu().expect("coudln't allow main menu activation");
                         xous::return_scalar2(msg.sender, 1, 0).expect("could't return scalar");
                     } else {
                         match ensure_password(&modals, &mut pddb_os, pw_cid) {
@@ -680,13 +695,13 @@ fn wrapped_main() -> ! {
                             },
                             PasswordState::Uninit => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit, time_resetter) {
-                                    is_mounted.store(true, Ordering::SeqCst);
                                     for requester in mount_notifications.drain(..) {
                                         xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
                                     }
                                     assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
                                     log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
+                                    is_mounted.store(true, Ordering::SeqCst);
                                 } else {
                                     xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
                                 }
@@ -701,6 +716,10 @@ fn wrapped_main() -> ! {
                                     failcount.min(u32::MAX as u64) as usize
                                 ).expect("couldn't return scalar"),
                         }
+                        // get a handle to the GAM and inform it that main menu should be allowed. The handle is dropped when this routine finishes.
+                        let gam = gam::Gam::new(&xns).unwrap();
+                        gam.allow_mainmenu().expect("coudln't allow main menu activation");
+                        // setup the heap
                         initial_heap = heap_usage();
                         latest_heap = initial_heap;
                         latest_cache = basis_cache.cache_size();
@@ -709,6 +728,11 @@ fn wrapped_main() -> ! {
                         #[cfg(feature="pddb-flamegraph")]
                         profiling::do_query_work();
                     }
+                }
+                // this is so that the UX can drop the initial "waiting for boot" message
+                // the attempt is credited even if it was aborted or failed.
+                for requester in attempt_notifications.drain(..) {
+                    xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
                 }
             }),
             Opcode::PeriodicScrub => {
@@ -1500,15 +1524,32 @@ fn wrapped_main() -> ! {
                         Failure(String)
                     }
                     loop {
+                        if buf.len() < size_of::<u32>() * 2 {
+                            // not enough space to hold our header records, break and get a new buf
+                            break;
+                        }
                         #[cfg(feature="perfcounter")]
                         pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 6, std::line!());
                         let ser_result: SerializeResult =
                             if let Some(key_name) = state.key_list.pop() {
-                                let attr = basis_cache.key_attributes(&mut pddb_os,
+                                let attr = match basis_cache.key_attributes(&mut pddb_os,
                                     &state.dict,
                                     &key_name,
                                     if state.is_basis_specified{Some(&state.basis)} else {None}
-                                ).expect("Key went missing during bulk read"); // could be a concurrent process mutating. We don't handle this; flag with a panic.
+                                ) {
+                                    Ok(attr) => attr,
+                                    Err(e) => {
+                                        modals.show_notification(
+                                            &format!("Error: key not found during bulk read:\n{:?}\n{:?}:{}:{}",
+                                                e,
+                                                if state.is_basis_specified{Some(&state.basis)} else {None},
+                                                &state.dict,
+                                                &key_name,
+                                                ),
+                                            None).ok();
+                                        continue;
+                                    }
+                                };
                                 if attr.len < state.read_limit - state.read_total {
                                     let mut d = vec![0u8; attr.len];
                                     match basis_cache.key_read(
@@ -1916,11 +1957,14 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
 fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cache: &mut BasisCache, pw_state: PasswordState, time_resetter: xous::CID) -> bool {
     log::info!("Attempting to mount the PDDB");
     if pw_state == PasswordState::Correct {
+        modals.dynamic_notification(Some(t!("pddb.waitmount", xous::LANG)), None).unwrap();
         if let Some(sys_basis) = pddb_os.pddb_mount() {
             log::info!("PDDB mount operation finished successfully");
             basis_cache.basis_add(sys_basis);
+            modals.dynamic_notification_close().unwrap();
             return true
         }
+        modals.dynamic_notification_close().unwrap();
     }
     // correct password but no mount -> offer to format; uninit -> offer to format
     if pw_state == PasswordState::Correct || pw_state == PasswordState::Uninit {
@@ -1977,12 +2021,14 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                         0, 0, 0, 0
                     )
                 ).expect("couldn't reset time");
-
+                modals.dynamic_notification(Some(t!("pddb.waitmount", xous::LANG)), None).unwrap();
                 if let Some(sys_basis) = pddb_os.pddb_mount() {
                     log::info!("PDDB mount operation finished successfully");
                     basis_cache.basis_add(sys_basis);
+                    modals.dynamic_notification_close().unwrap();
                     true
                 } else {
+                    modals.dynamic_notification_close().unwrap();
                     log::error!("Despite formatting, no PDDB was found!");
                     let mut err = String::from(t!("pddb.internalerror", xous::LANG));
                     err.push_str(" #1"); // punt and leave an error code, because this "should" be rare

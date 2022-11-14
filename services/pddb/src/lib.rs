@@ -164,6 +164,20 @@ impl Pddb {
             }
         }
     }
+    pub fn mount_attempted_blocking(&self) {
+        loop {
+            let ret = send_message(self.conn, Message::new_blocking_scalar(
+                Opcode::MountAttempted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+            match ret {
+                xous::Result::Scalar2(code, _count) => {
+                    if code == 0 { // mounted successfully
+                        break;
+                    }
+                },
+                _ => panic!("Internal error"),
+            }
+        }
+    }
     /// Attempts to mount the system basis. Returns `true` on success, `false` on failure.
     /// This call may cause a password request box to pop up, in the case that the boot PIN is not currently cached.
     ///
@@ -589,7 +603,9 @@ impl Pddb {
         match response.code {
             PddbRequestCode::NoErr => (),
             PddbRequestCode::NotFound => return Err(Error::new(ErrorKind::NotFound, "dictionary not found")),
-            _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
+            PddbRequestCode::AccessDenied => return Err(Error::new(ErrorKind::PermissionDenied, "concurrent operation in progress")),
+            PddbRequestCode::Uninit => return Err(Error::new(ErrorKind::ConnectionAborted, "Return code not set getting key count, server aborted?")),
+            _ => return Err(Error::new(ErrorKind::Other, "Internal error generating key count")),
         };
         // v2 key listing packs the key list into a larger [u8] field that should cut down on the number of messages
         // required to list a large dictionary by about a factor of 50.
@@ -611,7 +627,8 @@ impl Pddb {
             match response.retcode {
                 ArchivedPddbRetcode::Ok => (),
                 ArchivedPddbRetcode::AccessDenied => return Err(Error::new(ErrorKind::PermissionDenied, "KeyList facility locked by another process, try again later")),
-                _ => return Err(Error::new(ErrorKind::Other, "Internal Error")),
+                ArchivedPddbRetcode::Uninit => return Err(Error::new(ErrorKind::ConnectionAborted, "Return code not set fetching list, server aborted?")),
+                _ => return Err(Error::new(ErrorKind::Other, "Internal Error fetching list")),
             }
             // the [u8] data is structured as a packed list of u8-len + u8 data slice. The max length of
             // a PDDB key name is guaranteed to be shorter than a u8. If the length field is 0, then this

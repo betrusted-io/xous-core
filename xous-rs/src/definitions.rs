@@ -460,6 +460,9 @@ pub enum Result {
     /// the caller.
     NewProcess(ProcessStartup),
 
+    /// 20: A scalar with five values
+    Scalar5(usize, usize, usize, usize, usize),
+
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -523,6 +526,7 @@ impl Result {
                 0,
             ],
             Result::NewProcess(p) => Self::add_opcode(19, p.into()),
+            Result::Scalar5(a, b, c, d, e) => [15, *a, *b, *c, *d, *e, 0, 0],
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
             }
@@ -600,6 +604,7 @@ impl Result {
             17 => Result::None,
             18 => Result::MemoryReturned(MemorySize::new(src[1]), MemorySize::new(src[2])),
             19 => Result::NewProcess(src.into()),
+            20 => Result::Scalar5(src[1], src[2], src[3], src[4], src[5]),
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
         }
     }

@@ -56,7 +56,7 @@ pub trait ActionApi {
     fn close(&mut self) {}
     fn is_password(&self) -> bool { false }
     /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
-    fn key_action(&mut self, _key: char) -> (Option<ValidatorErr>, bool) {(None, true)}
+    fn key_action(&mut self, _key: char) -> Option<ValidatorErr> {None}
     fn set_action_opcode(&mut self, _op: u32) {}
 }
 
@@ -478,16 +478,9 @@ impl<'a> Modal<'a> {
         for &k in keys.iter() {
             if k != '\u{0}' {
                 log::debug!("got key '{}'", k);
-                let (err, close) = self.action.key_action(k);
+                let err = self.action.key_action(k);
                 if let Some(err_msg) = err {
                     self.modify(None, None, false, Some(err_msg.to_str()), false, None);
-                } else {
-                    if close {
-                        // if it's a "close" button, invoke the GAM to put our box away
-                        self.gam.relinquish_focus().unwrap();
-                        xous::yield_slice();
-                        break; // don't process any more keys after a close message
-                    }
                 }
             }
         }

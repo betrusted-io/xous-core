@@ -1,14 +1,16 @@
 {
-    "modals.radiobutton": {
-        "en": "",
-        "ja": "",
-        "zh": "",
-        "en-tts": "Radio button modal."
-    },
     "modals.checkbox": {
         "en": "",
+        "en-tts": "Checkbox modal.",
+        "fr": "",
         "ja": "",
-        "zh": "",
-        "en-tts": "Checkbox modal."
+        "zh": ""
+    },
+    "modals.radiobutton": {
+        "en": "",
+        "en-tts": "Radio button modal.",
+        "fr": "",
+        "ja": "",
+        "zh": ""
     }
 }

@@ -112,6 +112,7 @@ fn wrapped_main() -> ! {
     log::info!("my PID is {}", xous::process::id());
 
     let mut display = XousDisplay::new();
+    draw_boot_logo(&mut display); // bring this up as soon as possible
     let fontregion = map_fonts();
 
     // install the graphical panic handler. It won't catch really early panics, or panics in this crate,
@@ -138,8 +139,6 @@ fn wrapped_main() -> ! {
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(1))
         .expect("can't register server");
-
-    draw_boot_logo(&mut display);
 
     let screen_clip = Rectangle::new(Point::new(0, 0), display.screen_size());
 
@@ -456,6 +455,11 @@ fn wrapped_main() -> ! {
                 }),
                 Some(Opcode::DrawSleepScreen) => msg_scalar_unpack!(msg, _, _, _, _, {
                     display.blit_screen(&logo::LOGO_MAP);
+                    display.update();
+                    display.redraw();
+                }),
+                Some(Opcode::DrawBootLogo) => msg_scalar_unpack!(msg, _, _, _, _, {
+                    display.blit_screen(&poweron::LOGO_MAP);
                     display.update();
                     display.redraw();
                 }),

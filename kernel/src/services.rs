@@ -5,6 +5,7 @@ use crate::arch;
 use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
 pub use crate::arch::process::Thread;
+use crate::platform;
 use xous_kernel::arch::ProcessStartup;
 use xous_kernel::MemoryRange;
 
@@ -264,6 +265,7 @@ std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> =
 }));
 
 #[cfg(baremetal)]
+#[no_mangle]
 static mut SYSTEM_SERVICES: SystemServices = SystemServices {
     processes: [Process {
         state: ProcessState::Free,
@@ -1742,10 +1744,10 @@ impl SystemServices {
     /// any processes.
     pub fn create_server_id(&mut self) -> Result<SID, xous_kernel::Error> {
         let sid = SID::from_u32(
-            arch::rand::get_u32(),
-            arch::rand::get_u32(),
-            arch::rand::get_u32(),
-            arch::rand::get_u32(),
+            platform::rand::get_u32(),
+            platform::rand::get_u32(),
+            platform::rand::get_u32(),
+            platform::rand::get_u32(),
         );
         Ok(sid)
     }

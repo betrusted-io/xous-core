@@ -1,134 +1,156 @@
 {
     "mtxcli.filter.failed": {
         "en": "error: could not create filter",
+        "en-tts": "error: could not create filter",
+        "fr": "erreur: impossible de créer un filtre *MT*",
         "ja": "error: could not create filter *EN*",
-        "zh": "error: could not create filter *EN*",
-        "en-tts": "error: could not create filter"
-    },
-    "mtxcli.greeting": {
-        "en": "Welcome to the MTXCLI demo. Type /help for available commands",
-        "ja": "シンプルなMTXCLIデモへようこそ",
-        "zh": "简单的 mtxcli 演示活动",
-        "en-tts": "Welcome to the simple MTXCLI demo. Type /help for available commands"
+        "zh": "error: could not create filter *EN*"
     },
     "mtxcli.get.help": {
         "en": "/get key",
+        "en-tts": "get key",
+        "fr": "/get clé",
         "ja": "/get key *EN*",
-        "zh": "/get key *EN*",
-        "en-tts": "get key"
+        "zh": "/get key *EN*"
+    },
+    "mtxcli.greeting": {
+        "en": "Welcome to the MTXCLI demo. Type /help for available commands",
+        "en-tts": "Welcome to the simple MTXCLI demo. Type /help for available commands",
+        "fr": "Bienvenue à la démo simple de MTXCLI. Tapez /help pour les commandes disponibles",
+        "ja": "シンプルなMTXCLIデモへようこそ",
+        "zh": "简单的 mtxcli 演示活动"
     },
     "mtxcli.help.help": {
         "en": "/help [cmd]",
+        "en-tts": "help [cmd]",
+        "fr": "/help [cmd]",
         "ja": "/help [cmd] *EN*",
-        "zh": "/help [cmd] *EN*",
-        "en-tts": "help [cmd]"
+        "zh": "/help [cmd] *EN*"
     },
     "mtxcli.help.overview": {
         "en": "available mtxcli commands:",
+        "en-tts": "available mtxcli commands:",
+        "fr": "commandes mtxcli disponibles:",
         "ja": "available mtxcli commands: *EN*",
-        "zh": "available mtxcli commands: *EN*",
-        "en-tts": "available mtxcli commands:"
-    },
-    "mtxcli.logging.in": {
-        "en": "logging in...",
-        "ja": "logging in... *EN*",
-        "zh": "logging in... *EN*",
-        "en-tts": "logging in"
+        "zh": "available mtxcli commands: *EN*"
     },
     "mtxcli.logged.in": {
         "en": "logged in",
+        "en-tts": "logged in",
+        "fr": "connecté",
         "ja": "logged in *EN*",
-        "zh": "logged in *EN*",
-        "en-tts": "logged in"
+        "zh": "logged in *EN*"
     },
     "mtxcli.logged.out": {
         "en": "logged out",
+        "en-tts": "logged out",
+        "fr": "déconnecté",
         "ja": "logged out *EN*",
-        "zh": "logged out *EN*",
-        "en-tts": "logged out"
+        "zh": "logged out *EN*"
+    },
+    "mtxcli.logging.in": {
+        "en": "logging in...",
+        "en-tts": "logging in",
+        "fr": "connexion...",
+        "ja": "logging in... *EN*",
+        "zh": "logging in... *EN*"
     },
     "mtxcli.login.failed": {
         "en": "authentication failed",
+        "en-tts": "authentication failed",
+        "fr": "échec de l'authentification",
         "ja": "authentication failed *EN*",
-        "zh": "authentication failed *EN*",
-        "en-tts": "authentication failed"
+        "zh": "authentication failed *EN*"
     },
     "mtxcli.login.help": {
         "en": "/login",
+        "en-tts": "login",
+        "fr": "/login (connexion)",
         "ja": "/login *EN*",
-        "zh": "/login *EN*",
-        "en-tts": "login"
+        "zh": "/login *EN*"
     },
     "mtxcli.logout.help": {
         "en": "/logout",
+        "en-tts": "logout",
+        "fr": "/logout (déconnexion)",
         "ja": "/logout *EN*",
-        "zh": "/logout *EN*",
-        "en-tts": "logout"
+        "zh": "/logout *EN*"
     },
     "mtxcli.not.connected": {
         "en": "not connected",
+        "en-tts": "not conntected",
+        "fr": "déconnecté",
         "ja": "not connected *EN*",
-        "zh": "not connected *EN*",
-        "en-tts": "not conntected"
-    },
-    "mtxcli.please.set.user": {
-        "en": "please /set user @USER:matrix.org",
-        "ja": "please /set user @USER:matrix.org *EN*",
-        "zh": "please /set user @USER:matrix.org *EN*",
-        "en-tts": "please /set user @USER:matrix.org"
+        "zh": "not connected *EN*"
     },
     "mtxcli.please.set.password": {
         "en": "please /set password my-password",
+        "en-tts": "please /set password my-password",
+        "fr": "Veuillez /set password mot-de-passe",
         "ja": "please /set password my-password *EN*",
-        "zh": "please /set password my-password *EN*",
-        "en-tts": "please /set password my-password"
+        "zh": "please /set password my-password *EN*"
     },
     "mtxcli.please.set.room": {
         "en": "please /set room #my-room-to-join",
+        "en-tts": "please /set room #my-room-to-join",
+        "fr": "Veuillez /set room #ma-chambre",
         "ja": "please /set room #my-room-to-join *EN*",
-        "zh": "please /set room #my-room-to-join *EN*",
-        "en-tts": "please /set room #my-room-to-join"
+        "zh": "please /set room #my-room-to-join *EN*"
     },
     "mtxcli.please.set.server": {
         "en": "please /set server https://matrix.org",
+        "en-tts": "please /set server https://matrix.org",
+        "fr": "Veuillez /set server https://matrix.org",
         "ja": "please /set server https://matrix.org *EN*",
-        "zh": "please /set server https://matrix.org *EN*",
-        "en-tts": "please /set server https://matrix.org"
+        "zh": "please /set server https://matrix.org *EN*"
+    },
+    "mtxcli.please.set.user": {
+        "en": "please /set user @USER:matrix.org",
+        "en-tts": "please /set user @USER:matrix.org",
+        "fr": "Veuillez /set user @UTILISATEUR:matrix.org",
+        "ja": "please /set user @USER:matrix.org *EN*",
+        "zh": "please /set user @USER:matrix.org *EN*"
     },
     "mtxcli.roomid.failed": {
         "en": "error: could not find room_id",
+        "en-tts": "error: could not find room_id",
+        "fr": "erreur: impossible de trouver chambre",
         "ja": "error: could not find room_id *EN*",
-        "zh": "error: could not find room_id *EN*",
-        "en-tts": "error: could not find room_id"
+        "zh": "error: could not find room_id *EN*"
+    },
+    "mtxcli.send.failed": {
+        "en": "failed to send!",
+        "en-tts": "failed to send!",
+        "fr": "n'a pas envoyé!",
+        "ja": "failed to send! *EN*",
+        "zh": "failed to send! *EN*"
     },
     "mtxcli.set.help": {
         "en": "/set key value",
+        "en-tts": "set key value",
+        "fr": "/set clé valeur",
         "ja": "/set key value *EN*",
-        "zh": "/set key value *EN*",
-        "en-tts": "set key value"
-    },
-    "mtxcli.send.failed": {
-        "en": "FAILED TO SEND!",
-        "ja": "FAILED TO SEND! *EN*",
-        "zh": "FAILED TO SEND! *EN*",
-        "en-tts": "FAILED TO SEND!"
+        "zh": "/set key value *EN*"
     },
     "mtxcli.status.help": {
         "en": "/status",
+        "en-tts": "status",
+        "fr": "/status (statut)",
         "ja": "/status *EN*",
-        "zh": "/status *EN*",
-        "en-tts": "status"
-    },
-    "mtxcli.unset.help": {
-        "en": "/unset key",
-        "ja": "/unset key *EN*",
-        "zh": "/unset key *EN*",
-        "en-tts": "unset key"
+        "zh": "/status *EN*"
     },
     "mtxcli.unknown.help": {
         "en": "unknown command",
+        "en-tts": "unknown command",
+        "fr": "commande inconnue",
         "ja": "unknown command *EN*",
-        "zh": "unknown command *EN*",
-        "en-tts": "unknown command"
+        "zh": "unknown command *EN*"
+    },
+    "mtxcli.unset.help": {
+        "en": "/unset key",
+        "en-tts": "unset key",
+        "fr": "/unset clé",
+        "ja": "/unset key *EN*",
+        "zh": "/unset key *EN*"
     }
 }

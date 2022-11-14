@@ -4,9 +4,10 @@
         "menu_name": {
             "appmenu.ball": {
                 "en": "Simple ball demo",
+                "en-tts": "Simple ball demo",
+                "fr": "Démonstration de balle simple",
                 "ja": "シンプルなボールのデモ",
-                "zh": "简单的球演示",
-                "en-tts": "Simple ball demo"
+                "zh": "简单的球演示"
             }
         }
     },
@@ -15,32 +16,10 @@
         "menu_name": {
             "appmenu.hello": {
                 "en": "Hello World!",
+                "en-tts": "Hello World!",
+                "fr": "Bonjour le monde!",
                 "ja": "Hello World!",
-                "zh": "大家好!",
-                "en-tts": "Hello World!"
-            }
-        }
-    },
-    "vault": {
-        "context_name": "Key Vault",
-        "menu_name": {
-            "appmenu.vault": {
-                "en": "Key Vault",
-                "ja": "キーボールト",
-                "zh": "密钥库",
-                "en-tts": "Key Vault"
-            }
-        },
-        "submenu": 1
-    },
-    "repl": {
-        "context_name": "repl demo app",
-        "menu_name": {
-            "appmenu.repl": {
-                "en": "Basic REPL demo",
-                "ja": "シンプルなREPLデモ",
-                "zh": "基本 REPL 演示",
-                "en-tts": "Basic REPL demo"
+                "zh": "大家好!"
             }
         }
     },
@@ -49,10 +28,36 @@
         "menu_name": {
             "appmenu.mtxcli": {
                 "en": "Matrix chat",
+                "en-tts": "MATRIX demo",
+                "fr": "Matrix messagerie",
                 "ja": "シンプルなMATRIXデモ",
-                "zh": "基本 MATRIX 演示",
-                "en-tts": "MATRIX demo"
+                "zh": "基本 MATRIX 演示"
             }
         }
+    },
+    "repl": {
+        "context_name": "repl demo app",
+        "menu_name": {
+            "appmenu.repl": {
+                "en": "Basic REPL demo",
+                "en-tts": "Basic REPL demo",
+                "fr": "Démonstration REPL",
+                "ja": "シンプルなREPLデモ",
+                "zh": "基本 REPL 演示"
+            }
+        }
+    },
+    "vault": {
+        "context_name": "Key Vault",
+        "menu_name": {
+            "appmenu.vault": {
+                "en": "Key Vault",
+                "en-tts": "Key Vault",
+                "fr": "Coffre de clés",
+                "ja": "キーボールト",
+                "zh": "密钥库"
+            }
+        },
+        "submenu": 1
     }
 }

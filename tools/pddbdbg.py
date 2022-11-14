@@ -16,39 +16,82 @@ def main():
     parser.add_argument(
         "--dump", required=False, help="Only dump the image, skip the automated CI checks", action="store_true"
     )
+    parser.add_argument(
+        "--renode", required=False, help="Override flex-size settings and read a Renode bin file", action="store_true"
+    )
+    parser.add_argument(
+        "--smalldb", required=False, help="Override default size of PDDB and set it to 4MiB (for images built to that size only)", action="store_true"
+    )
+    parser.add_argument(
+        "--basis", type=str, help="Extra Bases to unlock, as `name:pass`. Each additional basis requires another --basis separator. Note that : is not legal to use in a Basis name.", action="append", nargs="+"
+    )
+    parser.add_argument(
+        "-p", "--pin", help="Unlock PIN", type=str, default='a'
+    )
+    parser.add_argument(
+        "--ci", help="Run in CI test mode. Requires all keys to have a specific checksum structure for automated checking.", action="store_true"
+    )
     args = parser.parse_args()
 
-    if args.name == None:
-        keyfile = './tools/pddb-images/pddb.key'
-        imagefile = './tools/pddb-images/pddb.bin'
-    else:
-        keyfile = './tools/pddb-images/{}.key'.format(args.name)
-        imagefile = './tools/pddb-images/{}.bin'.format(args.name)
-
-    if args.dump:
-        DO_CI_TESTS = False
-
     numeric_level = getattr(logging, args.loglevel.upper(), None)
+    if args.dump:
+        numeric_level = getattr(logging, 'DEBUG', None)
+    else:
+        numeric_level = getattr(logging, args.loglevel.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % args.loglevel)
     logging.basicConfig(level=numeric_level)
 
-    keys = {}
-    with open(keyfile, 'rb') as key_f:
-        raw_key = key_f.read()
-        num_keys = int.from_bytes(raw_key[:4], 'little')
-        for i in range(num_keys):
-            name_all = raw_key[4 + i*128 : 4 + i*128 + 64]
-            name_bytes = bytearray(b'')
-            for b in name_all:
-                if b != 0:
-                    name_bytes.append(b)
+    set_ci_tests_flag(args.ci)
+
+    if args.renode is True:
+        keyfile = "./emulation/renode-keybox.bin"
+        imagefile = "./tools/pddb-images/renode.bin"
+        basis_credentials = {}
+        if args.basis:
+            for pair in args.basis:
+                credpair = pair[0].split(':', 1)
+                if len(credpair) != 2:
+                    logging.error("Basis credential pair with name {} has a formatting problem, aborting!".format(credpair[0]))
+                    exit(1)
+                basis_credentials[credpair[0]] = credpair[1]
+
+        with open(keyfile, 'rb') as key_f:
+            keyrom = key_f.read()
+            with open(imagefile, 'rb') as img_f:
+                raw_img = img_f.read()
+                if args.smalldb:
+                    raw_img = raw_img[0x01D80000:0x1D8_0000 + 1024 * 1024 * 4]
                 else:
-                    break
-            name = name_bytes.decode('utf8', errors='ignore')
-            key_data = raw_key[4 + i*128 + 64 : 4 + i*128 + 96]
-            key_pt = raw_key[4 + i*128 + 96 : 4 + i*128 + 128]
-            keys[name] = [key_pt, key_data]
+                    raw_img = raw_img[0x01D80000:0x07F80000]
+                keys = extract_keys(keyrom, raw_img, args.pin, basis_credentials)
+    else:
+        if args.name == None:
+            keyfile = './tools/pddb-images/pddb.key'
+            imagefile = './tools/pddb-images/pddb.bin'
+        else:
+            keyfile = './tools/pddb-images/{}.key'.format(args.name)
+            imagefile = './tools/pddb-images/{}.bin'.format(args.name)
+
+        if args.dump:
+            DO_CI_TESTS = False
+
+        keys = {}
+        with open(keyfile, 'rb') as key_f:
+            raw_key = key_f.read()
+            num_keys = int.from_bytes(raw_key[:4], 'little')
+            for i in range(num_keys):
+                name_all = raw_key[4 + i*128 : 4 + i*128 + 64]
+                name_bytes = bytearray(b'')
+                for b in name_all:
+                    if b != 0:
+                        name_bytes.append(b)
+                    else:
+                        break
+                name = name_bytes.decode('utf8', errors='ignore')
+                key_data = raw_key[4 + i*128 + 64 : 4 + i*128 + 96]
+                key_pt = raw_key[4 + i*128 + 96 : 4 + i*128 + 128]
+                keys[name] = [key_pt.hex(), key_data.hex()]
 
     logging.info("Found basis keys (pt, data):")
     logging.info(str(keys))
@@ -60,10 +103,15 @@ def main():
     KEY_PAGES = 1
     global PAGE_SIZE
     global VPAGE_SIZE
-    MAX_DICTS = 16384
+    MAX_DICTS = 16383
 
     with open(imagefile, 'rb') as img_f:
         raw_img = img_f.read()
+        if args.renode:
+            if args.smalldb:
+                raw_img = raw_img[0x01D80000:0x1D8_0000 + 1024 * 1024 * 4]
+            else:
+                raw_img = raw_img[0x01D80000:0x07F80000]
         pddb_len = len(raw_img)
         pddb_size_pages = pddb_len // PAGE_SIZE
         logging.info("Disk size: 0x{:x}".format(pddb_len))
@@ -136,7 +184,7 @@ def main():
                     #logging.info("listing {} keys".format(len(d2.keys)))
                     #for key in d2.keys:
                     #    logging.info("{}".format(key))
-                    if args.dump == False:
+                    if args.ci == True:
                         logging.info("CI checks:")
                         for bdict in basis_dicts.values():
                             bdict.ci_check()

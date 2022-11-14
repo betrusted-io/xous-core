@@ -156,6 +156,7 @@ fn wrapped_main() -> ! {
     let mut work_queue = Vec::<(xous::MessageSender, [u32; 4])>::new();
 
     let mut dynamic_notification_listener: Option<xous::MessageSender> = None;
+    let mut dynamic_notification_active: bool = false;
 
     loop {
         let mut msg = xous::receive_message(modals_sid).unwrap();
@@ -331,7 +332,7 @@ fn wrapped_main() -> ! {
                 )
                 .expect("couldn't initiate UX op");
             }
-            Some(Opcode::StopProgress) => msg_scalar_unpack!(msg, t0, t1, t2, t3, {
+            Some(Opcode::StopProgress) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
                 let token = [t0 as u32, t1 as u32, t2 as u32, t3 as u32];
                 if token != token_lock.unwrap_or(default_nonce) {
                     log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
@@ -339,7 +340,7 @@ fn wrapped_main() -> ! {
                 }
                 send_message(
                     renderer_cid,
-                    Message::new_scalar(Opcode::FinishProgress.to_usize().unwrap(), 0, 0, 0, 0),
+                    Message::new_scalar(Opcode::FinishProgress.to_usize().unwrap(), msg.sender.to_usize(), 0, 0, 0),
                 )
                 .expect("couldn't update progress bar");
             }),
@@ -400,10 +401,6 @@ fn wrapped_main() -> ! {
                 if token != token_lock.unwrap_or(default_nonce) {
                     log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
                     continue;
-                }
-                if let Some(sender) = dynamic_notification_listener.take() {
-                    // unblock the listener with no key hit response
-                    xous::return_scalar2(sender, 0, 0,).unwrap();
                 }
                 send_message(
                     renderer_cid,
@@ -664,6 +661,10 @@ fn wrapped_main() -> ! {
                         renderer_modal.activate();
                     }
                     RendererState::RunDynamicNotification(config) => {
+                        if dynamic_notification_active {
+                            log::error!("Dynamic notification already active! Double-calls lead to unpredictable results");
+                        }
+                        dynamic_notification_active = true;
                         let mut top_text = String::new();
                         if let Some(title) = config.title {
                             #[cfg(feature = "tts")]
@@ -691,6 +692,7 @@ fn wrapped_main() -> ! {
                             Some(DEFAULT_STYLE),
                         );
                         renderer_modal.activate();
+                        xous::yield_slice();
                     }
                     RendererState::None => {
                         log::error!(
@@ -700,9 +702,11 @@ fn wrapped_main() -> ! {
                     }
                 }
             }
-            Some(Opcode::FinishProgress) => {
+            Some(Opcode::FinishProgress) => msg_scalar_unpack!(msg, caller, _, _, _, {
                 renderer_modal.gam.relinquish_focus().unwrap();
                 op = RendererState::None;
+                // unblock the caller, which was forwarded on as the first argument
+                xous::return_scalar(xous::sender::Sender::from_usize(caller), 0).ok();
                 token_lock = next_lock(&mut work_queue);
                 /*
                 if work_queue.len() > 0 {
@@ -712,7 +716,7 @@ fn wrapped_main() -> ! {
                 } else {
                     token_lock = None;
                 }*/
-            }
+            }),
             Some(Opcode::DoUpdateDynamicNotification) => match op {
                 RendererState::RunDynamicNotification(config) => {
                     //log::set_max_level(log::LevelFilter::Trace);
@@ -746,7 +750,12 @@ fn wrapped_main() -> ! {
             },
             Some(Opcode::DoCloseDynamicNotification) => {
                 renderer_modal.gam.relinquish_focus().unwrap();
+                dynamic_notification_active = false;
                 op = RendererState::None;
+                if let Some(sender) = dynamic_notification_listener.take() {
+                    // unblock the listener with no key hit response
+                    xous::return_scalar2(sender, 0, 0,).unwrap();
+                }
                 token_lock = next_lock(&mut work_queue);
             },
             Some(Opcode::HandleDynamicNotificationKeyhit) => msg_scalar_unpack!(msg, k, _, _, _, {

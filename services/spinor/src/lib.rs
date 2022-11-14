@@ -174,17 +174,25 @@ impl Spinor {
         // acquire a write lock on the unit
         #[cfg(not(test))]
         {
-            let response = send_message(self.conn,
-                Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
-                    self.token[0] as usize,
-                    self.token[1] as usize,
-                    self.token[2] as usize,
-                    self.token[3] as usize,
-                )
-            ).expect("couldn't send AcquireExclusive message to Spinor hardware!");
-            if let xous::Result::Scalar1(result) = response {
-                if result == 0 {
-                    return Err(SpinorError::BusyTryAgain)
+            const RETRY_LIMIT: usize = 5;
+            for i in 0..RETRY_LIMIT {
+                let response = send_message(self.conn,
+                    Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
+                        self.token[0] as usize,
+                        self.token[1] as usize,
+                        self.token[2] as usize,
+                        self.token[3] as usize,
+                    )
+                ).expect("couldn't send AcquireExclusive message to Spinor hardware!");
+                if let xous::Result::Scalar1(result) = response {
+                    if result == 0 {
+                        if i == RETRY_LIMIT - 1 {
+                            return Err(SpinorError::BusyTryAgain)
+                        }
+                        xous::yield_slice();
+                    } else {
+                        break;
+                    }
                 }
             }
         }
@@ -235,17 +243,25 @@ impl Spinor {
         // acquire a write lock on the unit
         #[cfg(not(test))]
         {
-            let response = send_message(self.conn,
-                Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
-                    self.token[0] as usize,
-                    self.token[1] as usize,
-                    self.token[2] as usize,
-                    self.token[3] as usize,
-                )
-            ).expect("couldn't send AcquireExclusive message to Spinor hardware!");
-            if let xous::Result::Scalar1(result) = response {
-                if result == 0 {
-                    return Err(SpinorError::BusyTryAgain)
+            const RETRY_LIMIT: usize = 5;
+            for i in 0..RETRY_LIMIT {
+                let response = send_message(self.conn,
+                    Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
+                        self.token[0] as usize,
+                        self.token[1] as usize,
+                        self.token[2] as usize,
+                        self.token[3] as usize,
+                    )
+                ).expect("couldn't send AcquireExclusive message to Spinor hardware!");
+                if let xous::Result::Scalar1(result) = response {
+                    if result == 0 {
+                        if i == RETRY_LIMIT - 1 {
+                            return Err(SpinorError::BusyTryAgain)
+                        }
+                        xous::yield_slice();
+                    } else {
+                        break;
+                    }
                 }
             }
         }

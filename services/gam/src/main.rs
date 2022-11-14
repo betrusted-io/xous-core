@@ -664,6 +664,10 @@ fn wrapped_main() -> ! {
                 }
                 buffer.replace(spec).unwrap();
             }
+            Some(Opcode::AllowMainMenu) => {
+                context_mgr.allow_mainmenu();
+                xous::return_scalar(msg.sender, 0).ok();
+            }
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }

@@ -276,6 +276,13 @@ namespace Antmicro.Renode.Peripherals.SPI.Betrusted
                     enable.Value = false;
                     return; //return to prevent further logging
 
+                case (byte)Commands.SectorErase4byte:
+                    currentOperation.Operation = DecodedOperation.OperationType.Erase;
+                    currentOperation.EraseSize = DecodedOperation.OperationEraseSize.Sector;
+                    currentOperation.AddressLength = 4;
+                    currentOperation.State = DecodedOperation.OperationState.AccumulateNoDataCommandAddressBytes;
+                    break;
+
                 case (byte)Commands.SubsectorErase4byte4kb:
                     currentOperation.Operation = DecodedOperation.OperationType.Erase;
                     currentOperation.EraseSize = DecodedOperation.OperationEraseSize.Subsector4K;
@@ -685,6 +692,7 @@ namespace Antmicro.Renode.Peripherals.SPI.Betrusted
                 tmp_byte[0] = val;
                 InternalBackingFile.Seek(position, SeekOrigin.Begin);
                 InternalBackingFile.Write(tmp_byte, 0, 1);
+                InternalBackingFile.Flush();
             }
         }
 
