@@ -160,6 +160,10 @@
         "ja": "ゲートウェアアップデートをインストールする",
         "zh": "安装比特流更新"
     },
+    "mainmenu.preferences": {
+        "en": "Preferences",
+        "en-tts": "Preferences"
+    },
     "mainmenu.reboot": {
         "en": "Reboot",
         "en-tts": "Reboot",
