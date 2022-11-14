@@ -19,6 +19,8 @@ enum DevicePrefsOp {
     AutobacklightTimeout,
     KeyboardLayout,
     WLANMenu,
+    SetTime,
+    SetTimezone,
 }
 
 impl Display for DevicePrefsOp {
@@ -30,6 +32,8 @@ impl Display for DevicePrefsOp {
             Self::RadioOnOnBoot => write!(f, "Enable WiFi on boot"),
             Self::KeyboardLayout => write!(f, "Keyboard layout"),
             Self::WLANMenu => write!(f, "WLAN settings"),
+            Self::SetTime => write!(f, "{}", t!("mainmenu.set_rtc", xous::LANG)),
+            Self::SetTimezone => write!(f, "{}", t!("mainmenu.set_tz", xous::LANG)),
         }
     }
 }
@@ -58,6 +62,7 @@ struct DevicePrefs {
     modals: modals::Modals,
     gam: gam::Gam,
     kbd: keyboard::Keyboard,
+    time_ux_cid: xous::CID,
 }
 
 impl PrefHandler for DevicePrefs {
@@ -101,12 +106,13 @@ impl PrefHandler for DevicePrefs {
 }
 
 impl DevicePrefs {
-    fn new(xns: &xous_names::XousNames) -> Self {
+    fn new(xns: &xous_names::XousNames, time_ux_cid: xous::CID) -> Self {
         Self {
             up: Manager::new(),
             modals: modals::Modals::new(&xns).unwrap(),
             gam: gam::Gam::new(&xns).unwrap(),
             kbd: keyboard::Keyboard::new(&xns).unwrap(),
+            time_ux_cid,
         }
     }
 
@@ -120,6 +126,8 @@ impl DevicePrefs {
             AutobacklightTimeout,
             KeyboardLayout,
             WLANMenu,
+            SetTime,
+            SetTimezone,
         ]
     }
 
@@ -131,6 +139,8 @@ impl DevicePrefs {
             DevicePrefsOp::AutobacklightTimeout => self.autobacklight_timeout(),
             DevicePrefsOp::KeyboardLayout => self.keyboard_layout(),
             DevicePrefsOp::WLANMenu => self.wlan_menu(),
+            DevicePrefsOp::SetTime => self.set_time_menu(),
+            DevicePrefsOp::SetTimezone => self.set_timezone_menu(),
         };
 
         resp.unwrap_or_else(|error| self.show_error_modal(error));
@@ -228,9 +238,44 @@ impl DevicePrefs {
     }
 
     fn wlan_menu(&self) -> Result<(), DevicePrefsError> {
-        log::info!("wlan menu invoked");
         std::thread::sleep(std::time::Duration::from_millis(100));
         self.gam.raise_menu(gam::WIFI_MENU_NAME).unwrap();
+
+        Ok(())
+    }
+
+    fn set_time_menu(&self) -> Result<(), DevicePrefsError> {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        xous::send_message(
+            self.time_ux_cid,
+            xous::Message::new_scalar(
+                crate::time::TimeUxOp::SetTime.to_usize().unwrap(),
+                0,
+                0,
+                0,
+                0,
+            ),
+        )
+        .unwrap();
+
+        Ok(())
+    }
+
+    fn set_timezone_menu(&self) -> Result<(), DevicePrefsError> {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        xous::send_message(
+            self.time_ux_cid,
+            xous::Message::new_scalar(
+                crate::time::TimeUxOp::SetTimeZone.to_usize().unwrap(),
+                0,
+                0,
+                0,
+                0,
+            ),
+        )
+        .unwrap();
 
         Ok(())
     }
@@ -238,30 +283,28 @@ impl DevicePrefs {
     fn keyboard_layout(&mut self) -> Result<(), DevicePrefsError> {
         let kl = self.up.keyboard_layout_or_default()?;
 
-        let mappings = vec![
-            "QWERTY",
-            "AZERTY",
-            "QWERTZ",
-            "Dvorak",
-        ];
+        let mappings = vec!["QWERTY", "AZERTY", "QWERTZ", "Dvorak"];
 
-        self.modals
-            .add_list(mappings.clone())
-            .unwrap();
+        self.modals.add_list(mappings.clone()).unwrap();
 
         let new_result = self
             .modals
             .get_radiobutton(&format!("Current layout: {}", keyboard::KeyMap::from(kl)))
             .unwrap();
-        
-        let new_result = match mappings.iter().position(|&elem| elem == new_result.as_str()) {
+
+        let new_result = match mappings
+            .iter()
+            .position(|&elem| elem == new_result.as_str())
+        {
             Some(val) => val,
             None => 0,
         };
 
         self.up.set_keyboard_layout(new_result)?;
 
-        self.kbd.set_keymap(keyboard::KeyMap::from(new_result)).unwrap();
+        self.kbd
+            .set_keymap(keyboard::KeyMap::from(new_result))
+            .unwrap();
 
         Ok(())
     }
@@ -292,8 +335,13 @@ fn run_menu_thread() {
     let sid = xous::create_server().unwrap();
     let menu_conn = xous::connect(sid).unwrap();
 
+    // --------------------------- spawn a time UX manager thread
+    let time_sid = xous::create_server().unwrap();
+    let time_cid = xous::connect(time_sid).unwrap();
+    crate::time::start_time_ux(time_sid);
+
     let mut handlers: Vec<Box<dyn PrefHandler>> = vec![
-        Box::new(DevicePrefs::new(&xns)),
+        Box::new(DevicePrefs::new(&xns, time_cid)),
         Box::new(wifi::WLANMan::new(&xns)),
     ];
 

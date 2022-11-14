@@ -312,11 +312,7 @@ fn wrapped_main() -> ! {
             t!("secnote.usb_unlock", xous::LANG).to_string(),
         );
     }
-
-    // --------------------------- spawn a time UX manager thread
-    let time_sid = xous::create_server().unwrap();
-    let time_cid = xous::connect(time_sid).unwrap();
-    time::start_time_ux(time_sid);
+    
     // this is used by the main loop to get the localtime to show on the status bar
     let mut localtime = llio::LocalTime::new();
 
@@ -334,7 +330,7 @@ fn wrapped_main() -> ! {
     log::debug!("starting main menu thread");
     let main_menu_sid = xous::create_server().unwrap();
     let status_cid = xous::connect(status_sid).unwrap();
-    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com, time_cid);
+    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com);
     create_app_menu(xous::connect(status_sid).unwrap());
     let kbd = Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap()));
 
