@@ -218,6 +218,29 @@ fn main() -> ! {
                 };
                 codec.set_headphone_gain_db(headphone_analog_gain_db, headphone_analog_gain_db);
             }),
+            Some(api::Opcode::GetHeadphoneCode) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if codec.is_init() && codec.is_on() {
+                    let hp_code = codec.get_headset_code();
+                    if hp_code & 0x80 != 0x80 {
+                        log::warn!("Headphone detection polled, but detection is not enabled in hardware!");
+                    }
+                    log::debug!("headset code: 0x{:x}", hp_code);
+                    let code = if hp_code == 0xff { // kind of a hack, we could also check codec power state
+                        HeadphoneState::CodecOff
+                    } else {
+                        match (hp_code >> 5) & 0x3 {
+                            0b00 => HeadphoneState::NotPresent,
+                            0b01 => HeadphoneState::PresentWithoutMic,
+                            0b10 => HeadphoneState::Reserved,
+                            0b11 => HeadphoneState::PresentWithMic,
+                            _ => HeadphoneState::Reserved,
+                        }
+                    };
+                    xous::return_scalar(msg.sender, code as usize).ok();
+                } else {
+                    xous::return_scalar(msg.sender, HeadphoneState::CodecOff as usize).ok();
+                }
+            }),
             None => {
                 log::error!("couldn't convert opcode");
                 break

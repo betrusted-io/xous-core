@@ -142,6 +142,20 @@ impl Codec {
             _ => Err(xous::Error::InternalError)
         }
     }
+    pub fn poll_headphone_state(&self) -> Result<HeadphoneState, xous::Error> {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::GetHeadphoneCode.to_usize().unwrap(), 0, 0, 0, 0)
+        ) {
+            Ok(xous::Result::Scalar1(code)) => {
+                let retcode: Option<HeadphoneState> = FromPrimitive::from_usize(code);
+                match retcode {
+                    Some(code) => Ok(code),
+                    None => Err(xous::Error::InternalError),
+                }
+            }
+            _ => Err(xous::Error::InternalError)
+        }
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

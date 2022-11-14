@@ -310,7 +310,9 @@ impl Codec {
     pub fn get_headset_code(&mut self) -> u8 {
         self.w(0, &[0]);
         let mut code: [u8; 1] = [0; 1];
-        self.r(67, &mut code);
+        if !self.r(67, &mut code) {
+            log::warn!("headset code read unsuccessful");
+        };
         code[0]
     }
 
