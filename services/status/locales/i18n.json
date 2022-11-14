@@ -174,10 +174,6 @@
         "ja": "WiFiメニュー...",
         "zh": "无线网络菜单..."
     },
-    "mainmenu.preferences": {
-        "en": "Preferences",
-        "en-tts": "Preferences"
-    },
     "mainmenu.backlighton": {
         "en": "Backlight on",
         "ja": "バックライト点灯",
