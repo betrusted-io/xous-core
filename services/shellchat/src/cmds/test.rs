@@ -666,7 +666,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
                 }
                 "hpstate" => {
-                    write!(ret, "HP state: {:?}", self.codec.poll_headphone_state()).ok();
+                    let state = self.codec.poll_headphone_state();
+                    log::info!("{:?}", state);
+                    write!(ret, "{:?}", state).ok();
                 }
                 "ecup" => {
                     let ecup_conn = env.xns.request_connection_blocking("__ECUP server__").unwrap();
