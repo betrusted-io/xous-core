@@ -116,6 +116,14 @@ impl TextEntryPayload {
 }
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct SliderPayload(pub u32);
+impl SliderPayload {
+    pub fn new(value: u32) -> Self {
+        SliderPayload(value)
+    }
+}
+
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct RadioButtonPayload(pub ItemName); // returns the name of the item corresponding to the radio button selection
 impl RadioButtonPayload {
     pub fn new(name: &str) -> Self {
