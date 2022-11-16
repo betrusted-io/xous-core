@@ -97,6 +97,8 @@ pub struct TotpEntry {
     pub digit_count: u32,
     pub algorithm: HashAlgorithms,
     pub name: String,
+    #[serde(default)] // if hotp is missing from the JSON representation, it's assumed to be false.
+    pub hotp: bool,
 }
 
 impl From<TotpEntry> for cbor::Value {
@@ -125,6 +127,7 @@ impl TryFrom<cbor::Value> for TotpEntry {
                 3 => digit_count,
                 4 => algorithm,
                 5 => name,
+                6 => hotp,
             } = rawmap;
         }
 
@@ -133,6 +136,7 @@ impl TryFrom<cbor::Value> for TotpEntry {
         let digit_count = extract_unsigned(digit_count.unwrap())? as u32;
         let algorithm: HashAlgorithms = algorithm.unwrap().try_into()?;
         let name = extract_string(name.unwrap())?;
+        let hotp = extract_bool(hotp.unwrap())?;
 
         Ok(TotpEntry {
             step_seconds,
@@ -140,13 +144,14 @@ impl TryFrom<cbor::Value> for TotpEntry {
             digit_count,
             algorithm,
             name,
+            hotp,
         })
     }
 
     type Error = CborConversionError;
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct TotpEntries(pub Vec<TotpEntry>);
 
 impl From<&TotpEntries> for cbor::Value {
@@ -230,7 +235,7 @@ impl TryFrom<cbor::Value> for PasswordEntry {
     type Error = CborConversionError;
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct PasswordEntries(pub Vec<PasswordEntry>);
 
 impl From<&PasswordEntries> for cbor::Value {
@@ -263,7 +268,7 @@ impl TryFrom<cbor::Value> for PasswordEntries {
     type Error = CborConversionError;
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum DataPacket {
     Password(PasswordEntries),
     TOTP(TotpEntries),
