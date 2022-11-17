@@ -946,8 +946,11 @@ pub mod utra {
             Time0 = 8,
             MsleepTarget1 = 12,
             MsleepTarget0 = 16,
+            EvStatus = 20,
+            EvPending = 24,
+            EvEnable = 28,
         }
-        pub const TICKTIMER_NUMREGS: usize = 5;
+        pub const TICKTIMER_NUMREGS: usize = 8;
 
         pub const CONTROL: crate::Register = crate::Register::new(0, 0x1);
         pub const CONTROL_RESET: crate::Field = crate::Field::new(1, 0, CONTROL);
@@ -963,6 +966,15 @@ pub mod utra {
 
         pub const MSLEEP_TARGET0: crate::Register = crate::Register::new(4, 0xffffffff);
         pub const MSLEEP_TARGET0_MSLEEP_TARGET: crate::Field = crate::Field::new(32, 0, MSLEEP_TARGET0);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(5, 0x1);
+        pub const EV_STATUS_ALARM: crate::Field = crate::Field::new(1, 0, EV_STATUS);
+
+        pub const EV_PENDING: crate::Register = crate::Register::new(6, 0x1);
+        pub const EV_PENDING_ALARM: crate::Field = crate::Field::new(1, 0, EV_PENDING);
+
+        pub const EV_ENABLE: crate::Register = crate::Register::new(7, 0x1);
+        pub const EV_ENABLE_ALARM: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
 
         pub const TICKTIMER_IRQ: usize = 8;
         pub const HW_TICKTIMER_BASE: usize = 0xf0012000;
@@ -982,8 +994,11 @@ pub mod utra {
             Powerdown = 28,
             Wfi = 32,
             Interrupt = 36,
+            EvStatus = 40,
+            EvPending = 44,
+            EvEnable = 48,
         }
-        pub const SUSRES_NUMREGS: usize = 10;
+        pub const SUSRES_NUMREGS: usize = 13;
 
         pub const CONTROL: crate::Register = crate::Register::new(0, 0x3);
         pub const CONTROL_PAUSE: crate::Field = crate::Field::new(1, 0, CONTROL);
@@ -1016,6 +1031,15 @@ pub mod utra {
 
         pub const INTERRUPT: crate::Register = crate::Register::new(9, 0x1);
         pub const INTERRUPT_INTERRUPT: crate::Field = crate::Field::new(1, 0, INTERRUPT);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(10, 0x1);
+        pub const EV_STATUS_SOFT_INT: crate::Field = crate::Field::new(1, 0, EV_STATUS);
+
+        pub const EV_PENDING: crate::Register = crate::Register::new(11, 0x1);
+        pub const EV_PENDING_SOFT_INT: crate::Field = crate::Field::new(1, 0, EV_PENDING);
+
+        pub const EV_ENABLE: crate::Register = crate::Register::new(12, 0x1);
+        pub const EV_ENABLE_SOFT_INT: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
 
         pub const SUSRES_IRQ: usize = 9;
         pub const HW_SUSRES_BASE: usize = 0xf0013000;
@@ -3435,6 +3459,30 @@ mod tests {
         let mut baz = ticktimer_csr.zf(utra::ticktimer::MSLEEP_TARGET0_MSLEEP_TARGET, bar);
         baz |= ticktimer_csr.ms(utra::ticktimer::MSLEEP_TARGET0_MSLEEP_TARGET, 1);
         ticktimer_csr.wfo(utra::ticktimer::MSLEEP_TARGET0_MSLEEP_TARGET, baz);
+
+        let foo = ticktimer_csr.r(utra::ticktimer::EV_STATUS);
+        ticktimer_csr.wo(utra::ticktimer::EV_STATUS, foo);
+        let bar = ticktimer_csr.rf(utra::ticktimer::EV_STATUS_ALARM);
+        ticktimer_csr.rmwf(utra::ticktimer::EV_STATUS_ALARM, bar);
+        let mut baz = ticktimer_csr.zf(utra::ticktimer::EV_STATUS_ALARM, bar);
+        baz |= ticktimer_csr.ms(utra::ticktimer::EV_STATUS_ALARM, 1);
+        ticktimer_csr.wfo(utra::ticktimer::EV_STATUS_ALARM, baz);
+
+        let foo = ticktimer_csr.r(utra::ticktimer::EV_PENDING);
+        ticktimer_csr.wo(utra::ticktimer::EV_PENDING, foo);
+        let bar = ticktimer_csr.rf(utra::ticktimer::EV_PENDING_ALARM);
+        ticktimer_csr.rmwf(utra::ticktimer::EV_PENDING_ALARM, bar);
+        let mut baz = ticktimer_csr.zf(utra::ticktimer::EV_PENDING_ALARM, bar);
+        baz |= ticktimer_csr.ms(utra::ticktimer::EV_PENDING_ALARM, 1);
+        ticktimer_csr.wfo(utra::ticktimer::EV_PENDING_ALARM, baz);
+
+        let foo = ticktimer_csr.r(utra::ticktimer::EV_ENABLE);
+        ticktimer_csr.wo(utra::ticktimer::EV_ENABLE, foo);
+        let bar = ticktimer_csr.rf(utra::ticktimer::EV_ENABLE_ALARM);
+        ticktimer_csr.rmwf(utra::ticktimer::EV_ENABLE_ALARM, bar);
+        let mut baz = ticktimer_csr.zf(utra::ticktimer::EV_ENABLE_ALARM, bar);
+        baz |= ticktimer_csr.ms(utra::ticktimer::EV_ENABLE_ALARM, 1);
+        ticktimer_csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, baz);
   }
 
     #[test]
@@ -3532,6 +3580,30 @@ mod tests {
         let mut baz = susres_csr.zf(utra::susres::INTERRUPT_INTERRUPT, bar);
         baz |= susres_csr.ms(utra::susres::INTERRUPT_INTERRUPT, 1);
         susres_csr.wfo(utra::susres::INTERRUPT_INTERRUPT, baz);
+
+        let foo = susres_csr.r(utra::susres::EV_STATUS);
+        susres_csr.wo(utra::susres::EV_STATUS, foo);
+        let bar = susres_csr.rf(utra::susres::EV_STATUS_SOFT_INT);
+        susres_csr.rmwf(utra::susres::EV_STATUS_SOFT_INT, bar);
+        let mut baz = susres_csr.zf(utra::susres::EV_STATUS_SOFT_INT, bar);
+        baz |= susres_csr.ms(utra::susres::EV_STATUS_SOFT_INT, 1);
+        susres_csr.wfo(utra::susres::EV_STATUS_SOFT_INT, baz);
+
+        let foo = susres_csr.r(utra::susres::EV_PENDING);
+        susres_csr.wo(utra::susres::EV_PENDING, foo);
+        let bar = susres_csr.rf(utra::susres::EV_PENDING_SOFT_INT);
+        susres_csr.rmwf(utra::susres::EV_PENDING_SOFT_INT, bar);
+        let mut baz = susres_csr.zf(utra::susres::EV_PENDING_SOFT_INT, bar);
+        baz |= susres_csr.ms(utra::susres::EV_PENDING_SOFT_INT, 1);
+        susres_csr.wfo(utra::susres::EV_PENDING_SOFT_INT, baz);
+
+        let foo = susres_csr.r(utra::susres::EV_ENABLE);
+        susres_csr.wo(utra::susres::EV_ENABLE, foo);
+        let bar = susres_csr.rf(utra::susres::EV_ENABLE_SOFT_INT);
+        susres_csr.rmwf(utra::susres::EV_ENABLE_SOFT_INT, bar);
+        let mut baz = susres_csr.zf(utra::susres::EV_ENABLE_SOFT_INT, bar);
+        baz |= susres_csr.ms(utra::susres::EV_ENABLE_SOFT_INT, 1);
+        susres_csr.wfo(utra::susres::EV_ENABLE_SOFT_INT, baz);
   }
 
     #[test]

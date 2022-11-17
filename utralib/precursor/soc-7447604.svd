@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2022-11-17 18:56:55]]></description>
+    <description><![CDATA[Litex SoC 2022-11-17 21:48:11]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1222,10 +1222,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``b414f2b5``, so this value is 3021271733, which should be enough to check out
+``74476049``, so this value is 1950834761, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0xb414f2b5</resetValue>
+                    <resetValue>0x74476049</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1242,7 +1242,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x06</resetValue>
+                    <resetValue>0x07</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2283,10 +2283,62 @@ other requests.]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the alarm event trigger.  Writes
+to this register have no effect.]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>alarm</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``alarm`` event]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <description><![CDATA[When a  alarm event occurs, the corresponding bit will be set in this register.
+To clear the Event, set the corresponding bit in this register.]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>alarm</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `alarm` event occurred. This Event is **level triggered** when the
+signal is **high**.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding alarm events.  Write a ``0`` to this
+register to disable individual events.]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>alarm</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``alarm`` Event]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x14</size>
+                <size>0x20</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -2472,10 +2524,62 @@ suspend/resume from an interrupt context.]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the soft_int event trigger.
+Writes to this register have no effect.]]></description>
+                    <addressOffset>0x0028</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>soft_int</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``soft_int`` event]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <description><![CDATA[When a  soft_int event occurs, the corresponding bit will be set in this
+register.  To clear the Event, set the corresponding bit in this register.]]></description>
+                    <addressOffset>0x002c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>soft_int</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `soft_int` event occurred. This Event is triggered on a **falling**
+edge.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding soft_int events.  Write a ``0`` to this
+register to disable individual events.]]></description>
+                    <addressOffset>0x0030</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>soft_int</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``soft_int`` Event]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x28</size>
+                <size>0x34</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -3473,7 +3577,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x37de9f06</resetValue>
+                    <resetValue>0x4163b882</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3488,7 +3592,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x51857265</resetValue>
+                    <resetValue>0xb32b62f</resetValue>
                     <size>32</size>
                     <fields>
                         <field>

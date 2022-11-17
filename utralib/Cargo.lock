@@ -25,9 +25,9 @@ dependencies = [
 
 [[package]]
 name = "svd2utra"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a65cf81cff9ec9ad564103468224386dc7443afd1c2037de148bd2c51ca006dd"
+checksum = "eb7e91b601f902ab3b99a58e9b8530493723e6c83b79c335c78ac8ce428a8743"
 dependencies = [
  "convert_case",
  "quick-xml",
@@ -35,7 +35,7 @@ dependencies = [
 
 [[package]]
 name = "utralib"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "svd2utra",
 ]

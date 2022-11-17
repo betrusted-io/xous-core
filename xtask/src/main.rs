@@ -12,7 +12,7 @@ use std::env;
 
 /// gitrev of the current precursor SoC version targeted by this build. This must
 /// be manually updated every time the SoC version is bumped.
-const PRECURSOR_SOC_VERSION: &str = "b414f2b";
+const PRECURSOR_SOC_VERSION: &str = "7447604";
 
 /*
   Some notes on kernel versions versus backups.

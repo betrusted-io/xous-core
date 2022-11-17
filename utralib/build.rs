@@ -91,7 +91,7 @@ fn main() {
         "precursor-c809403-perflib",
         "precursor-2753c12-dvt",
         "precursor-a0912d6",
-        "precursor-b414f2b"
+        "precursor-7447604"
     );
 
     // ----- select an SVD file based on a specific revision -----
@@ -120,10 +120,10 @@ fn main() {
     #[cfg(feature = "precursor-2753c12-dvt")]
     let generated_filename = "src/generated/precursor_dvt_2753c12.rs";
 
-    #[cfg(feature = "precursor-b414f2b")]
-    let svd_filename = "precursor/soc-b414f2b.svd";
-    #[cfg(feature = "precursor-b414f2b")]
-    let generated_filename = "src/generated/precursor_b414f2b.rs";
+    #[cfg(feature = "precursor-7447604")]
+    let svd_filename = "precursor/soc-7447604.svd";
+    #[cfg(feature = "precursor-7447604")]
+    let generated_filename = "src/generated/precursor_7447604.rs";
 
     // ----- control file generation and rebuild sequence -----
     // check and see if the configuration has changed since the last build. This should be
