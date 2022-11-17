@@ -3669,6 +3669,7 @@ name = "status"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "codec",
  "com",
  "com_rs-ref",
  "content-plugin-api",
