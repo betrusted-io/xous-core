@@ -3,25 +3,25 @@ authors = ["bunnie <bunnie@kosagi.com>"]
 description = "Provide high-resolution, non-rollover system time"
 edition = "2018"
 name = "xous-ticktimer"
-version = "0.1.20"
+version = "0.1.21"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/xous-book/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous-api-ticktimer = "0.9.19"
-xous = "0.9.25"
-xous-ipc = "0.9.25"
-xous-names = {package = "xous-api-names", version = "0.9.21"}
-log-server = {package = "xous-api-log", version = "0.1.19"}
-susres = {package = "xous-api-susres", version = "0.9.19"}
+xous-api-ticktimer = "0.9.20"
+xous = "0.9.26"
+xous-ipc = "0.9.26"
+xous-names = {package = "xous-api-names", version = "0.9.22"}
+log-server = {package = "xous-api-log", version = "0.1.20"}
+susres = {package = "xous-api-susres", version = "0.9.20"}
 log = "0.4.14"
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 xous-semver = "0.1.2"
-utralib = {version = "0.1.10", optional = true, default-features = false }
+utralib = {version = "0.1.11", optional = true, default-features = false }
 
 [features]
 precursor = ["utralib/precursor", "susres/precursor"]

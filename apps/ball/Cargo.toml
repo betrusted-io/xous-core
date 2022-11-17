@@ -10,11 +10,11 @@ description = "Ball demo app"
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
-xous = "0.9.25"
-xous-ipc = "0.9.25"
-log-server = { package = "xous-api-log", version = "0.1.19" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.19" }
-xous-names = { package = "xous-api-names", version = "0.9.21" }
+xous = "0.9.26"
+xous-ipc = "0.9.26"
+log-server = { package = "xous-api-log", version = "0.1.20" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.20" }
+xous-names = { package = "xous-api-names", version = "0.9.22" }
 gam = {path = "../../services/gam" }
 trng = {path = "../../services/trng"}
 modals = {path = "../../services/modals"}
