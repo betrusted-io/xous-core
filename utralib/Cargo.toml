@@ -34,6 +34,7 @@ precursor-c809403 = []
 precursor-a0912d6 = []
 precursor-c809403-perflib = []
 precursor-2753c12-dvt = []
+precursor-b414f2b = [] # based on 2020.08 litex
 
 # The SVD gitrev as specified above is only invoked to track fine-grained
 # changes between target revisions. Below is the overall target switch,
@@ -46,4 +47,4 @@ hosted = []
 renode = []
 
 # Specify a Precusor default so that we can pass packaging CI tests.
-default = ["precursor-c809403", "precursor"]
+default = ["precursor-b414f2b", "precursor"]

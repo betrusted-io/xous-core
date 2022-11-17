@@ -26,6 +26,11 @@ mod renode;
 #[cfg(feature="renode")]
 pub use renode::*;
 
+#[cfg(feature="precursor-b414f2b")]
+mod precursor_b414f2b;
+#[cfg(feature="precursor-b414f2b")]
+pub use precursor_b414f2b::*;
+
 // Hosted mode includes nothing, as it relies on the abstract host
 // architecture for I/O; so this file is empty when the "hosted"
 // configuration is selected and there are no corresponding "hosted"
