@@ -8,7 +8,7 @@ pub trait PrefHandler {
     // If handle() returns true, it has handled the operation.
     fn handle(&mut self, op: usize) -> bool;
 
-    fn claim_menumatic_menu(&self, cid: xous::CID);
+    fn claim_menumatic_menu(&mut self, cid: xous::CID);
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, PartialOrd)]
@@ -21,6 +21,21 @@ enum DevicePrefsOp {
     WLANMenu,
     SetTime,
     SetTimezone,
+    AudioOn,
+    AudioOff,
+    HeadsetVolume,
+    EarpieceVolume,
+
+    // Those are reserved for internal use
+    UpdateMenuAudioEnabled = 399,
+    UpdateMenuAudioDisabled,
+}
+
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, PartialOrd)]
+pub enum PrefsMenuUpdateOp {
+    // Those are reserved for internal use
+    UpdateMenuAudioEnabled = 399,
+    UpdateMenuAudioDisabled,
 }
 
 impl Display for DevicePrefsOp {
@@ -34,6 +49,12 @@ impl Display for DevicePrefsOp {
             Self::WLANMenu => write!(f, "WLAN settings"),
             Self::SetTime => write!(f, "{}", t!("mainmenu.set_rtc", xous::LANG)),
             Self::SetTimezone => write!(f, "{}", t!("mainmenu.set_tz", xous::LANG)),
+            Self::AudioOn => write!(f, "{}", "Enable audio subsystem"),
+            Self::AudioOff => write!(f, "{}", "Disable audio subsystem"),
+            Self::HeadsetVolume => write!(f, "{}", "Headset volume"),
+            Self::EarpieceVolume => write!(f, "{}", "Earpiece volume"),
+
+            _ => unimplemented!("should not end up here!"),
         }
     }
 }
@@ -41,6 +62,7 @@ impl Display for DevicePrefsOp {
 #[derive(Debug)]
 enum DevicePrefsError {
     PrefsError(userprefs::Error),
+    XousError(xous::Error),
 }
 
 impl From<userprefs::Error> for DevicePrefsError {
@@ -49,10 +71,19 @@ impl From<userprefs::Error> for DevicePrefsError {
     }
 }
 
+impl From<xous::Error> for DevicePrefsError {
+    fn from(e: xous::Error) -> Self{
+        Self::XousError(e)
+    }
+}
+
 impl Display for DevicePrefsError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        use DevicePrefsError::*;
+
         match self {
-            DevicePrefsError::PrefsError(e) => write!(f, "Preferences engine error: {:?}", e),
+            PrefsError(e) => write!(f, "Preferences engine error: {:?}", e),
+            XousError(e) => write!(f, "Kernel error: {:#?}", e),
         }
     }
 }
@@ -63,10 +94,31 @@ struct DevicePrefs {
     gam: gam::Gam,
     kbd: keyboard::Keyboard,
     time_ux_cid: xous::CID,
+    codec: codec::Codec,
+    menu: Option<gam::MenuMatic>,
+    menu_manager_sid: xous::SID,
+    menu_global_conn: xous::CID,
 }
 
 impl PrefHandler for DevicePrefs {
     fn handle(&mut self, op: usize) -> bool {
+        if match FromPrimitive::from_usize(op) {
+            Some(other) => {
+                let other: PrefsMenuUpdateOp = other;
+                match other {
+                    PrefsMenuUpdateOp::UpdateMenuAudioEnabled => self.alter_menu_audio_off(),
+                    PrefsMenuUpdateOp::UpdateMenuAudioDisabled => self.alter_menu_audio_on(),
+                }
+                true
+            }
+            _ => {
+                log::error!("Got unknown message");
+                false
+            }
+        } {
+            return true;
+        }
+
         match FromPrimitive::from_usize(op) {
             Some(other) => {
                 self.consume_menu_action(other);
@@ -80,7 +132,8 @@ impl PrefHandler for DevicePrefs {
         }
     }
 
-    fn claim_menumatic_menu(&self, cid: xous::CID) {
+    fn claim_menumatic_menu(&mut self, cid: xous::CID) {
+        // TODO(gsora): we have to specify and handle a manager here, because of the audio on/off thing.
         let mut menus = self
             .actions()
             .iter()
@@ -101,25 +154,29 @@ impl PrefHandler for DevicePrefs {
             close_on_select: true,
         });
 
-        gam::menu_matic(menus, gam::PREFERENCES_MENU_NAME, None);
+        self.menu = gam::menu_matic(menus, gam::PREFERENCES_MENU_NAME, Some(self.menu_manager_sid));
     }
 }
 
 impl DevicePrefs {
-    fn new(xns: &xous_names::XousNames, time_ux_cid: xous::CID) -> Self {
+    fn new(xns: &xous_names::XousNames, time_ux_cid: xous::CID, menu_manager_sid: xous::SID, menu_conn: xous::CID, codec: codec::Codec) -> Self {
         Self {
             up: Manager::new(),
             modals: modals::Modals::new(&xns).unwrap(),
             gam: gam::Gam::new(&xns).unwrap(),
             kbd: keyboard::Keyboard::new(&xns).unwrap(),
             time_ux_cid,
+            codec,
+            menu: None,
+            menu_manager_sid,
+            menu_global_conn: menu_conn,
         }
     }
 
-    fn actions(&self) -> Vec<DevicePrefsOp> {
+    fn actions(&mut self) -> Vec<DevicePrefsOp> {
         use DevicePrefsOp::*;
 
-        vec![
+        let mut ret = vec![
             RadioOnOnBoot,
             ConnectKnownNetworksOnBoot,
             AutobacklightOnBoot,
@@ -128,19 +185,41 @@ impl DevicePrefs {
             WLANMenu,
             SetTime,
             SetTimezone,
-        ]
+        ];
+
+        if self.codec.is_running().unwrap_or_default() {
+            ret.push(AudioOff);
+            
+            // TODO(gsora): detect what volume to show
+            match self.headphone_connected().unwrap() {
+                true => ret.push(HeadsetVolume),
+                false => ret.push(EarpieceVolume),
+            }
+        } else {
+            ret.push(AudioOn)
+        }
+
+        ret
     }
 
     fn consume_menu_action(&mut self, action: DevicePrefsOp) {
-        let resp = match action {
-            DevicePrefsOp::AutobacklightOnBoot => self.autobacklight_on_boot(),
-            DevicePrefsOp::RadioOnOnBoot => self.radio_on_on_boot(),
-            DevicePrefsOp::ConnectKnownNetworksOnBoot => self.connect_known_networks_on_boot(),
-            DevicePrefsOp::AutobacklightTimeout => self.autobacklight_timeout(),
-            DevicePrefsOp::KeyboardLayout => self.keyboard_layout(),
-            DevicePrefsOp::WLANMenu => self.wlan_menu(),
-            DevicePrefsOp::SetTime => self.set_time_menu(),
-            DevicePrefsOp::SetTimezone => self.set_timezone_menu(),
+        use DevicePrefsOp::*;
+
+        let resp = match action {            
+            AutobacklightOnBoot => self.autobacklight_on_boot(),
+            RadioOnOnBoot => self.radio_on_on_boot(),
+            ConnectKnownNetworksOnBoot => self.connect_known_networks_on_boot(),
+            AutobacklightTimeout => self.autobacklight_timeout(),
+            KeyboardLayout => self.keyboard_layout(),
+            WLANMenu => self.wlan_menu(),
+            SetTime => self.set_time_menu(),
+            SetTimezone => self.set_timezone_menu(),
+            AudioOn => self.audio_on(),
+            AudioOff => self.audio_off(),
+            HeadsetVolume => self.headset_volume(),
+            EarpieceVolume => self.earpiece_volume(),
+
+            _ => unimplemented!("should not end up here!"),
         };
 
         resp.unwrap_or_else(|error| self.show_error_modal(error));
@@ -308,6 +387,128 @@ impl DevicePrefs {
 
         Ok(())
     }
+
+    fn audio_on(&mut self) -> Result<(), DevicePrefsError> {
+        self.codec.setup_8k_stream()?;
+
+        self.up.set_audio_enabled(true)?;
+        self.alter_menu_audio_on();
+
+        Ok(())
+    }
+
+    fn alter_menu_audio_on(&mut self) {
+        let menu = self.menu.as_ref().unwrap();
+
+        menu.delete_item(t!("mainmenu.closemenu", xous::LANG));
+        menu.delete_item(&DevicePrefsOp::AudioOn.to_string());
+        menu.add_item(gam::MenuItem {
+            name: xous_ipc::String::from_str(&DevicePrefsOp::AudioOff.to_string()),
+            action_conn: Some(self.menu_global_conn),
+            action_opcode: DevicePrefsOp::AudioOff.to_u32().unwrap(),
+            action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        });
+        menu.add_item(gam::MenuItem {
+            name: xous_ipc::String::from_str(&DevicePrefsOp::EarpieceVolume.to_string()),
+            action_conn: Some(self.menu_global_conn),
+            action_opcode: DevicePrefsOp::EarpieceVolume.to_u32().unwrap(),
+            action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        });
+        menu.add_item(gam::MenuItem {
+            name: xous_ipc::String::from_str(&DevicePrefsOp::HeadsetVolume.to_string()),
+            action_conn: Some(self.menu_global_conn),
+            action_opcode: DevicePrefsOp::HeadsetVolume.to_u32().unwrap(),
+            action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        });
+
+        menu.add_item(gam::MenuItem {
+            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", xous::LANG)),
+            action_conn: None,
+            action_opcode: 0,
+            action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        });
+    }
+
+    fn audio_off(&mut self) -> Result<(), DevicePrefsError> {
+        self.codec.power_off()?;
+
+        self.up.set_audio_enabled(false)?;
+        self.alter_menu_audio_off();
+
+        Ok(())
+    }
+
+    fn alter_menu_audio_off(&mut self) {
+        let menu = self.menu.as_ref().unwrap();
+        // hide volume toggles
+        menu.delete_item(t!("mainmenu.closemenu", xous::LANG));
+        menu.delete_item(&DevicePrefsOp::AudioOff.to_string());
+        menu.delete_item(&DevicePrefsOp::EarpieceVolume.to_string());
+        menu.delete_item(&DevicePrefsOp::HeadsetVolume.to_string());
+        menu.add_item(gam::MenuItem {
+            name: xous_ipc::String::from_str(&DevicePrefsOp::AudioOn.to_string()),
+            action_conn: Some(self.menu_global_conn),
+            action_opcode: DevicePrefsOp::AudioOn.to_u32().unwrap(),
+            action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        });
+        menu.add_item(gam::MenuItem {
+            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", xous::LANG)),
+            action_conn: None,
+            action_opcode: 0,
+            action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        });
+    }
+
+    fn headphone_connected(&mut self) -> Result<bool, DevicePrefsError> {
+        match self.codec.poll_headphone_state()? {
+            codec::HeadphoneState::PresentWithMic => Ok(true),
+            codec::HeadphoneState::PresentWithoutMic => Ok(true),
+            _ => Ok(false),
+        }
+    }
+
+    fn volume_slider(&mut self, title: &str, headset: bool) -> Result<(i32, u32), DevicePrefsError> {
+        // We're aiming at 20 step levels in the UI, which is the result of dividing
+        // 80dB levels available through codec by 4 (https://xkcd.com/221/).
+
+        let current_level = match headset {
+            true => self.up.headset_volume_or_default()?,
+            false => self.up.earpiece_volume_or_default()?,
+        };
+
+        // we're going in the signed integer realm here, coerce val to i32
+        let val = self.modals.slider(title, 0, 100, current_level, 5).unwrap() as i32;
+        let db_val = percentage_to_db(val as u32);
+
+        Ok((db_val as i32, val as u32))
+    }
+
+    fn headset_volume(&mut self) -> Result<(), DevicePrefsError> {
+        let (db_val, slider_val) = self.volume_slider("Headset volume level", true)?;
+        self.codec.set_headphone_volume(codec::VolumeOps::Set, Some(db_val as f32))?;
+        self.up.set_headset_volume(slider_val)?;
+
+        Ok(())
+    }
+
+    fn earpiece_volume(&mut self) -> Result<(), DevicePrefsError> {
+        let (db_val, slider_val) = self.volume_slider("Earpiece volume level", false)?;
+        self.codec.set_speaker_volume(codec::VolumeOps::Set, Some(db_val as f32))?;
+        self.up.set_earpiece_volume(slider_val)?;
+        Ok(())
+    }
+}
+
+pub fn percentage_to_db(value: u32) -> i32 {
+    let negated_val = 100 - value;
+
+    (negated_val as i32 * -80)/100
 }
 
 fn yes_no_to_bool(val: &str) -> bool {
@@ -325,23 +526,27 @@ fn bool_to_yes_no(val: bool) -> String {
     }
 }
 
-pub fn start_background_thread() {
-    std::thread::spawn(|| run_menu_thread());
+pub fn start_background_thread(sid: xous::SID) {
+    let sid = sid.clone();
+    std::thread::spawn(move || run_menu_thread(sid));
 }
 
-fn run_menu_thread() {
+fn run_menu_thread(sid: xous::SID) {
     let xns = xous_names::XousNames::new().unwrap();
 
-    let sid = xous::create_server().unwrap();
     let menu_conn = xous::connect(sid).unwrap();
+
+    let menumatic_sid = xous::create_server().unwrap();
 
     // --------------------------- spawn a time UX manager thread
     let time_sid = xous::create_server().unwrap();
     let time_cid = xous::connect(time_sid).unwrap();
     crate::time::start_time_ux(time_sid);
 
+    let codec = codec::Codec::new(&xns).unwrap();
+
     let mut handlers: Vec<Box<dyn PrefHandler>> = vec![
-        Box::new(DevicePrefs::new(&xns, time_cid)),
+        Box::new(DevicePrefs::new(&xns, time_cid, menumatic_sid, menu_conn, codec)),
         Box::new(wifi::WLANMan::new(&xns)),
     ];
 

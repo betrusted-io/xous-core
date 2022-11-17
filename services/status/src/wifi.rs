@@ -90,7 +90,7 @@ impl PrefHandler for WLANMan {
         }
     }
 
-    fn claim_menumatic_menu(&self, cid: xous::CID) {
+    fn claim_menumatic_menu(&mut self, cid: xous::CID) {
         let mut menus = self
             .actions()
             .iter()
