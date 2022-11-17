@@ -44,10 +44,21 @@ pub(crate) enum Opcode {
     /// set headphone volume -- L&R channels are ganged together in this API, but codec can do separately
     SetHeadphoneVolume,
 
+    /// get headphone type code
+    GetHeadphoneCode,
+
     /// Suspend/resume callback
     SuspendResume,
 }
 
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum HeadphoneState {
+    NotPresent = 0,
+    PresentWithMic = 1,
+    PresentWithoutMic = 2,
+    Reserved = 3,
+    CodecOff = 4,
+}
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum VolumeOps {

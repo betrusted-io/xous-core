@@ -69,6 +69,8 @@ pub struct ManagedProgress {
     pub end_work: u32,
     /// current quanta of work. Used to int the bar, updates are just a scalar with the same value.
     pub current_work: u32,
+    /// can user interact with it?
+    pub user_interaction: bool,
 }
 
 /// This isn't a terribly useful notification -- it's basically read-only, no interactivity,
@@ -98,6 +100,8 @@ pub(crate) enum Opcode {
     Bip39 = 31, // ---- note op number
     Bip39Input = 32, // ----- note op number
     Bip39Return = 33, // ----- note op number
+    SliderReturn = 34,
+    Slider = 35,
     /// display an image
     #[cfg(feature = "ditherpunk")]
     Image = 3,

@@ -47,6 +47,11 @@ impl Slider {
             show_legend,
         }
     }
+
+    pub fn set_is_progressbar(&mut self, setting: bool) {
+        self.is_progressbar = setting;
+    } 
+
     pub fn set_is_password(&mut self, setting: bool) {
         // this will cause text to be inverted. Untrusted entities can try to set this,
         // but the GAM should defeat this for dialog boxes outside of the trusted boot
@@ -194,8 +199,11 @@ impl ActionApi for Slider {
                     gam.relinquish_focus().unwrap();
                     xous::yield_slice();
 
-                    send_message(self.action_conn,
-                        xous::Message::new_scalar(self.action_opcode as usize, self.action_payload as usize, 0, 0, 0)).expect("couldn't pass on action payload");
+                    let ret_payload = SliderPayload(self.action_payload);
+
+                    let buf = Buffer::into_buf(ret_payload).expect("couldn't convert message to payload");
+                    buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
+
                     return None;
                 }
                 _ => {

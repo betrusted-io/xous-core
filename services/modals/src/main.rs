@@ -113,7 +113,7 @@ fn wrapped_main() -> ! {
     let mut fixed_items = Vec::<ItemName>::new();
     let mut progress_action = Slider::new(
         renderer_cid,
-        Opcode::Gutter.to_u32().unwrap(),
+        Opcode::SliderReturn.to_u32().unwrap(),
         0,
         100,
         1,
@@ -326,6 +326,24 @@ fn wrapped_main() -> ! {
                     continue;
                 }
                 op = RendererState::RunProgress(spec);
+                send_message(
+                    renderer_cid,
+                    Message::new_scalar(Opcode::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't initiate UX op");
+            }
+            Some(Opcode::Slider) => {
+                let spec = {
+                    let buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    buffer.to_original::<ManagedProgress, _>().unwrap()
+                };
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
+                op = RendererState::RunProgress(spec);
+                dr = Some(msg);
                 send_message(
                     renderer_cid,
                     Message::new_scalar(Opcode::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0),
@@ -593,6 +611,7 @@ fn wrapped_main() -> ! {
                             end_work
                         );
                         progress_action.set_state(last_percentage);
+                        progress_action.set_is_progressbar(!config.user_interaction);
                         #[cfg(feature = "tts")]
                         tts.tts_simple(config.title.as_str().unwrap()).unwrap();
                         renderer_modal.modify(
@@ -603,6 +622,7 @@ fn wrapped_main() -> ! {
                             true,
                             Some(DEFAULT_STYLE),
                         );
+
                         renderer_modal.activate();
                     }
                     RendererState::RunRadio(config) => {
@@ -764,6 +784,32 @@ fn wrapped_main() -> ! {
                     xous::return_scalar2(sender, 1, k).unwrap();
                 }
             }),
+            Some(Opcode::SliderReturn) => match op {
+                RendererState::RunProgress(_) => {
+                    let buffer =
+                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let item = buffer.to_original::<SliderPayload, _>().unwrap();
+
+                    if let Some(mut origin) = dr.take() {
+                        let mut response = unsafe {
+                            Buffer::from_memory_message_mut(
+                                origin.body.memory_message_mut().unwrap(),
+                            )
+                        };
+
+                        response.replace(item).unwrap();
+                        op = RendererState::None;
+
+                        token_lock = next_lock(&mut work_queue);
+                    } else {
+                        log::error!("Ux routine returned but no origin was recorded");
+                        panic!("Ux routine returned but no origin was recorded");
+                    }
+                },
+                _ => {
+                    log::warn!("got weird stuff on slider return, ignoring");
+                }
+            },
             Some(Opcode::TextEntryReturn) => match op {
                 RendererState::RunText(_config) => {
                     log::trace!("validating text entry modal");

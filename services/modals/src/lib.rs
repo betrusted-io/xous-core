@@ -302,11 +302,38 @@ impl Modals {
             start_work: start,
             end_work: end,
             current_work: current,
+            user_interaction: false,
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::StartProgress.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
         Ok(())
+    }
+
+    pub fn slider(
+        &self,
+        title: &str,
+        start: u32,
+        end: u32,
+        current: u32,
+    ) -> Result<u32, xous::Error> {
+        self.lock();
+        let spec = ManagedProgress {
+            token: self.token,
+            title: xous_ipc::String::from_str(title),
+            start_work: start,
+            end_work: end,
+            current_work: current,
+            user_interaction: true,
+        };
+        let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::Slider.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+
+        let orig = buf.to_original::<SliderPayload, _>().unwrap();
+
+        self.unlock();
+        Ok(orig.0)
     }
 
     /// note that this API is not atomically token-locked, so, someone could mess with the progress bar state

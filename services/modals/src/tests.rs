@@ -96,6 +96,20 @@ pub fn spawn_test() {
                 }
                 Err(e) => log::error!("couldn't get input: {:?}", e),
             }
+
+            // 6. human interaction-enabled slider
+            log::info!("testing human interaction-enabled slider");
+            let result = modals.slider(
+                "Human interaction-enabled slider!",
+                0,
+                100,
+                50,
+            ).expect("slider test failed");
+
+            modals.show_notification(&format!("Slider value: {}", result), None)
+                .expect("cannot show slider result notification");
+
+            log::info!("slider test done");
         }
     });
 
@@ -165,6 +179,9 @@ pub fn spawn_test() {
                 modals.show_image(bm).expect("show image modal failed");
                 log::info!("image modal test done");
             }
+
+            // 6. test that human-interactable slider modal
+            log::info!("testing human interaction-enabled modal");
         }
     });
 }

@@ -665,6 +665,11 @@ impl<'a> ShellCmdApi<'a> for Test {
                         Err(e) => log::error!("couldn't get input: {:?}", e),
                     }
                 }
+                "hpstate" => {
+                    let state = self.codec.poll_headphone_state();
+                    log::info!("{:?}", state);
+                    write!(ret, "{:?}", state).ok();
+                }
                 "ecup" => {
                     let ecup_conn = env.xns.request_connection_blocking("__ECUP server__").unwrap();
                     xous::send_message(ecup_conn,
