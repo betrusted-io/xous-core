@@ -71,6 +71,8 @@ pub struct ManagedProgress {
     pub current_work: u32,
     /// can user interact with it?
     pub user_interaction: bool,
+    /// how much should the slider move with each movement?
+    pub step: u32,
 }
 
 /// This isn't a terribly useful notification -- it's basically read-only, no interactivity,

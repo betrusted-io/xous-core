@@ -612,6 +612,7 @@ fn wrapped_main() -> ! {
                         );
                         progress_action.set_state(last_percentage);
                         progress_action.set_is_progressbar(!config.user_interaction);
+                        progress_action.step = config.step;
                         #[cfg(feature = "tts")]
                         tts.tts_simple(config.title.as_str().unwrap()).unwrap();
                         renderer_modal.modify(
