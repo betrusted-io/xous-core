@@ -34,6 +34,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 )]
 use std::thread;
 
+use crate::preferences::{percentage_to_db, PrefsMenuUpdateOp};
+
 const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 const SERVER_NAME_STATUS: &str = "_Status_";
 /// How long a backup header should persist before it is automatically deleted.
@@ -213,6 +215,7 @@ fn wrapped_main() -> ! {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let mut netmgr = net::NetManager::new();
+    let mut codec = codec::Codec::new(&xns).unwrap();
 
     // screensize is controlled by the GAM, it's set in main.rs near the top
     let screensize = gam
@@ -350,7 +353,9 @@ fn wrapped_main() -> ! {
     let autobacklight_thread_already_running = Arc::new(Mutex::new(false));
     let thread_conn = xous::connect(status_sid).unwrap();
 
-    preferences::start_background_thread();
+    let prefs_sid = xous::create_server().unwrap();
+    let prefs_cid = xous::connect(prefs_sid).unwrap();
+    preferences::start_background_thread(prefs_sid);
     
     // load system preferences
     let prefs = Arc::new(Mutex::new(userprefs::Manager::new()));
@@ -412,6 +417,30 @@ fn wrapped_main() -> ! {
                 Err(error) => log::error!("cannot set keymap {:?}: {:?}", stored_keymap, error),
                 Ok(()) => (),
             };
+
+            log::info!("audio enabled: {}", all_prefs.audio_enabled);
+            match all_prefs.audio_enabled {
+                true => {
+                    match codec.setup_8k_stream() {
+                        Ok(()) => {
+                            send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                            Ok(())
+                        },
+                        Err(e) => Err(e),
+                    }
+                }
+                false => Ok(())
+            }.unwrap_or_else(|error| {
+                log::error!("cannot set audio enabled: {:?}", error);
+            });
+
+            codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
+                log::error!("cannot set headphone volume: {:?}", error);
+            });
+
+            codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
+                log::error!("cannot set speaker volume: {:?}", error);
+            });
             
             break
         }
