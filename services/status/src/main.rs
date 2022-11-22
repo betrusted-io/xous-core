@@ -388,7 +388,7 @@ fn wrapped_main() -> ! {
 
             log::debug!("pddb ready, loading preferences now!");
 
-            match all_prefs.radio_on_on_boot {
+            match all_prefs.wifi_kill {
                 true => netmgr.connection_manager_wifi_off_and_stop(),
                 false => netmgr.connection_manager_wifi_on(),
             }.unwrap_or_else(|error| {

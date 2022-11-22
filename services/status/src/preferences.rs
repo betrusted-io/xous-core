@@ -13,7 +13,7 @@ pub trait PrefHandler {
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, PartialOrd)]
 enum DevicePrefsOp {
-    RadioOnOnBoot,
+    WifiKill,
     ConnectKnownNetworksOnBoot,
     AutobacklightOnBoot,
     AutobacklightTimeout,
@@ -44,7 +44,7 @@ impl Display for DevicePrefsOp {
             Self::AutobacklightOnBoot => write!(f, "{}", t!("prefs.autobacklight_enable", xous::LANG)),
             Self::AutobacklightTimeout => write!(f, "{}", t!("prefs.autobacklight_duration", xous::LANG)),
             Self::ConnectKnownNetworksOnBoot => write!(f, "{}", t!("prefs.wifi_connect_auto", xous::LANG)),
-            Self::RadioOnOnBoot => write!(f, "{}", t!("prefs.wifi_kill", xous::LANG)),
+            Self::WifiKill => write!(f, "{}", t!("prefs.wifi_kill", xous::LANG)),
             Self::KeyboardLayout => write!(f, "Keyboard layout"),
             Self::WLANMenu => write!(f, "WiFi settings"),
             Self::SetTime => write!(f, "{}", t!("mainmenu.set_rtc", xous::LANG)),
@@ -181,7 +181,7 @@ impl DevicePrefs {
         use DevicePrefsOp::*;
 
         let mut ret = vec![
-            RadioOnOnBoot,
+            WifiKill,
             ConnectKnownNetworksOnBoot,
             AutobacklightOnBoot,
             AutobacklightTimeout,
@@ -211,7 +211,7 @@ impl DevicePrefs {
 
         let resp = match action {
             AutobacklightOnBoot => self.autobacklight_on_boot(),
-            RadioOnOnBoot => self.radio_on_on_boot(),
+            WifiKill => self.wifi_kill(),
             ConnectKnownNetworksOnBoot => self.connect_known_networks_on_boot(),
             AutobacklightTimeout => self.autobacklight_timeout(),
             KeyboardLayout => self.keyboard_layout(),
@@ -303,8 +303,8 @@ impl DevicePrefs {
         Ok(self.up.set_autobacklight_timeout(new_timeout)?)
     }
 
-    fn radio_on_on_boot(&mut self) -> Result<(), DevicePrefsError> {
-        let cv = self.up.radio_on_on_boot_or_default()?;
+    fn wifi_kill(&mut self) -> Result<(), DevicePrefsError> {
+        let cv = self.up.wifi_kill_or_default()?;
 
         self.modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
 
@@ -315,8 +315,13 @@ impl DevicePrefs {
                 .unwrap()
                 .as_str(),
         );
+        if cv {
+            self.netmgr.connection_manager_wifi_off_and_stop().ok();
+        } else {
+            self.netmgr.connection_manager_wifi_on().ok();
+        }
 
-        Ok(self.up.set_radio_on_on_boot(new_result)?)
+        Ok(self.up.set_wifi_kill(new_result)?)
     }
 
     fn connect_known_networks_on_boot(&mut self) -> Result<(), DevicePrefsError> {

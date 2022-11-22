@@ -529,6 +529,13 @@
         "ja": "現在の設定",
         "zh": "当前设置"
     },
+    "prefs.wifi_kill": {
+        "en": "WiFi kill switch",
+        "en-tts": "WiFi kill switch",
+        "fr": "Coupe-circuit WiFi *MT*",
+        "ja": "WiFiキルスイッチ",
+        "zh": "WiFi终止开关"
+    },
     "prefs.yes": {
         "en": "Yes",
         "en-tts": "Yes",

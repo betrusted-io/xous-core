@@ -44,7 +44,7 @@ impl From<DecodeError> for Error {
 #[derive(prefsgenerator::GetterSetter)]
 #[allow(dead_code)] // Allowing dead code here because UserPrefs is used to generate getter/setters.
 pub struct UserPrefs {
-    pub radio_on_on_boot: bool,
+    pub wifi_kill: bool,
     pub connect_known_networks_on_boot: bool,
     pub autobacklight_on_boot: bool,
     pub autobacklight_timeout: u64,
