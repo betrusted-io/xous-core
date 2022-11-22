@@ -189,7 +189,7 @@ impl DevicePrefs {
 
         if self.codec.is_running().unwrap_or_default() {
             ret.push(AudioOff);
-            
+
             // TODO(gsora): detect what volume to show
             match self.headphone_connected().unwrap() {
                 true => ret.push(HeadsetVolume),
@@ -205,7 +205,7 @@ impl DevicePrefs {
     fn consume_menu_action(&mut self, action: DevicePrefsOp) {
         use DevicePrefsOp::*;
 
-        let resp = match action {            
+        let resp = match action {
             AutobacklightOnBoot => self.autobacklight_on_boot(),
             RadioOnOnBoot => self.radio_on_on_boot(),
             ConnectKnownNetworksOnBoot => self.connect_known_networks_on_boot(),

@@ -85,7 +85,7 @@ pub(crate) enum StatusOpcode {
     BatteryDisconnect,
     /// for returning wifi stats
     WifiStats,
-    
+
     /// Raise the preferences menu
     Preferences,
     Quit,
@@ -315,7 +315,7 @@ fn wrapped_main() -> ! {
             t!("secnote.usb_unlock", xous::LANG).to_string(),
         );
     }
-    
+
     // this is used by the main loop to get the localtime to show on the status bar
     let mut localtime = llio::LocalTime::new();
 
@@ -356,11 +356,11 @@ fn wrapped_main() -> ! {
     let prefs_sid = xous::create_server().unwrap();
     let prefs_cid = xous::connect(prefs_sid).unwrap();
     preferences::start_background_thread(prefs_sid);
-    
+
     // load system preferences
     let prefs = Arc::new(Mutex::new(userprefs::Manager::new()));
     let prefs_thread_clone = prefs.clone();
-    
+
     /*
     This thread handles preference loading.
     It'll wait until PDDB is ready to load stuff off the preference
@@ -385,9 +385,9 @@ fn wrapped_main() -> ! {
                     return;
                 }
             };
-            
+
             log::debug!("pddb ready, loading preferences now!");
-            
+
             match all_prefs.radio_on_on_boot {
                 true => netmgr.connection_manager_wifi_off_and_stop(),
                 false => netmgr.connection_manager_wifi_on(),
@@ -441,7 +441,7 @@ fn wrapped_main() -> ! {
             codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
                 log::error!("cannot set speaker volume: {:?}", error);
             });
-            
+
             break
         }
     });
@@ -474,7 +474,7 @@ fn wrapped_main() -> ! {
                     // restore interrupts and connection manager
                     llio.com_event_enable(true).ok();
                     netmgr.reset();
-                    
+
                     // TODO(gsora): I'm commenting this out because user preferences might say otherwise.
                     //netmgr.connection_manager_run().ok();
                 }
@@ -754,7 +754,7 @@ fn wrapped_main() -> ! {
             }
         }
     });
-    
+
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();

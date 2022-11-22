@@ -43,7 +43,7 @@ pub fn getter_setter(input: TokenStream) -> TokenStream {
 
                                 Ok(ret)
                             }
-                            
+
                             pub fn #fn_name_or_default(&self) -> Result<#typ, Error> {
                                 let bytes = self.pddb_get_key(#ident_str)?;
                                 let ret: #typ = match bincode::decode_from_slice(&bytes, bincode::config::standard()) {
@@ -71,7 +71,7 @@ pub fn getter_setter(input: TokenStream) -> TokenStream {
                 let all = quote! {
                     impl Manager {
                         pub fn all(&self) -> Result<UserPrefs, Error> {
-                            
+
                             Ok(UserPrefs {
                                 #( #ident_map:self.#ident_fn_calls()? ),*
                             })
