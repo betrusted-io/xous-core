@@ -487,6 +487,48 @@
         "ja": "中断不可能な操作が保留中です。 数秒後にスリープ リクエストを再試行してください。",
         "zh": "不间断操作挂起。 请在几秒钟后重试睡眠请求。"
     },
+    "prefs.autobacklight_enable": {
+        "en": "Autobacklight on/off",
+        "en-tts": "Autobacklight on/off",
+        "fr": "Rétroéclairage automatique *MT*",
+        "ja": "自動逆光のオン/オフ",
+        "zh": "自动背光开/关"
+    },
+    "prefs.autobacklight_duration": {
+        "en": "Autobacklight duration",
+        "en-tts": "Autobacklight duration",
+        "fr": "Durée du rétroéclairage automatique *MT*",
+        "ja": "自動バックライトの持続時間",
+        "zh": "自动背光持续时间"
+    },
+    "prefs.autobacklight_duration_in_secs": {
+        "en": "Autobacklight duration in seconds:",
+        "en-tts": "Autobacklight duration in seconds",
+        "fr": "Durée du rétroéclairage automatique en secondes: *MT*",
+        "ja": "自動バックライトの持続時間 (秒):",
+        "zh": "自动背光持续时间（以秒为单位):"
+    },
+    "prefs.autobacklight_err": {
+        "en": "Duration must be positive!",
+        "en-tts": "Duration must be positive!",
+        "fr": "La durée doit être positive! *MT*",
+        "ja": "期間は正でなければなりません!",
+        "zh": "持续时间必须为正数！"
+    },
+    "prefs.yes": {
+        "en": "Yes",
+        "en-tts": "Yes",
+        "fr": "Oui",
+        "ja": "はい",
+        "zh": "确定"
+    },
+    "prefs.no": {
+        "en": "No",
+        "en-tts": "No",
+        "fr": "Non",
+        "ja": "いいえ",
+        "zh": "取消"
+    },
     "wlan.cancel": {
         "en": "❌ Cancel request ❌",
         "en-tts": "Cancel the requested action",

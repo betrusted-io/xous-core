@@ -41,18 +41,18 @@ pub enum PrefsMenuUpdateOp {
 impl Display for DevicePrefsOp {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::AutobacklightOnBoot => write!(f, "Autobacklight enabled on boot"),
-            Self::AutobacklightTimeout => write!(f, "Autobacklight timeout"),
-            Self::ConnectKnownNetworksOnBoot => write!(f, "Connect to known networks on boot"),
-            Self::RadioOnOnBoot => write!(f, "Enable WiFi on boot"),
+            Self::AutobacklightOnBoot => write!(f, "{}", t!("prefs.autobacklight_enable", xous::LANG)),
+            Self::AutobacklightTimeout => write!(f, "{}", t!("prefs.autobacklight_duration", xous::LANG)),
+            Self::ConnectKnownNetworksOnBoot => write!(f, "Automatically connnect to networks"),
+            Self::RadioOnOnBoot => write!(f, "WiFi kill switch"),
             Self::KeyboardLayout => write!(f, "Keyboard layout"),
-            Self::WLANMenu => write!(f, "WLAN settings"),
+            Self::WLANMenu => write!(f, "WiFi settings"),
             Self::SetTime => write!(f, "{}", t!("mainmenu.set_rtc", xous::LANG)),
             Self::SetTimezone => write!(f, "{}", t!("mainmenu.set_tz", xous::LANG)),
             Self::AudioOn => write!(f, "{}", "Enable audio subsystem"),
             Self::AudioOff => write!(f, "{}", "Disable audio subsystem"),
             Self::HeadsetVolume => write!(f, "{}", "Headset volume"),
-            Self::EarpieceVolume => write!(f, "{}", "Earpiece volume"),
+            Self::EarpieceVolume => write!(f, "{}", "Speaker volume"),
 
             _ => unimplemented!("should not end up here!"),
         }
@@ -237,11 +237,11 @@ impl DevicePrefs {
 
 impl DevicePrefs {
     fn autobacklight_on_boot(&mut self) -> Result<(), DevicePrefsError> {
-        let cv = self.up.autobacklight_on_boot_or_default()?;
+        let cv = !self.up.autobacklight_on_boot_or_default()?; // note inversion of storage sense to make it on when false
 
-        self.modals.add_list(vec!["Yes", "No"]).unwrap();
+        self.modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
 
-        let new_result = yes_no_to_bool(
+        let new_result = !yes_no_to_bool( // inversion of storage sense: false = on
             self.modals
                 .get_radiobutton(&format!("Current status: {}", bool_to_yes_no(cv)))
                 .unwrap()
@@ -268,13 +268,13 @@ impl DevicePrefs {
 
         let raw_timeout = self
             .modals
-            .alert_builder("Autobacklight timeout in seconds:")
+            .alert_builder(t!("prefs.autobacklight_duration_in_secs", xous::LANG))
             .field(
                 Some(cv.to_string()),
                 Some(|tf| match tf.as_str().parse::<u64>() {
                     Ok(_) => None,
                     Err(_) => Some(xous_ipc::String::from_str(
-                        "Timeout must be a positive number!",
+                        t!("prefs.autobacklight_err", xous::LANG),
                     )),
                 }),
             )
@@ -289,7 +289,7 @@ impl DevicePrefs {
     fn radio_on_on_boot(&mut self) -> Result<(), DevicePrefsError> {
         let cv = self.up.radio_on_on_boot_or_default()?;
 
-        self.modals.add_list(vec!["Yes", "No"]).unwrap();
+        self.modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
 
         let new_result = yes_no_to_bool(
             self.modals
@@ -304,7 +304,7 @@ impl DevicePrefs {
     fn connect_known_networks_on_boot(&mut self) -> Result<(), DevicePrefsError> {
         let cv = self.up.connect_known_networks_on_boot_or_default()?;
 
-        self.modals.add_list(vec!["Yes", "No"]).unwrap();
+        self.modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
 
         let new_result = yes_no_to_bool(
             self.modals
@@ -512,17 +512,19 @@ pub fn percentage_to_db(value: u32) -> i32 {
 }
 
 fn yes_no_to_bool(val: &str) -> bool {
-    match val.to_ascii_lowercase().as_str() {
-        "yes" => true,
-        "no" => false,
-        _ => unreachable!("cannot go here!"),
+    if val.to_ascii_lowercase().as_str() == t!("prefs.yes", xous::LANG) {
+        true
+    } else if val.to_ascii_lowercase().as_str() == t!("prefs.no", xous::LANG) {
+        false
+    } else {
+        unreachable!("cannot go here!");
     }
 }
 
 fn bool_to_yes_no(val: bool) -> String {
     match val {
-        true => "yes".to_owned(),
-        false => "no".to_owned(),
+        true => t!("prefs.yes", xous::LANG).to_owned(),
+        false => t!("prefs.no", xous::LANG).to_owned(),
     }
 }
 

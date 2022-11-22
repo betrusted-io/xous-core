@@ -401,11 +401,11 @@ fn wrapped_main() -> ! {
             }.unwrap_or_else(|error| {
                 log::error!("cannot start connection manager: {:?}", error)
             });
-
+            // note inversion of preferences to cause it to be on by default
             match all_prefs.autobacklight_on_boot {
-                true => send_message(status_cid, Message::new_scalar(
+                false => send_message(status_cid, Message::new_scalar(
                     StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
-                false => Ok(xous::Result::Ok),
+                true => Ok(xous::Result::Ok),
             }.unwrap_or_else(|error| {
                 log::error!("cannot set autobacklight status: {:?}", error);
                 xous::Result::Ok
