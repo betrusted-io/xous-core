@@ -536,6 +536,20 @@
         "ja": "WiFiキルスイッチ",
         "zh": "WiFi终止开关"
     },
+    "prefs.keyboard_layout": {
+        "en": "Keyboard layout",
+        "en-tts": "Keyboard layout",
+        "fr": "Disposition du clavier",
+        "ja": "キーボード・レイアウト",
+        "zh": "键盘布局"
+    },
+    "prefs.wifi_setting": {
+        "en": "WiFi settings",
+        "en-tts": "WiFi settings",
+        "fr": "Paramètres Wifi",
+        "ja": "WiFi 設定",
+        "zh": "无线网络设置"
+    },
     "prefs.yes": {
         "en": "Yes",
         "en-tts": "Yes",
