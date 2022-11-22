@@ -99,6 +99,7 @@ struct DevicePrefs {
     menu_manager_sid: xous::SID,
     menu_global_conn: xous::CID,
     status_cid: xous::CID,
+    netmgr: net::NetManager,
 }
 
 impl PrefHandler for DevicePrefs {
@@ -172,6 +173,7 @@ impl DevicePrefs {
             menu_manager_sid,
             menu_global_conn: menu_conn,
             status_cid: status_conn,
+            netmgr: net::NetManager::new(),
         }
     }
 
@@ -245,7 +247,8 @@ impl DevicePrefs {
 
         let new_result = yes_no_to_bool( // inversion of storage sense: false = on
             self.modals
-                .get_radiobutton(&format!("Current status: {}", bool_to_yes_no(cv)))
+                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
+                    bool_to_yes_no(cv)))
                 .unwrap()
                 .as_str(),
         );
@@ -307,22 +310,29 @@ impl DevicePrefs {
 
         let new_result = yes_no_to_bool(
             self.modals
-                .get_radiobutton(&format!("Current status: {}", bool_to_yes_no(cv)))
+                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
+                    bool_to_yes_no(cv)))
                 .unwrap()
                 .as_str(),
         );
+        if cv {
+            self.netmgr.connection_manager_run().ok();
+        } else {
+            self.netmgr.connection_manager_stop().ok();
+        }
 
         Ok(self.up.set_radio_on_on_boot(new_result)?)
     }
 
     fn connect_known_networks_on_boot(&mut self) -> Result<(), DevicePrefsError> {
-        let cv = self.up.connect_known_networks_on_boot_or_default()?;
+        let cv = self.up.connect_known_networks_on_boot_or_value(true)?;
 
         self.modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
 
         let new_result = yes_no_to_bool(
             self.modals
-                .get_radiobutton(&format!("Current status: {}", bool_to_yes_no(cv)))
+                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
+                    bool_to_yes_no(cv)))
                 .unwrap()
                 .as_str(),
         );
@@ -382,7 +392,8 @@ impl DevicePrefs {
 
         let new_result = self
             .modals
-            .get_radiobutton(&format!("Current layout: {}", keyboard::KeyMap::from(kl)))
+            .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
+                keyboard::KeyMap::from(kl)))
             .unwrap();
 
         let new_result = match mappings

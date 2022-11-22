@@ -522,6 +522,13 @@
         "ja": "自動でWiFiに接続",
         "zh": "自动连接WiFi"
     },
+    "prefs.current_setting": {
+        "en": "Current setting:",
+        "en-tts": "Current setting:",
+        "fr": "Paramètre actuel *MT*",
+        "ja": "現在の設定",
+        "zh": "当前设置"
+    },
     "prefs.yes": {
         "en": "Yes",
         "en-tts": "Yes",

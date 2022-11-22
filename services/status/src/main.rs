@@ -395,7 +395,7 @@ fn wrapped_main() -> ! {
                 log::error!("cannot set radio status: {:?}", error)
             });
 
-            match all_prefs.connect_known_networks_on_boot {
+            match prefs.connect_known_networks_on_boot_or_value(true).unwrap() {
                 true => netmgr.connection_manager_run(),
                 false => netmgr.connection_manager_stop(),
             }.unwrap_or_else(|error| {
