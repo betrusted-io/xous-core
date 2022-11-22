@@ -49,10 +49,10 @@ impl Display for DevicePrefsOp {
             Self::WLANMenu => write!(f, "{}", t!("prefs.wifi_setting", xous::LANG)),
             Self::SetTime => write!(f, "{}", t!("mainmenu.set_rtc", xous::LANG)),
             Self::SetTimezone => write!(f, "{}", t!("mainmenu.set_tz", xous::LANG)),
-            Self::AudioOn => write!(f, "{}", "Enable audio subsystem"),
-            Self::AudioOff => write!(f, "{}", "Disable audio subsystem"),
-            Self::HeadsetVolume => write!(f, "{}", "Headset volume"),
-            Self::EarpieceVolume => write!(f, "{}", "Speaker volume"),
+            Self::AudioOn => write!(f, "{}", t!("prefs.enable_audio", xous::LANG)),
+            Self::AudioOff => write!(f, "{}", t!("prefs.disable_audio", xous::LANG)),
+            Self::HeadsetVolume => write!(f, "{}", t!("prefs.headphone_volume", xous::LANG)),
+            Self::EarpieceVolume => write!(f, "{}", t!("prefs.speaker_volume", xous::LANG)),
 
             _ => unimplemented!("should not end up here!"),
         }
@@ -181,12 +181,12 @@ impl DevicePrefs {
         use DevicePrefsOp::*;
 
         let mut ret = vec![
-            WifiKill,
+            WLANMenu,
             ConnectKnownNetworksOnBoot,
+            WifiKill,
             AutobacklightOnBoot,
             AutobacklightTimeout,
             KeyboardLayout,
-            WLANMenu,
             SetTime,
             SetTimezone,
         ];
@@ -519,16 +519,16 @@ impl DevicePrefs {
         Ok((db_val as i32, val as u32))
     }
 
-    fn headset_volume(&mut self) -> Result<(), DevicePrefsError> {
-        let (db_val, slider_val) = self.volume_slider("Headset volume level", true)?;
+    fn headset_volume(&mut self) -> Result<(), DevicePrefsError> { // headset -> headphone
+        let (db_val, slider_val) = self.volume_slider(t!("prefs.headphone_volume", xous::LANG), true)?;
         self.codec.set_headphone_volume(codec::VolumeOps::Set, Some(db_val as f32))?;
         self.up.set_headset_volume(slider_val)?;
 
         Ok(())
     }
 
-    fn earpiece_volume(&mut self) -> Result<(), DevicePrefsError> {
-        let (db_val, slider_val) = self.volume_slider("Earpiece volume level", false)?;
+    fn earpiece_volume(&mut self) -> Result<(), DevicePrefsError> { // earpiece -> speaker
+        let (db_val, slider_val) = self.volume_slider(t!("prefs.speaker_volume", xous::LANG), false)?;
         self.codec.set_speaker_volume(codec::VolumeOps::Set, Some(db_val as f32))?;
         self.up.set_earpiece_volume(slider_val)?;
         Ok(())

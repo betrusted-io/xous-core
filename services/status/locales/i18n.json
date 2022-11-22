@@ -550,6 +550,34 @@
         "ja": "WiFi 設定",
         "zh": "无线网络设置"
     },
+    "prefs.enable_audio": {
+        "en": "Enable audio subsystem",
+        "en-tts": "Enable audio subsystem",
+        "fr": "Activer le sous-système audio",
+        "ja": "オーディオ サブシステムを有効にする",
+        "zh": "启用音频子系统"
+    },
+    "prefs.disable_audio": {
+        "en": "Disable audio subsystem",
+        "en-tts": "Disable audio subsystem",
+        "fr": "Désactiver le sous-système audio",
+        "ja": "オーディオ サブシステムを無効にする",
+        "zh": "禁用音频子系统"
+    },
+    "prefs.headphone_volume": {
+        "en": "Headphone volume",
+        "en-tts": "Headphone volume",
+        "fr": "Volume du casque",
+        "ja": "ヘッドホンの音量",
+        "zh": "耳机音量"
+    },
+    "prefs.speaker_volume": {
+        "en": "Speaker volume",
+        "en-tts": "Speaker volume",
+        "fr": "Volume du haut-parleur",
+        "ja": "スピーカーの音量",
+        "zh": "喇叭音量"
+    },
     "prefs.yes": {
         "en": "Yes",
         "en-tts": "Yes",
