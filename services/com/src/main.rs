@@ -673,6 +673,8 @@ fn main() -> ! {
                 com.txrx(ComState::CHG_BOOST_ON.verb);
             }
             Some(Opcode::SetBackLight) => msg_scalar_unpack!(msg, main, secondary, _, _, {
+                #[cfg(not(target_os = "xous"))]
+                log::info!("HOSTED: set backlight to {},{}", main, secondary);
                 bl_main = main;
                 bl_sec = secondary;
                 com.txrx(ComState::BL_START.verb | (main as u16) & 0x1f | (((secondary as u16) & 0x1f) << 5));
