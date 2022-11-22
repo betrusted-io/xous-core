@@ -488,11 +488,11 @@
         "zh": "不间断操作挂起。 请在几秒钟后重试睡眠请求。"
     },
     "prefs.autobacklight_enable": {
-        "en": "Autobacklight on/off",
-        "en-tts": "Autobacklight on/off",
-        "fr": "Rétroéclairage automatique *MT*",
-        "ja": "自動逆光のオン/オフ",
-        "zh": "自动背光开/关"
+        "en": "Autobacklight setting",
+        "en-tts": "Autobacklight setting",
+        "fr": "Réglage du rétroéclairage automatique *MT*",
+        "ja": "自動バックライト設定",
+        "zh": "自动背光设置"
     },
     "prefs.autobacklight_duration": {
         "en": "Autobacklight duration",
