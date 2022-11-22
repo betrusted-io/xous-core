@@ -44,7 +44,7 @@ impl Display for DevicePrefsOp {
             Self::AutobacklightOnBoot => write!(f, "{}", t!("prefs.autobacklight_enable", xous::LANG)),
             Self::AutobacklightTimeout => write!(f, "{}", t!("prefs.autobacklight_duration", xous::LANG)),
             Self::ConnectKnownNetworksOnBoot => write!(f, "{}", t!("prefs.wifi_connect_auto", xous::LANG)),
-            Self::RadioOnOnBoot => write!(f, "WiFi kill switch"),
+            Self::RadioOnOnBoot => write!(f, "{}", t!("prefs.wifi_kill", xous::LANG)),
             Self::KeyboardLayout => write!(f, "Keyboard layout"),
             Self::WLANMenu => write!(f, "WiFi settings"),
             Self::SetTime => write!(f, "{}", t!("mainmenu.set_rtc", xous::LANG)),
@@ -315,11 +315,6 @@ impl DevicePrefs {
                 .unwrap()
                 .as_str(),
         );
-        if cv {
-            self.netmgr.connection_manager_run().ok();
-        } else {
-            self.netmgr.connection_manager_stop().ok();
-        }
 
         Ok(self.up.set_radio_on_on_boot(new_result)?)
     }
@@ -336,6 +331,11 @@ impl DevicePrefs {
                 .unwrap()
                 .as_str(),
         );
+        if cv {
+            self.netmgr.connection_manager_run().ok();
+        } else {
+            self.netmgr.connection_manager_stop().ok();
+        }
 
         Ok(self.up.set_connect_known_networks_on_boot(new_result)?)
     }
