@@ -11,15 +11,11 @@ pub enum WlanManOp {
     AddNetworkManually,
     KnownNetworks,
     DeleteNetwork,
-    TurnWlanOn,
-    TurnWlanOff,
 }
 
 impl Display for WlanManOp {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::TurnWlanOn => write!(f, "{}", t!("wlan.turnon", xous::LANG)),
-            Self::TurnWlanOff => write!(f, "{}", t!("wlan.turnoff", xous::LANG)),
             Self::AddNetworkManually => write!(f, "{}", t!("wlan.manual_add", xous::LANG)),
             Self::ScanForNetworks => write!(f, "{}", t!("wlan.scan", xous::LANG)),
             Self::Status => write!(f, "{}", t!("wlan.status", xous::LANG)),
@@ -134,11 +130,9 @@ impl WLANMan {
             AddNetworkManually,
             KnownNetworks,
             DeleteNetwork,
-            TurnWlanOn,
-            TurnWlanOff,
         ]
     }
-
+    #[allow(dead_code)] // just in case we need this later
     fn set_wlan_state(&mut self, state: bool) -> Result<(), WLANError> {
         match state {
             true => {
@@ -374,8 +368,6 @@ impl WLANMan {
 
     fn consume_menu_action(&mut self, action: WlanManOp) {
         let resp = match action {
-            WlanManOp::TurnWlanOff => self.set_wlan_state(false),
-            WlanManOp::TurnWlanOn => self.set_wlan_state(true),
             WlanManOp::AddNetworkManually => self.add_new_ssid(),
             WlanManOp::ScanForNetworks => self.show_available_networks(),
             WlanManOp::Status => self.network_status(),
