@@ -98,6 +98,7 @@ struct DevicePrefs {
     menu: Option<gam::MenuMatic>,
     menu_manager_sid: xous::SID,
     menu_global_conn: xous::CID,
+    status_cid: xous::CID,
 }
 
 impl PrefHandler for DevicePrefs {
@@ -159,7 +160,7 @@ impl PrefHandler for DevicePrefs {
 }
 
 impl DevicePrefs {
-    fn new(xns: &xous_names::XousNames, time_ux_cid: xous::CID, menu_manager_sid: xous::SID, menu_conn: xous::CID, codec: codec::Codec) -> Self {
+    fn new(xns: &xous_names::XousNames, time_ux_cid: xous::CID, menu_manager_sid: xous::SID, menu_conn: xous::CID, codec: codec::Codec, status_conn: xous::CID) -> Self {
         Self {
             up: Manager::new(),
             modals: modals::Modals::new(&xns).unwrap(),
@@ -170,6 +171,7 @@ impl DevicePrefs {
             menu: None,
             menu_manager_sid,
             menu_global_conn: menu_conn,
+            status_cid: status_conn,
         }
     }
 
@@ -247,6 +249,18 @@ impl DevicePrefs {
                 .unwrap()
                 .as_str(),
         );
+
+        if cv { // true means off
+            xous::send_message(self.status_cid, xous::Message::new_scalar(
+                crate::StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(),
+                0, 0, 0, 0)
+            ).ok();
+        } else {
+            xous::send_message(self.status_cid, xous::Message::new_scalar(
+                crate::StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(),
+                0, 0, 0, 0)
+            ).ok();
+        }
 
         Ok(self.up.set_autobacklight_on_boot(new_result)?)
     }
@@ -512,9 +526,9 @@ pub fn percentage_to_db(value: u32) -> i32 {
 }
 
 fn yes_no_to_bool(val: &str) -> bool {
-    if val.to_ascii_lowercase().as_str() == t!("prefs.yes", xous::LANG) {
+    if val == t!("prefs.yes", xous::LANG) {
         true
-    } else if val.to_ascii_lowercase().as_str() == t!("prefs.no", xous::LANG) {
+    } else if val == t!("prefs.no", xous::LANG) {
         false
     } else {
         unreachable!("cannot go here!");
@@ -528,12 +542,12 @@ fn bool_to_yes_no(val: bool) -> String {
     }
 }
 
-pub fn start_background_thread(sid: xous::SID) {
+pub fn start_background_thread(sid: xous::SID, status_cid: xous::CID) {
     let sid = sid.clone();
-    std::thread::spawn(move || run_menu_thread(sid));
+    std::thread::spawn(move || run_menu_thread(sid, status_cid));
 }
 
-fn run_menu_thread(sid: xous::SID) {
+fn run_menu_thread(sid: xous::SID, status_cid: xous::CID) {
     let xns = xous_names::XousNames::new().unwrap();
 
     let menu_conn = xous::connect(sid).unwrap();
@@ -548,7 +562,7 @@ fn run_menu_thread(sid: xous::SID) {
     let codec = codec::Codec::new(&xns).unwrap();
 
     let mut handlers: Vec<Box<dyn PrefHandler>> = vec![
-        Box::new(DevicePrefs::new(&xns, time_cid, menumatic_sid, menu_conn, codec)),
+        Box::new(DevicePrefs::new(&xns, time_cid, menumatic_sid, menu_conn, codec, status_cid)),
         Box::new(wifi::WLANMan::new(&xns)),
     ];
 

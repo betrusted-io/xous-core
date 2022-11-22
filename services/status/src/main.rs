@@ -355,7 +355,7 @@ fn wrapped_main() -> ! {
 
     let prefs_sid = xous::create_server().unwrap();
     let prefs_cid = xous::connect(prefs_sid).unwrap();
-    preferences::start_background_thread(prefs_sid);
+    preferences::start_background_thread(prefs_sid, status_cid);
 
     // load system preferences
     let prefs = Arc::new(Mutex::new(userprefs::Manager::new()));
@@ -762,28 +762,23 @@ fn wrapped_main() -> ! {
         log::debug!("{:?}", opcode);
         match opcode {
             Some(StatusOpcode::EnableAutomaticBacklight) => {
+                if *autobacklight_enabled.lock().unwrap() {
+                    // already enabled, don't re-enable
+                    continue;
+                }
                 *autobacklight_enabled.lock().unwrap() = true;
 
                 // second: delete the first three elements off the menu
                 menu_manager.delete_item(t!("mainmenu.backlighton", xous::LANG));
                 menu_manager.delete_item(t!("mainmenu.backlightoff", xous::LANG));
-                menu_manager.delete_item(t!("mainmenu.autobacklighton", xous::LANG));
-
-                // third: add a "disable automatic backlight element"
-                menu_manager.insert_item(gam::MenuItem {
-                    name: xous_ipc::String::from_str(t!("mainmenu.autobacklightoff", xous::LANG)),
-                    action_conn: Some(status_cid),
-                    action_opcode: StatusOpcode::DisableAutomaticBacklight.to_u32().unwrap(),
-                    action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
-                    close_on_select: true,
-                }, 0);
             }
             Some(StatusOpcode::DisableAutomaticBacklight) => {
+                if !(*autobacklight_enabled.lock().unwrap()) {
+                    // already disabled, don't re-disable
+                    continue;
+                }
                 *autobacklight_enabled.lock().unwrap() = false;
                 tx.send(BacklightThreadOps::Stop).unwrap();
-
-                // second: delete the first element off the menu.
-                menu_manager.delete_item(t!("mainmenu.autobacklightoff", xous::LANG));
 
                 // third: construct an array of the new elements to add to the menu.
                 let new_elems = [
@@ -801,13 +796,6 @@ fn wrapped_main() -> ! {
                         action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
                         close_on_select: true,
                     },
-                    gam::MenuItem {
-                        name: xous_ipc::String::from_str(t!("mainmenu.autobacklighton", xous::LANG)),
-                        action_conn: Some(status_cid),
-                        action_opcode: StatusOpcode::EnableAutomaticBacklight.to_u32().unwrap(),
-                        action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
-                        close_on_select: true,
-                    }
                 ];
 
                 new_elems.iter().enumerate().for_each(|(index, element)| {let _ = menu_manager.insert_item(*element, index);});
