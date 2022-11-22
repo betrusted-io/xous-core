@@ -515,6 +515,13 @@
         "ja": "期間は正でなければなりません!",
         "zh": "持续时间必须为正数！"
     },
+    "prefs.wifi_connect_auto": {
+        "en": "Connect to WiFi automatically",
+        "en-tts": "Connect to WiFi automatically",
+        "fr": "Se connecter au wifi automatiquement *MT*",
+        "ja": "自動でWiFiに接続",
+        "zh": "自动连接WiFi"
+    },
     "prefs.yes": {
         "en": "Yes",
         "en-tts": "Yes",

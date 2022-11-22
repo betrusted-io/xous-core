@@ -22,6 +22,7 @@ pub fn getter_setter(input: TokenStream) -> TokenStream {
                     let set_fn_name = format_ident!("set_{}", ident);
                     let fn_name = format_ident!("{}", ident);
                     let fn_name_or_default = format_ident!("{}_or_default", ident);
+                    let fn_name_or_value = format_ident!("{}_or_value", ident);
 
                     let read = quote! {
                         impl Manager {
@@ -49,6 +50,16 @@ pub fn getter_setter(input: TokenStream) -> TokenStream {
                                 let ret: #typ = match bincode::decode_from_slice(&bytes, bincode::config::standard()) {
                                     Ok((data, _)) => data,
                                     Err(_) => #typ::default(),
+                                };
+
+                                Ok(ret)
+                            }
+
+                            pub fn #fn_name_or_value(&self, value: #typ) -> Result<#typ, Error> {
+                                let bytes = self.pddb_get_key(#ident_str)?;
+                                let ret: #typ = match bincode::decode_from_slice(&bytes, bincode::config::standard()) {
+                                    Ok((data, _)) => data,
+                                    Err(_) => value,
                                 };
 
                                 Ok(ret)

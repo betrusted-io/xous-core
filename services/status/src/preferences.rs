@@ -43,7 +43,7 @@ impl Display for DevicePrefsOp {
         match self {
             Self::AutobacklightOnBoot => write!(f, "{}", t!("prefs.autobacklight_enable", xous::LANG)),
             Self::AutobacklightTimeout => write!(f, "{}", t!("prefs.autobacklight_duration", xous::LANG)),
-            Self::ConnectKnownNetworksOnBoot => write!(f, "Automatically connnect to networks"),
+            Self::ConnectKnownNetworksOnBoot => write!(f, "{}", t!("prefs.wifi_connect_auto", xous::LANG)),
             Self::RadioOnOnBoot => write!(f, "WiFi kill switch"),
             Self::KeyboardLayout => write!(f, "Keyboard layout"),
             Self::WLANMenu => write!(f, "WiFi settings"),
@@ -239,11 +239,11 @@ impl DevicePrefs {
 
 impl DevicePrefs {
     fn autobacklight_on_boot(&mut self) -> Result<(), DevicePrefsError> {
-        let cv = !self.up.autobacklight_on_boot_or_default()?; // note inversion of storage sense to make it on when false
+        let cv = self.up.autobacklight_on_boot_or_value(true)?; // note inversion of storage sense to make it on when false
 
         self.modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
 
-        let new_result = !yes_no_to_bool( // inversion of storage sense: false = on
+        let new_result = yes_no_to_bool( // inversion of storage sense: false = on
             self.modals
                 .get_radiobutton(&format!("Current status: {}", bool_to_yes_no(cv)))
                 .unwrap()
