@@ -250,14 +250,14 @@ impl DevicePrefs {
                 .as_str(),
         );
 
-        if cv { // true means off
+        if cv { // already inverted, so the meaning is true (true is on)
             xous::send_message(self.status_cid, xous::Message::new_scalar(
-                crate::StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(),
+                crate::StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(),
                 0, 0, 0, 0)
             ).ok();
         } else {
             xous::send_message(self.status_cid, xous::Message::new_scalar(
-                crate::StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(),
+                crate::StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(),
                 0, 0, 0, 0)
             ).ok();
         }
