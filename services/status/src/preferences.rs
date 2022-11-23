@@ -187,6 +187,14 @@ impl DevicePrefs {
             AutobacklightOnBoot,
             AutobacklightTimeout,
             KeyboardLayout,
+            // Note: this vec sets the order of items in the preferences menu
+            // The CI system assumes that the time setting items are always at
+            // the bottom of the preferences menu, in this particular order.
+            // If you move these elsewhere, you must adjust the CI system because
+            // it 'dead reckons' to these menu items based on their assumed position.
+            // This is done in part to force testing of menu navigation, as opposed
+            // to "cheating" around this problem and invoking all the CI-related commands
+            // as scripts.
             SetTime,
             SetTimezone,
         ];
