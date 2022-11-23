@@ -352,7 +352,7 @@ impl DevicePrefs {
                 .unwrap()
                 .as_str(),
         );
-        if cv {
+        if new_result {
             self.netmgr.connection_manager_run().ok();
         } else {
             self.netmgr.connection_manager_stop().ok();
