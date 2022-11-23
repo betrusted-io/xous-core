@@ -26,6 +26,7 @@ pub(crate) enum ConnectionManagerOpcode {
     Stop,
     DisconnectAndStop,
     WifiOnAndRun,
+    WifiOn,
     SubscribeWifiStats,
     UnsubWifiStats,
     FetchSsidList,
@@ -492,6 +493,31 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 ssid_list.clear();
                 com.set_ssid_scanning(true).unwrap();
                 scan_state = SsidScanState::Scanning;
+                intervals_without_activity = 0;
+                scan_count = 0;
+                // this will force the UI to transition from 'WiFi Off' -> 'Not connected'
+                wifi_stats_cache = WlanStatus {
+                    ssid: None,
+                    link_state: com_rs_ref::LinkState::Disconnected,
+                    ipv4: com::Ipv4Conf::default(),
+                };
+                log::debug!("stats update: {:?}", wifi_stats_cache);
+                for &sub in status_subscribers.keys() {
+                    let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
+                    buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                }
+                if !run.swap(true, Ordering::SeqCst) {
+                    if !pumping.load(Ordering::SeqCst) { // avoid having multiple pump messages being sent if a user tries to rapidly toggle the run/stop switch
+                        send_message(run_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
+                    }
+                }
+            }),
+            Some(ConnectionManagerOpcode::WifiOn) => msg_scalar_unpack!(msg, _, _, _, _, {
+                com.wlan_set_on().expect("couldn't turn on wifi");
+                wifi_state = WifiState::Disconnected;
+                ssid_list.clear();
+                com.set_ssid_scanning(false).unwrap();
+                scan_state = SsidScanState::Idle;
                 intervals_without_activity = 0;
                 scan_count = 0;
                 // this will force the UI to transition from 'WiFi Off' -> 'Not connected'

@@ -6,12 +6,11 @@ use keyboard::KeyMap;
 use mainmenu::*;
 mod appmenu;
 use appmenu::*;
-mod kbdmenu;
-use kbdmenu::*;
 mod app_autogen;
 mod time;
 mod ecup;
 mod wifi;
+mod preferences;
 
 use com::api::*;
 use root_keys::api::{BackupOp, BackupKeyboardLayout};
@@ -35,6 +34,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 )]
 use std::thread;
 
+use crate::preferences::{percentage_to_db, PrefsMenuUpdateOp};
+
 const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 const SERVER_NAME_STATUS: &str = "_Status_";
 /// How long a backup header should persist before it is automatically deleted.
@@ -57,16 +58,11 @@ pub(crate) enum StatusOpcode {
     SubmenuPddb,
     /// Raise the App menu
     SubmenuApp,
-    /// Raise the Keyboard layout menu
-    SubmenuKbd,
 
     /// Raise the Shellchat app
     SwitchToShellchat,
     /// Switch to an app
     SwitchToApp,
-
-    /// Set the keyboard map
-    SetKeyboard,
 
     /// Prepare for a backup
     PrepareBackup,
@@ -90,8 +86,8 @@ pub(crate) enum StatusOpcode {
     /// for returning wifi stats
     WifiStats,
 
-    /// Raise the wifi menu
-    WifiMenu,
+    /// Raise the preferences menu
+    Preferences,
     Quit,
 }
 
@@ -219,6 +215,7 @@ fn wrapped_main() -> ! {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let mut netmgr = net::NetManager::new();
+    let mut codec = codec::Codec::new(&xns).unwrap();
 
     // screensize is controlled by the GAM, it's set in main.rs near the top
     let screensize = gam
@@ -319,10 +316,6 @@ fn wrapped_main() -> ! {
         );
     }
 
-    // --------------------------- spawn a time UX manager thread
-    let time_sid = xous::create_server().unwrap();
-    let time_cid = xous::connect(time_sid).unwrap();
-    time::start_time_ux(time_sid);
     // this is used by the main loop to get the localtime to show on the status bar
     let mut localtime = llio::LocalTime::new();
 
@@ -340,29 +333,117 @@ fn wrapped_main() -> ! {
     log::debug!("starting main menu thread");
     let main_menu_sid = xous::create_server().unwrap();
     let status_cid = xous::connect(status_sid).unwrap();
-    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com, time_cid);
+    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com);
     create_app_menu(xous::connect(status_sid).unwrap());
-    let kbd_mgr = xous::create_server().unwrap();
-    let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
-    let kbd = keyboard::Keyboard::new(&xns).unwrap();
+    let kbd = Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap()));
 
     // ---------------------------- Background processes that claim contexts
     // must be upstream of the update check, because we need to occupy the keyboard
     // server slot to prevent e.g. a keyboard logger from taking our passwords!
-    kbd.register_observer(
+    kbd.lock().unwrap().register_observer(
         SERVER_NAME_STATUS,
         StatusOpcode::Keypress.to_u32().unwrap() as usize,
     );
 
-    let enabled = Arc::new(Mutex::new(false));
+    let autobacklight_enabled = Arc::new(Mutex::new(false));
     let (tx, rx): (Sender<BacklightThreadOps>, Receiver<BacklightThreadOps>) = unbounded();
 
     let rx = Box::new(rx);
 
-    let thread_already_running = Arc::new(Mutex::new(false));
+    let autobacklight_thread_already_running = Arc::new(Mutex::new(false));
     let thread_conn = xous::connect(status_sid).unwrap();
 
-    wifi::start_background_thread();
+    let prefs_sid = xous::create_server().unwrap();
+    let prefs_cid = xous::connect(prefs_sid).unwrap();
+    preferences::start_background_thread(prefs_sid, status_cid);
+
+    // load system preferences
+    let prefs = Arc::new(Mutex::new(userprefs::Manager::new()));
+    let prefs_thread_clone = prefs.clone();
+
+    /*
+    This thread handles preference loading.
+    It'll wait until PDDB is ready to load stuff off the preference
+    dictionary.
+    */
+
+    let prefs_restore_kbd = kbd.clone();
+    std::thread::spawn(move || {
+        let pddb_poller = pddb::PddbMountPoller::new();
+        let prefs = prefs_thread_clone.lock().unwrap();
+        let netmgr = net::NetManager::new();
+
+        loop {
+            if !pddb_poller.is_mounted_nonblocking() {
+                continue
+            }
+
+            let all_prefs = match prefs.all() {
+                Ok(p) => p,
+                Err(error) => {
+                    log::error!("cannot read preference store: {:?}", error);
+                    return;
+                }
+            };
+
+            log::debug!("pddb ready, loading preferences now!");
+
+            match all_prefs.wifi_kill {
+                true => netmgr.connection_manager_wifi_off_and_stop(),
+                false => netmgr.connection_manager_wifi_on(),
+            }.unwrap_or_else(|error| {
+                log::error!("cannot set radio status: {:?}", error)
+            });
+
+            match prefs.connect_known_networks_on_boot_or_value(true).unwrap() {
+                true => netmgr.connection_manager_run(),
+                false => netmgr.connection_manager_stop(),
+            }.unwrap_or_else(|error| {
+                log::error!("cannot start connection manager: {:?}", error)
+            });
+            match prefs.autobacklight_on_boot_or_value(true).unwrap() {
+                true => send_message(status_cid, Message::new_scalar(
+                    StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
+                false => Ok(xous::Result::Ok),
+            }.unwrap_or_else(|error| {
+                log::error!("cannot set autobacklight status: {:?}", error);
+                xous::Result::Ok
+            });
+
+            let stored_keymap = keyboard::KeyMap::from(all_prefs.keyboard_layout);
+
+            match prefs_restore_kbd.lock().unwrap().set_keymap(stored_keymap) {
+                Err(error) => log::error!("cannot set keymap {:?}: {:?}", stored_keymap, error),
+                Ok(()) => (),
+            };
+
+            log::info!("audio enabled: {}", all_prefs.audio_enabled);
+            match all_prefs.audio_enabled {
+                true => {
+                    match codec.setup_8k_stream() {
+                        Ok(()) => {
+                            send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                            Ok(())
+                        },
+                        Err(e) => Err(e),
+                    }
+                }
+                false => Ok(())
+            }.unwrap_or_else(|error| {
+                log::error!("cannot set audio enabled: {:?}", error);
+            });
+
+            codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
+                log::error!("cannot set headphone volume: {:?}", error);
+            });
+
+            codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
+                log::error!("cannot set speaker volume: {:?}", error);
+            });
+
+            break
+        }
+    });
 
     // ------------------------ check firmware status and apply updates
     // all security sensitive servers must be occupied at this point in time.
@@ -392,7 +473,9 @@ fn wrapped_main() -> ! {
                     // restore interrupts and connection manager
                     llio.com_event_enable(true).ok();
                     netmgr.reset();
-                    netmgr.connection_manager_run().ok();
+
+                    // TODO(gsora): I'm commenting this out because user preferences might say otherwise.
+                    //netmgr.connection_manager_run().ok();
                 }
                 Some(ecup::UpdateResult::NothingToDo) => log::info!("EC update check: nothing to do, firmware is up to date."),
                 Some(ecup::UpdateResult::Abort) => {
@@ -427,7 +510,7 @@ fn wrapped_main() -> ! {
                     let map_deserialize: BackupKeyboardLayout = header.kbd_layout.into();
                     let map: KeyMap = map_deserialize.into();
                     log::info!("Keyboard layout set to {:?} by restore process.", map);
-                    kbd.set_keymap(map).ok();
+                    kbd.lock().unwrap().set_keymap(map).ok();
 
                     let backup_dna = u64::from_le_bytes(header.dna);
                     if backup_dna != llio.soc_dna().unwrap() {
@@ -678,28 +761,23 @@ fn wrapped_main() -> ! {
         log::debug!("{:?}", opcode);
         match opcode {
             Some(StatusOpcode::EnableAutomaticBacklight) => {
-                *enabled.lock().unwrap() = true;
+                if *autobacklight_enabled.lock().unwrap() {
+                    // already enabled, don't re-enable
+                    continue;
+                }
+                *autobacklight_enabled.lock().unwrap() = true;
 
                 // second: delete the first three elements off the menu
                 menu_manager.delete_item(t!("mainmenu.backlighton", xous::LANG));
                 menu_manager.delete_item(t!("mainmenu.backlightoff", xous::LANG));
-                menu_manager.delete_item(t!("mainmenu.autobacklighton", xous::LANG));
-
-                // third: add a "disable automatic backlight element"
-                menu_manager.insert_item(gam::MenuItem {
-                    name: xous_ipc::String::from_str(t!("mainmenu.autobacklightoff", xous::LANG)),
-                    action_conn: Some(status_cid),
-                    action_opcode: StatusOpcode::DisableAutomaticBacklight.to_u32().unwrap(),
-                    action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
-                    close_on_select: true,
-                }, 0);
             }
             Some(StatusOpcode::DisableAutomaticBacklight) => {
-                *enabled.lock().unwrap() = false;
+                if !(*autobacklight_enabled.lock().unwrap()) {
+                    // already disabled, don't re-disable
+                    continue;
+                }
+                *autobacklight_enabled.lock().unwrap() = false;
                 tx.send(BacklightThreadOps::Stop).unwrap();
-
-                // second: delete the first element off the menu.
-                menu_manager.delete_item(t!("mainmenu.autobacklightoff", xous::LANG));
 
                 // third: construct an array of the new elements to add to the menu.
                 let new_elems = [
@@ -717,13 +795,6 @@ fn wrapped_main() -> ! {
                         action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
                         close_on_select: true,
                     },
-                    gam::MenuItem {
-                        name: xous_ipc::String::from_str(t!("mainmenu.autobacklighton", xous::LANG)),
-                        action_conn: Some(status_cid),
-                        action_opcode: StatusOpcode::EnableAutomaticBacklight.to_u32().unwrap(),
-                        action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
-                        close_on_select: true,
-                    }
                 ];
 
                 new_elems.iter().enumerate().for_each(|(index, element)| {let _ = menu_manager.insert_item(*element, index);});
@@ -799,9 +870,9 @@ fn wrapped_main() -> ! {
                 };
                 wifi_status = WlanStatus::from_ipc(buffer.to_original::<com::WlanStatusIpc, _>().unwrap());
             },
-            Some(StatusOpcode::WifiMenu) => {
+            Some(StatusOpcode::Preferences) => {
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
-                gam.raise_menu(gam::WIFI_MENU_NAME).unwrap();
+                gam.raise_menu(gam::PREFERENCES_MENU_NAME).unwrap();
             },
             Some(StatusOpcode::Pump) => {
                 let elapsed_time = ticktimer.elapsed_ms();
@@ -982,19 +1053,6 @@ fn wrapped_main() -> ! {
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
                 gam.raise_menu(gam::APP_MENU_NAME).expect("couldn't raise App submenu");
             },
-            Some(StatusOpcode::SubmenuKbd) => {
-                log::debug!("getting keyboard map");
-                let map = kbd.get_keymap().expect("couldn't get key mapping");
-                log::info!("setting keymap index to {:?}", map);
-                kbd_menumatic.set_index(map.into());
-                log::debug!("raising keyboard menu");
-                ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
-                gam.raise_menu(gam::KBD_MENU_NAME).expect("couldn't raise keyboard layout submenu");
-            },
-            Some(StatusOpcode::SetKeyboard) => msg_scalar_unpack!(msg, code, _, _, _, {
-                let map = keyboard::KeyMap::from(code);
-                kbd.set_keymap(map).expect("couldn't set keyboard mapping");
-            }),
             Some(StatusOpcode::SwitchToShellchat) => {
                 ticktimer.sleep_ms(100).ok();
                 sec_notes.lock().unwrap().remove(&"current_app".to_string());
@@ -1069,11 +1127,11 @@ fn wrapped_main() -> ! {
             },
 
             Some(StatusOpcode::Keypress) => {
-                if !*enabled.lock().unwrap() {
+                if !*autobacklight_enabled.lock().unwrap() {
                     log::trace!("ignoring keypress, automatic backlight is disabled");
                     continue
                 }
-                let mut run_lock = thread_already_running.lock().unwrap();
+                let mut run_lock = autobacklight_thread_already_running.lock().unwrap();
                 match *run_lock {
                     true => {
                         log::trace!("renewing backlight timer");
@@ -1082,10 +1140,24 @@ fn wrapped_main() -> ! {
                     },
                     false => {
                         *run_lock = true;
+
+                        // TODO(gsora): this code queries PDDB every time autobacklight timeout expired
+                        // and user presses a button.
+                        // Too intensive? Needs a dirty bit+cache?
+                        let prefs = prefs.clone();
+                        let prefs = prefs.lock().unwrap();
+                        let abl_timeout = match prefs.autobacklight_timeout() {
+                            Ok(timeout) => timeout,
+                            Err(error) => {
+                                log::error!("cannot fetch autobacklight timeout, {:?}, defaulting to 10s", error);
+                                10
+                            }
+                        };
+
                         com.set_backlight(255, 128).expect("cannot set backlight on");
                         std::thread::spawn({
                             let rx = rx.clone();
-                            move || turn_lights_on(rx, thread_conn)
+                            move || turn_lights_on(rx, thread_conn, abl_timeout)
                         });
                     },
                 }
@@ -1096,7 +1168,7 @@ fn wrapped_main() -> ! {
             },
             Some(StatusOpcode::TurnLightsOff) => {
                 log::trace!("turning lights off");
-                let mut run_lock = thread_already_running.lock().unwrap();
+                let mut run_lock = autobacklight_thread_already_running.lock().unwrap();
                 *run_lock = false;
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
@@ -1164,7 +1236,7 @@ fn wrapped_main() -> ! {
                 metadata.ec_ver = com.get_ec_sw_tag().unwrap().into();
                 metadata.op = BackupOp::Backup;
                 metadata.dna = llio.soc_dna().unwrap().to_le_bytes();
-                let map = kbd.get_keymap().expect("couldn't get key mapping");
+                let map = kbd.lock().unwrap().get_keymap().expect("couldn't get key mapping");
                 let map_serialize: BackupKeyboardLayout = map.into();
                 metadata.kbd_layout = map_serialize.into();
                 // the backup process is coded to accept the option of no checksums, but the UX currently
@@ -1207,8 +1279,8 @@ enum BacklightThreadOps {
     Stop,
 }
 
-fn turn_lights_on(rx: Box<Receiver<BacklightThreadOps>>, cid: xous::CID) {
-    let standard_duration = std::time::Duration::from_secs(10);
+fn turn_lights_on(rx: Box<Receiver<BacklightThreadOps>>, cid: xous::CID, timeout: u64) {
+    let standard_duration = std::time::Duration::from_secs(timeout);
 
     let mut timeout = std::time::Instant::now() + standard_duration;
 

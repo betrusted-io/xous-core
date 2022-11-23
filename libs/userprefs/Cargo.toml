@@ -1,0 +1,11 @@
+[package]
+name = "userprefs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pddb = {path = "../../services/pddb"}
+keyboard = {path = "../../services/keyboard"}
+xous-names = {package = "xous-api-names", version = "0.9.4"}
+bincode = {version = "2.0.0-rc.2"}
+prefsgenerator = {path = "./prefsgenerator"}

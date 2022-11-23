@@ -104,6 +104,7 @@ pub fn spawn_test() {
                 0,
                 100,
                 50,
+                1,
             ).expect("slider test failed");
 
             modals.show_notification(&format!("Slider value: {}", result), None)
