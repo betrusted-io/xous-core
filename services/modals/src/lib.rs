@@ -303,6 +303,7 @@ impl Modals {
             end_work: end,
             current_work: current,
             user_interaction: false,
+            step: 1,
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::StartProgress.to_u32().unwrap())
@@ -316,6 +317,7 @@ impl Modals {
         start: u32,
         end: u32,
         current: u32,
+        step: u32,
     ) -> Result<u32, xous::Error> {
         self.lock();
         let spec = ManagedProgress {
@@ -325,6 +327,7 @@ impl Modals {
             end_work: end,
             current_work: current,
             user_interaction: true,
+            step: step,
         };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::Slider.to_u32().unwrap())

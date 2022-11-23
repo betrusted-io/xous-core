@@ -180,6 +180,11 @@ impl NetManager {
             Message::new_scalar(Opcode::ConnMgrStartStop.to_usize().unwrap(), 3, 0,0, 0)
         ).map(|_| ())
     }
+    pub fn connection_manager_wifi_on(&self) -> Result<(), xous::Error> {
+        send_message(self.netconn.conn(),
+            Message::new_scalar(Opcode::ConnMgrStartStop.to_usize().unwrap(), 4, 0,0, 0)
+        ).map(|_| ())
+    }
 }
 impl Drop for NetManager {
     fn drop(&mut self) {

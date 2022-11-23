@@ -160,6 +160,10 @@
         "ja": "ゲートウェアアップデートをインストールする",
         "zh": "安装比特流更新"
     },
+    "mainmenu.preferences": {
+        "en": "Preferences",
+        "en-tts": "Preferences"
+    },
     "mainmenu.reboot": {
         "en": "Reboot",
         "en-tts": "Reboot",
@@ -482,6 +486,111 @@
         "fr": "Fonctionnement ininterrompu en attente. Veuillez réessayer la demande de sommeil dans quelques secondes.",
         "ja": "中断不可能な操作が保留中です。 数秒後にスリープ リクエストを再試行してください。",
         "zh": "不间断操作挂起。 请在几秒钟后重试睡眠请求。"
+    },
+    "prefs.autobacklight_enable": {
+        "en": "Autobacklight setting",
+        "en-tts": "Autobacklight setting",
+        "fr": "Réglage du rétroéclairage automatique *MT*",
+        "ja": "自動バックライト設定",
+        "zh": "自动背光设置"
+    },
+    "prefs.autobacklight_duration": {
+        "en": "Autobacklight duration",
+        "en-tts": "Autobacklight duration",
+        "fr": "Durée du rétroéclairage automatique *MT*",
+        "ja": "自動バックライトの持続時間",
+        "zh": "自动背光持续时间"
+    },
+    "prefs.autobacklight_duration_in_secs": {
+        "en": "Autobacklight duration in seconds:",
+        "en-tts": "Autobacklight duration in seconds",
+        "fr": "Durée du rétroéclairage automatique en secondes: *MT*",
+        "ja": "自動バックライトの持続時間 (秒):",
+        "zh": "自动背光持续时间（以秒为单位):"
+    },
+    "prefs.autobacklight_err": {
+        "en": "Duration must be positive!",
+        "en-tts": "Duration must be positive!",
+        "fr": "La durée doit être positive! *MT*",
+        "ja": "期間は正でなければなりません!",
+        "zh": "持续时间必须为正数！"
+    },
+    "prefs.wifi_connect_auto": {
+        "en": "Connect to WiFi automatically",
+        "en-tts": "Connect to WiFi automatically",
+        "fr": "Se connecter au wifi automatiquement *MT*",
+        "ja": "自動でWiFiに接続",
+        "zh": "自动连接WiFi"
+    },
+    "prefs.current_setting": {
+        "en": "Current setting:",
+        "en-tts": "Current setting:",
+        "fr": "Paramètre actuel *MT*",
+        "ja": "現在の設定",
+        "zh": "当前设置"
+    },
+    "prefs.wifi_kill": {
+        "en": "WiFi kill switch",
+        "en-tts": "WiFi kill switch",
+        "fr": "Coupe-circuit WiFi *MT*",
+        "ja": "WiFiキルスイッチ",
+        "zh": "WiFi终止开关"
+    },
+    "prefs.keyboard_layout": {
+        "en": "Keyboard layout",
+        "en-tts": "Keyboard layout",
+        "fr": "Disposition du clavier",
+        "ja": "キーボード・レイアウト",
+        "zh": "键盘布局"
+    },
+    "prefs.wifi_setting": {
+        "en": "WiFi settings",
+        "en-tts": "WiFi settings",
+        "fr": "Paramètres Wifi",
+        "ja": "WiFi 設定",
+        "zh": "无线网络设置"
+    },
+    "prefs.enable_audio": {
+        "en": "Enable audio subsystem",
+        "en-tts": "Enable audio subsystem",
+        "fr": "Activer le sous-système audio",
+        "ja": "オーディオ サブシステムを有効にする",
+        "zh": "启用音频子系统"
+    },
+    "prefs.disable_audio": {
+        "en": "Disable audio subsystem",
+        "en-tts": "Disable audio subsystem",
+        "fr": "Désactiver le sous-système audio",
+        "ja": "オーディオ サブシステムを無効にする",
+        "zh": "禁用音频子系统"
+    },
+    "prefs.headphone_volume": {
+        "en": "Headphone volume",
+        "en-tts": "Headphone volume",
+        "fr": "Volume du casque",
+        "ja": "ヘッドホンの音量",
+        "zh": "耳机音量"
+    },
+    "prefs.speaker_volume": {
+        "en": "Speaker volume",
+        "en-tts": "Speaker volume",
+        "fr": "Volume du haut-parleur",
+        "ja": "スピーカーの音量",
+        "zh": "喇叭音量"
+    },
+    "prefs.yes": {
+        "en": "Yes",
+        "en-tts": "Yes",
+        "fr": "Oui",
+        "ja": "はい",
+        "zh": "确定"
+    },
+    "prefs.no": {
+        "en": "No",
+        "en-tts": "No",
+        "fr": "Non",
+        "ja": "いいえ",
+        "zh": "取消"
     },
     "wlan.cancel": {
         "en": "❌ Cancel request ❌",

@@ -25,8 +25,7 @@ use std::thread;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use llio::*;
-use pddb::{Pddb, PddbMountPoller};
-use std::io::{Read, Write, Seek, SeekFrom};
+use pddb::PddbMountPoller;
 use num_traits::*;
 // imports for time ux
 use locales::t;
@@ -41,13 +40,6 @@ use std::num::ParseIntError;
 /// This is a "well known name" used by `libstd` to connect to the time server
 /// Anyone who wants to check if time has been initialized would use this name.
 pub const TIME_SERVER_PUBLIC: &'static [u8; 16] = b"timeserverpublic";
-
-/// Dictionary for RTC settings.
-pub(crate) const TIME_SERVER_DICT: &'static str = "sys.rtc";
-/// This is the UTC offset from the current hardware RTC reading. This should be fixed once time is set.
-const TIME_SERVER_UTC_OFFSET: &'static str = "utc_offset";
-/// This is the offset from UTC to the display time zone. This can vary when the user changes time zones.
-pub(crate) const TIME_SERVER_TZ_OFFSET: &'static str = "tz_offset";
 
 #[allow(dead_code)]
 const CTL3: usize = 0;
@@ -249,9 +241,8 @@ pub fn start_time_server() {
         move || {
             let xns = xous_names::XousNames::new().unwrap();
             let llio = llio::Llio::new(&xns);
+            let prefs = userprefs::Manager::new();
 
-            let mut utc_offset_ms = 0i64;
-            let mut tz_offset_ms = 0i64;
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             // this routine can't proceed until the RTC has passed its power-on sanity checks
             while !rtc_checked.load(Ordering::SeqCst) {
@@ -320,32 +311,17 @@ pub fn start_time_server() {
                     _ => log::warn!("Time server can't handle this message yet: {:?}", msg),
                 }
             }
-            // once the PDDB is mounted, read in the time zone offsets and then restart the
-            // loop handler using the offsets.
-            let offset_handle = Pddb::new();
-            let mut offset_key = offset_handle.get(
-                TIME_SERVER_DICT,
-                TIME_SERVER_UTC_OFFSET,
-                Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
-                Some(8),
-                None::<fn()>
-            ).expect("couldn't open UTC offset key");
-            let tz_handle = Pddb::new();
-            let mut tz_key = tz_handle.get(
-                TIME_SERVER_DICT,
-                TIME_SERVER_TZ_OFFSET,
-                Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
-                Some(8),
-                None::<fn()>
-            ).expect("couldn't open TZ offset key");
-            let mut offset_buf = [0u8; 8];
-            if offset_key.read(&mut offset_buf).unwrap_or(0) == 8 {
-                utc_offset_ms = i64::from_le_bytes(offset_buf);
-            } // else 0 is the error value, so leave it at that.
-            let mut tz_buf = [0u8; 8];
-            if tz_key.read(&mut tz_buf).unwrap_or(0) == 8 {
-                tz_offset_ms = i64::from_le_bytes(tz_buf);
-            }
+
+            let mut utc_offset_ms = prefs.utc_offset().unwrap_or_else(|error| {
+                log::error!("cannot read utc offset: {:?}", error);
+                0
+            });
+
+            let mut tz_offset_ms = prefs.timezone_offset().unwrap_or_else(|error| {
+                log::error!("cannot read timezone offset: {:?}", error);
+                None
+            }).unwrap_or_default();
+
             log::debug!("offset_key: {}", utc_offset_ms / 1000);
             log::debug!("tz_key: {}", tz_offset_ms / 1000);
             log::debug!("start_rtc_secs: {}", start_rtc_secs);
@@ -411,12 +387,10 @@ pub fn start_time_server() {
                             utc_time_ms -
                             (start_rtc_secs as i64) * 1000;
                         utc_offset_ms = offset;
-                        offset_key.seek(SeekFrom::Start(0)).expect("couldn't seek");
-                        log::info!("setting offset to {} secs", offset / 1000);
-                        if offset_key.write(&offset.to_le_bytes()).unwrap_or(0) != 8 {
-                            log::warn!("Couldn't commit the latest time update. Is the PDDB mounted?");
-                        }
-                        offset_key.flush().expect("couldn't flush PDDB");
+
+                        prefs.set_utc_offset(offset).unwrap_or_else(|err| {
+                            log::error!("cannot set utc offset: {:?}", err);
+                        });
                     }),
                     Some(TimeOp::SetTzOffsetMs) => xous::msg_scalar_unpack!(msg, tz_hi_ms, tz_lo_ms, _, _, {
                         let tz_ms = ((tz_hi_ms as i64) << 32) | (tz_lo_ms as i64);
@@ -428,12 +402,10 @@ pub fn start_time_server() {
                             continue;
                         } else {
                             tz_offset_ms = tz_ms;
-                            tz_key.seek(SeekFrom::Start(0)).expect("couldn't seek");
-                            log::info!("setting tz offset to {} secs", tz_ms / 1000);
-                            if tz_key.write(&tz_ms.to_le_bytes()).unwrap_or(0) != 8 {
-                                log::warn!("Couldn't commit the latest timezone update. Is the PDDB mounted?");
-                            }
-                            tz_key.flush().expect("couldn't flush PDDB");
+
+                            prefs.set_timezone_offset(tz_ms).unwrap_or_else(|err| {
+                                log::error!("cannot set timezone offset: {:?}", err);
+                            });
                         }
                     }),
                     Some(TimeOp::WallClockTimeInit) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
@@ -541,6 +513,8 @@ pub fn start_time_ux(sid: xous::SID) {
             let pddb_poller = pddb::PddbMountPoller::new();
             let trng = trng::Trng::new(&xns).unwrap();
 
+            let prefs = userprefs::Manager::new();
+
             loop {
                 let msg = xous::receive_message(sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
@@ -549,23 +523,24 @@ pub fn start_time_ux(sid: xous::SID) {
                             modals.show_notification(t!("stats.please_mount", xous::LANG), None).expect("couldn't show notification");
                             continue;
                         }
-                        let tz_set_handle = pddb::Pddb::new();
                         let mut tz_set = false;
-                        let mut tz_offset_ms = 0i64;
-                        let maybe_tz_set_key = tz_set_handle.get(
-                            TIME_SERVER_DICT,
-                            TIME_SERVER_TZ_OFFSET,
-                            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
-                            None,
-                            None::<fn()>
-                        ).ok();
-                        if let Some(mut tz_set_key) = maybe_tz_set_key {
-                            let mut tz_buf = [0u8; 8];
-                            if tz_set_key.read(&mut tz_buf).unwrap_or(0) == 8 {
-                                tz_offset_ms = i64::from_le_bytes(tz_buf);
-                                tz_set = true;
+                        let mut tz_offset_ms = match prefs.timezone_offset() {
+                            Ok(offset) => match offset {
+                                Some(data) => {
+                                    tz_set = true;
+                                    data
+                                },
+                                None => {
+                                    tz_set = false;
+                                    0i64
+                                }
+                            },
+                            Err(error) => {
+                                log::error!("cannot read timezone offset: {:?}", error);
+                                0i64
                             }
-                        }
+                        };
+
                         // note that we don't do an "else" here because we also want to catch the case of
                         // a key exists, but nothing was written to it (length of key was 0 or inappropriate)
                         if !tz_set {
