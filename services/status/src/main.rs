@@ -345,7 +345,7 @@ fn wrapped_main() -> ! {
         StatusOpcode::Keypress.to_u32().unwrap() as usize,
     );
 
-    let autobacklight_enabled = Arc::new(Mutex::new(false));
+    let autobacklight_enabled = Arc::new(Mutex::new(true));
     let (tx, rx): (Sender<BacklightThreadOps>, Receiver<BacklightThreadOps>) = unbounded();
 
     let rx = Box::new(rx);
@@ -404,7 +404,8 @@ fn wrapped_main() -> ! {
             match prefs.autobacklight_on_boot_or_value(true).unwrap() {
                 true => send_message(status_cid, Message::new_scalar(
                     StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
-                false => Ok(xous::Result::Ok),
+                false => send_message(status_cid, Message::new_scalar(
+                    StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
             }.unwrap_or_else(|error| {
                 log::error!("cannot set autobacklight status: {:?}", error);
                 xous::Result::Ok

@@ -14,6 +14,7 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, menu_management_sid: xous::S
     let mut menuitems = Vec::<MenuItem>::new();
 
     // no backlight on versions with no display
+    /*
     #[cfg(not(feature="tts"))]
     menuitems.push(MenuItem {
         name: String::from_str(t!("mainmenu.backlighton", xous::LANG)),
@@ -30,7 +31,7 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, menu_management_sid: xous::S
         action_opcode: com.getop_backlight(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
-    });
+    }); */
 
     menuitems.push(MenuItem {
         name: String::from_str(t!("mainmenu.sleep", xous::LANG)),

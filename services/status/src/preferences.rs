@@ -249,11 +249,11 @@ impl DevicePrefs {
 
 impl DevicePrefs {
     fn autobacklight_on_boot(&mut self) -> Result<(), DevicePrefsError> {
-        let cv = self.up.autobacklight_on_boot_or_value(true)?; // note inversion of storage sense to make it on when false
+        let cv = self.up.autobacklight_on_boot_or_value(true)?;
 
         self.modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
 
-        let new_result = yes_no_to_bool( // inversion of storage sense: false = on
+        let new_result = yes_no_to_bool(
             self.modals
                 .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
                     bool_to_yes_no(cv)))
@@ -261,12 +261,16 @@ impl DevicePrefs {
                 .as_str(),
         );
 
-        if cv { // already inverted, so the meaning is true (true is on)
+        if new_result {
+            #[cfg(not(target_os = "xous"))]
+            log::info!("HOSTED: enable bl");
             xous::send_message(self.status_cid, xous::Message::new_scalar(
                 crate::StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(),
                 0, 0, 0, 0)
             ).ok();
         } else {
+            #[cfg(not(target_os = "xous"))]
+            log::info!("HOSTED: disable bl");
             xous::send_message(self.status_cid, xous::Message::new_scalar(
                 crate::StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(),
                 0, 0, 0, 0)
@@ -323,9 +327,13 @@ impl DevicePrefs {
                 .unwrap()
                 .as_str(),
         );
-        if cv {
+        if new_result {
+            #[cfg(not(target_os = "xous"))]
+            log::info!("HOSTED: killing wifi");
             self.netmgr.connection_manager_wifi_off_and_stop().ok();
         } else {
+            #[cfg(not(target_os = "xous"))]
+            log::info!("HOSTED: enabling wifi");
             self.netmgr.connection_manager_wifi_on().ok();
         }
 
