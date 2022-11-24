@@ -369,81 +369,75 @@ fn wrapped_main() -> ! {
 
     let prefs_restore_kbd = kbd.clone();
     std::thread::spawn(move || {
-        let pddb_poller = pddb::PddbMountPoller::new();
+        let pddb = pddb::Pddb::new();
         let prefs = prefs_thread_clone.lock().unwrap();
         let netmgr = net::NetManager::new();
 
-        loop {
-            if !pddb_poller.is_mounted_nonblocking() {
-                continue
+        pddb.is_mounted_blocking();
+
+        let all_prefs = match prefs.all() {
+            Ok(p) => p,
+            Err(error) => {
+                log::error!("cannot read preference store: {:?}", error);
+                return;
             }
+        };
 
-            let all_prefs = match prefs.all() {
-                Ok(p) => p,
-                Err(error) => {
-                    log::error!("cannot read preference store: {:?}", error);
-                    return;
+        log::debug!("pddb ready, loading preferences now!");
+
+        match all_prefs.wifi_kill {
+            true => netmgr.connection_manager_wifi_off_and_stop(),
+            false => netmgr.connection_manager_wifi_on(),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot set radio status: {:?}", error)
+        });
+
+        match prefs.connect_known_networks_on_boot_or_value(true).unwrap() {
+            true => netmgr.connection_manager_run(),
+            false => netmgr.connection_manager_stop(),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot start connection manager: {:?}", error)
+        });
+        match prefs.autobacklight_on_boot_or_value(true).unwrap() {
+            true => send_message(status_cid, Message::new_scalar(
+                StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
+            false => send_message(status_cid, Message::new_scalar(
+                StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot set autobacklight status: {:?}", error);
+            xous::Result::Ok
+        });
+
+        let stored_keymap = keyboard::KeyMap::from(all_prefs.keyboard_layout);
+
+        match prefs_restore_kbd.lock().unwrap().set_keymap(stored_keymap) {
+            Err(error) => log::error!("cannot set keymap {:?}: {:?}", stored_keymap, error),
+            Ok(()) => (),
+        };
+
+        log::info!("audio enabled: {}", all_prefs.audio_enabled);
+        match all_prefs.audio_enabled {
+            true => {
+                match codec.setup_8k_stream() {
+                    Ok(()) => {
+                        send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                        Ok(())
+                    },
+                    Err(e) => Err(e),
                 }
-            };
+            }
+            false => Ok(())
+        }.unwrap_or_else(|error| {
+            log::error!("cannot set audio enabled: {:?}", error);
+        });
 
-            log::debug!("pddb ready, loading preferences now!");
+        codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
+            log::error!("cannot set headphone volume: {:?}", error);
+        });
 
-            match all_prefs.wifi_kill {
-                true => netmgr.connection_manager_wifi_off_and_stop(),
-                false => netmgr.connection_manager_wifi_on(),
-            }.unwrap_or_else(|error| {
-                log::error!("cannot set radio status: {:?}", error)
-            });
-
-            match prefs.connect_known_networks_on_boot_or_value(true).unwrap() {
-                true => netmgr.connection_manager_run(),
-                false => netmgr.connection_manager_stop(),
-            }.unwrap_or_else(|error| {
-                log::error!("cannot start connection manager: {:?}", error)
-            });
-            match prefs.autobacklight_on_boot_or_value(true).unwrap() {
-                true => send_message(status_cid, Message::new_scalar(
-                    StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
-                false => send_message(status_cid, Message::new_scalar(
-                    StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
-            }.unwrap_or_else(|error| {
-                log::error!("cannot set autobacklight status: {:?}", error);
-                xous::Result::Ok
-            });
-
-            let stored_keymap = keyboard::KeyMap::from(all_prefs.keyboard_layout);
-
-            match prefs_restore_kbd.lock().unwrap().set_keymap(stored_keymap) {
-                Err(error) => log::error!("cannot set keymap {:?}: {:?}", stored_keymap, error),
-                Ok(()) => (),
-            };
-
-            log::info!("audio enabled: {}", all_prefs.audio_enabled);
-            match all_prefs.audio_enabled {
-                true => {
-                    match codec.setup_8k_stream() {
-                        Ok(()) => {
-                            send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-                            Ok(())
-                        },
-                        Err(e) => Err(e),
-                    }
-                }
-                false => Ok(())
-            }.unwrap_or_else(|error| {
-                log::error!("cannot set audio enabled: {:?}", error);
-            });
-
-            codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
-                log::error!("cannot set headphone volume: {:?}", error);
-            });
-
-            codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
-                log::error!("cannot set speaker volume: {:?}", error);
-            });
-
-            break
-        }
+        codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
+            log::error!("cannot set speaker volume: {:?}", error);
+        });
     });
 
     // ------------------------ check firmware status and apply updates
@@ -1145,14 +1139,19 @@ fn wrapped_main() -> ! {
                         // TODO(gsora): this code queries PDDB every time autobacklight timeout expired
                         // and user presses a button.
                         // Too intensive? Needs a dirty bit+cache?
-                        let prefs = prefs.clone();
-                        let prefs = prefs.lock().unwrap();
-                        let abl_timeout = match prefs.autobacklight_timeout() {
-                            Ok(timeout) => timeout,
-                            Err(error) => {
-                                log::error!("cannot fetch autobacklight timeout, {:?}, defaulting to 10s", error);
-                                10
+                        let abl_timeout = if pddb_poller.is_mounted_nonblocking() {
+                            let prefs = prefs.clone();
+                            let prefs = prefs.lock().unwrap();
+                            match prefs.autobacklight_timeout() {
+                                Ok(timeout) => timeout,
+                                Err(error) => {
+                                    log::error!("cannot fetch autobacklight timeout, {:?}, defaulting to 10s", error);
+                                    10
+                                }
                             }
+                        } else {
+                            // this routine can be polled before the pddb is mounted, e.g. while the pddb password is entered
+                            10
                         };
 
                         com.set_backlight(255, 128).expect("cannot set backlight on");
