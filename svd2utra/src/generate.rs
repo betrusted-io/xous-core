@@ -121,6 +121,9 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
     let mut name = None;
     let mut lsb = None;
     let mut msb = None;
+    let mut bit_offset = None;
+    let mut bit_width = None;
+
     loop {
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => {
@@ -153,6 +156,12 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
                                 .map_err(|_| ParseError::ParseIntError)?,
                         );
                     }
+                    "bitWidth" => {
+                        bit_width = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
+                    }
+                    "bitOffset" => {
+                        bit_offset = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
+                    }
                     _ => (),
                 }
             }
@@ -163,6 +172,16 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
             }
             Ok(_) => (),
             Err(e) => panic!("error parsing: {:?}", e),
+        }
+    }
+
+    // If no msb/lsb and bitRange tags were encountered then
+    // it's possible that the field is defined via
+    // `bitWidth` and `bitOffset` tags instead. Let's handle this.
+    if lsb.is_none() && msb.is_none() {
+        if let (Some(bit_width), Some(bit_offset)) = (bit_width, bit_offset) {
+            lsb = Some(bit_offset);
+            msb = Some(bit_offset + bit_width - 1);
         }
     }
 
