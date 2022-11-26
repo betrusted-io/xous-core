@@ -69,6 +69,10 @@ vaultbackup-rs <ACTION> <TARGET> <PATH>
 
 The output format is JSON.
 
+`totp` target supports both TOTP and HOTP codes.
+
+When the `totp_entry` object's `hotp` field is `true`, the `step_seconds` field is re-purposed as the HOTP count.
+
 ## Importing other password manager's exports
 
 `vaultbackup-rs` supports importing other password manager's export data in Vault, but to do so, you have to format it to Vault's format first.
