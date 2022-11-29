@@ -13,6 +13,7 @@ use std::cell::RefCell;
 
 use crate::{ux::{ListItem, deserialize_app_info}, ctap::FIDO_CRED_DICT, storage};
 use crate::{VaultMode, SelectedEntry};
+use crate::utc_now;
 
 use crate::fido::U2F_APP_DICT;
 use crate::totp::TotpAlgorithm;
@@ -640,6 +641,9 @@ impl<'a> ActionManager<'a> {
                 pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
                 pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
                 pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
+                // note the edit access, this counts as an access since the password was revealed
+                pw.count += 1;
+                pw.atime = utc_now().timestamp() as u64;
                 storage.update(&choice, key_name, &mut pw)
            },
         };
@@ -709,11 +713,16 @@ impl<'a> ActionManager<'a> {
                             self.perfentry(&self.pm, PERFMETA_NONE, 1, std::line!());
                             if let Some(data) = key.data {
                                 if let Some(pw) = storage::PasswordRecord::try_from(data).ok() {
-                                    let extra = format!("{}; {}{}",
-                                        crate::ux::atime_to_str(pw.atime),
-                                        t!("vault.u2f.appinfo.authcount", xous::LANG),
-                                        pw.count,
+                                    let human_time = crate::ux::atime_to_str(pw.atime);
+                                    // avoid allocations
+                                    let mut extra = String::with_capacity(
+                                        human_time.len() +
+                                        t!("vault.u2f.appinfo.authcount", xous::LANG).len() +
+                                        11 // space for "count" and "; "
                                     );
+                                    extra.push_str(&human_time);
+                                    extra.push_str("; ");
+                                    extra.push_str(&pw.count.to_string());
                                     let desc = format!("{}/{}", pw.description, pw.username);
                                     let li = ListItem {
                                         name: desc,
