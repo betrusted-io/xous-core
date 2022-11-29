@@ -367,7 +367,6 @@ fn wrapped_main() -> ! {
     dictionary.
     */
 
-    let prefs_restore_kbd = kbd.clone();
     std::thread::spawn(move || {
         let pddb = pddb::Pddb::new();
         let prefs = prefs_thread_clone.lock().unwrap();
@@ -408,12 +407,7 @@ fn wrapped_main() -> ! {
             xous::Result::Ok
         });
 
-        let stored_keymap = keyboard::KeyMap::from(all_prefs.keyboard_layout);
-
-        match prefs_restore_kbd.lock().unwrap().set_keymap(stored_keymap) {
-            Err(error) => log::error!("cannot set keymap {:?}: {:?}", stored_keymap, error),
-            Ok(()) => (),
-        };
+        // keyboard mapping is restored directly by the keyboard hardware
 
         log::info!("audio enabled: {}", all_prefs.audio_enabled);
         match all_prefs.audio_enabled {

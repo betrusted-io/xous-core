@@ -161,7 +161,14 @@ impl PrefHandler for DevicePrefs {
 }
 
 impl DevicePrefs {
-    fn new(xns: &xous_names::XousNames, time_ux_cid: xous::CID, menu_manager_sid: xous::SID, menu_conn: xous::CID, codec: codec::Codec, status_conn: xous::CID) -> Self {
+    fn new(
+        xns: &xous_names::XousNames,
+        time_ux_cid: xous::CID,
+        menu_manager_sid: xous::SID,
+        menu_conn: xous::CID,
+        codec: codec::Codec,
+        status_conn: xous::CID,
+) -> Self {
         Self {
             up: Manager::new(),
             modals: modals::Modals::new(&xns).unwrap(),
@@ -405,7 +412,7 @@ impl DevicePrefs {
     }
 
     fn keyboard_layout(&mut self) -> Result<(), DevicePrefsError> {
-        let kl = self.up.keyboard_layout_or_default()?;
+        let kl: usize = self.kbd.get_keymap().unwrap().into();
 
         let mappings = vec!["QWERTY", "AZERTY", "QWERTZ", "Dvorak"];
 
@@ -424,8 +431,6 @@ impl DevicePrefs {
             Some(val) => val,
             None => 0,
         };
-
-        self.up.set_keyboard_layout(new_result)?;
 
         self.kbd
             .set_keymap(keyboard::KeyMap::from(new_result))
