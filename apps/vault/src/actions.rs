@@ -537,12 +537,21 @@ impl<'a> ActionManager<'a> {
                     let maybe_update = match record.read_to_end(&mut data) {
                         Ok(_len) => {
                             if let Some(mut ai) = crate::fido::deserialize_app_info(data) {
-                                let edit_data = self.modals
+                                let edit_data = if ai.notes != t!("vault.notes", xous::LANG) {
+                                    self.modals
                                     .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                                    .field(Some(ai.name), Some(password_validator))
+                                    .field_placeholder_persist(Some(ai.name), Some(password_validator))
+                                    .field_placeholder_persist(Some(ai.notes), Some(password_validator))
+                                    .field_placeholder_persist(Some(hex::encode(ai.id)), None)
+                                    .build().expect("modals error in edit")
+                                } else {
+                                    self.modals
+                                    .alert_builder(t!("vault.edit_dialog", xous::LANG))
+                                    .field_placeholder_persist(Some(ai.name), Some(password_validator))
                                     .field(Some(ai.notes), Some(password_validator))
-                                    .field(Some(hex::encode(ai.id)), None)
-                                    .build().expect("modals error in edit");
+                                    .field_placeholder_persist(Some(hex::encode(ai.id)), None)
+                                    .build().expect("modals error in edit")
+                                };
                                 ai.name = edit_data.content()[0].content.as_str().unwrap().to_string();
                                 ai.notes = edit_data.content()[1].content.as_str().unwrap().to_string();
                                 ai.atime = 0;
@@ -595,16 +604,29 @@ impl<'a> ActionManager<'a> {
                     }
                 };
 
-                let edit_data = self.modals
+                let edit_data = if pw.notes != t!("vault.notes", xous::LANG) {
+                    self.modals
                     .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                    .field(Some(pw.name), Some(password_validator))
-                    .field(Some(pw.secret), Some(password_validator))
+                    .field_placeholder_persist(Some(pw.name), Some(password_validator))
+                    .field_placeholder_persist(Some(pw.secret), Some(password_validator))
+                    .field_placeholder_persist(Some(pw.notes), Some(password_validator))
+                    .field(Some(pw.timestep.to_string()), Some(password_validator))
+                    .field(Some(pw.algorithm.to_string()), Some(password_validator))
+                    .field(Some(pw.digits.to_string()), Some(password_validator))
+                    .field(Some(if pw.is_hotp {"HOTP".to_string()} else {"TOTP".to_string()}), Some(password_validator))
+                    .build().expect("modals error in edit")
+                } else {
+                    self.modals
+                    .alert_builder(t!("vault.edit_dialog", xous::LANG))
+                    .field_placeholder_persist(Some(pw.name), Some(password_validator))
+                    .field_placeholder_persist(Some(pw.secret), Some(password_validator))
                     .field(Some(pw.notes), Some(password_validator))
                     .field(Some(pw.timestep.to_string()), Some(password_validator))
                     .field(Some(pw.algorithm.to_string()), Some(password_validator))
                     .field(Some(pw.digits.to_string()), Some(password_validator))
                     .field(Some(if pw.is_hotp {"HOTP".to_string()} else {"TOTP".to_string()}), Some(password_validator))
-                    .build().expect("modals error in edit");
+                    .build().expect("modals error in edit")
+                };
                 pw.name = edit_data.content()[0].content.as_str().unwrap().to_string();
                 pw.secret = edit_data.content()[1].content.as_str().unwrap().to_string();
                 pw.notes = edit_data.content()[2].content.as_str().unwrap().to_string();
