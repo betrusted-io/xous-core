@@ -144,7 +144,7 @@ fn main() -> Result<()> {
                         let mut pw = backup::PasswordEntry::default();
 
                         if item.username.is_none() || item.site.is_none() {
-                            log::error!("entry {} is missing username and/or site. Skipping.", idx);
+                            log::error!("(non-fatal) entry {} is missing username and/or site. Ignoring entry.", idx);
                             continue
                         }
                         pw.password = item.password.as_ref().unwrap_or(&String::new()).clone();
