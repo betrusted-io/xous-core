@@ -630,13 +630,24 @@ impl<'a> ActionManager<'a> {
                     }
                 };
 
-                let edit_data = self.modals
+                let edit_data = if pw.notes != t!("vault.notes", xous::LANG) {
+                    self.modals
                     .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                    .field(Some(pw.description), Some(password_validator))
-                    .field(Some(pw.username), Some(password_validator))
-                    .field(Some(pw.password), Some(password_validator))
+                    .field_placeholder_persist(Some(pw.description), Some(password_validator))
+                    .field_placeholder_persist(Some(pw.username), Some(password_validator))
+                    .field_placeholder_persist(Some(pw.password), Some(password_validator))
+                    .field_placeholder_persist(Some(pw.notes), Some(password_validator))
+                    .build().expect("modals error in edit")
+                } else { // note is placeholder text, treat it as such
+                self.modals
+                    .alert_builder(t!("vault.edit_dialog", xous::LANG))
+                    .field_placeholder_persist(Some(pw.description), Some(password_validator))
+                    .field_placeholder_persist(Some(pw.username), Some(password_validator))
+                    .field_placeholder_persist(Some(pw.password), Some(password_validator))
                     .field(Some(pw.notes), Some(password_validator))
-                    .build().expect("modals error in edit");
+                    .build().expect("modals error in edit")
+                };
+
                 pw.description = edit_data.content()[0].content.as_str().unwrap().to_string();
                 pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
                 pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
