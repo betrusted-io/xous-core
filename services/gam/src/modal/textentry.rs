@@ -490,11 +490,14 @@ impl ActionApi for TextEntry {
                 }
             }
             _ => { // text entry
-                self.keys_hit[self.selected_field as usize] = true;
-                if payload.placeholder_persist && payload.placeholder.is_some() && payload.content.len() == 0 {
+                if !self.keys_hit[self.selected_field as usize]
+                && payload.placeholder_persist
+                && payload.placeholder.is_some()
+                && payload.content.len() == 0 {
                     // copy the placeholder into the content string before processing the backspace
                     payload.content.append(payload.placeholder.unwrap().to_str()).ok();
                 }
+                self.keys_hit[self.selected_field as usize] = true;
                 #[cfg(feature="tts")]
                 {
                     let xns = xous_names::XousNames::new().unwrap();
