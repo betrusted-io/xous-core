@@ -722,6 +722,7 @@ impl<'a> ActionManager<'a> {
                                     );
                                     extra.push_str(&human_time);
                                     extra.push_str("; ");
+                                    extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
                                     extra.push_str(&pw.count.to_string());
                                     let desc = format!("{}/{}", pw.description, pw.username);
                                     let li = ListItem {
