@@ -113,6 +113,10 @@ $ vaultbackup-rs format csv-pass your_passwords.csv
 
 This will read in a CSV and output a JSON file named `csv_to_vault_passwords.json`, suitable for restoring to `vault`. The second step is to do the actual restore operation, using the `restore` command, referencing the generated JSON fle. The intermediate JSON file may be inspected to ensure that the full CSV contents were translated correctly.
 
+:warning: it takes a few minutes to upload a couple hundred passwords!
+
+`vaultbackup-rs` will appear to "hang" while it is running if you have a lot of passwords to upload. It takes a long time because each password is atomically committed and synced to the cryptographic store individually.
+
 #### CSV File Format
 
 The CSV file should have the following header:

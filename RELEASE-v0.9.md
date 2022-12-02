@@ -292,6 +292,9 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Several infrastructure changes/improvements to how utralib and crating works
 - Add some UX cues on boot asking the user to wait for various operations.
 - Fix context switching in GAM. Now, when relinquishing a context, the context is switched before the response is fired back to the caller. This means that it is much less likely that the caller will start drawing prematurely and have the draw ops missed.
+- Rework main menu & preferences to use a dedicated "preferences" submenu (thanks @gsora!). This change will cause your system to prompt you to set the time again, because the location of the time zone record changes.
+- Notes in `vault` are now editable without deleting the existing text
+- `vault` password import from CSV using `vaultbackup-rs` (a host-based Rust program found in `apps/vault/tools`)
 
 ## Roadmap
 - Lots of testing and bug fixes
