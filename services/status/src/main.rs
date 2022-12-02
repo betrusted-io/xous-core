@@ -1139,7 +1139,7 @@ fn wrapped_main() -> ! {
                             match prefs.autobacklight_timeout() {
                                 Ok(timeout) => timeout,
                                 Err(error) => {
-                                    log::error!("cannot fetch autobacklight timeout, {:?}, defaulting to 10s", error);
+                                    log::warn!("Autobacklight timeout not set or corrupted, {:?}, defaulting to 10s", error);
                                     10
                                 }
                             }
