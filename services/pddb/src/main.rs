@@ -1848,6 +1848,7 @@ fn wrapped_main() -> ! {
                 // finally, unmount the system basis
                 basis_cache.basis_unmount(&mut pddb_os, PDDB_DEFAULT_SYSTEM_BASIS).expect("can't unmount system basis");
                 if basis_cache.basis_list().len() == 0 {
+                    is_mounted.store(false, Ordering::SeqCst);
                     log::info!(".System basis is unmounted.");
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
