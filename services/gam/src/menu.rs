@@ -323,6 +323,7 @@ impl<'a> Menu<'a> {
                     // give up focus before issuing the command, as some commands conflict with loss of focus...
                     if mi.close_on_select {
                         self.gam.relinquish_focus().unwrap();
+                        xous::yield_slice();
                         #[cfg(not(target_os = "xous"))]
                         ticktimer_server::Ticktimer::new().unwrap().sleep_ms(100).unwrap();
                     }
