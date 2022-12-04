@@ -66,7 +66,12 @@ pub(crate) enum StatusOpcode {
 
     /// Prepare for a backup
     PrepareBackup,
+    PrepareBackupConfirmed,
     PrepareBackupPhase2,
+
+    /// Burn a backup key
+    #[cfg(feature="efuse")]
+    BurnBackupKey,
 
     /// Tells keyboard watching thread that a new keypress happened.
     Keypress,
@@ -747,7 +752,7 @@ fn wrapped_main() -> ! {
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
         let opcode: Option<StatusOpcode> = FromPrimitive::from_usize(msg.body.id());
-        log::debug!("{:?}", opcode);
+        log::info!("{:?}", opcode);
         match opcode {
             Some(StatusOpcode::EnableAutomaticBacklight) => {
                 if *autobacklight_enabled.lock().unwrap() {
@@ -1082,6 +1087,12 @@ fn wrapped_main() -> ! {
                 }
             },
             Some(StatusOpcode::BatteryDisconnect) => { // this is described as "Shutdown" on the menu
+                // NOTE: this implementation takes a "shortcut" and blocks, which causes the
+                // status thread to block while the dialog boxes are up. This can eventually lead
+                // to deadlock in the system, but we assume that the user will acknowledge these
+                // dialog boxes fairly quickly. If this turns out not to be the case, we can
+                // turn the interactive dialog box into a thread that fires a message to move
+                // to the next stage (see `PrepareBackup` implementation for a template).
                 if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
@@ -1166,22 +1177,77 @@ fn wrapped_main() -> ! {
                 *run_lock = false;
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
-            Some(StatusOpcode::PrepareBackup) => {
-                log::info!("{}BACKUP.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
-                modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
-                match modals.get_radiobutton(t!("backup.confirm", xous::LANG)) {
-                    Ok(response) => {
-                        if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
-                            {}
-                        } else {
-                            // abort the flow now by returning to the main dispatch handler
-                            continue;
+            #[cfg(feature="efuse")]
+            Some(StatusOpcode::BurnBackupKey) => {
+                log::info!("{}BURNKEY.TYPE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                thread::spawn({
+                    let keys = keys.clone();
+                    move || {
+                        let xns = xous_names::XousNames::new().unwrap();
+                        let modals = modals::Modals::new(&xns).unwrap();
+                        modals.add_list_item(t!("burnkey.bbram", xous::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("burnkey.efuse", xous::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("wlan.cancel", xous::LANG)).expect("couldn't build radio item list");
+                        match modals.get_radiobutton(t!("burnkey.type", xous::LANG)) {
+                            Ok(response) => {
+                                if response.as_str() == t!("burnkey.bbram", xous::LANG) {
+                                    // do BBRAM flow
+                                    log::info!("{}BBRAM.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    // punts to a script-driven flow on the pi
+                                    modals.show_notification(
+                                        t!("burnkey.bbram_exec", xous::LANG),
+                                        Some("https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM)"),
+                                    ).ok();
+                                } else if response.as_str() == t!("burnkey.efuse", xous::LANG) {
+                                    log::info!("{}EFUSE.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    // do eFuse flow
+                                    modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                                    modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                                    match modals.get_radiobutton(t!("burnkey.efuse_confirm", xous::LANG)) {
+                                        Ok(response) => {
+                                            if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                                // do the efuse burn
+                                                keys.lock().unwrap().do_efuse_burn();
+                                            } else {
+                                                // abort the flow by doing nothing
+                                            }
+                                        }
+                                        _ => (),
+                                    }
+                                } else {
+                                    // abort flow by doing nothing
+                                }
+                            }
+                            _ => (),
                         }
                     }
-                    _ => (),
-                }
-
+                });
+            }
+            Some(StatusOpcode::PrepareBackup) => {
+                // don't block while prompting for backup confirmation
+                thread::spawn({
+                    move || {
+                        let xns = xous_names::XousNames::new().unwrap();
+                        let modals = modals::Modals::new(&xns).unwrap();
+                        modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                        log::info!("{}BACKUP.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        match modals.get_radiobutton(t!("backup.confirm", xous::LANG)) {
+                            Ok(response) => {
+                                if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                    send_message(cb_cid,
+                                        Message::new_scalar(StatusOpcode::PrepareBackupConfirmed.to_usize().unwrap(), 0, 0, 0, 0)
+                                    ).expect("couldn't initiate backup");
+                                } else {
+                                    // abort by just falling through
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+                });
+            },
+            Some(StatusOpcode::PrepareBackupConfirmed) => {
                 // disconnect from the network, so that incoming network packets don't trigger any processes that
                 // could write to the PDDB.
                 netmgr.connection_manager_wifi_off_and_stop().ok();
@@ -1202,7 +1268,6 @@ fn wrapped_main() -> ! {
                         // sync the PDDB to disk prior to making backups
                         let pddb = pddb::Pddb::new();
                         if !pddb.try_unmount() {
-                            // this is a rare case path...not worth turning the modals object into a mutex-wrapped thing just for this
                             let xns = xous_names::XousNames::new().unwrap();
                             let modals = modals::Modals::new(&xns).unwrap();
                             modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
