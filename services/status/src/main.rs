@@ -752,7 +752,7 @@ fn wrapped_main() -> ! {
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
         let opcode: Option<StatusOpcode> = FromPrimitive::from_usize(msg.body.id());
-        log::info!("{:?}", opcode);
+        log::debug!("{:?}", opcode);
         match opcode {
             Some(StatusOpcode::EnableAutomaticBacklight) => {
                 if *autobacklight_enabled.lock().unwrap() {
