@@ -258,17 +258,6 @@ fn wrapped_main() -> ! {
     log::debug!("|status: screensize as reported: {:?}", screensize);
     log::debug!("|status: uptime initialized to '{:?}'", uptime_tv);
 
-    // build battstats text view: right half of status bar
-    let mut battstats_tv = TextView::new(
-        status_gid,
-        TextBounds::GrowableFromTr(stats_rect.tr(), stats_rect.width() as _),
-    );
-    battstats_tv.style = GlyphStyle::Regular;
-    battstats_tv.draw_border = false;
-    battstats_tv.margin = Point::new(0, 0);
-    gam.post_textview(&mut battstats_tv)
-        .expect("|status: can't draw battery stats");
-
     // initialize to some "sane" mid-point defaults, so we don't trigger errors later on before the first real battstat reading comes
     let mut stats = BattStats {
         voltage: 3700,
@@ -790,9 +779,25 @@ fn wrapped_main() -> ! {
             }
             Some(StatusOpcode::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
                 stats = [lo, hi].into();
-                battstats_tv.clear_str();
                 // have to clear the entire rectangle area, because the SSID has a variable width and can be much wider or shorter than battstats
                 gam.draw_rectangle(status_gid, stats_rect).ok();
+
+                let battstats = if !battstats_phase && wifi_status.ssid.is_some() {
+                    // move the SSID name 30 pixels to the left only if there's a link
+                    Point{x: stats_rect.tr().x-30, y: stats_rect.tr().y}
+                } else {
+                    Point{x: stats_rect.tr().x, y: stats_rect.tr().y}
+                };
+                // build battstats text view: right half of status bar
+                let mut battstats_tv = TextView::new(
+                    status_gid,
+                    TextBounds::GrowableFromTr(battstats, stats_rect.width() as _),
+                );
+                battstats_tv.style = GlyphStyle::Regular;
+                battstats_tv.draw_border = false;
+                battstats_tv.margin = Point::new(0, 0);
+                gam.post_textview(&mut battstats_tv)
+                    .expect("|status: can't draw battery stats");
 
                 // 0xdddd and 0xffff are what are returned when the EC is too busy to respond/hung, or in reset, respectively
                 if stats.current == -8739 /* 0xdddd */
@@ -818,11 +823,11 @@ fn wrapped_main() -> ! {
                         stats.soc).unwrap();
                     } else {
                         if let Some(ssid) = wifi_status.ssid {
+                            bars(&gam, status_gid, ssid.rssi as i32 * -1, Point {x: 310, y: 13}, (3 ,2), 3, 2);
                             write!(
                                 &mut battstats_tv,
-                                "{} -{}dBm",
+                                "{}",
                                 ssid.name.as_str().unwrap_or("UTF-8 Erorr"),
-                                ssid.rssi,
                             ).unwrap();
                         } else {
                             if wifi_status.link_state == com_rs_ref::LinkState::ResetHold {
@@ -1302,4 +1307,68 @@ fn turn_lights_on(rx: Box<Receiver<BacklightThreadOps>>, cid: xous::CID, timeout
             }
         };
     }
+}
+
+// bars draws signal bars spaced by `bars_spacing` amount, drawing a 
+// the smallest signal square starting from `top_left` growing by `growth` amount of pixels.
+// The smallest bar will be exactly `(x, y)` in size.
+fn bars(g: &gam::Gam, canvas: graphics_server::Gid, 
+    level: i32,
+    top_left: Point,
+    (x, y): (i16,i16),
+    growth: i16,
+    bars_spacing: i16
+) {
+    let mut dl = gam::GamObjectList::new(canvas);
+
+    let bottom_right = Point{x: top_left.x + x, y: top_left.y + y};
+
+    let mut colors = HashMap::new();
+
+    let mut base = -90;
+    for i in 1..=5 {
+        let b = base < level;
+        log::debug!("base: {} signal: {} should be black: {}", base, level, b);
+        base += 13;
+
+        match b {
+            true => colors.insert(i, DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1)),
+            false => colors.insert(i, DrawStyle::new(PixelColor::Light, PixelColor::Dark, 1)),
+        };
+    }
+
+    for mult in 1..=5 {
+        let color = colors.get(&mult).unwrap();
+
+        let r = match mult{
+            1 => {
+                gam::Rectangle::new_coords_with_style(
+                    top_left.x,
+                    top_left.y,
+                    bottom_right.x as i16,
+                    bottom_right.y,
+                    *color,
+                )
+            },
+            _ => {
+                let last = match dl.last().unwrap() {
+                    gam::GamObjectType::Rect(r) => r,
+                    _ => panic!("expected only rects, found other stuff"),
+                };
+    
+                gam::Rectangle::new_coords_with_style(
+                    last.x1() as i16+bars_spacing,
+                    last.y0() as i16-growth,
+                    last.x1() as i16+growth+bars_spacing,
+                    bottom_right.y,
+                    *color,
+                )
+            }
+        };      
+
+        dl.push(gam::GamObjectType::Rect(r)).unwrap();
+    }
+
+    g.draw_list(dl).unwrap();
+
 }
