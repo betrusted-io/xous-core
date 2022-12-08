@@ -741,9 +741,9 @@ fn main() -> ! {
     //  - status sub system (for setting the layout, autobacklight feature)
     //  - USB (for getting layout)
     //  - Preference manager
-    #[cfg(all(any(feature="precursor", feature="renode"), not(feature="utralib/precursor-2753c12-dvt")))]
+    #[cfg(all(any(feature="precursor", feature="renode"), not(feature="dvt")))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(5)).expect("can't register server");
-    #[cfg(all(any(feature="precursor", feature="renode"), feature="utralib/precursor-2753c12-dvt"))] // dvt build has less in it
+    #[cfg(all(any(feature="precursor", feature="renode"), feature="dvt"))] // dvt build has less in it
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
     #[cfg(not(target_os = "xous"))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(5)).expect("can't register server");

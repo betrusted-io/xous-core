@@ -302,6 +302,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_precursor("2753c12-dvt")
                    .add_services(&services)
                    .add_feature("no-codec")
+                   .add_feature("dvt")
                    .add_apps(&get_cratespecs());
         }
         Some("tts") => {

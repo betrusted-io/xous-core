@@ -125,9 +125,9 @@ fn main() -> ! {
     // - time server
     // - llio
     // I2C can be used to set time, which can have security implications; we are more strict on counting who can have access to this resource.
-    #[cfg(all(any(feature="precursor", feature="renode"), not(feature="utralib/precursor-2753c12-dvt")))]
+    #[cfg(all(any(feature="precursor", feature="renode"), not(feature="dvt")))]
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(3)).expect("can't register I2C thread");
-    #[cfg(all(any(feature="precursor", feature="renode"), feature="utralib/precursor-2753c12-dvt"))] // dvt build has less in it
+    #[cfg(all(any(feature="precursor", feature="renode"), feature="dvt"))] // dvt build has less in it
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(2)).expect("can't register I2C thread");
     #[cfg(not(target_os = "xous"))]
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(1)).expect("can't register I2C thread");
