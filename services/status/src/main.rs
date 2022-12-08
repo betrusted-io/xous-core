@@ -220,6 +220,7 @@ fn wrapped_main() -> ! {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let mut netmgr = net::NetManager::new();
+    #[cfg(not(feature="no-codec"))]
     let mut codec = codec::Codec::new(&xns).unwrap();
 
     // screensize is controlled by the GAM, it's set in main.rs near the top
@@ -413,30 +414,32 @@ fn wrapped_main() -> ! {
         });
 
         // keyboard mapping is restored directly by the keyboard hardware
-
-        log::info!("audio enabled: {}", all_prefs.audio_enabled);
-        match all_prefs.audio_enabled {
-            true => {
-                match codec.setup_8k_stream() {
-                    Ok(()) => {
-                        send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-                        Ok(())
-                    },
-                    Err(e) => Err(e),
+        #[cfg(not(feature="no-codec"))]
+        {
+            log::info!("audio enabled: {}", all_prefs.audio_enabled);
+            match all_prefs.audio_enabled {
+                true => {
+                    match codec.setup_8k_stream() {
+                        Ok(()) => {
+                            send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                            Ok(())
+                        },
+                        Err(e) => Err(e),
+                    }
                 }
-            }
-            false => Ok(())
-        }.unwrap_or_else(|error| {
-            log::error!("cannot set audio enabled: {:?}", error);
-        });
+                false => Ok(())
+            }.unwrap_or_else(|error| {
+                log::error!("cannot set audio enabled: {:?}", error);
+            });
 
-        codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
-            log::error!("cannot set headphone volume: {:?}", error);
-        });
+            codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
+                log::error!("cannot set headphone volume: {:?}", error);
+            });
 
-        codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
-            log::error!("cannot set speaker volume: {:?}", error);
-        });
+            codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
+                log::error!("cannot set speaker volume: {:?}", error);
+            });
+        }
     });
 
     // ------------------------ check firmware status and apply updates

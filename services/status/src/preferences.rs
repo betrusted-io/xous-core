@@ -94,6 +94,7 @@ struct DevicePrefs {
     gam: gam::Gam,
     kbd: keyboard::Keyboard,
     time_ux_cid: xous::CID,
+    #[cfg(not(feature="no-codec"))]
     codec: codec::Codec,
     menu: Option<gam::MenuMatic>,
     menu_manager_sid: xous::SID,
@@ -107,6 +108,7 @@ impl PrefHandler for DevicePrefs {
         if match FromPrimitive::from_usize(op) {
             Some(other) => {
                 let other: PrefsMenuUpdateOp = other;
+                #[cfg(not(feature="no-codec"))]
                 match other {
                     PrefsMenuUpdateOp::UpdateMenuAudioEnabled => self.alter_menu_audio_off(),
                     PrefsMenuUpdateOp::UpdateMenuAudioDisabled => self.alter_menu_audio_on(),
@@ -166,6 +168,7 @@ impl DevicePrefs {
         time_ux_cid: xous::CID,
         menu_manager_sid: xous::SID,
         menu_conn: xous::CID,
+        #[cfg(not(feature="no-codec"))]
         codec: codec::Codec,
         status_conn: xous::CID,
 ) -> Self {
@@ -175,6 +178,7 @@ impl DevicePrefs {
             gam: gam::Gam::new(&xns).unwrap(),
             kbd: keyboard::Keyboard::new(&xns).unwrap(),
             time_ux_cid,
+            #[cfg(not(feature="no-codec"))]
             codec,
             menu: None,
             menu_manager_sid,
@@ -205,7 +209,7 @@ impl DevicePrefs {
             SetTime,
             SetTimezone,
         ];
-
+        #[cfg(not(feature="no-codec"))]
         if self.codec.is_running().unwrap_or_default() {
             ret.push(AudioOff);
 
@@ -233,9 +237,13 @@ impl DevicePrefs {
             WLANMenu => self.wlan_menu(),
             SetTime => self.set_time_menu(),
             SetTimezone => self.set_timezone_menu(),
+            #[cfg(not(feature="no-codec"))]
             AudioOn => self.audio_on(),
+            #[cfg(not(feature="no-codec"))]
             AudioOff => self.audio_off(),
+            #[cfg(not(feature="no-codec"))]
             HeadsetVolume => self.headset_volume(),
+            #[cfg(not(feature="no-codec"))]
             EarpieceVolume => self.earpiece_volume(),
 
             _ => unimplemented!("should not end up here!"),
@@ -438,7 +446,7 @@ impl DevicePrefs {
 
         Ok(())
     }
-
+    #[cfg(not(feature="no-codec"))]
     fn audio_on(&mut self) -> Result<(), DevicePrefsError> {
         self.codec.setup_8k_stream()?;
 
@@ -447,7 +455,7 @@ impl DevicePrefs {
 
         Ok(())
     }
-
+    #[cfg(not(feature="no-codec"))]
     fn alter_menu_audio_on(&mut self) {
         let menu = self.menu.as_ref().unwrap();
 
@@ -483,7 +491,7 @@ impl DevicePrefs {
             close_on_select: true,
         });
     }
-
+    #[cfg(not(feature="no-codec"))]
     fn audio_off(&mut self) -> Result<(), DevicePrefsError> {
         self.codec.power_off()?;
 
@@ -492,7 +500,7 @@ impl DevicePrefs {
 
         Ok(())
     }
-
+    #[cfg(not(feature="no-codec"))]
     fn alter_menu_audio_off(&mut self) {
         let menu = self.menu.as_ref().unwrap();
         // hide volume toggles
@@ -515,7 +523,7 @@ impl DevicePrefs {
             close_on_select: true,
         });
     }
-
+    #[cfg(not(feature="no-codec"))]
     fn headphone_connected(&mut self) -> Result<bool, DevicePrefsError> {
         match self.codec.poll_headphone_state()? {
             codec::HeadphoneState::PresentWithMic => Ok(true),
@@ -523,7 +531,7 @@ impl DevicePrefs {
             _ => Ok(false),
         }
     }
-
+    #[cfg(not(feature="no-codec"))]
     fn volume_slider(&mut self, title: &str, headset: bool) -> Result<(i32, u32), DevicePrefsError> {
         // We're aiming at 20 step levels in the UI, which is the result of dividing
         // 80dB levels available through codec by 4 (https://xkcd.com/221/).
@@ -539,7 +547,7 @@ impl DevicePrefs {
 
         Ok((db_val as i32, val as u32))
     }
-
+    #[cfg(not(feature="no-codec"))]
     fn headset_volume(&mut self) -> Result<(), DevicePrefsError> { // headset -> headphone
         let (db_val, slider_val) = self.volume_slider(t!("prefs.headphone_volume", xous::LANG), true)?;
         self.codec.set_headphone_volume(codec::VolumeOps::Set, Some(db_val as f32))?;
@@ -547,7 +555,7 @@ impl DevicePrefs {
 
         Ok(())
     }
-
+    #[cfg(not(feature="no-codec"))]
     fn earpiece_volume(&mut self) -> Result<(), DevicePrefsError> { // earpiece -> speaker
         let (db_val, slider_val) = self.volume_slider(t!("prefs.speaker_volume", xous::LANG), false)?;
         self.codec.set_speaker_volume(codec::VolumeOps::Set, Some(db_val as f32))?;
@@ -595,11 +603,17 @@ fn run_menu_thread(sid: xous::SID, status_cid: xous::CID) {
     let time_sid = xous::create_server().unwrap();
     let time_cid = xous::connect(time_sid).unwrap();
     crate::time::start_time_ux(time_sid);
-
+    #[cfg(not(feature="no-codec"))]
     let codec = codec::Codec::new(&xns).unwrap();
 
+    #[cfg(not(feature="no-codec"))]
     let mut handlers: Vec<Box<dyn PrefHandler>> = vec![
         Box::new(DevicePrefs::new(&xns, time_cid, menumatic_sid, menu_conn, codec, status_cid)),
+        Box::new(wifi::WLANMan::new(&xns)),
+    ];
+    #[cfg(feature="no-codec")]
+    let mut handlers: Vec<Box<dyn PrefHandler>> = vec![
+        Box::new(DevicePrefs::new(&xns, time_cid, menumatic_sid, menu_conn, status_cid)),
         Box::new(wifi::WLANMan::new(&xns)),
     ];
 
