@@ -367,81 +367,6 @@ fn wrapped_main() -> ! {
     let prefs = Arc::new(Mutex::new(userprefs::Manager::new()));
     let prefs_thread_clone = prefs.clone();
 
-    /*
-    This thread handles preference loading.
-    It'll wait until PDDB is ready to load stuff off the preference
-    dictionary.
-    */
-
-    std::thread::spawn(move || {
-        let pddb = pddb::Pddb::new();
-        let prefs = prefs_thread_clone.lock().unwrap();
-        let netmgr = net::NetManager::new();
-
-        pddb.is_mounted_blocking();
-
-        let all_prefs = match prefs.all() {
-            Ok(p) => p,
-            Err(error) => {
-                log::error!("cannot read preference store: {:?}", error);
-                return;
-            }
-        };
-
-        log::debug!("pddb ready, loading preferences now!");
-
-        match all_prefs.wifi_kill {
-            true => netmgr.connection_manager_wifi_off_and_stop(),
-            false => netmgr.connection_manager_wifi_on(),
-        }.unwrap_or_else(|error| {
-            log::error!("cannot set radio status: {:?}", error)
-        });
-
-        match prefs.connect_known_networks_on_boot_or_value(true).unwrap() {
-            true => netmgr.connection_manager_run(),
-            false => netmgr.connection_manager_stop(),
-        }.unwrap_or_else(|error| {
-            log::error!("cannot start connection manager: {:?}", error)
-        });
-        match prefs.autobacklight_on_boot_or_value(true).unwrap() {
-            true => send_message(status_cid, Message::new_scalar(
-                StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
-            false => send_message(status_cid, Message::new_scalar(
-                StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
-        }.unwrap_or_else(|error| {
-            log::error!("cannot set autobacklight status: {:?}", error);
-            xous::Result::Ok
-        });
-
-        // keyboard mapping is restored directly by the keyboard hardware
-        #[cfg(not(feature="no-codec"))]
-        {
-            log::info!("audio enabled: {}", all_prefs.audio_enabled);
-            match all_prefs.audio_enabled {
-                true => {
-                    match codec.setup_8k_stream() {
-                        Ok(()) => {
-                            send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-                            Ok(())
-                        },
-                        Err(e) => Err(e),
-                    }
-                }
-                false => Ok(())
-            }.unwrap_or_else(|error| {
-                log::error!("cannot set audio enabled: {:?}", error);
-            });
-
-            codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
-                log::error!("cannot set headphone volume: {:?}", error);
-            });
-
-            codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
-                log::error!("cannot set speaker volume: {:?}", error);
-            });
-        }
-    });
-
     // ------------------------ check firmware status and apply updates
     // all security sensitive servers must be occupied at this point in time.
     // in debug mode, anyone could, in theory, connect to and trigger an EC update, given this permissive policy.
@@ -577,7 +502,22 @@ fn wrapped_main() -> ! {
                 }
             }
             if !keys.lock().unwrap().is_dont_ask_set().unwrap_or(false) {
-                keys.lock().unwrap().do_init_keys_ux_flow();
+                let _ = thread::spawn({
+                    let keys = keys.clone();
+                    let pump_run = pump_run.clone();
+                    move || {
+                        let tt = ticktimer_server::Ticktimer::new().unwrap();
+                        // delay this question until the rest of the system has passed initialization
+                        // this is indicated when the status pump thread is allowed to start
+                        loop {
+                            tt.sleep_ms(500).unwrap();
+                            if pump_run.load(Ordering::SeqCst) {
+                                break;
+                            }
+                        }
+                        keys.lock().unwrap().do_init_keys_ux_flow();
+                    }
+                });
             }
         }
     } else if !restore_running {
@@ -748,6 +688,80 @@ fn wrapped_main() -> ! {
                     }
                 }
             }
+        }
+    });
+
+    /*
+    This thread handles preference loading.
+    It'll wait until PDDB is ready to load stuff off the preference
+    dictionary.
+    */
+    std::thread::spawn(move || {
+        let pddb = pddb::Pddb::new();
+        let prefs = prefs_thread_clone.lock().unwrap();
+        let netmgr = net::NetManager::new();
+
+        pddb.is_mounted_blocking();
+
+        let all_prefs = match prefs.all() {
+            Ok(p) => p,
+            Err(error) => {
+                log::error!("cannot read preference store: {:?}", error);
+                return;
+            }
+        };
+
+        log::debug!("pddb ready, loading preferences now!");
+
+        match all_prefs.wifi_kill {
+            true => netmgr.connection_manager_wifi_off_and_stop(),
+            false => netmgr.connection_manager_wifi_on(),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot set radio status: {:?}", error)
+        });
+
+        match prefs.connect_known_networks_on_boot_or_value(true).unwrap() {
+            true => netmgr.connection_manager_run(),
+            false => netmgr.connection_manager_stop(),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot start connection manager: {:?}", error)
+        });
+        match prefs.autobacklight_on_boot_or_value(true).unwrap() {
+            true => send_message(status_cid, Message::new_scalar(
+                StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
+            false => send_message(status_cid, Message::new_scalar(
+                StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot set autobacklight status: {:?}", error);
+            xous::Result::Ok
+        });
+
+        // keyboard mapping is restored directly by the keyboard hardware
+        #[cfg(not(feature="no-codec"))]
+        {
+            log::info!("audio enabled: {}", all_prefs.audio_enabled);
+            match all_prefs.audio_enabled {
+                true => {
+                    match codec.setup_8k_stream() {
+                        Ok(()) => {
+                            send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                            Ok(())
+                        },
+                        Err(e) => Err(e),
+                    }
+                }
+                false => Ok(())
+            }.unwrap_or_else(|error| {
+                log::error!("cannot set audio enabled: {:?}", error);
+            });
+
+            codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
+                log::error!("cannot set headphone volume: {:?}", error);
+            });
+
+            codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
+                log::error!("cannot set speaker volume: {:?}", error);
+            });
         }
     });
 
