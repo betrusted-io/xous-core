@@ -279,8 +279,11 @@ impl RootKeys {
     }
     #[cfg(feature="efuse")]
     pub fn do_efuse_burn(&self) {
-        log::info!("placeholder for now");
-        // placeholder
+        send_message(self.conn,
+            Message::new_scalar(Opcode::BurnEfuse.to_usize().unwrap(),
+                0, 0, 0, 0
+            )
+        ).expect("couldn't initiate eFuse burn");
     }
     pub fn is_jtag_working(&self) -> Result<bool, xous::Error> {
         let response = send_message(self.conn,

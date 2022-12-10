@@ -56,6 +56,7 @@ pub(crate) enum UpdateType {
     Regular,
     BbramProvision,
     Restore,
+    EfuseProvision,
 }
 
 /// An "easily" parseable metadata structure in flash. There's nothing that guarantees the authenticity
@@ -1042,7 +1043,7 @@ fn main() -> ! {
                 }
                 keys.set_ux_password_type(None);
 
-                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid, UpdateType::Regular);
+                let result = keys.do_gateware_update(&mut rootkeys_modal, &modals, main_cid, UpdateType::Regular);
                 // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
@@ -1335,7 +1336,7 @@ fn main() -> ! {
             }
             Some(Opcode::UxBbramRun) => {
                 keys.set_ux_password_type(None);
-                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid, UpdateType::BbramProvision);
+                let result = keys.do_gateware_update(&mut rootkeys_modal, &modals, main_cid, UpdateType::BbramProvision);
                 // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
@@ -1648,7 +1649,7 @@ fn main() -> ! {
                 buf.volatile_clear();
                 keys.set_ux_password_type(None);
 
-                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid,
+                let result = keys.do_gateware_update(&mut rootkeys_modal, &modals, main_cid,
                     UpdateType::Restore
                 );
                 // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
@@ -1782,6 +1783,88 @@ fn main() -> ! {
                 keys.reset_dont_ask_init();
                 xous::return_scalar(msg.sender, 1).ok();
             }),
+            #[cfg(feature = "efuse")]
+            Some(Opcode::BurnEfuse) => {
+                // Flow:
+                //   0. confirm that we can read out our JTAG ID (make sure the interface is working)
+                //   1. get password
+                //   [inside do_gateware_update()]
+                //   2. create a backup of the gateware
+                //   3. inject new key into gateware, while re-encrypting to the new key
+                //   4. burn the key using jtag.efuse_key_burn()
+                //   5. seal the device using seal_device_forever()
+                //      [first device don't call this so we can debug the flow; on second device, call this and confirm we can't re-burn or readout]
+                //   6. force a reboot
+                log::info!("{}EFUSE.START,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                // confirm that we can read out our JTAG ID.
+                if !keys.is_jtag_working() {
+                    modals.show_notification(t!("rootkeys.efuse_jtag_fail", xous::LANG), None).expect("modals error");
+                    continue;
+                }
+                // get password, or skip getting it if it's already in cache
+                if keys.is_pcache_update_password_valid() || !keys.is_initialized() {
+                    send_message(main_cid,
+                        xous::Message::new_scalar(Opcode::EfuseRun.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).unwrap();
+                } else {
+                    keys.set_ux_password_type(Some(PasswordType::Update));
+                    password_action.set_action_opcode(Opcode::EfusePasswordReturn.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::TextEntry(password_action.clone())),
+                        Some(t!("rootkeys.get_signing_password", xous::LANG)), false,
+                        None, true, None
+                    );
+                    #[cfg(feature="tts")]
+                    tts.tts_blocking(t!("rootkeys.get_signing_password", xous::LANG)).unwrap();
+                    rootkeys_modal.activate();
+                }
+            },
+            #[cfg(feature = "efuse")]
+            Some(Opcode::EfusePasswordReturn) => {
+                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
+
+                keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
+                plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                buf.volatile_clear();
+                send_message(main_cid,
+                    xous::Message::new_scalar(Opcode::EfuseRun.to_usize().unwrap(), 0, 0, 0, 0)
+                ).unwrap();
+            }
+            #[cfg(feature = "efuse")]
+            Some(Opcode::EfuseRun) => {
+                keys.set_ux_password_type(None);
+                let result = keys.do_gateware_update(&mut rootkeys_modal, &modals, main_cid, UpdateType::EfuseProvision);
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
+
+                match result {
+                    Ok(_) => {
+                        log::info!("{}EFUSE.OK,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        modals.show_notification(t!("rootkeys.efuse_finished", xous::LANG), None).expect("modals error");
+                        send_message(main_cid,
+                            xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't initiate dialog box");
+                    }
+                    Err(RootkeyResult::AlignmentError) => {
+                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::KeyError) => {
+                        // probably a bad password, purge it, so the user can try again
+                        keys.purge_password(PasswordType::Update);
+                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::IntegrityError) => {
+                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::FlashError) => {
+                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::StateError) => {
+                        modals.show_notification(t!("rootkeys.wrong_state", xous::LANG), None).expect("modals error");
+                    }
+                }
+            }
             Some(Opcode::TestUx) => msg_blocking_scalar_unpack!(msg, _arg, _, _, _, {
                 // dummy test for now
                 xous::return_scalar(msg.sender, 1234).unwrap();

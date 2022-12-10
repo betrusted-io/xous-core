@@ -1253,9 +1253,11 @@ impl<'a> RootKeys {
 
     pub fn do_gateware_update(&mut self,
         rootkeys_modal: &mut Modal,
+        modals: &modals::Modals,
         main_cid: xous::CID,
         update_type: UpdateType,
     ) -> Result<(), RootkeyResult> {
+        log::set_max_level(log::LevelFilter::Debug);
         // make sure the system is sane
         self.xous_init_interlock();
         self.spinor.set_staging_write_protect(true).expect("couldn't protect the staging area");
@@ -1265,20 +1267,21 @@ impl<'a> RootKeys {
         0, 100, 10, Some("%"), 0, true, true
         );
         progress_action.set_is_password(true);
-        // now show the init wait note...
-        rootkeys_modal.modify(
-            Some(ActionType::Slider(progress_action)),
-            Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
-            None, true, None);
-        rootkeys_modal.activate();
-        xous::yield_slice(); // give some time to the GAM to render
-        let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
-        pb.set_percentage(1);
 
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
         let mut keypair_bytes: [u8; ed25519_dalek::KEYPAIR_LENGTH] = [0; ed25519_dalek::KEYPAIR_LENGTH];
         let mut old_key = [0u8; 32];
-        if update_type == UpdateType::Restore {
+        let mut pb = if update_type == UpdateType::Restore {
+            // now show the init wait note...
+            rootkeys_modal.modify(
+                Some(ActionType::Slider(progress_action)),
+                Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
+                None, true, None);
+            rootkeys_modal.activate();
+            xous::yield_slice(); // give some time to the GAM to render
+            let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
+            pb.set_percentage(1);
+
             // ASSUME:
             //   - the sensitive_data has been set up correctly
             //   - sensitive_data's FPGA_KEY is a *plaintext* version of the FPGA key
@@ -1356,7 +1359,11 @@ impl<'a> RootKeys {
             }
 
             pb.set_percentage(3);
+            pb
         } else { // regular and bbram flow
+            // don't show the rootkey modals until after the key is computed, so we can pop up
+            // the BIP-39 dialog box.
+
             // decrypt the FPGA key using the stored password
             if pcache.hashed_update_pw_valid == 0 && self.is_initialized() {
                 self.purge_password(PasswordType::Update);
@@ -1401,8 +1408,7 @@ impl<'a> RootKeys {
 
             // stage the keyrom data for patching
             self.populate_sensitive_data();
-            if update_type == UpdateType::BbramProvision {
-                pb.set_percentage(3);
+            if update_type == UpdateType::BbramProvision || update_type == UpdateType::EfuseProvision {
                 if self.is_initialized() {
                     // make a backup copy of the old key, so we can use it to decrypt the gateware before re-encrypting it
                     old_key.copy_from_slice(&pcache.fpga_key);
@@ -1412,20 +1418,69 @@ impl<'a> RootKeys {
                 // we transmit the BBRAM key at this point -- because if there's going to be a failure,
                 // we'd rather know it now before moving on. Three copies are sent to provide some
                 // check on the integrity of the key.
-                log::info!("BBKEY|: {:?}", &pcache.fpga_key);
-                log::info!("BBKEY|: {:?}", &pcache.fpga_key);
-                log::info!("BBKEY|: {:?}", &pcache.fpga_key);
-                log::info!("{}", crate::CONSOLE_SENTINEL);
+                if update_type == UpdateType::BbramProvision {
+                    log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+                    log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+                    log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+                    log::info!("{}", crate::CONSOLE_SENTINEL);
+                } else if update_type == UpdateType::EfuseProvision {
+                    // share the backup key with the user so it can be saved somewhere safe
+                    modals.show_bip39(Some(t!("rootkeys.backup_key", xous::LANG)), &pcache.fpga_key.to_vec()).ok();
+                    loop {
+                        modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("modals error");
+                        modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("modals error");
+                        log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        match modals.get_radiobutton(t!("rootkeys.backup_verify", xous::LANG)) {
+                            Ok(response) => {
+                                if response == t!("rootkeys.gwup.yes", xous::LANG) {
+                                    match modals.input_bip39(Some(t!("rootkeys.backup_key_enter", xous::LANG))) {
+                                        Ok(verify) => {
+                                            log::debug!("got bip39 verification: {:x?}", verify);
+                                            if &verify == &pcache.fpga_key {
+                                                log::debug!("verify succeeded");
+                                                modals.show_notification(t!("rootkeys.backup_key_match", xous::LANG), None).ok();
+                                                break;
+                                            } else {
+                                                log::debug!("verify failed");
+                                                modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", xous::LANG)), &pcache.fpga_key.to_vec()).ok();
+                                            }
+                                        }
+                                        _ => {
+                                            log::debug!("bip39 verification aborted");
+                                            modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", xous::LANG)), &pcache.fpga_key.to_vec()).ok();
+                                        }
+                                    }
+                                } else {
+                                    break;
+                                }
+                            }
+                            _ => break,
+                        }
+                    }
+                }
             } else {
                 old_key.copy_from_slice(&pcache.fpga_key);
             };
-        }
+
+            // *now* show the progress bar...
+            rootkeys_modal.modify(
+                Some(ActionType::Slider(progress_action)),
+                Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
+                None, true, None);
+            rootkeys_modal.activate();
+            xous::yield_slice(); // give some time to the GAM to render
+            let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
+            pb.set_percentage(3);
+            pb
+        };
         #[cfg(feature = "hazardous-debug")]
         log::debug!("anti-rollback privkey: {:x?}", &keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
         #[cfg(feature = "hazardous-debug")]
         log::debug!("trying to make a keypair from {:x?}", keypair_bytes);
         // Keypair zeroizes on drop
-        let keypair: Option<Keypair> = if (update_type == UpdateType::BbramProvision) && !self.is_initialized() {
+        let keypair: Option<Keypair> = if
+        ((update_type == UpdateType::BbramProvision) || (update_type == UpdateType::EfuseProvision))
+         && !self.is_initialized() {
             // don't try to derive signing keys if we're doing BBRAM provisioning on an otherwise blank device
             None
         } else {
@@ -1433,7 +1488,9 @@ impl<'a> RootKeys {
         };
         log::debug!("keypair success");
         #[cfg(feature = "hazardous-debug")]
-        log::debug!("keypair privkey (after anti-rollback): {:x?}", keypair.as_ref().unwrap().secret.to_bytes());
+        if keypair.is_some() {
+            log::debug!("keypair privkey (after anti-rollback): {:x?}", keypair.as_ref().unwrap().secret.to_bytes());
+        }
 
         pb.set_percentage(4);
         log::debug!("making destination oracle");
@@ -1452,7 +1509,7 @@ impl<'a> RootKeys {
             }
         };
 
-        let mut next_progress = if update_type == UpdateType::BbramProvision {
+        let mut next_progress = if (update_type == UpdateType::BbramProvision) || (update_type == UpdateType::EfuseProvision) {
             pb.update_text(t!("rootkeys.init.backup_gateware", xous::LANG));
             pb.rebase_subtask_percentage(5, 25);
             self.make_gateware_backup(Some(&mut pb), false)?;
@@ -1463,6 +1520,8 @@ impl<'a> RootKeys {
         log::debug!("destination oracle success");
         if update_type == UpdateType::BbramProvision {
             dst_oracle.set_target_key_type(FpgaKeySource::Bbram);
+        } else if update_type == UpdateType::EfuseProvision {
+            dst_oracle.set_target_key_type(FpgaKeySource::Efuse);
         } else {
             let keysource = dst_oracle.get_original_key_type();
             dst_oracle.set_target_key_type(keysource);
@@ -1537,9 +1596,9 @@ impl<'a> RootKeys {
             pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
             self.commit_signature(loader_sig, loader_len, SignatureType::Loader)?;
             log::debug!("loader {} bytes, sig: {:x?}", loader_len, loader_sig.to_bytes());
-            pb.set_percentage(93);
+            pb.set_percentage(88);
             self.commit_signature(kernel_sig, kernel_len, SignatureType::Kernel)?;
-            pb.set_percentage(94);
+            pb.set_percentage(89);
 
             // pass the kp back into the original variable. keypair does not implement copy...for good reasons.
             Some(kp)
@@ -1548,7 +1607,7 @@ impl<'a> RootKeys {
         };
 
         // clean up the oracles
-        pb.set_percentage(95);
+        pb.set_percentage(90);
         src_oracle.clear();
         dst_oracle.clear();
         // make a backup copy of the public key before we purge it. Pubkey is...public, so that's fine!
@@ -1571,7 +1630,7 @@ impl<'a> RootKeys {
 
         // check signatures
         if keypair.is_some() {
-            pb.set_percentage(96);
+            pb.set_percentage(92);
             if !self.verify_gateware_self_signature(Some(&pubkey)) {
                 return Err(RootkeyResult::IntegrityError);
             }
@@ -1582,9 +1641,8 @@ impl<'a> RootKeys {
             }
         }
 
-        pb.set_percentage(100);
-
         if update_type == UpdateType::BbramProvision {
+            pb.set_percentage(95);
             self.ticktimer.sleep_ms(500).unwrap();
             // this will kick off the programming
             log::info!("BURN_NOW");
@@ -1597,12 +1655,90 @@ impl<'a> RootKeys {
             pb.set_percentage(0);
             pb.rebase_subtask_percentage(0, 100);
             self.make_gateware_backup(Some(&mut pb), true)?;
+        } else if update_type == UpdateType::EfuseProvision {
+            pb.update_text(t!("rootkeys.efuse_burning", xous::LANG));
+            self.ticktimer.sleep_ms(300).ok();
+            pb.set_percentage(93);
+            self.ticktimer.sleep_ms(300).ok();
+            #[cfg(feature="hazardous-debug")]
+            match self.jtag.efuse_fetch() {
+                Ok(rec) => {
+                    log::info!("Efuse record before burn: {:?}", rec);
+                }
+                Err(e) => {
+                    log::error!("failed to fetch jtag record: {:?}", e);
+                    return Err(RootkeyResult::IntegrityError);
+                }
+            }
+            log::info!("{}EFUSE.BURN,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+            // burn the key here to eFuses
+            match self.jtag.efuse_key_burn(pcache.fpga_key) {
+                Ok(result) => {
+                    if !result {
+                        pb.update_text(t!("rootkeys.efuse_burn_fail", xous::LANG));
+                        self.ticktimer.sleep_ms(2000).ok();
+                        return Err(RootkeyResult::KeyError)
+                    } else {
+                        log::info!("{}EFUSE.BURN_OK,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    }
+                }
+                Err(e) => {
+                    pb.update_text(&format!("{}\n{:?}", t!("rootkeys.efuse_internal_error", xous::LANG), e));
+                    self.ticktimer.sleep_ms(2000).ok();
+                    return Err(RootkeyResult::StateError)
+                }
+            }
+            log::info!("{}EFUSE.BURN_DONE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+
+            #[cfg(feature="hazardous-debug")]
+            match self.jtag.efuse_fetch() {
+                Ok(rec) => {
+                    log::info!("Efuse record readback: {:?}", rec);
+                }
+                Err(e) => {
+                    log::error!("failed to fetch jtag record: {:?}", e);
+                    return Err(RootkeyResult::IntegrityError);
+                }
+            }
+
+            // seal the device from key readout, force encrypted boot
+            pb.update_text(t!("rootkeys.efuse_sealing", xous::LANG));
+            pb.set_percentage(96);
+            log::info!("{}EFUSE.SEAL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+            match self.jtag.seal_device() {
+                Ok(result) => {
+                    if !result {
+                        pb.update_text(t!("rootkeys.efuse_seal_fail", xous::LANG));
+                        self.ticktimer.sleep_ms(2000).ok();
+                        return Err(RootkeyResult::FlashError)
+                    }
+                }
+                Err(e) => {
+                    pb.update_text(&format!("{}\n{:?}", t!("rootkeys.efuse_internal_error", xous::LANG), e));
+                    self.ticktimer.sleep_ms(2000).ok();
+                    return Err(RootkeyResult::StateError)
+                }
+            }
+            log::info!("{}EFUSE.SEAL_OK,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+
+            #[cfg(feature="hazardous-debug")]
+            match self.jtag.efuse_fetch() {
+                Ok(rec) => {
+                    log::info!("Efuse record after seal: {:?}", rec);
+                }
+                Err(e) => {
+                    log::error!("failed to fetch jtag record: {:?}", e);
+                    return Err(RootkeyResult::IntegrityError);
+                }
+            }
         }
+        pb.set_percentage(100);
 
         // check if we're to purge the password on completion
         if self.update_password_policy == PasswordRetentionPolicy::AlwaysPurge {
             self.purge_password(PasswordType::Update);
         }
+        log::set_max_level(log::LevelFilter::Info);
         Ok(())
     }
 
