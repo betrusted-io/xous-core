@@ -653,7 +653,7 @@ def main():
         "--dump-file", required=False, help="Name out output file for dump. Required if --dump is specified.", type=str,
     )
     parser.add_argument(
-        "--key", help="Backup key in hex or BIP-39 format. Used to factory-reset efused devices", type=str
+        "--key", help="Backup key in hex or BIP-39 format. Used to factory-reset efused devices. Specify BIP-39 phrase within double-quotes.", type=str
     )
     args = parser.parse_args()
 
@@ -781,7 +781,7 @@ def main():
         if args.soc == None:
             print("Must provide both a soc and loader image")
         print("Enabling boot with {} and {}".format(args.loader, args.soc))
-        print("WARNING: if you have burned a backup key into your device,\nyou MUST specify the key with `--key`, or else your device will be bricked.")
+        print("WARNING: if a backup key is set, the correct key MUST be specified with `--key`, or else the device will be bricked.")
         print("Continue? (y/n)")
         confirm = input()
         if len(confirm) > 0 and confirm.lower()[:1] == 'y':
@@ -891,7 +891,7 @@ def main():
                 pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
         else:
             print("This will overwrite any secret keys in your device and erase PDDB keys.")
-            print("WARNING: if you have burned a backup key into your device,\nyou MUST specify the key with `--key`, or else your device will be bricked.")
+            print("WARNING: if a backup key is set, the correct key MUST be specified with `--key`, or else the device will be bricked.")
             print("Continue? (y/n)")
             confirm = input()
             if len(confirm) > 0 and confirm.lower()[:1] == 'y':
@@ -917,7 +917,7 @@ def main():
                 pc_usb.flash_program(locs['LOC_AUDIO'][0], image, verify=verify)
 
     if args.factory_new:
-        print("WARNING: if you have burned a backup key into your device,\nyou MUST specify the key with `--key`, or else your device will be bricked.")
+        print("WARNING: if a backup key is set, the correct key MUST be specified with `--key`, or else the device will be bricked.")
         print("Continue? (y/n)")
         confirm = input()
         if len(confirm) > 0 and confirm.lower()[:1] == 'y':
