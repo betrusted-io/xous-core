@@ -56,6 +56,7 @@ pub(crate) enum UpdateType {
     Regular,
     BbramProvision,
     Restore,
+    #[allow(dead_code)]
     EfuseProvision,
 }
 
@@ -188,7 +189,12 @@ mod implementation {
             self.xous_init_interlock();
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.setup_wait", xous::LANG))
         }
-        pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, _updatetype: UpdateType) -> Result<(), RootkeyResult> {
+        pub fn do_gateware_update(&mut self,
+            rootkeys_modal: &mut Modal,
+            _modals: &modals::Modals,
+            main_cid: xous::CID,
+            _updatetype: UpdateType
+        ) -> Result<(), RootkeyResult> {
             self.xous_init_interlock();
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.gwup_starting", xous::LANG))
         }
