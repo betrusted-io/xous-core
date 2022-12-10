@@ -1257,7 +1257,7 @@ impl<'a> RootKeys {
         main_cid: xous::CID,
         update_type: UpdateType,
     ) -> Result<(), RootkeyResult> {
-        log::set_max_level(log::LevelFilter::Debug);
+        // log::set_max_level(log::LevelFilter::Debug);
         // make sure the system is sane
         self.xous_init_interlock();
         self.spinor.set_staging_write_protect(true).expect("couldn't protect the staging area");
@@ -1738,7 +1738,7 @@ impl<'a> RootKeys {
         if self.update_password_policy == PasswordRetentionPolicy::AlwaysPurge {
             self.purge_password(PasswordType::Update);
         }
-        log::set_max_level(log::LevelFilter::Info);
+        // log::set_max_level(log::LevelFilter::Info);
         Ok(())
     }
 
