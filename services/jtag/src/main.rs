@@ -510,8 +510,10 @@ fn main() -> ! {
     //   - one connection from the key server
     //   - one connection from shellchat for command line
     //   - another connection from shellchat for oqc testing
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(all(any(feature="precursor", feature="renode"), not(feature="dvt")))]
     let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(3)).expect("can't register server");
+    #[cfg(all(any(feature="precursor", feature="renode"), feature="dvt"))] // dvt build has less in it
+    let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(2)).expect("can't register server");
     #[cfg(not(target_os = "xous"))]
     let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", jtag_sid);
@@ -585,9 +587,7 @@ fn main() -> ! {
 
                 efuse_rec.user = efuse.phy_user();
                 efuse_rec.cntl = efuse.phy_cntl();
-                for (&src, dst) in efuse.phy_key().iter().zip(efuse_rec.key.iter_mut()) {
-                    *dst = src;
-                }
+                efuse_rec.key.copy_from_slice(&efuse.phy_key());
                 buffer.replace(efuse_rec).unwrap();
             }
             Some(Opcode::WriteIr) => msg_scalar_unpack!(msg, ir, _, _, _, {
@@ -607,11 +607,17 @@ fn main() -> ! {
                 // refresh the efuse cache
                 efuse.fetch(&mut jtag);
                 #[cfg(feature = "hazardous-debug")]
-                log::info!("attempting to burn key: {:x?}", key);
+                log::info!("attempting to burn key: {:x?}", key); // this is easier for me to read as a human
+                #[cfg(feature = "hazardous-debug")]
+                log::info!("attempting to burn key: {:?}", key); // this is easier for import to python
                 efuse.set_key(key);
                 if efuse.is_valid() {
                     log::info!("efuse key is valid to burn, proceeding. There is no return...");
-                    efuse.burn(&mut jtag);
+                    if cfg!(feature = "dry-run") {
+                        log::info!("Dry run selected, key NOT BURNED. Device will be in an inconsistent state.");
+                    } else {
+                        efuse.burn(&mut jtag);
+                    }
                     buffer.replace(EfuseResult::Success).unwrap();
                 } else {
                     log::error!("efuses already burned, new key is unpatchable. Refusing to burn!");
@@ -625,7 +631,11 @@ fn main() -> ! {
                 efuse.set_cntl(ctl as u8);
                 if efuse.is_valid() {
                     log::info!("control is valid to burn, proceeding. There is no return...");
-                    efuse.burn(&mut jtag);
+                    if cfg!(feature = "dry-run") {
+                        log::info!("Dry run selected, control fuses NOT BURNED. Device will be in an inconsistent state.");
+                    } else {
+                        efuse.burn(&mut jtag);
+                    }
                     susres.set_suspendable(true).unwrap();
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
@@ -639,7 +649,11 @@ fn main() -> ! {
                 efuse.set_user(user as u32);
                 if efuse.is_valid() {
                     log::info!("user fuses are valid to burn, proceeding. There is no return...");
-                    efuse.burn(&mut jtag);
+                    if cfg!(feature = "dry-run") {
+                        log::info!("Dry run selected, user fuse NOT BURNED. Device will be in an inconsistent state.");
+                    } else {
+                        efuse.burn(&mut jtag);
+                    }
                     susres.set_suspendable(true).unwrap();
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {

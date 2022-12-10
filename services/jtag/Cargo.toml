@@ -26,4 +26,6 @@ precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 hazardous-debug = []
-default = ["hazardous-debug"]
+dvt = []
+dry-run = [] # just prints keys but doesn't burn them
+default = []
