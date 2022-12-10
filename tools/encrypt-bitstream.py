@@ -188,17 +188,14 @@ Reverse the order of bits in a word that is bitwidth bits wide
 def bitflip(data_block, bitwidth=32):
     if bitwidth == 0:
         return data_block
-
     bytewidth = bitwidth // 8
     bitswapped = bytearray()
-
     i = 0
     while i < len(data_block):
         data = int.from_bytes(data_block[i:i+bytewidth], byteorder='big', signed=False)
         b = '{:0{width}b}'.format(data, width=bitwidth)
         bitswapped.extend(int(b[::-1], 2).to_bytes(bytewidth, byteorder='big'))
         i = i + bytewidth
-
     return bytes(bitswapped)
 
 # assumes a, b are the same length eh?
@@ -282,7 +279,6 @@ def try_key_to_bytes(input):
         key_bytes = Bip39MnemonicDecoder().Decode(input)
     else:
         key_bytes = int(input, 16).to_bytes(32, byteorder='big')
-
     return key_bytes
 
 
