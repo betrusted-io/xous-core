@@ -19,7 +19,7 @@ impl<'a> ShellCmdApi<'a> for JtagCmd {
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "jtag [id] [dna] [efuse] [reset] [burn0]";
+        let helpstring = "jtag [id] [dna] [efuse] [cntl] [reset] [burn0]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -60,6 +60,25 @@ impl<'a> ShellCmdApi<'a> for JtagCmd {
                         }
                     }
                 }
+                /* // for testing sealing only -- does not make sense for any normal context, but essential for debugging efuse issues.
+                "seal" => {
+                    use locales::t;
+                    log::info!("{}EFUSE.SEAL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    match self.jtag.seal_device() {
+                        Ok(result) => {
+                            if !result {
+                                log::info!("{}", t!("rootkeys.efuse_seal_fail", xous::LANG));
+                            } else {
+                                log::info!("eFuse sealing success!");
+                            }
+                        }
+                        Err(e) => {
+                            log::info!("{}", &format!("{}\n{:?}", t!("rootkeys.efuse_internal_error", xous::LANG), e));
+                        }
+                    }
+                    log::info!("{}EFUSE.SEAL_OK,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                }
+                */
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }
