@@ -509,6 +509,9 @@ fn wrapped_main() -> ! {
                         let tt = ticktimer_server::Ticktimer::new().unwrap();
                         // delay this question until the rest of the system has passed initialization
                         // this is indicated when the status pump thread is allowed to start
+                        //
+                        // NOTE: the ordering of this is very important because it gates the beginning
+                        // of the factory self-test.
                         loop {
                             tt.sleep_ms(500).unwrap();
                             if pump_run.load(Ordering::SeqCst) {
@@ -633,7 +636,10 @@ fn wrapped_main() -> ! {
             llio.vibe(llio::VibePattern::Double).unwrap();
         }
     });
-    log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
+    // older versions of the factory test looks for this exact string; however, later versions
+    // look for the INIT_Q3 prompt which is gated on the status pump running. Thus, this line may
+    // be removed after the next tester firmware update.
+    log::info!("|status: starting main loop");
 
     // add a security note if we're booting with a "zero key"
     match keys.lock().unwrap().is_zero_key().expect("couldn't query zero key status") {
