@@ -188,6 +188,13 @@ impl Canvas {
             false
         }
     }
+    pub fn is_defaced(&self) -> bool {
+        if *self.state.borrow() == CanvasState::NotDrawableDefaced {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl Ord for Canvas {
@@ -230,6 +237,7 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut Hash
          */
         for (_, c) in canvases.iter_mut() {
             if c.needs_defacing() {
+                log::debug!("Defacing canvas {:?}/{}/{:?} ({:x?})", c.canvas_type, c.trust_level(), c.state.borrow(), c.gid());
                 let clip_rect = c.clip_rect();
                 if clip_rect.intersects(screen_rect) {
                     let width = clip_rect.br().x - clip_rect.tl().x;
@@ -312,14 +320,21 @@ pub(crate) fn recompute_canvases(canvases: &HashMap<Gid, Canvas>) {
 
     let mut higher_clipregions = Vec::<&Canvas>::new(); // contains only a subset of on-screen clip rects to consider
     while let Some(candidate) = sorted_clipregions.pop() {
-        log::trace!("candidate {}", candidate.trust_level());
+        // log::trace!("Candidate {} is offscreen", candidate.trust_level());
         if candidate.is_onscreen() {
-            candidate.set_drawable(true); // i *think* this is ok and doesn't cause thrashing, but verify...
+            let was_defaced = candidate.is_defaced(); // this prevents thrashing in the case that we're simply re-computing an existing defacement
+            candidate.set_drawable(true);
             for previous in higher_clipregions.iter() {
-                log::trace!("candidate {:?}/{} veruss {:?}/{}", candidate.canvas_type, candidate.trust_level, previous.canvas_type, previous.trust_level);
+                log::debug!("Check candidate {:?}/{} versus {:?}/{}", candidate.canvas_type, candidate.trust_level, previous.canvas_type, previous.trust_level);
                 if candidate.clip_rect().intersects(previous.clip_rect()) {
-                    log::trace!("candidate is less trusted, setting to not drawable");
+                    log::debug!("  -> Above candidate ({:x?}) interects with ({:?}) and is less trusted, setting to not drawable",
+                        candidate.gid(), previous.gid()
+                    );
                     candidate.set_drawable(false);
+                    if was_defaced {
+                        log::debug!("  -> Restoring previous defacement to avoid thrashing");
+                        candidate.do_defaced().unwrap();
+                    }
                 }
             }
             higher_clipregions.push(candidate);
