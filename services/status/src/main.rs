@@ -502,25 +502,7 @@ fn wrapped_main() -> ! {
                 }
             }
             if !keys.lock().unwrap().is_dont_ask_set().unwrap_or(false) {
-                let _ = thread::spawn({
-                    let keys = keys.clone();
-                    let pump_run = pump_run.clone();
-                    move || {
-                        let tt = ticktimer_server::Ticktimer::new().unwrap();
-                        // delay this question until the rest of the system has passed initialization
-                        // this is indicated when the status pump thread is allowed to start
-                        //
-                        // NOTE: the ordering of this is very important because it gates the beginning
-                        // of the factory self-test.
-                        loop {
-                            tt.sleep_ms(500).unwrap();
-                            if pump_run.load(Ordering::SeqCst) {
-                                break;
-                            }
-                        }
-                        keys.lock().unwrap().do_init_keys_ux_flow();
-                    }
-                });
+                keys.lock().unwrap().do_init_keys_ux_flow();
             }
         }
     } else if !restore_running {
@@ -636,10 +618,7 @@ fn wrapped_main() -> ! {
             llio.vibe(llio::VibePattern::Double).unwrap();
         }
     });
-    // older versions of the factory test looks for this exact string; however, later versions
-    // look for the INIT_Q3 prompt which is gated on the status pump running. Thus, this line may
-    // be removed after the next tester firmware update.
-    log::info!("|status: starting main loop");
+    log::info!("|status: starting main loop"); // do not remove, this is used by the CI test infrastructure
 
     // add a security note if we're booting with a "zero key"
     match keys.lock().unwrap().is_zero_key().expect("couldn't query zero key status") {
