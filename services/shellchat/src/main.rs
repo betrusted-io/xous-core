@@ -372,8 +372,6 @@ enum ShellOpcode {
     Line = 0, // make sure we occupy opcodes with discriminants < 1000, as the rest are used for callbacks
     /// redraw our UI
     Redraw,
-    /// Used by the automounter to clear the "please wait..." message
-    ForceRedraw,
     /// change focus
     ChangeFocus,
     /// exit the application
@@ -438,8 +436,9 @@ fn wrapped_main() -> ! {
     }
     loop {
         let msg = xous::receive_message(shch_sid).unwrap();
-        log::debug!("got message {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let shell_op: Option::<ShellOpcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("Shellchat got message {:?}", msg);
+        match shell_op {
             Some(ShellOpcode::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
@@ -458,11 +457,6 @@ fn wrapped_main() -> ! {
                 if allow_redraw {
                     repl.redraw(pddb_init_done.load(Ordering::SeqCst)).expect("REPL couldn't redraw");
                 }
-            }
-            // Force a redraw without the "please wait" note.
-            Some(ShellOpcode::ForceRedraw) => {
-                repl.redraw(true).expect("REPL couldn't redraw");
-                xous::return_scalar(msg.sender, 0).ok();
             }
             Some(ShellOpcode::ChangeFocus) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
                 let new_state = gam::FocusState::convert_focus_change(new_state_code);
