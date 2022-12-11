@@ -299,13 +299,13 @@ impl Gfx {
                 self.conn,
                 Message::new_blocking_scalar(Opcode::Pop.to_usize().unwrap(), 0, 0, 0, 0)
             )
-            .expect("couldn't stash");
+            .expect("couldn't pop");
         } else {
             send_message(
                 self.conn,
                 Message::new_scalar(Opcode::Pop.to_usize().unwrap(), 0, 0, 0, 0)
             )
-            .expect("couldn't stash");
+            .expect("couldn't pop");
         }
     }
 }
