@@ -997,7 +997,13 @@ fn main() -> ! {
                     let rssi = if (maybe_rssi >> 8) & 0xff != 0 {
                         None
                     } else {
-                        Some(maybe_rssi & 0xff)
+                        // rssi as reported is a number from 0-110, where 110 is 0 dbm.
+                        // a perhaps dubious decision was made to shift the reported value over by one before
+                        // returning to the host, so we lost a 0.5dBm step. But...not a big deal, and not worth
+                        // putting every user through an EC update to gain some resolution they never see.
+                        // note there is also a function in lib.rs/wlan_get_rssi() that has to be patched if
+                        // this is fixed.
+                        Some((110 - maybe_rssi) & 0xff)
                     };
                     let link_state = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                     let mut ipv4_raw = Ipv4Conf::default().encode_u16();
@@ -1015,6 +1021,7 @@ fn main() -> ! {
                     let ssid_str = core::str::from_utf8(&ssid_buf[2..2+ssid_checked_len]).unwrap_or("Disconnected");
                     let status = WlanStatusIpc {
                         ssid: if let Some(rssi) = rssi {
+                            log::debug!("RSSI: -{}dBm", rssi);
                             Some(SsidRecord {
                                 rssi: rssi as u8,
                                 name: xous_ipc::String::<32>::from_str(ssid_str)

@@ -833,6 +833,7 @@ fn wrapped_main() -> ! {
                         stats.soc).unwrap();
                     } else {
                         if let Some(ssid) = wifi_status.ssid {
+                            log::debug!("RSSI: -{}dBm", ssid.rssi);
                             compute_bars(&mut wifi_bars, ssid.rssi);
                             bars(&gam, status_gid, &wifi_bars, Point {x: 310, y: 13}, (3 ,2), 3, 2);
                             write!(
