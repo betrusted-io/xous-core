@@ -713,29 +713,56 @@ fn wrapped_main() -> ! {
         // keyboard mapping is restored directly by the keyboard hardware
         #[cfg(not(feature="no-codec"))]
         {
-            log::info!("audio enabled: {}", all_prefs.audio_enabled);
-            match all_prefs.audio_enabled {
-                true => {
-                    match codec.setup_8k_stream() {
-                        Ok(()) => {
-                            send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-                            Ok(())
-                        },
-                        Err(e) => Err(e),
+            log::info!("audio enable state: {}", all_prefs.audio_enabled);
+            #[cfg(feature = "tts")] // if TTS is on, never disable audio system, and don't allow 0-volume for audio
+            {
+                codec.setup_8k_stream().ok();
+                send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                let hp_percentage = if all_prefs.headset_volume == 0 {
+                    log::warn!("Attempted to set headphone volume to 0, disallowing in TTS mode");
+                    100
+                } else {
+                    all_prefs.headset_volume
+                };
+                let spk_percentage = if all_prefs.earpiece_volume == 0 {
+                    log::warn!("Attempted to set speaker volume to 0, disallowing in TTS mode");
+                    100
+                } else {
+                    all_prefs.earpiece_volume
+                };
+                codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(hp_percentage) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set headphone volume: {:?}", error);
+                });
+
+                codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(spk_percentage) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set speaker volume: {:?}", error);
+                });
+            }
+            #[cfg(not(feature = "tts"))]
+            {
+                match all_prefs.audio_enabled {
+                    true => {
+                        match codec.setup_8k_stream() {
+                            Ok(()) => {
+                                send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                                Ok(())
+                            },
+                            Err(e) => Err(e),
+                        }
                     }
-                }
-                false => Ok(())
-            }.unwrap_or_else(|error| {
-                log::error!("cannot set audio enabled: {:?}", error);
-            });
+                    false => Ok(())
+                }.unwrap_or_else(|error| {
+                    log::error!("cannot set audio enabled: {:?}", error);
+                });
 
-            codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
-                log::error!("cannot set headphone volume: {:?}", error);
-            });
+                codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set headphone volume: {:?}", error);
+                });
 
-            codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
-                log::error!("cannot set speaker volume: {:?}", error);
-            });
+                codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set speaker volume: {:?}", error);
+                });
+            }
         }
     });
 
