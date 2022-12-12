@@ -303,6 +303,9 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Fixed GAM issue where canvases previously defaced would be re-defaced every time the canvas order is computed.
 - Wifi signal is now rendered as bars, instead of as a number (thanks @gsora for PR#283!).
 
+## New in 0.9.12
+
+
 ## Roadmap
 - Lots of testing and bug fixes
 - Fixing performance issues in `pddb`
