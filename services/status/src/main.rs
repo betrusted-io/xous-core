@@ -739,6 +739,9 @@ fn wrapped_main() -> ! {
         }
     });
 
+    // storage for wifi bars
+    let mut wifi_bars: [PixelColor; 5] = [PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light];
+
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
@@ -830,7 +833,8 @@ fn wrapped_main() -> ! {
                         stats.soc).unwrap();
                     } else {
                         if let Some(ssid) = wifi_status.ssid {
-                            bars(&gam, status_gid, ssid.rssi as i32 * -1, Point {x: 310, y: 13}, (3 ,2), 3, 2);
+                            compute_bars(&mut wifi_bars, ssid.rssi);
+                            bars(&gam, status_gid, &wifi_bars, Point {x: 310, y: 13}, (3 ,2), 3, 2);
                             write!(
                                 &mut battstats_tv,
                                 "{}",
@@ -1376,11 +1380,64 @@ fn turn_lights_on(rx: Box<Receiver<BacklightThreadOps>>, cid: xous::CID, timeout
     }
 }
 
-// bars draws signal bars spaced by `bars_spacing` amount, drawing a 
-// the smallest signal square starting from `top_left` growing by `growth` amount of pixels.
-// The smallest bar will be exactly `(x, y)` in size.
-fn bars(g: &gam::Gam, canvas: graphics_server::Gid, 
-    level: i32,
+/// Returns true if the color changed
+fn color_at_thresh(bar: &mut PixelColor, rssi: i32, threshold: i32) -> bool {
+    if rssi < threshold {
+        if *bar != PixelColor::Light {
+            *bar = PixelColor::Light;
+            true
+        } else {
+            false
+        }
+    } else {
+        if *bar != PixelColor::Dark {
+            *bar = PixelColor::Dark;
+            true
+        } else {
+            false
+        }
+    }
+}
+/// Acconding to the WF200 datasheet, -91.6dBm is the cutoff for 6Mbps 802.11g reception @ 10% PER, and
+/// -74.8dBm is the cutoff for 54Mbps @ 10% PER. The saturation point is -9 dBm, at which point the LNAs
+/// fail due to too much signal.
+///
+/// Thus the scale should go from -91.6dBm to -9dBm, with -74.8dBm being "four bars". Above -74.8dBm
+/// any extra signal does not improve your data rate, but we use the "fifth bar" to indicate
+/// that you have extra margin on your singal.
+///
+/// -92dBm  - 0 bars - 6Mbps @ 10% packet error rate
+/// -87dBm  - 1 bar - 6Mbps sustainable
+/// -82dBm  - 2 bars
+/// -77dBm  - 3 bars
+/// -72dBm  - 4 bars - 54Mbps with 10% packet error rate
+/// -60dBm+ - 5 bars - 54Mbps sustainable
+///
+/// Returns `true` if the bar list has changed; `false` if there is no change.
+fn compute_bars(wifi_bars: &mut [PixelColor; 5], rssi: u8) -> bool {
+    log::debug!("Rssi: -{}dBm, Bars before: {:?}", rssi, wifi_bars);
+    let rssi_int: i32 = -(rssi as i32);
+    let mut changed = false;
+    for (index, bar) in wifi_bars.iter_mut().enumerate() {
+        match index {
+            // anything less than -87dBm shows up as 0 bars
+            0 => changed |= color_at_thresh(bar, rssi_int, -87),
+            1 => changed |= color_at_thresh(bar, rssi_int, -82),
+            2 => changed |= color_at_thresh(bar, rssi_int, -77),
+            3 => changed |= color_at_thresh(bar, rssi_int, -72),
+            4 => changed |= color_at_thresh(bar, rssi_int, -60),
+            _ => panic!("Should be unreachable; wifi_bars list is too long!"),
+        }
+    }
+    log::debug!("New bars: {:?} ({:?})", wifi_bars, changed);
+    changed
+}
+/// bars draws signal bars spaced by `bars_spacing` amount, drawing a
+/// the smallest signal square starting from `top_left` growing by `growth` amount of pixels.
+/// The smallest bar will be exactly `(x, y)` in size.
+fn bars(g: &gam::Gam,
+    canvas: graphics_server::Gid,
+    levels: &[PixelColor; 5],
     top_left: Point,
     (x, y): (i16,i16),
     growth: i16,
@@ -1390,31 +1447,17 @@ fn bars(g: &gam::Gam, canvas: graphics_server::Gid,
 
     let bottom_right = Point{x: top_left.x + x, y: top_left.y + y};
 
-    let mut colors = HashMap::new();
+    for (index, bar) in levels.iter().enumerate() {
+        let color = DrawStyle::new(*bar, PixelColor::Dark, 1);
 
-    let mut base = -90;
-    for i in 1..=5 {
-        let b = base < level;
-        log::debug!("base: {} signal: {} should be black: {}", base, level, b);
-        base += 13;
-
-        match b {
-            true => colors.insert(i, DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1)),
-            false => colors.insert(i, DrawStyle::new(PixelColor::Light, PixelColor::Dark, 1)),
-        };
-    }
-
-    for mult in 1..=5 {
-        let color = colors.get(&mult).unwrap();
-
-        let r = match mult{
-            1 => {
+        let r = match index {
+            0 => {
                 gam::Rectangle::new_coords_with_style(
                     top_left.x,
                     top_left.y,
                     bottom_right.x as i16,
                     bottom_right.y,
-                    *color,
+                    color,
                 )
             },
             _ => {
@@ -1422,16 +1465,16 @@ fn bars(g: &gam::Gam, canvas: graphics_server::Gid,
                     gam::GamObjectType::Rect(r) => r,
                     _ => panic!("expected only rects, found other stuff"),
                 };
-    
+
                 gam::Rectangle::new_coords_with_style(
                     last.x1() as i16+bars_spacing,
                     last.y0() as i16-growth,
                     last.x1() as i16+growth+bars_spacing,
                     bottom_right.y,
-                    *color,
+                    color,
                 )
             }
-        };      
+        };
 
         dl.push(gam::GamObjectType::Rect(r)).unwrap();
     }
