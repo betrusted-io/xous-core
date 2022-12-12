@@ -301,6 +301,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - Testers need to build with `--feature efuse` in the command line. The process is not yet high confidence, so, proceed at your own risk!
   - Please contact bunnie if you plan to try this feature. Because it is permanent, and there is limited production due to supply chain issues, only minimal testing could be performed.
 - Fixed GAM issue where canvases previously defaced would be re-defaced every time the canvas order is computed.
+- Wifi signal is now rendered as bars, instead of as a number (thanks @gsora for PR#283!).
 
 ## Roadmap
 - Lots of testing and bug fixes
