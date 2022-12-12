@@ -204,7 +204,10 @@
     },
     "mainmenu.preferences": {
         "en": "Preferences",
-        "en-tts": "Preferences"
+        "en-tts": "Preferences",
+        "fr": "Préférences",
+        "ja": "環境設定",
+        "zh": "喜好"
     },
     "mainmenu.reboot": {
         "en": "Reboot",
