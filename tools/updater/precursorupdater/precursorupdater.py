@@ -278,7 +278,7 @@ def get_usb_interface(config=False, peek=None, override_csr=None, force=False):
         "LOC_PDDB"   : [0x01D80000, "pass"],
         }
     else:
-        print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.9 firmware offsets".format(pc_usb.load_csrs()))
+        print("SoC is from an unknown rev '{}', use --force to continue anyways with v0.9 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
 
     return (locs, pc_usb)
@@ -417,7 +417,7 @@ def main():
         retry_usb = False
         while True:
             if retry_usb:
-                print("Trying to re-aquire Precursor device...")
+                print("Trying to re-acquire Precursor device...")
                 try:
                     (locs, pc_usb) = get_usb_interface(args.config, args.peek, args.override_csr, args.force)
                 except Exception as e:

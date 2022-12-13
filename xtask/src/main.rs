@@ -424,10 +424,10 @@ Hardware images:
  app-image               Precursor user image. [cratespecs] are apps
  perf-image              Precursor user image, with performance profiling. [cratespecs] are apps
  tts                     builds an image with text to speech support via externally linked C executable. [cratespecs] are apps
- usbdev                  minimal, insecure build for new USB core bringup. [cratespecs] are services
+ usbdev                  minimal, insecure build for new USB core bring-up. [cratespecs] are services
  trng-test               automation framework for TRNG testing (CPRNG seeded by RO^AV). [cratespecs] ignored.
  ro-test                 automation framework for TRNG testing (RO directly, no CPRNG). [cratespecs] ignored.
- av-test                 automation framework for TRNG testing (AV dircetly, no CPRNG). [cratespecs] ignored.
+ av-test                 automation framework for TRNG testing (AV directly, no CPRNG). [cratespecs] ignored.
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
 
 Hosted emulation:
@@ -435,7 +435,7 @@ Hosted emulation:
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors). [cratespecs] ignored.
  pddb-btest              PDDB stress tester for secret basis creation/deletion [cratespecs] ignored.
  hosted-debug            Run user image in hosted mode with debug flags. [cratespecs] are apps
- gfx-dev                 Testing mode for graphics primitves. [cratespecs] are services
+ gfx-dev                 Testing mode for graphics primitives. [cratespecs] are services
  pddb-dev                Testing for compilation errors on hardware targets on the PDDB.
 
 Renode emulation:
