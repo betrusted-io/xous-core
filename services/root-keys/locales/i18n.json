@@ -456,7 +456,7 @@
     },
     "rootkeys.policy_request": {
         "en": "Please pick a password retention policy:",
-        "en-tts": "Please pick a passowrd retention policy.",
+        "en-tts": "Please pick a password retention policy.",
         "fr": "Veuillez choisir une politique de conservation des mots de passe :",
         "ja": "パスワード保持ポリシーを指定ください。",
         "zh": "请选择密码保留策略:"
