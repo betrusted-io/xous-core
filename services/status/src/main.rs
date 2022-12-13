@@ -160,7 +160,7 @@ fn wrapped_main() -> ! {
         .register_name(SERVER_NAME_STATUS_GID, Some(1))
         .expect("can't register server");
     let mut canvas_gid: [u32; 4] = [0; 4];
-    // wait unil we're assigned a GID -- this is a one-time message from the GAM
+    // wait until we're assigned a GID -- this is a one-time message from the GAM
     let msg = xous::receive_message(status_gam_getter).unwrap();
     log::trace!("GID assignment message: {:?}", msg);
     xous::msg_scalar_unpack!(msg, g0, g1, g2, g3, {
