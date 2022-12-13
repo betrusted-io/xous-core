@@ -49,7 +49,7 @@
 ///
 /// ### `frontend.rs`
 /// Defines a set of modules that plug the PDDB into applications (in particular, they
-/// attemp to provide a Rust-compatible `read`/`write`/`open` abstraction layer,
+/// attempt to provide a Rust-compatible `read`/`write`/`open` abstraction layer,
 /// torturing the notion of `Prefix`, `Path` and `File` in Rust to fit the basis/dict/key
 /// format of the PDDB).
 ///
@@ -64,12 +64,12 @@
 /// for most operations on the PDDB, and thus most externally-visible API calls will be revealed
 /// on that structure; in fact many calls on that object are just pass-through of lower level calls.
 ///
-/// A `BasisCach`e consists of one or more `BasisCacheEntries`. This structure manages one or more
+/// A `BasisCache` consists of one or more `BasisCacheEntries`. This structure manages one or more
 /// `DictCacheEntry` within a `BasisCacheEntry`'s dictionary cache.
 ///
 /// #### `dictionary.rs`
 /// The `DictCacheEntry` is defined in this file, along with the on-disk `Dictionary`
-/// storage stucture. Most of the methods on `DictCacheEntry` are concerned with managing
+/// storage structure. Most of the methods on `DictCacheEntry` are concerned with managing
 /// keys contained within the dictionary cache.
 ///
 /// #### `keys.rs`
@@ -243,7 +243,7 @@
 /// a presented password to a given salt entry. In a traditional user/pass login database, the username is
 /// the plaintext key to match the salt. In this case, we would use a nickname used to refer to each Basis
 /// to correlate to its salt entry. Thus, we'd have to come up with "garbage" plaintext nicknames
-/// for a Basis that are not trivial for a rubber-hose attacker to dismiss as chaffe. I think this is Hard.
+/// for a Basis that are not trivial for a rubber-hose attacker to dismiss as chaff. I think this is Hard.
 /// The alternative is to "brute force" the entire list of salts, guessing each one in sequence until one
 /// is found to decrypt entries in the Basis page table. The problem with this is that bcrypt is designed to
 /// be computationally slow, even for valid passwords. The complexity parameter is chosen so that it takes
@@ -268,7 +268,7 @@
 /// user ever using the PD function because it is too slow. Thus for v1 of the PDDB, we're going to try approach
 /// (2), where a common salt is used across all the PDDB passwords, but the salt is /not/ re-used between devices.
 /// This choice diminishes the overall security of the system in the case that a user chooses weak passwords, or re-uses
-/// passwords, but in exchange for a great improvement in responsivity of the implementation.
+/// passwords, but in exchange for a great improvement in responsiveness of the implementation.
 ///
 /// The final implementation uses a slight mod on (2), where the 128-bit common salt stored on disk is XOR'd
 /// with the user-provided "basis name". Users are of course allowed to pick crappy names for their basis, and
@@ -283,8 +283,8 @@
 ///
 /// A newly created Basis will request a name for the Basis, and a password. It is a requirement
 /// that the combination of `(name, password)` be unique; this property is enforced and a system will
-/// reject attempts to create identically named, identially passworded Basis. However, one can have
-/// same-named Basis that have a different password, or diffently-named Basis with the same password
+/// reject attempts to create identically named, identically passworded Basis. However, one can have
+/// same-named Basis that have a different password, or differently-named Basis with the same password
 /// (this is generally not recommended, but it's not prohibited).
 ///
 /// The `name` field is XOR'd with the device-local `salt` field to form the salt for the password,

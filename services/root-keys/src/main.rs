@@ -136,7 +136,7 @@ mod implementation {
             let jtag = jtag::Jtag::new(&xns).expect("couldn't connect to jtag server");
             RootKeys {
                 password_type: None,
-                // must occupy tihs connection for the system to boot properly
+                // must occupy this connection for the system to boot properly
                 jtag,
                 ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
                 gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),

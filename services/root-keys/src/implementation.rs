@@ -838,7 +838,7 @@ impl<'a> RootKeys {
     }
 
     /// Returns the `salt` needed for the `bcrypt` routine.
-    /// This routine handles the special-case of being unitialized: in that case, we need to get
+    /// This routine handles the special-case of being uninitialized: in that case, we need to get
     /// salt from a staging area, and not our KEYROM. However, `setup_key_init` must be called
     /// first to ensure that the staging area has a valid salt.
     fn get_salt(&mut self) -> [u8; 16] {
@@ -1021,7 +1021,7 @@ impl<'a> RootKeys {
             derived_sk.copy_from_slice(&root_sk);
             // hash a derived secret key based on the maximum rollback limit we anticipate less the current global rollback limit (which is 0)
             // this allows us to work with a "final" key that generates a private signing key, which can't be predicted to future versions
-            // given the current key (due to the irreversability of Sha512/256), but once derived to a more recent version can be willfullly
+            // given the current key (due to the irreversibility of Sha512/256), but once derived to a more recent version can be willfully
             // computed to an older version to recover e.g. old data encrypted with a prior key
             //
             // We don't use the `compute_key_rollback` function because the value of the GLOBAL_ROLLBACK in the KeyROM
