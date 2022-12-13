@@ -753,7 +753,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 write!(ret, "{}", s.as_str().unwrap()).unwrap();
             }
             _ => {
-                log::error!("got unecognized message type in callback handler")
+                log::error!("got unrecognized message type in callback handler")
             }
         }
         Ok(Some(ret))

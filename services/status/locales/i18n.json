@@ -238,8 +238,8 @@
         "zh": "设置本地时区"
     },
     "mainmenu.shutdown_confirm": {
-        "en": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?",
-        "en-tts": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?",
+        "en": "Confirm shutdown:\n🔌Device will remain off until a charging cable is plugged in. Proceed?",
+        "en-tts": "Confirm shutdown:\n🔌Device will remain off until a charging cable is plugged in. Proceed?",
         "fr": "Confirmez l’arrêt:\n🔌L’appareil s’éteindra jusqu’à ce qu’un câble de charge soit branché. Continuez?",
         "ja": "シャットダウンの確認:\n🔌充電ケーブルが差し込まれるまで、デバイスはオフのままになります。続行しますか?",
         "zh": "确认关机：\n🔌设备将保持关闭状态，直到插入充电线。继续？"
