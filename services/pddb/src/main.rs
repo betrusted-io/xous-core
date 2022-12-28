@@ -556,7 +556,7 @@ fn wrapped_main() -> ! {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             let mut flush_interval = 0;
             const ARBITRARY_INTERVAL_MS: usize = 12_513;
-            const PERIODIC_FLUSH_MS: usize = 1000 * 60 * 60 * 18 - 5555; // every 18 hours less ~5 seconds to try and stagger the process off of other periodics
+            const PERIODIC_FLUSH_MS: usize = 1000 * 60 * 60 * 18 - 5555; // every 18 hours less ~5 seconds to try and stagger the process off of other periodic tasks
             loop {
                 tt.sleep_ms(ARBITRARY_INTERVAL_MS).unwrap(); // arbitrary interval, but trying to avoid "round" numbers of seconds to interleave periodic tasks
                 flush_interval += ARBITRARY_INTERVAL_MS;
@@ -679,7 +679,7 @@ fn wrapped_main() -> ! {
                         log::info!("{}PDDB.SKIPMOUNT,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         // allow the main menu to be used in this case
                         let gam = gam::Gam::new(&xns).unwrap();
-                        gam.allow_mainmenu().expect("coudln't allow main menu activation");
+                        gam.allow_mainmenu().expect("couldn't allow main menu activation");
                         xous::return_scalar2(msg.sender, 1, 0).expect("could't return scalar");
                     } else {
                         match ensure_password(&modals, &mut pddb_os, pw_cid) {
@@ -721,7 +721,7 @@ fn wrapped_main() -> ! {
                         }
                         // get a handle to the GAM and inform it that main menu should be allowed. The handle is dropped when this routine finishes.
                         let gam = gam::Gam::new(&xns).unwrap();
-                        gam.allow_mainmenu().expect("coudln't allow main menu activation");
+                        gam.allow_mainmenu().expect("couldn't allow main menu activation");
                         // setup the heap
                         initial_heap = heap_usage();
                         latest_heap = initial_heap;
@@ -1436,7 +1436,7 @@ fn wrapped_main() -> ! {
                 } else {
                     pbuf.retcode = PddbRetcode::BasisLost;
                 }
-                // we don't nede a "replace" operation because all ops happen in-place
+                // we don't need a "replace" operation because all ops happen in-place
                 #[cfg(feature="perfcounter")]
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 4, std::line!());
             }
@@ -1612,11 +1612,11 @@ fn wrapped_main() -> ! {
                                         basis: attr.basis,
                                         data: None,
                                     };
-                                    let (prebuf, buf) = buf.split_at_mut(size_of::<u32>()*2);
+                                    let (pre_buf, buf) = buf.split_at_mut(size_of::<u32>()*2);
                                     let mut serializer = BufferSerializer::new(buf);
                                     let len = size_of::<ArchivedPddbKeyRecord>();
                                     match serializer.serialize_value(&rec) {
-                                        Ok(pos) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, prebuf),
+                                        Ok(pos) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, pre_buf),
                                         Err(_) => SerializeResult::Failure(key_name)
                                     }
                                 }
@@ -1727,7 +1727,7 @@ fn wrapped_main() -> ! {
                 } else {
                     pbuf.retcode = PddbRetcode::BasisLost;
                 }
-                // we don't nede a "replace" operation because all ops happen in-place
+                // we don't need a "replace" operation because all ops happen in-place
 
                 // for now, do an expensive sync operation after every write to ensure data integrity
                 basis_cache.sync(&mut pddb_os, None).expect("couldn't sync basis");
@@ -1968,7 +1968,7 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
                 }
                 return PasswordState::Uninit;
             }
-            PasswordState::ForcedAbort(_) => panic!("ForcedAbort is not expecetd from try_login()"),
+            PasswordState::ForcedAbort(_) => panic!("ForcedAbort is not expected from try_login()"),
         }
     }
 }
@@ -2040,7 +2040,7 @@ fn try_mount_or_format(
                 pddb_os.pddb_format(fast, Some(&modals)).expect("couldn't format PDDB");
 
                 // reset the RTC at the point of PDDB format. It is done now because at this point we know that
-                // no time offset keys can exist in the PDDB, and as a measure of good hygeine we want to restart
+                // no time offset keys can exist in the PDDB, and as a measure of good hygiene we want to restart
                 // our RTC counter from a random duration between epoch and 10 years to give some deniability about
                 // how long the device has been in use.
                 let _ = xous::send_message(time_resetter,
