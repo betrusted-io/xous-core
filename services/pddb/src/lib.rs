@@ -255,6 +255,27 @@ impl Pddb {
         }
         ret
     }
+    /// The caller of this function will block and return only if the order of Bases has changed.
+    pub fn monitor_basis(&self) -> Vec::<String> {
+        let list_alloc = PddbBasisList {
+            list: [xous_ipc::String::<BASIS_NAME_LEN>::default(); 63],
+            num: 0
+        };
+        let mut buf = Buffer::into_buf(list_alloc).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::BasisMonitor.to_u32().unwrap()).expect("Couldn't execute ListBasis opcode");
+        let list = buf.to_original::<PddbBasisList, _>().expect("couldn't restore list structure");
+        if list.num > list.list.len() as u32 {
+            log::warn!("Number of open basis larger than our IPC structure. May need to refactor this API.");
+        }
+        let mut ret = Vec::<String>::new();
+        for (index, name) in list.list.iter().enumerate() {
+            if index as u32 == list.num {
+                break;
+            }
+            ret.push(name.as_str().expect("name is not valid utf-8").to_string());
+        }
+        ret
+    }
     /// returns the latest basis that is opened -- this is where all new values are being sent by default
     /// if the PDDB is not mounted, returns None
     pub fn latest_basis(&self) -> Option<String> {
