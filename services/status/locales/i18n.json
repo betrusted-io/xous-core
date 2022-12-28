@@ -6,6 +6,13 @@
         "ja": "Shellchat",
         "zh": "外壳聊天"
     },
+    "secnote.basis": {
+        "en": "Basis: ",
+        "en-tts": "Basis: ",
+        "fr": "La base: ",
+        "ja": "基底: ",
+        "zh": "基: "
+    },
     "backup.confirm": {
         "en": "Prepare for PDDB and root key backup?\n\nThe process cannot be aborted once started.",
         "en-tts": "Prepare for PDDB and root key backup?\n\nThe process cannot be aborted once started.",

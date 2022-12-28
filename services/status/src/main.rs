@@ -766,6 +766,36 @@ fn wrapped_main() -> ! {
         }
     });
 
+    // this thread handles updating the PDDB basis list
+    thread::spawn({
+        let sec_notes = sec_notes.clone();
+        move || {
+            let pddb = pddb::Pddb::new();
+            loop {
+                // this blocks until there is a change in the basis list
+                let mut basis_list_vec = pddb.monitor_basis();
+
+                // the key may or may not be there, but remove it in case it is
+                sec_notes.lock().unwrap().remove(&"secnote.basis".to_string());
+
+                // only if there are more bases open than just the .System basis, insert a new key
+                if basis_list_vec.len() > 1 {
+                    let mut new_list_str = t!("secnote.basis", xous::LANG).to_string();
+                    // initially, just concatenate all the basis names...
+                    basis_list_vec.reverse(); // reverse the order so the highest priority basis is on the left.
+                    for basis in basis_list_vec {
+                        new_list_str.push_str(&basis);
+                        if basis != pddb::PDDB_DEFAULT_SYSTEM_BASIS {
+                            new_list_str.push_str(" > ");
+                        }
+                    }
+
+                    sec_notes.lock().unwrap().insert("secnote.basis".to_string(), new_list_str);
+                }
+            }
+        }
+    });
+
     // storage for wifi bars
     let mut wifi_bars: [PixelColor; 5] = [PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light];
 
