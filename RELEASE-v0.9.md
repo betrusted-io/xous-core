@@ -304,7 +304,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Wifi signal is now rendered as bars, instead of as a number (thanks @gsora for PR#283!).
 
 ## New in 0.9.12
-- Basis priority order is displayed in the status bar. The left-most basis is the default basis. When no secret bases are open, no notification is displayed (the `.System` basis is assumed).
+- Basis priority order is displayed in the status bar (issue #269). The left-most basis is the default basis. When no secret bases are open, no notification is displayed (the `.System` basis is assumed).
 - Various bug fixes in `mtxcli`
 
 ## Roadmap
