@@ -23,10 +23,40 @@ pub(crate) enum MtxcliOp {
 // This name should be (1) unique (2) under 64 characters long and (3) ideally descriptive.
 pub(crate) const SERVER_NAME_MTXCLI: &str = "_Matrix chat_";
 
-fn main() -> ! {
+fn main () -> ! {
+    let stack_size = 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(stack_size)
+        .spawn(wrapped_main)
+        .unwrap()
+        .join()
+        .unwrap()
+}
+
+fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
+
+    const HEAP_LARGER_LIMIT: usize = 2048 * 1024;
+    let new_limit = HEAP_LARGER_LIMIT;
+    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+        xous::Limits::HeapMaximum as usize,
+        0,
+        new_limit,
+    ));
+
+    if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
+        xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+            xous::Limits::HeapMaximum as usize,
+            current_limit,
+            new_limit,
+        ))
+        .unwrap();
+        log::info!("Heap limit increased to: {}", new_limit);
+    } else {
+        panic!("Unsupported syscall!");
+    }
 
     let xns = xous_names::XousNames::new().unwrap();
     // unlimited connections allowed, this is a user app and it's up to the app to decide its policy

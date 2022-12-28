@@ -330,6 +330,7 @@ pub fn get_filter(user: &str, server: &str, token: &str) -> Option<String> {
 }
 
 fn get_messages(body: Map<String, Value>, room_id: &str) -> String {
+    log::debug!("heap usage: {}", crate::cmds::heap_usage());
     let mut messages = String::new();
     if let Some(Value::Object(rooms)) = body.get("rooms") {
         if let Some(Value::Object(join)) = rooms.get("join") {
@@ -371,6 +372,7 @@ fn get_messages(body: Map<String, Value>, room_id: &str) -> String {
 
 pub fn client_sync(server: &str, filter: &str, since: &str, timeout: i32,
                    room_id: &str, token: &str) -> Option<(String, String)> {
+    log::debug!("heap usage: {}", crate::cmds::heap_usage());
     let mut url = String::from(server);
     url.push_str("/_matrix/client/r0/sync?filter=");
     url.push_str(filter);
@@ -417,6 +419,7 @@ impl MessageRequest {
 }
 
 pub fn send_message(server: &str, room_id: &str, text: &str, txn_id: &str, token: &str) -> bool {
+    log::debug!("heap usage: {}", crate::cmds::heap_usage());
     let room_id_encoded = url::encode(room_id);
     let mut url = String::from(server);
     url.push_str("/_matrix/client/r0/rooms/");

@@ -620,3 +620,16 @@ pub fn tokenize(line: &mut XousString::<1024>) -> Option<XousString::<1024>> {
         None
     }
 }
+
+pub(crate) fn heap_usage() -> usize {
+    match xous::rsyscall(xous::SysCall::IncreaseHeap(0, xous::MemoryFlags::R)).expect("couldn't get heap size") {
+        xous::Result::MemoryRange(m) => {
+            let usage = m.len();
+            usage
+        }
+        _ => {
+            log::error!("Couldn't measure heap usage");
+            0
+         },
+    }
+}
