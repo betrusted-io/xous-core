@@ -92,7 +92,7 @@ impl MemoryMessage {
 }
 
 #[repr(C)]
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Default)]
 /// A simple scalar message.  This is similar to a `move` message.
 pub struct ScalarMessage {
     pub id: MessageId,
@@ -239,6 +239,15 @@ impl Message {
         }
     }
 
+    pub fn scalar_message_mut(&mut self) -> Option<&mut ScalarMessage> {
+        match self {
+            Message::MutableBorrow(_)
+            | Message::Borrow(_)
+            | Message::Move(_)
+            | Message::Scalar(_) => None,
+            Message::BlockingScalar(scalar) => Some(scalar),
+        }
+    }
     pub(crate) fn message_type(&self) -> usize {
         match *self {
             Message::MutableBorrow(_) => 1,

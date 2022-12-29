@@ -850,15 +850,15 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::ReplyAndReceiveNext(sender, result, arg1, arg2, arg3, arg4) => [
-                SysCallNumber::ReturnMemory as usize,
+            SysCall::ReplyAndReceiveNext(sender, arg0, arg1, arg2, arg3, arg4, return_type) => [
+                SysCallNumber::ReplyAndReceiveNext as usize,
                 sender.to_usize(),
-                *result,
+                *arg0,
                 *arg1,
                 *arg2,
                 *arg3,
                 *arg4,
-                0,
+                *return_type,
             ],
 
             SysCall::CreateThread(init) => {
@@ -1086,7 +1086,7 @@ impl SysCall {
                 MemorySize::new(a5),
             ),
             SysCallNumber::ReplyAndReceiveNext => {
-                SysCall::ReplyAndReceiveNext(MessageSender::from_usize(a1), a2, a3, a4, a5, a6)
+                SysCall::ReplyAndReceiveNext(MessageSender::from_usize(a1), a2, a3, a4, a5, a6, a7)
             }
             SysCallNumber::CreateThread => {
                 SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
@@ -1936,6 +1936,30 @@ pub fn reply_and_receive_next(
     server: SID,
     msg: &mut Option<MessageEnvelope>,
 ) -> core::result::Result<(), crate::Error> {
+    reply_and_receive_next_legacy(server, msg, &mut 0)
+}
+
+/// Reply to the message, if one exists, and receive the next one.
+/// If no message exists, delegate the call to `receive_syscall()`.
+/// Allow specifying the scalar return type.
+///
+/// This is named `_legacy` because it is meant to work with calls that
+/// expect both `Scalar1` and `Scalar2` values, in addition to `Scalar5`.
+///
+/// ## Arguments
+///
+///  * **server**: The SID of the server to receive messages from
+///  * **msg**: An Option<MessageEnvelope> specifying the message to return.
+///  * **return_type**: If 1 or 2, responds to a BlockingScalarMessage
+///                 with a Scalar1 or a Scalar2. Otherwise, will respond
+///                 as normal.
+pub fn reply_and_receive_next_legacy(
+    server: SID,
+    msg: &mut Option<MessageEnvelope>,
+    return_type: &mut usize,
+) -> core::result::Result<(), crate::Error> {
+    let rt = *return_type;
+    *return_type = 0;
     if let Some(envelope) = msg.take() {
         // If the message inside is nonblocking, then there's nothing to return.
         // Delegate reception to the `receive_message()` call
