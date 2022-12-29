@@ -616,6 +616,147 @@ fn return_scalar5(
     })
 }
 
+fn reply_and_receive_next(
+    server_pid: PID,
+    server_tid: TID,
+    _in_irq: bool,
+    sender: MessageSender,
+    arg0: usize,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+    arg4: usize,
+    scalar_type: usize,
+) -> SysCallResult {
+    let sender = SenderID::from(sender);
+
+    SystemServices::with_mut(|ss| {
+        struct MessageResponse {
+            pid: PID,
+            tid: TID,
+            result: xous_kernel::Result,
+        }
+
+        let (result, next_message) = {
+            let server = ss
+                .server_from_sidx_mut(sender.sidx)
+                .ok_or(xous_kernel::Error::ServerNotFound)?;
+            if server.pid != server_pid {
+                println!(
+                    "WARNING: PIDs don't match!  The server is from PID {}, but our PID is {}",
+                    server.pid, server_pid
+                );
+                return Err(xous_kernel::Error::ServerNotFound);
+            }
+
+            let waiting_message = server.take_waiting_message(sender.idx, None)?;
+
+            let next_message = server.take_next_message(sender.sidx);
+            // If there is no message, park the server thread. We do this here because
+            // we cannot hold the `Server` object while we also modify process state.
+            if next_message.is_none() {
+                server.park_thread(server_tid);
+            }
+
+            (waiting_message, next_message)
+        };
+
+        // TODO: Have errors turn into calls to `ReceiveMessage`
+        let response = match result {
+            WaitingMessage::ScalarMessage(pid, tid) => {
+                let result = match scalar_type {
+                    1 => xous_kernel::Result::Scalar1(arg1),
+                    2 => xous_kernel::Result::Scalar2(arg1, arg2),
+                    _ => xous_kernel::Result::Scalar5(arg0, arg1, arg2, arg3, arg4),
+                };
+                MessageResponse { pid, tid, result }
+            }
+            WaitingMessage::ForgetMemory(_) => {
+                println!(
+                    "WARNING: Tried to wait on a scalar message that was actually forgetting memory"
+                );
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+            WaitingMessage::BorrowedMemory(pid, tid, _server_addr, client_addr, len) => {
+                #[cfg(baremetal)]
+                let src_virt = _server_addr.get() as _;
+                #[cfg(not(baremetal))]
+                let src_virt = arg1 as _; // TODO: Check this is correct on hosted mode
+
+                // Return the memory to the calling process
+                ss.return_memory(src_virt, pid, tid, client_addr.get() as _, len.get())?;
+
+                MessageResponse {
+                    pid,
+                    tid,
+                    result: xous_kernel::Result::MemoryReturned(MemorySize::new(arg3), MemorySize::new(arg4)),
+                }
+            }
+            WaitingMessage::MovedMemory => {
+                println!(
+                    "WARNING: Tried to wait on a scalar message that was actually moved memory"
+                );
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+            WaitingMessage::None => {
+                println!("WARNING: Tried to wait on a message that didn't exist");
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+        };
+
+        // If there is a pending message, fetch it and schedule the thread to run
+        if let Some(msg) = next_message {
+            if cfg!(baremetal) {
+                // When the server is resumed, it will receive this as a return value.
+                ss.set_thread_result(
+                    server_pid,
+                    server_tid,
+                    xous_kernel::Result::MessageEnvelope(msg),
+                )?;
+                ss.ready_thread(response.pid, response.tid).unwrap();
+                ss.set_thread_result(response.pid, response.tid, response.result)?;
+                ss.activate_process_thread(server_tid, response.pid, response.tid, true)
+                    .map(|_| Ok(xous_kernel::Result::ResumeProcess))
+                    .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+            } else {
+                // Switch to the client and return the result
+                ss.ready_thread(response.pid, response.tid)?;
+                ss.switch_to_thread(response.pid, Some(response.tid))?;
+                ss.set_thread_result(response.pid, response.tid, response.result)?;
+
+                // Return the new message envelope to the server
+                Ok(xous_kernel::Result::MessageEnvelope(msg))
+            }
+        } else {
+            // For baremetal targets, switch away from this process.
+            if cfg!(baremetal) {
+                // Switch back to the client process.
+                ss.ready_thread(response.pid, response.tid)?;
+
+                // Set the thread result for the client
+                ss.set_thread_result(response.pid, response.tid, response.result)?;
+
+                // Activate the client thread and switch to it
+                ss.activate_process_thread(server_tid, response.pid, response.tid, false)
+                    .map(|_| Ok(xous_kernel::Result::ResumeProcess))
+                    .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+            }
+            // For hosted targets, simply return `BlockedProcess` indicating we'll make
+            // a callback to their socket at a later time.
+            else {
+                ss.unschedule_thread(server_pid, server_tid)?;
+                // Switch to the client and return the result
+                ss.ready_thread(response.pid, response.tid)?;
+                ss.switch_to_thread(response.pid, Some(response.tid))?;
+                ss.set_thread_result(response.pid, response.tid, response.result)?;
+
+                // Indicate that the server should block its process
+                Ok(xous_kernel::Result::BlockedProcess)
+            }
+        }
+    })
+}
+
 fn receive_message(pid: PID, tid: TID, sid: SID, blocking: ExecutionType) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         assert!(
@@ -935,6 +1076,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }
         SysCall::ReturnScalar5(sender, arg1, arg2, arg3, arg4, arg5) => {
             return_scalar5(pid, tid, in_irq, sender, arg1, arg2, arg3, arg4, arg5)
+        }
+        SysCall::ReplyAndReceiveNext(sender, a0, a1, a2, a3, a4, scalar_type) => {
+            reply_and_receive_next(pid, tid, in_irq, sender, a0, a1, a2, a3, a4, scalar_type)
         }
         SysCall::TrySendMessage(cid, message) => send_message(pid, tid, cid, message),
         SysCall::TerminateProcess(_ret) => SystemServices::with_mut(|ss| {
