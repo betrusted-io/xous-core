@@ -535,6 +535,7 @@ pub struct PddbDangerousDebug {
 pub enum DebugRequest {
     Dump = 0,
     Remount = 1,
+    Prune = 2,
 }
 
 #[cfg(test)]

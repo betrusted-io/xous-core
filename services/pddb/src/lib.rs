@@ -1018,6 +1018,18 @@ impl Pddb {
         buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())
     }
+    /// Forces a basis pruning, for testing the pruning and prune recovery code.
+    #[cfg(not(target_os = "xous"))]
+    pub fn dbg_prune(&self) -> Result<()> {
+        let ipc = PddbDangerousDebug {
+            request: DebugRequest::Prune,
+            dump_name: xous_ipc::String::new(),
+        };
+        let buf = Buffer::into_buf(ipc)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())
+    }
 
     #[cfg(all(feature="pddbtest", feature="autobasis"))]
     pub fn basis_testing(&self, config: &[Option<bool>; 32]) {

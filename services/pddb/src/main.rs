@@ -1817,6 +1817,13 @@ fn wrapped_main() -> ! {
                         } else {
                             log::info!("remount failed");
                         }
+                    },
+                    DebugRequest::Prune => {
+                        log::info!("initiating prune");
+                        log::set_max_level(log::LevelFilter::Debug);
+                        basis_cache.cache_prune(&mut pddb_os, 262144);
+                        log::set_max_level(log::LevelFilter::Info);
+                        log::info!("prune finished");
                     }
                 }
             }
