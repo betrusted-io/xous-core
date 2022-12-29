@@ -54,9 +54,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         #[cfg(not(feature="pddbtest"))]
-        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete] [churn] [flush] [sync]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]";
         #[cfg(feature="pddbtest")]
-        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
         if let Some(sub_cmd) = tokens.next() {
