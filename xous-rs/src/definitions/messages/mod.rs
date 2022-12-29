@@ -264,6 +264,19 @@ impl Message {
             Message::Scalar(s) | Message::BlockingScalar(s) => s.id = id,
         }
     }
+
+    pub fn to_usize(&self) -> [usize; 6] {
+        let ret = match &*self {
+            Message::MutableBorrow(m) => (0, m.to_usize()),
+            Message::Borrow(m) => (1, m.to_usize()),
+            Message::Move(m) => (2, m.to_usize()),
+            Message::Scalar(m) => (3, m.to_usize()),
+            Message::BlockingScalar(m) => (4, m.to_usize()),
+        };
+        [
+            ret.0, ret.1[0], ret.1[1], ret.1[2], ret.1[3], ret.1[4],
+        ]
+    }
 }
 
 impl TryFrom<(usize, usize, usize, usize, usize, usize)> for Message {

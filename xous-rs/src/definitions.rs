@@ -463,6 +463,9 @@ pub enum Result {
     /// 20: A scalar with five values
     Scalar5(usize, usize, usize, usize, usize),
 
+    // 21: A message is returned as part of `send_message()` when the result is blocking
+    Message(Message),
+
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -526,7 +529,13 @@ impl Result {
                 0,
             ],
             Result::NewProcess(p) => Self::add_opcode(19, p.into()),
-            Result::Scalar5(a, b, c, d, e) => [15, *a, *b, *c, *d, *e, 0, 0],
+            Result::Scalar5(a, b, c, d, e) => [20, *a, *b, *c, *d, *e, 0, 0],
+            Result::Message(message) => {
+                let encoded = message.to_usize();
+                [
+                    21, encoded[0], encoded[1], encoded[2], encoded[3], encoded[4], encoded[5], 0,
+                ]
+            }
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
             }
@@ -605,19 +614,36 @@ impl Result {
             18 => Result::MemoryReturned(MemorySize::new(src[1]), MemorySize::new(src[2])),
             19 => Result::NewProcess(src.into()),
             20 => Result::Scalar5(src[1], src[2], src[3], src[4], src[5]),
+            21 => Result::Message(match src[1] {
+                0 => match MemoryMessage::from_usize(src[2], src[3], src[4], src[5], src[6]) {
+                    None => return Result::Error(Error::InternalError),
+                    Some(s) => Message::MutableBorrow(s),
+                },
+                1 => match MemoryMessage::from_usize(src[2], src[3], src[4], src[5], src[6]) {
+                    None => return Result::Error(Error::InternalError),
+                    Some(s) => Message::Borrow(s),
+                },
+                2 => match MemoryMessage::from_usize(src[2], src[3], src[4], src[5], src[6]) {
+                    None => return Result::Error(Error::InternalError),
+                    Some(s) => Message::Move(s),
+                },
+                3 => Message::Scalar(ScalarMessage::from_usize(
+                    src[2], src[3], src[4], src[5], src[6],
+                )),
+                4 => Message::BlockingScalar(ScalarMessage::from_usize(
+                    src[2], src[3], src[4], src[5], src[6],
+                )),
+                _ => return Result::Error(Error::InternalError),
+            }),
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
         }
     }
 
     /// If the Result has memory attached to it, return the memory
-    pub fn memory(&self) -> Option<MemoryRange> {
+    pub fn memory(&self) -> Option<&MemoryRange> {
         match self {
-            Result::Message(msg) => match &msg.body {
-                Message::Move(memory_message)
-                | Message::Borrow(memory_message)
-                | Message::MutableBorrow(memory_message) => Some(memory_message.buf),
-                _ => None,
-            },
+            Result::MessageEnvelope(msg) => msg.body.memory(),
+            Result::Message(msg) => msg.memory(),
             _ => None,
         }
     }

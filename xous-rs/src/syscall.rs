@@ -324,11 +324,14 @@ pub enum SysCall {
     ///
     /// # Returns
     ///
-    /// * **Ok**: The Scalar / Send message was successfully sent, or the Borrow has finished
+    /// * **Ok**: The Scalar / Send message was successfully sent
     /// * **Scalar1**: The Server returned a `Scalar1` value
     /// * **Scalar2**: The Server returned a `Scalar2` value
     /// * **Scalar5**: The Server returned a `Scalar5` value
     /// * **BlockedProcess**: In Hosted mode, the target process is now blocked
+    /// * **Message**: For Scalar messages, this includes the args as returned
+    ///                 by the server. For MemoryMessages, this will include
+    ///                 the Opcode, Offset, and Valid fields.
     ///
     /// # Errors
     ///
@@ -511,6 +514,7 @@ pub enum SysCall {
         usize,         /* arg2 (BlockingScalar) or the memory length (MemoryMesage) */
         usize,         /* arg3 (BlockingScalar) or the memory offset (MemoryMesage) */
         usize,         /* arg4 (BlockingScalar) or the memory valid (MemoryMesage) */
+        usize,         /* for BlockingScalars, indicates how many args are valid */
     ),
 
     /// This syscall does not exist. It captures all possible
