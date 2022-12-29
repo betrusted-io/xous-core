@@ -199,7 +199,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     ss.set_thread_result(
                         server_pid,
                         server_tid,
-                        xous_kernel::Result::Message(envelope),
+                        xous_kernel::Result::MessageEnvelope(envelope),
                     )
                     .expect("couldn't set result for server thread");
                     ss.activate_process_thread(thread, ppid, ptid, false)
@@ -209,7 +209,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     // Switch to the server, since it's in a state to be run.
                     klog!("Activating Server context and switching away from Client");
                     ss.activate_process_thread(thread, server_pid, server_tid, false)
-                        .map(|_| Ok(xous_kernel::Result::Message(envelope)))
+                        .map(|_| Ok(xous_kernel::Result::MessageEnvelope(envelope)))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
                 }
             } else if blocking && !cfg!(baremetal) {
@@ -219,7 +219,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 ss.set_thread_result(
                     server_pid,
                     server_tid,
-                    xous_kernel::Result::Message(envelope),
+                    xous_kernel::Result::MessageEnvelope(envelope),
                 )
                 .map(|_| xous_kernel::Result::BlockedProcess)
             } else if cfg!(baremetal) {
@@ -228,7 +228,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 ss.set_thread_result(
                     server_pid,
                     server_tid,
-                    xous_kernel::Result::Message(envelope),
+                    xous_kernel::Result::MessageEnvelope(envelope),
                 )
                 .map(|_| xous_kernel::Result::Ok)
             } else {
@@ -242,7 +242,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 ss.set_thread_result(
                     server_pid,
                     server_tid,
-                    xous_kernel::Result::Message(envelope),
+                    xous_kernel::Result::MessageEnvelope(envelope),
                 )
                 .map(|_| xous_kernel::Result::Ok)
             };
@@ -639,7 +639,7 @@ fn receive_message(pid: PID, tid: TID, sid: SID, blocking: ExecutionType) -> Sys
         // If there is a pending message, return it immediately.
         if let Some(msg) = server.take_next_message(sidx) {
             klog!("waiting messages found -- returning {:x?}", msg);
-            return Ok(xous_kernel::Result::Message(msg));
+            return Ok(xous_kernel::Result::MessageEnvelope(msg));
         }
 
         if blocking == ExecutionType::NonBlocking {
