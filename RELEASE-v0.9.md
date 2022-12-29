@@ -306,6 +306,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 ## New in 0.9.12
 - Basis priority order is displayed in the status bar (issue #269). The left-most basis is the default basis. When no secret bases are open, no notification is displayed (the `.System` basis is assumed).
 - Various bug fixes in `mtxcli`
+- Fixed issue #109, where PDDB can panic after a memory cache prune due to missing keys.
 
 ## Roadmap
 - Lots of testing and bug fixes
