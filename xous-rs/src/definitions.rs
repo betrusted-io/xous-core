@@ -421,7 +421,7 @@ pub enum Result {
     NewServerID(SID, CID),
 
     // 9
-    Message(MessageEnvelope),
+    MessageEnvelope(MessageEnvelope),
 
     // 10
     ThreadID(TID),
@@ -488,7 +488,7 @@ impl Result {
                 [6, s.0 as _, s.1 as _, s.2 as _, s.3 as _, 0, 0, 0]
             }
             Result::ConnectionID(cid) => [7, *cid as usize, 0, 0, 0, 0, 0, 0],
-            Result::Message(me) => {
+            Result::MessageEnvelope(me) => {
                 let me_enc = me.to_usize();
                 [
                     9, me_enc[0], me_enc[1], me_enc[2], me_enc[3], me_enc[4], me_enc[5], me_enc[6],
@@ -589,7 +589,7 @@ impl Result {
                     )),
                     _ => return Result::Error(Error::InternalError),
                 };
-                Result::Message(MessageEnvelope {
+                Result::MessageEnvelope(MessageEnvelope {
                     sender: MessageSender::from_usize(sender),
                     body: message,
                 })

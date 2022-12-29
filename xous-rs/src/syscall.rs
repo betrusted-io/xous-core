@@ -158,7 +158,7 @@ pub enum SysCall {
     ///
     /// # Returns
     ///
-    /// * **Message**: A valid message from the queue
+    /// * **MessageEnvelope**: A valid message from the queue
     ///
     /// # Errors
     ///
@@ -1570,7 +1570,7 @@ pub fn try_connect(server: SID) -> core::result::Result<CID, Error> {
 ///
 pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Error> {
     let result = rsyscall(SysCall::ReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
-    if let Result::Message(envelope) = result {
+    if let Result::MessageEnvelope(envelope) = result {
         Ok(envelope)
     } else if let Result::Error(e) = result {
         Err(e)
@@ -1587,7 +1587,7 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 pub fn try_receive_message(server: SID) -> core::result::Result<Option<MessageEnvelope>, Error> {
     let result =
         rsyscall(SysCall::TryReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
-    if let Result::Message(envelope) = result {
+    if let Result::MessageEnvelope(envelope) = result {
         Ok(Some(envelope))
     } else if result == Result::None {
         Ok(None)
@@ -1617,6 +1617,7 @@ pub fn try_send_message(connection: CID, message: Message) -> core::result::Resu
         Ok(Result::Scalar2(a, b)) => Ok(Result::Scalar2(a, b)),
         Ok(Result::Scalar5(a, b, c, d, e)) => Ok(Result::Scalar5(a, b, c, d, e)),
         Ok(Result::MemoryReturned(offset, valid)) => Ok(Result::MemoryReturned(offset, valid)),
+        Ok(Result::MessageEnvelope(msg)) => Ok(Result::MessageEnvelope(msg)),
         Err(e) => Err(e),
         v => panic!("Unexpected return value: {:?}", v),
     }
@@ -1946,16 +1947,12 @@ pub fn reply_and_receive_next(
         } else {
             panic!("unrecognized message type")
         };
-        let call = SysCall::ReplyAndReceiveNext(
-            envelope.sender,
-            args[0],
-            args[1],
-            args[2],
-            args[3],
-            args[4],
-        );
+        let sender = envelope.sender;
+        core::mem::forget(envelope);
+        let call =
+            SysCall::ReplyAndReceiveNext(sender, args[0], args[1], args[2], args[3], args[4], rt);
         match rsyscall(call) {
-            Ok(crate::Result::Message(envelope)) => {
+            Ok(crate::Result::MessageEnvelope(envelope)) => {
                 *msg = Some(envelope);
                 Ok(())
             }

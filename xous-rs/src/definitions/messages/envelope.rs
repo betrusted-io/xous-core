@@ -10,21 +10,15 @@ pub struct Envelope {
 
 impl Envelope {
     pub fn to_usize(&self) -> [usize; 7] {
-        let ret = match &self.body {
-            Message::MutableBorrow(m) => (0, m.to_usize()),
-            Message::Borrow(m) => (1, m.to_usize()),
-            Message::Move(m) => (2, m.to_usize()),
-            Message::Scalar(m) => (3, m.to_usize()),
-            Message::BlockingScalar(m) => (4, m.to_usize()),
-        };
+        let body_usize = self.body.to_usize();
         [
             self.sender.to_usize(),
-            ret.0,
-            ret.1[0],
-            ret.1[1],
-            ret.1[2],
-            ret.1[3],
-            ret.1[4],
+            body_usize[0],
+            body_usize[1],
+            body_usize[2],
+            body_usize[3],
+            body_usize[4],
+            body_usize[5],
         ]
     }
 
