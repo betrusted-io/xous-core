@@ -3,7 +3,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 use xous_api_ticktimer::*;
-#[cfg(feature="timestamp")]
+#[cfg(feature = "timestamp")]
 mod version;
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -62,7 +62,7 @@ impl core::cmp::PartialEq for TimerRequest {
     }
 }
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation {
     const TICKS_PER_MS: u64 = 1;
     use super::TimerRequest;
@@ -284,8 +284,9 @@ mod implementation {
     }
 }
 
-#[cfg(any(not(target_os = "xous"),
-  not(any(feature="precursor", feature="renode", not(target_os = "xous")))
+#[cfg(any(
+    not(target_os = "xous"),
+    not(any(feature = "precursor", feature = "renode", not(target_os = "xous")))
 ))]
 mod implementation {
     use crate::RequestKind;
@@ -524,14 +525,14 @@ fn main() -> ! {
     log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
-    #[cfg(feature="timestamp")]
+    #[cfg(feature = "timestamp")]
     {
         log::info!("****************************************************************");
         log::info!("Welcome to Xous {}", version::SEMVER);
         log::info!("Built on {}", version::TIMESTAMP);
         log::info!("****************************************************************");
     }
-    #[cfg(not(feature="timestamp"))]
+    #[cfg(not(feature = "timestamp"))]
     {
         log::info!("****************************************************************");
         log::info!("Welcome to Xous");
@@ -598,38 +599,66 @@ fn main() -> ! {
     let mut mutex_hash: HashMap<Option<xous::PID>, HashMap<usize, VecDeque<xous::MessageSender>>> =
         HashMap::new();
 
+    let mut msg_opt = None;
+    let mut return_type = 0;
     loop {
         #[cfg(feature = "watchdog")]
         ticktimer.reset_wdt();
         //#[cfg(feature = "watchdog")] // for debugging the watchdog
         //ticktimer.check_wdt();
 
-        let mut msg = xous::receive_message(ticktimer_server).unwrap();
+        xous::reply_and_receive_next_legacy(ticktimer_server, &mut msg_opt, &mut return_type)
+            .unwrap();
+        let msg = msg_opt.as_mut().unwrap();
         log::trace!("msg: {:x?}", msg);
-        match num_traits::FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::Opcode::ElapsedMs) => {
-                let time = ticktimer.elapsed_ms() as i64;
-                xous::return_scalar2(
-                    msg.sender,
-                    (time & 0xFFFF_FFFFi64) as usize,
-                    ((time >> 32) & 0xFFF_FFFFi64) as usize,
-                )
-                .expect("couldn't return time request");
+        match num_traits::FromPrimitive::from_usize(msg.body.id())
+            .unwrap_or(api::Opcode::InvalidCall)
+        {
+            api::Opcode::ElapsedMs => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let time = ticktimer.elapsed_ms() as i64;
+                    scalar.arg1 = (time & 0xFFFF_FFFFi64) as usize;
+                    scalar.arg2 = ((time >> 32) & 0xFFF_FFFFi64) as usize;
+                    scalar.id = 0;
+
+                    // API calls expect a `Scalar2` value in response
+                    return_type = 2;
+                }
             }
-            Some(api::Opcode::SleepMs) => xous::msg_blocking_scalar_unpack!(msg, ms, _, _, _, {
-                // let timeout_queue = timeout_heap.entry(msg.sender.pid()).or_default();
-                recalculate_sleep(
-                    &mut ticktimer,
-                    &mut sleep_heap,
-                    Some(TimerRequest {
-                        msec: ms as i64,
-                        sender: msg.sender,
-                        kind: RequestKind::Sleep,
-                        data: 0,
-                    }),
-                )
-            }),
-            Some(api::Opcode::RecalculateSleep) => {
+            api::Opcode::SleepMs => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let ms = scalar.arg1 as i64;
+                    let sender = msg.sender;
+
+                    // Forget the contents of the message, replacing it with `None`. This
+                    // will prevent it from getting dropped, which (under normal circumstances)
+                    // would cause it to be responded to automatically.
+                    //
+                    // The ideal approach here would be to have the struct -- in this case the
+                    // TimerRequest -- keep track of the element itself. That way, it could
+                    // return the value as part of its response routine. However, due to the
+                    // legacy split of `BlockingScalars`, these are allowed to have an explicit
+                    // return path, so we need to forget the original message here to prevent
+                    // it from getting returned early.
+                    //
+                    // (n.b. this auto-response hasn't been enabled yet for Scalar messages,
+                    // but this definitely would need to be done for e.g. Memory messages).
+                    core::mem::forget(msg_opt.take());
+
+                    // let timeout_queue = timeout_heap.entry(msg.sender.pid()).or_default();
+                    recalculate_sleep(
+                        &mut ticktimer,
+                        &mut sleep_heap,
+                        Some(TimerRequest {
+                            msec: ms,
+                            sender: sender,
+                            kind: RequestKind::Sleep,
+                            data: 0,
+                        }),
+                    );
+                }
+            }
+            api::Opcode::RecalculateSleep => {
                 // let timeout_queue = timeout_heap.entry(msg.sender.pid()).or_default();
                 if let Some(args) = msg.body.scalar_message() {
                     // If this is a Timeout message that fired, remove it from the Notification list
@@ -643,7 +672,8 @@ fn main() -> ! {
                     // the first check confirms that the origin of the RecalculateSleep message is the Ticktimer,
                     // to prevent third-party servers from issuing the command and thus distorting the sleep
                     // calculations (since this is a public API, anything could happen).
-                    if (msg.sender.pid().map(|p| p.get()).unwrap_or_default() as u32) == xous::process::id()
+                    if (msg.sender.pid().map(|p| p.get()).unwrap_or_default() as u32)
+                        == xous::process::id()
                         && (request_kind == RequestKind::Timeout as usize)
                         && (sender > 0)
                     {
@@ -667,44 +697,40 @@ fn main() -> ! {
                 }
                 recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
             }
-            Some(api::Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+            api::Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 ticktimer.suspend();
                 susres
                     .suspend_until_resume(token)
                     .expect("couldn't execute suspend/resume");
                 ticktimer.resume();
             }),
-            Some(api::Opcode::PingWdt) => {
+            api::Opcode::PingWdt => {
                 ticktimer.reset_wdt();
             }
-            Some(api::Opcode::GetVersion) => {
+            api::Opcode::GetVersion => {
                 let mut buf = unsafe {
                     xous_ipc::Buffer::from_memory_message_mut(
                         msg.body.memory_message_mut().unwrap(),
                     )
                 };
-                #[cfg(feature="timestamp")]
+                #[cfg(feature = "timestamp")]
                 buf.replace(version::get_version()).unwrap();
-                #[cfg(not(feature="timestamp"))]
+                #[cfg(not(feature = "timestamp"))]
                 {
                     let v = crate::api::VersionString {
-                        version: xous_ipc::String::from_str("--no-timestamp requested for build")
+                        version: xous_ipc::String::from_str("--no-timestamp requested for build"),
                     };
                     buf.replace(v).unwrap();
                 }
             }
-            Some(api::Opcode::LockMutex) => {
+            api::Opcode::LockMutex => {
                 let pid = msg.sender.pid();
-                if !msg.body.is_blocking() {
-                    info!("sender made LockMutex request that was not blocking");
-                    continue;
-                }
-                if let Some(scalar) = msg.body.scalar_message() {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
                     let ready = mutex_ready_hash.entry(pid).or_default();
 
                     // If this item is in the Ready list, return right away without blocking
                     if ready.remove(&scalar.arg1) {
-                        xous::return_scalar(msg.sender, 0).unwrap();
+                        scalar.id = 0;
                         continue;
                     }
 
@@ -716,9 +742,15 @@ fn main() -> ! {
                     // the message will get a response.
                     let mutex_entry = awaiting.entry(scalar.arg1).or_default();
                     mutex_entry.push_back(msg.sender);
+
+                    // We've saved the `msg.sender` above and will return the lock as part of the mutex
+                    // work thread. Forget the contents of `msg_opt` without running its destructor.
+                    core::mem::forget(msg_opt.take());
+                } else {
+                    info!("sender made LockMutex request that was not blocking");
                 }
             }
-            Some(api::Opcode::UnlockMutex) => {
+            api::Opcode::UnlockMutex => {
                 let pid = msg.sender.pid();
                 if msg.body.is_blocking() {
                     info!("sender made UnlockMutex request that was blocking");
@@ -740,13 +772,9 @@ fn main() -> ! {
                     }
                 }
             }
-            Some(api::Opcode::WaitForCondition) => {
+            api::Opcode::WaitForCondition => {
                 let pid = msg.sender.pid();
-                if !msg.body.is_blocking() {
-                    info!("sender made WaitForCondition request that was not blocking");
-                    continue;
-                }
-                if let Some(scalar) = msg.body.scalar_message() {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
                     let condvar = scalar.arg1;
                     let timeout = scalar.arg2;
 
@@ -766,8 +794,10 @@ fn main() -> ! {
                     {
                         if *excess > 0 {
                             *excess -= 1;
-                            xous::return_scalar(msg.sender, 0)
-                                .expect("couldn't respond to message");
+                            scalar.id = 0;
+
+                            // Rust libstd expects a `Scalar1` return type for this call
+                            return_type = 1;
                             continue;
                         }
                     }
@@ -795,14 +825,18 @@ fn main() -> ! {
                         .push_back(msg.sender);
 
                     // log::trace!("New waiting senders: {:?}", notify_hash.get(&pid).unwrap().get(&condvar));
-                    continue;
+
+                    // The message will be responded to as part of the notification hash
+                    // when the condvar is unlocked. Forget the contents of the message
+                    // in order to prevent it from being responded to early.
+                    core::mem::forget(msg_opt.take());
                 } else {
                     info!(
                         "sender made WaitForCondition request that wasn't a BlockingScalar Message"
                     );
                 }
             }
-            Some(api::Opcode::NotifyCondition) => {
+            api::Opcode::NotifyCondition => {
                 let pid = msg.sender.pid();
                 if msg.body.is_blocking() {
                     info!("sender made NotifyCondition request that was blocking");
@@ -831,13 +865,7 @@ fn main() -> ! {
                     stop_sleep(&mut ticktimer, &mut sleep_heap);
                     for entry in awaiting.drain(..available_count) {
                         // Remove each entry in the timeout set
-                        sleep_heap.retain(|_, v| {
-                            if v.sender == entry {
-                                false
-                            } else {
-                                true
-                            }
-                        });
+                        sleep_heap.retain(|_, v| if v.sender == entry { false } else { true });
                         xous::return_scalar(entry, 0).expect("couldn't send response");
                     }
 
@@ -865,7 +893,7 @@ fn main() -> ! {
                     );
                 }
             }
-            None => {
+            api::Opcode::InvalidCall => {
                 error!("couldn't convert opcode");
             }
         }

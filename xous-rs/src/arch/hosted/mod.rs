@@ -233,7 +233,7 @@ fn read_next_syscall_result(
 
         // If the client is passing us memory, read bytes from the data, then
         // remap the addresses to function in our address space.
-        if let Result::Message(msg) = &mut response {
+        if let Result::MessageEnvelope(msg) = &mut response {
             match &mut msg.body {
                 crate::Message::Move(ref mut memory_message)
                 | crate::Message::Borrow(ref mut memory_message)

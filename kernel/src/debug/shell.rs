@@ -36,12 +36,12 @@ impl fmt::Write for Output {
                 self.character_count = 0;
             } else if self.character_count > 80 {
                 self.character_count = 0;
-                self.uart.putc(b'\n');
-                self.uart.putc(b'\r');
-                self.uart.putc(b' ');
-                self.uart.putc(b' ');
-                self.uart.putc(b' ');
-                self.uart.putc(b' ');
+                self.serial.putc(b'\n');
+                self.serial.putc(b'\r');
+                self.serial.putc(b' ');
+                self.serial.putc(b' ');
+                self.serial.putc(b' ');
+                self.serial.putc(b' ');
             } else {
                 self.character_count += 1;
             }

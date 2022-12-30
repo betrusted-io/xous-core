@@ -92,7 +92,7 @@ impl MemoryMessage {
 }
 
 #[repr(C)]
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Default)]
 /// A simple scalar message.  This is similar to a `move` message.
 pub struct ScalarMessage {
     pub id: MessageId,
@@ -210,6 +210,10 @@ impl Message {
         }
     }
 
+    pub fn is_scalar(&self) -> bool {
+        !self.has_memory()
+    }
+
     pub fn memory(&self) -> Option<&MemoryRange> {
         self.memory_message().map(|msg| &msg.buf)
     }
@@ -235,6 +239,15 @@ impl Message {
         }
     }
 
+    pub fn scalar_message_mut(&mut self) -> Option<&mut ScalarMessage> {
+        match self {
+            Message::MutableBorrow(_)
+            | Message::Borrow(_)
+            | Message::Move(_)
+            | Message::Scalar(_) => None,
+            Message::BlockingScalar(scalar) => Some(scalar),
+        }
+    }
     pub(crate) fn message_type(&self) -> usize {
         match *self {
             Message::MutableBorrow(_) => 1,
@@ -259,6 +272,19 @@ impl Message {
             Message::MutableBorrow(mem) | Message::Borrow(mem) | Message::Move(mem) => mem.id = id,
             Message::Scalar(s) | Message::BlockingScalar(s) => s.id = id,
         }
+    }
+
+    pub fn to_usize(&self) -> [usize; 6] {
+        let ret = match &*self {
+            Message::MutableBorrow(m) => (0, m.to_usize()),
+            Message::Borrow(m) => (1, m.to_usize()),
+            Message::Move(m) => (2, m.to_usize()),
+            Message::Scalar(m) => (3, m.to_usize()),
+            Message::BlockingScalar(m) => (4, m.to_usize()),
+        };
+        [
+            ret.0, ret.1[0], ret.1[1], ret.1[2], ret.1[3], ret.1[4],
+        ]
     }
 }
 

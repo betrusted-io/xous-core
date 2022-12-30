@@ -32,7 +32,7 @@ fn handle_panic(_arg: &core::panic::PanicInfo) -> ! {
 pub extern "C" fn init(server1: u32, server2: u32, server3: u32, server4: u32) -> ! {
     let server = xous::SID::from_u32(server1, server2, server3, server4);
     loop {
-        if let Ok(xous::Result::Message(envelope)) =
+        if let Ok(xous::Result::MessageEnvelope(envelope)) =
             xous::rsyscall(xous::SysCall::ReceiveMessage(server))
         {
             match envelope.id().into() {
