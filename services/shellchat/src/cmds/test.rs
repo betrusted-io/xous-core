@@ -680,6 +680,91 @@ impl<'a> ShellCmdApi<'a> for Test {
                     ).unwrap();
                     write!(ret, "\nDid EC auto update command").unwrap();
                 }
+                #[cfg(feature="benchmarks")]
+                "bench" => {
+                    let bench_original_sid = xous::create_server().unwrap();
+                    let bench_original_cid = xous::connect(bench_original_sid).unwrap();
+                    std::thread::spawn({
+                        move || {
+                            loop {
+                                let msg = xous::receive_message(bench_original_sid).unwrap();
+                                xous::msg_blocking_scalar_unpack!(msg, a1, _, _, _, {
+                                    xous::return_scalar(msg.sender, a1 + 1).unwrap();
+                                });
+                                if msg.id() == 1 {
+                                    break;
+                                }
+                            }
+                            log::info!("Quitting old bench thread");
+                        }
+                    });
+
+                    let bench_new_sid = xous::create_server().unwrap();
+                    let bench_new_cid = xous::connect(bench_new_sid).unwrap();
+                    std::thread::spawn({
+                        move || {
+                            let mut msg_opt = None;
+                            let mut return_type = 0;
+                            loop {
+                                xous::reply_and_receive_next_legacy(bench_new_sid, &mut msg_opt, &mut return_type)
+                                    .unwrap();
+                                let msg = msg_opt.as_mut().unwrap();
+                                if let Some(scalar) = msg.body.scalar_message_mut() {
+                                    scalar.arg1 += 1;
+                                    return_type = 1;
+                                    if scalar.id == 1 {
+                                        scalar.id = 1;
+                                        xous::return_scalar(msg.sender, scalar.arg1).ok();
+                                        core::mem::forget(msg_opt.take());
+                                        break;
+                                    } else {
+                                        scalar.id = 0;
+                                    }
+                                }
+                            }
+                            log::info!("Quitting new bench thread");
+                        }
+                    });
+                    const ITERS: usize = 10_000;
+                    let tt = ticktimer_server::Ticktimer::new().unwrap();
+                    let start_time = tt.elapsed_ms();
+                    let mut a = 0;
+                    while a < ITERS {
+                        a = match xous::send_message(bench_original_cid,
+                            Message::new_blocking_scalar(0, a, 0, 0, 0)
+                        ) {
+                            Ok(xous::Result::Scalar1(a_prime)) => a_prime,
+                            _ => panic!("incorrect return type")
+                        }
+                    }
+                    let result = format!("Original took {}ms for {} iters\n", tt.elapsed_ms() - start_time, ITERS);
+                    log::info!("{}", result);
+                    write!(ret, "{}\n", result).ok();
+                    // this quits the thread
+                    xous::send_message(bench_original_cid,
+                        Message::new_blocking_scalar(1, 0, 0, 0, 0)
+                    ).ok();
+                    unsafe {xous::disconnect(bench_original_cid).ok()};
+
+                    let start_time = tt.elapsed_ms();
+                    let mut a = 0;
+                    while a < ITERS {
+                        a = match xous::send_message(bench_new_cid,
+                            Message::new_blocking_scalar(0, a, 0, 0, 0)
+                        ) {
+                            Ok(xous::Result::Scalar1(a_prime)) => a_prime,
+                            _ => panic!("incorrect return type")
+                        }
+                    }
+                    let result = format!("New took {}ms for {} iters\n", tt.elapsed_ms() - start_time, ITERS);
+                    write!(ret, "{}", result).ok();
+                    log::info!("{}", result);
+                    // this quits the thread
+                    xous::send_message(bench_new_cid,
+                        Message::new_blocking_scalar(1, 0, 0, 0, 0)
+                    ).ok();
+                    unsafe {xous::disconnect(bench_new_cid).ok()};
+                }
                 _ => {
                     () // do nothing
                 }
