@@ -589,7 +589,7 @@ impl Server {
 
         // Sanity check the specified address was correct, and matches what we
         // had cached.
-        if is_memory && cfg!(baremetal) {
+        if is_memory && cfg!(baremetal) && buf.is_some() {
             let buf = buf.expect("memory message expected but no buffer passed!");
             if server_addr != buf.as_ptr() as usize || len != buf.len() {
                 // klog!("Memory is attached but the returned buffer doesn't match (len: {} vs {}), buf addr: {:08x} vs {:08x}", len, buf.len(), server_addr, buf.as_ptr() as usize);
