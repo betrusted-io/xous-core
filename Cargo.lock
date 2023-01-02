@@ -225,6 +225,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
+name = "base64"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ea22880d78093b0cbe17c89f64a7d457941e65759157ec6cb31a31d652b05e5"
+
+[[package]]
 name = "base64ct"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -651,6 +657,10 @@ dependencies = [
  "embedded-hal",
  "volatile-register",
 ]
+
+[[package]]
+name = "cos_table"
+version = "0.1.0"
 
 [[package]]
 name = "cpufeatures"
@@ -1340,15 +1350,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "float-cmp"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1267f4ac4f343772758f7b1bdcbe767c218bbab93bb432acbf5162bbf85a6c4"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2023,12 +2024,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fc7aa29613bd6a620df431842069224d8bc9011086b1db4c0e0cd47fa03ec9a"
 
 [[package]]
-name = "libm"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33a33a362ce288760ec6a508b94caaec573ae7d3bbbd91b87aa0bad4456839db"
-
-[[package]]
 name = "libstd-test"
 version = "0.1.0"
 dependencies = [
@@ -2145,16 +2140,6 @@ dependencies = [
  "keccak",
  "rand_core 0.5.1",
  "zeroize",
-]
-
-[[package]]
-name = "microfft"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b04ffc2e74da5513185343835177bfd4adf718986185c6d81c2ae2c6ebc07637"
-dependencies = [
- "num-complex 0.4.1",
- "static_assertions",
 ]
 
 [[package]]
@@ -2333,7 +2318,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b7a8e9be5e039e2ff869df49155f1c06bd01ade2117ec783e56ab0932b67a8f"
 dependencies = [
- "num-complex 0.3.1",
+ "num-complex",
  "num-integer",
  "num-iter",
  "num-rational",
@@ -2345,15 +2330,6 @@ name = "num-complex"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "747d632c0c558b87dbabbe6a82f3b4ae03720d0646ac5b7b4dae89394be5f2c5"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "num-complex"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97fbc387afefefd5e9e39493299f3069e14a140dd34dc19b4c1c1a8fddb6a790"
 dependencies = [
  "num-traits",
 ]
@@ -2498,7 +2474,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "defdcfef86dcc44ad208f71d9ff4ce28df6537a4e0d6b0e8e845cb8ca10059a6"
 dependencies = [
  "cfg-if",
- "libm 0.1.4",
+ "libm",
 ]
 
 [[package]]
@@ -3037,6 +3013,7 @@ dependencies = [
  "codec",
  "com",
  "content-plugin-api",
+ "cos_table",
  "gam",
  "graphics-server",
  "ime-plugin-api",
@@ -3479,12 +3456,14 @@ name = "shellchat"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "base64 0.20.0",
  "chrono",
  "cipher 0.3.0",
  "codec",
  "com",
  "com_rs-ref",
  "content-plugin-api",
+ "cos_table",
  "curve25519-dalek",
  "digest 0.9.0",
  "dns",
@@ -3516,7 +3495,6 @@ dependencies = [
  "root-keys",
  "rustls",
  "sha2",
- "spectrum-analyzer",
  "spinor",
  "threadpool",
  "tracing",
@@ -3590,17 +3568,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "spectrum-analyzer"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b3c55cf9ba96815eb07435b381048ea2d031b21223b850bdba7d401eaae6388"
-dependencies = [
- "float-cmp",
- "libm 0.2.2",
- "microfft",
-]
-
-[[package]]
 name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3652,12 +3619,6 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
-
-[[package]]
-name = "static_assertions"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stats_alloc"
