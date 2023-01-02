@@ -52,7 +52,8 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 chrono = {version = "0.4.19", default-features = false, features = ["std"]}
 
 # for audio self-test analysis
-spectrum-analyzer = "0.5.2"
+base64 = "0.20.0"
+cos_table = {path="../../libs/cos_table"}
 # used to parse net connectivity results
 com_rs-ref = {path = "../../imports/com_rs-ref"}
 
@@ -125,4 +126,5 @@ no-codec = []
 nettest = [] # batch network tests
 tls = ["rustls", "webpki-roots", "ring", "tungstenite", "url"]
 shellperf = ["ring", "perflib", "xous/v2p", "random-pick"] # this also needs the project-wide "perfcounter" feature to be selected. shellchat is the exclusive manager of the performance counter, do not use with e.g. "vaultperf" feature
+extra-tests = []
 default = [] # "debugprint"

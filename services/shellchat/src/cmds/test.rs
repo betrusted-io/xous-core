@@ -4,9 +4,9 @@ use xous_ipc::String;
 use xous::{MessageEnvelope, Message};
 
 use codec::*;
-use spectrum_analyzer::{FrequencyLimit, FrequencySpectrum, samples_fft_to_spectrum};
-use spectrum_analyzer::windows::hann_window;
+use base64::encode;
 use core::fmt::Write;
+use core::mem::size_of;
 use core::sync::atomic::{AtomicBool, Ordering, AtomicU32};
 use std::sync::Arc;
 use num_traits::*;
@@ -392,7 +392,7 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     // now do FFT analysis on the sample buffer
                     // analyze one channel at a time
-                    let mut right_samples = Vec::<f32>::new();
+                    // let mut right_samples = Vec::<f32>::new();
                     if self.recbuf.is_none() { // lazy allocate recbuf
                         self.recbuf = Some(xous::syscall::map_memory(
                             None,
@@ -402,14 +402,22 @@ impl<'a> ShellCmdApi<'a> for Test {
                         ).expect("couldn't allocate record buffer"));
                     }
                     if let Some(recbuf) = self.recbuf {
-                        let recslice = recbuf.as_slice::<u32>();
+                        let recslice = recbuf.as_slice::<u8>();
+                        const BUFLEN: usize = 512;
+                        // serialize and send audio as b64 encoded data
+                        for (i, sample) in recslice[recslice.len()-4096 * size_of::<u32>()..].chunks_exact(BUFLEN).enumerate() {
+                            let b64str = encode(sample);
+                            log::info!("{}|ASAMP|{}|:{}", SENTINEL, i, b64str);
+                        }
+                        /*
                         for &sample in recslice[recslice.len()-4096..].iter() {
                             right_samples.push( ((sample & 0xFFFF) as i16) as f32 );
                             //left_samples.push( (((sample >> 16) & 0xFFFF) as i16) as f32 ); // reminder of how to extract the right channel
-                        }
+                        } */
                     } else {
                         panic!("recbuf was not allocated");
                     }
+                    /*
                     // only one channel is considered, because in reality the left is just a copy of the right, as
                     // we are taking a mono microphone signal and mixing it into both ADCs
 
@@ -434,6 +442,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
                     log::debug!("off-target 1 {}", analyze(&spectrum_right, 329.63));
                     log::debug!("off-target 2 {}", analyze(&spectrum_right, 261.63));
+                    */
                     log::info!("{}|ASTOP|", SENTINEL);
                 }
                 "oqc" => {
@@ -804,7 +813,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     // put the "expensive" f32 comparison outside the cosine wave table computation loop
                     let omega = self.freq * 2.0 * std::f32::consts::PI / SAMPLE_RATE_HZ;
                     for sample in frame.iter_mut() {
-                        let raw_sine: i16 = (AMPLITUDE * f32::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
+                        let raw_sine: i16 = (AMPLITUDE * cos_table::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
                         let left = if self.left_play { raw_sine as u16 } else { ZERO_PCM };
                         let right = if self.right_play { raw_sine as u16 } else { ZERO_PCM };
                         *sample = right as u32 | (left as u32) << 16;
@@ -891,71 +900,6 @@ impl<'a> ShellCmdApi<'a> for Test {
         log::debug!("audio callback");
         Ok(None)
     }
-}
-
-// plus minus this amount for frequencing searching
-// this is set less by our desired accuracy of the frequency
-// than by the artifacts of the analysis: the FFT window has some "skirt" to it
-// by a few Hz, and this ratio tries to capture about 90% of the power within the hanning window's skirt.
-const ANALYSIS_DELTA: f32 = 10.0;
-fn analyze(fs: &FrequencySpectrum, target: f32) -> f32 {
-    let mut total_power: f32 = 0.0;
-    let mut h1_power: f32 = 0.0;
-    let mut h2_power: f32 = 0.0;
-    let mut outside_power: f32 = 0.0;
-
-    for &(freq, mag) in fs.data().iter() {
-        let f = freq.val();
-        let m = mag.val();
-        total_power += m;
-        if (f >= target - ANALYSIS_DELTA) && (f <= target + ANALYSIS_DELTA) {
-            h1_power += m;
-        } else if (f >= (target * 2.0 - ANALYSIS_DELTA)) && (f <= (target * 2.0 + ANALYSIS_DELTA)) {
-            h2_power += m;
-        } else if f >= ANALYSIS_DELTA { // don't count the DC offset
-            outside_power += m;
-        } else {
-            log::debug!("ignoring {}Hz @ {}", f, m);
-        }
-    }
-    log::debug!("h1: {}, h2: {}, outside: {}, total: {}", h1_power, h2_power, outside_power, total_power);
-
-    let ratio = if outside_power > 0.0 {
-        (h1_power + h2_power) / outside_power
-    } else {
-        1_000_000.0
-    };
-    ratio
-}
-
-fn db_compute(samps: &[f32]) -> f32 {
-    let mut cum = 0.0;
-    for &s in samps.iter() {
-        cum += s;
-    }
-    let mid = cum / samps.len() as f32;
-    cum = 0.0;
-    for &s in samps.iter() {
-        let a = s - mid;
-        cum += a * a;
-    }
-    cum /= samps.len() as f32;
-    let db = 10.0 * f32::log10(cum);
-    db
-}
-
-fn asciiplot(fs: &FrequencySpectrum) {
-    let (max_f, max_val) = fs.max();
-    const LINES: usize = 100;
-    const WIDTH: usize = 80;
-    const MAX_F: usize = 1000;
-
-    for f in (0..MAX_F).step_by(MAX_F / LINES) {
-        let (freq, val) = fs.freq_val_closest(f as f32);
-        let pos = ((val.val() / max_val.val()) * WIDTH as f32) as usize;
-        log::debug!("{:>5} | {:width$}*", freq.val() as u32, " ", width = pos);
-    }
-    log::debug!("max freq: {}, max_val: {}", max_f, max_val);
 }
 
 fn oqc_status(conn: xous::CID) -> Option<bool> { // None if still running or not yet run; Some(true) if pass; Some(false) if fail
