@@ -303,8 +303,13 @@ pub(crate) fn main_hw() -> ! {
                         }
                     },
                     Views::MassStorage => {
-                        //ums.poll(); // TODO(gsora): wire ums poll
-                        None
+                        if ums_device.poll(&mut [&mut ums]) {
+                            //Some(fido_class.interface::<RawFidoInterface<'_, _>, _>())
+                            log::info!("mass storage took a irq!");
+                            None
+                        } else {
+                            None
+                        }
                     }
                 };
                 if let Some(u2f) = maybe_u2f {
