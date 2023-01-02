@@ -160,15 +160,27 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 "copy" => {
                     if let Some(srcdescriptor) = tokens.next() {
                         if let Some(dstdescriptor) = tokens.next() {
-                            match std::fs::copy(srcdescriptor, dstdescriptor) {
-                                Ok(_result) => {
-                                    write!(ret, "Copy from {} to {} succeeded", srcdescriptor, dstdescriptor).ok();
+                            if let Some((_srcdict, _srckeyname)) = srcdescriptor.split_once(':') {
+                                if let Some((_dstdict, _dstkeyname)) = dstdescriptor.split_once(':') {
+                                    match std::fs::copy(srcdescriptor, dstdescriptor) {
+                                        Ok(_result) => {
+                                            write!(ret, "Copy from {} to {} succeeded", srcdescriptor, dstdescriptor).ok();
+                                        }
+                                        Err(e) => {
+                                            write!(ret, "Error copying from {} to {}: {:?}", srcdescriptor, dstdescriptor, e).ok();
+                                        }
+                                    }
+                                } else {
+                                    write!(ret, "Destination {} is not of required form 'dict:key'", dstdescriptor).unwrap();
                                 }
-                                Err(e) => {
-                                    write!(ret, "Error copying from {} to {}: {:?}", srcdescriptor, dstdescriptor, e).ok();
-                                }
+                            } else {
+                                write!(ret, "Source {} is not of required form 'dict:key'", srcdescriptor).unwrap();
                             }
+                        } else {
+                            write!(ret, "Usage is copy 'dict:key' 'dict:key' (missing destination)").unwrap();
                         }
+                    } else {
+                        write!(ret, "Usage is copy 'dict:key' 'dict:key' (missing source)").unwrap();
                     }
                 }
                 "write" => {
