@@ -3,6 +3,7 @@ import hashlib
 import csv
 
 from progressbar.bar import ProgressBar
+from Crypto.Hash import SHA256
 
 class PrecursorUsb:
     def __init__(self, dev):
