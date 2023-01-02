@@ -160,7 +160,6 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 "copy" => {
                     if let Some(srcdescriptor) = tokens.next() {
                         if let Some(dstdescriptor) = tokens.next() {
-                            write!(ret, "Will copy from {} to {}", srcdescriptor, dstdescriptor).ok();
                             match std::fs::copy(srcdescriptor, dstdescriptor) {
                                 Ok(result) => {
                                     write!(ret, "Copy from {} to {} succeeded", srcdescriptor, dstdescriptor).ok();
@@ -170,67 +169,6 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                                 }
                             }
                         }
-                    }
-                }
-                "copy2" => {
-                    if let Some(descriptor) = tokens.next() {
-                        if let Some((dict, keyname)) = descriptor.split_once(':') {
-                            match self.pddb.get(dict, keyname, None,
-                                false, false, None, None::<fn()>) {
-                                Ok(mut key) => {
-                                    let mut readbuf = [0u8; 512]; // up to the first 512 chars of the key
-                                    match key.read(&mut readbuf) {
-                                        Ok(len) => {
-                                            match std::string::String::from_utf8(readbuf[..len].to_vec()) {
-                                                Ok(val) => {
-                                                    if let Some(descriptor) = tokens.next() {
-                                                        if let Some((dict, keyname)) = descriptor.split_once(':') {
-                                                            match self.pddb.get(dict, keyname, None,
-                                                                true, true, Some(256), None::<fn()>) {
-                                                                Ok(mut key) => {
-                                                                    if val.len() > 0 {
-                                                                        match key.write(&val.as_bytes()[..val.len()]) {
-                                                                            Ok(len) => {
-                                                                                self.pddb.sync().ok();
-                                                                                write!(ret, "Copied {} bytes to {}:{}", len, dict, keyname).ok();
-                                                                            }
-                                                                            Err(e) => {
-                                                                                write!(ret, "Error writing {}:{}: {:?}", dict, keyname, e).ok();
-                                                                            }
-                                                                        }
-                                                                    } else {
-                                                                        write!(ret, "Created an empty key {}:{}", dict, keyname).ok();
-                                                                    }
-                                                                }
-                                                                _ => write!(ret, "{}:{} not found or other error", dict, keyname).unwrap()
-                                                            }
-                                                        } else {
-                                                            write!(ret, "Query is of form 'dict:key'").unwrap();
-                                                        }
-                                                    } else {
-                                                        write!(ret, "Missing query of form 'dict:key'").unwrap();
-                                                    }
-                                                }
-                                                _ => {
-                                                    for &b in readbuf[..len].iter() {
-                                                        match write!(ret, "{:02x} ", b) {
-                                                            Ok(_) => (),
-                                                            Err(_) => break, // we can overflow our return buffer returning hex chars
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        _ => write!(ret, "Error encountered reading {}:{}", dict, keyname).unwrap()
-                                    }
-                                }
-                                _ => write!(ret, "{}:{} not found or other error", dict, keyname).unwrap()
-                            }
-                        } else {
-                            write!(ret, "Query is of form 'dict:key'").unwrap();
-                        }
-                    } else {
-                        write!(ret, "Missing query of form 'dict:key'").unwrap();
                     }
                 }
                 "write" => {
