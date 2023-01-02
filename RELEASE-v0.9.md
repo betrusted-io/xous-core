@@ -307,6 +307,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Basis priority order is displayed in the status bar (issue #269). The left-most basis is the default basis. When no secret bases are open, no notification is displayed (the `.System` basis is assumed).
 - Various bug fixes in `mtxcli`
 - Fixed issue #109, where PDDB can panic after a memory cache prune due to missing keys.
+- Reduced kernel code size by about 737kiB (10%) by restoring lto=`fat` and pushing FFT test code onto the tester. Note that any users who wish to write code that relies on built-in floating point transcendental functions will have to restore lto=`thin`, at least until https://github.com/rust-lang/rust/issues/105734 is resolved.
 
 ## Roadmap
 - Lots of testing and bug fixes
