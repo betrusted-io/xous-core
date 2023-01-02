@@ -292,6 +292,21 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Several infrastructure changes/improvements to how utralib and crating works
 - Add some UX cues on boot asking the user to wait for various operations.
 - Fix context switching in GAM. Now, when relinquishing a context, the context is switched before the response is fired back to the caller. This means that it is much less likely that the caller will start drawing prematurely and have the draw ops missed.
+- Rework main menu & preferences to use a dedicated "preferences" submenu (thanks @gsora!). This change will cause your system to prompt you to set the time again, because the location of the time zone record changes.
+- Notes in `vault` are now editable without deleting the existing text
+- `vault` password import from CSV using `vaultbackup-rs` (a host-based Rust program found in `apps/vault/tools`)
+- eFuse burning now in Beta.
+  - Burn an indelible backup key into your device without any third-party hardware
+  - Loss of the backup key will brick your device permanently. Bugs in the burning process could also brick your device.
+  - Testers need to build with `--feature efuse` in the command line. The process is not yet high confidence, so, proceed at your own risk!
+  - Please contact bunnie if you plan to try this feature. Because it is permanent, and there is limited production due to supply chain issues, only minimal testing could be performed.
+- Fixed GAM issue where canvases previously defaced would be re-defaced every time the canvas order is computed.
+- Wifi signal is now rendered as bars, instead of as a number (thanks @gsora for PR#283!).
+
+## New in 0.9.12
+- Basis priority order is displayed in the status bar (issue #269). The left-most basis is the default basis. When no secret bases are open, no notification is displayed (the `.System` basis is assumed).
+- Various bug fixes in `mtxcli`
+- Fixed issue #109, where PDDB can panic after a memory cache prune due to missing keys.
 
 ## Roadmap
 - Lots of testing and bug fixes

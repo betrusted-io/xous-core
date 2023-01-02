@@ -12,6 +12,12 @@ import urllib.request
 import re
 
 from progressbar.bar import ProgressBar
+from bip_utils import (
+   Bip39MnemonicValidator, Bip39MnemonicDecoder
+)
+from Crypto.Cipher import AES
+from Crypto.Hash import SHA256
+from Crypto.Random import get_random_bytes
 
 class PrecursorUsb:
     def __init__(self, dev):
@@ -415,6 +421,163 @@ class PrecursorUsb:
 
         self.ping_wdt()
 
+def bitflip(data_block, bitwidth=32):
+    if bitwidth == 0:
+        return data_block
+    bytewidth = bitwidth // 8
+    bitswapped = bytearray()
+    i = 0
+    while i < len(data_block):
+        data = int.from_bytes(data_block[i:i+bytewidth], byteorder='big', signed=False)
+        b = '{:0{width}b}'.format(data, width=bitwidth)
+        bitswapped.extend(int(b[::-1], 2).to_bytes(bytewidth, byteorder='big'))
+        i = i + bytewidth
+    return bytes(bitswapped)
+
+# assumes a, b are the same length eh?
+def xor_bytes(a, b):
+    i = 0
+    y = bytearray()
+    while i < len(a):
+        y.extend((a[i] ^ b[i]).to_bytes(1, byteorder='little'))
+        i = i + 1
+
+    return bytes(y)
+
+def try_key_to_bytes(input):
+    if len(input.split(' ')) == 24: # 24 words is BIP-39
+        # Get if a mnemonic is valid with automatic language detection, return bool
+        assert(Bip39MnemonicValidator().IsValid(input))
+        # Like before with automatic language detection
+        key_bytes = Bip39MnemonicDecoder().Decode(input)
+    else:
+        key_bytes = int(input, 16).to_bytes(32, byteorder='big')
+    return key_bytes
+
+# binfile should be the input SoC file, already read in as bytes()
+# returns the encrypted version of binfile
+def encrypt_to_efuse(binfile, key):
+    print("Encrypting gateware to target-specific key...")
+    # extract the keys
+    key_bytes = bytes([0] * 32)
+    new_key = try_key_to_bytes(key)
+    new_hmac = get_random_bytes(32)
+    new_iv = get_random_bytes(16)
+
+    # search for structure
+    # 0x3001_6004 -> specifies the CBC key
+    # 4 words of CBC IV
+    # 0x3003_4001 -> ciphertext len
+    # 1 word of ciphertext len
+    # then ciphertext
+
+    position = 0
+    iv_pos = 0
+    while position < len(binfile):
+        cwd = int.from_bytes(binfile[position:position+4], 'big')
+        if cwd == 0x3001_6004:
+            iv_pos = position+4
+        if cwd == 0x3003_4001:
+            break
+        position = position + 1
+
+    position = position + 4
+
+    ciphertext_len = 4* int.from_bytes(binfile[position:position+4], 'big')
+    position = position + 4
+
+    active_area = binfile[position : position+ciphertext_len]
+    postamble = binfile[position+ciphertext_len:]
+
+    iv_bytes = bitflip(binfile[iv_pos : iv_pos+0x10])  # note that the IV is embedded in the file
+
+    cipher = AES.new(key_bytes, AES.MODE_CBC, iv_bytes)
+    plain_bitstream = cipher.decrypt(bitflip(active_area))
+
+    # now construct the output file and its hashes
+    plaintext = bytearray()
+    f = bytearray()
+
+    # fixed header that sets 66MHz config speed, x1, 1.8V, eFuse target
+    device_header = [
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xaa, 0x99, 0x55, 0x66, 0x20, 0x00, 0x00, 0x00, 0x30, 0x03, 0xe0, 0x01, 0x00, 0x00, 0x00, 0x0b,
+        0x30, 0x00, 0x80, 0x01, 0x00, 0x00, 0x00, 0x12, 0x20, 0x00, 0x00, 0x00, 0x30, 0x00, 0xc0, 0x01,
+        0x80, 0x00, 0x00, 0x40, 0x30, 0x00, 0xa0, 0x01, 0x80, 0x00, 0x00, 0x40, 0x30, 0x01, 0xc0, 0x01,
+        0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00,
+        0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00,
+        0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00,
+        0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x30, 0x01, 0x60, 0x04,
+    ]
+
+    for item in device_header:  # add the cleartext header
+        f.extend(bytes([item]))
+
+    f.extend(bitflip(new_iv)) # insert the IV
+
+    ciphertext_header = [
+        0x30, 0x03, 0x40, 0x01, 0x00, 0x08, 0x5b, 0x98,
+    ]
+    for item in ciphertext_header:  # add the cleartext length-of-ciphertext field before the ciphertext
+        f.extend(bytes([item]))
+
+    # generate the header and footer hash keys.
+    header = int(0x6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C6C).to_bytes(32, byteorder='big')
+    keyed_header = xor_bytes(header, new_hmac)
+    footer = int(0x3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A3A).to_bytes(32, byteorder='big')
+    keyed_footer = xor_bytes(footer, new_hmac)
+
+    # add the header
+    plaintext.extend(keyed_header)
+    plaintext.extend(header)
+
+    # insert the bitstream plaintext, skipping the header and the trailing HMAC.
+    plaintext.extend(plain_bitstream[64:-160])
+
+    # compute first HMAC of stream with new HMAC key
+    h1 = SHA256.new()
+    k = 0
+    while k < len(plaintext) - 320:  # HMAC does /not/ cover the whole file, it stops 320 bytes short of the end
+        h1.update(bitflip(plaintext[k:k+16], 32))
+        k = k + 16
+    h1_digest = h1.digest()
+
+    # add the footer
+    plaintext.extend(keyed_footer)
+    plaintext.extend(footer)
+    plaintext.extend(bytes(32)) # empty spot where hash #1 would be stored
+    hash_pad = [ # sha-256 padding for the zero'd hash #1, which is in the bitstream and seems necessary for verification
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00,
+    ]
+    plaintext.extend(hash_pad)
+
+    # compute the hash of the hash, presumably to prevent length extension attacks?
+    h2 = SHA256.new()
+    h2.update(bitflip(keyed_footer))
+    h2.update(bitflip(footer))
+    h2.update(h1_digest)
+    h2_digest = h2.digest()
+
+    # commit the final HMAC to the bitstream plaintext
+    plaintext.extend(bitflip(h2_digest))
+
+    # encrypt the bitstream
+    newcipher = AES.new(new_key, AES.MODE_CBC, new_iv)
+
+    # finally generate the ciphertext block, which encapsulates the HMACs
+    ciphertext = newcipher.encrypt(bytes(plaintext))
+
+    # add ciphertext to the bitstream
+    f.extend(bitflip(ciphertext))
+
+    # add the cleartext postamble to the bitstream. These are a series of NOP commands + all of the csr.csv data & signatures
+    f.extend(postamble)
+    print("Encryption success! {} bytes generated.".format(len(f)))
+    assert len(f) == 2621440, "Encryption length is incorrect; aborting!"
+
+    return f
+
 def auto_int(x):
     return int(x, 0)
 
@@ -488,6 +651,9 @@ def main():
     )
     parser.add_argument(
         "--dump-file", required=False, help="Name out output file for dump. Required if --dump is specified.", type=str,
+    )
+    parser.add_argument(
+        "--key", help="Backup key in hex or BIP-39 format. Used to factory-reset efused devices. Specify BIP-39 phrase within double-quotes.", type=str
     )
     args = parser.parse_args()
 
@@ -572,7 +738,7 @@ def main():
            "LOC_PDDB"   : [0x01D80000, "pass"],
         }
     else:
-        print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.9 firmware offsets".format(pc_usb.load_csrs()))
+        print("SoC is from an unknown rev '{}', use --force to continue anyways with v0.9 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
 
     vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
@@ -615,29 +781,35 @@ def main():
         if args.soc == None:
             print("Must provide both a soc and loader image")
         print("Enabling boot with {} and {}".format(args.loader, args.soc))
-        print("Programming loader image {}".format(args.loader))
-        with open(args.loader, "rb") as f:
-            image = f.read()
-            pc_usb.flash_program(locs['LOC_LOADER'][0], image, verify=verify)
-        print("Programming SoC gateware".format(args.soc))
-        with open(args.soc, "rb") as f:
-            image = f.read()
-            if verify == True:
-                print("Note: SoC verification is not possible as readback is locked for security purposes")
-            pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=False)
+        print("WARNING: if a backup key is set, the correct key MUST be specified with `--key`, or else the device will be bricked.")
+        print("Continue? (y/n)")
+        confirm = input()
+        if len(confirm) > 0 and confirm.lower()[:1] == 'y':
+            print("Programming loader image {}".format(args.loader))
+            with open(args.loader, "rb") as f:
+                image = f.read()
+                pc_usb.flash_program(locs['LOC_LOADER'][0], image, verify=verify)
+            print("Programming SoC gateware".format(args.soc))
+            with open(args.soc, "rb") as f:
+                image = f.read()
+                if args.key is not None:
+                    image = encrypt_to_efuse(image, args.key)
+                if verify == True:
+                    print("Note: SoC verification is not possible as readback is locked for security purposes")
+                pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=False)
 
-        print("Erasing PDDB root structures")
-        pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
+            print("Erasing PDDB root structures")
+            pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
 
-        print("Resuming CPU.")
-        pc_usb.poke(vexdbg_addr, 0x02000000)
+            print("Resuming CPU.")
+            pc_usb.poke(vexdbg_addr, 0x02000000)
 
-        print("Resetting SOC...")
-        try:
-            pc_usb.poke(pc_usb.register('reboot_soc_reset'), 0xac, display=False)
-        except usb.core.USBError:
-            pass # we expect an error because we reset the SOC and that includes the USB core
-        exit(0)
+            print("Resetting SOC...")
+            try:
+                pc_usb.poke(pc_usb.register('reboot_soc_reset'), 0xac, display=False)
+            except usb.core.USBError:
+                pass # we expect an error because we reset the SOC and that includes the USB core
+            exit(0)
 
     if args.enable_boot_update:
         if args.loader == None:
@@ -708,6 +880,7 @@ def main():
 
     if args.soc != None:
         if args.force == True:
+            print("`--force` specified; all checks disabled, you may brick your device!")
             print("Programming SoC gateware {}".format(args.soc))
             with open(args.soc, "rb") as f:
                 image = f.read()
@@ -717,12 +890,16 @@ def main():
                 print("Erasing PDDB root structures")
                 pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
         else:
-            print("This will overwrite any secret keys in your device and erase PDDB keys. Continue? (y/n)")
+            print("This will overwrite any secret keys in your device and erase PDDB keys.")
+            print("WARNING: if a backup key is set, the correct key MUST be specified with `--key`, or else the device will be bricked.")
+            print("Continue? (y/n)")
             confirm = input()
             if len(confirm) > 0 and confirm.lower()[:1] == 'y':
                 print("Programming SoC gateware {}".format(args.soc))
                 with open(args.soc, "rb") as f:
                     image = f.read()
+                    if args.key is not None:
+                        image = encrypt_to_efuse(image, args.key)
                     if verify == True:
                         print("Note: SoC verification is not possible as readback is locked for security purposes")
                     pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=False)
@@ -740,17 +917,23 @@ def main():
                 pc_usb.flash_program(locs['LOC_AUDIO'][0], image, verify=verify)
 
     if args.factory_new:
-        base_url = "https://ci.betrusted.io/releases/v0.9.5/"
-        # erase the entire flash
-        pc_usb.erase_region(0, 0x800_0000)
-        # burn the gateware
-        for sections in locs.values():
-            if sections[1] != 'pass':
-                print('retrieving {}'.format(base_url + sections[1]))
-                with urllib.request.urlopen(base_url + sections[1]) as f:
-                    print('burning at {:x}'.format(sections[0]))
-                    image = f.read()
-                    pc_usb.flash_program(sections[0], image, verify=False)
+        print("WARNING: if a backup key is set, the correct key MUST be specified with `--key`, or else the device will be bricked.")
+        print("Continue? (y/n)")
+        confirm = input()
+        if len(confirm) > 0 and confirm.lower()[:1] == 'y':
+            base_url = "https://ci.betrusted.io/releases/v0.9.5/"
+            # erase the entire flash
+            pc_usb.erase_region(0, 0x800_0000)
+            # burn the gateware
+            for sections in locs.values():
+                if sections[1] != 'pass':
+                    print('retrieving {}'.format(base_url + sections[1]))
+                    with urllib.request.urlopen(base_url + sections[1]) as f:
+                        print('burning at {:x}'.format(sections[0]))
+                        image = f.read()
+                        if sections[1] == "soc_csr.bin" and args.key is not None:
+                            image = encrypt_to_efuse(image, args.key)
+                        pc_usb.flash_program(sections[0], image, verify=False)
 
 
     print("Resuming CPU.")

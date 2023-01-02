@@ -928,6 +928,11 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     }
                 }
                 #[cfg(not(target_os = "xous"))]
+                "prune" => {
+                    self.pddb.dbg_prune().ok();
+                    write!(ret, "Prune finished").ok();
+                }
+                #[cfg(not(target_os = "xous"))]
                 "rkyvtest" => {
                     use rkyv::{
                         archived_value,

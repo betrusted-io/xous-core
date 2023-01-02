@@ -66,7 +66,12 @@ pub(crate) enum StatusOpcode {
 
     /// Prepare for a backup
     PrepareBackup,
+    PrepareBackupConfirmed,
     PrepareBackupPhase2,
+
+    /// Burn a backup key
+    #[cfg(feature="efuse")]
+    BurnBackupKey,
 
     /// Tells keyboard watching thread that a new keypress happened.
     Keypress,
@@ -155,7 +160,7 @@ fn wrapped_main() -> ! {
         .register_name(SERVER_NAME_STATUS_GID, Some(1))
         .expect("can't register server");
     let mut canvas_gid: [u32; 4] = [0; 4];
-    // wait unil we're assigned a GID -- this is a one-time message from the GAM
+    // wait until we're assigned a GID -- this is a one-time message from the GAM
     let msg = xous::receive_message(status_gam_getter).unwrap();
     log::trace!("GID assignment message: {:?}", msg);
     xous::msg_scalar_unpack!(msg, g0, g1, g2, g3, {
@@ -215,6 +220,7 @@ fn wrapped_main() -> ! {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let mut netmgr = net::NetManager::new();
+    #[cfg(not(feature="no-codec"))]
     let mut codec = codec::Codec::new(&xns).unwrap();
 
     // screensize is controlled by the GAM, it's set in main.rs near the top
@@ -257,17 +263,6 @@ fn wrapped_main() -> ! {
         .expect("|status: can't draw battery stats");
     log::debug!("|status: screensize as reported: {:?}", screensize);
     log::debug!("|status: uptime initialized to '{:?}'", uptime_tv);
-
-    // build battstats text view: right half of status bar
-    let mut battstats_tv = TextView::new(
-        status_gid,
-        TextBounds::GrowableFromTr(stats_rect.tr(), stats_rect.width() as _),
-    );
-    battstats_tv.style = GlyphStyle::Regular;
-    battstats_tv.draw_border = false;
-    battstats_tv.margin = Point::new(0, 0);
-    gam.post_textview(&mut battstats_tv)
-        .expect("|status: can't draw battery stats");
 
     // initialize to some "sane" mid-point defaults, so we don't trigger errors later on before the first real battstat reading comes
     let mut stats = BattStats {
@@ -360,79 +355,6 @@ fn wrapped_main() -> ! {
     // load system preferences
     let prefs = Arc::new(Mutex::new(userprefs::Manager::new()));
     let prefs_thread_clone = prefs.clone();
-
-    /*
-    This thread handles preference loading.
-    It'll wait until PDDB is ready to load stuff off the preference
-    dictionary.
-    */
-
-    std::thread::spawn(move || {
-        let pddb = pddb::Pddb::new();
-        let prefs = prefs_thread_clone.lock().unwrap();
-        let netmgr = net::NetManager::new();
-
-        pddb.is_mounted_blocking();
-
-        let all_prefs = match prefs.all() {
-            Ok(p) => p,
-            Err(error) => {
-                log::error!("cannot read preference store: {:?}", error);
-                return;
-            }
-        };
-
-        log::debug!("pddb ready, loading preferences now!");
-
-        match all_prefs.wifi_kill {
-            true => netmgr.connection_manager_wifi_off_and_stop(),
-            false => netmgr.connection_manager_wifi_on(),
-        }.unwrap_or_else(|error| {
-            log::error!("cannot set radio status: {:?}", error)
-        });
-
-        match prefs.connect_known_networks_on_boot_or_value(true).unwrap() {
-            true => netmgr.connection_manager_run(),
-            false => netmgr.connection_manager_stop(),
-        }.unwrap_or_else(|error| {
-            log::error!("cannot start connection manager: {:?}", error)
-        });
-        match prefs.autobacklight_on_boot_or_value(true).unwrap() {
-            true => send_message(status_cid, Message::new_scalar(
-                StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
-            false => send_message(status_cid, Message::new_scalar(
-                StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
-        }.unwrap_or_else(|error| {
-            log::error!("cannot set autobacklight status: {:?}", error);
-            xous::Result::Ok
-        });
-
-        // keyboard mapping is restored directly by the keyboard hardware
-
-        log::info!("audio enabled: {}", all_prefs.audio_enabled);
-        match all_prefs.audio_enabled {
-            true => {
-                match codec.setup_8k_stream() {
-                    Ok(()) => {
-                        send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-                        Ok(())
-                    },
-                    Err(e) => Err(e),
-                }
-            }
-            false => Ok(())
-        }.unwrap_or_else(|error| {
-            log::error!("cannot set audio enabled: {:?}", error);
-        });
-
-        codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
-            log::error!("cannot set headphone volume: {:?}", error);
-        });
-
-        codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
-            log::error!("cannot set speaker volume: {:?}", error);
-        });
-    });
 
     // ------------------------ check firmware status and apply updates
     // all security sensitive servers must be occupied at this point in time.
@@ -685,7 +607,7 @@ fn wrapped_main() -> ! {
             llio.vibe(llio::VibePattern::Double).unwrap();
         }
     });
-    log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
+    log::info!("|status: starting main loop"); // do not remove, this is used by the CI test infrastructure
 
     // add a security note if we're booting with a "zero key"
     match keys.lock().unwrap().is_zero_key().expect("couldn't query zero key status") {
@@ -743,6 +665,140 @@ fn wrapped_main() -> ! {
         }
     });
 
+    /*
+    This thread handles preference loading.
+    It'll wait until PDDB is ready to load stuff off the preference
+    dictionary.
+    */
+    std::thread::spawn(move || {
+        let pddb = pddb::Pddb::new();
+        let prefs = prefs_thread_clone.lock().unwrap();
+        let netmgr = net::NetManager::new();
+
+        pddb.is_mounted_blocking();
+
+        let all_prefs = match prefs.all() {
+            Ok(p) => p,
+            Err(error) => {
+                log::error!("cannot read preference store: {:?}", error);
+                return;
+            }
+        };
+
+        log::debug!("pddb ready, loading preferences now!");
+
+        match all_prefs.wifi_kill {
+            true => netmgr.connection_manager_wifi_off_and_stop(),
+            false => netmgr.connection_manager_wifi_on(),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot set radio status: {:?}", error)
+        });
+
+        match prefs.connect_known_networks_on_boot_or_value(true).unwrap() {
+            true => netmgr.connection_manager_run(),
+            false => netmgr.connection_manager_stop(),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot start connection manager: {:?}", error)
+        });
+        match prefs.autobacklight_on_boot_or_value(true).unwrap() {
+            true => send_message(status_cid, Message::new_scalar(
+                StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
+            false => send_message(status_cid, Message::new_scalar(
+                StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot set autobacklight status: {:?}", error);
+            xous::Result::Ok
+        });
+
+        // keyboard mapping is restored directly by the keyboard hardware
+        #[cfg(not(feature="no-codec"))]
+        {
+            log::info!("audio enable state: {}", all_prefs.audio_enabled);
+            #[cfg(feature = "tts")] // if TTS is on, never disable audio system, and don't allow 0-volume for audio
+            {
+                codec.setup_8k_stream().ok();
+                send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                let hp_percentage = if all_prefs.headset_volume == 0 {
+                    log::warn!("Attempted to set headphone volume to 0, disallowing in TTS mode");
+                    100
+                } else {
+                    all_prefs.headset_volume
+                };
+                let spk_percentage = if all_prefs.earpiece_volume == 0 {
+                    log::warn!("Attempted to set speaker volume to 0, disallowing in TTS mode");
+                    100
+                } else {
+                    all_prefs.earpiece_volume
+                };
+                codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(hp_percentage) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set headphone volume: {:?}", error);
+                });
+
+                codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(spk_percentage) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set speaker volume: {:?}", error);
+                });
+            }
+            #[cfg(not(feature = "tts"))]
+            {
+                match all_prefs.audio_enabled {
+                    true => {
+                        match codec.setup_8k_stream() {
+                            Ok(()) => {
+                                send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                                Ok(())
+                            },
+                            Err(e) => Err(e),
+                        }
+                    }
+                    false => Ok(())
+                }.unwrap_or_else(|error| {
+                    log::error!("cannot set audio enabled: {:?}", error);
+                });
+
+                codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set headphone volume: {:?}", error);
+                });
+
+                codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set speaker volume: {:?}", error);
+                });
+            }
+        }
+    });
+
+    // this thread handles updating the PDDB basis list
+    thread::spawn({
+        let sec_notes = sec_notes.clone();
+        move || {
+            let pddb = pddb::Pddb::new();
+            loop {
+                // this blocks until there is a change in the basis list
+                let mut basis_list_vec = pddb.monitor_basis();
+
+                // the key may or may not be there, but remove it in case it is
+                sec_notes.lock().unwrap().remove(&"secnote.basis".to_string());
+
+                // only if there are more bases open than just the .System basis, insert a new key
+                if basis_list_vec.len() > 1 {
+                    let mut new_list_str = t!("secnote.basis", xous::LANG).to_string();
+                    // initially, just concatenate all the basis names...
+                    basis_list_vec.reverse(); // reverse the order so the highest priority basis is on the left.
+                    for basis in basis_list_vec {
+                        new_list_str.push_str(&basis);
+                        if basis != pddb::PDDB_DEFAULT_SYSTEM_BASIS {
+                            new_list_str.push_str(" > ");
+                        }
+                    }
+
+                    sec_notes.lock().unwrap().insert("secnote.basis".to_string(), new_list_str);
+                }
+            }
+        }
+    });
+
+    // storage for wifi bars
+    let mut wifi_bars: [PixelColor; 5] = [PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light];
+
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
@@ -790,9 +846,25 @@ fn wrapped_main() -> ! {
             }
             Some(StatusOpcode::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
                 stats = [lo, hi].into();
-                battstats_tv.clear_str();
                 // have to clear the entire rectangle area, because the SSID has a variable width and can be much wider or shorter than battstats
                 gam.draw_rectangle(status_gid, stats_rect).ok();
+
+                let battstats = if !battstats_phase && wifi_status.ssid.is_some() {
+                    // move the SSID name 30 pixels to the left only if there's a link
+                    Point{x: stats_rect.tr().x-30, y: stats_rect.tr().y}
+                } else {
+                    Point{x: stats_rect.tr().x, y: stats_rect.tr().y}
+                };
+                // build battstats text view: right half of status bar
+                let mut battstats_tv = TextView::new(
+                    status_gid,
+                    TextBounds::GrowableFromTr(battstats, stats_rect.width() as _),
+                );
+                battstats_tv.style = GlyphStyle::Regular;
+                battstats_tv.draw_border = false;
+                battstats_tv.margin = Point::new(0, 0);
+                gam.post_textview(&mut battstats_tv)
+                    .expect("|status: can't draw battery stats");
 
                 // 0xdddd and 0xffff are what are returned when the EC is too busy to respond/hung, or in reset, respectively
                 if stats.current == -8739 /* 0xdddd */
@@ -818,11 +890,13 @@ fn wrapped_main() -> ! {
                         stats.soc).unwrap();
                     } else {
                         if let Some(ssid) = wifi_status.ssid {
+                            log::debug!("RSSI: -{}dBm", ssid.rssi);
+                            compute_bars(&mut wifi_bars, ssid.rssi);
+                            bars(&gam, status_gid, &wifi_bars, Point {x: 310, y: 13}, (3 ,2), 3, 2);
                             write!(
                                 &mut battstats_tv,
-                                "{} -{}dBm",
-                                ssid.name.as_str().unwrap_or("UTF-8 Erorr"),
-                                ssid.rssi,
+                                "{}",
+                                ssid.name.as_str().unwrap_or("UTF-8 Error"),
                             ).unwrap();
                         } else {
                             if wifi_status.link_state == com_rs_ref::LinkState::ResetHold {
@@ -1082,6 +1156,12 @@ fn wrapped_main() -> ! {
                 }
             },
             Some(StatusOpcode::BatteryDisconnect) => { // this is described as "Shutdown" on the menu
+                // NOTE: this implementation takes a "shortcut" and blocks, which causes the
+                // status thread to block while the dialog boxes are up. This can eventually lead
+                // to deadlock in the system, but we assume that the user will acknowledge these
+                // dialog boxes fairly quickly. If this turns out not to be the case, we can
+                // turn the interactive dialog box into a thread that fires a message to move
+                // to the next stage (see `PrepareBackup` implementation for a template).
                 if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
@@ -1166,22 +1246,77 @@ fn wrapped_main() -> ! {
                 *run_lock = false;
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
-            Some(StatusOpcode::PrepareBackup) => {
-                log::info!("{}BACKUP.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
-                modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
-                match modals.get_radiobutton(t!("backup.confirm", xous::LANG)) {
-                    Ok(response) => {
-                        if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
-                            {}
-                        } else {
-                            // abort the flow now by returning to the main dispatch handler
-                            continue;
+            #[cfg(feature="efuse")]
+            Some(StatusOpcode::BurnBackupKey) => {
+                log::info!("{}BURNKEY.TYPE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                thread::spawn({
+                    let keys = keys.clone();
+                    move || {
+                        let xns = xous_names::XousNames::new().unwrap();
+                        let modals = modals::Modals::new(&xns).unwrap();
+                        modals.add_list_item(t!("burnkey.bbram", xous::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("burnkey.efuse", xous::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("wlan.cancel", xous::LANG)).expect("couldn't build radio item list");
+                        match modals.get_radiobutton(t!("burnkey.type", xous::LANG)) {
+                            Ok(response) => {
+                                if response.as_str() == t!("burnkey.bbram", xous::LANG) {
+                                    // do BBRAM flow
+                                    log::info!("{}BBRAM.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    // punts to a script-driven flow on the pi
+                                    modals.show_notification(
+                                        t!("burnkey.bbram_exec", xous::LANG),
+                                        Some("https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM)"),
+                                    ).ok();
+                                } else if response.as_str() == t!("burnkey.efuse", xous::LANG) {
+                                    log::info!("{}EFUSE.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    // do eFuse flow
+                                    modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                                    modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                                    match modals.get_radiobutton(t!("burnkey.efuse_confirm", xous::LANG)) {
+                                        Ok(response) => {
+                                            if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                                // do the efuse burn
+                                                keys.lock().unwrap().do_efuse_burn();
+                                            } else {
+                                                // abort the flow by doing nothing
+                                            }
+                                        }
+                                        _ => (),
+                                    }
+                                } else {
+                                    // abort flow by doing nothing
+                                }
+                            }
+                            _ => (),
                         }
                     }
-                    _ => (),
-                }
-
+                });
+            }
+            Some(StatusOpcode::PrepareBackup) => {
+                // don't block while prompting for backup confirmation
+                thread::spawn({
+                    move || {
+                        let xns = xous_names::XousNames::new().unwrap();
+                        let modals = modals::Modals::new(&xns).unwrap();
+                        modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                        log::info!("{}BACKUP.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        match modals.get_radiobutton(t!("backup.confirm", xous::LANG)) {
+                            Ok(response) => {
+                                if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                    send_message(cb_cid,
+                                        Message::new_scalar(StatusOpcode::PrepareBackupConfirmed.to_usize().unwrap(), 0, 0, 0, 0)
+                                    ).expect("couldn't initiate backup");
+                                } else {
+                                    // abort by just falling through
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+                });
+            },
+            Some(StatusOpcode::PrepareBackupConfirmed) => {
                 // disconnect from the network, so that incoming network packets don't trigger any processes that
                 // could write to the PDDB.
                 netmgr.connection_manager_wifi_off_and_stop().ok();
@@ -1202,7 +1337,6 @@ fn wrapped_main() -> ! {
                         // sync the PDDB to disk prior to making backups
                         let pddb = pddb::Pddb::new();
                         if !pddb.try_unmount() {
-                            // this is a rare case path...not worth turning the modals object into a mutex-wrapped thing just for this
                             let xns = xous_names::XousNames::new().unwrap();
                             let modals = modals::Modals::new(&xns).unwrap();
                             modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
@@ -1302,4 +1436,107 @@ fn turn_lights_on(rx: Box<Receiver<BacklightThreadOps>>, cid: xous::CID, timeout
             }
         };
     }
+}
+
+/// Returns true if the color changed
+fn color_at_thresh(bar: &mut PixelColor, rssi: i32, threshold: i32) -> bool {
+    if rssi < threshold {
+        if *bar != PixelColor::Light {
+            *bar = PixelColor::Light;
+            true
+        } else {
+            false
+        }
+    } else {
+        if *bar != PixelColor::Dark {
+            *bar = PixelColor::Dark;
+            true
+        } else {
+            false
+        }
+    }
+}
+/// Acconding to the WF200 datasheet, -91.6dBm is the cutoff for 6Mbps 802.11g reception @ 10% PER, and
+/// -74.8dBm is the cutoff for 54Mbps @ 10% PER. The saturation point is -9 dBm, at which point the LNAs
+/// fail due to too much signal.
+///
+/// Thus the scale should go from -91.6dBm to -9dBm, with -74.8dBm being "four bars". Above -74.8dBm
+/// any extra signal does not improve your data rate, but we use the "fifth bar" to indicate
+/// that you have extra margin on your singal.
+///
+/// -92dBm  - 0 bars - 6Mbps @ 10% packet error rate
+/// -87dBm  - 1 bar - 6Mbps sustainable
+/// -82dBm  - 2 bars
+/// -77dBm  - 3 bars
+/// -72dBm  - 4 bars - 54Mbps with 10% packet error rate
+/// -60dBm+ - 5 bars - 54Mbps sustainable
+///
+/// Returns `true` if the bar list has changed; `false` if there is no change.
+fn compute_bars(wifi_bars: &mut [PixelColor; 5], rssi: u8) -> bool {
+    log::debug!("Rssi: -{}dBm, Bars before: {:?}", rssi, wifi_bars);
+    let rssi_int: i32 = -(rssi as i32);
+    let mut changed = false;
+    for (index, bar) in wifi_bars.iter_mut().enumerate() {
+        match index {
+            // anything less than -87dBm shows up as 0 bars
+            0 => changed |= color_at_thresh(bar, rssi_int, -87),
+            1 => changed |= color_at_thresh(bar, rssi_int, -82),
+            2 => changed |= color_at_thresh(bar, rssi_int, -77),
+            3 => changed |= color_at_thresh(bar, rssi_int, -72),
+            4 => changed |= color_at_thresh(bar, rssi_int, -60),
+            _ => panic!("Should be unreachable; wifi_bars list is too long!"),
+        }
+    }
+    log::debug!("New bars: {:?} ({:?})", wifi_bars, changed);
+    changed
+}
+/// bars draws signal bars spaced by `bars_spacing` amount, drawing a
+/// the smallest signal square starting from `top_left` growing by `growth` amount of pixels.
+/// The smallest bar will be exactly `(x, y)` in size.
+fn bars(g: &gam::Gam,
+    canvas: graphics_server::Gid,
+    levels: &[PixelColor; 5],
+    top_left: Point,
+    (x, y): (i16,i16),
+    growth: i16,
+    bars_spacing: i16
+) {
+    let mut dl = gam::GamObjectList::new(canvas);
+
+    let bottom_right = Point{x: top_left.x + x, y: top_left.y + y};
+
+    for (index, bar) in levels.iter().enumerate() {
+        let color = DrawStyle::new(*bar, PixelColor::Dark, 1);
+
+        let r = match index {
+            0 => {
+                gam::Rectangle::new_coords_with_style(
+                    top_left.x,
+                    top_left.y,
+                    bottom_right.x as i16,
+                    bottom_right.y,
+                    color,
+                )
+            },
+            _ => {
+                let last = match dl.last().unwrap() {
+                    gam::GamObjectType::Rect(r) => r,
+                    _ => panic!("expected only rects, found other stuff"),
+                };
+
+                gam::Rectangle::new_coords_with_style(
+                    last.x1() as i16+bars_spacing,
+                    last.y0() as i16-growth,
+                    last.x1() as i16+growth+bars_spacing,
+                    bottom_right.y,
+                    color,
+                )
+            }
+        };
+
+        dl.push(gam::GamObjectType::Rect(r)).unwrap();
+    }
+
+    g.draw_list(dl).unwrap();
+
 }

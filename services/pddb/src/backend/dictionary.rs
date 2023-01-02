@@ -368,6 +368,37 @@ impl DictCacheEntry {
             panic!("consistency error");
         }
     }
+    /// To be called only to re-fill key entries whose data have been evicted by a prune.
+    pub (crate) fn refill_small_key(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
+        data_cache: &mut PlaintextCache, key_name: &str) {
+        if let Some(kcache) = self.keys.get_mut(key_name) {
+            if let Some(pool_index) = small_storage_index_from_key(&kcache, self.index) {
+                let ksp = &mut self.small_pool[pool_index];
+                assert!(ksp.contents.contains(&key_name.to_string()), "refill called on a non-existent key. This is an illegal state.");
+                // now grab the *data* referred to by this key. Maybe this is a "bad" idea -- this can really eat up RAM fast to hold
+                // all the small pool data right away, but let's give it a try and see how it works. Later on we can always skip this.
+                // manage a separate small cache for data blocks, under the theory that small keys tend to be packed together
+                let data_vaddr = small_storage_base_vaddr_from_indices(self.index, pool_index);
+                data_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(data_vaddr).unwrap());
+                if let Some(page) = data_cache.data.as_ref() {
+                    let start_offset = size_of::<JournalType>() + (kcache.start % VPAGE_SIZE as u64) as usize;
+                    let mut data = page[start_offset..start_offset + kcache.len as usize].to_vec();
+                    data.reserve_exact((kcache.reserved - kcache.len) as usize);
+                    kcache.data = Some(KeyCacheData::Small(
+                        KeySmallData {
+                            clean: true,
+                            data
+                        }
+                    ));
+                } else {
+                    log::error!("Key {}'s data region at pp: {:x?} va: {:x} is unreadable", key_name, data_cache.tag, kcache.start);
+                }
+            }
+        } else {
+            log::error!("refill_small_key() can only be called after the key cache entry has been allocated");
+            panic!("consistency error");
+        }
+    }
     /// Update a key entry. If the key does not already exist, it will create a new one.
     ///
     /// Assume: the caller has called ensure_fast_space_alloc() to make sure there is sufficient space for the inserted key before calling.
@@ -835,6 +866,7 @@ impl DictCacheEntry {
     /// Observation: given the dictionary index and the small key pool index, we know exactly
     /// the virtual address of the data pool.
     pub(crate) fn sync_small_pool(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) -> bool {
+        let mut data_cache = PlaintextCache { data: None, tag: None };
         for (index, entry) in self.small_pool.iter_mut().enumerate() {
             if !entry.clean {
                 let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(self.index, index)).unwrap();
@@ -845,7 +877,7 @@ impl DictCacheEntry {
                     let mut ap = hw.try_fast_space_alloc().expect("No free space to allocate small key storage");
                     ap.set_valid(true);
                     ap
-                });
+                }).clone();
                 assert!(pp.valid(), "v2p returned an invalid page");
 
                 // WARNING - we don't read back the journal number before loading data into the page!
@@ -876,14 +908,33 @@ impl DictCacheEntry {
                         kcache.clean = false;
                         kcache.flags.set_unresolved(false);
                         kcache.flags.set_valid(true);
-                        if let Some(KeyCacheData::Small(data)) = kcache.data.as_mut() {
-                            data.clean = true;
-                            for (&src, dst) in data.data.iter()
-                            .zip(page[size_of::<JournalType>() + pool_offset..size_of::<JournalType>() + pool_offset + kcache.reserved as usize].iter_mut())
-                            {*dst = src;}
-                        } else {
-                            // we have a rule that all small keys, when cached, also carry their data: there should not be an index without data.
-                            panic!("Incorrect data cache type for small key entry.");
+                        match kcache.data.as_mut() {
+                            Some(KeyCacheData::Small(data)) => {
+                                data.clean = true;
+                                page[size_of::<JournalType>() + pool_offset ..
+                                    size_of::<JournalType>() + pool_offset + kcache.len as usize]
+                                    .copy_from_slice(&data.data[..kcache.len as usize]);
+                            }
+                            None => {
+                                // the entry was pruned and must be loaded
+                                // fill() will only do the expensive decryption operation once per page, and refer to the cached value on other calls
+                                log::debug!("Small key sync filling {}", key_name);
+                                data_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(pool_vaddr.get()).unwrap());
+                                if let Some(old_page) = data_cache.data.as_ref() {
+                                    let start_offset = size_of::<JournalType>() + (kcache.start % VPAGE_SIZE as u64) as usize;
+                                    // the delta of len-reserved bytes is assumed zeroed by the original space allocator; we just copy that
+                                    // here. However, if this assumption is broken, we could have leakage between keys in the reserved area!!!
+                                    page[size_of::<JournalType>() + pool_offset ..
+                                        size_of::<JournalType>() + pool_offset + kcache.len as usize]
+                                        .copy_from_slice(&old_page[start_offset..start_offset + kcache.len as usize]);
+                                } else {
+                                    log::error!("Key {}'s data region at pp: {:x?} va: {:x} is unreadable", key_name, data_cache.tag, kcache.start);
+                                }
+                            }
+                            _ => {
+                                // the type returned was large, which is patently incorrect
+                                panic!("Incorrect data cache type for small key entry.");
+                            }
                         }
                         pool_offset += kcache.reserved as usize;
                     }
@@ -891,6 +942,8 @@ impl DictCacheEntry {
                 // now commit the sector to disk
                 hw.data_encrypt_and_patch_page(cipher, &self.aad, &mut page, &pp);
                 entry.clean = true;
+            } else {
+                log::debug!("Key pool entry was clean, no need to sync: {:?}", entry.contents);
             }
         }
         // we now have a bunch of dirty kcache entries. You should call `dict_sync` shortly after this to synchronize those entries to disk.

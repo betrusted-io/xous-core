@@ -757,7 +757,7 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
         });
 
         // If the client is passing us memory, remap the array to our own space.
-        if let Result::Message(msg) = &mut response {
+        if let Result::MessageEnvelope(msg) = &mut response {
             match &mut msg.body {
                 crate::Message::Move(ref mut memory_message)
                 | crate::Message::Borrow(ref mut memory_message)

@@ -277,6 +277,14 @@ impl RootKeys {
             Err(xous::Error::InternalError)
         }
     }
+    #[cfg(feature="efuse")]
+    pub fn do_efuse_burn(&self) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::BurnEfuse.to_usize().unwrap(),
+                0, 0, 0, 0
+            )
+        ).expect("couldn't initiate eFuse burn");
+    }
     pub fn is_jtag_working(&self) -> Result<bool, xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::IsJtagWorking.to_usize().unwrap(), 0, 0, 0, 0)

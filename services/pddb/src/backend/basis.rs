@@ -254,12 +254,15 @@ pub(crate) struct BasisCache {
     cache: Vec::<BasisCacheEntry>,
     /// ticktimer reference, for managing atimes
     pub(crate) tt: ticktimer_server::Ticktimer,
+    /// data cache - stores the most recently decrypted pages of data
+    data_cache: PlaintextCache,
 }
 impl BasisCache {
     pub(crate) fn new() -> Self {
         BasisCache {
             cache: Vec::new(),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
+            data_cache: PlaintextCache { data: None, tag: None },
         }
     }
     /// Returns a Vec which is a list of Bases to visit, in order of visitation, to create the union view.
@@ -443,88 +446,103 @@ impl BasisCache {
             }
             if let Some(dict_entry) = basis.dicts.get_mut(dict) {
                 if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, key) {
-                    let kcache = dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
-                    kcache.set_atime(self.tt.elapsed_ms());
-                    // the key exists, *and* there's sufficient space for the data
-                    if kcache.start < SMALL_POOL_END {
-                        // small pool fetch
-                        // for now, the rule is, if we have a small key, we also have its data in cache.
-                        if let KeyCacheData::Small(cache_data) = kcache.data.as_mut().expect("small pool should all have their data 'hot' if the index entry is also in cache") {
-                            let mut bytes_read = 0;
+                    let mut needs_fill = false;
+                    loop { // this weird loop works around an interior mutability issue with filling key data. It's awful, like a `goto`.
+                        if needs_fill {
+                            // fetch the data from disk
+                            log::debug!("Small key evicted: filling {}:{}", dict, key);
+                            // this call does a mutable borrow of dict_entry, which interferes with getting kcache below.
+                            dict_entry.refill_small_key(hw, &basis.v2p_map, &basis.cipher, &mut self.data_cache, key);
+                        }
+                        let kcache = dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
+                        kcache.set_atime(self.tt.elapsed_ms());
+                        // the key exists, *and* there's sufficient space for the data
+                        if kcache.start < SMALL_POOL_END {
+                            // small pool fetch
+                            if kcache.data.is_none() {
+                                needs_fill = true;
+                                // loop starts again at the top, but this time filling the key first.
+                                continue;
+                            }
+                            // at this point, if we have a small key, we also have its data in cache.
+                            if let KeyCacheData::Small(cache_data) = kcache.data.as_mut().expect("small pool should all have their data 'hot' if the index entry is also in cache") {
+                                let mut bytes_read = 0;
+                                if offset.unwrap_or(0) as u64 > kcache.len {
+                                    return Err(Error::new(ErrorKind::UnexpectedEof, "offest requested is beyond the key length"));
+                                }
+                                for (&src, dst) in cache_data.data[offset.unwrap_or(0)..kcache.len as usize].iter().zip(data.iter_mut()) {
+                                    *dst = src;
+                                    bytes_read += 1;
+                                }
+                                if bytes_read != data.len() {
+                                    log::debug!("Key shorter than read buffer {}:{} ({}/{})", dict, key, bytes_read, data.len());
+                                }
+                                return Ok(bytes_read)
+                            } else {
+                                panic!("Key allocated to small area but its cache data was not of the small type");
+                            }
+                        } else {
                             if offset.unwrap_or(0) as u64 > kcache.len {
                                 return Err(Error::new(ErrorKind::UnexpectedEof, "offest requested is beyond the key length"));
                             }
-                            for (&src, dst) in cache_data.data[offset.unwrap_or(0)..kcache.len as usize].iter().zip(data.iter_mut()) {
-                                *dst = src;
-                                bytes_read += 1;
+                            if data.len() == 0 { // mostly because i don't want to have to think about this case in the later logic.
+                                return Ok(0)
                             }
-                            if bytes_read != data.len() {
-                                log::debug!("Key shorter than read buffer {}:{} ({}/{})", dict, key, bytes_read, data.len());
-                            }
-                            return Ok(bytes_read)
-                        } else {
-                            panic!("Key allocated to small area but its cache data was not of the small type");
-                        }
-                    } else {
-                        if offset.unwrap_or(0) as u64 > kcache.len {
-                            return Err(Error::new(ErrorKind::UnexpectedEof, "offest requested is beyond the key length"));
-                        }
-                        if data.len() == 0 { // mostly because i don't want to have to think about this case in the later logic.
-                            return Ok(0)
-                        }
-                        // large pool fetch
-                        let mut abs_cursor = offset.unwrap_or(0) as u64;
-                        let mut blocks_read = 0;
-                        let mut bytes_read = 0;
-                        loop {
-                            let start_vpage_addr = ((kcache.start + abs_cursor) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
+                            // large pool fetch
+                            let mut abs_cursor = offset.unwrap_or(0) as u64;
+                            let mut blocks_read = 0;
+                            let mut bytes_read = 0;
+                            loop {
+                                let start_vpage_addr = ((kcache.start + abs_cursor) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
 
-                            if let Some(pp) = basis.v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()) {
-                                let block_start_pos = (abs_cursor % VPAGE_SIZE as u64) as usize;
-                                assert!(pp.valid(), "v2p returned an invalid page");
-                                let pt_data = hw.data_decrypt_page(&basis.cipher, &basis.aad, pp).expect("Decryption auth error");
-                                if blocks_read != 0 {
-                                    assert!(block_start_pos == 0, "algorithm error in handling offset data");
-                                }
-                                if blocks_read == 0 {
-                                    log::debug!("reading {} abs: {}, block_start: {}, block: {}, data.len:{} kcache.len:{}",
-                                        key, abs_cursor, block_start_pos, blocks_read, data.len(), kcache.len);
-                                } else {
-                                    log::debug!("  reading {} abs: {}, block_start: {}, block: {}, remaining.data:{} kcache.len:{}",
-                                        key, abs_cursor, block_start_pos, blocks_read, data.len() - bytes_read, kcache.len);
-                                }
-                                let data_offset = bytes_read;
-                                for (&src, dst) in
-                                pt_data[
-                                    size_of::<JournalType>() // always this fixed offset per block
-                                    + block_start_pos
-                                    ..
-                                ].iter().zip(data[data_offset..].iter_mut()) {
-                                    *dst = src;
-                                    // it'd be computationally more efficient to figure out what this should be going into
-                                    // every copy loop, but it's logically easier to think about in this form. Without this
-                                    // check, a user could read past the allocated space for a block...
-                                    if abs_cursor >= kcache.len {
-                                        break;
+                                if let Some(pp) = basis.v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()) {
+                                    let block_start_pos = (abs_cursor % VPAGE_SIZE as u64) as usize;
+                                    assert!(pp.valid(), "v2p returned an invalid page");
+                                    let pt_data = hw.data_decrypt_page(&basis.cipher, &basis.aad, pp).expect("Decryption auth error");
+                                    if blocks_read != 0 {
+                                        assert!(block_start_pos == 0, "algorithm error in handling offset data");
                                     }
-                                    abs_cursor += 1;
-                                    bytes_read += 1;
+                                    if blocks_read == 0 {
+                                        log::debug!("reading {} abs: {}, block_start: {}, block: {}, data.len:{} kcache.len:{}",
+                                            key, abs_cursor, block_start_pos, blocks_read, data.len(), kcache.len);
+                                    } else {
+                                        log::debug!("  reading {} abs: {}, block_start: {}, block: {}, remaining.data:{} kcache.len:{}",
+                                            key, abs_cursor, block_start_pos, blocks_read, data.len() - bytes_read, kcache.len);
+                                    }
+                                    let data_offset = bytes_read;
+                                    for (&src, dst) in
+                                    pt_data[
+                                        size_of::<JournalType>() // always this fixed offset per block
+                                        + block_start_pos
+                                        ..
+                                    ].iter().zip(data[data_offset..].iter_mut()) {
+                                        *dst = src;
+                                        // it'd be computationally more efficient to figure out what this should be going into
+                                        // every copy loop, but it's logically easier to think about in this form. Without this
+                                        // check, a user could read past the allocated space for a block...
+                                        if abs_cursor >= kcache.len {
+                                            break;
+                                        }
+                                        abs_cursor += 1;
+                                        bytes_read += 1;
+                                    }
+                                    blocks_read += 1;
+                                } else {
+                                    log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, abs_cursor, data.len());
+                                    return Ok(bytes_read as usize)
                                 }
-                                blocks_read += 1;
-                            } else {
-                                log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, abs_cursor, data.len());
-                                return Ok(bytes_read as usize)
+                                if abs_cursor >= kcache.len {
+                                    break;
+                                }
+                                if bytes_read >= data.len() {
+                                    break;
+                                }
                             }
-                            if abs_cursor >= kcache.len {
-                                break;
-                            }
-                            if bytes_read >= data.len() {
-                                break;
-                            }
+                            return Ok(bytes_read as usize)
                         }
-                        return Ok(bytes_read as usize)
+                        // note that from this point forward, either the "if" or the "else" branch returns;
+                        // the end of this loop is never seen, unless a `continue` statement is hit within the loop.
                     }
-
                 } else {
                     return Err(Error::new(ErrorKind::NotFound, "key not found"));
                 }

@@ -49,7 +49,7 @@
 ///
 /// ### `frontend.rs`
 /// Defines a set of modules that plug the PDDB into applications (in particular, they
-/// attemp to provide a Rust-compatible `read`/`write`/`open` abstraction layer,
+/// attempt to provide a Rust-compatible `read`/`write`/`open` abstraction layer,
 /// torturing the notion of `Prefix`, `Path` and `File` in Rust to fit the basis/dict/key
 /// format of the PDDB).
 ///
@@ -64,12 +64,12 @@
 /// for most operations on the PDDB, and thus most externally-visible API calls will be revealed
 /// on that structure; in fact many calls on that object are just pass-through of lower level calls.
 ///
-/// A `BasisCach`e consists of one or more `BasisCacheEntries`. This structure manages one or more
+/// A `BasisCache` consists of one or more `BasisCacheEntries`. This structure manages one or more
 /// `DictCacheEntry` within a `BasisCacheEntry`'s dictionary cache.
 ///
 /// #### `dictionary.rs`
 /// The `DictCacheEntry` is defined in this file, along with the on-disk `Dictionary`
-/// storage stucture. Most of the methods on `DictCacheEntry` are concerned with managing
+/// storage structure. Most of the methods on `DictCacheEntry` are concerned with managing
 /// keys contained within the dictionary cache.
 ///
 /// #### `keys.rs`
@@ -243,7 +243,7 @@
 /// a presented password to a given salt entry. In a traditional user/pass login database, the username is
 /// the plaintext key to match the salt. In this case, we would use a nickname used to refer to each Basis
 /// to correlate to its salt entry. Thus, we'd have to come up with "garbage" plaintext nicknames
-/// for a Basis that are not trivial for a rubber-hose attacker to dismiss as chaffe. I think this is Hard.
+/// for a Basis that are not trivial for a rubber-hose attacker to dismiss as chaff. I think this is Hard.
 /// The alternative is to "brute force" the entire list of salts, guessing each one in sequence until one
 /// is found to decrypt entries in the Basis page table. The problem with this is that bcrypt is designed to
 /// be computationally slow, even for valid passwords. The complexity parameter is chosen so that it takes
@@ -268,7 +268,7 @@
 /// user ever using the PD function because it is too slow. Thus for v1 of the PDDB, we're going to try approach
 /// (2), where a common salt is used across all the PDDB passwords, but the salt is /not/ re-used between devices.
 /// This choice diminishes the overall security of the system in the case that a user chooses weak passwords, or re-uses
-/// passwords, but in exchange for a great improvement in responsivity of the implementation.
+/// passwords, but in exchange for a great improvement in responsiveness of the implementation.
 ///
 /// The final implementation uses a slight mod on (2), where the 128-bit common salt stored on disk is XOR'd
 /// with the user-provided "basis name". Users are of course allowed to pick crappy names for their basis, and
@@ -283,8 +283,8 @@
 ///
 /// A newly created Basis will request a name for the Basis, and a password. It is a requirement
 /// that the combination of `(name, password)` be unique; this property is enforced and a system will
-/// reject attempts to create identically named, identially passworded Basis. However, one can have
-/// same-named Basis that have a different password, or diffently-named Basis with the same password
+/// reject attempts to create identically named, identically passworded Basis. However, one can have
+/// same-named Basis that have a different password, or differently-named Basis with the same password
 /// (this is generally not recommended, but it's not prohibited).
 ///
 /// The `name` field is XOR'd with the device-local `salt` field to form the salt for the password,
@@ -556,7 +556,7 @@ fn wrapped_main() -> ! {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             let mut flush_interval = 0;
             const ARBITRARY_INTERVAL_MS: usize = 12_513;
-            const PERIODIC_FLUSH_MS: usize = 1000 * 60 * 60 * 18 - 5555; // every 18 hours less ~5 seconds to try and stagger the process off of other periodics
+            const PERIODIC_FLUSH_MS: usize = 1000 * 60 * 60 * 18 - 5555; // every 18 hours less ~5 seconds to try and stagger the process off of other periodic tasks
             loop {
                 tt.sleep_ms(ARBITRARY_INTERVAL_MS).unwrap(); // arbitrary interval, but trying to avoid "round" numbers of seconds to interleave periodic tasks
                 flush_interval += ARBITRARY_INTERVAL_MS;
@@ -591,6 +591,9 @@ fn wrapped_main() -> ! {
     // track processes that want a notification of a mount event
     let mut mount_notifications = Vec::<xous::MessageSender>::new();
     let mut attempt_notifications = Vec::<xous::MessageSender>::new();
+
+    // track the basis monitor requester.
+    let mut basis_monitor_notifications = Vec::<xous::MessageEnvelope>::new();
 
     // track heap usage
     let mut initial_heap: usize = 0;
@@ -676,12 +679,12 @@ fn wrapped_main() -> ! {
                         log::info!("{}PDDB.SKIPMOUNT,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         // allow the main menu to be used in this case
                         let gam = gam::Gam::new(&xns).unwrap();
-                        gam.allow_mainmenu().expect("coudln't allow main menu activation");
+                        gam.allow_mainmenu().expect("couldn't allow main menu activation");
                         xous::return_scalar2(msg.sender, 1, 0).expect("could't return scalar");
                     } else {
                         match ensure_password(&modals, &mut pddb_os, pw_cid) {
                             PasswordState::Correct => {
-                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct, time_resetter) {
+                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct, time_resetter, &mut basis_monitor_notifications) {
                                     is_mounted.store(true, Ordering::SeqCst);
                                     for requester in mount_notifications.drain(..) {
                                         xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
@@ -694,7 +697,7 @@ fn wrapped_main() -> ! {
                                 }
                             },
                             PasswordState::Uninit => {
-                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit, time_resetter) {
+                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit, time_resetter, &mut basis_monitor_notifications) {
                                     for requester in mount_notifications.drain(..) {
                                         xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
                                     }
@@ -718,7 +721,7 @@ fn wrapped_main() -> ! {
                         }
                         // get a handle to the GAM and inform it that main menu should be allowed. The handle is dropped when this routine finishes.
                         let gam = gam::Gam::new(&xns).unwrap();
-                        gam.allow_mainmenu().expect("coudln't allow main menu activation");
+                        gam.allow_mainmenu().expect("couldn't allow main menu activation");
                         // setup the heap
                         initial_heap = heap_usage();
                         latest_heap = initial_heap;
@@ -745,7 +748,7 @@ fn wrapped_main() -> ! {
                 latest_cache = current_cache;
                 if (latest_heap > initial_heap
                 && (latest_heap - initial_heap) > HEAP_GC_THRESH)
-                // this line is mostly so this triggers occassionally in hosted mode where heap usage is faked;
+                // this line is mostly so this triggers occasionally in hosted mode where heap usage is faked;
                 // in practice heap threshold will always hit before cache threshold
                 || current_cache > HEAP_GC_THRESH {
                     log::info!("PDDB trim threshold reached: {} heap, {} cache", latest_heap, basis_cache.cache_size());
@@ -764,6 +767,9 @@ fn wrapped_main() -> ! {
                 }
                 list_ipc.num = basis_list.len() as u32;
                 buffer.replace(list_ipc).unwrap();
+            }
+            Opcode::BasisMonitor => {
+                basis_monitor_notifications.push(msg);
             }
             Opcode::ListBasisStd => {
                 if let Some(mem) = msg.body.memory_message_mut() {
@@ -872,6 +878,9 @@ fn wrapped_main() -> ! {
                                     basis_cache.basis_add(basis);
                                     finished = true;
                                     log::info!("{}PDDB.UNLOCKOK,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
+                                    if basis_monitor_notifications.len() > 0 {
+                                        notify_basis_change(&mut basis_monitor_notifications, basis_cache.basis_list());
+                                    }
                                     mgmt.code = PddbRequestCode::NoErr;
                                 } else {
                                     log::info!("{}PDDB.BADPASS,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
@@ -912,7 +921,12 @@ fn wrapped_main() -> ! {
                 match mgmt.code {
                     PddbRequestCode::Close => {
                         match basis_cache.basis_unmount(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8")) {
-                            Ok(_) => mgmt.code = PddbRequestCode::NoErr,
+                            Ok(_) => {
+                                mgmt.code = PddbRequestCode::NoErr;
+                                if basis_monitor_notifications.len() > 0 {
+                                    notify_basis_change(&mut basis_monitor_notifications, basis_cache.basis_list());
+                                }
+                            }
                             Err(e) => match e.kind() {
                                 ErrorKind::NotFound => mgmt.code = PddbRequestCode::NotFound,
                                 _ => mgmt.code = PddbRequestCode::InternalError,
@@ -1422,7 +1436,7 @@ fn wrapped_main() -> ! {
                 } else {
                     pbuf.retcode = PddbRetcode::BasisLost;
                 }
-                // we don't nede a "replace" operation because all ops happen in-place
+                // we don't need a "replace" operation because all ops happen in-place
                 #[cfg(feature="perfcounter")]
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 4, std::line!());
             }
@@ -1598,11 +1612,11 @@ fn wrapped_main() -> ! {
                                         basis: attr.basis,
                                         data: None,
                                     };
-                                    let (prebuf, buf) = buf.split_at_mut(size_of::<u32>()*2);
+                                    let (pre_buf, buf) = buf.split_at_mut(size_of::<u32>()*2);
                                     let mut serializer = BufferSerializer::new(buf);
                                     let len = size_of::<ArchivedPddbKeyRecord>();
                                     match serializer.serialize_value(&rec) {
-                                        Ok(pos) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, prebuf),
+                                        Ok(pos) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, pre_buf),
                                         Err(_) => SerializeResult::Failure(key_name)
                                     }
                                 }
@@ -1713,7 +1727,7 @@ fn wrapped_main() -> ! {
                 } else {
                     pbuf.retcode = PddbRetcode::BasisLost;
                 }
-                // we don't nede a "replace" operation because all ops happen in-place
+                // we don't need a "replace" operation because all ops happen in-place
 
                 // for now, do an expensive sync operation after every write to ensure data integrity
                 basis_cache.sync(&mut pddb_os, None).expect("couldn't sync basis");
@@ -1803,6 +1817,13 @@ fn wrapped_main() -> ! {
                         } else {
                             log::info!("remount failed");
                         }
+                    },
+                    DebugRequest::Prune => {
+                        log::info!("initiating prune");
+                        log::set_max_level(log::LevelFilter::Debug);
+                        basis_cache.cache_prune(&mut pddb_os, 262144);
+                        log::set_max_level(log::LevelFilter::Info);
+                        log::info!("prune finished");
                     }
                 }
             }
@@ -1847,6 +1868,9 @@ fn wrapped_main() -> ! {
                 }
                 // finally, unmount the system basis
                 basis_cache.basis_unmount(&mut pddb_os, PDDB_DEFAULT_SYSTEM_BASIS).expect("can't unmount system basis");
+                if basis_monitor_notifications.len() > 0 {
+                    notify_basis_change(&mut basis_monitor_notifications, basis_cache.basis_list());
+                }
                 if basis_cache.basis_list().len() == 0 {
                     is_mounted.store(false, Ordering::SeqCst);
                     log::info!(".System basis is unmounted.");
@@ -1951,17 +1975,27 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
                 }
                 return PasswordState::Uninit;
             }
-            PasswordState::ForcedAbort(_) => panic!("ForcedAbort is not expecetd from try_login()"),
+            PasswordState::ForcedAbort(_) => panic!("ForcedAbort is not expected from try_login()"),
         }
     }
 }
-fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cache: &mut BasisCache, pw_state: PasswordState, time_resetter: xous::CID) -> bool {
+fn try_mount_or_format(
+    modals: &modals::Modals,
+    pddb_os: &mut PddbOs,
+    basis_cache: &mut BasisCache,
+    pw_state: PasswordState,
+    time_resetter: xous::CID,
+    basis_monitor_notifications: &mut Vec::<xous::MessageEnvelope>
+) -> bool {
     log::info!("Attempting to mount the PDDB");
     if pw_state == PasswordState::Correct {
         modals.dynamic_notification(Some(t!("pddb.waitmount", xous::LANG)), None).unwrap();
         if let Some(sys_basis) = pddb_os.pddb_mount() {
             log::info!("PDDB mount operation finished successfully");
             basis_cache.basis_add(sys_basis);
+            if basis_monitor_notifications.len() > 0 {
+                notify_basis_change(basis_monitor_notifications, basis_cache.basis_list());
+            }
             modals.dynamic_notification_close().unwrap();
             return true
         }
@@ -2013,7 +2047,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                 pddb_os.pddb_format(fast, Some(&modals)).expect("couldn't format PDDB");
 
                 // reset the RTC at the point of PDDB format. It is done now because at this point we know that
-                // no time offset keys can exist in the PDDB, and as a measure of good hygeine we want to restart
+                // no time offset keys can exist in the PDDB, and as a measure of good hygiene we want to restart
                 // our RTC counter from a random duration between epoch and 10 years to give some deniability about
                 // how long the device has been in use.
                 let _ = xous::send_message(time_resetter,
@@ -2026,6 +2060,9 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                 if let Some(sys_basis) = pddb_os.pddb_mount() {
                     log::info!("PDDB mount operation finished successfully");
                     basis_cache.basis_add(sys_basis);
+                    if basis_monitor_notifications.len() > 0 {
+                        notify_basis_change(basis_monitor_notifications, basis_cache.basis_list());
+                    }
                     modals.dynamic_notification_close().unwrap();
                     true
                 } else {
@@ -2188,6 +2225,21 @@ fn notify_of_disconnect(pddb_os: &mut PddbOs, token_dict: &HashMap::<ApiToken, T
                 }
             }
         }
+    }
+}
+
+fn notify_basis_change(basis_monitor_notifications: &mut Vec::<xous::MessageEnvelope>, basis_list: Vec::<String>) {
+    for mut sender in basis_monitor_notifications.drain(..) {
+        let mut response = unsafe {
+            Buffer::from_memory_message_mut(sender.body.memory_message_mut().unwrap())
+        };
+        let mut list_ipc = response.to_original::<PddbBasisList, _>().unwrap();
+        for (src, dst) in basis_list.iter().zip(list_ipc.list.iter_mut()) {
+            dst.clear();
+            write!(dst, "{}", src).expect("couldn't write basis name");
+        }
+        list_ipc.num = basis_list.len() as u32;
+        response.replace(list_ipc).unwrap();
     }
 }
 

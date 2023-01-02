@@ -6,12 +6,54 @@
         "ja": "Shellchat",
         "zh": "外壳聊天"
     },
+    "secnote.basis": {
+        "en": "Basis: ",
+        "en-tts": "Basis: ",
+        "fr": "La base: ",
+        "ja": "基底: ",
+        "zh": "基: "
+    },
     "backup.confirm": {
         "en": "Prepare for PDDB and root key backup?\n\nThe process cannot be aborted once started.",
         "en-tts": "Prepare for PDDB and root key backup?\n\nThe process cannot be aborted once started.",
         "fr": "Préparez-vous pour la sauvegarde de PDDB et de la clé racine?\n\nLe processus ne peut pas être abandonné une fois lancé.",
         "ja": "PDDB とルート キーのバックアップの準備をしますか?\n\nプロセスは、いったん開始すると中止できません。",
         "zh": "准备 PDDB 和根密钥备份吗？\n\n进程一旦启动就不能中止。"
+    },
+    "burnkey.type": {
+        "en": "Please select the type of key to use.\n\nUnsure which one to use? See github.com/betrusted-io/faq",
+        "en-tt": "Please select the type of key to use.\n\nUnsure which one to use? See github.com/betrusted-io/faq",
+        "fr": "Veuillez sélectionner le type de clé à utiliser.\n\nVous ne savez pas lequel utiliser ? Voir github.com/betrusted-io/faq *MT*",
+        "ja": "使用する鍵の種類を選択してください。\n\nどちらを使用するかわからない場合 github.com/betrusted-io/faq を参照してください",
+        "zh": "请选择要使用的密钥类型。 不确定使用哪一个？\n\n请参阅 github.com/betrusted-io/faq"
+    },
+    "burnkey.efuse_confirm": {
+        "en": "This will permanently burn a backup key into your device. If you lose this key and brick the device, you will have to buy a new device.\n\nTHIS FLOW IS BETA. BY PROCEEDING YOU ACKNOWLEDGE THE RISK OF PERMANENT DAMAGE TO YOUR DEVICE WITH NO WARRANTY REPAIR OPTION.\n\nNOTE: You may also set a backup key using the BBRAM flow, with no risk of permanent damage to hardware.\n\nProceed?",
+        "en-tts": "This will permanently burn a backup key into your device.\nIf you lose the key and brick the device, you will have to buy a new device.\nTHIS FLOW IS BETA. BY PROCEEDING YOU ACKNOWLEDGE THE RISK OF PERMANENT DAMAGE TO YOUR DEVICE WITH NO WARRANTY REPAIR OPTION.\nProceed?",
+        "fr": "Cela gravera définitivement une clé de sauvegarde dans votre appareil.\nSi vous perdez la clé et briquez l'appareil, vous devrez acheter un nouvel appareil.\nCE FLUX EST BÊTA. EN POURSUIVANT, VOUS RECONNAISSEZ LE RISQUE DE DOMMAGES PERMANENTS À VOTRE APPAREIL SANS OPTION DE RÉPARATION SOUS GARANTIE.\nPoursuivre?",
+        "ja": "これにより、バックアップ キーがデバイスに永久に焼き付けられます。\nキーを紛失してデバイスをブリックした場合は、新しいデバイスを購入する必要があります。\nこのフローはベータ版です。 続行することにより、保証修理オプションなしでデバイスに恒久的な損傷が生じるリスクを認めたことになります。\n続行しますか?",
+        "zh": "这会将备份密钥永久地刻录到您的设备中。\n如果您丢失密钥并使设备变砖，您将不得不购买新设备。\n此流程是测试版。 继续，即表示您承认您的设备存在永久损坏的风险，且不提供保修维修选项。\n继续吗?"
+    },
+    "burnkey.bbram": {
+        "en" : "BBRAM",
+        "en-tts": "BBRAM",
+        "fr" : "BBRAM",
+        "ja" : "BBRAM",
+        "zh" : "BBRAM"
+    },
+    "burnkey.efuse": {
+        "en" : "eFuse",
+        "en-tts": "eFuse",
+        "fr" : "eFuse",
+        "ja" : "eFuse",
+        "zh" : "eFuse"
+    },
+    "burnkey.bbram_exec": {
+        "en" : "Close this dialog box, then follow the instructions at https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM)",
+        "en-tts" : "Close this dialog box, then follow the instructions at https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM)",
+        "fr" : "Fermez cette boîte de dialogue, puis suivez les instructions sur https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM) *MT*",
+        "ja" : "このダイアログ ボックスを閉じて、https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM) の指示に従います。",
+        "zh" : "关闭此对话框，然后按照 https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM) 中的说明进行操作"
     },
     "ecup.abort": {
         "en": "EC update aborted due to error!",
@@ -97,6 +139,13 @@
         "ja": "バックライト点灯",
         "zh": "背光开启"
     },
+    "mainmenu.backup_key": {
+        "en": "Burn backup key (BETA)",
+        "en-tts": "Burn backup key (BETA)",
+        "fr": "Graver la clé de sauvegarde (BETA) *MT*",
+        "ja": "バックアップ キーの書き込み (ベータ版)",
+        "zh": "刻录备份密钥（测试版）"
+    },
     "mainmenu.battery_disconnect": {
         "en": "Shutdown",
         "en-tts": "Shutdown",
@@ -162,7 +211,10 @@
     },
     "mainmenu.preferences": {
         "en": "Preferences",
-        "en-tts": "Preferences"
+        "en-tts": "Preferences",
+        "fr": "Préférences",
+        "ja": "環境設定",
+        "zh": "喜好"
     },
     "mainmenu.reboot": {
         "en": "Reboot",
@@ -193,8 +245,8 @@
         "zh": "设置本地时区"
     },
     "mainmenu.shutdown_confirm": {
-        "en": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?",
-        "en-tts": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?",
+        "en": "Confirm shutdown:\n🔌Device will remain off until a charging cable is plugged in. Proceed?",
+        "en-tts": "Confirm shutdown:\n🔌Device will remain off until a charging cable is plugged in. Proceed?",
         "fr": "Confirmez l’arrêt:\n🔌L’appareil s’éteindra jusqu’à ce qu’un câble de charge soit branché. Continuez?",
         "ja": "シャットダウンの確認:\n🔌充電ケーブルが差し込まれるまで、デバイスはオフのままになります。続行しますか?",
         "zh": "确认关机：\n🔌设备将保持关闭状态，直到插入充电线。继续？"

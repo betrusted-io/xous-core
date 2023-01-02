@@ -153,6 +153,55 @@
         "ja": "ヘルパーと通信しています... Enterキーを押して中止します。",
         "zh": "与助手通信，按 Enter 中止"
     },
+    "rootkeys.efuse_burning": {
+        "en": "eFuse key burning...",
+        "en-tts": "eFuse key burning...",
+        "fr": "Gravure de clé eFuse...*MT*",
+        "ja": "eFuse キーの書き込み中...",
+        "zh": "eFuse 密钥烧毁..."
+    },
+    "rootkeys.efuse_burn_fail": {
+        "en": "eFuse key failed to burn!",
+        "en-tts": "eFuse key failed to burn!",
+        "fr": "La clé eFuse n'a pas pu être gravée !*MT*",
+        "ja": "eFuse キーの書き込みに失敗しました!",
+        "zh": "eFuse key 烧录失败！"
+    },
+    "rootkeys.efuse_finished": {
+        "en": "eFuse burning success!\n\nReboot the device using the paperclip method to ensure new keys are loaded.",
+        "en-tts": "eFuse burning success!\n\nReboot the device using the paperclip method to ensure new keys are loaded.",
+        "fr": "Gravure eFuse réussie !\n\nRedémarrez l'appareil à l'aide de la méthode du trombone pour vous assurer que les nouvelles clés sont chargées. *MT*",
+        "ja": "eFuse の書き込みに成功しました!\n\nペーパークリップを使用してデバイスを再起動し、新しいキーがロードされていることを確認してください。",
+        "zh": "eFuse 烧录成功！\n\n使用回形针方法重启设备以确保加载新密钥。"
+    },
+    "rootkeys.efuse_internal_error": {
+        "en": "Internal error in eFuse routine",
+        "en-tts": "Internal error in eFuse routine",
+        "fr": "Erreur interne dans la routine eFuse*MT*",
+        "ja": "eFuse ルーチンの内部エラー",
+        "zh": "eFuse 例程中的内部错误"
+    },
+    "rootkeys.efuse_jtag_fail": {
+        "en": "JTAG failed self-test. Aborting eFuse burn.\n\nPlease ensure that the Pi debug HAT is not attached!",
+        "en-tts": "JTAG failed self-test. Aborting eFuse burn.\n\nPlease ensure that the Pi debug HAT is not attached!",
+        "fr": "JTAG a échoué à l'autotest. Abandon de la gravure eFuse.\n\nVeuillez vous assurer que le HAT de débogage Pi n'est pas connecté ! *MT*",
+        "ja": "JTAG がセルフテストに失敗しました。 eFuse の書き込みを中止しています。\n\nPi デバッグ HAT が接続されていないことを確認してください!",
+        "zh": "JTAG 自检失败。 中止 eFuse 刻录。\n\n请确保未连接 Pi 调试 HAT！"
+    },
+    "rootkeys.efuse_sealing": {
+        "en": "eFuse sealing device FOREVER...",
+        "en-tts": "eFuse key burning...",
+        "fr": "Dispositif d'étanchéité eFuse pour toujours...*MT*",
+        "ja": "eFuseシーリング装置を永遠に...",
+        "zh": "eFuse密封装置永远..."
+    },
+    "rootkeys.efuse_seal_fail": {
+        "en": "eFuse sealing failed!",
+        "en-tts": "eFuse sealing failed!",
+        "fr": "Échec de l'étanchéité du fusible !*MT*",
+        "ja": "eFuse シーリングに失敗しました!",
+        "zh": "eFuse 密封失败！"
+    },
     "rootkeys.get_login_password": {
         "en": "Password request\nEnter the 'unlock' PIN code.",
         "en-tts": "Enter device unlock password to access basic service.",
@@ -407,7 +456,7 @@
     },
     "rootkeys.policy_request": {
         "en": "Please pick a password retention policy:",
-        "en-tts": "Please pick a passowrd retention policy.",
+        "en-tts": "Please pick a password retention policy.",
         "fr": "Veuillez choisir une politique de conservation des mots de passe :",
         "ja": "パスワード保持ポリシーを指定ください。",
         "zh": "请选择密码保留策略:"

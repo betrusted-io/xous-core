@@ -539,6 +539,8 @@ fn wrapped_main() -> ! {
 
                         let phrase = renderer_modal.gam.bytes_to_bip39(&config.bip39_data[..config.bip39_len as usize].to_vec())
                         .unwrap_or(vec![t!("bip39.invalid_bytes", xous::LANG).to_string()]);
+                        #[cfg(feature = "hazardous-debug")]
+                        log::info!("BIP-39 phrase: {:?}", phrase);
 
                         for word in phrase {
                             text.push_str(&word);

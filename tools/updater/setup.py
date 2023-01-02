@@ -7,7 +7,7 @@ with open('README.md') as f:
 
 setup(
     name="precursorupdater",
-    version="0.0.9",
+    version="0.1.0",
     author="bunnie",
     description="Precursor USB Updater",
     long_description=long_description,
@@ -33,6 +33,8 @@ setup(
         "requests >= 2",
         "pyusb >= 1",
         "progressbar2 >= 3",
+        "bip-utils >= 2.5",
+        "pycryptodome >= 3",
     ],
     entry_points="""
         [console_scripts]

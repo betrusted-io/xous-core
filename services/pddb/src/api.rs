@@ -239,6 +239,9 @@ pub(crate) enum Opcode {
     /// Mount was attempted
     MountAttempted = 53,
 
+    /// Basis monitoring - reports when the basis order has changed
+    BasisMonitor = 54,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }
@@ -532,6 +535,7 @@ pub struct PddbDangerousDebug {
 pub enum DebugRequest {
     Dump = 0,
     Remount = 1,
+    Prune = 2,
 }
 
 #[cfg(test)]
