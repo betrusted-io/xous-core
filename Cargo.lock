@@ -4168,6 +4168,7 @@ dependencies = [
  "rkyv",
  "usb-device",
  "usbd-human-interface-device 0.2.1",
+ "usbd-mass-storage",
  "utralib",
  "vcell",
  "xous 0.9.29 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4233,6 +4234,14 @@ dependencies = [
  "log",
  "num_enum",
  "packed_struct",
+ "usb-device",
+]
+
+[[package]]
+name = "usbd-mass-storage"
+version = "0.1.0"
+dependencies = [
+ "log",
  "usb-device",
 ]
 

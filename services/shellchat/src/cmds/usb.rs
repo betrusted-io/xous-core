@@ -29,6 +29,9 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::FidoKbd).unwrap();
                     write!(ret, "USB connected to HID (FIDO + keyboard) core").unwrap();
                 }
+                "ms" => {
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::MassStorage).unwrap();
+                    write!(ret, "USB connected to mass storage core").unwrap();                }
                 "fido" => {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Fido).unwrap();
                     write!(ret, "USB connected to FIDO-only core").unwrap();
