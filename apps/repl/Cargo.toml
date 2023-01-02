@@ -25,6 +25,7 @@ content-plugin-api = {path = "../../services/content-plugin-api"} # all content 
 com = {path = "../../services/com"}
 llio = {path = "../../services/llio"}
 codec = {path = "../../services/codec"}
+cos_table = {path = "../../libs/cos_table"}
 
 [features]
 default = []
