@@ -392,7 +392,6 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     // now do FFT analysis on the sample buffer
                     // analyze one channel at a time
-                    // let mut right_samples = Vec::<f32>::new();
                     if self.recbuf.is_none() { // lazy allocate recbuf
                         self.recbuf = Some(xous::syscall::map_memory(
                             None,
@@ -407,42 +406,11 @@ impl<'a> ShellCmdApi<'a> for Test {
                         // serialize and send audio as b64 encoded data
                         for (i, sample) in recslice[recslice.len()-4096 * size_of::<u32>()..].chunks_exact(BUFLEN).enumerate() {
                             let b64str = encode(sample);
-                            log::info!("{}|ASAMP|{}|:{}", SENTINEL, i, b64str);
+                            log::info!("{}|ASAMP|{}|{}", SENTINEL, i, b64str);
                         }
-                        /*
-                        for &sample in recslice[recslice.len()-4096..].iter() {
-                            right_samples.push( ((sample & 0xFFFF) as i16) as f32 );
-                            //left_samples.push( (((sample >> 16) & 0xFFFF) as i16) as f32 ); // reminder of how to extract the right channel
-                        } */
                     } else {
                         panic!("recbuf was not allocated");
                     }
-                    /*
-                    // only one channel is considered, because in reality the left is just a copy of the right, as
-                    // we are taking a mono microphone signal and mixing it into both ADCs
-
-                    let db = db_compute(&right_samples);
-                    let hann_right = hann_window(&right_samples);
-                    let spectrum_right = samples_fft_to_spectrum(
-                        &hann_right,
-                        SAMPLE_RATE_HZ as _,
-                        FrequencyLimit::All,
-                        None,
-                        None
-                    );
-                    asciiplot(&spectrum_right);
-                    let ratio = analyze(&spectrum_right, self.freq);
-                    // ratio typical range 0.35 (speaker) to 3.5 (headphones)
-                    // speaker has a wider spectrum because we don't have a filter on the PWM, so there are sampling issues feeding it back into the mic
-                    // db typical <10 (silence) to 78 (full amplitude)
-                    if (ratio > 0.25) && (db > 60.0) {
-                        log::info!("{}|ARESULT|PASS|{}|{}|{}|{}|{}|", SENTINEL, ratio, db, self.freq, self.left_play, self.right_play);
-                    } else {
-                        log::info!("{}|ARESULT|FAIL|{}|{}|{}|{}|{}|", SENTINEL, ratio, db, self.freq, self.left_play, self.right_play);
-                    }
-                    log::debug!("off-target 1 {}", analyze(&spectrum_right, 329.63));
-                    log::debug!("off-target 2 {}", analyze(&spectrum_right, 261.63));
-                    */
                     log::info!("{}|ASTOP|", SENTINEL);
                 }
                 "oqc" => {
