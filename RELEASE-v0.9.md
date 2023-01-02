@@ -308,6 +308,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Various bug fixes in `mtxcli`
 - Fixed issue #109, where PDDB can panic after a memory cache prune due to missing keys.
 - Reduced kernel code size by about 737kiB (10%) by restoring lto=`fat` and pushing FFT test code onto the tester. Note that any users who wish to write code that relies on built-in floating point transcendental functions will have to restore lto=`thin`, at least until https://github.com/rust-lang/rust/issues/105734 is resolved.
+- `bip-utils` dependency removed from Python packages. This allows `backalyzer` and `precursorupdater` to run on older platforms that don't have the latest-greatest Python. A hand-rolled BIP-39 word-to-bits converter is used instead.
 
 ## Roadmap
 - Lots of testing and bug fixes
