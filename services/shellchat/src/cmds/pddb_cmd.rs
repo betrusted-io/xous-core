@@ -161,7 +161,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     if let Some(srcdescriptor) = tokens.next() {
                         if let Some(dstdescriptor) = tokens.next() {
                             match std::fs::copy(srcdescriptor, dstdescriptor) {
-                                Ok(result) => {
+                                Ok(_result) => {
                                     write!(ret, "Copy from {} to {} succeeded", srcdescriptor, dstdescriptor).ok();
                                 }
                                 Err(e) => {
