@@ -20,7 +20,7 @@ pub struct Test {
     state: u32,
     // audio
     codec: codec::Codec,
-    recbuf: xous::MemoryRange,
+    recbuf: Option<xous::MemoryRange>,
     callback_id: Option<u32>,
     callback_conn: u32,
     framecount: u32,
@@ -44,18 +44,11 @@ impl Test {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         let codec = codec::Codec::new(xns).unwrap();
 
-        let recbuf = xous::syscall::map_memory(
-            None,
-            None,
-            0x8000,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        ).expect("couldn't allocate record buffer");
-
         let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
 
         Test {
             codec,
-            recbuf,
+            recbuf: None,
             state: 0,
             callback_id: None,
             callback_conn,
@@ -398,10 +391,20 @@ impl<'a> ShellCmdApi<'a> for Test {
                     // now do FFT analysis on the sample buffer
                     // analyze one channel at a time
                     let mut right_samples = Vec::<f32>::new();
-                    let recslice = self.recbuf.as_slice::<u32>();
-                    for &sample in recslice[recslice.len()-4096..].iter() {
-                        right_samples.push( ((sample & 0xFFFF) as i16) as f32 );
-                        //left_samples.push( (((sample >> 16) & 0xFFFF) as i16) as f32 ); // reminder of how to extract the right channel
+                    if self.recbuf.is_none() { // lazy allocate recbuf
+                        self.recbuf = Some(xous::syscall::map_memory(
+                            None,
+                            None,
+                            0x8000,
+                            xous::MemoryFlags::R | xous::MemoryFlags::W,
+                        ).expect("couldn't allocate record buffer"));
+                    }
+                    if let Some(recbuf) = self.recbuf {
+                        let recslice = recbuf.as_slice::<u32>();
+                        for &sample in recslice[recslice.len()-4096..].iter() {
+                            right_samples.push( ((sample & 0xFFFF) as i16) as f32 );
+                            //left_samples.push( (((sample >> 16) & 0xFFFF) as i16) as f32 ); // reminder of how to extract the right channel
+                        }
                     }
                     // only one channel is considered, because in reality the left is just a copy of the right, as
                     // we are taking a mono microphone signal and mixing it into both ADCs
@@ -807,23 +810,35 @@ impl<'a> ShellCmdApi<'a> for Test {
                 self.codec.swap_frames(&mut frames).unwrap();
 
                 if !AUDIO_OQC.load(Ordering::Relaxed) {
-                    let rec_samples = self.recbuf.as_slice_mut::<u32>();
-                    let rec_len = rec_samples.len();
-                    loop {
-                        if let Some(frame) = frames.dq_frame() {
-                            for &sample in frame.iter() {
-                                rec_samples[self.rec_sample] = sample;
-                                // increment and wrap around on overflow
-                                // we should be sampling a continuous tone, so we'll get a small phase discontinutity once in the buffer.
-                                // should be no problem for the analysis phase.
-                                self.rec_sample += 1;
-                                if self.rec_sample >= rec_len {
-                                    self.rec_sample = 0;
+                    if self.recbuf.is_none() { // lazy allocate recbuf
+                        self.recbuf = Some(xous::syscall::map_memory(
+                            None,
+                            None,
+                            0x8000,
+                            xous::MemoryFlags::R | xous::MemoryFlags::W,
+                        ).expect("couldn't allocate record buffer"));
+                    }
+                    if let Some(mut recbuf) = self.recbuf {
+                        let rec_samples = recbuf.as_slice_mut::<u32>();
+                        let rec_len = rec_samples.len();
+                        loop {
+                            if let Some(frame) = frames.dq_frame() {
+                                for &sample in frame.iter() {
+                                    rec_samples[self.rec_sample] = sample;
+                                    // increment and wrap around on overflow
+                                    // we should be sampling a continuous tone, so we'll get a small phase discontinutity once in the buffer.
+                                    // should be no problem for the analysis phase.
+                                    self.rec_sample += 1;
+                                    if self.rec_sample >= rec_len {
+                                        self.rec_sample = 0;
+                                    }
                                 }
-                            }
-                        } else {
-                            break;
-                        };
+                            } else {
+                                break;
+                            };
+                        }
+                    } else {
+                        panic!("recbuf was not allocated");
                     }
                 } else {
                     let elapsed = env.ticktimer.elapsed_ms();
