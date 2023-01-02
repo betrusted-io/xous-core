@@ -158,6 +158,21 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     }
                 }
                 "copy" => {
+                    if let Some(srcdescriptor) = tokens.next() {
+                        if let Some(dstdescriptor) = tokens.next() {
+                            write!(ret, "Will copy from {} to {}", srcdescriptor, dstdescriptor).ok();
+                            match std::fs::copy(srcdescriptor, dstdescriptor) {
+                                Ok(result) => {
+                                    write!(ret, "Copy from {} to {} succeeded", srcdescriptor, dstdescriptor).ok();
+                                }
+                                Err(e) => {
+                                    write!(ret, "Error copying from {} to {}: {:?}", srcdescriptor, dstdescriptor, e).ok();
+                                }
+                            }
+                        }
+                    }
+                }
+                "copy2" => {
                     if let Some(descriptor) = tokens.next() {
                         if let Some((dict, keyname)) = descriptor.split_once(':') {
                             match self.pddb.get(dict, keyname, None,
