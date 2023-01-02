@@ -10,7 +10,7 @@ use core::fmt::Write;
 use core::sync::atomic::{AtomicBool, Ordering, AtomicU32};
 use std::sync::Arc;
 use num_traits::*;
-
+#[cfg(feature="extra-tests")]
 use std::time::Instant;
 
 static AUDIO_OQC: AtomicBool = AtomicBool::new(false);
@@ -129,9 +129,11 @@ impl<'a> ShellCmdApi<'a> for Test {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                #[cfg(feature="extra-tests")]
                 "panic" => {
                     assert!(1 == 0, "Panic test: 1 == 0 failure!");
                 }
+                #[cfg(feature="extra-tests")]
                 "instant" => {
                     write!(ret, "start elapsed_ms {}\n", env.ticktimer.elapsed_ms()).unwrap();
                     let now = Instant::now();
@@ -612,10 +614,12 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     env.llio.wfi_override(false).unwrap();
                 }
+                #[cfg(feature="extra-tests")]
                 "devboot" => {
                     env.gam.set_devboot(true).unwrap();
                     write!(ret, "devboot on").unwrap();
                 }
+                #[cfg(feature="extra-tests")]
                 "devbootoff" => {
                     // this should do nothing if devboot was already set
                     env.gam.set_devboot(false).unwrap();
@@ -652,6 +656,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                 "modals" => {
                     modals::tests::spawn_test();
                 }
+                #[cfg(feature="extra-tests")]
                 "bip39" => {
                     let modals = modals::Modals::new(&env.xns).unwrap();
                     // 4. bip39 display test
