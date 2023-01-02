@@ -405,6 +405,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                             right_samples.push( ((sample & 0xFFFF) as i16) as f32 );
                             //left_samples.push( (((sample >> 16) & 0xFFFF) as i16) as f32 ); // reminder of how to extract the right channel
                         }
+                    } else {
+                        panic!("recbuf was not allocated");
                     }
                     // only one channel is considered, because in reality the left is just a copy of the right, as
                     // we are taking a mono microphone signal and mixing it into both ADCs
