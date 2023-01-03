@@ -450,6 +450,7 @@ fn main() -> ! {
                 }
             }
             Some(VaultOp::BasisChange) => {
+                vaultux.basis_change();
                 // this set of calls will effectively force a reload of any UX data
                 *mode.lock().unwrap() = VaultMode::Fido;
                 send_message(actions_conn,

@@ -204,6 +204,12 @@ impl VaultUx {
         }
     }
 
+    pub(crate) fn basis_change(&mut self) {
+        self.item_lists.lock().unwrap().pw.clear();
+        self.item_lists.lock().unwrap().fido.clear();
+        self.item_lists.lock().unwrap().totp.clear();
+    }
+
     pub(crate) fn update_mode(&mut self) {
         self.title_dirty = true;
         self.filtered_list.clear();
