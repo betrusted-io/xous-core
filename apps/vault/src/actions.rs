@@ -11,7 +11,7 @@ use std::io::{Write, Read};
 use passwords::PasswordGenerator;
 use std::cell::RefCell;
 
-use crate::{ux::{ListItem, deserialize_app_info}, ctap::FIDO_CRED_DICT, storage};
+use crate::{ux::{ListItem, deserialize_app_info}, ctap::FIDO_CRED_DICT, storage::{self, PasswordRecord, StorageContent}, ItemLists};
 use crate::{VaultMode, SelectedEntry};
 use crate::utc_now;
 
@@ -53,12 +53,12 @@ pub(crate) enum ActionOp {
 pub(crate) fn start_actions_thread(
     main_conn: xous::CID,
     sid: SID, mode: Arc::<Mutex::<VaultMode>>,
-    item_list: Arc::<Mutex::<Vec::<ListItem>>>,
+    item_lists: Arc::<Mutex::<ItemLists>>,
     action_active: Arc::<AtomicBool>,
 ) {
     let _ = thread::spawn({
         move || {
-            let mut manager = ActionManager::new(main_conn, mode, item_list, action_active);
+            let mut manager = ActionManager::new(main_conn, mode, item_lists, action_active);
             loop {
                 let msg = xous::receive_message(sid).unwrap();
                 let opcode: Option<ActionOp> = FromPrimitive::from_usize(msg.body.id());
@@ -134,7 +134,7 @@ struct ActionManager<'a> {
     trng: RefCell::<trng::Trng>,
 
     mode: Arc::<Mutex::<VaultMode>>,
-    item_list: Arc::<Mutex::<Vec::<ListItem>>>,
+    item_lists: Arc::<Mutex::<ItemLists>>,
     pddb: RefCell::<pddb::Pddb>,
     tt: ticktimer_server::Ticktimer,
     action_active: Arc::<AtomicBool>,
@@ -153,7 +153,7 @@ impl<'a> ActionManager<'a> {
     pub fn new(
         main_conn: xous::CID,
         mode: Arc::<Mutex::<VaultMode>>,
-        item_list: Arc::<Mutex::<Vec::<ListItem>>>,
+        item_lists: Arc::<Mutex::<ItemLists>>,
         action_active: Arc::<AtomicBool>
     ) -> ActionManager<'a> {
         let xns = xous_names::XousNames::new().unwrap();
@@ -181,7 +181,7 @@ impl<'a> ActionManager<'a> {
 
             mode_cache: mc,
             mode,
-            item_list,
+            item_lists,
             pddb: RefCell::new(pddb::Pddb::new()),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             action_active,
@@ -716,6 +716,10 @@ impl<'a> ActionManager<'a> {
 
     /// Populate the display list with data from the PDDB. Limited by total available RAM; probably
     /// would stop working if you have over 500-1k records with the current heap limits.
+    ///
+    /// This has been performance-optimized for our platform:
+    ///   - `format!()` is very slow, so we use `push_str()` where possible
+    ///   - allocations are slow, so we try to avoid them at all costs
     pub(crate) fn retrieve_db(&mut self) {
         #[cfg(feature="vaultperf")]
         self.pm.stop_and_reset();
@@ -727,11 +731,10 @@ impl<'a> ActionManager<'a> {
         self.mode_cache = {
             (*self.mode.lock().unwrap()).clone()
         };
-        let il = &mut *self.item_list.lock().unwrap();
-        il.clear();
-        log::info!("heap usage A: {}", heap_usage());
+        log::debug!("heap usage A: {}", heap_usage());
         match self.mode_cache {
             VaultMode::Password => {
+                let il = &mut self.item_lists.lock().unwrap().pw;
                 let start = self.tt.elapsed_ms();
                 #[cfg(feature="vaultperf")]
                 self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 1, std::line!());
@@ -741,39 +744,91 @@ impl<'a> ActionManager<'a> {
                         #[cfg(feature="vaultperf")]
                         self.perfentry(&self.pm, PERFMETA_NONE, 1, std::line!());
                         let mut oom_keys = 0;
-                        il.reserve(keys.len());
+                        // allocate a re-usable temporary buffers, to avoid triggering allocs
+                        let mut pw_rec = PasswordRecord::alloc();
+                        let mut extra = String::with_capacity(256);
+                        let mut desc = String::with_capacity(256);
+                        let mut lookup_key = String::with_capacity(384);
                         for key in keys {
                             #[cfg(feature="vaultperf")]
                             self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 2, std::line!());
                             if let Some(data) = key.data {
-                                if let Some(pw) = storage::PasswordRecord::try_from(data).ok() { // this call is slow
-                                    let human_time = crate::ux::atime_to_str(pw.atime);
+                                if pw_rec.from_vec(data).is_ok() {
+                                    // reset the re-usable structures
+                                    lookup_key.clear();
+                                    desc.clear();
+                                    extra.clear();
+                                    #[cfg(feature="vaultperf")]
+                                    self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
 
-                                    // avoid allocations
-                                    let mut extra = String::with_capacity(
-                                        human_time.len() +
-                                        t!("vault.u2f.appinfo.authcount", xous::LANG).len() +
-                                        11 // space for "count" and "; "
-                                    );
-                                    extra.push_str(&human_time);
-                                    extra.push_str("; ");
-                                    extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
-                                    extra.push_str(&pw.count.to_string());
-                                    // this region is slow
-                                    let mut desc = String::with_capacity(
-                                        pw.description.len() + 1 + pw.username.len()
-                                    );
-                                    desc.push_str(&pw.description);
+                                    // build the description string
+                                    desc.push_str(&pw_rec.description);
                                     desc.push_str("/");
-                                    desc.push_str(&pw.username);
-                                    let li = ListItem {
-                                        name: desc,
-                                        extra,
-                                        dirty: true,
-                                        guid: key.name,
-                                    };
+                                    desc.push_str(&pw_rec.username);
+
+                                    // build the storage key in the list array
+                                    lookup_key.push_str(&desc);
+                                    lookup_key.push_str(&key.name);
+
+                                    #[cfg(feature="vaultperf")]
+                                    self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
+                                    if let Some(prev_entry) = il.get_mut(&lookup_key) {
+                                        #[cfg(feature="vaultperf")]
+                                        self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 3, std::line!());
+                                        prev_entry.dirty = true;
+                                        #[cfg(feature="vaultperf")]
+                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
+                                        if prev_entry.atime != pw_rec.atime || prev_entry.count != pw_rec.count {
+                                            // this is expensive, so don't run it unless we have to
+                                            let human_time = crate::ux::atime_to_str(pw_rec.atime);
+                                            extra.push_str(&human_time);
+                                            extra.push_str("; ");
+                                            extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
+                                            extra.push_str(&pw_rec.count.to_string());
+                                            prev_entry.extra.clear();
+                                            prev_entry.extra.push_str(&extra);
+                                        }
+                                        #[cfg(feature="vaultperf")]
+                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
+                                        if prev_entry.name != desc { // this check should be redundant, but, leave it in to be safe
+                                            prev_entry.name.clear();
+                                            prev_entry.name.push_str(&desc);
+                                        }
+                                        #[cfg(feature="vaultperf")]
+                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
+                                        if prev_entry.guid != key.name {
+                                            prev_entry.guid.clear();
+                                            prev_entry.guid.push_str(&key.name);
+                                        }
+                                        #[cfg(feature="vaultperf")]
+                                        self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 3, std::line!());
+                                    } else {
+                                        #[cfg(feature="vaultperf")]
+                                        self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 4, std::line!());
+
+                                        let human_time = crate::ux::atime_to_str(pw_rec.atime);
+
+                                        extra.push_str(&human_time);
+                                        extra.push_str("; ");
+                                        extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
+                                        extra.push_str(&pw_rec.count.to_string());
+
+                                        let li = ListItem {
+                                            name: desc.to_string(), // these allocs will be slow, but we do it only once on boot
+                                            extra: extra.to_string(),
+                                            dirty: true,
+                                            guid: key.name,
+                                            atime: pw_rec.atime,
+                                            count: pw_rec.count,
+                                        };
+                                        il.insert(li.key(), li); // this push is very slow, but we only have to do it once on boot
+                                        #[cfg(feature="vaultperf")]
+                                        self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 4, std::line!());
+                                    }
+
                                     klen += 1;
-                                    il.push(li); // this push is very slow
+                                } else {
+                                    log::warn!("Couldn't interpret password record: {}", key.name);
                                 }
                             } else {
                                 oom_keys += 1;
@@ -805,10 +860,12 @@ impl<'a> ActionManager<'a> {
             VaultMode::Fido => {
                 // first assemble U2F records
                 log::debug!("listing in {}", U2F_APP_DICT);
+                let il = &mut self.item_lists.lock().unwrap().fido;
+                // regen from scratch every time, It's slow, but we're counting on <20 FIDO entries on average
+                il.clear();
                 match self.pddb.borrow().read_dict(U2F_APP_DICT, None, Some(256 * 1024)) {
                     Ok(keys) => {
                         let mut oom_keys = 0;
-                        il.reserve(keys.len());
                         for key in keys {
                             if let Some(data) = key.data {
                                 if let Some(ai) = deserialize_app_info(data) {
@@ -823,8 +880,10 @@ impl<'a> ActionManager<'a> {
                                         extra,
                                         dirty: true,
                                         guid: key.name,
+                                        count: ai.count,
+                                        atime: ai.atime,
                                     };
-                                    il.push(li);
+                                    il.insert(li.key(), li);
                                 } else {
                                     let err = format!("{}:{}:{}: ({})[moved data]...",
                                         key.basis, U2F_APP_DICT, key.name, key.len
@@ -857,7 +916,6 @@ impl<'a> ActionManager<'a> {
                 match self.pddb.borrow().read_dict(FIDO_CRED_DICT, None, Some(256 * 1024)) {
                     Ok(keys) => {
                         let mut oom_keys = 0;
-                        il.reserve(keys.len());
                         for key in keys {
                             if let Some(data) = key.data {
                                 match crate::ctap::storage::deserialize_credential(&data) {
@@ -874,8 +932,10 @@ impl<'a> ActionManager<'a> {
                                             extra,
                                             dirty: true,
                                             guid: key.name,
+                                            count: 0,
+                                            atime: 0,
                                         };
-                                        il.push(li);
+                                        il.insert(li.key(), li);
                                     }
                                     None => {
                                         let err = format!("{}:{}:{}: ({}){:x?}...",
@@ -907,10 +967,11 @@ impl<'a> ActionManager<'a> {
                 }
             }
             VaultMode::Totp => {
+                let il = &mut self.item_lists.lock().unwrap().totp;
+                il.clear();
                 match self.pddb.borrow().read_dict(VAULT_TOTP_DICT, None, Some(256 * 1024)) {
                     Ok(keys) => {
                         let mut oom_keys = 0;
-                        il.reserve(keys.len());
                         for key in keys {
                             if let Some(data) = key.data {
                                 if let Some(totp) = storage::TotpRecord::try_from(data).ok() {
@@ -927,8 +988,10 @@ impl<'a> ActionManager<'a> {
                                         extra,
                                         dirty: true,
                                         guid: key.name,
+                                        count: 0,
+                                        atime: 0,
                                     };
-                                    il.push(li);
+                                    il.insert(li.key(), li);
                                 } else {
                                     let err = format!("{}:{}:{}: ({})[moved data]...",
                                         key.basis, VAULT_TOTP_DICT, key.name, key.len
@@ -958,8 +1021,7 @@ impl<'a> ActionManager<'a> {
                 }
             }
         }
-        log::info!("heap usage B: {}", heap_usage());
-        il.sort();
+        log::debug!("heap usage B: {}", heap_usage());
         #[cfg(feature="vaultperf")]
         {
             self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 0, std::line!());

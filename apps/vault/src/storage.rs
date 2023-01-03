@@ -349,7 +349,7 @@ impl StorageContent for TotpRecord {
     }
 
     fn from_vec(&mut self, data: Vec<u8>) -> Result<(), Error> {
-        let desc_str = String::from_utf8(data).or(Err(TOTPSerializationError::MalformedInput))?;
+        let desc_str = std::str::from_utf8(&data).or(Err(TOTPSerializationError::MalformedInput))?;
 
         let mut pr = TotpRecord::default();
 
@@ -462,7 +462,7 @@ impl TryFrom<Vec<u8>> for TotpRecord {
     type Error = TOTPSerializationError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let desc_str = String::from_utf8(value).or(Err(TOTPSerializationError::MalformedInput))?;
+        let desc_str = std::str::from_utf8(&value).or(Err(TOTPSerializationError::MalformedInput))?;
 
         let mut pr = TotpRecord {
             version: VAULT_TOTP_REC_VERSION,
@@ -595,6 +595,33 @@ pub struct PasswordRecord {
     pub atime: u64,
     pub count: u64,
 }
+impl PasswordRecord {
+    pub fn alloc() -> Self {
+        // The intent is only one of these is allocated, and it is re-used.
+        // Sizes picked to be big enough to probably avoid re-allocs,
+        // yet small enough to not be unreasonable for a temporary buffer.
+        PasswordRecord {
+            version: 0,
+            description: String::with_capacity(256),
+            username: String::with_capacity(256),
+            password: String::with_capacity(256),
+            notes: String::with_capacity(1024),
+            ctime: 0,
+            atime: 0,
+            count: 0,
+        }
+    }
+    pub fn clear(&mut self) {
+        self.description.clear();
+        self.username.clear();
+        self.password.clear();
+        self.notes.clear();
+        self.version = 0;
+        self.ctime = 0;
+        self.atime = 0;
+        self.count = 0;
+    }
+}
 
 impl StorageContent for PasswordRecord {
     fn settings(&self) -> ContentPDDBSettings {
@@ -609,10 +636,10 @@ impl StorageContent for PasswordRecord {
     }
 
     fn from_vec(&mut self, data: Vec<u8>) -> Result<(), Error> {
+        self.clear();
+        // use `std::str` so we're allocating this temporary on the stack
         let desc_str =
-            String::from_utf8(data).or(Err(PasswordSerializationError::MalformedInput))?;
-
-        let mut pr = PasswordRecord::default();
+            std::str::from_utf8(&data).or(Err(PasswordSerializationError::MalformedInput))?;
 
         let lines = desc_str.split('\n');
         for line in lines {
@@ -620,19 +647,19 @@ impl StorageContent for PasswordRecord {
                 match tag {
                     "version" => {
                         if let Ok(ver) = u32::from_str_radix(data, 10) {
-                            pr.version = ver
+                            self.version = ver
                         } else {
                             log::warn!("ver error");
                             return Err(PasswordSerializationError::BadVersion)?;
                         }
                     }
-                    "description" => pr.description.push_str(data),
-                    "username" => pr.username.push_str(data),
-                    "password" => pr.password.push_str(data),
-                    "notes" => pr.notes.push_str(data),
+                    "description" => self.description.push_str(data),
+                    "username" => self.username.push_str(data),
+                    "password" => self.password.push_str(data),
+                    "notes" => self.notes.push_str(data),
                     "ctime" => {
                         if let Ok(ctime) = u64::from_str_radix(data, 10) {
-                            pr.ctime = ctime;
+                            self.ctime = ctime;
                         } else {
                             log::warn!("ctime error");
                             return Err(PasswordSerializationError::BadCtime)?;
@@ -640,7 +667,7 @@ impl StorageContent for PasswordRecord {
                     }
                     "atime" => {
                         if let Ok(atime) = u64::from_str_radix(data, 10) {
-                            pr.atime = atime;
+                            self.atime = atime;
                         } else {
                             log::warn!("atime error");
                             return Err(PasswordSerializationError::BadAtime)?;
@@ -648,7 +675,7 @@ impl StorageContent for PasswordRecord {
                     }
                     "count" => {
                         if let Ok(count) = u64::from_str_radix(data, 10) {
-                            pr.count = count;
+                            self.count = count;
                         } else {
                             log::warn!("count error");
                             return Err(PasswordSerializationError::BadCount)?;
@@ -665,8 +692,6 @@ impl StorageContent for PasswordRecord {
                 log::trace!("invalid line skipped: {:?}", line);
             }
         }
-
-        *self = pr;
         Ok(())
     }
     fn to_vec(&self) -> Vec<u8> {
