@@ -729,6 +729,7 @@ impl<'a> ActionManager<'a> {
         };
         let il = &mut *self.item_list.lock().unwrap();
         il.clear();
+        log::info!("heap usage A: {}", heap_usage());
         match self.mode_cache {
             VaultMode::Password => {
                 let start = self.tt.elapsed_ms();
@@ -743,10 +744,11 @@ impl<'a> ActionManager<'a> {
                         il.reserve(keys.len());
                         for key in keys {
                             #[cfg(feature="vaultperf")]
-                            self.perfentry(&self.pm, PERFMETA_NONE, 1, std::line!());
+                            self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 2, std::line!());
                             if let Some(data) = key.data {
-                                if let Some(pw) = storage::PasswordRecord::try_from(data).ok() {
+                                if let Some(pw) = storage::PasswordRecord::try_from(data).ok() { // this call is slow
                                     let human_time = crate::ux::atime_to_str(pw.atime);
+
                                     // avoid allocations
                                     let mut extra = String::with_capacity(
                                         human_time.len() +
@@ -757,7 +759,13 @@ impl<'a> ActionManager<'a> {
                                     extra.push_str("; ");
                                     extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
                                     extra.push_str(&pw.count.to_string());
-                                    let desc = format!("{}/{}", pw.description, pw.username);
+                                    // this region is slow
+                                    let mut desc = String::with_capacity(
+                                        pw.description.len() + 1 + pw.username.len()
+                                    );
+                                    desc.push_str(&pw.description);
+                                    desc.push_str("/");
+                                    desc.push_str(&pw.username);
                                     let li = ListItem {
                                         name: desc,
                                         extra,
@@ -765,11 +773,13 @@ impl<'a> ActionManager<'a> {
                                         guid: key.name,
                                     };
                                     klen += 1;
-                                    il.push(li);
+                                    il.push(li); // this push is very slow
                                 }
                             } else {
                                 oom_keys += 1;
                             }
+                            #[cfg(feature="vaultperf")]
+                            self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 2, std::line!());
                         }
                         if oom_keys != 0 {
                             log::warn!("Ran out of cache space handling password keys. {} keys are not loaded.", oom_keys);
@@ -948,6 +958,7 @@ impl<'a> ActionManager<'a> {
                 }
             }
         }
+        log::info!("heap usage B: {}", heap_usage());
         il.sort();
         #[cfg(feature="vaultperf")]
         {
@@ -1347,4 +1358,17 @@ fn build_perf_mgr<'a>(bufptr: *mut u8) -> PerfMgr<'a> {
         AtomicCsr::new(perf_csr.as_mut_ptr() as *mut u32),
         AtomicCsr::new(event1_csr.as_mut_ptr() as *mut u32) // event_source1
     )
+}
+
+pub(crate) fn heap_usage() -> usize {
+    match xous::rsyscall(xous::SysCall::IncreaseHeap(0, xous::MemoryFlags::R)).expect("couldn't get heap size") {
+        xous::Result::MemoryRange(m) => {
+            let usage = m.len();
+            usage
+        }
+        _ => {
+            log::error!("Couldn't measure heap usage");
+            0
+         },
+    }
 }
