@@ -1061,7 +1061,13 @@ impl<'a> ActionManager<'a> {
         #[cfg(feature="ux-swap-delay")]
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
         match self.pddb.borrow().unlock_basis(&name, Some(BasisRetentionPolicy::Persist)) {
-            Ok(_) => log::debug!("Basis {} unlocked", name),
+            Ok(_) => {
+                log::debug!("Basis {} unlocked", name);
+                // clear local caches
+                self.item_lists.lock().unwrap().pw.clear();
+                self.item_lists.lock().unwrap().fido.clear();
+                self.item_lists.lock().unwrap().totp.clear();
+            },
             Err(e) => match e.kind() {
                 ErrorKind::PermissionDenied => {
                     self.report_err(t!("vault.error.basis_unlock_error", xous::LANG), None::<std::io::Error>)
@@ -1084,7 +1090,13 @@ impl<'a> ActionManager<'a> {
                 Ok(unmount) => {
                     for b in unmount {
                         match self.pddb.borrow().lock_basis(&b) {
-                            Ok(_) => log::debug!("basis {} locked", b),
+                            Ok(_) => {
+                                log::debug!("basis {} locked", b);
+                                // clear local caches
+                                self.item_lists.lock().unwrap().pw.clear();
+                                self.item_lists.lock().unwrap().fido.clear();
+                                self.item_lists.lock().unwrap().totp.clear();
+                            },
                             Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
                     }
@@ -1109,7 +1121,13 @@ impl<'a> ActionManager<'a> {
                 Ok(_) => {
                     if self.yes_no_approval(t!("vault.basis.created_mount", xous::LANG)) {
                         match self.pddb.borrow().unlock_basis(&name, Some(BasisRetentionPolicy::Persist)) {
-                            Ok(_) => log::debug!("Basis {} unlocked", name),
+                            Ok(_) => {
+                                log::debug!("Basis {} unlocked", name);
+                                // clear local caches
+                                self.item_lists.lock().unwrap().pw.clear();
+                                self.item_lists.lock().unwrap().fido.clear();
+                                self.item_lists.lock().unwrap().totp.clear();
+                            },
                             Err(e) => match e.kind() {
                                 ErrorKind::PermissionDenied => {
                                     self.report_err(t!("vault.error.basis_unlock_error", xous::LANG), None::<std::io::Error>)
