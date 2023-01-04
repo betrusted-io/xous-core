@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -e
+
+# Check for pre-requeisites
+MSG="Install gcc, gdb, openocd and libudev-dev. For distros that use apt, try 'apt-get install -y gcc openocd gdb-multiarch libudev-dev'"
+gcc --version > /dev/null 2>&1 || (echo $MSG && exit 1)
+openocd --version > /dev/null 2>&1 || (echo $MSG && exit 1)
+gdb-multiarch --version > /dev/null 2>&1 || (echo $MSG && exit 1) 
+ldconfig -p | grep libudev > /dev/null 2>&1 || (echo $MSG && exit 1)
+
+# Download and install rustup if it's missing
+rustup -V || curl https://sh.rustup.rs -sSf | sh
+# Ensure we have the latest rustup
+rustup self update
+
+# Add the embedded toolchains
+rustup target add --toolchain stable thumbv6m-none-eabi thumbv7m-none-eabi thumbv7em-none-eabi thumbv7em-none-eabihf
+rustup target add --toolchain nightly thumbv6m-none-eabi thumbv7m-none-eabi thumbv7em-none-eabi thumbv7em-none-eabihf
+
+# Install cargo-binutils if it's not already installed. (Possibly not needed but listed in embedded book)
+if ! cargo nm -V >/dev/null 2>&1; then
+    cargo install -f cargo-binutils            
+fi
+
+# Install cargo-watch is it's not already installed
+if ! cargo watch -V >/dev/null 2>&1; then
+    cargo install -f cargo-watch
+fi
+
+if ! serialitm --help > /dev/null 2>&1; then
+    cargo install -f serialitm
+fi
+
+# Install llvm-tools-preview
+rustup component add --toolchain stable llvm-tools-preview
+rustup component add --toolchain nightly llvm-tools-preview
+
+# Run the initial build(s) which take quite a while the first time
+cargo +nightly check
+cargo +nightly build
+cargo +nightly doc

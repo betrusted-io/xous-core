@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+./stop_openocd
+
+set -e
+
+openocd -f openocd.cfg -c "init_reset halt; program uf2boot.elf verify reset exit"

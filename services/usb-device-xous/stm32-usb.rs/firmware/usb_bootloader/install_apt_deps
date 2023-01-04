@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+
+apt-get install -y gcc openocd gdb-multiarch libudev-dev

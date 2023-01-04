@@ -1,0 +1,37 @@
+[package]
+authors = ["cs2dsb <cs2dsb@gmail.com>"]
+edition = "2018"
+readme = "README.md"
+name = "usb_bootloader"
+version = "0.1.0"
+
+[dependencies]
+cortex-m              = "0.6.2"
+cortex-m-rt           = "0.6.9"
+cortex-m-rtfm         = "0.5.1"
+stm32f1               = "0.8.0"
+usb-device            = "0.2.4"
+usbd-serial           = "0.1"
+usbd-webusb           = "1.0.0"
+stm32f1xx-hal         = { version = "0.5", features = ["stm32f103", "stm32-usbd", "rt"] }
+embedded-hal          = { version = "0.2.3", features = ["unproven"] }
+bitmask               = { version = "0.5.0", default-features = false }
+itm_logger            = { version = "0.1.0", default-features = false, path = "../../../../rust/itm_logger" }
+usbd_mass_storage     = { version = "0.1.0", path = "../usbd_mass_storage" }
+usbd_scsi             = { version = "0.1.0", path = "../usbd_scsi" }
+uf2_block             = { version = "0.1.0", path = "../uf2_block" }
+packing               = { version = "0.1.0", path = "../packing/packing" }
+
+[features]
+default = [ ]
+itm = [ "itm_logger/logging" ]
+trace-usb = [ "itm", "usbd_mass_storage/trace-all", "usbd_scsi/trace-all" ]
+
+[profile.release]
+codegen-units = 1 # better optimizations
+debug = true # symbols are nice and they don't increase the size on Flash
+lto = true # better optimizations
+opt-level = 's'
+
+[profile.dev]
+lto = true

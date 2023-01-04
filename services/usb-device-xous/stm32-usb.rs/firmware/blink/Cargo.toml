@@ -1,0 +1,23 @@
+[package]
+authors = ["cs2dsb <cs2dsb@gmail.com>"]
+edition = "2018"
+readme = "README.md"
+name = "blink"
+version = "0.1.0"
+
+[dependencies]
+cortex-m              = "0.6.2"
+cortex-m-rt           = "0.6.9"
+cortex-m-rtfm         = "0.5.1"
+stm32f1               = "0.8.0"
+stm32f1xx-hal         = { version = "0.5", features = ["stm32f103", "rt"] }
+embedded-hal          = { version = "0.2.3", features = ["unproven"] }
+
+[profile.release]
+codegen-units = 1 # better optimizations
+debug = true # symbols are nice and they don't increase the size on Flash
+lto = true # better optimizations
+opt-level = 's'
+
+[profile.dev]
+lto = true

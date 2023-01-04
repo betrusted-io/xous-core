@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -e
+
+./build_uf2
+
+cp ./blink.uf2 "$1"

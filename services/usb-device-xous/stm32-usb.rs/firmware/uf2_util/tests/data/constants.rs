@@ -1,0 +1,2 @@
+const BASE_ADDRESS: u32 = 0x08004000;
+const PAGE_SIZE: u16 = 256;

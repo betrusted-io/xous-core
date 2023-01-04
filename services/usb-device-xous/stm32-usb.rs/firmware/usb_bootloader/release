@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+./device_reset_halt
+
+cargo +nightly run --release --bin msc --features trace-usb,itm

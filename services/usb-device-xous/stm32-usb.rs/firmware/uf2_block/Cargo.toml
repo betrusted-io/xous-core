@@ -1,0 +1,17 @@
+[package]
+name = "uf2_block"
+version = "0.1.0"
+authors = ["cs2dsb <cs2dsb@gmail.com>"]
+edition = "2018"
+description = "UF2 block packing and unpacking"
+categories = ["encoding"]
+keywords = ["encoding", "no_std"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cs2dsb/stm32-usb.rs"
+readme = "README.md"
+documentation = "https://docs.rs/uf2_block"
+homepage = "https://github.com/cs2dsb/stm32-usb.rs/tree/master/firmware/uf2_block"
+
+[dependencies]
+bitmask               = { version = "0.5.0", default-features = false }
+packing               = { version = "0.2.0", path = "../packing/packing" }

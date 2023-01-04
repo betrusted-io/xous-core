@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+./stop_openocd
+
+set -e
+
+#TODO: use --message-format json to find the path to the executable instead of hard coded
+cargo +nightly build --release --bin msc
+openocd -f openocd.cfg -c 'init_reset halt; program target/thumbv7m-none-eabi/release/msc verify reset exit'

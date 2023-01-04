@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+cargo +nightly doc --document-private-items --open

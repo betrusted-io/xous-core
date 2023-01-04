@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+# cargo +nightly size --release --bin msc
+# cargo +nightly bloat --release --bin msc
+cargo +nightly build --release --bin msc
+
+arm-none-eabi-size target/thumbv7m-none-eabi/release/msc | tail -n 1 >> size.txt
+
+cat size.txt

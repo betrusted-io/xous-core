@@ -1,0 +1,17 @@
+[package]
+name = "packing"
+version = "0.2.0"
+authors = ["cs2dsb <cs2dsb@gmail.com>"]
+edition = "2018"
+description = "Bit packing and unpacking for arbitrarily aligned fields"
+categories = ["encoding"]
+keywords = ["serialization", "packing", "no_std"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cs2dsb/stm32-usb.rs"
+readme = "README.md"
+documentation = "https://docs.rs/packing"
+homepage = "https://github.com/cs2dsb/stm32-usb.rs/tree/master/firmware/packing/packing"
+
+[dependencies]
+packing_codegen = { version = "0.1.0", path = "../packing_codegen" }
+typenum = "1.11.2"

@@ -1,0 +1,13 @@
+[package]
+name = "uf2_util"
+version = "0.1.0"
+authors = ["cs2dsb <cs2dsb@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+uf2_block   = { version = "0.1.0", path = "../uf2_block" }
+clap        = "2.33.0"
+structopt   = "0.3"
+goblin      = "0.2"
+env_logger  = "0.7.1"
+log         = "0.4.8"

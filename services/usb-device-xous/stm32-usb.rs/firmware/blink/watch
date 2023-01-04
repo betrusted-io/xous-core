@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+cargo watch -w .. -x "build --release --bin blink"

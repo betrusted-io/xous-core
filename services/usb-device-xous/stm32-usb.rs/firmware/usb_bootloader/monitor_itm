@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+
+# Hopefully it's one of these...
+serialitm /dev/ttyUSB0 8000000
+serialitm /dev/ttyUSB1 8000000

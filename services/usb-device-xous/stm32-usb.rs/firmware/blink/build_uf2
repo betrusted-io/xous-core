@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -e
+
+ELF=target/thumbv7m-none-eabi/release/blink
+UF2=./blink.uf2
+
+
+cargo build --bin blink
+
+# Make sure uf2_util has been built
+(cd ../uf2_util/; cargo build)
+
+# Convert elf to UF2
+rm -f $UF2
+../uf2_util/target/debug/main $ELF --input-type elf $UF2
