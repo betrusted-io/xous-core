@@ -87,6 +87,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
                                 _ => write!(ret, "HID not connected to USB host").unwrap(),
                             }
                         }
+                        Ok(UsbDeviceType::MassStorage) => write!(ret, "USB mass storage connected").unwrap(),
                         _ => write!(ret, "Invalid response checking status").unwrap(),
                     }
                 }
