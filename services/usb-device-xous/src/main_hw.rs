@@ -170,13 +170,38 @@ pub(crate) fn main_hw() -> ! {
     .build();
 
     let ums_alloc = UsbBusAllocator::new(ums_dev);
+
+    let bd = block_device::BlockDevice{};
+
+    let mut ums = usbd_scsi::Scsi::new(
+        &ums_alloc, 
+        16, 
+        bd, 
+        "Kosagi".as_bytes(), 
+        "Kosagi Precursor".as_bytes(), 
+        "1".as_bytes()
+    ); 
+
+    //let mut ums = usbd_serial::CdcAcmClass::new(&ums_alloc, 64);
+    
+    // let mut ums = usbd_mass_storage::MscClass::new(
+    //     &ums_alloc, 
+    //     64, 
+    //     usbd_mass_storage::InterfaceSubclass::ScsiTransparentCommandSet, 
+    //     usbd_mass_storage::InterfaceProtocol::BulkOnlyTransport
+    // );
+
     let mut ums_device = UsbDeviceBuilder::new(&ums_alloc, UsbVidPid(0x1209, 0x3613))
         .manufacturer("Kosagi")
         .product("Precursor")
         .serial_number(&serial_number)
+        .device_class(usbd_mass_storage::USB_CLASS_MSC)
+        .self_powered(false)
+        .max_power(500)
         .build();
 
-    let mut ums = usbd_mass_storage::UMSClass::new(&ums_alloc);
+
+
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -279,6 +304,15 @@ pub(crate) fn main_hw() -> ! {
                 buffer.replace(u2f_ipc).unwrap();
             }
             Some(Opcode::UsbIrqHandler) => {
+                if matches!(view, Views::MassStorage) {
+                    if ums_device.poll(&mut [&mut ums]) {
+                        log::debug!("ums device had something to do!")
+                        //Some(fido_class.interface::<RawFidoInterface<'_, _>, _>())
+                    }
+
+                    continue;
+                }
+
                 let maybe_u2f = match view {
                     Views::FidoWithKbd => {
                         if usb_dev.poll(&mut [&mut composite]) {
@@ -302,14 +336,8 @@ pub(crate) fn main_hw() -> ! {
                             None
                         }
                     },
-                    Views::MassStorage => {
-                        if ums_device.poll(&mut [&mut ums]) {
-                            //Some(fido_class.interface::<RawFidoInterface<'_, _>, _>())
-                            log::info!("mass storage took a irq!");
-                            None
-                        } else {
-                            None
-                        }
+                    _ => {
+                        unreachable!("should not be able to arrive here if view is mass storage!")
                     }
                 };
                 if let Some(u2f) = maybe_u2f {
