@@ -29,9 +29,10 @@ usbd-human-interface-device = "0.2.1"
 embedded-time = "0.12.1" # required by the keyboard interface
 packed_struct = { version = "0.10", default-features = false } # used by the usbd-human-interface-device crate
 num_enum = { version = "0.5", default-features = false } # used by the usbd-human-interface-device crate
+usbd_scsi = { path = "./stm32-usb.rs/firmware/usbd_scsi" }
+usbd_mass_storage = { path = "./stm32-usb.rs/firmware/usbd_mass_storage" }
 
-[dependencies.usbd-mass-storage]
-path = "../../../usbd-mass-storage"
+ghostfat = "0.5.0"
 
 [dependencies.usb-device]
 # see top level Cargo.toml for patch.crates-io directive to help with dev work
