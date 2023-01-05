@@ -23,6 +23,7 @@ uf2_block                = { version = "0.1.0", path = "../uf2_block" }
 usbd_mass_storage     = { version = "0.1.0", path = "../usbd_mass_storage" }
 packing               = { version = "0.2.0", path = "../packing/packing" }
 usbd_bulk_only_transport = { version = "0.1.0", path = "../usbd_bulk_only_transport" }
+log = "0.4.17"
 
 [features]
 trace-bot-headers   = [ "usbd_bulk_only_transport/trace-bot-headers" ]

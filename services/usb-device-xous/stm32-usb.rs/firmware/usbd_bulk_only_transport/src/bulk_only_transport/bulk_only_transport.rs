@@ -175,6 +175,9 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
             data_done: false,
         }
     }
+    pub fn debug(&self) {
+        log::debug!("data_i: {}, buffer_i: {}, buf: {:x?}", self.data_i, self.buffer_i, self.buffer);
+    }
 
     fn max_packet_size(&self) -> u16 {
         self.inner.max_packet_size()
@@ -338,6 +341,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
             let e = s + len;
 
             self.buffer_i += len;
+            self.command_status_wrapper.data_residue = self.buffer_i as u32;
 
             Ok(&mut self.buffer[s..e])
         } else {
@@ -390,6 +394,15 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
                 .min(packet_size);
 
             let end = start + len;
+
+            log::debug!("write_packet: start {} end {} buffer_i {} data_i {} residue {} packet_size{}, buf {:x?}",
+                start, end,
+                self.buffer_i,
+                self.data_i,
+                residue,
+                packet_size,
+                self.buffer,
+            );
 
             let bytes = self.inner.write_packet(&self.buffer[start..end])?;
 
@@ -445,7 +458,9 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
 
     fn end_data_transfer(&mut self) -> Result<(), Error> {
         // Get the csw ready to send
+        log::debug!("data_i: {}, buffer_i: {}, buf: {:x?}", self.data_i, self.buffer_i, self.buffer);
         self.pack_csw();
+        log::debug!("data_i: {}, buffer_i: {}, buf: {:x?}", self.data_i, self.buffer_i, self.buffer);
 
         // We only send a zero length packet if the last write was a full packet AND we are sending
         // less total bytes than the command header asked for
@@ -489,6 +504,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     }
 
     fn check_end_data_transfer(&mut self) -> Result<(), Error> {
+        self.flush()?;
         match self.state {
             State::ReceivingDataFromHost => {
                 // Check if we've read everything we were expecting

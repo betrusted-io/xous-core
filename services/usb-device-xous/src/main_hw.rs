@@ -175,7 +175,7 @@ pub(crate) fn main_hw() -> ! {
 
     let mut ums = usbd_scsi::Scsi::new(
         &ums_alloc, 
-        16, 
+        64, 
         bd, 
         "Kosagi".as_bytes(), 
         "Kosagi Precursor".as_bytes(), 

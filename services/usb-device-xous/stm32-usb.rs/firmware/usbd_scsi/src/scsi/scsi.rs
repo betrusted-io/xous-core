@@ -129,7 +129,10 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
             // for descriptor based response data.
             Command::Inquiry(_) => {
                 let buf = self.inner.take_buffer_space(InquiryResponse::BYTES)?;
+                log::debug!("{:x?}", buf);
                 self.inquiry_response.pack(buf)?;
+                log::debug!("{:x?}", buf);
+                log::debug!("{:x?}", self.inquiry_response);
                 Done
             },
 
