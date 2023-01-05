@@ -12,12 +12,10 @@ import urllib.request
 import re
 
 from progressbar.bar import ProgressBar
-from bip_utils import (
-   Bip39MnemonicValidator, Bip39MnemonicDecoder
-)
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 from Crypto.Random import get_random_bytes
+from pddbcommon import bip39_to_bits
 
 class PrecursorUsb:
     def __init__(self, dev):
@@ -446,10 +444,7 @@ def xor_bytes(a, b):
 
 def try_key_to_bytes(input):
     if len(input.split(' ')) == 24: # 24 words is BIP-39
-        # Get if a mnemonic is valid with automatic language detection, return bool
-        assert(Bip39MnemonicValidator().IsValid(input))
-        # Like before with automatic language detection
-        key_bytes = Bip39MnemonicDecoder().Decode(input)
+        key_bytes = bip39_to_bits(input)
     else:
         key_bytes = int(input, 16).to_bytes(32, byteorder='big')
     return key_bytes
