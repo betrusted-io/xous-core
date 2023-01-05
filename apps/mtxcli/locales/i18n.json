@@ -20,6 +20,13 @@
         "ja": "シンプルなMTXCLIデモへようこそ",
         "zh": "简单的 mtxcli 演示活动"
     },
+    "mtxcli.heap.help": {
+        "en": "/heap",
+        "en-tts": "heap",
+        "fr": "/heap",
+        "ja": "/heap",
+        "zh": "/heap"
+    },
     "mtxcli.help.help": {
         "en": "/help [cmd]",
         "en-tts": "help [cmd]",
