@@ -26,6 +26,8 @@ const SERVER_KEY: &str = "server";
 const TOKEN_KEY: &str = "_token";
 const USER_KEY: &str = "user";
 const USERNAME_KEY: &str = "username";
+const VERSION_KEY: &str = "_version";
+const CURRENT_VERSION_KEY: &str = "__version";
 
 const HTTPS: &str = "https://";
 const SERVER_MATRIX: &str = "https://matrix.org";
@@ -203,23 +205,33 @@ impl CommonEnv {
         }
     }
 
+    pub fn xous_version(&self) -> String {
+        // Currently breaks in hosted mode:
+        // self.ticktimer.get_version()
+        "v0.9.11".to_string()
+    }
+
     pub fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
-        let mut keypath = PathBuf::new();
-        keypath.push(MTXCLI_DICT);
-        if std::fs::metadata(&keypath).is_ok() { // keypath exists
-            log::info!("dict '{}' exists", MTXCLI_DICT);
+        if key.eq(CURRENT_VERSION_KEY) {
+            Ok(Some(self.xous_version()))
         } else {
-            log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
-            std::fs::create_dir_all(&keypath)?;
-        }
-        keypath.push(key);
-        if let Ok(mut file)= File::open(keypath) {
-            let mut value = String::new();
-            file.read_to_string(&mut value)?;
-            // log::info!("get '{}' = '{}'", key, value);
-            Ok(Some(value))
-        } else {
-            Ok(None)
+            let mut keypath = PathBuf::new();
+            keypath.push(MTXCLI_DICT);
+            if std::fs::metadata(&keypath).is_ok() { // keypath exists
+                log::info!("dict '{}' exists", MTXCLI_DICT);
+            } else {
+                log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
+                std::fs::create_dir_all(&keypath)?;
+            }
+            keypath.push(key);
+            if let Ok(mut file)= File::open(keypath) {
+                let mut value = String::new();
+                file.read_to_string(&mut value)?;
+                // log::info!("get '{}' = '{}'", key, value);
+                Ok(Some(value))
+            } else {
+                Ok(None)
+            }
         }
     }
 
@@ -422,6 +434,7 @@ impl CommonEnv {
 
 ///// 1. add your module here, and pull its namespace into the local crate
 mod get;       use get::*;
+mod heap;      use heap::*;
 mod help;      use help::*;
 mod login;     use login::*;
 mod logout;    use logout::*;
@@ -434,6 +447,7 @@ pub struct CmdEnv {
     lastverb: XousString::<256>,
     ///// 2. declare storage for your command here.
     get_cmd: Get,
+    heap_cmd: Heap,
     help_cmd: Help,
     login_cmd: Login,
     logout_cmd: Logout,
@@ -471,6 +485,7 @@ impl CmdEnv {
             lastverb: XousString::<256>::new(),
             ///// 3. initialize your storage, by calling new()
             get_cmd: Get::new(&xns),
+            heap_cmd: Heap::new(&xns),
             help_cmd: Help::new(&xns),
             login_cmd: Login::new(&xns),
             logout_cmd: Logout::new(&xns),
@@ -487,6 +502,7 @@ impl CmdEnv {
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut self.get_cmd,
+            &mut self.heap_cmd,
             &mut self.help_cmd,
             &mut self.login_cmd,
             &mut self.logout_cmd,
