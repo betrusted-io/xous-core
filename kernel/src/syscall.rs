@@ -681,7 +681,7 @@ fn reply_and_receive_next(
                 #[cfg(baremetal)]
                 let src_virt = _server_addr.get() as _;
                 #[cfg(not(baremetal))]
-                let src_virt = arg1 as _; // TODO: Check this is correct on hosted mode
+                let src_virt = arg1 as _;
 
                 // Return the memory to the calling process
                 ss.return_memory(src_virt, pid, tid, client_addr.get() as _, len.get())?;
@@ -689,7 +689,10 @@ fn reply_and_receive_next(
                 MessageResponse {
                     pid,
                     tid,
-                    result: xous_kernel::Result::MemoryReturned(MemorySize::new(arg3), MemorySize::new(arg4)),
+                    result: xous_kernel::Result::MemoryReturned(
+                        MemorySize::new(arg3),
+                        MemorySize::new(arg4),
+                    ),
                 }
             }
             WaitingMessage::MovedMemory => {
