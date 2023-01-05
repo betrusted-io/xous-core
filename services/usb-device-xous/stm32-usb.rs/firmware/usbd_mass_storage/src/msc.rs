@@ -20,9 +20,9 @@ pub const USB_CLASS_MSC: u8 = 0x08;
 /// [Scsi](struct.Scsi.html) and [Bulk Only Transport](struct.BulkOnlyTransport.html)
 pub struct MscClass<'a, B: UsbBus> {
     pub(crate) msc_if: InterfaceNumber,
-    fake_if: InterfaceNumber,
     pub(crate) read_ep: EndpointOut<'a, B>,
     pub(crate) write_ep: EndpointIn<'a, B>,
+    pub(crate) write2_ep: EndpointIn<'a, B>,
     pub(crate) subclass: InterfaceSubclass,
     pub(crate) protocol: InterfaceProtocol,
 }
@@ -36,8 +36,8 @@ impl<B: UsbBus> MscClass<'_, B> {
     ) -> MscClass<'_, B> {
         MscClass {
             msc_if: alloc.interface(),
-            fake_if: alloc.interface(),
             write_ep: alloc.bulk(max_packet_size),
+            write2_ep: alloc.bulk(max_packet_size),
             read_ep: alloc.bulk(max_packet_size),
             subclass,
             protocol,
@@ -92,8 +92,9 @@ impl<B: UsbBus> UsbClass<B> for MscClass<'_, B> {
 
         writer.endpoint(&self.write_ep)?;
         writer.endpoint(&self.read_ep)?;
+        writer.endpoint(&self.write2_ep)
 
-        writer.write(0, &[])
+        //writer.write(0, &[])
 
         // writer.interface(
         //     self.fake_if,
@@ -108,14 +109,14 @@ impl<B: UsbBus> UsbClass<B> for MscClass<'_, B> {
     fn control_in(&mut self, xfer: ControlIn<B>) {
         let req = xfer.request();
         if self.correct_interface_number(req.index) {
-           trace_usb_control!("USB_CONTROL> Unhandled control-IN: {:?}", req);
+           //trace_usb_control!("USB_CONTROL> Unhandled control-IN: {:?}", req);
         }
     }
 
     fn control_out(&mut self, xfer: ControlOut<B>) {
         let req = xfer.request();
         if self.correct_interface_number(req.index) {
-            trace_usb_control!("USB_CONTRO> Unhandled control-OUT: {:?}", req);
+            //trace_usb_control!("USB_CONTRO> Unhandled control-OUT: {:?}", req);
         };
     }
 }
