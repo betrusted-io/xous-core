@@ -514,7 +514,7 @@ pub enum SysCall {
         usize,         /* arg2 (BlockingScalar) or the memory length (MemoryMesage) */
         usize,         /* arg3 (BlockingScalar) or the memory offset (MemoryMesage) */
         usize,         /* arg4 (BlockingScalar) or the memory valid (MemoryMesage) */
-        usize,         /* for BlockingScalars, indicates how many args are valid */
+        usize,         /* how many args are valid (BlockingScalar) or usize::MAX (MemoryMessge) */
     ),
 
     /// This syscall does not exist. It captures all possible
@@ -1188,6 +1188,7 @@ impl SysCall {
                 )
             }
             SysCall::ReturnMemory(_, _, _, _) => true,
+            SysCall::ReplyAndReceiveNext(_, _, _, _, _, _, usize::MAX) => true,
             _ => false,
         }
     }
@@ -1224,7 +1225,10 @@ impl SysCall {
 
     /// Returns `true` if the associated syscall is returning memory
     pub fn is_return_memory(&self) -> bool {
-        matches!(self, SysCall::ReturnMemory(_, _, _, _))
+        matches!(
+            self,
+            SysCall::ReturnMemory(..) | SysCall::ReplyAndReceiveNext(_, _, _, _, _, _, usize::MAX)
+        )
     }
 
     /// If the syscall has memory attached to it, return the memory
@@ -1237,26 +1241,33 @@ impl SysCall {
                 _ => None,
             },
             SysCall::ReturnMemory(_, range, _, _) => Some(*range),
+            SysCall::ReplyAndReceiveNext(_, _, a1, a2, _, _, usize::MAX) => unsafe {
+                MemoryRange::new(*a1, *a2).ok()
+            },
             _ => None,
         }
     }
 
-    /// If the syscall has memory attached to it, return the memory, mutably
+    /// If the syscall has memory attached to it, replace the memory.
     ///
     /// # Safety
     ///
-    /// This function is only safe to call to fixup the pointer. It should
-    /// not be used for any other purpose.
-    pub unsafe fn memory_mut(&mut self) -> Option<&mut MemoryRange> {
+    /// This function is only safe to call to fixup the pointer, particularly
+    /// when running in hosted mode. It should not be used for any other purpose.
+    pub unsafe fn replace_memory(&mut self, new: MemoryRange) {
         match self {
             SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => match msg {
                 Message::Move(memory_message)
                 | Message::Borrow(memory_message)
-                | Message::MutableBorrow(memory_message) => Some(&mut memory_message.buf),
-                _ => None,
+                | Message::MutableBorrow(memory_message) => memory_message.buf = new,
+                _ => (),
             },
-            SysCall::ReturnMemory(_, range, _, _) => Some(range),
-            _ => None,
+            SysCall::ReturnMemory(_, range, _, _) => *range = new,
+            SysCall::ReplyAndReceiveNext(_, _, a1, a2, _, _, usize::MAX) => {
+                *a1 = new.addr.get();
+                *a2 = new.size.get();
+            }
+            _ => (),
         }
     }
 
@@ -1958,7 +1969,7 @@ pub fn reply_and_receive_next_legacy(
     msg: &mut Option<MessageEnvelope>,
     return_type: &mut usize,
 ) -> core::result::Result<(), crate::Error> {
-    let rt = *return_type;
+    let mut rt = *return_type;
     *return_type = 0;
     if let Some(envelope) = msg.take() {
         // If the message inside is nonblocking, then there's nothing to return.
@@ -1969,6 +1980,8 @@ pub fn reply_and_receive_next_legacy(
         }
 
         let args = if let Some(mem) = envelope.body.memory_message() {
+            // Allow hosted mode to detect this is a memory message by giving a sentinal value here
+            rt = usize::MAX;
             mem.to_usize()
         } else if let Some(scalar) = envelope.body.scalar_message() {
             scalar.to_usize()
