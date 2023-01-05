@@ -1200,10 +1200,3 @@ def bip39_to_bits(phrase):
         return data
     else:
         raise ValueError("checksum did not match on BIP-39 phrase")
-
-def main():
-    bip39_to_bits("lava window state pupil bread light theme amazing paddle zone deer foam strong alien hero employ spare rib symptom lunar save giant ocean ghost")
-
-if __name__ == "__main__":
-    main()
-    exit(0)
