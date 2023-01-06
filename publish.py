@@ -12,9 +12,9 @@ UTRA_CRATES = [
     ["utralib", "utralib"],
 ]
 CRATES = [
-    #["xous", "xous-rs"],
-    #["xous-kernel", "kernel"],
-    #["xous-ipc", "xous-ipc"],
+    ["xous", "xous-rs"],
+    ["xous-kernel", "kernel"],
+    ["xous-ipc", "xous-ipc"],
     ["xous-api-log", "api/xous-api-log"],
     ["xous-api-names", "api/xous-api-names"],
     ["xous-api-susres", "api/xous-api-susres"],
