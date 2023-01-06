@@ -140,6 +140,7 @@ mod implementation {
 
             #[cfg(feature = "watchdog")]
             {
+                xtt.wdt.wfo(utra::wdt::PERIOD_PERIOD, 0x7FFF_FFFF); // about 30 seconds +/- 50%
                 xtt.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
                 // this is a write-once field that is lost later on, so it must be explicitly managed
                 // xtt.wdt_sr_manager.push(RegOrField::Field(utra::wdt::WATCHDOG_ENABLE), None);
