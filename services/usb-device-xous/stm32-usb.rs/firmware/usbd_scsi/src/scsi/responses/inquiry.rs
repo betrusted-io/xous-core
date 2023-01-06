@@ -116,6 +116,7 @@ pub struct InquiryResponse {
     #[pkd(7, 0, 32, 35)]
     product_revision_level: [u8; 4],
 
+    /*
     #[pkd(7, 0, 36, 55)]
     _vendor_specific3: [u8; 20],
 
@@ -154,7 +155,7 @@ pub struct InquiryResponse {
     compliant_standard_7: VersionDescriptor,
 
     #[pkd(7, 0, 72, 73)]
-    compliant_standard_8: VersionDescriptor,
+    compliant_standard_8: VersionDescriptor,*/
 }
 
 fn set_ascii_str<T: AsRef<[u8]>>(target: &mut [u8], value: T) {
@@ -194,9 +195,9 @@ impl Default for InquiryResponse {
             vendor_identification: [ASCII_SPACE; 8],
             product_identification: [ASCII_SPACE; 16],
             product_revision_level: [ASCII_SPACE; 4],
-            compliant_standard_1: VersionDescriptor::SAM3NoVersionClaimed,
-            compliant_standard_2: VersionDescriptor::SPC4NoVersionClaimed,
-            compliant_standard_3: VersionDescriptor::SBC3NoVersionClaimed,
+            //compliant_standard_1: VersionDescriptor::SAM3NoVersionClaimed,
+            //compliant_standard_2: VersionDescriptor::SPC4NoVersionClaimed,
+            //compliant_standard_3: VersionDescriptor::SBC3NoVersionClaimed,
 
             peripheral_qualifier: Default::default(),
             peripheral_device_type: Default::default(),
@@ -217,6 +218,7 @@ impl Default for InquiryResponse {
             _sync: Default::default(),
             command_queue: Default::default(),
             _vendor_specific2: Default::default(),
+            /*
             _vendor_specific3: Default::default(),
             _clocking: Default::default(),
             _qas: Default::default(),
@@ -225,7 +227,7 @@ impl Default for InquiryResponse {
             compliant_standard_5: Default::default(),
             compliant_standard_6: Default::default(),
             compliant_standard_7: Default::default(),
-            compliant_standard_8: Default::default(),
+            compliant_standard_8: Default::default(),*/
         }
     }
 }
