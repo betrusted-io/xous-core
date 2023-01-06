@@ -4745,9 +4745,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-log"
-version = "0.1.24"
+version = "0.1.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b40340c05d0bddb20274767474ed95062a598ebd814f8a00f8abef89a7e060a7"
+checksum = "2021b1e48cf6868a6ac46264cd14e037d7f536a8c237ad686bc186d0ea20721c"
 dependencies = [
  "log",
  "num-derive",
@@ -4758,9 +4758,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-names"
-version = "0.9.26"
+version = "0.9.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "337a238c84b1f93375fde23c42967d482f93285cee303be17a9c6c991a925f3f"
+checksum = "6f907fef193079493a8fd76d6aefa2482b6d8aa905f99aaa40eb83893e13aa92"
 dependencies = [
  "log",
  "num-derive",
@@ -4773,9 +4773,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-susres"
-version = "0.9.24"
+version = "0.9.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0068aa890ac18d50b7c243b8af9167cbfe190a2e4220a1de8e8173027982ff0"
+checksum = "0dfd6fba7d25640550ceabc6db360fd6b00a8bb2d973686adc873a4ca7a7da2b"
 dependencies = [
  "log",
  "num-derive",
@@ -4790,9 +4790,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-ticktimer"
-version = "0.9.24"
+version = "0.9.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e3c5071c2c16bf46878b3e9c6777a05a8c99455312fe07711b1f5682cef4eb6"
+checksum = "03f93a59d94df320122caecd1d80ea20a33bbc8165359da16a2fb1df02fd4f5a"
 dependencies = [
  "log",
  "num-derive",
@@ -4844,7 +4844,7 @@ dependencies = [
 
 [[package]]
 name = "xous-log"
-version = "0.1.21"
+version = "0.1.22"
 dependencies = [
  "log",
  "num-derive",
@@ -4857,7 +4857,7 @@ dependencies = [
 
 [[package]]
 name = "xous-names"
-version = "0.9.30"
+version = "0.9.31"
 dependencies = [
  "log",
  "num-derive",
@@ -4888,7 +4888,7 @@ checksum = "6ed3278bb4e7be4895c1c597434e5269f7357ffb800ebc644f0398bb008a15ad"
 
 [[package]]
 name = "xous-susres"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "log",
  "num-derive",
@@ -4904,7 +4904,7 @@ dependencies = [
 
 [[package]]
 name = "xous-ticktimer"
-version = "0.1.25"
+version = "0.1.26"
 dependencies = [
  "log",
  "num-derive",
