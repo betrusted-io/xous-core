@@ -3,14 +3,14 @@ authors = ["Sean Cross <sean@xobs.io>"]
 description = "Log output program"
 edition = "2018"
 name = "xous-log"
-version = "0.1.21"
+version = "0.1.22"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/xous-book/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous-api-log = {package = "xous-api-log", version = "0.1.24"}
+xous-api-log = {package = "xous-api-log", version = "0.1.25"}
 xous = "0.9.30"
 xous-ipc = "0.9.30"
 log = "0.4.14"
