@@ -37,7 +37,7 @@ impl<B: UsbBus> MscClass<'_, B> {
         MscClass {
             msc_if: alloc.interface(),
             write_ep: alloc.bulk(max_packet_size),
-            write2_ep: alloc.bulk(max_packet_size),
+            write2_ep: alloc.interrupt(64, 5),
             read_ep: alloc.bulk(max_packet_size),
             subclass,
             protocol,
