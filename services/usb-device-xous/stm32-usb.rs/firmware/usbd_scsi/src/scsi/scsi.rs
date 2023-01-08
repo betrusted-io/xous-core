@@ -279,9 +279,21 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                 // Reset sense code to good
                 self.request_sense_response.reset_status();
             },
+            Ok(CommandState::Ongoing) => {
+                log::info!("transfer_state: {:?}", self.inner.transfer_state());
+                /*
+                match self.inner.transfer_state() {
+                    TransferState::ReceivingDataFromHost { bytes_available: _, full: _, done: _ } => {
+                        self.inner.read()?;
+                    }
+                    TransferState::SendingDataToHost { bytes_remaining: _, empty: _ } => {
+                        self.inner.write()?;
+                    }
+                    _ => {}
+                } */
+            }
             // WouldBlock error is handled the same as ongoing (i.e. do nothing)
             Ok(CommandState::None) |
-            Ok(CommandState::Ongoing) |
             Err(Error::BulkOnlyTransportError(
                 BulkOnlyTransportError::UsbError(
                     UsbError::WouldBlock))) => {

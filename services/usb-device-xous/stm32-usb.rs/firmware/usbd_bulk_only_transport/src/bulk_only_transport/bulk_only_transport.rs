@@ -188,6 +188,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     }
 
     pub fn read(&mut self) -> Result<(), Error> {
+        log::info!("read state: {:?}", self.state);
         match self.state {
             State::WaitingForCommand => self.waiting_for_command(),
             State::ReceivingDataFromHost => self.receiving_data_from_host(),
@@ -196,6 +197,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     }
 
     pub fn write(&mut self) -> Result<(), Error> {
+        log::info!("write state: {:?}", self.state);
         match self.state {
             State::SendingDataToHost => self.sending_data_to_host(),
             State::NeedZlp => self.send_zlp(),
@@ -381,7 +383,8 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     }
 
     fn flush(&mut self) -> Result<(), Error> {
-        let packet_size = self.max_packet_size() as usize;
+        // let packet_size = self.max_packet_size() as usize;
+        let packet_size = 512; // TODO: link this to the buffer length constant if it the lower-level rework works
         let residue = self.command_status_wrapper.data_residue as usize;
 
         let bytes = if self.data_i < self.buffer_i && residue > 0 {
@@ -474,7 +477,9 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         if needs_zlp {            
             trace_bot_zlp!("ZLP> required");
             self.change_state(State::NeedZlp);
+            self.flush()?;
             self.send_zlp()?;
+            self.flush()?;
         } else {
             trace_bot_zlp!("ZLP> not required");
             self.change_state(State::NeedToSendStatus);

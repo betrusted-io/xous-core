@@ -171,7 +171,7 @@ pub(crate) fn main_hw() -> ! {
 
     let ums_alloc = UsbBusAllocator::new(ums_dev);
 
-    let bd = block_device::BlockDevice{};
+    let bd = block_device::BlockDevice::new();
 
     let mut ums = usbd_scsi::Scsi::new(
         &ums_alloc, 
