@@ -382,7 +382,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         Ok(&self.buffer[s..e])
     }
 
-    fn flush(&mut self) -> Result<(), Error> {
+    pub fn flush(&mut self) -> Result<(), Error> {
         // let packet_size = self.max_packet_size() as usize;
         let packet_size = 512; // TODO: link this to the buffer length constant if it the lower-level rework works
         let residue = self.command_status_wrapper.data_residue as usize;
@@ -461,9 +461,12 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
 
     fn end_data_transfer(&mut self) -> Result<(), Error> {
         // Get the csw ready to send
-        log::debug!("data_i: {}, buffer_i: {}, buf: {:x?}", self.data_i, self.buffer_i, self.buffer);
+        //log::debug!("data_i: {}, buffer_i: {}, buf: {:x?}", self.data_i, self.buffer_i, self.buffer);
         self.pack_csw();
-        log::debug!("data_i: {}, buffer_i: {}, buf: {:x?}", self.data_i, self.buffer_i, self.buffer);
+        log::info!("data_residue: {}", self.command_status_wrapper.data_residue);
+        self.flush()?;
+        //log::debug!("data_i: {}, buffer_i: {}, buf: {:x?}", self.data_i, self.buffer_i, self.buffer);
+        log::info!("data_residue: {}", self.command_status_wrapper.data_residue);
 
         // We only send a zero length packet if the last write was a full packet AND we are sending
         // less total bytes than the command header asked for
@@ -477,9 +480,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         if needs_zlp {            
             trace_bot_zlp!("ZLP> required");
             self.change_state(State::NeedZlp);
-            self.flush()?;
             self.send_zlp()?;
-            self.flush()?;
         } else {
             trace_bot_zlp!("ZLP> not required");
             self.change_state(State::NeedToSendStatus);

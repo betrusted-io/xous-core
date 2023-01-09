@@ -200,6 +200,8 @@ pub struct SpinalUsbDevice {
     address: AtomicUsize,
     // bit vector to track if a read is allowed. This prevents a race condition between polled reads and interrupted reads.
     read_allowed: AtomicU16,
+    // last descriptor in chain. Used to check if a transaction is in progress.
+    last_descriptor: Arc::<Mutex<[Option<SpinalUdcDescriptor>; 16]>>,
 }
 impl SpinalUsbDevice {
     pub fn new(sid: xous::SID) -> SpinalUsbDevice {
@@ -235,6 +237,7 @@ impl SpinalUsbDevice {
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             address: AtomicUsize::new(0),
             read_allowed: AtomicU16::new(0),
+            last_descriptor: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
         };
 
         xous::claim_interrupt(
@@ -269,6 +272,7 @@ impl SpinalUsbDevice {
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             address: AtomicUsize::new(0),
             read_allowed: AtomicU16::new(0),
+            last_descriptor: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
         }
     }
     pub fn get_iface(&self) -> SpinalUsbMgmt {
@@ -678,41 +682,30 @@ impl UsbBus for SpinalUsbDevice {
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
 
                 if ep_addr.index() != 0 {
-                    let now = self.tt.elapsed_ms();
-                    let mut last_print = 10;
-                    while (self.tt.elapsed_ms() - now < WRITE_TIMEOUT_MS)
-                    && ep_status.head_offset() != 0 {
-                        xous::yield_slice();
-                        let secs = (self.tt.elapsed_ms() - now) / 1_000;
-                        if secs != last_print {
-                            log::info!("write wait!");
-                            last_print = secs;
+                    if let Some(final_descriptor) = &self.last_descriptor.lock().unwrap()[ep_addr.index()] {
+                        let now = self.tt.elapsed_ms();
+                        log::info!("checking final descriptor {:x?}", final_descriptor);
+                        let mut last_print = 10;
+                        while (self.tt.elapsed_ms() - now < WRITE_TIMEOUT_MS)
+                        && final_descriptor.in_progress() {
+                            xous::yield_slice();
+                            let secs = (self.tt.elapsed_ms() - now) / 1_000;
+                            if secs != last_print {
+                                log::info!("write wait!");
+                                last_print = secs;
+                            }
                         }
-                        ep_status = self.status_read_volatile(ep_addr.index());
-                    }
-                    if ep_status.head_offset() != 0 {
-                        log::warn!("head offset is not 0 even after waiting");
-                        return Err(UsbError::WouldBlock);
+                        // TODO: report WouldBlock timeout
                     }
                 }
 
                 // this is reset to 0 after every transaction by the hardware, so we must reset it
                 ep_status.set_head_offset(head_offset as u32);
-
                 let descriptor = self.descriptor_from_status(&ep_status);
                 /*if descriptor.in_progress() && ep_addr.index() != 0 {
                     log::warn!("WouldBlock {:?}", ep_addr);
                     return Err(UsbError::WouldBlock);
                 }*/
-                if descriptor.in_progress() && ep_addr.index() != 0 {
-                    // refresh the ep_status after waiting
-                    ep_status = self.status_read_volatile(ep_addr.index());
-                    ep_status.set_head_offset(head_offset as u32);
-                    // note that the *descriptor* doesn't need to be updated because it refers directly to a memory location
-                    if descriptor.in_progress() {
-                        log::warn!("in progress despite waiting on write");
-                    }
-                }
                 if ep_addr.index() != 0 {
                     descriptor.set_desc_flags(UsbDirection::In,
                         false, false, false);
@@ -739,6 +732,7 @@ impl UsbBus for SpinalUsbDevice {
                         false, true, false);
                 }
                 descriptor.set_offset(0); // reset the write pointer to 0, also sets in_progress
+                self.last_descriptor.lock().unwrap()[ep_addr.index()] = Some(descriptor);
                 //if ep_addr.index() != 0 {
                 //    log::info!("WR PREdesc{}: {:?}", ep_addr.index(), descriptor);
                 //}
@@ -766,18 +760,20 @@ impl UsbBus for SpinalUsbDevice {
                 //}
                 Ok(buf.len())
             } else {
+                if let Some(final_descriptor) = &self.last_descriptor.lock().unwrap()[ep_addr.index()] {
+                    log::info!("ll checking final descriptor {:x?}", final_descriptor);
+                    let now = self.tt.elapsed_ms();
+                    let mut last_secs = 5;
+                    while final_descriptor.in_progress() && (self.tt.elapsed_ms() - now < WRITE_TIMEOUT_MS) {
+                        xous::yield_slice();
+                        let secs = (self.tt.elapsed_ms() - now) / 1_0000;
+                        if last_secs != secs {
+                            log::info!("waiting for linked list to complete...");
+                            last_secs = secs;
+                        }
+                    }
+                }
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
-
-                let now = self.tt.elapsed_ms();
-                while (self.tt.elapsed_ms() - now < WRITE_TIMEOUT_MS)
-                && ep_status.head_offset() != 0 {
-                    xous::yield_slice();
-                    ep_status = self.status_read_volatile(ep_addr.index());
-                }
-                if ep_status.head_offset() != 0 {
-                    log::warn!("head offset is not 0 even after waiting");
-                    return Err(UsbError::WouldBlock);
-                }
 
                 for (chain_offset, sub_buf) in buf.chunks(packet_len).enumerate() {
                     let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
@@ -807,6 +803,7 @@ impl UsbBus for SpinalUsbDevice {
                     }
                     descriptor.set_offset(0); // reset the write pointer to 0, also sets in_progress
                     log::info!("bulk descriptor {} setup: {:x?}", chain_offset, descriptor);
+                    self.last_descriptor.lock().unwrap()[ep_addr.index()] = Some(descriptor);
                 }
 
                 ep_status.set_max_packet_size(packet_len as _);

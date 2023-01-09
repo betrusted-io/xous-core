@@ -199,9 +199,12 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                     new_command, self.lba, self.lba_end, self.lba == self.lba_end);
 
                 // We only get here if the buffer is empty 
-                let buf = self.inner.take_buffer_space(BD::BLOCK_BYTES)?;
-                self.block_device.read_block(self.lba, buf)?;
-                self.lba += 1;
+                while self.lba <= self.lba_end {
+                    let buf = self.inner.take_buffer_space(BD::BLOCK_BYTES)?;
+                    self.block_device.read_block(self.lba, buf)?;
+                    self.inner.flush()?;
+                    self.lba += 1;
+                }
 
                 if self.lba <= self.lba_end {
                     Ongoing

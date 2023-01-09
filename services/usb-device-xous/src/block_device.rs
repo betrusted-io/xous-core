@@ -37,6 +37,6 @@ impl usbd_scsi::BlockDevice for BlockDevice {
     }
 
     fn max_lba(&self) -> u32 {
-        512
+        511
     }
 }
