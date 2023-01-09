@@ -30,10 +30,10 @@ mod logging {
     #[cfg(feature = "trace-usb-control")]
     pub use itm_logger::trace as trace_usb_control;
 
-    pub use log::info as trace_bot_headers;
+    pub use log::debug as trace_bot_headers;
     pub use log::info as trace_bot_states;
-    pub use log::info as trace_bot_bytes;
-    pub use log::info as trace_bot_zlp;
-    pub use log::info as trace_bot_buffer;
-    pub use log::info as trace_usb_control;
+    pub use log::debug as trace_bot_bytes;
+    pub use log::debug as trace_bot_zlp;
+    pub use log::debug as trace_bot_buffer;
+    pub use log::debug as trace_usb_control;
 }

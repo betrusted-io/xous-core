@@ -118,7 +118,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
     fn process_command(&mut self, new_command: bool) -> Result<CommandState, Error> {
         use CommandState::*;
 
-        trace_scsi_command!("COMMAND> {:?}", self.current_command);
+        /*trace_scsi_command!*/log::info!("COMMAND> {:?} tag {:x}", self.current_command, self.inner.get_tag());
 
         Ok(match self.current_command {
             // No command, nothing to do
@@ -195,8 +195,8 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                     self.lba_end = r.lba + r.transfer_length - 1;
                 }
 
-                trace_scsi_fs!("FS> Read; new: {}, lba: 0x{:X?}, lba_end: 0x{:X?}, done: {}",
-                    new_command, self.lba, self.lba_end, self.lba == self.lba_end);
+                /*trace_scsi_fs!*/log::info!("FS> Read; new: {}, lba: 0x{:X?}, lba_end: 0x{:X?}, done: {}, tag: {:x}",
+                    new_command, self.lba, self.lba_end, self.lba == self.lba_end, self.inner.get_tag());
 
                 // We only get here if the buffer is empty 
                 while self.lba <= self.lba_end {
@@ -221,8 +221,8 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                     self.lba_end = w.lba + w.transfer_length - 1;
                 }
 
-                trace_scsi_fs!("FS> Write; new: {}, lba: 0x{:X?}, lba_end: 0x{:X?}, done: {}",
-                    new_command, self.lba, self.lba_end, self.lba == self.lba_end);
+                /*trace_scsi_fs!*/log::info!("FS> Write; new: {}, lba: 0x{:X?}, lba_end: 0x{:X?}, done: {}, tag: {:x}",
+                    new_command, self.lba, self.lba_end, self.lba == self.lba_end, self.inner.get_tag());
 
                 let len = match self.inner.transfer_state() {
                     TransferState::ReceivingDataFromHost { done: true, full: false, bytes_available: b } => b,
@@ -230,13 +230,18 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                     _ => BD::BLOCK_BYTES,
                 };
 
-                let buf = self.inner.take_buffered_data(len, false).expect("Buffer should have enough data");
-                self.block_device.write_block(self.lba, buf)?;
-                self.lba += 1;
+                while self.lba <= self.lba_end {
+                    // I think this "len" computation isn't right for our purposes..
+                    let buf = self.inner.take_buffered_data(len, true).expect("Buffer should have enough data");
+                    log::info!("buf: {:x?}", &buf[..32]);
+                    self.block_device.write_block(self.lba, buf)?;
+                    self.lba += 1;
+                }
 
                 if self.lba <= self.lba_end {
                     Ongoing
                 } else {
+                    self.inner.mark_write_done();
                     Done
                 }
             },
@@ -246,7 +251,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
     }
 
     fn receive_command(&mut self) -> Result<(), Error> {
-        let transfer_state = self.inner.transfer_state();
+        /* let transfer_state = self.inner.transfer_state();
         // These calls all assume only a single block will fit in the buffer which 
         // is true here because we configure BOT that way but we could make the inner
         // buffer length a multiple of BLOCK_SIZE and queue up more than one block
@@ -267,13 +272,15 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
         };
 
         if skip {
+            log::info!("SKIP condition reached");
             Err(UsbError::WouldBlock)?;
-        }
+        }*/
 
         let new_command = self.get_new_command()?;
 
         match self.process_command(new_command) {
             Ok(CommandState::Done) => {
+                log::info!("command done");
                 // Command is done, send CommandOk
                 self.inner.send_command_ok()?;
                 // Clear the command so we don't try and execute it again

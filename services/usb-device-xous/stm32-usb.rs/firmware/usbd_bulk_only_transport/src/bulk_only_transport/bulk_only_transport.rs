@@ -178,6 +178,9 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     pub fn debug(&self) {
         log::debug!("data_i: {}, buffer_i: {}, buf: {:x?}", self.data_i, self.buffer_i, self.buffer);
     }
+    pub fn get_tag(&self) -> u32 {
+        self.command_block_wrapper.tag
+    }
 
     fn max_packet_size(&self) -> u16 {
         self.inner.max_packet_size()
@@ -188,7 +191,6 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     }
 
     pub fn read(&mut self) -> Result<(), Error> {
-        log::info!("read state: {:?}", self.state);
         match self.state {
             State::WaitingForCommand => self.waiting_for_command(),
             State::ReceivingDataFromHost => self.receiving_data_from_host(),
@@ -197,7 +199,6 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     }
 
     pub fn write(&mut self) -> Result<(), Error> {
-        log::info!("write state: {:?}", self.state);
         match self.state {
             State::SendingDataToHost => self.sending_data_to_host(),
             State::NeedZlp => self.send_zlp(),
@@ -242,7 +243,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
             // logging is enabled or not it appears to sometimes work and sometimes not which makes
             // me think it's a timing issue. In the hardware example I'm testing with RTFM appears
             // to be clearing the 
-            self.read()?;
+            // self.read()?;
         }
 
         Ok(())
@@ -357,11 +358,13 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     /// `take_available` modifies behaviour to return whatever is available, even if that is [u8; 0]
     /// returns WouldBlock if there isn't enough data available
     pub fn take_buffered_data(&mut self, len: usize, take_available: bool) -> Result<&[u8], Error> {
+        /*
         if len > self.buffer.len() {
             panic!("BulkOnlyTransport::take_buffered_data called with len > buffer.len() ({} > {}) which can never be successful",
                 len, self.buffer.len());
         }
 
+        log::info!("take_buffered_data() len: {}", len);
         let available = self.buffer_i - self.data_i;
         if !take_available && len > available {
             trace_bot_buffer!("BUFFER> contains insufficient data for take; requested: {}, available: {}", len, self.buffer_i - self.data_i);
@@ -379,7 +382,30 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         }
         trace_bot_buffer!("BUFFER> took {}, available after: {}", len, self.buffer_i - self.data_i);
 
+        log::info!("take_buffered_data() s: {} e: {}", s, e);
         Ok(&self.buffer[s..e])
+        */
+        log::info!("take_buffered_data() len: {}", len);
+        loop {
+            match self.inner.read_packet(&mut self.buffer[..len]) {
+                Ok(l) => {
+                    return Ok(&self.buffer[..l]);
+                }
+                Err(e) => {
+                    match e {
+                        UsbError::WouldBlock => {
+                            log::info!("bulk read not ready yet");
+                            continue;
+                        },
+                        _ => return Err(Error::UsbError(e)),
+                    }
+                }
+            }
+        }
+    }
+    pub fn mark_write_done(&mut self) {
+        self.command_status_wrapper.data_residue = 0;
+        self.data_done = true;
     }
 
     pub fn flush(&mut self) -> Result<(), Error> {
@@ -461,12 +487,9 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
 
     fn end_data_transfer(&mut self) -> Result<(), Error> {
         // Get the csw ready to send
-        //log::debug!("data_i: {}, buffer_i: {}, buf: {:x?}", self.data_i, self.buffer_i, self.buffer);
+        log::info!("end_data_transfer() pack csw for cbw {:x}", self.command_block_wrapper.tag);
         self.pack_csw();
-        log::info!("data_residue: {}", self.command_status_wrapper.data_residue);
         self.flush()?;
-        //log::debug!("data_i: {}, buffer_i: {}, buf: {:x?}", self.data_i, self.buffer_i, self.buffer);
-        log::info!("data_residue: {}", self.command_status_wrapper.data_residue);
 
         // We only send a zero length packet if the last write was a full packet AND we are sending
         // less total bytes than the command header asked for
@@ -478,13 +501,13 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         // send_zlp or flush are called here because we may not get an interrupt in a timley manner
         // if we don't send immediately and
         if needs_zlp {            
-            trace_bot_zlp!("ZLP> required");
+            /*trace_bot_zlp!*/ log::info!("ZLP> required");
             self.change_state(State::NeedZlp);
             self.send_zlp()?;
         } else {
             trace_bot_zlp!("ZLP> not required");
             self.change_state(State::NeedToSendStatus);
-            self.flush()?;
+            // self.flush()?;
         }
 
         Ok(())
@@ -510,7 +533,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     }
 
     fn check_end_data_transfer(&mut self) -> Result<(), Error> {
-        self.flush()?;
+        // self.flush()?;
         match self.state {
             State::ReceivingDataFromHost => {
                 // Check if we've read everything we were expecting

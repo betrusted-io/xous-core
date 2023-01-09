@@ -4,7 +4,6 @@ use usb_device::{
 };
 
 use crate::{
-    logging::*,
     InterfaceSubclass,
     InterfaceProtocol,
 };

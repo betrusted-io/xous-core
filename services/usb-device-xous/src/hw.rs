@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::convert::TryInto;
 
 const WRITE_TIMEOUT_MS: u64 = 10_000;
+const READ_TIMEOUT_MS: u64 = 10_000;
 
 fn handle_usb(_irq_no: usize, arg: *mut usize) {
     let usb = unsafe { &mut *(arg as *mut SpinalUsbDevice) };
@@ -200,8 +201,10 @@ pub struct SpinalUsbDevice {
     address: AtomicUsize,
     // bit vector to track if a read is allowed. This prevents a race condition between polled reads and interrupted reads.
     read_allowed: AtomicU16,
-    // last descriptor in chain. Used to check if a transaction is in progress.
-    last_descriptor: Arc::<Mutex<[Option<SpinalUdcDescriptor>; 16]>>,
+    // last descriptor in write (IN packet; device->host) chain. Used to check if a transaction is in progress.
+    last_wr_desc: Arc::<Mutex<[Option<SpinalUdcDescriptor>; 16]>>,
+    // last descriptor in read (OUT packet; host->device) chain. Used to check if a transaction is in progress.
+    last_rd_desc: Arc::<Mutex<[Option<SpinalUdcDescriptor>; 16]>>,
 }
 impl SpinalUsbDevice {
     pub fn new(sid: xous::SID) -> SpinalUsbDevice {
@@ -237,7 +240,8 @@ impl SpinalUsbDevice {
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             address: AtomicUsize::new(0),
             read_allowed: AtomicU16::new(0),
-            last_descriptor: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
+            last_wr_desc: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
+            last_rd_desc: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
         };
 
         xous::claim_interrupt(
@@ -272,7 +276,8 @@ impl SpinalUsbDevice {
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             address: AtomicUsize::new(0),
             read_allowed: AtomicU16::new(0),
-            last_descriptor: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
+            last_wr_desc: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
+            last_rd_desc: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
         }
     }
     pub fn get_iface(&self) -> SpinalUsbMgmt {
@@ -440,6 +445,73 @@ impl SpinalUsbDevice {
         );
         setup
     }
+/*
+    pub(crate) fn read_blocking_bulk(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> {
+        // in the case that a transfer longer than a packet is expected, this call blocks until
+        // we have read in as much data as we can hold given our descriptor chain depth.
+        assert!(ep_addr.index() != 0); // long buffers are not allowed on EP0
+        let mut ep_status = self.status_read_volatile(ep_addr.index());
+        let mut descriptor = self.descriptor_from_head_and_chain(head_offset, 0, packet_len);
+
+        for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
+            descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
+            descriptor.set_desc_flags(UsbDirection::Out,
+                false, true, false);
+            for b in sub_buf.iter_mut() {
+                *b = 0; // zeroize the buffer between transactions, to avoid data leakage in unused areas
+            }
+
+            if chain_offset == (max_chain - 1) || sub_buf.len() != packet_len {
+                // on the very last packet (either by chain exhaustion, or buffer source exhaustion), set completion_on_full interrupt
+                descriptor.set_next_desc_and_len(0, sub_buf.len());
+            } else {
+                // if not the last packet, setup the linked list pointer
+                let next_addr = self.next_from_head_and_chain(head_offset, chain_offset, packet_len);
+                descriptor.set_next_desc_and_len(next_addr, sub_buf.len());
+            }
+            descriptor.set_offset(0); // reset the write pointer to 0, also sets in_progress
+            log::info!("bulk descriptor {} setup: {:x?}", chain_offset, descriptor);
+        }
+
+        ep_status.set_max_packet_size(packet_len as _);
+        // this is reset to 0 after every transaction by the hardware, so we must reset it
+        ep_status.set_head_offset(head_offset as u32);
+
+        // this is required to commit the ep_status record once all the setup is done
+        self.status_write_volatile(ep_addr.index(), ep_status);
+
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        // zeroize the return buffer now -- gives us something to do while the data comes in!
+        for d in buf.iter_mut() {
+            *d = 0;
+        }
+
+        // now busy-wait for the packet to come in!
+        let now = self.tt.elapsed_ms();
+        let mut last_secs = 5;
+        while descriptor.in_progress() && (self.tt.elapsed_ms() - now < READ_TIMEOUT_MS) {
+            xous::yield_slice();
+            let secs = (self.tt.elapsed_ms() - now) / 1_0000;
+            if last_secs != secs {
+                log::info!("waiting for rd linked list to complete...");
+                last_secs = secs;
+            }
+        }
+
+        // now copy results to buf
+        for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
+            let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
+            // buffer was zeroized as we were waiting for data to come in, so we can safely do partial copies of data here
+            for (desc_offset, word_chunk) in sub_buf.chunks_mut(size_of::<u32>()).enumerate() {
+                word_chunk.copy_from_slice(
+                    &descriptor.read_data(desc_offset)
+                    .to_le_bytes()[..word_chunk.len()]) // the upper limit index ensures that if sub_buf is an odd number of bytes, we don't panic
+            }
+        }
+        log::info!("bulk read {} bytes: {:x?}", buf.len(), buf);
+        Ok(buf.len())
+    }
+*/
 }
 
 const CHAINED_BUF_LEN: usize = 512;
@@ -677,14 +749,16 @@ impl UsbBus for SpinalUsbDevice {
             if buf.len() > max_chain * packet_len {
                 Err(UsbError::BufferOverflow)
             } else if buf.len() <= packet_len { // no-chain path
+                // TODO: merge this with the path below, mostly to reduce code space. This was kept "intact" so enumeration
+                // would work while we figured out the details of chaining on bulk transfers.
                 #[cfg(feature="mjolnir")] // mjolnir is so powerful, one must halt the USB core entirely for it to be weilded
                 if ep_addr.index() == 1 { self.udc_hard_halt(ep_addr.index()); }
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
 
                 if ep_addr.index() != 0 {
-                    if let Some(final_descriptor) = &self.last_descriptor.lock().unwrap()[ep_addr.index()] {
+                    if let Some(final_descriptor) = &self.last_wr_desc.lock().unwrap()[ep_addr.index()] {
                         let now = self.tt.elapsed_ms();
-                        log::info!("checking final descriptor {:x?}", final_descriptor);
+                        log::debug!("checking final descriptor {:x?}", final_descriptor);
                         let mut last_print = 10;
                         while (self.tt.elapsed_ms() - now < WRITE_TIMEOUT_MS)
                         && final_descriptor.in_progress() {
@@ -732,7 +806,7 @@ impl UsbBus for SpinalUsbDevice {
                         false, true, false);
                 }
                 descriptor.set_offset(0); // reset the write pointer to 0, also sets in_progress
-                self.last_descriptor.lock().unwrap()[ep_addr.index()] = Some(descriptor);
+                self.last_wr_desc.lock().unwrap()[ep_addr.index()] = Some(descriptor);
                 //if ep_addr.index() != 0 {
                 //    log::info!("WR PREdesc{}: {:?}", ep_addr.index(), descriptor);
                 //}
@@ -760,15 +834,16 @@ impl UsbBus for SpinalUsbDevice {
                 //}
                 Ok(buf.len())
             } else {
-                if let Some(final_descriptor) = &self.last_descriptor.lock().unwrap()[ep_addr.index()] {
-                    log::info!("ll checking final descriptor {:x?}", final_descriptor);
+                assert!(ep_addr.index() != 0); // long buffers are not allowed on EP0
+                if let Some(final_descriptor) = &self.last_wr_desc.lock().unwrap()[ep_addr.index()] {
+                    log::debug!("llwr checking final descriptor {:x?}", final_descriptor);
                     let now = self.tt.elapsed_ms();
                     let mut last_secs = 5;
                     while final_descriptor.in_progress() && (self.tt.elapsed_ms() - now < WRITE_TIMEOUT_MS) {
                         xous::yield_slice();
                         let secs = (self.tt.elapsed_ms() - now) / 1_0000;
                         if last_secs != secs {
-                            log::info!("waiting for linked list to complete...");
+                            log::debug!("waiting for wr linked list to complete...");
                             last_secs = secs;
                         }
                     }
@@ -794,16 +869,14 @@ impl UsbBus for SpinalUsbDevice {
                     if chain_offset == (max_chain - 1) || sub_buf.len() != packet_len {
                         // on the very last packet (either by chain exhaustion, or buffer source exhaustion), set completion_on_full interrupt
                         descriptor.set_next_desc_and_len(0, sub_buf.len());
-                        descriptor.set_desc_flags(UsbDirection::In,
-                            false, true, false);
                     } else {
                         // if not the last packet, setup the linked list pointer
                         let next_addr = self.next_from_head_and_chain(head_offset, chain_offset, packet_len);
                         descriptor.set_next_desc_and_len(next_addr, sub_buf.len());
                     }
                     descriptor.set_offset(0); // reset the write pointer to 0, also sets in_progress
-                    log::info!("bulk descriptor {} setup: {:x?}", chain_offset, descriptor);
-                    self.last_descriptor.lock().unwrap()[ep_addr.index()] = Some(descriptor);
+                    log::debug!("bulk descriptor {} setup: {:x?}", chain_offset, descriptor);
+                    self.last_wr_desc.lock().unwrap()[ep_addr.index()] = Some(descriptor);
                 }
 
                 ep_status.set_max_packet_size(packet_len as _);
@@ -896,7 +969,13 @@ impl UsbBus for SpinalUsbDevice {
                     // we do get spurious reads on EP0 transactions, so this code prevents these from proceeding
                     // this is because the EP0 interrupt will fire off a poll event that also causes a read of all the endpoints.
                     // the interrupt hasn't triggered, don't allow the read
-                    return Err(UsbError::WouldBlock);
+                    let ep_status = self.status_read_volatile(ep_addr.index());
+                    let descriptor = self.descriptor_from_status(&ep_status);
+                    if descriptor.offset() == 0 {
+                        return Err(UsbError::WouldBlock);
+                    } else {
+                        log::info!("bypassing WouldBlock");
+                    }
                 } else {
                     // this load-store race condition is OK because the interrupt handler doesn't modify this
                     let masked = self.read_allowed.load(Ordering::Relaxed) & !(1 << ep_addr.index() as u16); // clear the read mask
@@ -915,6 +994,29 @@ impl UsbBus for SpinalUsbDevice {
                     log::warn!("WouldBlock {:?}", ep_addr);
                     return Err(UsbError::WouldBlock);
                 }
+                #[cfg(feature="chain")]
+                let mut len = 0;
+                #[cfg(feature="chain")]
+                for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
+                    let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
+                    if descriptor.offset() != 0 {
+                        log::info!("appending {:x?}", descriptor);
+                        let available_len = sub_buf.len().min(descriptor.offset());
+                        for (desc_offset, word_chunk) in sub_buf[..available_len].chunks_mut(size_of::<u32>()).enumerate() {
+                            word_chunk.copy_from_slice(
+                                &descriptor.read_data(desc_offset)
+                                .to_le_bytes()[..word_chunk.len()]) // the upper limit index ensures that if sub_buf is an odd number of bytes, we don't panic
+                        }
+                        if sub_buf.len() < descriptor.offset() {
+                            log::warn!("insufficient space in buffer to store incoming data (want: {} have: {}). truncating!", descriptor.offset(), sub_buf.len());
+                        }
+                        len += available_len;
+                    } else {
+                        log::info!("breaking at {:x?}", descriptor);
+                        break;
+                    }
+                }
+                #[cfg(not(feature="chain"))]
                 let mut len = descriptor.offset();
                 if buf.len() < len {
                     log::error!("read ep{} overflows: {} < {}", ep_addr.index(), buf.len(), len);
@@ -922,10 +1024,12 @@ impl UsbBus for SpinalUsbDevice {
                     // return Err(UsbError::BufferOverflow)
                     len = buf.len();
                 }
+                #[cfg(not(feature="chain"))]
                 for (index, dst) in buf[..len].chunks_exact_mut(4).enumerate() {
                     let word = descriptor.read_data(index).to_le_bytes();
                     dst.copy_from_slice(&word);
                 }
+                #[cfg(not(feature="chain"))]
                 if len % 4 != 0 {
                     // this will "overread" the descriptor area, but it's OK because descriptors must be aligned to 16-byte boundaries
                     // so even if the length is odd, the space allocated will always include dummy padding which will keep us
@@ -938,11 +1042,41 @@ impl UsbBus for SpinalUsbDevice {
                 }
 
                 // setup for the next transaction
+                #[cfg(not(feature="chain"))]
                 ep_status.set_max_packet_size(packet_len as _);
+                #[cfg(not(feature="chain"))]
                 descriptor.set_next_desc_and_len(0, buf.len());
+                #[cfg(not(feature="chain"))]
                 descriptor.set_desc_flags(UsbDirection::Out,
                     true, true, false);
+                #[cfg(not(feature="chain"))]
                 descriptor.set_offset_only(0); // reset the read pointer to 0, also sets in_progress
+
+                #[cfg(feature="chain")]
+                for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
+                    let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
+                    descriptor.set_desc_flags(UsbDirection::Out,
+                        true, true, false);
+                    for (index, _slice) in sub_buf.chunks(size_of::<u32>()).enumerate() {
+                        descriptor.write_data(index, 0); // zeroize the descriptor area so we don't leak data between packets
+                    }
+
+                    if chain_offset == (max_chain - 1) || sub_buf.len() != packet_len {
+                        // mark the last item in linked list with a null pointer
+                        descriptor.set_next_desc_and_len(0, sub_buf.len());
+                    } else {
+                        // if not the last link, setup the next linked list pointer
+                        let next_addr = self.next_from_head_and_chain(head_offset, chain_offset, packet_len);
+                        descriptor.set_next_desc_and_len(next_addr, sub_buf.len());
+                    }
+                    descriptor.set_offset_only(0); // reset the write pointer to 0, also sets in_progress
+                    log::debug!("bulk descriptor {} setup: {:x?}", chain_offset, descriptor);
+                }
+                #[cfg(feature="chain")]
+                ep_status.set_max_packet_size(packet_len as _);
+                // this is reset to 0 after every transaction by the hardware, so we must reset it
+                #[cfg(feature="chain")]
+                ep_status.set_head_offset(head_offset as u32);
 
                 // sanity check on interrupts: it should be cleared by this point!
                 let interrupts = self.regs.interrupts();
