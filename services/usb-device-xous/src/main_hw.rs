@@ -6,6 +6,7 @@ use usb_device_xous::UsbDeviceType;
 use usbd_human_interface_device::device::fido::RawFidoMsg;
 use usbd_human_interface_device::device::fido::RawFidoInterface;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
+#[cfg(not(feature="minimal"))]
 use xous_semver::SemVer;
 use core::num::NonZeroU8;
 
@@ -18,6 +19,7 @@ use num_enum::FromPrimitive as EnumFromPrimitive;
 
 use embedded_time::Clock;
 use std::convert::TryInto;
+#[cfg(not(feature="minimal"))]
 use keyboard::KeyMap;
 use xous_ipc::Buffer;
 use std::collections::VecDeque;
@@ -59,59 +61,82 @@ pub(crate) fn main_hw() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     let usbdev_sid = xns.register_name(api::SERVER_NAME_USB_DEVICE, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", usbdev_sid);
+    #[cfg(not(feature="minimal"))]
     let llio = llio::Llio::new(&xns);
     let tt = ticktimer_server::Ticktimer::new().unwrap();
+    #[cfg(not(feature="minimal"))]
     let native_kbd = keyboard::Keyboard::new(&xns).unwrap();
+    #[cfg(not(feature="minimal"))]
     let native_map = native_kbd.get_keymap().unwrap();
 
+    #[cfg(not(feature="minimal"))]
     let serial_number = format!("{:x}", llio.soc_dna().unwrap());
-    let minimum_ver = SemVer {maj: 0, min: 9, rev: 8, extra: 20, commit: None};
-    let soc_ver = llio.soc_gitrev().unwrap();
-    if soc_ver < minimum_ver {
-        if soc_ver.min != 0 { // don't show during hosted mode, which reports 0.0.0+0
-            tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
-            let modals = modals::Modals::new(&xns).unwrap();
-            modals.show_notification(
-                &format!("SoC version >= 0.9.8+20 required for USB HID. Detected rev: {}. Refusing to start USB driver.",
-                soc_ver.to_string()
-            ),
-                None
-            ).unwrap();
-        }
-        let mut fido_listener: Option<xous::MessageEnvelope> = None;
-        loop {
-            let msg = xous::receive_message(usbdev_sid).unwrap();
-            match FromPrimitive::from_usize(msg.body.id()) {
-                Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
-                    xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
-                }),
-                Some(Opcode::U2fRxDeferred) => {
-                    // block any rx requests forever
-                    fido_listener = Some(msg);
-                }
-                Some(Opcode::IsSocCompatible) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, 0).expect("couldn't return compatibility status")
-                }),
-                Some(Opcode::Quit) => {
-                    break;
-                }
-                _ => {
-                    log::warn!("SoC not compatible with HID, ignoring USB message: {:?}", msg);
-                    // make it so blocking scalars don't block
-                    if let xous::Message::BlockingScalar(xous::ScalarMessage {
-                        id: _,
-                        arg1: _,
-                        arg2: _,
-                        arg3: _,
-                        arg4: _,
-                    }) = msg.body {
-                        log::warn!("Returning bogus result");
-                        xous::return_scalar(msg.sender, 0).unwrap();
+    #[cfg(not(feature="minimal"))]
+    {
+        let minimum_ver = SemVer {maj: 0, min: 9, rev: 8, extra: 20, commit: None};
+        let soc_ver = llio.soc_gitrev().unwrap();
+        if soc_ver < minimum_ver {
+            if soc_ver.min != 0 { // don't show during hosted mode, which reports 0.0.0+0
+                tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
+                let modals = modals::Modals::new(&xns).unwrap();
+                modals.show_notification(
+                    &format!("SoC version >= 0.9.8+20 required for USB HID. Detected rev: {}. Refusing to start USB driver.",
+                    soc_ver.to_string()
+                ),
+                    None
+                ).unwrap();
+            }
+            let mut fido_listener: Option<xous::MessageEnvelope> = None;
+            loop {
+                let msg = xous::receive_message(usbdev_sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
+                        xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
+                    }),
+                    Some(Opcode::U2fRxDeferred) => {
+                        // block any rx requests forever
+                        fido_listener = Some(msg);
+                    }
+                    Some(Opcode::IsSocCompatible) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        xous::return_scalar(msg.sender, 0).expect("couldn't return compatibility status")
+                    }),
+                    Some(Opcode::Quit) => {
+                        break;
+                    }
+                    _ => {
+                        log::warn!("SoC not compatible with HID, ignoring USB message: {:?}", msg);
+                        // make it so blocking scalars don't block
+                        if let xous::Message::BlockingScalar(xous::ScalarMessage {
+                            id: _,
+                            arg1: _,
+                            arg2: _,
+                            arg3: _,
+                            arg4: _,
+                        }) = msg.body {
+                            log::warn!("Returning bogus result");
+                            xous::return_scalar(msg.sender, 0).unwrap();
+                        }
                     }
                 }
             }
+            log::info!("consuming listener: {:?}", fido_listener);
         }
-        log::info!("consuming listener: {:?}", fido_listener);
+    }
+    #[cfg(feature="minimal")]
+    let serial_number = "minimal_build";
+    #[cfg(feature="minimal")]
+    {
+        use utralib::generated::*;
+        let gpio_base = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map GPIO CSR range");
+        let mut gpio_csr = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
+        // setup the initial logging output
+        gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 is kernel, 1 is console
     }
 
     let usb_fidokbd_dev = SpinalUsbDevice::new(usbdev_sid);
@@ -124,6 +149,7 @@ pub(crate) fn main_hw() -> ! {
     let ums_dev = usb_fidokbd_dev.clone_unalloc();
 
     // track which view is visible on the device core
+    #[cfg(not(feature="minimal"))]
     let mut view = Views::FidoWithKbd;
 
     // register a suspend/resume listener
@@ -191,8 +217,15 @@ pub(crate) fn main_hw() -> ! {
         .max_power(500)
         .build();
 
-
-
+    // switch the core automatically on boot
+    #[cfg(feature="minimal")]
+    std::thread::spawn(move || {
+        // this keeps the watchdog alive
+        let tt = ticktimer_server::Ticktimer::new().unwrap();
+        loop {
+            tt.sleep_ms(1500).ok();
+        }
+    });
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -203,6 +236,17 @@ pub(crate) fn main_hw() -> ! {
 
     let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
     let mut was_suspend = true;
+
+    #[cfg(feature="minimal")]
+    let mut view = Views::MassStorage;
+    #[cfg(feature="minimal")]
+    {
+        usbmgmt.ll_reset(true);
+        tt.sleep_ms(1000).ok();
+        usbmgmt.ll_connect_device_core(true);
+        tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+        usbmgmt.ll_reset(false);
+    }
 
     loop {
         let mut msg = xous::receive_message(usbdev_sid).unwrap();
@@ -597,6 +641,7 @@ pub(crate) fn main_hw() -> ! {
                 let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
                 let mut sent = 0;
                 match view {
+                    #[cfg(not(feature="minimal"))]
                     Views::FidoWithKbd => {
                         for ch in usb_send.s.as_str().unwrap().chars() {
                             // ASSUME: user's keyboard type matches the preference on their Precursor device.

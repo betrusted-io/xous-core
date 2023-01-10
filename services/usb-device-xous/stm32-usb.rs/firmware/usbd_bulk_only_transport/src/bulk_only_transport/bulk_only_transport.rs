@@ -214,6 +214,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         }
 
         let bytes = self.inner.read_packet(&mut self.buffer[self.buffer_i..])?;
+        // print!("+\r\n"); //1
         trace_bot_bytes!("BYTES> Read {} bytes for command", bytes);
         self.buffer_i += bytes;
         // This looks for the signature and throws away any bytes until it finds one
@@ -224,6 +225,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         }
 
         if self.buffer_i >= CommandBlockWrapper::BYTES {
+            // print!("c");
             trace_bot_buffer!("BUFFER> full enough to try deserializing command block wrapper");
             let cbw = CommandBlockWrapper::unpack(&self.buffer)
                 // We don't want to return a PackingError here because that's a fatal error
@@ -394,7 +396,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
                 Err(e) => {
                     match e {
                         UsbError::WouldBlock => {
-                            log::info!("bulk read not ready yet");
+                            log::debug!("bulk read not ready yet");
                             continue;
                         },
                         _ => return Err(Error::UsbError(e)),
@@ -412,7 +414,6 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         // let packet_size = self.max_packet_size() as usize;
         let packet_size = 512; // TODO: link this to the buffer length constant if it the lower-level rework works
         let residue = self.command_status_wrapper.data_residue as usize;
-
         let bytes = if self.data_i < self.buffer_i && residue > 0 {
             let start = self.data_i;
 
@@ -432,8 +433,9 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
                 packet_size,
                 self.buffer,
             );
-
+            // print!("e\r\n"); // required for `read` to work. delays a flush.
             let bytes = self.inner.write_packet(&self.buffer[start..end])?;
+            // print!("f{}\n\r", bytes); //1
 
             self.last_packet_full = bytes == packet_size;
             self.data_i += bytes;
@@ -507,6 +509,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         } else {
             trace_bot_zlp!("ZLP> not required");
             self.change_state(State::NeedToSendStatus);
+            // print!("g\n\r");
             // self.flush()?;
         }
 
@@ -534,6 +537,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
 
     fn check_end_data_transfer(&mut self) -> Result<(), Error> {
         // self.flush()?;
+        // print!("e\r\n");
         match self.state {
             State::ReceivingDataFromHost => {
                 // Check if we've read everything we were expecting
@@ -560,9 +564,11 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     }
 
     fn receiving_data_from_host(&mut self) -> Result<(), Error> {
+        // print!("r\r\n");
         if self.command_status_wrapper.data_residue > 0 &&
             self.buffer.len() - self.buffer_i >= self.max_packet_usize() 
         {
+            // print!("x\r\n");
             let bytes = self.inner.read_packet(&mut self.buffer[self.buffer_i..])?;
             self.buffer_i += bytes;
 

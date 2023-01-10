@@ -1,4 +1,4 @@
-#![no_std]
+// #![no_std]
 
 mod scsi;
 pub use scsi::*;
@@ -22,5 +22,5 @@ mod logging {
     */
 
     pub use log::debug as trace_scsi_fs;
-    pub use log::info as trace_scsi_command;
+    pub use log::debug as trace_scsi_command;
 }

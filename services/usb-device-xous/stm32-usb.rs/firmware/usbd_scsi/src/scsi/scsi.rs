@@ -47,6 +47,7 @@ pub struct Scsi<'a, B: UsbBus, BD: BlockDevice> {
     block_device: BD,
     lba: u32,
     lba_end: u32,
+    tt: ticktimer_server::Ticktimer,
 }
 
 impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
@@ -54,20 +55,20 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
     ///
     /// `block_device` provides reading and writing of blocks to the underlying filesystem
     ///
-    /// `vendor_identification` is an ASCII string that forms part of the SCSI inquiry response. 
+    /// `vendor_identification` is an ASCII string that forms part of the SCSI inquiry response.
     ///      Should come from [t10](https://www.t10.org/lists/2vid.htm). Any semi-unique non-blank
     ///      string should work fine for local development. Panics if > 8 characters are supplied.
     ///
-    /// `product_identification` is an ASCII string that forms part of the SCSI inquiry response. 
+    /// `product_identification` is an ASCII string that forms part of the SCSI inquiry response.
     ///      Vendor (probably you...) defined so pick whatever you want. Panics if > 16 characters
     ///      are supplied.
     ///
-    /// `product_revision_level` is an ASCII string that forms part of the SCSI inquiry response. 
+    /// `product_revision_level` is an ASCII string that forms part of the SCSI inquiry response.
     ///      Vendor (probably you...) defined so pick whatever you want. Typically a version number.
     ///      Panics if > 4 characters are supplied.
     pub fn new<V: AsRef<[u8]>, P: AsRef<[u8]>, R: AsRef<[u8]>> (
-        alloc: &UsbBusAllocator<B>, 
-        max_packet_size: u16, 
+        alloc: &UsbBusAllocator<B>,
+        max_packet_size: u16,
         block_device: BD,
         vendor_identification: V,
         product_identification: P,
@@ -78,13 +79,13 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
         inquiry_response.set_product_identification(product_identification);
         inquiry_response.set_product_revision_level(product_revision_level);
 
-        //TODO: This is reasonable for FAT but not FAT32 or others. BOT buffer should probably be 
-        //configurable from here, perhaps passing in BD::BLOCK_BYTES.max(BOT::MIN_BUFFER) or something 
+        //TODO: This is reasonable for FAT but not FAT32 or others. BOT buffer should probably be
+        //configurable from here, perhaps passing in BD::BLOCK_BYTES.max(BOT::MIN_BUFFER) or something
         assert!(BD::BLOCK_BYTES <= BulkOnlyTransport::<B>::BUFFER_BYTES);
         Scsi {
             inner: BulkOnlyTransport::new(
-                alloc, 
-                max_packet_size, 
+                alloc,
+                max_packet_size,
                 InterfaceSubclass::ScsiTransparentCommandSet,
                 0,
             ),
@@ -94,6 +95,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
             block_device,
             lba: 0,
             lba_end: 0,
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
 
@@ -131,6 +133,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                 let buf = self.inner.take_buffer_space(InquiryResponse::BYTES)?;
                 log::debug!("{:x?}", buf);
                 self.inquiry_response.pack(buf)?;
+                // print!("i\n\r");
                 log::debug!("{:x?}", buf);
                 log::debug!("{:x?}", self.inquiry_response);
                 Done
@@ -141,7 +144,10 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
             // requests and nothing else, regardless of the response. There may be additional data
             // in the request that indicates you should respond CommandError and prepare sense
             // response data with more info but not looked in detail yet.
-            Command::TestUnitReady(_) => Done,
+            Command::TestUnitReady(_) => {
+                // print!("t\n\r");
+                Done
+            },
 
             // Prevent the user removing the disk, not implemented. Just responding CommandOk sufficient
             // for flash based device.
@@ -389,36 +395,51 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
     }
 
     fn update(&mut self) -> Result<(), Error> {
-
         // Send anything that's already queued
-        accept_would_block(
-            self.inner.write()
-                .map_err(|e| e.into())
-        )?;
+        //accept_would_block(
+        //    self.inner.write()
+        //        .map_err(|e| e.into())
+        //)?;
+        let mut i = 0;
+        loop {
+            // print!("p{}", i);
+            // Read new data if available
+            match accept_would_block(
+                self.inner.read()
+                    .map_err(|e| e.into())
+            ) {
+                Ok(false) => {
+                    self.tt.sleep_ms(1).unwrap();
+                    i += 1;
+                },
+                _ => {},
+            };
+            // Receive and execute a command if one is available
+            accept_would_block(self.receive_command())?;
 
-        // Read new data if available
-        accept_would_block(
-            self.inner.read()
-                .map_err(|e| e.into())
-        )?;
-
-        // Recieve and execute a command if one is available
-        accept_would_block(self.receive_command())?;
-
-        // Send anything we may have generated this go around
-        accept_would_block(
-            self.inner.write()
-                .map_err(|e| e.into())
-        )?;
+            // Send anything we may have generated this go around
+            accept_would_block(
+                self.inner.write()
+                    .map_err(|e| e.into())
+            )?;
+            if i > 1 {
+                break;
+            }
+        }
 
         Ok(())
     }
 }
 
-fn accept_would_block(r: Result<(), Error>) -> Result<(), Error> {
+fn accept_would_block(r: Result<(), Error>) -> Result<bool, Error> {
     match r {
-        Ok(_) | Err(Error::BulkOnlyTransportError(BulkOnlyTransportError::UsbError(UsbError::WouldBlock))) => Ok(()),
-        e => e
+        Ok(_) => Ok(true),
+        Err(e) => {
+            match e {
+                Error::BulkOnlyTransportError(BulkOnlyTransportError::UsbError(UsbError::WouldBlock)) => Ok(false),
+                _ => Err(e),
+            }
+        },
     }
 }
 
