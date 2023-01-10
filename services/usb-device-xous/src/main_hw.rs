@@ -174,22 +174,13 @@ pub(crate) fn main_hw() -> ! {
     let bd = block_device::BlockDevice::new();
 
     let mut ums = usbd_scsi::Scsi::new(
-        &ums_alloc, 
-        64, 
-        bd, 
-        "Kosagi".as_bytes(), 
-        "Kosagi Precursor".as_bytes(), 
+        &ums_alloc,
+        64,
+        bd,
+        "Kosagi".as_bytes(),
+        "Kosagi Precursor".as_bytes(),
         "1".as_bytes()
-    ); 
-
-    //let mut ums = usbd_serial::CdcAcmClass::new(&ums_alloc, 64);
-    
-    // let mut ums = usbd_mass_storage::MscClass::new(
-    //     &ums_alloc, 
-    //     64, 
-    //     usbd_mass_storage::InterfaceSubclass::ScsiTransparentCommandSet, 
-    //     usbd_mass_storage::InterfaceProtocol::BulkOnlyTransport
-    // );
+    );
 
     let mut ums_device = UsbDeviceBuilder::new(&ums_alloc, UsbVidPid(0x1209, 0x3613))
         .manufacturer("Kosagi")

@@ -118,7 +118,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
     fn process_command(&mut self, new_command: bool) -> Result<CommandState, Error> {
         use CommandState::*;
 
-        /*trace_scsi_command!*/log::info!("COMMAND> {:?} tag {:x}", self.current_command, self.inner.get_tag());
+        trace_scsi_command!("COMMAND> {:?} tag {:x}", self.current_command, self.inner.get_tag());
 
         Ok(match self.current_command {
             // No command, nothing to do
@@ -155,7 +155,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                     max_lba,
                     block_size,
                 };
-                
+
                 let buf = self.inner.take_buffer_space(ReadCapacity10Response::BYTES)?;
                 cap.pack(buf)?;
                 Done
@@ -165,13 +165,13 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
             Command::ModeSense(ModeSenseXCommand { command_length: CommandLength::C6, page_control: PageControl::CurrentValues })  => {
                 let mut header = ModeParameterHeader6::default();
                 header.increase_length_for_page(PageCode::CachingModePage);
-                
+
                 // Default is both caches disabled
                 let cache_page = CachingModePage::default();
 
                 let buf = self.inner.take_buffer_space(
                     ModeParameterHeader6::BYTES + CachingModePage::BYTES
-                )?;   
+                )?;
 
                 header.pack(&mut buf[..ModeParameterHeader6::BYTES])?;
                 cache_page.pack(&mut buf[ModeParameterHeader6::BYTES..])?;
@@ -195,7 +195,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                     self.lba_end = r.lba + r.transfer_length - 1;
                 }
 
-                /*trace_scsi_fs!*/log::info!("FS> Read; new: {}, lba: 0x{:X?}, lba_end: 0x{:X?}, done: {}, tag: {:x}",
+                trace_scsi_fs!("FS> Read; new: {}, lba: 0x{:X?}, lba_end: 0x{:X?}, done: {}, tag: {:x}",
                     new_command, self.lba, self.lba_end, self.lba == self.lba_end, self.inner.get_tag());
 
                 // We only get here if the buffer is empty 
@@ -221,7 +221,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                     self.lba_end = w.lba + w.transfer_length - 1;
                 }
 
-                /*trace_scsi_fs!*/log::info!("FS> Write; new: {}, lba: 0x{:X?}, lba_end: 0x{:X?}, done: {}, tag: {:x}",
+                trace_scsi_fs!("FS> Write; new: {}, lba: 0x{:X?}, lba_end: 0x{:X?}, done: {}, tag: {:x}",
                     new_command, self.lba, self.lba_end, self.lba == self.lba_end, self.inner.get_tag());
 
                 let len = match self.inner.transfer_state() {
@@ -233,7 +233,6 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                 while self.lba <= self.lba_end {
                     // I think this "len" computation isn't right for our purposes..
                     let buf = self.inner.take_buffered_data(len, true).expect("Buffer should have enough data");
-                    log::info!("buf: {:x?}", &buf[..32]);
                     self.block_device.write_block(self.lba, buf)?;
                     self.lba += 1;
                 }
@@ -280,7 +279,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
 
         match self.process_command(new_command) {
             Ok(CommandState::Done) => {
-                log::info!("command done");
+                log::trace!("command done");
                 // Command is done, send CommandOk
                 self.inner.send_command_ok()?;
                 // Clear the command so we don't try and execute it again
@@ -290,7 +289,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                 self.request_sense_response.reset_status();
             },
             Ok(CommandState::Ongoing) => {
-                log::info!("transfer_state: {:?}", self.inner.transfer_state());
+                log::trace!("transfer_state: {:?}", self.inner.transfer_state());
                 /*
                 match self.inner.transfer_state() {
                     TransferState::ReceivingDataFromHost { bytes_available: _, full: _, done: _ } => {
@@ -335,7 +334,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                  SenseKey::IllegalRequest,
                  AdditionalSenseCode::InvalidCommandOperationCode,
             ),
-            
+
             Error::InsufficientDataForCommand => (
                 SenseKey::IllegalRequest,
                 // Closest thing I could find. Some sources suggest OS does very little with ASC/ASCQ and it's
@@ -428,7 +427,7 @@ impl<B: UsbBus, BD: BlockDevice> UsbClass<B> for Scsi<'_, B, BD> {
         self.inner.get_configuration_descriptors(writer)
     }
 
-    fn reset(&mut self) { 
+    fn reset(&mut self) {
         self.current_command = Command::None;
         self.request_sense_response.reset_status();
         self.lba = 0;
@@ -445,7 +444,7 @@ impl<B: UsbBus, BD: BlockDevice> UsbClass<B> for Scsi<'_, B, BD> {
         self.inner.control_out(xfer)
     }
 
-    fn poll(&mut self) { 
+    fn poll(&mut self) {
         if let Err(e) = self.update() {
             error!("Error from Scsi::update: {:?}", e);
         }

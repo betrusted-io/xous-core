@@ -143,7 +143,7 @@ pub struct BulkOnlyTransport<'a, B: UsbBus> {
     /// Used to determine if a ZLP is required or not
     last_packet_full: bool,
 
-    /// Indicates we are going to end the current data transaction after draining the current 
+    /// Indicates we are going to end the current data transaction after draining the current
     /// buffer regardless of data_residue
     data_done: bool,
 }
@@ -151,16 +151,16 @@ pub struct BulkOnlyTransport<'a, B: UsbBus> {
 impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     pub const BUFFER_BYTES: usize = BUFFER_BYTES;
     pub fn new(
-        alloc: &UsbBusAllocator<B>, 
-        max_packet_size: u16, 
+        alloc: &UsbBusAllocator<B>,
+        max_packet_size: u16,
         subclass: InterfaceSubclass,
         max_lun: u8,
     ) -> BulkOnlyTransport<'_, B> {
         assert!(max_lun < 16);
         BulkOnlyTransport {
             inner: MscClass::new(
-                alloc, 
-                max_packet_size, 
+                alloc,
+                max_packet_size,
                 subclass,
                 InterfaceProtocol::BulkOnlyTransport,
             ),
@@ -242,7 +242,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
             // read that initiated the command should have drained the RX buffer. Depending on if
             // logging is enabled or not it appears to sometimes work and sometimes not which makes
             // me think it's a timing issue. In the hardware example I'm testing with RTFM appears
-            // to be clearing the 
+            // to be clearing the
             // self.read()?;
         }
 
@@ -271,7 +271,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         // Reset the positions in the buffer
         self.buffer_i = 0;
         self.data_i = 0;
-        
+
         // Reset the data_done override
         self.data_done = false;
 
@@ -305,18 +305,18 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
             State::SendingDataToHost |
             State::ReceivingDataFromHost => Some(self.command_status_wrapper.data_residue),
             _ => None,
-        }   
+        } 
     }
 
     pub fn transfer_state(&self) -> TransferState {
         trace_bot_buffer!("BUFFER> i: {}, di: {}", self.buffer_i, self.data_i);
         match self.state {
-            State::ReceivingDataFromHost => TransferState::ReceivingDataFromHost { 
+            State::ReceivingDataFromHost => TransferState::ReceivingDataFromHost {
                 bytes_available: self.buffer_i - self.data_i,
                 full: self.buffer_i == self.buffer.len(),
                 done: self.command_status_wrapper.data_residue == 0,
             },
-            State::SendingDataToHost => TransferState::SendingDataToHost { 
+            State::SendingDataToHost => TransferState::SendingDataToHost {
                 bytes_remaining: self.buffer_i - self.data_i,
                 empty: self.buffer_i == 0,
             },
@@ -385,7 +385,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         log::info!("take_buffered_data() s: {} e: {}", s, e);
         Ok(&self.buffer[s..e])
         */
-        log::info!("take_buffered_data() len: {}", len);
+        log::debug!("take_buffered_data() len: {}", len);
         loop {
             match self.inner.read_packet(&mut self.buffer[..len]) {
                 Ok(l) => {
@@ -487,7 +487,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
 
     fn end_data_transfer(&mut self) -> Result<(), Error> {
         // Get the csw ready to send
-        log::info!("end_data_transfer() pack csw for cbw {:x}", self.command_block_wrapper.tag);
+        log::debug!("end_data_transfer() pack csw for cbw {:x}", self.command_block_wrapper.tag);
         self.pack_csw();
         self.flush()?;
 
@@ -501,7 +501,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         // send_zlp or flush are called here because we may not get an interrupt in a timley manner
         // if we don't send immediately and
         if needs_zlp {            
-            /*trace_bot_zlp!*/ log::info!("ZLP> required");
+            trace_bot_zlp!("ZLP> required");
             self.change_state(State::NeedZlp);
             self.send_zlp()?;
         } else {

@@ -8,7 +8,6 @@ use std::collections::BTreeMap;
 use std::convert::TryInto;
 
 const WRITE_TIMEOUT_MS: u64 = 10_000;
-const READ_TIMEOUT_MS: u64 = 10_000;
 
 fn handle_usb(_irq_no: usize, arg: *mut usize) {
     let usb = unsafe { &mut *(arg as *mut SpinalUsbDevice) };
@@ -23,7 +22,7 @@ fn handle_usb(_irq_no: usize, arg: *mut usize) {
 }
 
 pub struct SpinalUsbMgmt {
-    csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactory AtomicCsr so it is non-mutable
+    csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactoring AtomicCsr so it is non-mutable
     usb: AtomicPtr<u8>,
     eps: AtomicPtr<UdcEpStatus>,
     // can't use the srmem macro because the memory region window is not exactly the size of the memory to be stored.
@@ -190,10 +189,10 @@ pub struct SpinalUsbDevice {
     pub(crate) conn: xous::CID,
     usb: xous::MemoryRange,
     csr_addr: u32,
-    csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactory AtomicCsr so it is non-mutable
+    csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactoring AtomicCsr so it is non-mutable
     regs: SpinalUdcRegs,
     // 1:1 mapping of endpoint structures to offsets in the memory space for the actual ep storage
-    // data must be committed to this in a single write, and not composed dynamcally using this as scratch space
+    // data must be committed to this in a single write, and not composed dynamically using this as scratch space
     eps: AtomicPtr<UdcEpStatus>,
     // different views into allocation, depending on the configuration
     view: AllocView,
@@ -204,7 +203,6 @@ pub struct SpinalUsbDevice {
     // last descriptor in write (IN packet; device->host) chain. Used to check if a transaction is in progress.
     last_wr_desc: Arc::<Mutex<[Option<SpinalUdcDescriptor>; 16]>>,
     // last descriptor in read (OUT packet; host->device) chain. Used to check if a transaction is in progress.
-    last_rd_desc: Arc::<Mutex<[Option<SpinalUdcDescriptor>; 16]>>,
 }
 impl SpinalUsbDevice {
     pub fn new(sid: xous::SID) -> SpinalUsbDevice {
@@ -241,7 +239,6 @@ impl SpinalUsbDevice {
             address: AtomicUsize::new(0),
             read_allowed: AtomicU16::new(0),
             last_wr_desc: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
-            last_rd_desc: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
         };
 
         xous::claim_interrupt(
@@ -277,7 +274,6 @@ impl SpinalUsbDevice {
             address: AtomicUsize::new(0),
             read_allowed: AtomicU16::new(0),
             last_wr_desc: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
-            last_rd_desc: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
         }
     }
     pub fn get_iface(&self) -> SpinalUsbMgmt {
@@ -445,73 +441,6 @@ impl SpinalUsbDevice {
         );
         setup
     }
-/*
-    pub(crate) fn read_blocking_bulk(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> {
-        // in the case that a transfer longer than a packet is expected, this call blocks until
-        // we have read in as much data as we can hold given our descriptor chain depth.
-        assert!(ep_addr.index() != 0); // long buffers are not allowed on EP0
-        let mut ep_status = self.status_read_volatile(ep_addr.index());
-        let mut descriptor = self.descriptor_from_head_and_chain(head_offset, 0, packet_len);
-
-        for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
-            descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
-            descriptor.set_desc_flags(UsbDirection::Out,
-                false, true, false);
-            for b in sub_buf.iter_mut() {
-                *b = 0; // zeroize the buffer between transactions, to avoid data leakage in unused areas
-            }
-
-            if chain_offset == (max_chain - 1) || sub_buf.len() != packet_len {
-                // on the very last packet (either by chain exhaustion, or buffer source exhaustion), set completion_on_full interrupt
-                descriptor.set_next_desc_and_len(0, sub_buf.len());
-            } else {
-                // if not the last packet, setup the linked list pointer
-                let next_addr = self.next_from_head_and_chain(head_offset, chain_offset, packet_len);
-                descriptor.set_next_desc_and_len(next_addr, sub_buf.len());
-            }
-            descriptor.set_offset(0); // reset the write pointer to 0, also sets in_progress
-            log::info!("bulk descriptor {} setup: {:x?}", chain_offset, descriptor);
-        }
-
-        ep_status.set_max_packet_size(packet_len as _);
-        // this is reset to 0 after every transaction by the hardware, so we must reset it
-        ep_status.set_head_offset(head_offset as u32);
-
-        // this is required to commit the ep_status record once all the setup is done
-        self.status_write_volatile(ep_addr.index(), ep_status);
-
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-        // zeroize the return buffer now -- gives us something to do while the data comes in!
-        for d in buf.iter_mut() {
-            *d = 0;
-        }
-
-        // now busy-wait for the packet to come in!
-        let now = self.tt.elapsed_ms();
-        let mut last_secs = 5;
-        while descriptor.in_progress() && (self.tt.elapsed_ms() - now < READ_TIMEOUT_MS) {
-            xous::yield_slice();
-            let secs = (self.tt.elapsed_ms() - now) / 1_0000;
-            if last_secs != secs {
-                log::info!("waiting for rd linked list to complete...");
-                last_secs = secs;
-            }
-        }
-
-        // now copy results to buf
-        for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
-            let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
-            // buffer was zeroized as we were waiting for data to come in, so we can safely do partial copies of data here
-            for (desc_offset, word_chunk) in sub_buf.chunks_mut(size_of::<u32>()).enumerate() {
-                word_chunk.copy_from_slice(
-                    &descriptor.read_data(desc_offset)
-                    .to_le_bytes()[..word_chunk.len()]) // the upper limit index ensures that if sub_buf is an odd number of bytes, we don't panic
-            }
-        }
-        log::info!("bulk read {} bytes: {:x?}", buf.len(), buf);
-        Ok(buf.len())
-    }
-*/
 }
 
 const CHAINED_BUF_LEN: usize = 512;
@@ -532,7 +461,7 @@ impl UsbBus for SpinalUsbDevice {
     /// # Errors
     ///
     /// * [`EndpointOverflow`](crate::UsbError::EndpointOverflow) - Available total number of
-    ///   endpoints, endpoints of the specified type, or endpoind packet memory has been exhausted.
+    ///   endpoints, endpoints of the specified type, or endpoint packet memory has been exhausted.
     ///   This is generally caused when a user tries to add too many classes to a composite device.
     /// * [`InvalidEndpoint`](crate::UsbError::InvalidEndpoint) - A specific `ep_addr` was specified
     ///   but the endpoint in question has already been allocated.
@@ -597,7 +526,7 @@ impl UsbBus for SpinalUsbDevice {
                         ep_dir,
                         ep_dir == UsbDirection::Out,
                         true, // this should be equal to "packet_end", but this driver doesn't have that...?
-                        index == 0, // only trigger for ep0 (per spinal linux driver)
+                        index == 0, // only trigger for ep0 (per spinal Linux driver)
                     );
                     // clear the descriptor to 0
                     let init_vec = vec![0u8; max_packet_size as _];
@@ -751,7 +680,7 @@ impl UsbBus for SpinalUsbDevice {
             } else if buf.len() <= packet_len { // no-chain path
                 // TODO: merge this with the path below, mostly to reduce code space. This was kept "intact" so enumeration
                 // would work while we figured out the details of chaining on bulk transfers.
-                #[cfg(feature="mjolnir")] // mjolnir is so powerful, one must halt the USB core entirely for it to be weilded
+                #[cfg(feature="mjolnir")] // mjolnir is so powerful, one must halt the USB core entirely for it to be wielded
                 if ep_addr.index() == 1 { self.udc_hard_halt(ep_addr.index()); }
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
 
@@ -814,7 +743,7 @@ impl UsbBus for SpinalUsbDevice {
                 self.status_write_volatile(ep_addr.index(), ep_status);
 
                 #[cfg(feature="mjolnir")]
-                { // mjolnir is so powerful, one must halt the USB core entirely for it to be weilded
+                { // mjolnir is so powerful, one must halt the USB core entirely for it to be wielded
                     if ep_addr.index() == 1 {
                         self.ll_debug();
                     }
@@ -1000,7 +929,7 @@ impl UsbBus for SpinalUsbDevice {
                 for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
                     let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
                     if descriptor.offset() != 0 {
-                        log::info!("appending {:x?}", descriptor);
+                        log::debug!("appending {:x?}", descriptor);
                         let available_len = sub_buf.len().min(descriptor.offset());
                         for (desc_offset, word_chunk) in sub_buf[..available_len].chunks_mut(size_of::<u32>()).enumerate() {
                             word_chunk.copy_from_slice(
@@ -1012,7 +941,7 @@ impl UsbBus for SpinalUsbDevice {
                         }
                         len += available_len;
                     } else {
-                        log::info!("breaking at {:x?}", descriptor);
+                        log::debug!("breaking at {:x?}", descriptor);
                         break;
                     }
                 }

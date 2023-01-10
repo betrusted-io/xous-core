@@ -21,6 +21,6 @@ mod logging {
     pub use itm_logger::stub as trace_scsi_fs;
     */
 
-    pub use log::info as trace_scsi_fs;
+    pub use log::debug as trace_scsi_fs;
     pub use log::info as trace_scsi_command;
 }
