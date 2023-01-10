@@ -16,7 +16,24 @@ pub struct ReadFormatCapacitiesCommand {
     #[pkd(7, 0, 7, 8)]
     pub allocation_length: u16,
     
-    #[pkd(7, 0, 11, 11)]
+    #[pkd(7, 0, 9, 9)]
     pub control: Control,
 }
 impl ParsePackedStruct for ReadFormatCapacitiesCommand {}
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Packed)]
+#[packed(big_endian, lsb0)]
+pub struct ReadFormatCapacitiesResponse {
+    #[pkd(7, 0, 3, 3)]
+    pub capacity_list_length: u8,
+
+    #[pkd(7, 0, 4, 7)]
+    pub number_of_blocks: u32,
+
+    #[pkd(1, 0, 8, 8)]
+    pub descriptor_code: u8,
+
+    #[pkd(7, 0, 9, 11)]
+    pub block_length: u32,
+}
+impl ParsePackedStruct for ReadFormatCapacitiesResponse {}

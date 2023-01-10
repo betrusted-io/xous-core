@@ -251,6 +251,19 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                 }
             },
 
+            Command::ReadFormatCapacities(_rfc) => {
+                log::info!("got rfc");
+                let rfc_resp = ReadFormatCapacitiesResponse {
+                    capacity_list_length: 1 * 8, // 1 entry by 8 bytes
+                    number_of_blocks: self.block_device.max_lba(),
+                    descriptor_code: 1, // 1 - unformatted media; 2 - formatted media; 3 - no cartridge in drive
+                    block_length: BD::BLOCK_BYTES as u32,
+                };
+                let mut buf = self.inner.take_buffer_space(ReadFormatCapacitiesResponse::BYTES)?;
+                rfc_resp.pack(&mut buf)?;
+                Done
+            },
+
             _ => Err(Error::UnhandledOpCode)?,
         })
     }
