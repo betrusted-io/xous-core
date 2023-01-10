@@ -7,7 +7,7 @@ use usb_device::{class_prelude::*, Result, UsbDirection};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 
-const WRITE_TIMEOUT_MS: u64 = 10_000;
+const WRITE_TIMEOUT_MS: u64 = 20;
 
 fn handle_usb(_irq_no: usize, arg: *mut usize) {
     let usb = unsafe { &mut *(arg as *mut SpinalUsbDevice) };
@@ -677,7 +677,7 @@ impl UsbBus for SpinalUsbDevice {
         if let Some((head_offset, packet_len, max_chain)) = self.view.ep_allocs[ep_addr.index()] {
             if buf.len() > max_chain * packet_len {
                 Err(UsbError::BufferOverflow)
-            } else if buf.len() <= packet_len { // no-chain path
+            } else if buf.len() <= packet_len {
                 // TODO: merge this with the path below, mostly to reduce code space. This was kept "intact" so enumeration
                 // would work while we figured out the details of chaining on bulk transfers.
                 #[cfg(feature="mjolnir")] // mjolnir is so powerful, one must halt the USB core entirely for it to be wielded
@@ -685,30 +685,23 @@ impl UsbBus for SpinalUsbDevice {
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
 
                 if ep_addr.index() != 0 {
-                    if let Some(final_descriptor) = &self.last_wr_desc.lock().unwrap()[ep_addr.index()] {
-                        let now = self.tt.elapsed_ms();
-                        log::debug!("checking final descriptor {:x?}", final_descriptor);
-                        let mut last_print = 10;
-                        while (self.tt.elapsed_ms() - now < WRITE_TIMEOUT_MS)
-                        && final_descriptor.in_progress() {
-                            xous::yield_slice();
-                            let secs = (self.tt.elapsed_ms() - now) / 1_000;
-                            if secs != last_print {
-                                log::info!("write wait!");
-                                last_print = secs;
-                            }
-                        }
-                        // TODO: report WouldBlock timeout
+                    let start = self.tt.elapsed_ms();
+                    let mut now = start;
+                    while (ep_status.head_offset() != 0)
+                    && (now - start < WRITE_TIMEOUT_MS) {
+                        xous::yield_slice();
+                        ep_status = self.status_read_volatile(ep_addr.index());
+                        now = self.tt.elapsed_ms();
+                    }
+                    if now - start >= WRITE_TIMEOUT_MS {
+                        log::debug!("write wait timed out: head offset {:x?} {:x?}", ep_status.head_offset() * 16,
+                        self.last_wr_desc.lock().unwrap()[ep_addr.index()].as_ref().unwrap());
                     }
                 }
 
                 // this is reset to 0 after every transaction by the hardware, so we must reset it
                 ep_status.set_head_offset(head_offset as u32);
                 let descriptor = self.descriptor_from_status(&ep_status);
-                /*if descriptor.in_progress() && ep_addr.index() != 0 {
-                    log::warn!("WouldBlock {:?}", ep_addr);
-                    return Err(UsbError::WouldBlock);
-                }*/
                 if ep_addr.index() != 0 {
                     descriptor.set_desc_flags(UsbDirection::In,
                         false, false, false);
@@ -764,20 +757,18 @@ impl UsbBus for SpinalUsbDevice {
                 Ok(buf.len())
             } else {
                 assert!(ep_addr.index() != 0); // long buffers are not allowed on EP0
-                if let Some(final_descriptor) = &self.last_wr_desc.lock().unwrap()[ep_addr.index()] {
-                    log::debug!("llwr checking final descriptor {:x?}", final_descriptor);
-                    let now = self.tt.elapsed_ms();
-                    let mut last_secs = 5;
-                    while final_descriptor.in_progress() && (self.tt.elapsed_ms() - now < WRITE_TIMEOUT_MS) {
-                        xous::yield_slice();
-                        let secs = (self.tt.elapsed_ms() - now) / 1_0000;
-                        if last_secs != secs {
-                            log::debug!("waiting for wr linked list to complete...");
-                            last_secs = secs;
-                        }
-                    }
-                }
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
+                let start = self.tt.elapsed_ms();
+                let mut now = start;
+                while (ep_status.head_offset() != 0) && (now - start < WRITE_TIMEOUT_MS) {
+                    xous::yield_slice();
+                    ep_status = self.status_read_volatile(ep_addr.index());
+                    now = self.tt.elapsed_ms();
+                }
+                if now - start >= WRITE_TIMEOUT_MS {
+                    log::debug!("ll write wait timed out: head offset {:x?} {:x?}", ep_status.head_offset() * 16,
+                    self.last_wr_desc.lock().unwrap()[ep_addr.index()].as_ref().unwrap());
+                }
 
                 for (chain_offset, sub_buf) in buf.chunks(packet_len).enumerate() {
                     let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
@@ -899,19 +890,29 @@ impl UsbBus for SpinalUsbDevice {
                     // this is because the EP0 interrupt will fire off a poll event that also causes a read of all the endpoints.
                     // the interrupt hasn't triggered, don't allow the read
                     let ep_status = self.status_read_volatile(ep_addr.index());
-                    let descriptor = self.descriptor_from_status(&ep_status);
-                    if descriptor.offset() == 0 {
+                    if ep_status.head_offset() != 0 {
                         return Err(UsbError::WouldBlock);
-                    } else {
-                        log::info!("bypassing WouldBlock");
                     }
                 } else {
                     // this load-store race condition is OK because the interrupt handler doesn't modify this
                     let masked = self.read_allowed.load(Ordering::Relaxed) & !(1 << ep_addr.index() as u16); // clear the read mask
                     self.read_allowed.store(masked, Ordering::SeqCst);
                 }
+                /*
+                    let mut ep_status = self.status_read_volatile(ep_addr.index());
+                    let start = self.tt.elapsed_ms();
+                    let mut now = start;
+                    while (ep_status.head_offset() != 0) && (now - start < WRITE_TIMEOUT_MS) {
+                        xous::yield_slice();
+                        ep_status = self.status_read_volatile(ep_addr.index());
+                        now = self.tt.elapsed_ms();
+                    }
+                    if now - start >= WRITE_TIMEOUT_MS {
+                        log::debug!("read wait timed out: head offset {:x?} {:x?}", ep_status.head_offset() * 16,
+                        self.descriptor_from_status(&ep_status));
+                    }
+                 */
 
-                self.udc_hard_halt(ep_addr.index());
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
                 // log::info!("head_offset{}: {:x}", ep_addr.index(), head_offset * 16);
                 ep_status.set_head_offset(head_offset as u32);
@@ -923,6 +924,7 @@ impl UsbBus for SpinalUsbDevice {
                     log::warn!("WouldBlock {:?}", ep_addr);
                     return Err(UsbError::WouldBlock);
                 }
+                self.udc_hard_halt(ep_addr.index());
                 #[cfg(feature="chain")]
                 let mut len = 0;
                 #[cfg(feature="chain")]
@@ -1011,7 +1013,7 @@ impl UsbBus for SpinalUsbDevice {
                 let interrupts = self.regs.interrupts();
                 if interrupts.0 != 0 {
                     if interrupts.0 != 1 { // ep0 interrupt can sometimes be leftover from ep0setup handling
-                        log::warn!("Pending interrupts, clearing: {:?}", interrupts);
+                        log::debug!("Pending interrupts, clearing: {:?}", interrupts);
                     }
                     self.regs.clear_all_interrupts();
                 }
