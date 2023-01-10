@@ -4416,6 +4416,8 @@ dependencies = [
  "usb-device",
  "usbd_bulk_only_transport 0.1.0",
  "usbd_mass_storage 0.1.0",
+ "xous 0.9.29 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-ticktimer",
 ]
 
 [[package]]
