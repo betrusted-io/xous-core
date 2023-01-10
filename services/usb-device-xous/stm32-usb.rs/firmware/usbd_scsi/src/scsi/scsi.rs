@@ -407,15 +407,16 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
         self.request_sense_response.additional_sense_code = additional_sense_code;
     }
 
+    /// Update is called by the IRQ handler, whenever a new event is available on one of
+    /// the endpoints allocated to the USB mass storage device.
     fn update(&mut self) -> Result<(), Error> {
-        // Send anything that's already queued
-        //accept_would_block(
-        //    self.inner.write()
-        //        .map_err(|e| e.into())
-        //)?;
         let mut i = 0;
+        // This loop will automatically re-poll for read data after a single update
+        // originating from an incoming IRQ. This is necessary because when a new packet
+        // comes in while processing the current packet, a second IRQ is not fired.
+        //
+        // The loop exits if it polls twice and finds no new packets pending.
         loop {
-            // print!("p{}", i);
             // Read new data if available
             match accept_would_block(
                 self.inner.read()
@@ -435,6 +436,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                 self.inner.write()
                     .map_err(|e| e.into())
             )?;
+            // exit the loop if we blocked more than twice
             if i > 1 {
                 break;
             }

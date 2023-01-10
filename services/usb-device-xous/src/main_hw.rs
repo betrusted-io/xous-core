@@ -342,9 +342,7 @@ pub(crate) fn main_hw() -> ! {
                 if matches!(view, Views::MassStorage) {
                     if ums_device.poll(&mut [&mut ums]) {
                         log::debug!("ums device had something to do!")
-                        //Some(fido_class.interface::<RawFidoInterface<'_, _>, _>())
                     }
-
                     continue;
                 }
 

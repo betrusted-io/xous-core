@@ -12,10 +12,10 @@ pub struct ReadFormatCapacitiesCommand {
 
     #[pkd(7, 5, 1, 1)]
     pub logical_unit_number: u8,
-    
+
     #[pkd(7, 0, 7, 8)]
     pub allocation_length: u16,
-    
+
     #[pkd(7, 0, 9, 9)]
     pub control: Control,
 }
