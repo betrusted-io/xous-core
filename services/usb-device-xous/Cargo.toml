@@ -29,8 +29,10 @@ usbd-human-interface-device = "0.2.1"
 embedded-time = "0.12.1" # required by the keyboard interface
 packed_struct = { version = "0.10", default-features = false } # used by the usbd-human-interface-device crate
 num_enum = { version = "0.5", default-features = false } # used by the usbd-human-interface-device crate
-usbd_scsi = { path = "./stm32-usb.rs/firmware/usbd_scsi", optional = true }
-usbd_mass_storage = { path = "./stm32-usb.rs/firmware/usbd_mass_storage", optional = true }
+
+# Mass storage support
+usbd_scsi = { path = "../../libs/mass-storage/usbd_scsi", optional = true }
+usbd_mass_storage = { path = "../../libs/mass-storage/usbd_mass_storage", optional = true }
 
 ghostfat = "0.5.0"
 
