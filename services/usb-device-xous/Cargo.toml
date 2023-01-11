@@ -29,8 +29,8 @@ usbd-human-interface-device = "0.2.1"
 embedded-time = "0.12.1" # required by the keyboard interface
 packed_struct = { version = "0.10", default-features = false } # used by the usbd-human-interface-device crate
 num_enum = { version = "0.5", default-features = false } # used by the usbd-human-interface-device crate
-usbd_scsi = { path = "./stm32-usb.rs/firmware/usbd_scsi" }
-usbd_mass_storage = { path = "./stm32-usb.rs/firmware/usbd_mass_storage" }
+usbd_scsi = { path = "./stm32-usb.rs/firmware/usbd_scsi", optional = true }
+usbd_mass_storage = { path = "./stm32-usb.rs/firmware/usbd_mass_storage", optional = true }
 
 ghostfat = "0.5.0"
 
@@ -48,6 +48,7 @@ precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 chain = []
-minimal = []
+minimal = ["mass-storage"]
+mass-storage = ["usbd_scsi", "usbd_mass_storage"]
 mjolnir = [] # the big hammer for debugging Spinal USB issues. A raw memory dump of config and descriptor space. Use with care.
 default = ["chain"]

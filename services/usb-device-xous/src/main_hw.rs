@@ -50,6 +50,7 @@ const EXTENDED_CORE_RESET_MS: usize = 4000;
 enum Views {
     FidoWithKbd = 0,
     FidoOnly = 1,
+    #[cfg(feature="mass-storage")]
     MassStorage = 2,
 }
 
@@ -123,7 +124,7 @@ pub(crate) fn main_hw() -> ! {
         }
     }
     #[cfg(feature="minimal")]
-    let serial_number = "minimal_build";
+    let serial_number = "minimalbuild";
     #[cfg(feature="minimal")]
     {
         use utralib::generated::*;
@@ -146,6 +147,7 @@ pub(crate) fn main_hw() -> ! {
     let usb_fido_dev = usb_fidokbd_dev.clone_unalloc();
 
     // do the same thing for mass storage
+    #[cfg(feature="mass-storage")]
     let ums_dev = usb_fidokbd_dev.clone_unalloc();
 
     // track which view is visible on the device core
@@ -195,10 +197,11 @@ pub(crate) fn main_hw() -> ! {
     .serial_number(&serial_number)
     .build();
 
+    #[cfg(feature="mass-storage")]
     let ums_alloc = UsbBusAllocator::new(ums_dev);
-
+    #[cfg(feature="mass-storage")]
     let bd = block_device::BlockDevice::new();
-
+    #[cfg(feature="mass-storage")]
     let mut ums = usbd_scsi::Scsi::new(
         &ums_alloc,
         64,
@@ -207,7 +210,7 @@ pub(crate) fn main_hw() -> ! {
         "Kosagi Precursor".as_bytes(),
         "1".as_bytes()
     );
-
+    #[cfg(feature="mass-storage")]
     let mut ums_device = UsbDeviceBuilder::new(&ums_alloc, UsbVidPid(0x1209, 0x3613))
         .manufacturer("Kosagi")
         .product("Precursor")
@@ -271,8 +274,9 @@ pub(crate) fn main_hw() -> ! {
                             _ => ()
                         };
                     }
+                    #[cfg(feature="mass-storage")]
                     Views::MassStorage => {
-
+                        // TODO: what to do on a resume for USB mass storage??
                     }
                 }
                 // resume2 brings us to our last application state
@@ -328,6 +332,7 @@ pub(crate) fn main_hw() -> ! {
                     let u2f = match view {
                         Views::FidoWithKbd => composite.interface::<RawFidoInterface<'_, _>, _>(),
                         Views::FidoOnly => fido_class.interface::<RawFidoInterface<'_, _>, _>(),
+                        #[cfg(feature="mass-storage")]
                         Views::MassStorage => panic!("expected u2f tx when in mass storage mode!"),
                     };
                     u2f.write_report(&u2f_msg).ok();
@@ -339,6 +344,7 @@ pub(crate) fn main_hw() -> ! {
                 buffer.replace(u2f_ipc).unwrap();
             }
             Some(Opcode::UsbIrqHandler) => {
+                #[cfg(feature="mass-storage")]
                 if matches!(view, Views::MassStorage) {
                     if ums_device.poll(&mut [&mut ums]) {
                         log::debug!("ums device had something to do!")
@@ -369,6 +375,7 @@ pub(crate) fn main_hw() -> ! {
                             None
                         }
                     },
+                    #[cfg(feature="mass-storage")]
                     _ => {
                         unreachable!("should not be able to arrive here if view is mass storage!")
                     }
@@ -398,6 +405,7 @@ pub(crate) fn main_hw() -> ! {
                 let is_suspend = match view {
                     Views::FidoWithKbd => usb_dev.state() == UsbDeviceState::Suspend,
                     Views::FidoOnly => fido_dev.state() == UsbDeviceState::Suspend,
+                    #[cfg(feature="mass-storage")]
                     Views::MassStorage => ums_device.state() == UsbDeviceState::Suspend,
                 };
                 if is_suspend {
@@ -432,7 +440,7 @@ pub(crate) fn main_hw() -> ! {
                         log::info!("Connecting USB device core; disconnecting debug USB core");
                         match view {
                             Views::FidoWithKbd => usbmgmt.connect_device_core(true),
-                            Views::FidoOnly | Views::MassStorage => {
+                            _ => {
                                 view = Views::FidoWithKbd;
                                 usbmgmt.ll_reset(true);
                                 tt.sleep_ms(1000).ok();
@@ -445,7 +453,7 @@ pub(crate) fn main_hw() -> ! {
                     UsbDeviceType::Fido => {
                         match view {
                             Views::FidoOnly => usbmgmt.connect_device_core(true),
-                            Views::FidoWithKbd | Views::MassStorage => {
+                            _ => {
                                 view = Views::FidoOnly;
                                 usbmgmt.ll_reset(true);
                                 tt.sleep_ms(1000).ok();
@@ -455,10 +463,11 @@ pub(crate) fn main_hw() -> ! {
                             }
                         }
                     }
+                    #[cfg(feature="mass-storage")]
                     UsbDeviceType::MassStorage => {
                         match view {
                             Views::MassStorage => usbmgmt.connect_device_core(true),
-                            Views::FidoWithKbd | Views::FidoOnly => {
+                            _ => {
                                 view = Views::MassStorage;
                                 usbmgmt.ll_reset(true);
                                 tt.sleep_ms(1000).ok();
@@ -517,6 +526,7 @@ pub(crate) fn main_hw() -> ! {
                             }
                         }
                     },
+                    #[cfg(feature="mass-storage")]
                     UsbDeviceType::MassStorage => {
                         if !usbmgmt.is_device_connected() {
                             log::info!("Connecting USB device core; disconnecting debug USB core");
@@ -543,6 +553,7 @@ pub(crate) fn main_hw() -> ! {
                     match view {
                         Views::FidoWithKbd => xous::return_scalar(msg.sender, UsbDeviceType::FidoKbd as usize).unwrap(),
                         Views::FidoOnly => xous::return_scalar(msg.sender, UsbDeviceType::Fido as usize).unwrap(),
+                        #[cfg(feature="mass-storage")]
                         Views::MassStorage => xous::return_scalar(msg.sender, UsbDeviceType::MassStorage as usize).unwrap(),
                     }
                 } else {
@@ -597,6 +608,7 @@ pub(crate) fn main_hw() -> ! {
                 match view {
                     Views::FidoWithKbd => xous::return_scalar(msg.sender, usb_dev.state() as usize).unwrap(),
                     Views::FidoOnly => xous::return_scalar(msg.sender, fido_dev.state() as usize).unwrap(),
+                    #[cfg(feature="mass-storage")]
                     Views::MassStorage => xous::return_scalar(msg.sender, ums_device.state() as usize).unwrap(),
                 }
             }),
@@ -629,7 +641,7 @@ pub(crate) fn main_hw() -> ! {
                             xous::return_scalar(msg.sender, 1).unwrap();
                         }
                     }
-                    Views::FidoOnly | Views::MassStorage => {
+                    _ => {
                         xous::return_scalar(msg.sender, 1).unwrap();
                     }
                 }
