@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-
-cargo +nightly watch -w .. -x "build --release --bin msc"
