@@ -1,3 +1,0 @@
-[submodule "hardware/kicad_custom"]
-	path = hardware/kicad_custom
-	url = git@github.com:cs2dsb/kicad_custom.git
