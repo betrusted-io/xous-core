@@ -649,7 +649,10 @@ pub(crate) fn main_hw() -> ! {
             Some(Opcode::SendString) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
+                #[cfg(not(feature="minimal"))]
                 let mut sent = 0;
+                #[cfg(feature="minimal")]
+                let sent = 0;
                 match view {
                     #[cfg(not(feature="minimal"))]
                     Views::FidoWithKbd => {

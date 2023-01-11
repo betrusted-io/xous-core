@@ -54,15 +54,15 @@ impl From<PackingError> for Error {
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 enum State {
-    /// Waiting for a command block wrapper to arrive. Throws away data until 
+    /// Waiting for a command block wrapper to arrive. Throws away data until
     /// CBW signature is found. Moves to SendingDataToHost or ReceivingDataFromHost
     /// depending on CBW direction flag
     WaitingForCommand,
-    /// Command initiated a transfer to the host (IN in USB parlance). Sends the 
-    /// number of bytes the command asked for unless instructed to terminate early. 
+    /// Command initiated a transfer to the host (IN in USB parlance). Sends the
+    /// number of bytes the command asked for unless instructed to terminate early.
     /// Moves to NeedToSendStatus or NeedZlp
     SendingDataToHost,
-    /// Command initiated a transfer from the host (OUT in USB parlance). Reads the 
+    /// Command initiated a transfer from the host (OUT in USB parlance). Reads the
     /// number of bytes the command asked to send. Moves to NeedToSendStatus or NeedZlp
     ReceivingDataFromHost,
     /// Need to send a zero length packet because the transfer was shorter than
@@ -84,7 +84,7 @@ pub enum TransferState {
     /// need the caller to process the data before we can do more work. `done` indicates
     /// data_residue has reached 0 and there won't be any more data read
     ReceivingDataFromHost { bytes_available: usize, full: bool, done: bool },
-    /// We are sending data to the host, `bytes_remaining` indicates how many bytes are 
+    /// We are sending data to the host, `bytes_remaining` indicates how many bytes are
     /// still in the buffer. `empty` indicates the buffer is empty and we can't do any
     /// more work before the caller gives us more data
     SendingDataToHost { bytes_remaining: usize, empty: bool },
@@ -95,7 +95,7 @@ pub enum TransferState {
 /// So far only tested with the SCSI transparent command set - see [Scsi](struct.Scsi.html)
 ///
 /// [Glossary](index.html#glossary)
-/// 
+///
 /// ## Functionality overview
 /// 1. Reading CBWs
 /// 1. Initiating a data transfer with the length and direction from the CBW
@@ -116,7 +116,7 @@ pub enum TransferState {
 ///
 pub struct BulkOnlyTransport<'a, B: UsbBus> {
     inner: MscClass<'a, B>,
-    
+
     /// This is the response this class will give to the Get Max LUN request
     /// must be between 0 and 15, which is checked in the new function
     max_lun: u8,
@@ -127,7 +127,7 @@ pub struct BulkOnlyTransport<'a, B: UsbBus> {
     /// The most recent CBW. Not valid if in WaitingForCommand state
     command_block_wrapper: CommandBlockWrapper,
 
-    /// The previous command's CSW. 
+    /// The previous command's CSW.
     command_status_wrapper: CommandStatusWrapper,
 
     /// The buffer, used for both reading and writing
@@ -146,6 +146,9 @@ pub struct BulkOnlyTransport<'a, B: UsbBus> {
     /// Indicates we are going to end the current data transaction after draining the current
     /// buffer regardless of data_residue
     data_done: bool,
+
+    /// access handle for the ticktimer, so we can measure time/delays
+    tt: ticktimer_server::Ticktimer,
 }
 
 impl<B: UsbBus> BulkOnlyTransport<'_, B> {
@@ -173,6 +176,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
             data_i: 0,
             last_packet_full: false,
             data_done: false,
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
     pub fn debug(&self) {
@@ -233,7 +237,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
                 .map_err(|_| Error::DataError);
             if cbw.is_err() {
                 let err = cbw.err().unwrap();
-                warn!("CBW unpack error: {:?}", err);
+                log::warn!("CBW unpack error: {:?}", err);
                 self.buffer_i = 0;
                 return Err(err);
             }
@@ -252,7 +256,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     }
 
     // Updates the command status wrapper in readiness to execute the provided command.
-    // Copies the tag across, sets data_residue to the requested bytes and sets the 
+    // Copies the tag across, sets data_residue to the requested bytes and sets the
     // status to OK.
     fn prepare_for_command(&mut self, cbw: &CommandBlockWrapper) {
         self.command_status_wrapper.tag = cbw.tag;
@@ -307,7 +311,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
             State::SendingDataToHost |
             State::ReceivingDataFromHost => Some(self.command_status_wrapper.data_residue),
             _ => None,
-        } 
+        }
     }
 
     pub fn transfer_state(&self) -> TransferState {
@@ -338,7 +342,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
         if len > self.buffer.len() {
             panic!("BulkOnlyTransport::take_buffer_space called with len > buffer.len() ({} > {}) which can never be successful",
                 len, self.buffer.len());
-        } 
+        }
 
         if len <= self.buffer.len() - self.buffer_i {
             trace_bot_buffer!("BUFFER> successfully allocated {} bytes", len);
@@ -357,37 +361,12 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
 
     /// Returns a slice containing data from the buffer if there is `len` bytes available
     /// panics if len requested is > the max size of the buffer
-    /// `take_available` modifies behaviour to return whatever is available, even if that is [u8; 0]
+    /// Waits until a time-out for data to become available;
     /// returns WouldBlock if there isn't enough data available
-    pub fn take_buffered_data(&mut self, len: usize, take_available: bool) -> Result<&[u8], Error> {
-        /*
-        if len > self.buffer.len() {
-            panic!("BulkOnlyTransport::take_buffered_data called with len > buffer.len() ({} > {}) which can never be successful",
-                len, self.buffer.len());
-        }
-
-        log::info!("take_buffered_data() len: {}", len);
-        let available = self.buffer_i - self.data_i;
-        if !take_available && len > available {
-            trace_bot_buffer!("BUFFER> contains insufficient data for take; requested: {}, available: {}", len, self.buffer_i - self.data_i);
-            Err(WouldBlock)?
-        }
-
-        let s = self.data_i;
-        let len = len.min(available);
-        let e = s + len;
-
-        self.data_i += len;
-        if self.data_i == self.buffer_i {
-            self.data_i = 0;
-            self.buffer_i = 0;
-        }
-        trace_bot_buffer!("BUFFER> took {}, available after: {}", len, self.buffer_i - self.data_i);
-
-        log::info!("take_buffered_data() s: {} e: {}", s, e);
-        Ok(&self.buffer[s..e])
-        */
+    pub fn take_buffered_data(&mut self, len: usize) -> Result<&[u8], Error> {
         log::debug!("take_buffered_data() len: {}", len);
+        const TIMEOUT_MS: u64 = 2000;
+        let start = self.tt.elapsed_ms();
         loop {
             match self.inner.read_packet(&mut self.buffer[..len]) {
                 Ok(l) => {
@@ -397,6 +376,10 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
                     match e {
                         UsbError::WouldBlock => {
                             log::debug!("bulk read not ready yet");
+                            if self.tt.elapsed_ms() - start > TIMEOUT_MS {
+                                log::error!("bulk read timed out");
+                                return Err(Error::UsbError(WouldBlock))
+                            }
                             continue;
                         },
                         _ => return Err(Error::UsbError(e)),
@@ -455,9 +438,9 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
             0
         };
 
-        trace_bot_bytes!("BYTES> Sent {} bytes. Data residue {} -> {}. Buff bytes: {}", 
-            bytes, 
-            residue, 
+        trace_bot_bytes!("BYTES> Sent {} bytes. Data residue {} -> {}. Buff bytes: {}",
+            bytes,
+            residue,
             self.command_status_wrapper.data_residue,
             self.buffer_i - self.data_i,
         );
@@ -472,7 +455,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
                 trace_bot_zlp!("ZLP> sending failed: {:?}", e);
                 Err(e)?
             },
-        }        
+        }
 
         self.change_state(State::NeedToSendStatus);
 
@@ -495,14 +478,14 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
 
         // We only send a zero length packet if the last write was a full packet AND we are sending
         // less total bytes than the command header asked for
-        let needs_zlp = self.last_packet_full && 
+        let needs_zlp = self.last_packet_full &&
                         self.state == State::SendingDataToHost &&
                         self.command_status_wrapper.data_residue > 0;
 
 
         // send_zlp or flush are called here because we may not get an interrupt in a timley manner
         // if we don't send immediately and
-        if needs_zlp {            
+        if needs_zlp {
             trace_bot_zlp!("ZLP> required");
             self.change_state(State::NeedZlp);
             self.send_zlp()?;
@@ -566,7 +549,7 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
     fn receiving_data_from_host(&mut self) -> Result<(), Error> {
         // print!("r\r\n");
         if self.command_status_wrapper.data_residue > 0 &&
-            self.buffer.len() - self.buffer_i >= self.max_packet_usize() 
+            self.buffer.len() - self.buffer_i >= self.max_packet_usize()
         {
             // print!("x\r\n");
             let bytes = self.inner.read_packet(&mut self.buffer[self.buffer_i..])?;
@@ -577,17 +560,16 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
             if self.command_status_wrapper.data_residue >= bytes {
                 self.command_status_wrapper.data_residue -= bytes;
             } else {
-                warn!("Read more bytes that CBW offered");
+                log::warn!("Read more bytes that CBW offered");
                 self.command_status_wrapper.data_residue = 0;
             }
-            
-            trace_bot_bytes!("BYTES> Read {} bytes. Data residue {} -> {}. Buff bytes: {}", 
-                bytes, 
-                residue, 
+
+            trace_bot_bytes!("BYTES> Read {} bytes. Data residue {} -> {}. Buff bytes: {}",
+                bytes,
+                residue,
                 self.command_status_wrapper.data_residue,
                 self.buffer_i - self.data_i,
             );
-        
         }
 
         self.check_end_data_transfer()?;
@@ -612,7 +594,7 @@ impl<B: UsbBus> UsbClass<B> for BulkOnlyTransport<'_, B> {
         self.inner.get_configuration_descriptors(writer)
     }
 
-    fn reset(&mut self) { 
+    fn reset(&mut self) {
         trace_usb_control!("USB_CONTROL> reset");
         self.buffer_i = 0;
         self.data_i = 0;
@@ -623,7 +605,7 @@ impl<B: UsbBus> UsbClass<B> for BulkOnlyTransport<'_, B> {
 
     fn control_in(&mut self, xfer: ControlIn<B>) {
         let req = xfer.request();
-        
+
         // Check it's the right interface first
         if !self.inner.correct_interface_number(req.index) {
             // Inner might still want to deal with it
@@ -660,7 +642,7 @@ impl<B: UsbBus> UsbClass<B> for BulkOnlyTransport<'_, B> {
         };
 
         if let Some(Err(e)) = handled_res {
-            error!("Error from ControlIn.accept: {:?}", e);
+            log::error!("Error from ControlIn.accept: {:?}", e);
         }
     }
 
@@ -668,7 +650,7 @@ impl<B: UsbBus> UsbClass<B> for BulkOnlyTransport<'_, B> {
         self.inner.control_out(xfer)
     }
 
-    fn poll(&mut self) { 
+    fn poll(&mut self) {
         panic!("BulkOnlyTransport::poll should never be called. Consumers (SCSI for example) should use BulkOnlyTransport::read and BulkOnlyTransport::write");
     }
 }

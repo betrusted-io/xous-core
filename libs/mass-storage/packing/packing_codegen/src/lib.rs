@@ -7,14 +7,14 @@ use self::proc_macro::TokenStream;
 use quote::{ quote, format_ident };
 use syn::{
     spanned::Spanned,
-    Ident, 
+    Ident,
     Error,
-    parse_macro_input, 
+    parse_macro_input,
     Data,
-    DeriveInput, 
-    Fields, 
-    Attribute, 
-    Path, 
+    DeriveInput,
+    Fields,
+    Attribute,
+    Path,
     Meta,
     Lit,
     NestedMeta,
@@ -59,7 +59,7 @@ const PKD_ATTR: &str = "pkd";
 ///
 /// Optional flags for `packed` attribute when used at the struct level:
 ///
-/// | Name          | Description | 
+/// | Name          | Description |
 /// |---------------|-------------|
 /// | little_endian | (default) sets the struct default endianness to little endian |
 /// | big_endian    | sets the struct default endianness to big endian |
@@ -80,7 +80,7 @@ const PKD_ATTR: &str = "pkd";
 /// | space         | (partially tested) The space before the field in bits. Allows shifting a field along by a number of bits | 0 |
 ///
 /// Mandatory values for `pkd` attribute:
-/// 
+///
 /// | Index | Description |
 /// |-------|-------------|
 /// | 0     | start_byte  |
@@ -114,7 +114,7 @@ pub fn packed_derive(input: TokenStream) -> TokenStream {
 enum Attr {
     Flag { name: Ident, span: Span },
     Value { name: Ident, value: Lit, span: Span },
-    Lit { value: Lit, span: Span },
+    Lit { _value: Lit, span: Span },
 }
 
 impl Attr {
@@ -143,12 +143,12 @@ fn flatten_attrs(attrs: &Vec<Attribute>) -> Result<Vec<Attr>, Error> {
                 if l.path.is_ident(PACKED_ATTR) {
                     for n in l.nested.iter() {
                         ret.push(match n {
-                            NestedMeta::Meta(Meta::Path(p)) => 
+                            NestedMeta::Meta(Meta::Path(p)) =>
                                 Attr::Flag { name: get_single_segment(p)?, span: p.span() },
-                            NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) => 
+                            NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) =>
                                 Attr::Value { name: get_single_segment(path)?, value: lit.clone(), span: path.span() },
-                            NestedMeta::Lit(l) => 
-                                Attr::Lit { value: l.clone(), span: a.span() },
+                            NestedMeta::Lit(l) =>
+                                Attr::Lit { _value: l.clone(), span: a.span() },
                             y => panic!("y: {:?}", y),
                         });
                     }
@@ -334,7 +334,7 @@ usize_field!(EndBit, "EndBit", "EndBit");
 
 
 fn get_attr<'a, I, Ta: 'a, Tb, F>(iter: I, _span: Span, scope: Scope, default: Tb, filter_map: F) -> Result<Tb, Error> 
-where 
+where
     I: Iterator<Item = &'a Ta>,
     Tb: Clone + Name + Debug,
     F: FnMut(&Ta) -> Option<(Result<Tb, Error>, Span)>,
@@ -362,7 +362,7 @@ where
         _ => {
             #[cfg(feature = "diagnostic-notes")]
             {
-                Diagnostic::spanned(results.iter().map(|x| x.1.unwrap()).collect::<Vec<proc_macro::Span>>(), 
+                Diagnostic::spanned(results.iter().map(|x| x.1.unwrap()).collect::<Vec<proc_macro::Span>>(),
                     Level::Error, format!("{}.{} specified multiple times", scope, name)).emit();
             }
 
@@ -371,8 +371,8 @@ where
     }
 }
 
-fn get_value<'a, A, B>(attrs: A, span: Span, scope: Scope, name_: &str) -> Result<B, Error> 
-where 
+fn get_value<'a, A, B>(attrs: A, span: Span, scope: Scope, name_: &str) -> Result<B, Error>
+where
     A: Iterator<Item = &'a Attr>,
     B: TryFrom<Attr> + Debug + Clone + Default + Name
 {
@@ -384,7 +384,7 @@ where
     })
 }
 
-fn get_endianness<'a, A>(attrs: A, span: Span, scope: Scope, default: Endian) -> Result<Endian, Error> 
+fn get_endianness<'a, A>(attrs: A, span: Span, scope: Scope, default: Endian) -> Result<Endian, Error>
 where
     A: Iterator<Item = &'a Attr>
 {
@@ -395,7 +395,7 @@ where
     })
 }
 
-fn get_bit_order<'a, A>(attrs: A, span: Span, scope: Scope) -> Result<BitOrder, Error> 
+fn get_bit_order<'a, A>(attrs: A, span: Span, scope: Scope) -> Result<BitOrder, Error>
 where
     A: Iterator<Item = &'a Attr>
 {
@@ -486,7 +486,7 @@ impl ExplicitField {
         let endian = self.endian();
         let ty = &self.out_type;
         let name = &self.name;
-        
+
         (quote! {{
             const W: usize = <#ty as packing::PackedSize>::BYTES;
             let field_bytes = <#ty as packing::PackedBytes<[u8; W]>>::to_bytes::<#endian>(&self.#name)?;
@@ -519,7 +519,7 @@ impl ExplicitField {
                         }
 
                         (
-                            quote! { bytes[#sbyte..=#ebyte].copy_from_slice(&self.#name); }, 
+                            quote! { bytes[#sbyte..=#ebyte].copy_from_slice(&self.#name); },
                             quote! { #name: {
                                 let mut t = [0; #width_bytes];
                                 t.copy_from_slice(&bytes[#sbyte..=#ebyte]);
@@ -539,7 +539,7 @@ impl Debug for Field {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, r"Field {{
     name: {},
-    out_bits: {:?}, 
+    out_bits: {:?},
     width: {:?},
     space: {:?},
     start_byte: {:?},
@@ -547,7 +547,7 @@ impl Debug for Field {
     start_bit: {:?},
     end_bit: {:?},
 }}
-", 
+",
         self.name, self.out_bits, self.width.value(), self.space.value(), self.start_byte.value(),
         self.end_byte.value(), self.start_bit.value(), self.end_bit.value())
     }
@@ -568,14 +568,14 @@ fn error_or_diagnostic<M: core::fmt::Display>(span: Span, msg: M) -> Result<(), 
 }
 
 fn derive_struct(
-    struct_span: Span, 
+    struct_span: Span,
     struct_ident: Ident,
     bit_order: BitOrder,
     struct_endian: Endian,
     fields: Fields,
-) -> Result<TokenStream, Error> 
+) -> Result<TokenStream, Error>
 {
-    let named_fields = if let Fields::Named(f) = fields { 
+    let named_fields = if let Fields::Named(f) = fields {
         f
     } else {
         // TODO: shouldn't be hard to support the other kinds
@@ -602,23 +602,23 @@ fn derive_struct(
             start_byte: get_value(attrs.iter(), f.ident.span(), Scope::Field, ATTR_START_BYTE)?,
             end_byte: get_value(attrs.iter(), f.ident.span(), Scope::Field, ATTR_END_BYTE)?,
             start_bit: get_value(attrs.iter(), f.ident.span(), Scope::Field, ATTR_START_BIT)?,
-            end_bit: get_value(attrs.iter(), f.ident.span(), Scope::Field, ATTR_END_BIT)?,  
-            endian: get_endianness(attrs.iter(), f.ident.span(), Scope::Field, struct_endian)?,          
+            end_bit: get_value(attrs.iter(), f.ident.span(), Scope::Field, ATTR_END_BIT)?,
+            endian: get_endianness(attrs.iter(), f.ident.span(), Scope::Field, struct_endian)?,
         };
 
 
         if let Some(eb) = field.end_bit.value() {
             if eb > 7 {
-                Err(Error::new(field.end_bit.0.unwrap().1, 
-                    "end_bit must be between 0 and 7 (inclusive)"))?; 
+                Err(Error::new(field.end_bit.0.unwrap().1,
+                    "end_bit must be between 0 and 7 (inclusive)"))?;
             } else {
                 field.end_bit.0 = field.end_bit.0.map(|b| bit_order.map_bits(b));
             }
         }
         if let Some(sb) = field.start_bit.value() {
             if sb > 7 {
-                Err(Error::new(field.start_bit.0.unwrap().1, 
-                    "start_bit must be between 0 and 7 (inclusive)"))?; 
+                Err(Error::new(field.start_bit.0.unwrap().1,
+                    "start_bit must be between 0 and 7 (inclusive)"))?;
             } else {
                 field.start_bit.0 = field.start_bit.0.map(|b| bit_order.map_bits(b));
             }
@@ -658,7 +658,7 @@ fn derive_struct(
         },
     }
     pack_to_comment += "\n|-|-|-|-|-|-|-|-|-|\n";
-    
+
 
     let mut explicit_fields = Vec::new();
     let mut bit = 0;
@@ -704,7 +704,7 @@ fn derive_struct(
                 if w != end - bit {
                     error_or_diagnostic(f.name.span(),
                         format!("Field specifies width of {} but calculated width is {}. Check width, start/end byte/bit attributes", 
-                            w, end - bit))?; 
+                            w, end - bit))?;
                 }
             } else {
                 end += w;
@@ -718,23 +718,23 @@ fn derive_struct(
                 //end += width;
 
                 #[cfg(feature = "diagnostic-notes")]
-                Diagnostic::spanned(f.name.span().unwrap(), Level::Note, 
-                    format!("Field {} inferred length: {}", 
-                        f.name, width)).emit(); 
+                Diagnostic::spanned(f.name.span().unwrap(), Level::Note,
+                    format!("Field {} inferred length: {}",
+                        f.name, width)).emit();
 
                 panic!("!end_set: {:?}", f);
             }
 
             if end - bit > width {
                 error_or_diagnostic(f.name.span(),
-                    format!("Field width is {} bits which is more than will fit in {:?} ({} bits)", 
-                        end - bit, f.out_type, width))?; 
+                    format!("Field width is {} bits which is more than will fit in {:?} ({} bits)",
+                        end - bit, f.out_type, width))?;
             }
         }
 
         #[cfg(feature = "diagnostic-notes")]
         Diagnostic::spanned(f.name.span().unwrap(), Level::Note,
-            format!("{}: {} -> {} ({}.{} .. {}.{})", f.name, bit, end, 
+            format!("{}: {} -> {} ({}.{} .. {}.{})", f.name, bit, end,
                 f.start_byte.value().unwrap(),
                 f.start_bit.value().unwrap(),
                 f.end_byte.value().unwrap(),
@@ -817,7 +817,7 @@ fn derive_struct(
     let result = quote!{
         impl packing::Packed for #struct_ident {
             type Error = packing::Error;
-            
+
             #[doc = #pack_to_comment]
             fn pack(&self, bytes: &mut [u8]) -> Result<(), Self::Error> {
                 if bytes.len() < #min_len {
@@ -866,12 +866,12 @@ fn derive_struct(
 }
 
 fn derive_enum(
-    struct_span: Span, 
+    struct_span: Span,
     struct_ident: Ident,
     _bit_order: BitOrder,
     _struct_endian: Endian,
     variants: Vec<Variant>,
-) -> Result<TokenStream, Error> 
+) -> Result<TokenStream, Error>
 {
     let mut max_discriminant = 0;
 
@@ -914,7 +914,7 @@ fn derive_enum(
     }
 
     let width = min_width as usize;
-    
+
     let mut results = Vec::new();
 
     results.push(quote!{
@@ -938,7 +938,7 @@ fn derive_enum(
         }
     });
 
-    results.push(quote!{ 
+    results.push(quote!{
         impl packing::PackedBytes<[u8; #width]> for #struct_ident {
             type Error = packing::Error;
             fn to_bytes<En: packing::Endian>(&self) -> Result<[u8; #width], Self::Error> {
@@ -955,7 +955,7 @@ fn derive_enum(
                 }
             }
         }
-    
+
     });
 
     Ok(quote! {
@@ -978,4 +978,4 @@ fn inner(input: DeriveInput) -> Result<TokenStream, Error> {
         Data::Enum(e) => derive_enum(struct_span, struct_ident, bit_order, struct_endian, e.variants.into_iter().collect()),
         other => Err(Error::new(struct_span, format!("Packed derive only supported on structs ({:?})", other)))?,
     }
-}   
+}

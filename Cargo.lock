@@ -4326,13 +4326,14 @@ name = "usbd_bulk_only_transport"
 version = "0.1.0"
 dependencies = [
  "embedded-hal",
- "itm_logger",
  "log",
  "nb 0.1.3",
  "packing 0.2.0",
  "typenum",
  "usb-device",
  "usbd_mass_storage 0.1.0",
+ "xous 0.9.29 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-ticktimer",
 ]
 
 [[package]]
@@ -4355,7 +4356,6 @@ name = "usbd_mass_storage"
 version = "0.1.0"
 dependencies = [
  "embedded-hal",
- "itm_logger",
  "log",
  "nb 0.1.3",
  "packing 0.2.0",
@@ -4399,7 +4399,6 @@ name = "usbd_scsi"
 version = "0.1.1"
 dependencies = [
  "embedded-hal",
- "itm_logger",
  "log",
  "nb 0.1.3",
  "packing 0.2.0",

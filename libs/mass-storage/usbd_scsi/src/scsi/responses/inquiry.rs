@@ -5,7 +5,6 @@ use packing::{
 
 use crate::scsi::{
     enums::{
-        VersionDescriptor,
         TargetPortGroupSupport,
         SpcVersion,
         PeripheralQualifier,
@@ -40,7 +39,7 @@ pub struct InquiryResponse {
 
     ///A hierarchical support (HISUP) bit set to zero indicates the SCSI target device does not use the hierarchical addressing model to assign LUNs to logical units. A H I S UP bit set to one indicates the SCSI target device uses the hierarchical addressing model to assign LUNs to logical units.
     #[pkd(4, 4, 3, 3)]
-    hierarchical_support: bool, 
+    hierarchical_support: bool,
 
     ///The RESPONSE DATA FORMAT field indicates the format of the standard INQUIRY data and shall be set as shown in table 139. A RESPONSE DATA FORMAT field set to 2h indicates that the standard INQUIRY data is in the format defined in this standard. Response data format values less than 2h are obsolete. Response data format values greater than 2h are reserved.
     #[pkd(3, 0, 3, 3)]
@@ -49,7 +48,7 @@ pub struct InquiryResponse {
     ///The ADDITIONAL LENGTH field indicates the length in bytes of the remaining standard INQUIRY data. The relationship between the ADDITIONAL LENGTH field and the CDB ALLOCATION LENGTH field is defined in 4.3.5.6.
     ///Set to total length in bytes minus 4
     #[pkd(7, 0, 4, 4)]
-    additional_length: u8, 
+    additional_length: u8,
 
     ///An SCC Supported ( SCCS ) bit set to one indicates that the SCSI target device contains an embedded storage array controller component that is addressable through this logical unit. See SCC-2 for details about storage array controller devices. An SCCS bit set to zero indicates that no embedded storage array controller component is addressable through this logical unit.
     #[pkd(7, 7, 5, 5)]
@@ -79,7 +78,7 @@ pub struct InquiryResponse {
     enclosure_services: bool,
 
     #[pkd(5, 5, 6, 6)]
-    _vendor_specific: bool, 
+    _vendor_specific: bool,
 
     ///A Multi Port (MULTIP) bit set to one indicates that this is a multi-port (two or more ports) SCSI target device and conforms to the SCSI multi-port device requirements found in the applicable standards (e.g., SAM-4, a SCSI transport protocol standard and possibly provisions of a command standard). A M ULTI P bit set to zero indicates that this SCSI target device has a single port and does not implement the multi-port requirements.
     #[pkd(4, 4, 6, 6)]
@@ -116,7 +115,7 @@ pub struct InquiryResponse {
     #[pkd(7, 0, 32, 35)]
     product_revision_level: [u8; 4],
 
-    /*
+    /* // these records cause the inquiry to fail, and are thus omitted
     #[pkd(7, 0, 36, 55)]
     _vendor_specific3: [u8; 20],
 
@@ -144,7 +143,7 @@ pub struct InquiryResponse {
 
     #[pkd(7, 0, 64, 65)]
     compliant_standard_4: VersionDescriptor,
-    
+
     #[pkd(7, 0, 66, 67)]
     compliant_standard_5: VersionDescriptor,
 
@@ -164,8 +163,8 @@ fn set_ascii_str<T: AsRef<[u8]>>(target: &mut [u8], value: T) {
     target[..l].copy_from_slice(&bytes[..l]);
 
     // Set any additional bytes to space as per SPC
-    for b in target[l..].iter_mut() { 
-        *b = ASCII_SPACE 
+    for b in target[l..].iter_mut() {
+        *b = ASCII_SPACE
     }
 }
 

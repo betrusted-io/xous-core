@@ -237,8 +237,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                 };
 
                 while self.lba <= self.lba_end {
-                    // I think this "len" computation isn't right for our purposes..
-                    let buf = self.inner.take_buffered_data(len, true).expect("Buffer should have enough data");
+                    let buf = self.inner.take_buffered_data(len).expect("Buffer should have enough data");
                     self.block_device.write_block(self.lba, buf)?;
                     self.lba += 1;
                 }
@@ -402,7 +401,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
             ),
         };
 
-        info!("SENSE: {:?}, ASC: {} {}", sense_key, additional_sense_code.asc(), additional_sense_code.ascq());
+        log::info!("SENSE: {:?}, ASC: {} {}", sense_key, additional_sense_code.asc(), additional_sense_code.ascq());
         self.request_sense_response.sense_key = sense_key;
         self.request_sense_response.additional_sense_code = additional_sense_code;
     }
@@ -482,7 +481,7 @@ impl<B: UsbBus, BD: BlockDevice> UsbClass<B> for Scsi<'_, B, BD> {
 
     fn poll(&mut self) {
         if let Err(e) = self.update() {
-            error!("Error from Scsi::update: {:?}", e);
+            log::error!("Error from Scsi::update: {:?}", e);
         }
     }
 }

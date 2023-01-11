@@ -22,13 +22,13 @@ pub struct CommandBlockWrapper {
     pub signature: u32,
     /// Tag sent by the host. Must be echoed back to host in tag
     /// field of the command status wrapper sent after the command
-    /// has been executed/rejected. Host uses it to positively 
+    /// has been executed/rejected. Host uses it to positively
     /// associate a CSW with the corresponding CBW
     #[packed(start_bit=7, end_bit=0, start_byte=4, end_byte=7)]
     pub tag: u32,
     /// Number of bytes of data that the host expects to receive on
-    /// the IN or OUT endpoint (as indicated by the direction field) 
-    /// during the execution of this command. If this field is zero, 
+    /// the IN or OUT endpoint (as indicated by the direction field)
+    /// during the execution of this command. If this field is zero,
     /// must respond directly with CSW
     #[packed(start_bit=7, end_bit=0, start_byte=8, end_byte=11)]
     pub data_transfer_length: u32,
@@ -41,7 +41,7 @@ pub struct CommandBlockWrapper {
     /// The device Logical Unit Number (LUN) to which the command is
     /// for. For devices that don't support multiple LUNs the host will
     /// set this field to zero.
-    /// Devices that don't support multiple LUNS must not ignore this 
+    /// Devices that don't support multiple LUNS must not ignore this
     /// field and apply all commands to LUN 0, [see General Problems with Commands](http://janaxelson.com/device_errors.htm)
     #[packed(start_bit=7, end_bit=0, start_byte=13, end_byte=13)]
     pub lun: u8,
@@ -73,7 +73,7 @@ impl CommandBlockWrapper {
         buf[0] == SIGNATURE_0 &&
         buf[1] == SIGNATURE_1 &&
         buf[2] == SIGNATURE_2 &&
-        buf[3] == SIGNATURE_3 
+        buf[3] == SIGNATURE_3
     }
 
     fn find_signature(buf: &[u8]) -> Option<usize> {
@@ -83,7 +83,7 @@ impl CommandBlockWrapper {
         for i in 0..buf.len().saturating_sub(4) {
             if Self::check_signature(&buf[i..(i+4)]) {
                 return Some(i);
-            } 
+            }
         }
         None
     }

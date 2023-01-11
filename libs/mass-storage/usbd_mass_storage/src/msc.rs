@@ -6,6 +6,7 @@ use usb_device::{
 use crate::{
     InterfaceSubclass,
     InterfaceProtocol,
+    logging::*,
 };
 
 /// This should be used as `device_class` when building `UsbDevice`
@@ -15,7 +16,7 @@ pub const USB_CLASS_MSC: u8 = 0x08;
 
 /// # USB Mass Storage Class Device
 ///
-/// So far only tested with the Bulk Only protocol and the SCSI transparent command set - see 
+/// So far only tested with the Bulk Only protocol and the SCSI transparent command set - see
 /// [Scsi](struct.Scsi.html) and [Bulk Only Transport](struct.BulkOnlyTransport.html)
 pub struct MscClass<'a, B: UsbBus> {
     pub(crate) msc_if: InterfaceNumber,
@@ -28,8 +29,8 @@ pub struct MscClass<'a, B: UsbBus> {
 
 impl<B: UsbBus> MscClass<'_, B> {
     pub fn new(
-        alloc: &UsbBusAllocator<B>, 
-        max_packet_size: u16, 
+        alloc: &UsbBusAllocator<B>,
+        max_packet_size: u16,
         subclass: InterfaceSubclass,
         protocol: InterfaceProtocol,
     ) -> MscClass<'_, B> {
@@ -63,27 +64,7 @@ impl<B: UsbBus> MscClass<'_, B> {
 
 impl<B: UsbBus> UsbClass<B> for MscClass<'_, B> {
     fn get_configuration_descriptors(&self, writer: &mut DescriptorWriter) -> Result<()> {
-        // writer.interface(
-        //     self.msc_if,
-        //     USB_CLASS_MSC,
-        //     self.subclass.to_primitive(),
-        //     self.protocol.to_primitive(),
-        // )?;
-
-        // trace_usb_control!("AYYYYYYYY: read ep addr: {:?} write ep addr: {:?}", self.read_ep.address(), self.write_ep.address());
-
-        // writer.endpoint(&self.read_ep)?;
-        // writer.endpoint(&self.write_ep)
-
-        // writer.iad(
-        //     self.msc_if,
-        //     1,
-        //     USB_CLASS_MSC,
-        //     self.subclass.to_primitive(),
-        //     self.protocol.to_primitive(),
-        // )?;
-
-        writer.interface(self.msc_if,             
+        writer.interface(self.msc_if,
             USB_CLASS_MSC,
             self.subclass.to_primitive(),
             self.protocol.to_primitive(),
@@ -92,15 +73,6 @@ impl<B: UsbBus> UsbClass<B> for MscClass<'_, B> {
         writer.endpoint(&self.write_ep)?;
         writer.endpoint(&self.read_ep)?;
         writer.endpoint(&self.write2_ep)
-
-        //writer.write(0, &[])
-
-        // writer.interface(
-        //     self.fake_if,
-        //     0xff,
-        //     0,
-        //     0
-        // )
     }
 
     fn reset(&mut self) { }
@@ -108,14 +80,14 @@ impl<B: UsbBus> UsbClass<B> for MscClass<'_, B> {
     fn control_in(&mut self, xfer: ControlIn<B>) {
         let req = xfer.request();
         if self.correct_interface_number(req.index) {
-           //trace_usb_control!("USB_CONTROL> Unhandled control-IN: {:?}", req);
+           trace_usb_control!("USB_CONTROL> Unhandled control-IN: {:?}", req);
         }
     }
 
     fn control_out(&mut self, xfer: ControlOut<B>) {
         let req = xfer.request();
         if self.correct_interface_number(req.index) {
-            //trace_usb_control!("USB_CONTRO> Unhandled control-OUT: {:?}", req);
+            trace_usb_control!("USB_CONTRO> Unhandled control-OUT: {:?}", req);
         };
     }
 }

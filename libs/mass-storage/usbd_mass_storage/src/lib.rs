@@ -24,11 +24,5 @@ pub use interface_subclass::*;
 pub use interface_protocol::*;
 
 mod logging {
-    pub use itm_logger::*;
-
-    #[cfg(feature = "trace-usb-control")]
-    pub use itm_logger::trace as trace_usb_control;
-    #[cfg(not(feature = "trace-usb-control"))]
-    //pub use itm_logger::stub as trace_usb_control;
-    pub use log::info as trace_usb_control;
+    pub use log::debug as trace_usb_control;
 }
