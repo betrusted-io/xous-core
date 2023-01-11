@@ -1,5 +1,3 @@
-// #![no_std]
-
 mod scsi;
 pub use scsi::*;
 

@@ -12,8 +12,6 @@
 //! [USBBot]: https://www.usb.org/document-library/mass-storage-bulk-only-10
 //!
 
-#![no_std]
-
 mod msc;
 mod interface_subclass;
 mod interface_protocol;

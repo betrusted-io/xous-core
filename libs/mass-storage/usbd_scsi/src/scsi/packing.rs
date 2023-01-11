@@ -2,7 +2,7 @@ use packing::Packed;
 
 use crate::scsi::Error;
 
-pub trait ParsePackedStruct: Packed 
+pub trait ParsePackedStruct: Packed
 where
     Error: From<<Self as Packed>::Error>,
 {

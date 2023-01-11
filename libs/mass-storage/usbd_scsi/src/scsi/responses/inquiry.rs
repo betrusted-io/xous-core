@@ -190,7 +190,7 @@ impl Default for InquiryResponse {
             //TODO: Work out why off by 1, docs say -4 but that's one byte too long
             //      It could be that sg_inq is adding 1 for some reason, the OS hasn't
             //      actually followed up with a longer request in real use.
-            additional_length: (InquiryResponse::BYTES - 4) as u8, 
+            additional_length: (InquiryResponse::BYTES - 4) as u8,
             vendor_identification: [ASCII_SPACE; 8],
             product_identification: [ASCII_SPACE; 16],
             product_revision_level: [ASCII_SPACE; 4],

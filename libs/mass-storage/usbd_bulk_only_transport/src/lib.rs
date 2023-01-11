@@ -1,5 +1,3 @@
-// #![no_std]
-
 mod bulk_only_transport;
 
 pub use bulk_only_transport::{

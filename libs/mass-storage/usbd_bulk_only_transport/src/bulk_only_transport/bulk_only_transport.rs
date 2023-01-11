@@ -242,14 +242,6 @@ impl<B: UsbBus> BulkOnlyTransport<'_, B> {
                 return Err(err);
             }
             self.transition_to_data(cbw?);
-
-            // After transitioning to data, we need to read but we might not get another interrupt
-            // TODO: dig into this a bit. It seems that we *should* get an interrupt since the last
-            // read that initiated the command should have drained the RX buffer. Depending on if
-            // logging is enabled or not it appears to sometimes work and sometimes not which makes
-            // me think it's a timing issue. In the hardware example I'm testing with RTFM appears
-            // to be clearing the
-            // self.read()?;
         }
 
         Ok(())

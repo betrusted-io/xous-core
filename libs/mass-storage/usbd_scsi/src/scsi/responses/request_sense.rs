@@ -14,44 +14,44 @@ use crate::scsi::enums::{
 pub struct RequestSenseResponse {
     #[pkd(7, 7, 0, 0)]
     pub valid: bool,
-    
+
     #[pkd(6, 0, 0, 0)]
     pub response_code: ResponseCode,
-    
+
     #[pkd(7, 7, 2, 2)]
     pub filemark: bool,
-    
+
     #[pkd(6, 6, 2, 2)]
     pub end_of_medium: bool,
-    
+
     #[pkd(5, 5, 2, 2)]
     pub incorrect_length_indicator: bool,
-    
+
     #[pkd(3, 0, 2, 2)]
     pub sense_key: SenseKey,
-    
+
     #[pkd(7, 0, 3, 6)]
     pub information: u32,
-    
+
     #[pkd(7, 0, 7, 7)]
-    /// n-7 
+    /// n-7
     pub additional_sense_length: u8,
-    
+
     #[pkd(7, 0, 8, 11)]
     pub command_specifc_information: u32,
-    
+
     #[pkd(7, 0, 12, 13)]
     pub additional_sense_code: AdditionalSenseCode,
-    
+
     #[pkd(7, 0, 14, 14)]
     pub field_replaceable_unit_code: u8,
-    
+
     #[pkd(7, 7, 15, 15)]
     pub sense_key_specific_valid: bool,
-    
+
     #[pkd(6, 0, 15, 17)]
     pub sense_key_specific: u32,
-    
+
     #[pkd(7, 0, 18, 252)]
     pub additional_sense_data: [u8; 235],
 }
@@ -98,7 +98,7 @@ impl RequestSenseResponse {
     else
         if descriptor sense data supported
             return descriptor sense data
-        else 
+        else
             return CHECK CONDITION with sense:
                 key: ILLEGAL REQUEST
                 additional code: INVALID FIELD IN CDB

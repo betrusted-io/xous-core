@@ -204,7 +204,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                 trace_scsi_fs!("FS> Read; new: {}, lba: 0x{:X?}, lba_end: 0x{:X?}, done: {}, tag: {:x}",
                     new_command, self.lba, self.lba_end, self.lba == self.lba_end, self.inner.get_tag());
 
-                // We only get here if the buffer is empty 
+                // We only get here if the buffer is empty
                 while self.lba <= self.lba_end {
                     let buf = self.inner.take_buffer_space(BD::BLOCK_BYTES)?;
                     self.block_device.read_block(self.lba, buf)?;
@@ -268,31 +268,6 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
     }
 
     fn receive_command(&mut self) -> Result<(), Error> {
-        /* let transfer_state = self.inner.transfer_state();
-        // These calls all assume only a single block will fit in the buffer which 
-        // is true here because we configure BOT that way but we could make the inner
-        // buffer length a multiple of BLOCK_SIZE and queue up more than one block
-        // at a time. I don't know if there's any benefit to that but the option is there
-        let skip = match transfer_state {
-            TransferState::ReceivingDataFromHost { full, done, .. } => {
-                !(full || done)
-            },
-            TransferState::SendingDataToHost { empty, .. } => {
-                !empty
-            },
-            // We still need to check if the buffer is empty because if a CSW is being sent
-            // we won't be able to grab a full block buffer if the next command happens to be
-            // a Read
-            TransferState::NotTransferring { empty, .. } => {
-                !empty
-            }
-        };
-
-        if skip {
-            log::info!("SKIP condition reached");
-            Err(UsbError::WouldBlock)?;
-        }*/
-
         let new_command = self.get_new_command()?;
 
         match self.process_command(new_command) {
@@ -308,16 +283,6 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
             },
             Ok(CommandState::Ongoing) => {
                 log::trace!("transfer_state: {:?}", self.inner.transfer_state());
-                /*
-                match self.inner.transfer_state() {
-                    TransferState::ReceivingDataFromHost { bytes_available: _, full: _, done: _ } => {
-                        self.inner.read()?;
-                    }
-                    TransferState::SendingDataToHost { bytes_remaining: _, empty: _ } => {
-                        self.inner.write()?;
-                    }
-                    _ => {}
-                } */
             }
             // WouldBlock error is handled the same as ongoing (i.e. do nothing)
             Ok(CommandState::None) |
