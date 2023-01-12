@@ -20,6 +20,8 @@ mod spinal_udc;
 use packed_struct::PackedStructSlice;
 #[cfg(any(feature="precursor", feature="renode"))]
 use spinal_udc::*;
+#[cfg(all(any(feature="precursor", feature="renode"),feature="mass-storage"))]
+mod block_device;
 
 #[cfg(not(target_os = "xous"))]
 mod hosted;

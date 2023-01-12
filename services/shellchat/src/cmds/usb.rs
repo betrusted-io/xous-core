@@ -29,6 +29,10 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::FidoKbd).unwrap();
                     write!(ret, "USB connected to HID (FIDO + keyboard) core").unwrap();
                 }
+                #[cfg(feature="mass-storage")]
+                "ms" => {
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::MassStorage).unwrap();
+                    write!(ret, "USB connected to mass storage core").unwrap();                }
                 "fido" => {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Fido).unwrap();
                     write!(ret, "USB connected to FIDO-only core").unwrap();
@@ -84,6 +88,8 @@ impl<'a> ShellCmdApi<'a> for Usb {
                                 _ => write!(ret, "HID not connected to USB host").unwrap(),
                             }
                         }
+                        #[cfg(feature="mass-storage")]
+                        Ok(UsbDeviceType::MassStorage) => write!(ret, "USB mass storage connected").unwrap(),
                         _ => write!(ret, "Invalid response checking status").unwrap(),
                     }
                 }

@@ -311,6 +311,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - `bip-utils` dependency removed from Python packages. This allows `backalyzer` and `precursorupdater` to run on older platforms that don't have the latest-greatest Python. A hand-rolled BIP-39 word-to-bits converter is used instead.
 - More optimizations to `vault` passwords path. Records are re-used instead of re-allocated if they don't change. This should speedup switching to `vault` passwords by about 2x after the very first time the records are loaded (the first time will take longer because the records have to be built up).
 - Extend watchdog reset time to ~30s from 7s, to enable easier guru meditation reporting.
+- Add USB mass-storage drivers (thanks @gsora for all the help there!). Currently able to emulate a blank USB drive in RAM; more to come soon.
 
 ## Roadmap
 - Lots of testing and bug fixes

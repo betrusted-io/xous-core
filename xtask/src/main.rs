@@ -327,9 +327,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("usbdev") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
+                   .add_services(&base_pkgs.into_iter().map(String::from).collect())
                    .add_services(&get_cratespecs());
-            builder.add_service("usb-test");
+            //builder.add_service("usb-test");
+            builder.add_service("usb-device-xous");
         }
         Some("pddb-dev") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION)

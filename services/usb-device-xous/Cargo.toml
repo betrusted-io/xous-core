@@ -30,6 +30,12 @@ embedded-time = "0.12.1" # required by the keyboard interface
 packed_struct = { version = "0.10", default-features = false } # used by the usbd-human-interface-device crate
 num_enum = { version = "0.5", default-features = false } # used by the usbd-human-interface-device crate
 
+# Mass storage support
+usbd_scsi = { path = "../../libs/mass-storage/usbd_scsi", optional = true }
+usbd_mass_storage = { path = "../../libs/mass-storage/usbd_mass_storage", optional = true }
+
+ghostfat = "0.5.0"
+
 [dependencies.usb-device]
 # see top level Cargo.toml for patch.crates-io directive to help with dev work
 version = "0.2.8"
@@ -43,5 +49,8 @@ rand_chacha = "0.3.1"
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
+chain = []
+minimal = ["mass-storage"]
+mass-storage = ["usbd_scsi", "usbd_mass_storage"]
 mjolnir = [] # the big hammer for debugging Spinal USB issues. A raw memory dump of config and descriptor space. Use with care.
-default = []
+default = ["chain"]

@@ -1,0 +1,12 @@
+[package]
+name = "packing_tests"
+version = "0.1.0"
+authors = ["cs2dsb <cs2dsb@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+packing = { version = "0.1.0", path = "../packing" }
+
+[dev-dependencies]
+quickcheck = "0.9.2"
+quickcheck_macros = "0.9.1"
