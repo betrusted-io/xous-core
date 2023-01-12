@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-
-{ echo "$@"; sleep 0.5;} | telnet 127.0.0.1 4444

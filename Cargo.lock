@@ -4130,14 +4130,6 @@ checksum = "dcf81ac59edc17cc8697ff311e8f5ef2d99fcbd9817b34cec66f90b6c3dfd987"
 [[package]]
 name = "uf2_block"
 version = "0.1.0"
-dependencies = [
- "bitmask",
- "packing 0.2.0",
-]
-
-[[package]]
-name = "uf2_block"
-version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68df793ca56bcdef49a7f1a584798ecdf3bf1e69669df5f6d539245b985f3a4b"
 dependencies = [
@@ -4334,13 +4326,14 @@ name = "usbd_bulk_only_transport"
 version = "0.1.0"
 dependencies = [
  "embedded-hal",
- "itm_logger",
  "log",
  "nb 0.1.3",
  "packing 0.2.0",
  "typenum",
  "usb-device",
  "usbd_mass_storage 0.1.0",
+ "xous 0.9.29 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-ticktimer",
 ]
 
 [[package]]
@@ -4363,7 +4356,6 @@ name = "usbd_mass_storage"
 version = "0.1.0"
 dependencies = [
  "embedded-hal",
- "itm_logger",
  "log",
  "nb 0.1.3",
  "packing 0.2.0",
@@ -4396,7 +4388,7 @@ dependencies = [
  "nb 0.1.3",
  "packing 0.1.0",
  "typenum",
- "uf2_block 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uf2_block",
  "usb-device",
  "usbd_bulk_only_transport 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "usbd_mass_storage 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4407,14 +4399,15 @@ name = "usbd_scsi"
 version = "0.1.1"
 dependencies = [
  "embedded-hal",
- "itm_logger",
+ "log",
  "nb 0.1.3",
  "packing 0.2.0",
  "typenum",
- "uf2_block 0.1.0",
  "usb-device",
  "usbd_bulk_only_transport 0.1.0",
  "usbd_mass_storage 0.1.0",
+ "xous 0.9.29 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-ticktimer",
 ]
 
 [[package]]

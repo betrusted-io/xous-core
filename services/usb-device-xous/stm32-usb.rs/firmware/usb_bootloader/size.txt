@@ -1,3 +1,0 @@
-   text	   data	    bss	    dec	    hex	filename
-  22124	      0	   4368	  26492	   677c	target/thumbv7m-none-eabi/release/msc
-  
