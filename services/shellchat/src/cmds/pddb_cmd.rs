@@ -160,8 +160,8 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 "copy" => {
                     if let Some(srcdescriptor) = tokens.next() {
                         if let Some(dstdescriptor) = tokens.next() {
-                            if let Some((_srcdict, _srckeyname)) = srcdescriptor.split_once(':') {
-                                if let Some((_dstdict, _dstkeyname)) = dstdescriptor.split_once(':') {
+                            if let Some((_srcdict, _srckeyname)) = srcdescriptor.split_once(std::path::MAIN_SEPARATOR) {
+                                if let Some((_dstdict, _dstkeyname)) = dstdescriptor.split_once(std::path::MAIN_SEPARATOR) {
                                     match std::fs::copy(srcdescriptor, dstdescriptor) {
                                         Ok(_result) => {
                                             write!(ret, "Copy from {} to {} succeeded", srcdescriptor, dstdescriptor).ok();
@@ -171,10 +171,10 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                                         }
                                     }
                                 } else {
-                                    write!(ret, "Destination {} is not of required form 'dict:key'", dstdescriptor).unwrap();
+                                    write!(ret, "Destination {} is not of required form 'dict{}key'", dstdescriptor, std::path::MAIN_SEPARATOR).unwrap();
                                 }
                             } else {
-                                write!(ret, "Source {} is not of required form 'dict:key'", srcdescriptor).unwrap();
+                                write!(ret, "Source {} is not of required form 'dict{}key'", srcdescriptor, std::path::MAIN_SEPARATOR).unwrap();
                             }
                         } else {
                             write!(ret, "Usage is copy 'dict:key' 'dict:key' (missing destination)").unwrap();
