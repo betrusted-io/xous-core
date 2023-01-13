@@ -19,7 +19,10 @@ impl<'a> ShellCmdApi<'a> for Usb {
 
     fn process(&mut self, args: xous_ipc::String::<1024>, _env: &mut CommonEnv) -> Result<Option<xous_ipc::String::<1024>>, xous::Error> {
         let mut ret = xous_ipc::String::<1024>::new();
+        #[cfg(not(feature="mass-storage"))]
         let helpstring = "usb [hid] [fido] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";
+        #[cfg(feature="mass-storage")]
+        let helpstring = "usb [hid] [fido] [ms] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
