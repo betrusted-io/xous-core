@@ -555,7 +555,20 @@ impl UsbBus for SpinalUsbDevice {
 
                     // now commit the ep config
                     self.status_write_volatile(index, ep_status);
-                    self.view.ep_allocs[index] = Some((offset as usize / 16, base_packet_size as usize, CHAINED_BUF_LEN / base_packet_size as usize));
+                    match ep_type {
+                        EndpointType::Bulk => { // only Bulk types do chaining
+                            self.view.ep_allocs[index] = Some(
+                                (offset as usize / 16,
+                                base_packet_size as usize,
+                                CHAINED_BUF_LEN / base_packet_size as usize))
+                        }
+                        _ => {
+                            self.view.ep_allocs[index] = Some(
+                                (offset as usize / 16,
+                                base_packet_size as usize,
+                                1));
+                        }
+                    }
 
                     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                     log::info!("alloc ep{} type {:?} dir {:?}, @{:x}({})",
@@ -898,20 +911,6 @@ impl UsbBus for SpinalUsbDevice {
                     let masked = self.read_allowed.load(Ordering::Relaxed) & !(1 << ep_addr.index() as u16); // clear the read mask
                     self.read_allowed.store(masked, Ordering::SeqCst);
                 }
-                /*
-                    let mut ep_status = self.status_read_volatile(ep_addr.index());
-                    let start = self.tt.elapsed_ms();
-                    let mut now = start;
-                    while (ep_status.head_offset() != 0) && (now - start < WRITE_TIMEOUT_MS) {
-                        xous::yield_slice();
-                        ep_status = self.status_read_volatile(ep_addr.index());
-                        now = self.tt.elapsed_ms();
-                    }
-                    if now - start >= WRITE_TIMEOUT_MS {
-                        log::debug!("read wait timed out: head offset {:x?} {:x?}", ep_status.head_offset() * 16,
-                        self.descriptor_from_status(&ep_status));
-                    }
-                 */
 
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
                 // log::info!("head_offset{}: {:x}", ep_addr.index(), head_offset * 16);
@@ -925,89 +924,83 @@ impl UsbBus for SpinalUsbDevice {
                     return Err(UsbError::WouldBlock);
                 }
                 self.udc_hard_halt(ep_addr.index());
-                #[cfg(feature="chain")]
-                let mut len = 0;
-                #[cfg(feature="chain")]
-                for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
-                    let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
-                    if descriptor.offset() != 0 {
-                        log::debug!("appending {:x?}", descriptor);
-                        let available_len = sub_buf.len().min(descriptor.offset());
-                        for (desc_offset, word_chunk) in sub_buf[..available_len].chunks_mut(size_of::<u32>()).enumerate() {
-                            word_chunk.copy_from_slice(
-                                &descriptor.read_data(desc_offset)
-                                .to_le_bytes()[..word_chunk.len()]) // the upper limit index ensures that if sub_buf is an odd number of bytes, we don't panic
-                        }
-                        if sub_buf.len() < descriptor.offset() {
-                            log::warn!("insufficient space in buffer to store incoming data (want: {} have: {}). truncating!", descriptor.offset(), sub_buf.len());
-                        }
-                        len += available_len;
-                    } else {
-                        log::debug!("breaking at {:x?}", descriptor);
-                        break;
-                    }
-                }
-                #[cfg(not(feature="chain"))]
-                let mut len = descriptor.offset();
-                if buf.len() < len {
-                    log::error!("read ep{} overflows: {} < {}", ep_addr.index(), buf.len(), len);
-                    // just return a truncated set of data
-                    // return Err(UsbError::BufferOverflow)
-                    len = buf.len();
-                }
-                #[cfg(not(feature="chain"))]
-                for (index, dst) in buf[..len].chunks_exact_mut(4).enumerate() {
-                    let word = descriptor.read_data(index).to_le_bytes();
-                    dst.copy_from_slice(&word);
-                }
-                #[cfg(not(feature="chain"))]
-                if len % 4 != 0 {
-                    // this will "overread" the descriptor area, but it's OK because descriptors must be aligned to 16-byte boundaries
-                    // so even if the length is odd, the space allocated will always include dummy padding which will keep us
-                    // from reading into neighboring data.
-                    let word = descriptor.read_data(len / 4).to_le_bytes();
-                    // write only into the portion of the buffer that's allocated, don't write the extra 0's
-                    for i in 0..len % 4 {
-                        buf[(len / 4) + i] = word[i]
-                    }
-                }
 
-                // setup for the next transaction
-                #[cfg(not(feature="chain"))]
-                ep_status.set_max_packet_size(packet_len as _);
-                #[cfg(not(feature="chain"))]
-                descriptor.set_next_desc_and_len(0, buf.len());
-                #[cfg(not(feature="chain"))]
-                descriptor.set_desc_flags(UsbDirection::Out,
-                    true, true, false);
-                #[cfg(not(feature="chain"))]
-                descriptor.set_offset_only(0); // reset the read pointer to 0, also sets in_progress
-
-                #[cfg(feature="chain")]
-                for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
-                    let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
+                let mut len = if max_chain > 1 {
+                    0
+                } else {
+                    descriptor.offset()
+                };
+                if max_chain > 1 { // chained descriptors
+                    for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
+                        let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
+                        if descriptor.offset() != 0 {
+                            log::debug!("appending {:x?}", descriptor);
+                            let available_len = sub_buf.len().min(descriptor.offset());
+                            for (desc_offset, word_chunk) in sub_buf[..available_len].chunks_mut(size_of::<u32>()).enumerate() {
+                                word_chunk.copy_from_slice(
+                                    &descriptor.read_data(desc_offset)
+                                    .to_le_bytes()[..word_chunk.len()]) // the upper limit index ensures that if sub_buf is an odd number of bytes, we don't panic
+                            }
+                            if sub_buf.len() < descriptor.offset() {
+                                log::warn!("insufficient space in buffer to store incoming data (want: {} have: {}). truncating!", descriptor.offset(), sub_buf.len());
+                            }
+                            len += available_len;
+                        } else {
+                            log::debug!("breaking at {:x?}", descriptor);
+                            break;
+                        }
+                    }
+                    if buf.len() < len {
+                        log::error!("read ep{} overflows: {} < {}", ep_addr.index(), buf.len(), len);
+                        len = buf.len();
+                    }
+                    for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
+                        let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
+                        descriptor.set_desc_flags(UsbDirection::Out,
+                            true, true, false);
+                        for (index, _slice) in sub_buf.chunks(size_of::<u32>()).enumerate() {
+                            descriptor.write_data(index, 0); // zeroize the descriptor area so we don't leak data between packets
+                        }
+                        if chain_offset == (max_chain - 1) || sub_buf.len() != packet_len {
+                            // mark the last item in linked list with a null pointer
+                            descriptor.set_next_desc_and_len(0, sub_buf.len());
+                        } else {
+                            // if not the last link, setup the next linked list pointer
+                            let next_addr = self.next_from_head_and_chain(head_offset, chain_offset, packet_len);
+                            descriptor.set_next_desc_and_len(next_addr, sub_buf.len());
+                        }
+                        descriptor.set_offset_only(0); // reset the write pointer to 0, also sets in_progress
+                        log::debug!("bulk descriptor {} setup: {:x?}", chain_offset, descriptor);
+                    }
+                    ep_status.set_max_packet_size(packet_len as _);
+                    // this is reset to 0 after every transaction by the hardware, so we must reset it
+                    ep_status.set_head_offset(head_offset as u32);
+                } else { // single descriptor
+                    if buf.len() < len {
+                        log::error!("read ep{} overflows: {} < {}", ep_addr.index(), buf.len(), len);
+                        len = buf.len();
+                    }
+                    for (index, dst) in buf[..len].chunks_exact_mut(4).enumerate() {
+                        let word = descriptor.read_data(index).to_le_bytes();
+                        dst.copy_from_slice(&word);
+                    }
+                    if len % 4 != 0 {
+                        // this will "overread" the descriptor area, but it's OK because descriptors must be aligned to 16-byte boundaries
+                        // so even if the length is odd, the space allocated will always include dummy padding which will keep us
+                        // from reading into neighboring data.
+                        let word = descriptor.read_data(len / 4).to_le_bytes();
+                        // write only into the portion of the buffer that's allocated, don't write the extra 0's
+                        for i in 0..len % 4 {
+                            buf[(len / 4) + i] = word[i]
+                        }
+                    }
+                    // setup for the next transaction
+                    ep_status.set_max_packet_size(packet_len as _);
+                    descriptor.set_next_desc_and_len(0, buf.len());
                     descriptor.set_desc_flags(UsbDirection::Out,
                         true, true, false);
-                    for (index, _slice) in sub_buf.chunks(size_of::<u32>()).enumerate() {
-                        descriptor.write_data(index, 0); // zeroize the descriptor area so we don't leak data between packets
-                    }
-
-                    if chain_offset == (max_chain - 1) || sub_buf.len() != packet_len {
-                        // mark the last item in linked list with a null pointer
-                        descriptor.set_next_desc_and_len(0, sub_buf.len());
-                    } else {
-                        // if not the last link, setup the next linked list pointer
-                        let next_addr = self.next_from_head_and_chain(head_offset, chain_offset, packet_len);
-                        descriptor.set_next_desc_and_len(next_addr, sub_buf.len());
-                    }
-                    descriptor.set_offset_only(0); // reset the write pointer to 0, also sets in_progress
-                    log::debug!("bulk descriptor {} setup: {:x?}", chain_offset, descriptor);
+                    descriptor.set_offset_only(0); // reset the read pointer to 0, also sets in_progress
                 }
-                #[cfg(feature="chain")]
-                ep_status.set_max_packet_size(packet_len as _);
-                // this is reset to 0 after every transaction by the hardware, so we must reset it
-                #[cfg(feature="chain")]
-                ep_status.set_head_offset(head_offset as u32);
 
                 // sanity check on interrupts: it should be cleared by this point!
                 let interrupts = self.regs.interrupts();
