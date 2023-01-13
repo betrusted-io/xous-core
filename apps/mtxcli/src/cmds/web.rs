@@ -29,8 +29,8 @@ fn serialize<T: ?Sized + Serialize>(object: &T) -> Option<String> {
         Ok(value) => {
             Some(value)
         },
-        Err(_) => {
-            // println!("FAILED TO SERIALIZE");
+        Err(e) => {
+            log::error!("ERROR in serialize: {:?}", e);
             None
         }
     }
@@ -39,10 +39,6 @@ fn serialize<T: ?Sized + Serialize>(object: &T) -> Option<String> {
 pub fn handle_response(maybe_response: Result<ureq::Response,ureq::Error>) -> Option<Value> {
     match maybe_response {
         Ok(response) => {
-            // DEBUG
-            // if let Ok(json) = response.into_string() {
-            //     println!("JSON = \n{}\n", json);
-            //     None
             if let Ok(body) = response.into_json() {
                 Some(body)
             } else {
@@ -55,27 +51,22 @@ pub fn handle_response(maybe_response: Result<ureq::Response,ureq::Error>) -> Op
             code (such as 400, 500 etc) */
             let err_body = response.into_string().unwrap();
             log::error!("ERROR code {} err_body = {}", code, err_body);
-            // let status_text = "the status text";
-            // Err(ureq::Error::Status(code, ureq::Response::new(code, status_text, &body).unwrap()))
             None
         }
-        Err(_) => {
-            log::error!("Unknown Error");
-            // Err(e)
+        Err(e) => {
+            log::error!("ERROR in handle_response: {:?}", e);
             None
         }
     }
 }
 
 pub fn get_json(url: &str) -> Result<ureq::Response, ureq::Error> {
-    // println!("getting json from {}", &url);
     ureq::get(&url)
         .set(ACCEPT, ACCEPT_JSON)
         .call()
 }
 
 pub fn get_json_auth(url: &str, token:&str) -> Result<ureq::Response, ureq::Error> {
-    // println!("getting json auth from {}", &url);
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
     ureq::get(&url)
@@ -85,14 +76,12 @@ pub fn get_json_auth(url: &str, token:&str) -> Result<ureq::Response, ureq::Erro
 }
 
 pub fn post_string(url: &str, request_body: &str) -> Result<ureq::Response, ureq::Error> {
-    // println!("post json to {}", &url);
     ureq::post(&url)
         .set(ACCEPT, ACCEPT_JSON)
         .send_string(request_body)
 }
 
 pub fn post_string_auth(url: &str, request_body: &str, token: &str) -> Result<ureq::Response, ureq::Error> {
-    // println!("post json auth from {}", &url);
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
     ureq::post(&url)
@@ -102,7 +91,6 @@ pub fn post_string_auth(url: &str, request_body: &str, token: &str) -> Result<ur
 }
 
 pub fn put_string_auth(url: &str, request_body: &str, token: &str) -> Result<ureq::Response, ureq::Error> {
-    // println!("put json auth from {}", &url);
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
     ureq::put(&url)
@@ -225,13 +213,17 @@ pub fn get_room_id(server: &str, room_server: &str, token: &str) -> Option<Strin
 
 #[derive(Serialize, Deserialize)]
 struct EventFilter {
-    limit: i32
+    limit: i32,
+    not_types: Vec<String>,
 }
 
 impl EventFilter {
     pub fn new(limit: i32) -> Self {
+        let mut not_types: Vec<String> = Vec::new();
+        not_types.push("*".to_string());
         EventFilter {
-            limit
+            limit,
+            not_types,
         }
     }
 }
@@ -240,15 +232,19 @@ impl EventFilter {
 struct RoomEventFilter {
     limit: i32,
     types: Vec<String>,
+    rooms: Vec<String>,
 }
 
 impl RoomEventFilter {
-    pub fn new(limit: i32, type_0: &str) -> Self {
+    pub fn new(limit: i32, room_id: &str, type_0: &str) -> Self {
         let mut types = Vec::new();
         types.push(type_0.to_string());
+        let mut rooms: Vec<String> = Vec::new();
+        rooms.push(room_id.to_string());
         RoomEventFilter {
             limit,
             types,
+            rooms,
         }
     }
 }
@@ -256,21 +252,25 @@ impl RoomEventFilter {
 #[derive(Serialize, Deserialize)]
 struct RoomFilter {
     account_data: EventFilter,  // Should be RoomEventFilter
-    state: EventFilter, // Should be StateFilter
     ephemeral: EventFilter,
+    rooms: Vec<String>,
+    state: EventFilter, // Should be StateFilter
     timeline: RoomEventFilter,
 }
 
 impl RoomFilter {
-    pub fn new() -> Self {
+    pub fn new(room_id: &str) -> Self {
         let account_data = EventFilter::new(0);
-        let state = EventFilter::new(0);
         let ephemeral = EventFilter::new(0);
-        let timeline = RoomEventFilter::new(10, "m.room.message");
+        let mut rooms: Vec<String> = Vec::new();
+        rooms.push(room_id.to_string());
+        let state = EventFilter::new(0);
+        let timeline = RoomEventFilter::new(10, room_id, "m.room.message");
         RoomFilter {
             account_data,
-            state,
             ephemeral,
+            rooms,
+            state,
             timeline,
         }
     }
@@ -278,38 +278,44 @@ impl RoomFilter {
 
 #[derive(Serialize, Deserialize)]
 struct FilterRequest {
-    presence: EventFilter,
     account_data: EventFilter,
+    event_fields: Vec<String>,
+    presence: EventFilter,
     room: RoomFilter,
 }
 
 impl FilterRequest {
-    pub fn new() -> Self {
-        let presence = EventFilter::new(0);
+    pub fn new(room_id: &str) -> Self {
         let account_data = EventFilter::new(0);
-        let room = RoomFilter::new();
+        let mut event_fields: Vec<String> = Vec::new();
+        event_fields.push("type".to_string());
+        event_fields.push("sender".to_string());
+        event_fields.push("content.body".to_string());
+        let presence = EventFilter::new(0);
+        let room = RoomFilter::new(room_id);
         FilterRequest {
-            presence,
             account_data,
-            room
+            event_fields,
+            presence,
+            room,
         }
     }
 }
 
-pub fn get_filter(user: &str, server: &str, token: &str) -> Option<String> {
+pub fn get_filter(user: &str, server: &str, room_id: &str, token: &str)
+                  -> Option<String> {
     let user_encoded = url::encode(user);
     let mut url = String::from(server);
-    url.push_str("/_matrix/client/r0/user/");
+    url.push_str("/_matrix/client/v3/user/");
     url.push_str(&user_encoded);
     url.push_str("/filter");
     log::debug!("get_filter = {}", url);
-    let filter_request = FilterRequest::new();
+    let filter_request = FilterRequest::new(room_id);
     if let Some(request_body) = serialize(&filter_request) {
-        // println!("filter_request = {}", request_body);
         if let Some(value) = handle_response(post_string_auth(&url, &request_body, token)) {
             if let Value::Object(body) = value {
                 if let Some(Value::String(filter_id)) = body.get("filter_id") {
-                    // log::debug!("filter_id = {}", filter_id);
+                    log::debug!("filter_id = {}", filter_id);
                     Some(filter_id.to_string())
                 } else {
                     log::error!("invalid response for get_filter");
@@ -384,7 +390,6 @@ pub fn client_sync(server: &str, filter: &str, since: &str, timeout: i32,
     }
     log::debug!("client_sync = {}", url);
     if let Some(value) = handle_response(get_json_auth(&url, token)) {
-        // println!("SYNC = {:?}", value);
         if let Value::Object(body) = value {
             if let Some(Value::String(next_batch)) = body.get("next_batch") {
                 Some((next_batch.to_string(), get_messages(body, room_id)))
@@ -429,10 +434,8 @@ pub fn send_message(server: &str, room_id: &str, text: &str, txn_id: &str, token
     log::debug!("send_message = {}", url);
     let message_request = MessageRequest::new(text);
     if let Some(request_body) = serialize(&message_request) {
-        // println!("request_body = {}", request_body);
         if let Some(value) = handle_response(put_string_auth(&url, &request_body, token)) {
             if let Value::Object(_body) = value {
-                // println!("SENT = {:?}", body);
                 true
             } else {
                 log::error!("invalid response for send_message");
