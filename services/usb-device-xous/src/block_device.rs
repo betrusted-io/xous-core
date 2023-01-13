@@ -1,5 +1,6 @@
 use xous::MemoryRange;
 
+const CAPACITY: usize = 256 * 1024; // must be a multiple of one page (4096)
 pub struct BlockDevice{
     backing: MemoryRange,
 }
@@ -8,7 +9,7 @@ impl BlockDevice {
         let mut backing = xous::syscall::map_memory(
             None,
             None,
-            512 * 1024,
+            CAPACITY,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         ).unwrap();
         let backing_slice: &mut [u32] = backing.as_slice_mut();
@@ -37,6 +38,6 @@ impl usbd_scsi::BlockDevice for BlockDevice {
     }
 
     fn max_lba(&self) -> u32 {
-        1023
+        (CAPACITY / Self::BLOCK_BYTES) as u32 - 1
     }
 }
