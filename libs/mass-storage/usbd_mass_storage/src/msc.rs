@@ -28,7 +28,6 @@ pub struct MscClass<'a, B: UsbBus> {
     pub(crate) msc_if: InterfaceNumber,
     pub(crate) read_ep: EndpointOut<'a, B>,
     pub(crate) write_ep: EndpointIn<'a, B>,
-    pub(crate) write2_ep: EndpointIn<'a, B>,
     pub(crate) subclass: InterfaceSubclass,
     pub(crate) protocol: InterfaceProtocol,
 }
@@ -43,7 +42,6 @@ impl<B: UsbBus> MscClass<'_, B> {
         MscClass {
             msc_if: alloc.interface(),
             write_ep: alloc.bulk(max_packet_size),
-            write2_ep: alloc.interrupt(64, 5),
             read_ep: alloc.bulk(max_packet_size),
             subclass,
             protocol,
@@ -77,8 +75,24 @@ impl<B: UsbBus> UsbClass<B> for MscClass<'_, B> {
         )?;
 
         writer.endpoint(&self.write_ep)?;
-        writer.endpoint(&self.read_ep)?;
-        writer.endpoint(&self.write2_ep)
+
+        /*
+        UGLY HACK ALERT
+
+        For some unknown reason, just adding a second bulk endpoint descriptor makes enumeration
+        fail on essentially all operating systems.
+
+        Adding three endpoints is no issue though, but since we want to avoid wasting resources around
+        here, writing 0x42 at the end of the last bulk endpoint... fixes everything.
+
+        Tested under Linux, Windows, OpenBSD, FreeBSD.
+        macOS still MIA.
+        */
+
+        writer.endpoint_ex(&self.read_ep, |remainder|{
+            remainder[0] = 0x42;
+            Ok(1)
+        })
     }
 
     fn reset(&mut self) { }
