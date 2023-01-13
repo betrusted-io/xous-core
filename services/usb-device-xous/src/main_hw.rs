@@ -184,19 +184,6 @@ pub(crate) fn main_hw() -> ! {
     keyboard.write_report(&Vec::<Keyboard>::new()).ok();
     keyboard.tick().ok();
 
-    let fido_alloc = UsbBusAllocator::new(usb_fido_dev);
-    let mut fido_class = UsbHidClassBuilder::new()
-        .add_interface(
-            RawFidoInterface::default_config()
-        )
-        .build(&fido_alloc);
-
-    let mut fido_dev = UsbDeviceBuilder::new(&fido_alloc, UsbVidPid(0x1209, 0x3613))
-    .manufacturer("Kosagi")
-    .product("Precursor")
-    .serial_number(&serial_number)
-    .build();
-
     #[cfg(feature="mass-storage")]
     let ums_alloc = UsbBusAllocator::new(ums_dev);
     #[cfg(feature="mass-storage")]
@@ -229,6 +216,19 @@ pub(crate) fn main_hw() -> ! {
             tt.sleep_ms(1500).ok();
         }
     });
+
+    let fido_alloc = UsbBusAllocator::new(usb_fido_dev);
+    let mut fido_class = UsbHidClassBuilder::new()
+        .add_interface(
+            RawFidoInterface::default_config()
+        )
+        .build(&fido_alloc);
+
+    let mut fido_dev = UsbDeviceBuilder::new(&fido_alloc, UsbVidPid(0x1209, 0x3613))
+    .manufacturer("Kosagi")
+    .product("Precursor")
+    .serial_number(&serial_number)
+    .build();
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -276,7 +276,11 @@ pub(crate) fn main_hw() -> ! {
                     }
                     #[cfg(feature="mass-storage")]
                     Views::MassStorage => {
-                        // TODO: what to do on a resume for USB mass storage??
+                        // TODO: test this
+                        match ums_device.force_reset() {
+                            Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                            _ => ()
+                        };
                     }
                 }
                 // resume2 brings us to our last application state
@@ -344,13 +348,14 @@ pub(crate) fn main_hw() -> ! {
                 buffer.replace(u2f_ipc).unwrap();
             }
             Some(Opcode::UsbIrqHandler) => {
+                /*
                 #[cfg(feature="mass-storage")]
                 if matches!(view, Views::MassStorage) {
                     if ums_device.poll(&mut [&mut ums]) {
                         log::debug!("ums device had something to do!")
                     }
                     continue;
-                }
+                }*/
 
                 let maybe_u2f = match view {
                     Views::FidoWithKbd => {
@@ -377,7 +382,11 @@ pub(crate) fn main_hw() -> ! {
                     },
                     #[cfg(feature="mass-storage")]
                     _ => {
-                        unreachable!("should not be able to arrive here if view is mass storage!")
+                        if ums_device.poll(&mut [&mut ums]) {
+                            log::debug!("ums device had something to do!")
+                        }
+                        None
+                        // unreachable!("should not be able to arrive here if view is mass storage!")
                     }
                 };
                 if let Some(u2f) = maybe_u2f {
