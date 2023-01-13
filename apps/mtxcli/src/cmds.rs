@@ -5,10 +5,11 @@ use locales::t;
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Read, Write as StdWrite, Error};
+use std::io::{Read, Write as StdWrite, Error, ErrorKind};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH}; // to help gen_txn_id
 
+mod migrations;  use migrations::run_migrations;
 mod url;
 mod web;
 
@@ -34,6 +35,24 @@ const SERVER_MATRIX: &str = "https://matrix.org";
 
 const EMPTY: &str = "";
 const MTX_TIMEOUT: i32 = 300; // ms
+
+/// Returns a version string which is more likely to string compare
+/// correctly vs. another version. FFI please see
+/// https://git-scm.com/docs/git-describe#_examples
+fn get_version(ticktimer: &ticktimer_server::Ticktimer) -> String {
+    let xous_version = ticktimer.get_version();
+    let v: Vec<&str> = xous_version.split('-').collect();
+    if v.len() > 2 {
+        let n = v[1].parse::<usize>().expect("could not parse version");
+        let version = format!("{}-{:04}",v[0], n);
+        log::info!("version={}=", version);
+        version
+    } else {
+        log::error!("ERROR, couldn't find version from xous_version: {}",
+                    xous_version);
+        xous_version
+    }
+}
 
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
@@ -90,6 +109,7 @@ pub struct CommonEnv {
     filter: String,
     since: String,
     first_line: bool,
+    version: String,
 }
 impl CommonEnv {
 
@@ -103,24 +123,29 @@ impl CommonEnv {
     }
 
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), Error> {
-        log::info!("set '{}' = '{}'", key, value);
-        let mut keypath = PathBuf::new();
-        keypath.push(MTXCLI_DICT);
-        if std::fs::metadata(&keypath).is_ok() { // keypath exists
-            log::info!("dict '{}' exists", MTXCLI_DICT);
+        if key.starts_with("__") {
+            Err(Error::new(ErrorKind::PermissionDenied,
+                           "may not set a variable beginning with __ "))
         } else {
-            log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
-            std::fs::create_dir_all(&keypath)?;
+            log::info!("set '{}' = '{}'", key, value);
+            let mut keypath = PathBuf::new();
+            keypath.push(MTXCLI_DICT);
+            if std::fs::metadata(&keypath).is_ok() { // keypath exists
+                log::info!("dict '{}' exists", MTXCLI_DICT);
+            } else {
+                log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
+                std::fs::create_dir_all(&keypath)?;
+            }
+            keypath.push(key);
+            File::create(keypath)?.write_all(value.as_bytes())?;
+            match key { // special case side effects
+                USER_KEY => { self.set_user(value); }
+                PASSWORD_KEY => { self.set_password(); }
+                ROOM_KEY => { self.set_room(); }
+                _ => { }
+            }
+            Ok(())
         }
-        keypath.push(key);
-        File::create(keypath)?.write_all(value.as_bytes())?;
-        match key { // special case side effects
-            USER_KEY => { self.set_user(value); }
-            PASSWORD_KEY => { self.set_password(); }
-            ROOM_KEY => { self.set_room(); }
-            _ => { }
-        }
-        Ok(())
     }
 
     // will log on error (vs. panic)
@@ -174,22 +199,27 @@ impl CommonEnv {
     }
 
     pub fn unset(&mut self, key: &str) -> Result<(), Error> {
-        // log::info!("unset '{}'", key);
-        let mut keypath = PathBuf::new();
-        keypath.push(MTXCLI_DICT);
-        if std::fs::metadata(&keypath).is_ok() { // keypath exists
-            log::info!("dict '{}' exists", MTXCLI_DICT);
+        if key.starts_with("__") {
+            Err(Error::new(ErrorKind::PermissionDenied,
+                           "may not unset a variable beginning with __ "))
         } else {
-            log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
-            std::fs::create_dir_all(&keypath)?;
-        }
-        keypath.push(key);
-        if std::fs::metadata(&keypath).is_ok() { // keypath exists
-            log::info!("dict:key = '{}:{}' exists.. deleting it", MTXCLI_DICT, key);
+            log::info!("unset '{}'", key);
+            let mut keypath = PathBuf::new();
+            keypath.push(MTXCLI_DICT);
+            if std::fs::metadata(&keypath).is_ok() { // keypath exists
+                log::info!("dict '{}' exists", MTXCLI_DICT);
+            } else {
+                log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
+                std::fs::create_dir_all(&keypath)?;
+            }
+            keypath.push(key);
+            if std::fs::metadata(&keypath).is_ok() { // keypath exists
+                log::info!("dict:key = '{}:{}' exists.. deleting it", MTXCLI_DICT, key);
 
-            std::fs::remove_file(keypath)?;
+                std::fs::remove_file(keypath)?;
+            }
+            Ok(())
         }
-        Ok(())
     }
 
     // will log on error (vs. panic)
@@ -205,15 +235,9 @@ impl CommonEnv {
         }
     }
 
-    pub fn xous_version(&self) -> String {
-        // Currently breaks in hosted mode:
-        // self.ticktimer.get_version()
-        "v0.9.11".to_string()
-    }
-
     pub fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
         if key.eq(CURRENT_VERSION_KEY) {
-            Ok(Some(self.xous_version()))
+            Ok(Some(self.version.clone()))
         } else {
             let mut keypath = PathBuf::new();
             keypath.push(MTXCLI_DICT);
@@ -383,7 +407,8 @@ impl CommonEnv {
         if self.filter.len() > 0 {
             true
         } else {
-            if let Some(new_filter) = web::get_filter(&self.user, &self.server, &self.token) {
+            if let Some(new_filter) = web::get_filter(&self.user, &self.server,
+                                                      &self.room_id, &self.token) {
                 self.set_debug(FILTER_KEY, &new_filter);
                 self.filter = new_filter;
                 true
@@ -458,8 +483,9 @@ pub struct CmdEnv {
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+        let version = get_version(&ticktimer);
         log::info!("creating CommonEnv");
-        let common = CommonEnv {
+        let mut common = CommonEnv {
             llio: llio::Llio::new(&xns),
             com: com::Com::new(&xns).expect("could't connect to COM"),
             codec: codec::Codec::new(&xns).expect("couldn't connect to CODEC"),
@@ -477,9 +503,11 @@ impl CmdEnv {
             room_id: EMPTY.to_string(),
             filter: EMPTY.to_string(),
             since: EMPTY.to_string(),
-            first_line: true
+            first_line: true,
+            version,
         };
         log::info!("done creating CommonEnv");
+        run_migrations(&mut common);
         CmdEnv {
             common_env: common,
             lastverb: XousString::<256>::new(),
