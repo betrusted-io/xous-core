@@ -54,9 +54,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         #[cfg(not(feature="pddbtest"))]
-        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete] [churn] [flush] [sync]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]";
         #[cfg(feature="pddbtest")]
-        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
         if let Some(sub_cmd) = tokens.next() {
@@ -156,6 +156,32 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     } else {
                         write!(ret, "Missing query of form 'dict:key'").unwrap();
                     }
+                }
+                "copy" => {
+                    (|| {
+                        let Some(srcdescriptor) = tokens.next() else {
+                            write!(ret, "Usage is copy 'dict:key' 'dict:key' (missing destination)").unwrap();
+                            return;
+                        };
+                        let Some(dstdescriptor) = tokens.next() else {
+                            write!(ret, "Usage is copy 'dict:key' 'dict:key' (missing source)").unwrap();
+                            return;
+                        };
+                        if srcdescriptor.split_once(':').is_none() {
+                            write!(ret, "Source {} is not of required form 'dict:key'", srcdescriptor).unwrap();
+                            return;
+                        }
+                        if dstdescriptor.split_once(':').is_none() {
+                            write!(ret, "Destination {} is not of required form 'dict:key'", dstdescriptor).unwrap();
+                            return;
+                        }
+                        if let Err(e) = std::fs::copy(srcdescriptor, dstdescriptor) {
+                            write!(ret, "Error copying from {} to {}: {:?}", srcdescriptor, dstdescriptor, e).unwrap();
+                            return;
+                        }
+
+                        write!(ret, "Copy from {} to {} succeeded", srcdescriptor, dstdescriptor).unwrap();
+                    })()
                 }
                 "write" => {
                     if let Some(descriptor) = tokens.next() {
