@@ -1,6 +1,6 @@
 [package]
 name = "mtxcli"
-version = "0.1.0"
+version = "0.6.0"
 authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Matrix chat"
