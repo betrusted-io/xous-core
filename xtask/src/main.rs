@@ -269,6 +269,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("app-image") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION)
                    .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                   .add_feature("mass-storage") // add this in by default to help with testing
                    .add_apps(&get_cratespecs());
         }
         Some("perf-image") => {
