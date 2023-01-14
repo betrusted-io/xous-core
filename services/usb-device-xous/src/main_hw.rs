@@ -387,7 +387,7 @@ pub(crate) fn main_hw() -> ! {
                         }
                     },
                     #[cfg(feature="mass-storage")]
-                    _ => {
+                    Views::MassStorage => {
                         if ums_device.poll(&mut [&mut ums]) {
                             log::debug!("ums device had something to do!")
                         }
