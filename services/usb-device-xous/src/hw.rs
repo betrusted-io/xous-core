@@ -169,10 +169,20 @@ impl SpinalUsbMgmt {
     }
 }
 
+#[derive(Copy, Clone)]
+struct EpProps {
+    pub head_offset: usize,
+    pub packet_len: usize,
+    pub max_chain: usize,
+    pub ep_type: EndpointType,
+    pub ep_addr: EndpointAddress,
+    pub ep_dir: UsbDirection,
+}
+
 struct AllocView {
     // tracks which endpoints have been allocated. ep0 is special. parameter is the maximum size buffer available.
     // parameter is (address, len, chain_len); chain_len is the maximum number of `len`-length packets that could be chained
-    ep_allocs: [Option<(usize, usize, usize)>; 16],
+    ep_allocs: [Option<EpProps>; 16],
     // record a copy of the ep0 IN setup descriptor address - could extract from ep_allocs[0], but it's here for legacy reasons
     ep0in_head: u32,
     // structure to track space allocations within the memory space
@@ -511,7 +521,7 @@ impl UsbBus for SpinalUsbDevice {
                         descriptor.write_data(init_vec.len() / 4, u32::from_le_bytes(remainder));
                     }
 
-                    if index != 0 { // disable tranmission on the In descriptor as there's nothing to send
+                    if index != 0 { // disable transmission on the In descriptor as there's nothing to send
                         if ep_dir == UsbDirection::In {
                             ep_status.set_head_offset(0);
                         }
@@ -524,20 +534,19 @@ impl UsbBus for SpinalUsbDevice {
 
                     // now commit the ep config
                     self.status_write_volatile(index, ep_status);
-                    match ep_type {
-                        EndpointType::Bulk => { // only Bulk types do chaining
-                            self.view.ep_allocs[index] = Some(
-                                (offset as usize / 16,
-                                base_packet_size as usize,
-                                CHAINED_BUF_LEN / base_packet_size as usize))
+                    self.view.ep_allocs[index] = Some(
+                        EpProps {
+                            head_offset: offset as usize / 16,
+                            packet_len: base_packet_size as usize,
+                            max_chain: match ep_type {
+                                EndpointType::Bulk => CHAINED_BUF_LEN / base_packet_size as usize,
+                                _ => 1,
+                            },
+                            ep_type,
+                            ep_addr: EndpointAddress::from(index as u8),
+                            ep_dir,
                         }
-                        _ => {
-                            self.view.ep_allocs[index] = Some(
-                                (offset as usize / 16,
-                                base_packet_size as usize,
-                                1));
-                        }
-                    }
+                    );
 
                     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                     log::info!("alloc ep{} type {:?} dir {:?}, @{:x}({})",
@@ -579,14 +588,15 @@ impl UsbBus for SpinalUsbDevice {
         self.regs.set_address(0x0); // this does *not* require the trigger
         self.address.store(0, Ordering::SeqCst);
         self.ep0_out_reset();
-        for (index, &ep) in self.view.ep_allocs.iter().enumerate() {
-            if let Some((head_offset, packet_len, max_chain)) = ep {
+        for (index, &ep) in self.view.ep_allocs.iter().enumerate().rev() {
+            if let Some(ep_props) = ep {
                 if index == 0 {
                     log::trace!("ep0 reset");
+                    /*
                     // basically rewrite the whole EP0 setup from scratch.
                     let mut ep0_status = self.status_read_volatile(0);
-                    ep0_status.set_head_offset(head_offset as u32);
-                    ep0_status.set_max_packet_size(packet_len as u32);
+                    ep0_status.set_head_offset(ep_props.head_offset as u32);
+                    ep0_status.set_max_packet_size(ep_props.packet_len as u32);
                     let descriptor = self.descriptor_from_status(&ep0_status);
                     ep0_status.set_head_offset(0); // reset the descriptor offset to 0, so the IN packet doesn't fire until prepared
                     ep0_status.set_data_phase(true); // reset to data1
@@ -595,30 +605,66 @@ impl UsbBus for SpinalUsbDevice {
                     descriptor.set_offset(0); // reset the pointer to 0, and sets phase
                     // force this to the correct settings in case it got munged
                     descriptor.set_desc_flags(UsbDirection::In, true, true, true);
+                    */
+                    self.ep0_out_reset();
                 } else {
-                    let mut ep_status = self.status_read_volatile(index);
-                    log::trace!("ep{} reset from {:?}", index, ep_status);
-                    ep_status.set_max_packet_size(packet_len as u32);
-                    ep_status.set_head_offset(head_offset as u32);
-                    ep_status.set_data_phase(false); // reset to data0
+                    assert!(index as u8 == ep_props.ep_addr.into(), "EP record stored in incorrect location in ep_allocs array!");
+                    let mut ep_status = UdcEpStatus(0); // rebuild from scratch, not from self.status_read_volatile(index);
+                    match ep_props.ep_type {
+                        EndpointType::Isochronous => ep_status.set_isochronous(true),
+                        _ => ep_status.set_isochronous(false),
+                    }
+                    ep_status.set_head_offset(ep_props.head_offset as u32);
+                    ep_status.set_max_packet_size(ep_props.packet_len as u32);
+                    ep_status.set_enable(true);
+                    if index == 0 {
+                        ep_status.set_data_phase(true); // ep0 IN always responds on data phase 1
+                    }
+
+                    // setup descriptors from the yet-to-be-written ep config
                     let descriptor = self.descriptor_from_status(&ep_status);
-                    if descriptor.direction() == UsbDirection::In {
-                        ep_status.set_head_offset(0);
+                    descriptor.set_offset_only(0);
+                    descriptor.set_next_desc_and_len(0, ep_props.packet_len as _);
+                    descriptor.set_desc_flags(
+                        ep_props.ep_dir,
+                        ep_props.ep_dir == UsbDirection::Out,
+                        true, // this should be equal to "packet_end", but this driver doesn't have that...?
+                        index == 0, // only trigger for ep0 (per spinal Linux driver)
+                    );
+                    // clear the descriptor to 0
+                    let init_vec = vec![0u8; ep_props.packet_len as _];
+                    for (index, src) in init_vec.chunks_exact(4).enumerate() {
+                        let w = u32::from_le_bytes(src.try_into().unwrap());
+                        descriptor.write_data(index, w);
                     }
+                    if init_vec.len() % 4 != 0 { // handle the odd remainder case
+                        let mut remainder = [0u8; 4];
+                        for (index, &src) in init_vec.chunks_exact(4).remainder().iter().enumerate() {
+                            remainder[index] = src;
+                        }
+                        descriptor.write_data(init_vec.len() / 4, u32::from_le_bytes(remainder));
+                    }
+
+                    if index != 0 { // disable transmission on the In descriptor as there's nothing to send
+                        if ep_props.ep_dir == UsbDirection::In {
+                            ep_status.set_head_offset(0);
+                        }
+                    }
+                    // now commit the ep config
                     self.status_write_volatile(index, ep_status);
-                    descriptor.set_offset_only(0); // reset the pointer to 0, does not set phase
-                    if max_chain == 1 { // clear any chaining if it was previously set for non-chained descriptors
-                        descriptor.set_next_desc_and_len(0, packet_len);
-                    }
                 }
+            } else {
+                let mut ep_status = self.status_read_volatile(index);
+                ep_status.set_enable(false);
+                self.status_write_volatile(index, ep_status);
             }
         }
-        if true {
+        if false {
             // Config confirmation for debug (change above to `true`)
             for (index, &ep) in self.view.ep_allocs.iter().enumerate() {
-                if let Some((head_offset, _packet_len, _max_chain)) = ep {
+                if let Some(ep_props) = ep {
                     let mut ep_status = self.status_read_volatile(index);
-                    ep_status.set_head_offset(head_offset as u32);
+                    ep_status.set_head_offset(ep_props.head_offset as u32);
                     log::info!("ep{}_status: {:?}", index, ep_status);
                     let descriptor = self.descriptor_from_status(&ep_status);
                     log::info!("desc{}: {:?}", index, descriptor);
@@ -659,10 +705,10 @@ impl UsbBus for SpinalUsbDevice {
     ///
     /// Implementations may also return other errors if applicable.
     fn write(&self, ep_addr: EndpointAddress, buf: &[u8]) -> Result<usize> {
-        if let Some((head_offset, packet_len, max_chain)) = self.view.ep_allocs[ep_addr.index()] {
-            if buf.len() > max_chain * packet_len {
+        if let Some(ep_props) = self.view.ep_allocs[ep_addr.index()] {
+            if buf.len() > ep_props.max_chain * ep_props.packet_len {
                 Err(UsbError::BufferOverflow)
-            } else if buf.len() <= packet_len {
+            } else if buf.len() <= ep_props.packet_len {
                 // TODO: merge this with the path below, mostly to reduce code space. This was kept "intact" so enumeration
                 // would work while we figured out the details of chaining on bulk transfers.
                 #[cfg(feature="mjolnir")] // mjolnir is so powerful, one must halt the USB core entirely for it to be wielded
@@ -685,7 +731,7 @@ impl UsbBus for SpinalUsbDevice {
                 }
 
                 // this is reset to 0 after every transaction by the hardware, so we must reset it
-                ep_status.set_head_offset(head_offset as u32);
+                ep_status.set_head_offset(ep_props.head_offset as u32);
                 let descriptor = self.descriptor_from_status(&ep_status);
                 if ep_addr.index() != 0 {
                     descriptor.set_desc_flags(UsbDirection::In,
@@ -706,7 +752,7 @@ impl UsbBus for SpinalUsbDevice {
                     descriptor.write_data(buf.len() / 4, u32::from_le_bytes(remainder));
                 }
 
-                ep_status.set_max_packet_size(packet_len as _);
+                ep_status.set_max_packet_size(ep_props.packet_len as _);
                 descriptor.set_next_desc_and_len(0, buf.len());
                 if ep_addr.index() != 0 {
                     descriptor.set_desc_flags(UsbDirection::In,
@@ -755,8 +801,8 @@ impl UsbBus for SpinalUsbDevice {
                     self.last_wr_desc.lock().unwrap()[ep_addr.index()].as_ref().unwrap());
                 }
 
-                for (chain_offset, sub_buf) in buf.chunks(packet_len).enumerate() {
-                    let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
+                for (chain_offset, sub_buf) in buf.chunks(ep_props.packet_len).enumerate() {
+                    let descriptor = self.descriptor_from_head_and_chain(ep_props.head_offset, chain_offset, ep_props.packet_len);
                     descriptor.set_desc_flags(UsbDirection::In,
                         false, true, false);
                     for (index, src) in sub_buf.chunks_exact(4).enumerate() {
@@ -771,12 +817,12 @@ impl UsbBus for SpinalUsbDevice {
                         descriptor.write_data(sub_buf.len() / 4, u32::from_le_bytes(remainder));
                     }
 
-                    if chain_offset == (max_chain - 1) || sub_buf.len() != packet_len {
+                    if chain_offset == (ep_props.max_chain - 1) || sub_buf.len() != ep_props.packet_len {
                         // on the very last packet (either by chain exhaustion, or buffer source exhaustion), set completion_on_full interrupt
                         descriptor.set_next_desc_and_len(0, sub_buf.len());
                     } else {
                         // if not the last packet, setup the linked list pointer
-                        let next_addr = self.next_from_head_and_chain(head_offset, chain_offset, packet_len);
+                        let next_addr = self.next_from_head_and_chain(ep_props.head_offset, chain_offset, ep_props.packet_len);
                         descriptor.set_next_desc_and_len(next_addr, sub_buf.len());
                     }
                     descriptor.set_offset(0); // reset the write pointer to 0, also sets in_progress
@@ -784,9 +830,9 @@ impl UsbBus for SpinalUsbDevice {
                     self.last_wr_desc.lock().unwrap()[ep_addr.index()] = Some(descriptor);
                 }
 
-                ep_status.set_max_packet_size(packet_len as _);
+                ep_status.set_max_packet_size(ep_props.packet_len as _);
                 // this is reset to 0 after every transaction by the hardware, so we must reset it
-                ep_status.set_head_offset(head_offset as u32);
+                ep_status.set_head_offset(ep_props.head_offset as u32);
 
                 // this is required to commit the ep_status record once all the setup is done
                 self.status_write_volatile(ep_addr.index(), ep_status);
@@ -819,7 +865,7 @@ impl UsbBus for SpinalUsbDevice {
     /// Implementations may also return other errors if applicable.
     fn read(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> {
         log::trace!("read ep{} into buf of len {}", ep_addr.index(), buf.len());
-        if let Some((head_offset, packet_len, max_chain)) = self.view.ep_allocs[ep_addr.index()] {
+        if let Some(ep_props) = self.view.ep_allocs[ep_addr.index()] {
             if ep_addr.index() == 0 {
                 if buf.len() == 0 {
                     log::info!("STATUS dummy read");
@@ -868,6 +914,13 @@ impl UsbBus for SpinalUsbDevice {
                 //
                 // I thought this was fixed by removing spurious interrupts, but instead, it seems to come back "sometimes",
                 // as opposed to "always" being a problem. So the delay is re-instated.
+                //
+                // Update Jan 2023: I think this delay is necessary because we have an interaction of two bugs:
+                // 1. Some interrupts are going missing, because the ISR doesn't run fast enough to clear
+                //    the interrupt before the next packet comes in.
+                // 2. This (or something else maybe) causes a race condition between when interrupts fire for reads,
+                //    and when the read call actually happens, such that the read call does not line up with the intended
+                //    interrupt.
                 self.tt.sleep_ms(1).ok();
 
                 if (self.read_allowed.load(Ordering::Relaxed) & (1 << ep_addr.index() as u16)) == 0 {
@@ -886,7 +939,7 @@ impl UsbBus for SpinalUsbDevice {
 
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
                 // log::info!("head_offset{}: {:x}", ep_addr.index(), head_offset * 16);
-                ep_status.set_head_offset(head_offset as u32);
+                ep_status.set_head_offset(ep_props.head_offset as u32);
                 let descriptor = self.descriptor_from_status(&ep_status);
                 if descriptor.in_progress() || descriptor.offset() == 0 {
                     // "early polls" happen because the main loop can be sloppy and request a read report at any time,
@@ -897,14 +950,14 @@ impl UsbBus for SpinalUsbDevice {
                 }
                 self.udc_hard_halt(ep_addr.index());
 
-                let mut len = if max_chain > 1 {
+                let mut len = if ep_props.max_chain > 1 {
                     0
                 } else {
                     descriptor.offset()
                 };
-                if max_chain > 1 { // chained descriptors
-                    for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
-                        let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
+                if ep_props.max_chain > 1 { // chained descriptors
+                    for (chain_offset, sub_buf) in buf.chunks_mut(ep_props.packet_len).enumerate() {
+                        let descriptor = self.descriptor_from_head_and_chain(ep_props.head_offset, chain_offset, ep_props.packet_len);
                         if descriptor.offset() != 0 {
                             log::debug!("appending {:x?}", descriptor);
                             let available_len = sub_buf.len().min(descriptor.offset());
@@ -926,27 +979,27 @@ impl UsbBus for SpinalUsbDevice {
                         log::error!("read ep{} overflows: {} < {}", ep_addr.index(), buf.len(), len);
                         len = buf.len();
                     }
-                    for (chain_offset, sub_buf) in buf.chunks_mut(packet_len).enumerate() {
-                        let descriptor = self.descriptor_from_head_and_chain(head_offset, chain_offset, packet_len);
+                    for (chain_offset, sub_buf) in buf.chunks_mut(ep_props.packet_len).enumerate() {
+                        let descriptor = self.descriptor_from_head_and_chain(ep_props.head_offset, chain_offset, ep_props.packet_len);
                         descriptor.set_desc_flags(UsbDirection::Out,
                             true, true, false);
                         for (index, _slice) in sub_buf.chunks(size_of::<u32>()).enumerate() {
                             descriptor.write_data(index, 0); // zeroize the descriptor area so we don't leak data between packets
                         }
-                        if chain_offset == (max_chain - 1) || sub_buf.len() != packet_len {
+                        if chain_offset == (ep_props.max_chain - 1) || sub_buf.len() != ep_props.packet_len {
                             // mark the last item in linked list with a null pointer
                             descriptor.set_next_desc_and_len(0, sub_buf.len());
                         } else {
                             // if not the last link, setup the next linked list pointer
-                            let next_addr = self.next_from_head_and_chain(head_offset, chain_offset, packet_len);
+                            let next_addr = self.next_from_head_and_chain(ep_props.head_offset, chain_offset, ep_props.packet_len);
                             descriptor.set_next_desc_and_len(next_addr, sub_buf.len());
                         }
                         descriptor.set_offset_only(0); // reset the write pointer to 0, also sets in_progress
                         log::debug!("bulk descriptor {} setup: {:x?}", chain_offset, descriptor);
                     }
-                    ep_status.set_max_packet_size(packet_len as _);
+                    ep_status.set_max_packet_size(ep_props.packet_len as _);
                     // this is reset to 0 after every transaction by the hardware, so we must reset it
-                    ep_status.set_head_offset(head_offset as u32);
+                    ep_status.set_head_offset(ep_props.head_offset as u32);
                 } else { // single descriptor
                     if buf.len() < len {
                         log::error!("read ep{} overflows: {} < {}", ep_addr.index(), buf.len(), len);
@@ -967,7 +1020,7 @@ impl UsbBus for SpinalUsbDevice {
                         }
                     }
                     // setup for the next transaction
-                    ep_status.set_max_packet_size(packet_len as _);
+                    ep_status.set_max_packet_size(ep_props.packet_len as _);
                     descriptor.set_next_desc_and_len(0, buf.len());
                     descriptor.set_desc_flags(UsbDirection::Out,
                         true, true, false);
@@ -1097,11 +1150,11 @@ impl UsbBus for SpinalUsbDevice {
                             // (but don't write it back, since we're not ready to send anything --
                             // it will get written back on the next `write`)
                             ep_status.set_head_offset(self.view.ep0in_head);
-                        } else if let Some((head_offset, _packet_len, _max_chain)) = self.view.ep_allocs[bit] {
+                        } else if let Some(ep_props) = self.view.ep_allocs[bit] {
                             if ep_status.head_offset() != 0 {
                                 log::warn!("got INT on ep{} but head is not 0", bit);
                             }
-                            ep_status.set_head_offset(head_offset as u32);
+                            ep_status.set_head_offset(ep_props.head_offset as u32);
                         }
                         let descriptor = self.descriptor_from_status(&ep_status);
                         if descriptor.direction() == UsbDirection::Out {
