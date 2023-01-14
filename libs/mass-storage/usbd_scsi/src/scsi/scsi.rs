@@ -269,6 +269,10 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
                 Done
             },
 
+            Command::StartStopUnit(_ssu) => {
+                Done
+            },
+
             _ => Err(Error::UnhandledOpCode)?,
         })
     }
