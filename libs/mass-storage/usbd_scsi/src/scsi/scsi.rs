@@ -257,7 +257,7 @@ impl<B: UsbBus, BD: BlockDevice> Scsi<'_, B, BD> {
             },
 
             Command::ReadFormatCapacities(_rfc) => {
-                log::info!("got rfc");
+                log::debug!("got rfc");
                 let rfc_resp = ReadFormatCapacitiesResponse {
                     capacity_list_length: 1 * 8, // 1 entry by 8 bytes
                     number_of_blocks: self.block_device.max_lba(),
