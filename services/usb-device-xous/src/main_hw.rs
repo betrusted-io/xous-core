@@ -9,6 +9,7 @@ use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 #[cfg(not(feature="minimal"))]
 use xous_semver::SemVer;
 use core::num::NonZeroU8;
+use utralib::generated::*;
 
 use usb_device::prelude::*;
 use usb_device::class_prelude::*;
@@ -140,15 +141,30 @@ pub(crate) fn main_hw() -> ! {
         gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 is kernel, 1 is console
     }
 
-    let usb_fidokbd_dev = SpinalUsbDevice::new(usbdev_sid);
+    // Allocate memory range and CSR for sharing between all the views.
+    let usb = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utralib::HW_USBDEV_MEM),
+        None,
+        utralib::HW_USBDEV_MEM_LEN,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map USB device memory range");
+    let csr = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::usbdev::HW_USBDEV_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map USB CSR range");
+
+    let usb_fidokbd_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     let mut usbmgmt = usb_fidokbd_dev.get_iface();
     // before doing any allocs, clone a copy of the hardware access structure so we can build a second
     // view into the hardware with only FIDO descriptors
-    let usb_fido_dev = usb_fidokbd_dev.clone_unalloc();
-
+    let usb_fido_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     // do the same thing for mass storage
     #[cfg(feature="mass-storage")]
-    let ums_dev = usb_fidokbd_dev.clone_unalloc();
+    let ums_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
 
     // track which view is visible on the device core
     #[cfg(not(feature="minimal"))]
@@ -163,6 +179,7 @@ pub(crate) fn main_hw() -> ! {
         cid
     ).expect("couldn't create suspend/resume object");
 
+    // FIDO + keyboard
     let usb_alloc = UsbBusAllocator::new(usb_fidokbd_dev);
     let clock = EmbeddedClock::new();
 
@@ -180,10 +197,22 @@ pub(crate) fn main_hw() -> ! {
         .product("Precursor")
         .serial_number(&serial_number)
         .build();
-    let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
-    keyboard.write_report(&Vec::<Keyboard>::new()).ok();
-    keyboard.tick().ok();
 
+    // FIDO only
+    let fido_alloc = UsbBusAllocator::new(usb_fido_dev);
+    let mut fido_class = UsbHidClassBuilder::new()
+        .add_interface(
+            RawFidoInterface::default_config()
+        )
+        .build(&fido_alloc);
+
+    let mut fido_dev = UsbDeviceBuilder::new(&fido_alloc, UsbVidPid(0x1209, 0x3613))
+    .manufacturer("Kosagi")
+    .product("Precursor")
+    .serial_number(&serial_number)
+    .build();
+
+    // Mass storage
     #[cfg(feature="mass-storage")]
     let ums_alloc = UsbBusAllocator::new(ums_dev);
     #[cfg(feature="mass-storage")]
@@ -207,29 +236,6 @@ pub(crate) fn main_hw() -> ! {
         .max_power(500)
         .build();
 
-    // switch the core automatically on boot
-    #[cfg(feature="minimal")]
-    std::thread::spawn(move || {
-        // this keeps the watchdog alive
-        let tt = ticktimer_server::Ticktimer::new().unwrap();
-        loop {
-            tt.sleep_ms(1500).ok();
-        }
-    });
-
-    let fido_alloc = UsbBusAllocator::new(usb_fido_dev);
-    let mut fido_class = UsbHidClassBuilder::new()
-        .add_interface(
-            RawFidoInterface::default_config()
-        )
-        .build(&fido_alloc);
-
-    let mut fido_dev = UsbDeviceBuilder::new(&fido_alloc, UsbVidPid(0x1209, 0x3613))
-    .manufacturer("Kosagi")
-    .product("Precursor")
-    .serial_number(&serial_number)
-    .build();
-
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
     // under the theory that PIDs are unforgeable. TODO: check that PIDs are unforgeable.
@@ -240,6 +246,15 @@ pub(crate) fn main_hw() -> ! {
     let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
     let mut was_suspend = true;
 
+    #[cfg(feature="minimal")]
+    std::thread::spawn(move || {
+        // this keeps the watchdog alive in minimal mode; if there's no event, eventually the watchdog times out
+        let tt = ticktimer_server::Ticktimer::new().unwrap();
+        loop {
+            tt.sleep_ms(1500).ok();
+        }
+    });
+    // switch the core automatically on boot
     #[cfg(feature="minimal")]
     let mut view = Views::MassStorage;
     #[cfg(feature="minimal")]
@@ -348,15 +363,6 @@ pub(crate) fn main_hw() -> ! {
                 buffer.replace(u2f_ipc).unwrap();
             }
             Some(Opcode::UsbIrqHandler) => {
-                /*
-                #[cfg(feature="mass-storage")]
-                if matches!(view, Views::MassStorage) {
-                    if ums_device.poll(&mut [&mut ums]) {
-                        log::debug!("ums device had something to do!")
-                    }
-                    continue;
-                }*/
-
                 let maybe_u2f = match view {
                     Views::FidoWithKbd => {
                         if usb_dev.poll(&mut [&mut composite]) {
@@ -386,7 +392,6 @@ pub(crate) fn main_hw() -> ! {
                             log::debug!("ums device had something to do!")
                         }
                         None
-                        // unreachable!("should not be able to arrive here if view is mass storage!")
                     }
                 };
                 if let Some(u2f) = maybe_u2f {
@@ -445,8 +450,7 @@ pub(crate) fn main_hw() -> ! {
                         usbmgmt.connect_device_core(false);
                     }
                     UsbDeviceType::FidoKbd => {
-                        // need to recode to also consider the view type
-                        log::info!("Connecting USB device core; disconnecting debug USB core");
+                        log::info!("Connecting device core FIDO + kbd; disconnecting debug USB core");
                         match view {
                             Views::FidoWithKbd => usbmgmt.connect_device_core(true),
                             _ => {
@@ -458,8 +462,12 @@ pub(crate) fn main_hw() -> ! {
                                 usbmgmt.ll_reset(false);
                             }
                         }
+                        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                        keyboard.write_report(&[]).ok(); // queues an "all key-up" for the interface
+                        keyboard.tick().ok();
                     }
                     UsbDeviceType::Fido => {
+                        log::info!("Connecting device core FIDO only; disconnecting debug USB core");
                         match view {
                             Views::FidoOnly => usbmgmt.connect_device_core(true),
                             _ => {
@@ -474,6 +482,7 @@ pub(crate) fn main_hw() -> ! {
                     }
                     #[cfg(feature="mass-storage")]
                     UsbDeviceType::MassStorage => {
+                        log::info!("Connecting device mass storage; disconnecting debug USB core");
                         match view {
                             Views::MassStorage => usbmgmt.connect_device_core(true),
                             _ => {
@@ -501,7 +510,7 @@ pub(crate) fn main_hw() -> ! {
                     }
                     UsbDeviceType::FidoKbd => {
                         if !usbmgmt.is_device_connected() {
-                            log::info!("Connecting USB device core; disconnecting debug USB core");
+                            log::info!("Ensuring FIDO + kbd device");
                             view = Views::FidoWithKbd;
                             usbmgmt.connect_device_core(true);
                         } else {
@@ -516,10 +525,13 @@ pub(crate) fn main_hw() -> ! {
                                 // type matches, do nothing
                             }
                         }
+                        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                        keyboard.write_report(&[]).ok(); // queues an "all key-up" for the interface
+                        keyboard.tick().ok();
                     }
                     UsbDeviceType::Fido => {
                         if !usbmgmt.is_device_connected() {
-                            log::info!("Connecting USB device core; disconnecting debug USB core");
+                            log::info!("Ensuring FIDO only device");
                             view = Views::FidoOnly;
                             usbmgmt.connect_device_core(true);
                         } else {
@@ -537,8 +549,8 @@ pub(crate) fn main_hw() -> ! {
                     },
                     #[cfg(feature="mass-storage")]
                     UsbDeviceType::MassStorage => {
+                        log::info!("Ensuring mass storage device");
                         if !usbmgmt.is_device_connected() {
-                            log::info!("Connecting USB device core; disconnecting debug USB core");
                             view = Views::MassStorage;
                             usbmgmt.connect_device_core(true);
                         } else {
