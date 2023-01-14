@@ -241,8 +241,8 @@ impl SpinalUdcDescriptor {
     }
     fn write(&self, offset: usize, data: u32) {
         // -16 for the dedicated ep0-out space
-        assert!((self.base.load(Ordering::SeqCst) as u32) & 0xFFF >= crate::START_OFFSET - 16, "descriptor is illegal (too low)!");
-        assert!((self.base.load(Ordering::SeqCst) as u32) & 0xFFF < crate::END_OFFSET, "descriptor is illegal (too high)!");
+        assert!((self.base.load(Ordering::SeqCst) as u32) & 0xFFF >= crate::START_OFFSET - 16, "descriptor is illegal (too low)! 0x{:x}", self.base.load(Ordering::SeqCst) as u32);
+        assert!((self.base.load(Ordering::SeqCst) as u32) & 0xFFF < crate::END_OFFSET, "descriptor is illegal (too high)! 0x{:x}", self.base.load(Ordering::SeqCst) as u32);
         unsafe{self.base.load(Ordering::SeqCst).add(offset).write_volatile(data)}
     }
     pub fn offset(&self) -> usize {
