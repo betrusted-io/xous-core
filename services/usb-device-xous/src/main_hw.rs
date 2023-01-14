@@ -231,7 +231,6 @@ pub(crate) fn main_hw() -> ! {
         .manufacturer("Kosagi")
         .product("Precursor")
         .serial_number(&serial_number)
-        .device_class(usbd_mass_storage::USB_CLASS_MSC)
         .self_powered(false)
         .max_power(500)
         .build();
