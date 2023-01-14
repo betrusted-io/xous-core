@@ -278,6 +278,25 @@ impl Gam {
         }
     }
 
+    pub fn type_keys(&self, s: &str) -> Result<bool, xous::Error> {
+        let mut view = s.chars().peekable();
+
+        while view.peek().is_some() {
+            let chunk: std::string::String = view.by_ref().take(4).collect();
+            let bytes = chunk.as_bytes();
+            send_message(self.conn,
+                Message::new_scalar(Opcode::KeyboardEvent.to_usize().unwrap(),
+                 bytes[0] as usize,
+                 if bytes.len() > 1 {bytes[1]} else {0} as usize,
+                 if bytes.len() > 2 {bytes[2]} else {0} as usize,
+                 if bytes.len() > 3 {bytes[3]} else {0} as usize
+                )
+            ).expect("Couldn't type keys");
+        }
+
+        Ok(true)
+    }
+
     pub fn claim_token(&self, name: &str) -> Result<Option<[u32; 4]>, xous::Error> {
         let tokenclaim = TokenClaim {
             token: None,
