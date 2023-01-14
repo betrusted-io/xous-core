@@ -157,6 +157,56 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         write!(ret, "Missing query of form 'dict:key'").unwrap();
                     }
                 }
+                "edit" => {
+                    ( || {
+                        let Some(descriptor) = tokens.next() else {
+                            write!(ret, "Missing query of form 'dict:key'").unwrap();
+                            return;
+                        };
+                        let Some((dict, keyname)) = descriptor.split_once(':') else {
+                            write!(ret, "Query is of form 'dict:key'").unwrap();
+                            return;
+                        };
+                        match self.pddb.get(dict, keyname, None,
+                            false, false, None, None::<fn()>) {
+                            Ok(mut key) => {
+                                let mut readbuf = [0u8; 512]; // up to the first 512 chars of the key
+                                match key.read(&mut readbuf) {
+                                    Ok(len) => {
+                                        match std::string::String::from_utf8(readbuf[..len].to_vec()) {
+                                            Ok(s) => {
+                                                let mut editcmd = "pddb write ".to_string();
+                                                editcmd.push_str(&descriptor);
+                                                editcmd.push_str(" ");
+                                                editcmd.push_str(&s);
+
+                                                match _env.gam.type_keys(&editcmd) {
+                                                    Ok(_) => {
+                                                        write!(ret, "Edit the value and press enter:").unwrap()
+                                                    }
+                                                    _ => {
+                                                        write!(ret, "Couldn't type out write command.").unwrap()
+                                                    }
+                                                }
+
+                                            }
+                                            _ => {
+                                                for &b in readbuf[..len].iter() {
+                                                    match write!(ret, "Not editing non-string: {:02x} ", b) {
+                                                        Ok(_) => (),
+                                                        Err(_) => break, // we can overflow our return buffer returning hex chars
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => write!(ret, "Error encountered reading {}:{}", dict, keyname).unwrap()
+                                }
+                            }
+                            _ => write!(ret, "{}:{} not found or other error", dict, keyname).unwrap()
+                        }
+                    })()
+                }
                 "copy" => {
                     (|| {
                         let Some(srcdescriptor) = tokens.next() else {
