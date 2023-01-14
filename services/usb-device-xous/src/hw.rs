@@ -1,13 +1,16 @@
 use usb_device::bus::PollResult;
 use utralib::generated::*;
 use crate::*;
-use core::{sync::atomic::{AtomicPtr, Ordering, AtomicUsize, AtomicU16}, mem::size_of};
+use core::{sync::atomic::{AtomicPtr, Ordering, AtomicUsize, AtomicU16, AtomicBool}, mem::size_of};
 use std::sync::{Arc, Mutex};
 use usb_device::{class_prelude::*, Result, UsbDirection};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
+use xous::MemoryRange;
 
 const WRITE_TIMEOUT_MS: u64 = 20;
+/// This can be done exactly once, even if there are multiple views. Track if it's been done yet.
+static INTERRUPT_INIT_DONE: AtomicBool = AtomicBool::new(false);
 
 fn handle_usb(_irq_no: usize, arg: *mut usize) {
     let usb = unsafe { &mut *(arg as *mut SpinalUsbDevice) };
@@ -205,23 +208,7 @@ pub struct SpinalUsbDevice {
     // last descriptor in read (OUT packet; host->device) chain. Used to check if a transaction is in progress.
 }
 impl SpinalUsbDevice {
-    pub fn new(sid: xous::SID) -> SpinalUsbDevice {
-        // this particular core does not use CSRs for control - it uses directly memory mapped registers
-        let usb = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utralib::HW_USBDEV_MEM),
-            None,
-            utralib::HW_USBDEV_MEM_LEN,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map USB device memory range");
-        let csr = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::usbdev::HW_USBDEV_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map USB CSR range");
-
+    pub fn new(sid: xous::SID, usb: MemoryRange, csr: MemoryRange) -> SpinalUsbDevice {
         let mut usbdev = SpinalUsbDevice {
             conn: xous::connect(sid).unwrap(),
             csr_addr: csr.as_ptr() as u32,
@@ -241,40 +228,22 @@ impl SpinalUsbDevice {
             last_wr_desc: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
         };
 
-        xous::claim_interrupt(
-            utra::usbdev::USBDEV_IRQ,
-            handle_usb,
-            (&mut usbdev) as *mut SpinalUsbDevice as *mut usize,
-        )
-        .expect("couldn't claim irq");
-        let p = usbdev.csr.r(utra::usbdev::EV_PENDING);
-        usbdev.csr.wo(utra::usbdev::EV_PENDING, p); // clear in case it's pending for some reason
-        usbdev.csr.wfo(utra::usbdev::EV_ENABLE_USB, 1);
-
+        if !INTERRUPT_INIT_DONE.fetch_or(true, Ordering::SeqCst) {
+            xous::claim_interrupt(
+                utra::usbdev::USBDEV_IRQ,
+                handle_usb,
+                (&mut usbdev) as *mut SpinalUsbDevice as *mut usize,
+            )
+            .expect("couldn't claim irq");
+            let p = usbdev.csr.r(utra::usbdev::EV_PENDING);
+            usbdev.csr.wo(utra::usbdev::EV_PENDING, p); // clear in case it's pending for some reason
+            usbdev.csr.wfo(utra::usbdev::EV_ENABLE_USB, 1);
+        }
         let mut cfg = UdcConfig(0);
         cfg.set_pullup_on(true); // required for proper operation
         usbdev.regs.set_config(cfg);
 
         usbdev
-    }
-    /// Creates a clone that has access to all the address space, but none of the allocations
-    pub fn clone_unalloc(&self) -> SpinalUsbDevice {
-        let usb = self.usb.clone();
-        SpinalUsbDevice {
-            conn: self.conn,
-            csr_addr: self.csr_addr,
-            csr: AtomicCsr::new(self.csr.base.load(Ordering::SeqCst)),
-            regs: SpinalUdcRegs::new(unsafe{usb.as_mut_ptr().add(0xFF00) as *mut u32}),
-            eps: AtomicPtr::new(unsafe {
-                    (usb.as_mut_ptr().add(0x00) as *mut UdcEpStatus).as_mut().unwrap()
-            }),
-            usb,
-            view: AllocView::default(),
-            tt: ticktimer_server::Ticktimer::new().unwrap(),
-            address: AtomicUsize::new(0),
-            read_allowed: AtomicU16::new(0),
-            last_wr_desc: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
-        }
     }
     pub fn get_iface(&self) -> SpinalUsbMgmt {
         SpinalUsbMgmt {
@@ -611,7 +580,7 @@ impl UsbBus for SpinalUsbDevice {
         self.address.store(0, Ordering::SeqCst);
         self.ep0_out_reset();
         for (index, &ep) in self.view.ep_allocs.iter().enumerate() {
-            if let Some((head_offset, packet_len, _max_chain)) = ep {
+            if let Some((head_offset, packet_len, max_chain)) = ep {
                 if index == 0 {
                     log::trace!("ep0 reset");
                     // basically rewrite the whole EP0 setup from scratch.
@@ -638,10 +607,13 @@ impl UsbBus for SpinalUsbDevice {
                     }
                     self.status_write_volatile(index, ep_status);
                     descriptor.set_offset_only(0); // reset the pointer to 0, does not set phase
+                    if max_chain == 1 { // clear any chaining if it was previously set for non-chained descriptors
+                        descriptor.set_next_desc_and_len(0, packet_len);
+                    }
                 }
             }
         }
-        if false {
+        if true {
             // Config confirmation for debug (change above to `true`)
             for (index, &ep) in self.view.ep_allocs.iter().enumerate() {
                 if let Some((head_offset, _packet_len, _max_chain)) = ep {
