@@ -592,20 +592,6 @@ impl UsbBus for SpinalUsbDevice {
             if let Some(ep_props) = ep {
                 if index == 0 {
                     log::trace!("ep0 reset");
-                    /*
-                    // basically rewrite the whole EP0 setup from scratch.
-                    let mut ep0_status = self.status_read_volatile(0);
-                    ep0_status.set_head_offset(ep_props.head_offset as u32);
-                    ep0_status.set_max_packet_size(ep_props.packet_len as u32);
-                    let descriptor = self.descriptor_from_status(&ep0_status);
-                    ep0_status.set_head_offset(0); // reset the descriptor offset to 0, so the IN packet doesn't fire until prepared
-                    ep0_status.set_data_phase(true); // reset to data1
-                    self.status_write_volatile(0, ep0_status);
-                    descriptor.set_next_desc_and_len(0, 8);
-                    descriptor.set_offset(0); // reset the pointer to 0, and sets phase
-                    // force this to the correct settings in case it got munged
-                    descriptor.set_desc_flags(UsbDirection::In, true, true, true);
-                    */
                     self.ep0_out_reset();
                 } else {
                     assert!(index as u8 == ep_props.ep_addr.into(), "EP record stored in incorrect location in ep_allocs array!");
