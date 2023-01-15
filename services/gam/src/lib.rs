@@ -278,20 +278,19 @@ impl Gam {
         }
     }
 
-    pub fn type_keys(&self, s: &str) -> Result<bool, xous::Error> {
+    pub fn type_chars(&self, s: &str) -> Result<bool, xous::Error> {
         let mut view = s.chars().peekable();
 
         while view.peek().is_some() {
             let chunk: std::string::String = view.by_ref().take(4).collect();
-            let bytes = chunk.as_bytes();
             send_message(self.conn,
                 Message::new_scalar(Opcode::KeyboardEvent.to_usize().unwrap(),
-                 bytes[0] as usize,
-                 if bytes.len() > 1 {bytes[1]} else {0} as usize,
-                 if bytes.len() > 2 {bytes[2]} else {0} as usize,
-                 if bytes.len() > 3 {bytes[3]} else {0} as usize
+                 chunk.chars().nth(0).unwrap() as usize,
+                 if chunk.len() > 1 {chunk.chars().nth(1).unwrap()} else {'\u{0000}'} as usize,
+                 if chunk.len() > 2 {chunk.chars().nth(2).unwrap()} else {'\u{0000}'} as usize,
+                 if chunk.len() > 3 {chunk.chars().nth(3).unwrap()} else {'\u{0000}'} as usize
                 )
-            ).expect("Couldn't type keys");
+            ).expect("Couldn't type chars");
         }
 
         Ok(true)
