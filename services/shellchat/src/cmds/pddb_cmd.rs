@@ -180,7 +180,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                                                 editcmd.push_str(" ");
                                                 editcmd.push_str(&s);
 
-                                                match _env.gam.type_keys(&editcmd) {
+                                                match _env.gam.type_chars(&editcmd) {
                                                     Ok(_) => {
                                                         write!(ret, "Edit the value and press enter:").unwrap()
                                                     }
