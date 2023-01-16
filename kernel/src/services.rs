@@ -653,8 +653,7 @@ impl SystemServices {
         let process = self.get_process(pid)?;
         if let Some(tid) = tid {
             Ok(match process.state {
-                ProcessState::Running(x) if x & (1 << tid) == 0 => true,
-                ProcessState::Ready(x) if x & (1 << tid) == 0 => true,
+                ProcessState::Running(x) | ProcessState::Ready(x) if x & (1 << tid) != 0 => true,
                 ProcessState::Sleeping => true,
                 _ => false,
             })
