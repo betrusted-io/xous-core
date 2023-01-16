@@ -1,5 +1,6 @@
 mod bitwarden;
 mod authenticator;
+mod csvpass;
 use anyhow::Result;
 use clap::Parser;
 use clap::Subcommand;
@@ -46,6 +47,7 @@ struct SubcommandFields {
 enum FormatTargets {
     Bitwarden,
     Authenticator,
+    CsvPass,
 }
 
 #[derive(Debug, PartialEq, clap::Args, Clone)]
@@ -131,6 +133,35 @@ fn main() -> Result<()> {
             let f = std::fs::File::open(params.path)?;
 
             match params.target {
+                FormatTargets::CsvPass => {
+                    println!("Formatting CSV file to uploadable JSON -> csv_to_vault_passwords.json");
+                    let items = csvpass::Items::try_from(f)?;
+                    let items = items.logins();
+
+                    let mut passwords = backup::PasswordEntries::default();
+
+                    for (idx, item) in items.into_iter().enumerate() {
+                        let mut pw = backup::PasswordEntry::default();
+
+                        if item.username.is_none() || item.site.is_none() {
+                            log::error!("(non-fatal) entry {} is missing username and/or site. Ignoring entry.", idx);
+                            continue
+                        }
+                        pw.password = item.password.as_ref().unwrap_or(&String::new()).clone();
+                        pw.username = item.username.as_ref().unwrap().clone();
+                        pw.description = item.site.as_ref().unwrap().clone();
+                        pw.notes = item.notes.as_ref().unwrap_or(&String::new()).clone();
+
+                        passwords.0.push(pw);
+                    }
+
+                    std::fs::write(
+                        "csv_to_vault_passwords.json",
+                        serde_json::ser::to_vec(&passwords)?,
+                    )?;
+
+                    Ok(())
+                }
                 FormatTargets::Bitwarden => {
                     let items = bitwarden::Items::try_from(f)?;
                     let items = items.logins();

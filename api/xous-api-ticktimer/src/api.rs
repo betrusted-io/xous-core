@@ -1,4 +1,5 @@
 /// Do not modify the discriminants in this structure. They are used in `libstd` directly.
+#[repr(usize)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub enum Opcode {
     /// Get the elapsed time in milliseconds
@@ -48,9 +49,12 @@ pub enum Opcode {
     /// *arg1*: An integer of some sort, such as the address of the Condvar
     /// *arg2*: The number of conditions to notify
     NotifyCondition = 9,
+
+    /// Invalid call -- an error occurred decoding the opcode
+    InvalidCall = u32::MAX as usize,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct VersionString {
-    pub version: xous_ipc::String::<512>,
+    pub version: xous_ipc::String<512>,
 }

@@ -111,7 +111,8 @@ impl EfusePhy {
         }
         // derive bits from bank data, to debug any bit-order issues on readout, etc.
         for index in 0..32 {
-            self.key[index] = ((self.banks[((index / 3) + 1) as usize] >> ((index % 3) * 8)) & 0xFF) as u8;
+            // key reversal from hw storage state is handled here
+            self.key[31 - index] = ((self.banks[((index / 3) + 1) as usize] >> ((index % 3) * 8)) & 0xFF) as u8;
         }
 
         jm.pause(2000);
@@ -197,11 +198,14 @@ impl EfuseApi {
     // synchronizes the API state with the hardware. Needs to be called first.
     pub fn fetch(&mut self, jm: &mut JtagMach) {
         self.phy.fetch(jm);
+        self.key = self.phy.key();
+        self.user = self.phy.user();
+        self.cntl = self.phy.cntl();
     }
 
     pub fn set_key(&mut self, new_key: [u8; 32]) {
         for i in 0..32 {
-            self.key[i] = new_key[i];
+            self.key[i] = new_key[31 - i]; // key is reversed in byte order
         }
     }
     pub fn set_user(&mut self, new_user: u32) { self.user = new_user; }
@@ -216,16 +220,19 @@ impl EfuseApi {
                 // handle cntl special case
                 if ((self.phy.banks[0] & 0x3F) as u8 ^ self.cntl) & (self.phy.banks[0] & 0x3F) as u8 != 0 {
                     valid = false;
+                    log::warn!("proposed efuse cntl setting is not valid {:x?} -> {:x?}", self.phy.banks[0] & 0x3F, self.cntl);
                 }
             } else if index == 12 {
                 // handle user special case
                 if ((self.phy.banks[index] ^ add_ecc(self.user >> 8)) & self.phy.banks[index]) != 0 {
+                    log::warn!("proposed efuse user setting is not valid {:x?} -> {:x?}", self.phy.banks[index], add_ecc(self.user >> 8));
                     valid = false;
                 }
             } else if index == 11 {
                 // handle user + key special case
                 let raw_fuse: u32 = ((self.user & 0xFF) << 16) | (self.key[31] as u32) << 8 | self.key[30] as u32;
                 if ((self.phy.banks[index] ^ add_ecc(raw_fuse)) & self.phy.banks[index]) != 0 {
+                    log::warn!("proposed user/key overlap area setting is not valid {:x?} -> {:x?}", self.phy.banks[index], add_ecc(raw_fuse));
                     valid = false;
                 }
             } else {
@@ -236,6 +243,7 @@ impl EfuseApi {
                     raw_fuse |= self.key[(index-1)*3 + 2-i] as u32;
                 }
                 if ((self.phy.banks[index] ^ add_ecc(raw_fuse)) & self.phy.banks[index]) != 0 {
+                    log::warn!("proposed key setting is not valid {:x?} -> {:x?}", self.phy.banks[index],  add_ecc(raw_fuse));
                     valid = false;
                 }
             }

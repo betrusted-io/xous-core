@@ -6,12 +6,54 @@
         "ja": "Shellchat",
         "zh": "外壳聊天"
     },
+    "secnote.basis": {
+        "en": "Basis: ",
+        "en-tts": "Basis: ",
+        "fr": "La base: ",
+        "ja": "基底: ",
+        "zh": "基: "
+    },
     "backup.confirm": {
         "en": "Prepare for PDDB and root key backup?\n\nThe process cannot be aborted once started.",
         "en-tts": "Prepare for PDDB and root key backup?\n\nThe process cannot be aborted once started.",
         "fr": "Préparez-vous pour la sauvegarde de PDDB et de la clé racine?\n\nLe processus ne peut pas être abandonné une fois lancé.",
         "ja": "PDDB とルート キーのバックアップの準備をしますか?\n\nプロセスは、いったん開始すると中止できません。",
         "zh": "准备 PDDB 和根密钥备份吗？\n\n进程一旦启动就不能中止。"
+    },
+    "burnkey.type": {
+        "en": "Please select the type of key to use.\n\nUnsure which one to use? See github.com/betrusted-io/faq",
+        "en-tt": "Please select the type of key to use.\n\nUnsure which one to use? See github.com/betrusted-io/faq",
+        "fr": "Veuillez sélectionner le type de clé à utiliser.\n\nVous ne savez pas lequel utiliser ? Voir github.com/betrusted-io/faq *MT*",
+        "ja": "使用する鍵の種類を選択してください。\n\nどちらを使用するかわからない場合 github.com/betrusted-io/faq を参照してください",
+        "zh": "请选择要使用的密钥类型。 不确定使用哪一个？\n\n请参阅 github.com/betrusted-io/faq"
+    },
+    "burnkey.efuse_confirm": {
+        "en": "This will permanently burn a backup key into your device. If you lose this key and brick the device, you will have to buy a new device.\n\nTHIS FLOW IS BETA. BY PROCEEDING YOU ACKNOWLEDGE THE RISK OF PERMANENT DAMAGE TO YOUR DEVICE WITH NO WARRANTY REPAIR OPTION.\n\nNOTE: You may also set a backup key using the BBRAM flow, with no risk of permanent damage to hardware.\n\nProceed?",
+        "en-tts": "This will permanently burn a backup key into your device.\nIf you lose the key and brick the device, you will have to buy a new device.\nTHIS FLOW IS BETA. BY PROCEEDING YOU ACKNOWLEDGE THE RISK OF PERMANENT DAMAGE TO YOUR DEVICE WITH NO WARRANTY REPAIR OPTION.\nProceed?",
+        "fr": "Cela gravera définitivement une clé de sauvegarde dans votre appareil.\nSi vous perdez la clé et briquez l'appareil, vous devrez acheter un nouvel appareil.\nCE FLUX EST BÊTA. EN POURSUIVANT, VOUS RECONNAISSEZ LE RISQUE DE DOMMAGES PERMANENTS À VOTRE APPAREIL SANS OPTION DE RÉPARATION SOUS GARANTIE.\nPoursuivre?",
+        "ja": "これにより、バックアップ キーがデバイスに永久に焼き付けられます。\nキーを紛失してデバイスをブリックした場合は、新しいデバイスを購入する必要があります。\nこのフローはベータ版です。 続行することにより、保証修理オプションなしでデバイスに恒久的な損傷が生じるリスクを認めたことになります。\n続行しますか?",
+        "zh": "这会将备份密钥永久地刻录到您的设备中。\n如果您丢失密钥并使设备变砖，您将不得不购买新设备。\n此流程是测试版。 继续，即表示您承认您的设备存在永久损坏的风险，且不提供保修维修选项。\n继续吗?"
+    },
+    "burnkey.bbram": {
+        "en" : "BBRAM",
+        "en-tts": "BBRAM",
+        "fr" : "BBRAM",
+        "ja" : "BBRAM",
+        "zh" : "BBRAM"
+    },
+    "burnkey.efuse": {
+        "en" : "eFuse",
+        "en-tts": "eFuse",
+        "fr" : "eFuse",
+        "ja" : "eFuse",
+        "zh" : "eFuse"
+    },
+    "burnkey.bbram_exec": {
+        "en" : "Close this dialog box, then follow the instructions at https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM)",
+        "en-tts" : "Close this dialog box, then follow the instructions at https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM)",
+        "fr" : "Fermez cette boîte de dialogue, puis suivez les instructions sur https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM) *MT*",
+        "ja" : "このダイアログ ボックスを閉じて、https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM) の指示に従います。",
+        "zh" : "关闭此对话框，然后按照 https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM) 中的说明进行操作"
     },
     "ecup.abort": {
         "en": "EC update aborted due to error!",
@@ -97,6 +139,13 @@
         "ja": "バックライト点灯",
         "zh": "背光开启"
     },
+    "mainmenu.backup_key": {
+        "en": "Burn backup key (BETA)",
+        "en-tts": "Burn backup key (BETA)",
+        "fr": "Graver la clé de sauvegarde (BETA) *MT*",
+        "ja": "バックアップ キーの書き込み (ベータ版)",
+        "zh": "刻录备份密钥（测试版）"
+    },
     "mainmenu.battery_disconnect": {
         "en": "Shutdown",
         "en-tts": "Shutdown",
@@ -160,6 +209,13 @@
         "ja": "ゲートウェアアップデートをインストールする",
         "zh": "安装比特流更新"
     },
+    "mainmenu.preferences": {
+        "en": "Preferences",
+        "en-tts": "Preferences",
+        "fr": "Préférences",
+        "ja": "環境設定",
+        "zh": "喜好"
+    },
     "mainmenu.reboot": {
         "en": "Reboot",
         "en-tts": "Reboot",
@@ -189,8 +245,8 @@
         "zh": "设置本地时区"
     },
     "mainmenu.shutdown_confirm": {
-        "en": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?",
-        "en-tts": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?",
+        "en": "Confirm shutdown:\n🔌Device will remain off until a charging cable is plugged in. Proceed?",
+        "en-tts": "Confirm shutdown:\n🔌Device will remain off until a charging cable is plugged in. Proceed?",
         "fr": "Confirmez l’arrêt:\n🔌L’appareil s’éteindra jusqu’à ce qu’un câble de charge soit branché. Continuez?",
         "ja": "シャットダウンの確認:\n🔌充電ケーブルが差し込まれるまで、デバイスはオフのままになります。続行しますか?",
         "zh": "确认关机：\n🔌设备将保持关闭状态，直到插入充电线。继续？"
@@ -482,6 +538,111 @@
         "fr": "Fonctionnement ininterrompu en attente. Veuillez réessayer la demande de sommeil dans quelques secondes.",
         "ja": "中断不可能な操作が保留中です。 数秒後にスリープ リクエストを再試行してください。",
         "zh": "不间断操作挂起。 请在几秒钟后重试睡眠请求。"
+    },
+    "prefs.autobacklight_enable": {
+        "en": "Autobacklight setting",
+        "en-tts": "Autobacklight setting",
+        "fr": "Réglage du rétroéclairage automatique *MT*",
+        "ja": "自動バックライト設定",
+        "zh": "自动背光设置"
+    },
+    "prefs.autobacklight_duration": {
+        "en": "Autobacklight duration",
+        "en-tts": "Autobacklight duration",
+        "fr": "Durée du rétroéclairage automatique *MT*",
+        "ja": "自動バックライトの持続時間",
+        "zh": "自动背光持续时间"
+    },
+    "prefs.autobacklight_duration_in_secs": {
+        "en": "Autobacklight duration in seconds:",
+        "en-tts": "Autobacklight duration in seconds",
+        "fr": "Durée du rétroéclairage automatique en secondes: *MT*",
+        "ja": "自動バックライトの持続時間 (秒):",
+        "zh": "自动背光持续时间（以秒为单位):"
+    },
+    "prefs.autobacklight_err": {
+        "en": "Duration must be positive!",
+        "en-tts": "Duration must be positive!",
+        "fr": "La durée doit être positive! *MT*",
+        "ja": "期間は正でなければなりません!",
+        "zh": "持续时间必须为正数！"
+    },
+    "prefs.wifi_connect_auto": {
+        "en": "Connect to WiFi automatically",
+        "en-tts": "Connect to WiFi automatically",
+        "fr": "Se connecter au wifi automatiquement *MT*",
+        "ja": "自動でWiFiに接続",
+        "zh": "自动连接WiFi"
+    },
+    "prefs.current_setting": {
+        "en": "Current setting:",
+        "en-tts": "Current setting:",
+        "fr": "Paramètre actuel *MT*",
+        "ja": "現在の設定",
+        "zh": "当前设置"
+    },
+    "prefs.wifi_kill": {
+        "en": "WiFi kill switch",
+        "en-tts": "WiFi kill switch",
+        "fr": "Coupe-circuit WiFi *MT*",
+        "ja": "WiFiキルスイッチ",
+        "zh": "WiFi终止开关"
+    },
+    "prefs.keyboard_layout": {
+        "en": "Keyboard layout",
+        "en-tts": "Keyboard layout",
+        "fr": "Disposition du clavier",
+        "ja": "キーボード・レイアウト",
+        "zh": "键盘布局"
+    },
+    "prefs.wifi_setting": {
+        "en": "WiFi settings",
+        "en-tts": "WiFi settings",
+        "fr": "Paramètres Wifi",
+        "ja": "WiFi 設定",
+        "zh": "无线网络设置"
+    },
+    "prefs.enable_audio": {
+        "en": "Enable audio subsystem",
+        "en-tts": "Enable audio subsystem",
+        "fr": "Activer le sous-système audio",
+        "ja": "オーディオ サブシステムを有効にする",
+        "zh": "启用音频子系统"
+    },
+    "prefs.disable_audio": {
+        "en": "Disable audio subsystem",
+        "en-tts": "Disable audio subsystem",
+        "fr": "Désactiver le sous-système audio",
+        "ja": "オーディオ サブシステムを無効にする",
+        "zh": "禁用音频子系统"
+    },
+    "prefs.headphone_volume": {
+        "en": "Headphone volume",
+        "en-tts": "Headphone volume",
+        "fr": "Volume du casque",
+        "ja": "ヘッドホンの音量",
+        "zh": "耳机音量"
+    },
+    "prefs.speaker_volume": {
+        "en": "Speaker volume",
+        "en-tts": "Speaker volume",
+        "fr": "Volume du haut-parleur",
+        "ja": "スピーカーの音量",
+        "zh": "喇叭音量"
+    },
+    "prefs.yes": {
+        "en": "Yes",
+        "en-tts": "Yes",
+        "fr": "Oui",
+        "ja": "はい",
+        "zh": "确定"
+    },
+    "prefs.no": {
+        "en": "No",
+        "en-tts": "No",
+        "fr": "Non",
+        "ja": "いいえ",
+        "zh": "取消"
     },
     "wlan.cancel": {
         "en": "❌ Cancel request ❌",

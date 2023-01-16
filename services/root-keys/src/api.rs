@@ -104,6 +104,15 @@ pub(crate) enum Opcode {
     IsDontAskSet = 46,
     /// Resets the dont ask bit. Mainly for use by the OQC testing routine
     ResetDontAsk = 47,
+
+    /// Initiates the efuse burn process. Any user abort for the flow must be done
+    /// prior to this call; the flow within rootkeys is intended to be non-abortable.
+    #[cfg(feature = "efuse")]
+    BurnEfuse = 48,
+    #[cfg(feature = "efuse")]
+    EfuseRun = 49,
+    #[cfg(feature = "efuse")]
+    EfusePasswordReturn = 50,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]

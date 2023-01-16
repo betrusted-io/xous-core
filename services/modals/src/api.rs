@@ -32,7 +32,7 @@ pub struct ManagedPromptWithTextResponse {
     pub prompt: xous_ipc::String<1024>,
     pub fields: u32,
     /// placeholders
-    pub placeholders: Option<[Option<xous_ipc::String<256>>; 10]>,
+    pub placeholders: Option<[Option<(xous_ipc::String<256>, bool)>; 10]>,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
@@ -71,6 +71,8 @@ pub struct ManagedProgress {
     pub current_work: u32,
     /// can user interact with it?
     pub user_interaction: bool,
+    /// how much should the slider move with each movement?
+    pub step: u32,
 }
 
 /// This isn't a terribly useful notification -- it's basically read-only, no interactivity,

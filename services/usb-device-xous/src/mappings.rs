@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub use usbd_human_interface_device::page::Keyboard as UsbKeyCode;
 
 #[cfg(any(feature="precursor", feature="renode"))]

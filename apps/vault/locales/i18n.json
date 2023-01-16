@@ -427,16 +427,16 @@
         "zh": "使用次数: "
     },
     "vault.u2f.appinfo.days_ago": {
-        "en": "days ago",
-        "en-tts": "days ago",
-        "fr": "jours passés",
+        "en": " days ago",
+        "en-tts": " days ago",
+        "fr": " jours passés",
         "ja": "日前",
         "zh": "天前"
     },
     "vault.u2f.appinfo.hours_ago": {
-        "en": "hours ago",
-        "en-tts": "hours ago",
-        "fr": "heures passées",
+        "en": " hours ago",
+        "en-tts": " hours ago",
+        "fr": " heures passées",
         "ja": "時間前",
         "zh": "小时前"
     },
@@ -448,9 +448,9 @@
         "zh": "最后访问:"
     },
     "vault.u2f.appinfo.minutes_ago": {
-        "en": "mins ago",
-        "en-tts": "minutes ago",
-        "fr": "minutes passées",
+        "en": " mins ago",
+        "en-tts": " minutes ago",
+        "fr": " minutes passées",
         "ja": "分前",
         "zh": "分钟前"
     },
@@ -469,9 +469,9 @@
         "zh": "没用过"
     },
     "vault.u2f.appinfo.seconds_ago": {
-        "en": "secs ago",
-        "en-tts": "seconds ago",
-        "fr": "secondes passées",
+        "en": " secs ago",
+        "en-tts": " seconds ago",
+        "fr": " secondes passées",
         "ja": "秒前",
         "zh": "秒前"
     },

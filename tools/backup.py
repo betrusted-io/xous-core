@@ -10,7 +10,6 @@ import hashlib
 import csv
 import urllib.request
 from datetime import datetime
-from datetime import date
 from Crypto.Hash import SHA512
 
 from progressbar.bar import ProgressBar
@@ -558,9 +557,14 @@ def main():
         "--peek", required=False, help="Inspect an address", type=auto_int, metavar=('ADDR')
     )
     parser.add_argument(
-        "--output", help="Output file name", type=str, default="backup.pddb"
+        "--output", help="Output file name. Defaults to ./backup_<current_iso_time>.pddb", type=str, default=None
     )
     args = parser.parse_args()
+
+    if args.output is None:
+        ofile = "backup_{}.pddb".format(datetime.now().isoformat())
+    else:
+        ofile = args.output
 
     dev = usb.core.find(idProduct=0x5bf0, idVendor=0x1209)
 
@@ -613,7 +617,7 @@ def main():
            "LOC_PDDB"   : [0x01D80000, "pass"],
         }
     else:
-        print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.9 firmware offsets".format(pc_usb.load_csrs()))
+        print("SoC is from an unknown rev '{}', use --force to continue anyways with v0.9 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
 
     vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
@@ -627,7 +631,7 @@ def main():
     if args.peek:
         pc_usb.peek(args.peek + flash_region, display=True)
     else:
-        with open(args.output, "wb") as file:
+        with open(ofile, "wb") as file:
             checksum = []
             start_addr = locs['LOC_PDDB'][0] - 0x1000
             total_length = locs['LOC_WF200'][0] - locs['LOC_PDDB'][0] + 0x1000

@@ -6,8 +6,10 @@ use usb_device_xous::UsbDeviceType;
 use usbd_human_interface_device::device::fido::RawFidoMsg;
 use usbd_human_interface_device::device::fido::RawFidoInterface;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
+#[cfg(not(feature="minimal"))]
 use xous_semver::SemVer;
 use core::num::NonZeroU8;
+use utralib::generated::*;
 
 use usb_device::prelude::*;
 use usb_device::class_prelude::*;
@@ -18,6 +20,7 @@ use num_enum::FromPrimitive as EnumFromPrimitive;
 
 use embedded_time::Clock;
 use std::convert::TryInto;
+#[cfg(not(feature="minimal"))]
 use keyboard::KeyMap;
 use xous_ipc::Buffer;
 use std::collections::VecDeque;
@@ -48,6 +51,8 @@ const EXTENDED_CORE_RESET_MS: usize = 4000;
 enum Views {
     FidoWithKbd = 0,
     FidoOnly = 1,
+    #[cfg(feature="mass-storage")]
+    MassStorage = 2,
 }
 
 pub(crate) fn main_hw() -> ! {
@@ -58,67 +63,111 @@ pub(crate) fn main_hw() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     let usbdev_sid = xns.register_name(api::SERVER_NAME_USB_DEVICE, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", usbdev_sid);
+    #[cfg(not(feature="minimal"))]
     let llio = llio::Llio::new(&xns);
     let tt = ticktimer_server::Ticktimer::new().unwrap();
+    #[cfg(not(feature="minimal"))]
     let native_kbd = keyboard::Keyboard::new(&xns).unwrap();
+    #[cfg(not(feature="minimal"))]
     let native_map = native_kbd.get_keymap().unwrap();
 
+    #[cfg(not(feature="minimal"))]
     let serial_number = format!("{:x}", llio.soc_dna().unwrap());
-    let minimum_ver = SemVer {maj: 0, min: 9, rev: 8, extra: 20, commit: None};
-    let soc_ver = llio.soc_gitrev().unwrap();
-    if soc_ver < minimum_ver {
-        if soc_ver.min != 0 { // don't show during hosted mode, which reports 0.0.0+0
-            tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
-            let modals = modals::Modals::new(&xns).unwrap();
-            modals.show_notification(
-                &format!("SoC version >= 0.9.8+20 required for USB HID. Detected rev: {}. Refusing to start USB driver.",
-                soc_ver.to_string()
-            ),
-                None
-            ).unwrap();
-        }
-        let mut fido_listener: Option<xous::MessageEnvelope> = None;
-        loop {
-            let msg = xous::receive_message(usbdev_sid).unwrap();
-            match FromPrimitive::from_usize(msg.body.id()) {
-                Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
-                    xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
-                }),
-                Some(Opcode::U2fRxDeferred) => {
-                    // block any rx requests forever
-                    fido_listener = Some(msg);
-                }
-                Some(Opcode::IsSocCompatible) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, 0).expect("couldn't return compatibility status")
-                }),
-                Some(Opcode::Quit) => {
-                    break;
-                }
-                _ => {
-                    log::warn!("SoC not compatible with HID, ignoring USB message: {:?}", msg);
-                    // make it so blocking scalars don't block
-                    if let xous::Message::BlockingScalar(xous::ScalarMessage {
-                        id: _,
-                        arg1: _,
-                        arg2: _,
-                        arg3: _,
-                        arg4: _,
-                    }) = msg.body {
-                        log::warn!("Returning bogus result");
-                        xous::return_scalar(msg.sender, 0).unwrap();
+    #[cfg(not(feature="minimal"))]
+    {
+        let minimum_ver = SemVer {maj: 0, min: 9, rev: 8, extra: 20, commit: None};
+        let soc_ver = llio.soc_gitrev().unwrap();
+        if soc_ver < minimum_ver {
+            if soc_ver.min != 0 { // don't show during hosted mode, which reports 0.0.0+0
+                tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
+                let modals = modals::Modals::new(&xns).unwrap();
+                modals.show_notification(
+                    &format!("SoC version >= 0.9.8+20 required for USB HID. Detected rev: {}. Refusing to start USB driver.",
+                    soc_ver.to_string()
+                ),
+                    None
+                ).unwrap();
+            }
+            let mut fido_listener: Option<xous::MessageEnvelope> = None;
+            loop {
+                let msg = xous::receive_message(usbdev_sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
+                        xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
+                    }),
+                    Some(Opcode::U2fRxDeferred) => {
+                        // block any rx requests forever
+                        fido_listener = Some(msg);
+                    }
+                    Some(Opcode::IsSocCompatible) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        xous::return_scalar(msg.sender, 0).expect("couldn't return compatibility status")
+                    }),
+                    Some(Opcode::Quit) => {
+                        break;
+                    }
+                    _ => {
+                        log::warn!("SoC not compatible with HID, ignoring USB message: {:?}", msg);
+                        // make it so blocking scalars don't block
+                        if let xous::Message::BlockingScalar(xous::ScalarMessage {
+                            id: _,
+                            arg1: _,
+                            arg2: _,
+                            arg3: _,
+                            arg4: _,
+                        }) = msg.body {
+                            log::warn!("Returning bogus result");
+                            xous::return_scalar(msg.sender, 0).unwrap();
+                        }
                     }
                 }
             }
+            log::info!("consuming listener: {:?}", fido_listener);
         }
-        log::info!("consuming listener: {:?}", fido_listener);
+    }
+    #[cfg(feature="minimal")]
+    let serial_number = "minimalbuild";
+    #[cfg(feature="minimal")]
+    {
+        use utralib::generated::*;
+        let gpio_base = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map GPIO CSR range");
+        let mut gpio_csr = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
+        // setup the initial logging output
+        gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 is kernel, 1 is console
     }
 
-    let usb_fidokbd_dev = SpinalUsbDevice::new(usbdev_sid);
+    // Allocate memory range and CSR for sharing between all the views.
+    let usb = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utralib::HW_USBDEV_MEM),
+        None,
+        utralib::HW_USBDEV_MEM_LEN,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map USB device memory range");
+    let csr = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::usbdev::HW_USBDEV_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map USB CSR range");
+
+    let usb_fidokbd_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     let mut usbmgmt = usb_fidokbd_dev.get_iface();
     // before doing any allocs, clone a copy of the hardware access structure so we can build a second
     // view into the hardware with only FIDO descriptors
-    let usb_fido_dev = usb_fidokbd_dev.clone_unalloc();
+    let usb_fido_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    // do the same thing for mass storage
+    #[cfg(feature="mass-storage")]
+    let ums_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+
     // track which view is visible on the device core
+    #[cfg(not(feature="minimal"))]
     let mut view = Views::FidoWithKbd;
 
     // register a suspend/resume listener
@@ -130,6 +179,7 @@ pub(crate) fn main_hw() -> ! {
         cid
     ).expect("couldn't create suspend/resume object");
 
+    // FIDO + keyboard
     let usb_alloc = UsbBusAllocator::new(usb_fidokbd_dev);
     let clock = EmbeddedClock::new();
 
@@ -147,10 +197,8 @@ pub(crate) fn main_hw() -> ! {
         .product("Precursor")
         .serial_number(&serial_number)
         .build();
-    let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
-    keyboard.write_report(&Vec::<Keyboard>::new()).ok();
-    keyboard.tick().ok();
 
+    // FIDO only
     let fido_alloc = UsbBusAllocator::new(usb_fido_dev);
     let mut fido_class = UsbHidClassBuilder::new()
         .add_interface(
@@ -164,6 +212,29 @@ pub(crate) fn main_hw() -> ! {
     .serial_number(&serial_number)
     .build();
 
+    // Mass storage
+    #[cfg(feature="mass-storage")]
+    let ums_alloc = UsbBusAllocator::new(ums_dev);
+    #[cfg(feature="mass-storage")]
+    let bd = block_device::BlockDevice::new();
+    #[cfg(feature="mass-storage")]
+    let mut ums = usbd_scsi::Scsi::new(
+        &ums_alloc,
+        64,
+        bd,
+        "Kosagi".as_bytes(),
+        "Kosagi Precursor".as_bytes(),
+        "1".as_bytes()
+    );
+    #[cfg(feature="mass-storage")]
+    let mut ums_device = UsbDeviceBuilder::new(&ums_alloc, UsbVidPid(0x1209, 0x3613))
+        .manufacturer("Kosagi")
+        .product("Precursor")
+        .serial_number(&serial_number)
+        .self_powered(false)
+        .max_power(500)
+        .build();
+
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
     // under the theory that PIDs are unforgeable. TODO: check that PIDs are unforgeable.
@@ -173,6 +244,26 @@ pub(crate) fn main_hw() -> ! {
 
     let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
     let mut was_suspend = true;
+
+    #[cfg(feature="minimal")]
+    std::thread::spawn(move || {
+        // this keeps the watchdog alive in minimal mode; if there's no event, eventually the watchdog times out
+        let tt = ticktimer_server::Ticktimer::new().unwrap();
+        loop {
+            tt.sleep_ms(1500).ok();
+        }
+    });
+    // switch the core automatically on boot
+    #[cfg(feature="minimal")]
+    let mut view = Views::MassStorage;
+    #[cfg(feature="minimal")]
+    {
+        usbmgmt.ll_reset(true);
+        tt.sleep_ms(1000).ok();
+        usbmgmt.ll_connect_device_core(true);
+        tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+        usbmgmt.ll_reset(false);
+    }
 
     loop {
         let mut msg = xous::receive_message(usbdev_sid).unwrap();
@@ -193,6 +284,14 @@ pub(crate) fn main_hw() -> ! {
                     }
                     Views::FidoOnly => {
                         match fido_dev.force_reset() {
+                            Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                            _ => ()
+                        };
+                    }
+                    #[cfg(feature="mass-storage")]
+                    Views::MassStorage => {
+                        // TODO: test this
+                        match ums_device.force_reset() {
                             Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
                             _ => ()
                         };
@@ -251,6 +350,8 @@ pub(crate) fn main_hw() -> ! {
                     let u2f = match view {
                         Views::FidoWithKbd => composite.interface::<RawFidoInterface<'_, _>, _>(),
                         Views::FidoOnly => fido_class.interface::<RawFidoInterface<'_, _>, _>(),
+                        #[cfg(feature="mass-storage")]
+                        Views::MassStorage => panic!("expected u2f tx when in mass storage mode!"),
                     };
                     u2f.write_report(&u2f_msg).ok();
                     log::debug!("sent U2F packet {:x?}", u2f_ipc.data);
@@ -283,6 +384,13 @@ pub(crate) fn main_hw() -> ! {
                         } else {
                             None
                         }
+                    },
+                    #[cfg(feature="mass-storage")]
+                    Views::MassStorage => {
+                        if ums_device.poll(&mut [&mut ums]) {
+                            log::debug!("ums device had something to do!")
+                        }
+                        None
                     }
                 };
                 if let Some(u2f) = maybe_u2f {
@@ -310,6 +418,8 @@ pub(crate) fn main_hw() -> ! {
                 let is_suspend = match view {
                     Views::FidoWithKbd => usb_dev.state() == UsbDeviceState::Suspend,
                     Views::FidoOnly => fido_dev.state() == UsbDeviceState::Suspend,
+                    #[cfg(feature="mass-storage")]
+                    Views::MassStorage => ums_device.state() == UsbDeviceState::Suspend,
                 };
                 if is_suspend {
                     log::info!("suspend detected");
@@ -339,11 +449,10 @@ pub(crate) fn main_hw() -> ! {
                         usbmgmt.connect_device_core(false);
                     }
                     UsbDeviceType::FidoKbd => {
-                        // need to recode to also consider the view type
-                        log::info!("Connecting USB device core; disconnecting debug USB core");
+                        log::info!("Connecting device core FIDO + kbd; disconnecting debug USB core");
                         match view {
                             Views::FidoWithKbd => usbmgmt.connect_device_core(true),
-                            Views::FidoOnly => {
+                            _ => {
                                 view = Views::FidoWithKbd;
                                 usbmgmt.ll_reset(true);
                                 tt.sleep_ms(1000).ok();
@@ -352,12 +461,31 @@ pub(crate) fn main_hw() -> ! {
                                 usbmgmt.ll_reset(false);
                             }
                         }
+                        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                        keyboard.write_report(&[]).ok(); // queues an "all key-up" for the interface
+                        keyboard.tick().ok();
                     }
                     UsbDeviceType::Fido => {
+                        log::info!("Connecting device core FIDO only; disconnecting debug USB core");
                         match view {
                             Views::FidoOnly => usbmgmt.connect_device_core(true),
-                            Views::FidoWithKbd => {
+                            _ => {
                                 view = Views::FidoOnly;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            }
+                        }
+                    }
+                    #[cfg(feature="mass-storage")]
+                    UsbDeviceType::MassStorage => {
+                        log::info!("Connecting device mass storage; disconnecting debug USB core");
+                        match view {
+                            Views::MassStorage => usbmgmt.connect_device_core(true),
+                            _ => {
+                                view = Views::MassStorage;
                                 usbmgmt.ll_reset(true);
                                 tt.sleep_ms(1000).ok();
                                 usbmgmt.ll_connect_device_core(true);
@@ -381,7 +509,7 @@ pub(crate) fn main_hw() -> ! {
                     }
                     UsbDeviceType::FidoKbd => {
                         if !usbmgmt.is_device_connected() {
-                            log::info!("Connecting USB device core; disconnecting debug USB core");
+                            log::info!("Ensuring FIDO + kbd device");
                             view = Views::FidoWithKbd;
                             usbmgmt.connect_device_core(true);
                         } else {
@@ -396,15 +524,37 @@ pub(crate) fn main_hw() -> ! {
                                 // type matches, do nothing
                             }
                         }
+                        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                        keyboard.write_report(&[]).ok(); // queues an "all key-up" for the interface
+                        keyboard.tick().ok();
                     }
                     UsbDeviceType::Fido => {
                         if !usbmgmt.is_device_connected() {
-                            log::info!("Connecting USB device core; disconnecting debug USB core");
+                            log::info!("Ensuring FIDO only device");
                             view = Views::FidoOnly;
                             usbmgmt.connect_device_core(true);
                         } else {
                             if view != Views::FidoOnly {
                                 view = Views::FidoOnly;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            } else {
+                                // type matches, do nothing
+                            }
+                        }
+                    },
+                    #[cfg(feature="mass-storage")]
+                    UsbDeviceType::MassStorage => {
+                        log::info!("Ensuring mass storage device");
+                        if !usbmgmt.is_device_connected() {
+                            view = Views::MassStorage;
+                            usbmgmt.connect_device_core(true);
+                        } else {
+                            if view != Views::MassStorage {
+                                view = Views::MassStorage;
                                 usbmgmt.ll_reset(true);
                                 tt.sleep_ms(1000).ok();
                                 usbmgmt.ll_connect_device_core(true);
@@ -423,6 +573,8 @@ pub(crate) fn main_hw() -> ! {
                     match view {
                         Views::FidoWithKbd => xous::return_scalar(msg.sender, UsbDeviceType::FidoKbd as usize).unwrap(),
                         Views::FidoOnly => xous::return_scalar(msg.sender, UsbDeviceType::Fido as usize).unwrap(),
+                        #[cfg(feature="mass-storage")]
+                        Views::MassStorage => xous::return_scalar(msg.sender, UsbDeviceType::MassStorage as usize).unwrap(),
                     }
                 } else {
                     xous::return_scalar(msg.sender, UsbDeviceType::Debug as usize).unwrap();
@@ -476,6 +628,8 @@ pub(crate) fn main_hw() -> ! {
                 match view {
                     Views::FidoWithKbd => xous::return_scalar(msg.sender, usb_dev.state() as usize).unwrap(),
                     Views::FidoOnly => xous::return_scalar(msg.sender, fido_dev.state() as usize).unwrap(),
+                    #[cfg(feature="mass-storage")]
+                    Views::MassStorage => xous::return_scalar(msg.sender, ums_device.state() as usize).unwrap(),
                 }
             }),
             Some(Opcode::SendKeyCode) => msg_blocking_scalar_unpack!(msg, code0, code1, code2, autoup, {
@@ -507,7 +661,7 @@ pub(crate) fn main_hw() -> ! {
                             xous::return_scalar(msg.sender, 1).unwrap();
                         }
                     }
-                    Views::FidoOnly => {
+                    _ => {
                         xous::return_scalar(msg.sender, 1).unwrap();
                     }
                 }
@@ -515,8 +669,12 @@ pub(crate) fn main_hw() -> ! {
             Some(Opcode::SendString) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
+                #[cfg(not(feature="minimal"))]
                 let mut sent = 0;
+                #[cfg(feature="minimal")]
+                let sent = 0;
                 match view {
+                    #[cfg(not(feature="minimal"))]
                     Views::FidoWithKbd => {
                         for ch in usb_send.s.as_str().unwrap().chars() {
                             // ASSUME: user's keyboard type matches the preference on their Precursor device.

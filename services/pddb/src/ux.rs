@@ -22,7 +22,7 @@ What we really want from the UX helper is a compound, blocking call which encaps
 complex requests (prompt -> list response) and progress bars, with a simple blocking or
 non-blocking call.
 
-I thnk non-blocking calls are pretty straight forward, but the blocking call is harder, because
+I think non-blocking calls are pretty straight forward, but the blocking call is harder, because
 the structure of the UX handler is like this:
 
 The (bouncer) is a single-use server to filter UX server opcodes from the GAM server.

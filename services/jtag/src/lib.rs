@@ -134,8 +134,17 @@ impl Jtag {
     pub fn burn_control_write_protect(&self) -> Result<bool, xous::Error> {
         self.mod_ctl_efuse(0x20)
     }
-    pub fn seal_device_forever(&self) -> Result<bool, xous::Error> {
-        self.mod_ctl_efuse(0x3F)
+    /// Sets all the fuses, except `disable_jtag` and `control_write_protect`.
+    /// This forces the device to:
+    ///   - only boot from an encrypted image (so unbricking via JTAG requires you to provide an encryption key)
+    ///   - key update disallowed
+    ///   - key readback disallowed
+    ///   - user bits can be read out (but they can't be updated)
+    ///   - control bits can still be blown (so you can still set `disable_jtag` later on;
+    ///     however, it is physically impossible to unset bits, so it is not possible to
+    ///     enable key readback despite being able to write bits)
+    pub fn seal_device(&self) -> Result<bool, xous::Error> {
+        self.mod_ctl_efuse(0b00_1101)
     }
 }
 

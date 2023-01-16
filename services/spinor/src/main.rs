@@ -392,7 +392,7 @@ mod implementation {
     #[cfg(feature="extra_flush")]
     const CACHE_LINE_WIDTH: usize = 32; // in bytes
     #[cfg(feature="extra_flush")]
-    const FLUSH_SIZE_BYTES: usize = 16384 * 4; // cache capacity * 4 ways
+    const FLUSH_SIZE_BYTES: usize = 16384 * 5; // cache capacity * 4 ways + 1 to force overlap
 
     pub struct Spinor {
         id: u32,

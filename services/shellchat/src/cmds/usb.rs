@@ -19,7 +19,10 @@ impl<'a> ShellCmdApi<'a> for Usb {
 
     fn process(&mut self, args: xous_ipc::String::<1024>, _env: &mut CommonEnv) -> Result<Option<xous_ipc::String::<1024>>, xous::Error> {
         let mut ret = xous_ipc::String::<1024>::new();
+        #[cfg(not(feature="mass-storage"))]
         let helpstring = "usb [hid] [fido] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";
+        #[cfg(feature="mass-storage")]
+        let helpstring = "usb [hid] [fido] [ms] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -29,6 +32,10 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::FidoKbd).unwrap();
                     write!(ret, "USB connected to HID (FIDO + keyboard) core").unwrap();
                 }
+                #[cfg(feature="mass-storage")]
+                "ms" => {
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::MassStorage).unwrap();
+                    write!(ret, "USB connected to mass storage core").unwrap();                }
                 "fido" => {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Fido).unwrap();
                     write!(ret, "USB connected to FIDO-only core").unwrap();
@@ -84,6 +91,8 @@ impl<'a> ShellCmdApi<'a> for Usb {
                                 _ => write!(ret, "HID not connected to USB host").unwrap(),
                             }
                         }
+                        #[cfg(feature="mass-storage")]
+                        Ok(UsbDeviceType::MassStorage) => write!(ret, "USB mass storage connected").unwrap(),
                         _ => write!(ret, "Invalid response checking status").unwrap(),
                     }
                 }

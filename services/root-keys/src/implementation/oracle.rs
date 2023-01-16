@@ -84,6 +84,10 @@ impl<'a> BitstreamOracle<'a> {
         bitflip(&bitstream[iv_pos..iv_pos + AES_BLOCKSIZE], &mut iv_bytes);
         log::debug!("recovered iv (pre-flip): {:x?}", &bitstream[iv_pos..iv_pos + AES_BLOCKSIZE]);
         log::debug!("recovered iv           : {:x?}", &iv_bytes);
+        #[cfg(feature="hazardous-debug")]
+        log::debug!("dec key for oracle {:x?}", dec_key);
+        #[cfg(feature="hazardous-debug")]
+        log::debug!("enc key for oracle {:x?}", enc_key);
 
         let dec_cipher = Aes256::new(dec_key.try_into().unwrap());
         let enc_cipher = Aes256::new(enc_key.try_into().unwrap());
@@ -188,6 +192,7 @@ impl<'a> BitstreamOracle<'a> {
     pub fn get_original_key_type(&self) -> FpgaKeySource {self.dec_from_key}
     pub fn get_target_key_type(&self) -> FpgaKeySource {self.enc_to_key}
     pub fn set_target_key_type(&mut self, keytype: FpgaKeySource) {
+        log::debug!("Oracle target key type set to {:?}", keytype);
         self.enc_to_key = keytype;
     }
     pub fn ciphertext_offset_to_frame(&self, offset: usize) -> (usize, usize) {

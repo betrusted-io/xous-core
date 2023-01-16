@@ -129,3 +129,16 @@ The resulting images are in your target directory (typically `target/riscv32imac
 with the names `xous.img` (for the kernel) and `loader.bin` (for its bootloader). The corresponding
 gateware is in `precursors/soc_csr-<gitref>.bin`. These can be written to your
 device by following the [update guide](https://github.com/betrusted-io/betrusted-wiki/wiki/Updating-Your-Device).
+
+## Acknowledgement
+This project is funded through the NGI0 PET Fund, a fund established by NLnet
+with financial support from the European Commission's Next Generation Internet
+programme, under the aegis of DG Communications Networks, Content and Technology
+under grant agreement No 825310.
+
+<table>
+    <tr>
+        <td align="center" width="50%"><img src="https://nlnet.nl/logo/banner.svg" alt="NLnet foundation logo" style="width:90%"></td>
+        <td align="center"><img src="https://nlnet.nl/image/logos/NGI0_tag.svg" alt="NGI0 logo" style="width:90%"></td>
+    </tr>
+</table>

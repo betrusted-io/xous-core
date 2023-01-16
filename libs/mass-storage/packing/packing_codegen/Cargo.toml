@@ -1,0 +1,24 @@
+[package]
+name = "packing_codegen"
+version = "0.1.0"
+authors = ["cs2dsb <cs2dsb@gmail.com>"]
+edition = "2018"
+description = "Code generation for the packing crate"
+categories = ["encoding"]
+keywords = ["macro"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cs2dsb/stm32-usb.rs"
+readme = "README.md"
+documentation = "https://docs.rs/packing"
+homepage = "https://github.com/cs2dsb/stm32-usb.rs/tree/master/firmware/packing/packing_codegen"
+
+[dependencies]
+syn = { version = "1.0.14", features = [ "extra-traits" ] }
+quote = "1.0.2"
+proc-macro2 = "1.0.8"
+
+[lib]
+proc-macro = true
+
+[features]
+diagnostic-notes = []

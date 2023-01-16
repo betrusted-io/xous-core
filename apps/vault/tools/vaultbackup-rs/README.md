@@ -69,6 +69,10 @@ vaultbackup-rs <ACTION> <TARGET> <PATH>
 
 The output format is JSON.
 
+`totp` target supports both TOTP and HOTP codes.
+
+When the `totp_entry` object's `hotp` field is `true`, the `step_seconds` field is re-purposed as the HOTP count.
+
 ## Importing other password manager's exports
 
 `vaultbackup-rs` supports importing other password manager's export data in Vault, but to do so, you have to format it to Vault's format first.
@@ -79,11 +83,13 @@ Supported password managers:
  - Bitwarden: TOTP, logins
  - Google Authenticator: TOTP
 
-Example:
+### Bitwarden
 
 ```bash
 $ vaultbackup-rs format bitwarden your-bitwarden-export.json
 ```
+
+### Google Authenticator
 
 For Google Authenticator, the input file is expected to contain
 `otpauth://` or `otpauth-migration://` URIs, one per line; for example,
@@ -96,3 +102,49 @@ $ vaultbackup-rs restore totp authenticator_to_vault_totps.json
 ```
 
 If `zbarcam` can't decode a dense QR code with multiple TOTP exports, try selecting just one TOTP code at a time, and then exporting them in series. The commands will automatically collate all the individually read QR codes.
+
+### Plaintext Passwords from CSV
+
+Passwords may be imported from a CSV file with a two-step process. The first step is to run the following command:
+
+```bash
+$ vaultbackup-rs format csv-pass your_passwords.csv
+```
+
+This will read in a CSV and output a JSON file named `csv_to_vault_passwords.json`, suitable for restoring to `vault`. The second step is to do the actual restore operation, using the `restore` command, referencing the generated JSON fle. The intermediate JSON file may be inspected to ensure that the full CSV contents were translated correctly.
+
+:warning: it takes a few minutes to upload a couple hundred passwords!
+
+`vaultbackup-rs` will appear to "hang" while it is running if you have a lot of passwords to upload. It takes a long time because each password is atomically committed and synced to the cryptographic store individually.
+
+#### CSV File Format
+
+The CSV file should have the following header:
+
+```
+site,username,password,notes
+```
+
+`site` and `username` are mandatory fields; `password` and `notes` may be left blank, but the comma delimiters are still required to indicate the blank fields.
+
+The CSV file may contain any valid UTF-8 characters, and anything between double quotes `"` is interpreted as a single field. For example:
+
+```
+site,username,password,notes
+test.com,bunnie,f00b4r,a test password
+commas.net,troll,"c0mm4,c,c","a site that loves commas,
+and a new line in a CSV,,,"
+simple_site,username only,,
+```
+
+The above CSV file contains three entries. `test.com` is the base case. `commas.net` shows how both the extra commas and the newline in the `notes` field are captured within a single field, because they are surrounded by `"`. `simple_site` shows a record with only a username, and no password or notes; note the two trailing commas holding the place for the blank `password` and `notes` fields.
+
+The current implementation bails ungracefully if any lines are encountered without the correct number of fields. Here is an example of the error message in this case:
+
+```
+Error: CSV deserialization error, "Error(UnequalLengths { pos: Some(Position { byte: 780, line: 18, record: 11 }), expected_len: 4, len: 5 })"
+```
+
+The parser expects 4 fields (`expected_len`), but the actual length in ths case was 5 (so the problem is an extra comma).
+
+If you are using unicode and/or special characters in your file, and you run on Windows, be sure to export the CSV with the correct encoder settings. Windows defaults to UTF-16, but Rust only operates on UTF-8.

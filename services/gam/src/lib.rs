@@ -41,8 +41,8 @@ pub const SHARED_MODAL_NAME: &'static str = "shared modal";
 pub const STATUS_BAR_NAME: &'static str = "status";
 pub const APP_NAME_SHELLCHAT: &'static str = "shellchat";
 pub const APP_MENU_NAME: &'static str = "app menu";
-pub const KBD_MENU_NAME: &'static str = "keyboard menu";
 pub const WIFI_MENU_NAME: &'static str = "WLAN menu";
+pub const PREFERENCES_MENU_NAME: &'static str = "Preferences menu";
 
 /// UX context registry. Names here are authorized by the GAM to have Canvases.
 pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
@@ -55,8 +55,8 @@ pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
     SHARED_MODAL_NAME,
     PDDB_MENU_NAME,
     APP_MENU_NAME,
-    KBD_MENU_NAME,
     WIFI_MENU_NAME,
+    PREFERENCES_MENU_NAME,
 ];
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]

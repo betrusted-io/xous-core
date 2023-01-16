@@ -31,6 +31,7 @@ use actions::{ActionOp, start_actions_thread};
 
 use crate::prereqs::ntp_updater;
 use crate::vendor_commands::VendorSession;
+use std::collections::BTreeMap;
 
 // CTAP2 testing notes:
 // run our branch and use this to forward the prompts on to the device:
@@ -159,6 +160,17 @@ struct SelectedEntry {
     mode: VaultMode,
 }
 
+struct ItemLists {
+    pub fido: BTreeMap::<String, ListItem>,
+    pub totp: BTreeMap::<String, ListItem>,
+    pub pw: BTreeMap::<String, ListItem>,
+}
+impl ItemLists {
+    pub fn new() -> Self {
+        ItemLists { fido: BTreeMap::new(), totp: BTreeMap::new(), pw: BTreeMap::new() }
+    }
+}
+
 static SELF_CONN: AtomicU32 = AtomicU32::new(0);
 const ERR_TIMEOUT_MS: usize = 5000;
 
@@ -177,7 +189,7 @@ fn main() -> ! {
 
     // global shared state between threads.
     let mode = Arc::new(Mutex::new(VaultMode::Fido));
-    let item_list = Arc::new(Mutex::new(Vec::<ListItem>::new()));
+    let item_lists = Arc::new(Mutex::new(ItemLists::new()));
     let action_active = Arc::new(AtomicBool::new(false));
     let allow_host = Arc::new(AtomicBool::new(false));
 
@@ -186,7 +198,13 @@ fn main() -> ! {
     // redraws of the background list to block/fail.
     let actions_sid = xous::create_server().unwrap();
     SELF_CONN.store(conn, Ordering::SeqCst);
-    start_actions_thread(conn, actions_sid, mode.clone(), item_list.clone(), action_active.clone());
+    start_actions_thread(
+        conn,
+        actions_sid,
+        mode.clone(),
+        item_lists.clone(),
+        action_active.clone()
+    );
     let actions_conn = xous::connect(actions_sid).unwrap();
 
 
@@ -307,7 +325,16 @@ fn main() -> ! {
 
     // this will block all initialization until the prereqs are met
     let (token, mut allow_redraw) = prereqs::prereqs(sid, time_conn);
-    let mut vaultux = VaultUx::new(token, &xns, sid, menu_mgr, actions_conn, mode.clone(), item_list, action_active.clone());
+    let mut vaultux = VaultUx::new(
+        token,
+        &xns,
+        sid,
+        menu_mgr,
+        actions_conn,
+        mode.clone(),
+        item_lists,
+        action_active.clone()
+    );
     // Trigger the mode update in the actions
     send_message(actions_conn,
         Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
@@ -423,6 +450,7 @@ fn main() -> ! {
                 }
             }
             Some(VaultOp::BasisChange) => {
+                vaultux.basis_change();
                 // this set of calls will effectively force a reload of any UX data
                 *mode.lock().unwrap() = VaultMode::Fido;
                 send_message(actions_conn,

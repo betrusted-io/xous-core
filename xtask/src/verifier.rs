@@ -10,20 +10,20 @@ use crate::DynError;
 pub fn check_project_consistency() -> Result<(), DynError> {
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous@0.9.24",
-        "xous-kernel@0.9.20",
-        "xous-ipc@0.9.24",
-        "xous-api-log@0.1.18",
-        "xous-api-names@0.9.20",
-        "xous-api-susres@0.9.18",
-        "xous-api-ticktimer@0.9.18",
-        "xous-log@0.1.15",
-        "xous-names@0.9.24",
-        "xous-susres@0.1.20",
-        "xous-ticktimer@0.1.19",
+        "xous@0.9.30",
+        "xous-kernel@0.9.26",
+        "xous-ipc@0.9.30",
+        "xous-api-log@0.1.25",
+        "xous-api-names@0.9.27",
+        "xous-api-susres@0.9.25",
+        "xous-api-ticktimer@0.9.25",
+        "xous-log@0.1.22",
+        "xous-names@0.9.31",
+        "xous-susres@0.1.27",
+        "xous-ticktimer@0.1.26",
         // this set is only updated if the utralib changes
-        "utralib@0.1.9",
-        "svd2utra@0.1.7",
+        "utralib@0.1.13",
+        "svd2utra@0.1.11",
     ];
     for pkg in check_pkgs {
         verify(pkg.into())?;

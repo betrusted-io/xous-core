@@ -148,7 +148,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
                         // put the "expensive" f32 comparison outside the cosine wave table computation loop
                         let omega = self.freq * 2.0 * std::f32::consts::PI / SAMPLE_RATE_HZ;
                         for sample in frame.iter_mut() {
-                            let raw_sine: i16 = (AMPLITUDE * f32::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
+                            let raw_sine: i16 = (AMPLITUDE * cos_table::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
                             let left = raw_sine as u16;
                             let right = raw_sine as u16;
                             *sample = right as u32 | (left as u32) << 16;

@@ -91,7 +91,7 @@ def main():
                 name = name_bytes.decode('utf8', errors='ignore')
                 key_data = raw_key[4 + i*128 + 64 : 4 + i*128 + 96]
                 key_pt = raw_key[4 + i*128 + 96 : 4 + i*128 + 128]
-                keys[name] = [key_pt.hex(), key_data.hex()]
+                keys[name] = [key_pt, key_data]
 
     logging.info("Found basis keys (pt, data):")
     logging.info(str(keys))

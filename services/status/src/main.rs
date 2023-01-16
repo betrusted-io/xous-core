@@ -6,12 +6,11 @@ use keyboard::KeyMap;
 use mainmenu::*;
 mod appmenu;
 use appmenu::*;
-mod kbdmenu;
-use kbdmenu::*;
 mod app_autogen;
 mod time;
 mod ecup;
 mod wifi;
+mod preferences;
 
 use com::api::*;
 use root_keys::api::{BackupOp, BackupKeyboardLayout};
@@ -35,6 +34,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 )]
 use std::thread;
 
+use crate::preferences::{percentage_to_db, PrefsMenuUpdateOp};
+
 const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 const SERVER_NAME_STATUS: &str = "_Status_";
 /// How long a backup header should persist before it is automatically deleted.
@@ -57,20 +58,20 @@ pub(crate) enum StatusOpcode {
     SubmenuPddb,
     /// Raise the App menu
     SubmenuApp,
-    /// Raise the Keyboard layout menu
-    SubmenuKbd,
 
     /// Raise the Shellchat app
     SwitchToShellchat,
     /// Switch to an app
     SwitchToApp,
 
-    /// Set the keyboard map
-    SetKeyboard,
-
     /// Prepare for a backup
     PrepareBackup,
+    PrepareBackupConfirmed,
     PrepareBackupPhase2,
+
+    /// Burn a backup key
+    #[cfg(feature="efuse")]
+    BurnBackupKey,
 
     /// Tells keyboard watching thread that a new keypress happened.
     Keypress,
@@ -90,8 +91,8 @@ pub(crate) enum StatusOpcode {
     /// for returning wifi stats
     WifiStats,
 
-    /// Raise the wifi menu
-    WifiMenu,
+    /// Raise the preferences menu
+    Preferences,
     Quit,
 }
 
@@ -159,7 +160,7 @@ fn wrapped_main() -> ! {
         .register_name(SERVER_NAME_STATUS_GID, Some(1))
         .expect("can't register server");
     let mut canvas_gid: [u32; 4] = [0; 4];
-    // wait unil we're assigned a GID -- this is a one-time message from the GAM
+    // wait until we're assigned a GID -- this is a one-time message from the GAM
     let msg = xous::receive_message(status_gam_getter).unwrap();
     log::trace!("GID assignment message: {:?}", msg);
     xous::msg_scalar_unpack!(msg, g0, g1, g2, g3, {
@@ -219,6 +220,8 @@ fn wrapped_main() -> ! {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let mut netmgr = net::NetManager::new();
+    #[cfg(not(feature="no-codec"))]
+    let mut codec = codec::Codec::new(&xns).unwrap();
 
     // screensize is controlled by the GAM, it's set in main.rs near the top
     let screensize = gam
@@ -260,17 +263,6 @@ fn wrapped_main() -> ! {
         .expect("|status: can't draw battery stats");
     log::debug!("|status: screensize as reported: {:?}", screensize);
     log::debug!("|status: uptime initialized to '{:?}'", uptime_tv);
-
-    // build battstats text view: right half of status bar
-    let mut battstats_tv = TextView::new(
-        status_gid,
-        TextBounds::GrowableFromTr(stats_rect.tr(), stats_rect.width() as _),
-    );
-    battstats_tv.style = GlyphStyle::Regular;
-    battstats_tv.draw_border = false;
-    battstats_tv.margin = Point::new(0, 0);
-    gam.post_textview(&mut battstats_tv)
-        .expect("|status: can't draw battery stats");
 
     // initialize to some "sane" mid-point defaults, so we don't trigger errors later on before the first real battstat reading comes
     let mut stats = BattStats {
@@ -319,10 +311,6 @@ fn wrapped_main() -> ! {
         );
     }
 
-    // --------------------------- spawn a time UX manager thread
-    let time_sid = xous::create_server().unwrap();
-    let time_cid = xous::connect(time_sid).unwrap();
-    time::start_time_ux(time_sid);
     // this is used by the main loop to get the localtime to show on the status bar
     let mut localtime = llio::LocalTime::new();
 
@@ -340,29 +328,33 @@ fn wrapped_main() -> ! {
     log::debug!("starting main menu thread");
     let main_menu_sid = xous::create_server().unwrap();
     let status_cid = xous::connect(status_sid).unwrap();
-    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com, time_cid);
+    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com);
     create_app_menu(xous::connect(status_sid).unwrap());
-    let kbd_mgr = xous::create_server().unwrap();
-    let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
-    let kbd = keyboard::Keyboard::new(&xns).unwrap();
+    let kbd = Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap()));
 
     // ---------------------------- Background processes that claim contexts
     // must be upstream of the update check, because we need to occupy the keyboard
     // server slot to prevent e.g. a keyboard logger from taking our passwords!
-    kbd.register_observer(
+    kbd.lock().unwrap().register_observer(
         SERVER_NAME_STATUS,
         StatusOpcode::Keypress.to_u32().unwrap() as usize,
     );
 
-    let enabled = Arc::new(Mutex::new(false));
+    let autobacklight_enabled = Arc::new(Mutex::new(true));
     let (tx, rx): (Sender<BacklightThreadOps>, Receiver<BacklightThreadOps>) = unbounded();
 
     let rx = Box::new(rx);
 
-    let thread_already_running = Arc::new(Mutex::new(false));
+    let autobacklight_thread_already_running = Arc::new(Mutex::new(false));
     let thread_conn = xous::connect(status_sid).unwrap();
 
-    wifi::start_background_thread();
+    let prefs_sid = xous::create_server().unwrap();
+    let prefs_cid = xous::connect(prefs_sid).unwrap();
+    preferences::start_background_thread(prefs_sid, status_cid);
+
+    // load system preferences
+    let prefs = Arc::new(Mutex::new(userprefs::Manager::new()));
+    let prefs_thread_clone = prefs.clone();
 
     // ------------------------ check firmware status and apply updates
     // all security sensitive servers must be occupied at this point in time.
@@ -392,7 +384,9 @@ fn wrapped_main() -> ! {
                     // restore interrupts and connection manager
                     llio.com_event_enable(true).ok();
                     netmgr.reset();
-                    netmgr.connection_manager_run().ok();
+
+                    // TODO(gsora): I'm commenting this out because user preferences might say otherwise.
+                    //netmgr.connection_manager_run().ok();
                 }
                 Some(ecup::UpdateResult::NothingToDo) => log::info!("EC update check: nothing to do, firmware is up to date."),
                 Some(ecup::UpdateResult::Abort) => {
@@ -427,7 +421,7 @@ fn wrapped_main() -> ! {
                     let map_deserialize: BackupKeyboardLayout = header.kbd_layout.into();
                     let map: KeyMap = map_deserialize.into();
                     log::info!("Keyboard layout set to {:?} by restore process.", map);
-                    kbd.set_keymap(map).ok();
+                    kbd.lock().unwrap().set_keymap(map).ok();
 
                     let backup_dna = u64::from_le_bytes(header.dna);
                     if backup_dna != llio.soc_dna().unwrap() {
@@ -613,7 +607,7 @@ fn wrapped_main() -> ! {
             llio.vibe(llio::VibePattern::Double).unwrap();
         }
     });
-    log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
+    log::info!("|status: starting main loop"); // do not remove, this is used by the CI test infrastructure
 
     // add a security note if we're booting with a "zero key"
     match keys.lock().unwrap().is_zero_key().expect("couldn't query zero key status") {
@@ -671,6 +665,140 @@ fn wrapped_main() -> ! {
         }
     });
 
+    /*
+    This thread handles preference loading.
+    It'll wait until PDDB is ready to load stuff off the preference
+    dictionary.
+    */
+    std::thread::spawn(move || {
+        let pddb = pddb::Pddb::new();
+        let prefs = prefs_thread_clone.lock().unwrap();
+        let netmgr = net::NetManager::new();
+
+        pddb.is_mounted_blocking();
+
+        let all_prefs = match prefs.all() {
+            Ok(p) => p,
+            Err(error) => {
+                log::error!("cannot read preference store: {:?}", error);
+                return;
+            }
+        };
+
+        log::debug!("pddb ready, loading preferences now!");
+
+        match all_prefs.wifi_kill {
+            true => netmgr.connection_manager_wifi_off_and_stop(),
+            false => netmgr.connection_manager_wifi_on(),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot set radio status: {:?}", error)
+        });
+
+        match prefs.connect_known_networks_on_boot_or_value(true).unwrap() {
+            true => netmgr.connection_manager_run(),
+            false => netmgr.connection_manager_stop(),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot start connection manager: {:?}", error)
+        });
+        match prefs.autobacklight_on_boot_or_value(true).unwrap() {
+            true => send_message(status_cid, Message::new_scalar(
+                StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
+            false => send_message(status_cid, Message::new_scalar(
+                StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
+        }.unwrap_or_else(|error| {
+            log::error!("cannot set autobacklight status: {:?}", error);
+            xous::Result::Ok
+        });
+
+        // keyboard mapping is restored directly by the keyboard hardware
+        #[cfg(not(feature="no-codec"))]
+        {
+            log::info!("audio enable state: {}", all_prefs.audio_enabled);
+            #[cfg(feature = "tts")] // if TTS is on, never disable audio system, and don't allow 0-volume for audio
+            {
+                codec.setup_8k_stream().ok();
+                send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                let hp_percentage = if all_prefs.headset_volume == 0 {
+                    log::warn!("Attempted to set headphone volume to 0, disallowing in TTS mode");
+                    100
+                } else {
+                    all_prefs.headset_volume
+                };
+                let spk_percentage = if all_prefs.earpiece_volume == 0 {
+                    log::warn!("Attempted to set speaker volume to 0, disallowing in TTS mode");
+                    100
+                } else {
+                    all_prefs.earpiece_volume
+                };
+                codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(hp_percentage) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set headphone volume: {:?}", error);
+                });
+
+                codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(spk_percentage) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set speaker volume: {:?}", error);
+                });
+            }
+            #[cfg(not(feature = "tts"))]
+            {
+                match all_prefs.audio_enabled {
+                    true => {
+                        match codec.setup_8k_stream() {
+                            Ok(()) => {
+                                send_message(prefs_cid, Message::new_scalar(PrefsMenuUpdateOp::UpdateMenuAudioDisabled.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                                Ok(())
+                            },
+                            Err(e) => Err(e),
+                        }
+                    }
+                    false => Ok(())
+                }.unwrap_or_else(|error| {
+                    log::error!("cannot set audio enabled: {:?}", error);
+                });
+
+                codec.set_headphone_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.headset_volume) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set headphone volume: {:?}", error);
+                });
+
+                codec.set_speaker_volume(codec::VolumeOps::Set, Some(percentage_to_db(all_prefs.earpiece_volume) as f32)).unwrap_or_else(|error| {
+                    log::error!("cannot set speaker volume: {:?}", error);
+                });
+            }
+        }
+    });
+
+    // this thread handles updating the PDDB basis list
+    thread::spawn({
+        let sec_notes = sec_notes.clone();
+        move || {
+            let pddb = pddb::Pddb::new();
+            loop {
+                // this blocks until there is a change in the basis list
+                let mut basis_list_vec = pddb.monitor_basis();
+
+                // the key may or may not be there, but remove it in case it is
+                sec_notes.lock().unwrap().remove(&"secnote.basis".to_string());
+
+                // only if there are more bases open than just the .System basis, insert a new key
+                if basis_list_vec.len() > 1 {
+                    let mut new_list_str = t!("secnote.basis", xous::LANG).to_string();
+                    // initially, just concatenate all the basis names...
+                    basis_list_vec.reverse(); // reverse the order so the highest priority basis is on the left.
+                    for basis in basis_list_vec {
+                        new_list_str.push_str(&basis);
+                        if basis != pddb::PDDB_DEFAULT_SYSTEM_BASIS {
+                            new_list_str.push_str(" > ");
+                        }
+                    }
+
+                    sec_notes.lock().unwrap().insert("secnote.basis".to_string(), new_list_str);
+                }
+            }
+        }
+    });
+
+    // storage for wifi bars
+    let mut wifi_bars: [PixelColor; 5] = [PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light];
+
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
@@ -678,28 +806,23 @@ fn wrapped_main() -> ! {
         log::debug!("{:?}", opcode);
         match opcode {
             Some(StatusOpcode::EnableAutomaticBacklight) => {
-                *enabled.lock().unwrap() = true;
+                if *autobacklight_enabled.lock().unwrap() {
+                    // already enabled, don't re-enable
+                    continue;
+                }
+                *autobacklight_enabled.lock().unwrap() = true;
 
                 // second: delete the first three elements off the menu
                 menu_manager.delete_item(t!("mainmenu.backlighton", xous::LANG));
                 menu_manager.delete_item(t!("mainmenu.backlightoff", xous::LANG));
-                menu_manager.delete_item(t!("mainmenu.autobacklighton", xous::LANG));
-
-                // third: add a "disable automatic backlight element"
-                menu_manager.insert_item(gam::MenuItem {
-                    name: xous_ipc::String::from_str(t!("mainmenu.autobacklightoff", xous::LANG)),
-                    action_conn: Some(status_cid),
-                    action_opcode: StatusOpcode::DisableAutomaticBacklight.to_u32().unwrap(),
-                    action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
-                    close_on_select: true,
-                }, 0);
             }
             Some(StatusOpcode::DisableAutomaticBacklight) => {
-                *enabled.lock().unwrap() = false;
+                if !(*autobacklight_enabled.lock().unwrap()) {
+                    // already disabled, don't re-disable
+                    continue;
+                }
+                *autobacklight_enabled.lock().unwrap() = false;
                 tx.send(BacklightThreadOps::Stop).unwrap();
-
-                // second: delete the first element off the menu.
-                menu_manager.delete_item(t!("mainmenu.autobacklightoff", xous::LANG));
 
                 // third: construct an array of the new elements to add to the menu.
                 let new_elems = [
@@ -717,22 +840,31 @@ fn wrapped_main() -> ! {
                         action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
                         close_on_select: true,
                     },
-                    gam::MenuItem {
-                        name: xous_ipc::String::from_str(t!("mainmenu.autobacklighton", xous::LANG)),
-                        action_conn: Some(status_cid),
-                        action_opcode: StatusOpcode::EnableAutomaticBacklight.to_u32().unwrap(),
-                        action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
-                        close_on_select: true,
-                    }
                 ];
 
                 new_elems.iter().enumerate().for_each(|(index, element)| {let _ = menu_manager.insert_item(*element, index);});
             }
             Some(StatusOpcode::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
                 stats = [lo, hi].into();
-                battstats_tv.clear_str();
                 // have to clear the entire rectangle area, because the SSID has a variable width and can be much wider or shorter than battstats
                 gam.draw_rectangle(status_gid, stats_rect).ok();
+
+                let battstats = if !battstats_phase && wifi_status.ssid.is_some() {
+                    // move the SSID name 30 pixels to the left only if there's a link
+                    Point{x: stats_rect.tr().x-30, y: stats_rect.tr().y}
+                } else {
+                    Point{x: stats_rect.tr().x, y: stats_rect.tr().y}
+                };
+                // build battstats text view: right half of status bar
+                let mut battstats_tv = TextView::new(
+                    status_gid,
+                    TextBounds::GrowableFromTr(battstats, stats_rect.width() as _),
+                );
+                battstats_tv.style = GlyphStyle::Regular;
+                battstats_tv.draw_border = false;
+                battstats_tv.margin = Point::new(0, 0);
+                gam.post_textview(&mut battstats_tv)
+                    .expect("|status: can't draw battery stats");
 
                 // 0xdddd and 0xffff are what are returned when the EC is too busy to respond/hung, or in reset, respectively
                 if stats.current == -8739 /* 0xdddd */
@@ -758,11 +890,13 @@ fn wrapped_main() -> ! {
                         stats.soc).unwrap();
                     } else {
                         if let Some(ssid) = wifi_status.ssid {
+                            log::debug!("RSSI: -{}dBm", ssid.rssi);
+                            compute_bars(&mut wifi_bars, ssid.rssi);
+                            bars(&gam, status_gid, &wifi_bars, Point {x: 310, y: 13}, (3 ,2), 3, 2);
                             write!(
                                 &mut battstats_tv,
-                                "{} -{}dBm",
-                                ssid.name.as_str().unwrap_or("UTF-8 Erorr"),
-                                ssid.rssi,
+                                "{}",
+                                ssid.name.as_str().unwrap_or("UTF-8 Error"),
                             ).unwrap();
                         } else {
                             if wifi_status.link_state == com_rs_ref::LinkState::ResetHold {
@@ -799,9 +933,9 @@ fn wrapped_main() -> ! {
                 };
                 wifi_status = WlanStatus::from_ipc(buffer.to_original::<com::WlanStatusIpc, _>().unwrap());
             },
-            Some(StatusOpcode::WifiMenu) => {
+            Some(StatusOpcode::Preferences) => {
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
-                gam.raise_menu(gam::WIFI_MENU_NAME).unwrap();
+                gam.raise_menu(gam::PREFERENCES_MENU_NAME).unwrap();
             },
             Some(StatusOpcode::Pump) => {
                 let elapsed_time = ticktimer.elapsed_ms();
@@ -982,19 +1116,6 @@ fn wrapped_main() -> ! {
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
                 gam.raise_menu(gam::APP_MENU_NAME).expect("couldn't raise App submenu");
             },
-            Some(StatusOpcode::SubmenuKbd) => {
-                log::debug!("getting keyboard map");
-                let map = kbd.get_keymap().expect("couldn't get key mapping");
-                log::info!("setting keymap index to {:?}", map);
-                kbd_menumatic.set_index(map.into());
-                log::debug!("raising keyboard menu");
-                ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
-                gam.raise_menu(gam::KBD_MENU_NAME).expect("couldn't raise keyboard layout submenu");
-            },
-            Some(StatusOpcode::SetKeyboard) => msg_scalar_unpack!(msg, code, _, _, _, {
-                let map = keyboard::KeyMap::from(code);
-                kbd.set_keymap(map).expect("couldn't set keyboard mapping");
-            }),
             Some(StatusOpcode::SwitchToShellchat) => {
                 ticktimer.sleep_ms(100).ok();
                 sec_notes.lock().unwrap().remove(&"current_app".to_string());
@@ -1035,6 +1156,12 @@ fn wrapped_main() -> ! {
                 }
             },
             Some(StatusOpcode::BatteryDisconnect) => { // this is described as "Shutdown" on the menu
+                // NOTE: this implementation takes a "shortcut" and blocks, which causes the
+                // status thread to block while the dialog boxes are up. This can eventually lead
+                // to deadlock in the system, but we assume that the user will acknowledge these
+                // dialog boxes fairly quickly. If this turns out not to be the case, we can
+                // turn the interactive dialog box into a thread that fires a message to move
+                // to the next stage (see `PrepareBackup` implementation for a template).
                 if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
@@ -1069,11 +1196,11 @@ fn wrapped_main() -> ! {
             },
 
             Some(StatusOpcode::Keypress) => {
-                if !*enabled.lock().unwrap() {
+                if !*autobacklight_enabled.lock().unwrap() {
                     log::trace!("ignoring keypress, automatic backlight is disabled");
                     continue
                 }
-                let mut run_lock = thread_already_running.lock().unwrap();
+                let mut run_lock = autobacklight_thread_already_running.lock().unwrap();
                 match *run_lock {
                     true => {
                         log::trace!("renewing backlight timer");
@@ -1082,10 +1209,29 @@ fn wrapped_main() -> ! {
                     },
                     false => {
                         *run_lock = true;
+
+                        // TODO(gsora): this code queries PDDB every time autobacklight timeout expired
+                        // and user presses a button.
+                        // Too intensive? Needs a dirty bit+cache?
+                        let abl_timeout = if pddb_poller.is_mounted_nonblocking() {
+                            let prefs = prefs.clone();
+                            let prefs = prefs.lock().unwrap();
+                            match prefs.autobacklight_timeout() {
+                                Ok(timeout) => timeout,
+                                Err(error) => {
+                                    log::warn!("Autobacklight timeout not set or corrupted, {:?}, defaulting to 10s", error);
+                                    10
+                                }
+                            }
+                        } else {
+                            // this routine can be polled before the pddb is mounted, e.g. while the pddb password is entered
+                            10
+                        };
+
                         com.set_backlight(255, 128).expect("cannot set backlight on");
                         std::thread::spawn({
                             let rx = rx.clone();
-                            move || turn_lights_on(rx, thread_conn)
+                            move || turn_lights_on(rx, thread_conn, abl_timeout)
                         });
                     },
                 }
@@ -1096,26 +1242,81 @@ fn wrapped_main() -> ! {
             },
             Some(StatusOpcode::TurnLightsOff) => {
                 log::trace!("turning lights off");
-                let mut run_lock = thread_already_running.lock().unwrap();
+                let mut run_lock = autobacklight_thread_already_running.lock().unwrap();
                 *run_lock = false;
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
-            Some(StatusOpcode::PrepareBackup) => {
-                log::info!("{}BACKUP.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
-                modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
-                match modals.get_radiobutton(t!("backup.confirm", xous::LANG)) {
-                    Ok(response) => {
-                        if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
-                            {}
-                        } else {
-                            // abort the flow now by returning to the main dispatch handler
-                            continue;
+            #[cfg(feature="efuse")]
+            Some(StatusOpcode::BurnBackupKey) => {
+                log::info!("{}BURNKEY.TYPE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                thread::spawn({
+                    let keys = keys.clone();
+                    move || {
+                        let xns = xous_names::XousNames::new().unwrap();
+                        let modals = modals::Modals::new(&xns).unwrap();
+                        modals.add_list_item(t!("burnkey.bbram", xous::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("burnkey.efuse", xous::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("wlan.cancel", xous::LANG)).expect("couldn't build radio item list");
+                        match modals.get_radiobutton(t!("burnkey.type", xous::LANG)) {
+                            Ok(response) => {
+                                if response.as_str() == t!("burnkey.bbram", xous::LANG) {
+                                    // do BBRAM flow
+                                    log::info!("{}BBRAM.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    // punts to a script-driven flow on the pi
+                                    modals.show_notification(
+                                        t!("burnkey.bbram_exec", xous::LANG),
+                                        Some("https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM)"),
+                                    ).ok();
+                                } else if response.as_str() == t!("burnkey.efuse", xous::LANG) {
+                                    log::info!("{}EFUSE.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    // do eFuse flow
+                                    modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                                    modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                                    match modals.get_radiobutton(t!("burnkey.efuse_confirm", xous::LANG)) {
+                                        Ok(response) => {
+                                            if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                                // do the efuse burn
+                                                keys.lock().unwrap().do_efuse_burn();
+                                            } else {
+                                                // abort the flow by doing nothing
+                                            }
+                                        }
+                                        _ => (),
+                                    }
+                                } else {
+                                    // abort flow by doing nothing
+                                }
+                            }
+                            _ => (),
                         }
                     }
-                    _ => (),
-                }
-
+                });
+            }
+            Some(StatusOpcode::PrepareBackup) => {
+                // don't block while prompting for backup confirmation
+                thread::spawn({
+                    move || {
+                        let xns = xous_names::XousNames::new().unwrap();
+                        let modals = modals::Modals::new(&xns).unwrap();
+                        modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                        log::info!("{}BACKUP.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        match modals.get_radiobutton(t!("backup.confirm", xous::LANG)) {
+                            Ok(response) => {
+                                if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                    send_message(cb_cid,
+                                        Message::new_scalar(StatusOpcode::PrepareBackupConfirmed.to_usize().unwrap(), 0, 0, 0, 0)
+                                    ).expect("couldn't initiate backup");
+                                } else {
+                                    // abort by just falling through
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+                });
+            },
+            Some(StatusOpcode::PrepareBackupConfirmed) => {
                 // disconnect from the network, so that incoming network packets don't trigger any processes that
                 // could write to the PDDB.
                 netmgr.connection_manager_wifi_off_and_stop().ok();
@@ -1136,7 +1337,6 @@ fn wrapped_main() -> ! {
                         // sync the PDDB to disk prior to making backups
                         let pddb = pddb::Pddb::new();
                         if !pddb.try_unmount() {
-                            // this is a rare case path...not worth turning the modals object into a mutex-wrapped thing just for this
                             let xns = xous_names::XousNames::new().unwrap();
                             let modals = modals::Modals::new(&xns).unwrap();
                             modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
@@ -1164,7 +1364,7 @@ fn wrapped_main() -> ! {
                 metadata.ec_ver = com.get_ec_sw_tag().unwrap().into();
                 metadata.op = BackupOp::Backup;
                 metadata.dna = llio.soc_dna().unwrap().to_le_bytes();
-                let map = kbd.get_keymap().expect("couldn't get key mapping");
+                let map = kbd.lock().unwrap().get_keymap().expect("couldn't get key mapping");
                 let map_serialize: BackupKeyboardLayout = map.into();
                 metadata.kbd_layout = map_serialize.into();
                 // the backup process is coded to accept the option of no checksums, but the UX currently
@@ -1207,8 +1407,8 @@ enum BacklightThreadOps {
     Stop,
 }
 
-fn turn_lights_on(rx: Box<Receiver<BacklightThreadOps>>, cid: xous::CID) {
-    let standard_duration = std::time::Duration::from_secs(10);
+fn turn_lights_on(rx: Box<Receiver<BacklightThreadOps>>, cid: xous::CID, timeout: u64) {
+    let standard_duration = std::time::Duration::from_secs(timeout);
 
     let mut timeout = std::time::Instant::now() + standard_duration;
 
@@ -1236,4 +1436,107 @@ fn turn_lights_on(rx: Box<Receiver<BacklightThreadOps>>, cid: xous::CID) {
             }
         };
     }
+}
+
+/// Returns true if the color changed
+fn color_at_thresh(bar: &mut PixelColor, rssi: i32, threshold: i32) -> bool {
+    if rssi < threshold {
+        if *bar != PixelColor::Light {
+            *bar = PixelColor::Light;
+            true
+        } else {
+            false
+        }
+    } else {
+        if *bar != PixelColor::Dark {
+            *bar = PixelColor::Dark;
+            true
+        } else {
+            false
+        }
+    }
+}
+/// Acconding to the WF200 datasheet, -91.6dBm is the cutoff for 6Mbps 802.11g reception @ 10% PER, and
+/// -74.8dBm is the cutoff for 54Mbps @ 10% PER. The saturation point is -9 dBm, at which point the LNAs
+/// fail due to too much signal.
+///
+/// Thus the scale should go from -91.6dBm to -9dBm, with -74.8dBm being "four bars". Above -74.8dBm
+/// any extra signal does not improve your data rate, but we use the "fifth bar" to indicate
+/// that you have extra margin on your singal.
+///
+/// -92dBm  - 0 bars - 6Mbps @ 10% packet error rate
+/// -87dBm  - 1 bar - 6Mbps sustainable
+/// -82dBm  - 2 bars
+/// -77dBm  - 3 bars
+/// -72dBm  - 4 bars - 54Mbps with 10% packet error rate
+/// -60dBm+ - 5 bars - 54Mbps sustainable
+///
+/// Returns `true` if the bar list has changed; `false` if there is no change.
+fn compute_bars(wifi_bars: &mut [PixelColor; 5], rssi: u8) -> bool {
+    log::debug!("Rssi: -{}dBm, Bars before: {:?}", rssi, wifi_bars);
+    let rssi_int: i32 = -(rssi as i32);
+    let mut changed = false;
+    for (index, bar) in wifi_bars.iter_mut().enumerate() {
+        match index {
+            // anything less than -87dBm shows up as 0 bars
+            0 => changed |= color_at_thresh(bar, rssi_int, -87),
+            1 => changed |= color_at_thresh(bar, rssi_int, -82),
+            2 => changed |= color_at_thresh(bar, rssi_int, -77),
+            3 => changed |= color_at_thresh(bar, rssi_int, -72),
+            4 => changed |= color_at_thresh(bar, rssi_int, -60),
+            _ => panic!("Should be unreachable; wifi_bars list is too long!"),
+        }
+    }
+    log::debug!("New bars: {:?} ({:?})", wifi_bars, changed);
+    changed
+}
+/// bars draws signal bars spaced by `bars_spacing` amount, drawing a
+/// the smallest signal square starting from `top_left` growing by `growth` amount of pixels.
+/// The smallest bar will be exactly `(x, y)` in size.
+fn bars(g: &gam::Gam,
+    canvas: graphics_server::Gid,
+    levels: &[PixelColor; 5],
+    top_left: Point,
+    (x, y): (i16,i16),
+    growth: i16,
+    bars_spacing: i16
+) {
+    let mut dl = gam::GamObjectList::new(canvas);
+
+    let bottom_right = Point{x: top_left.x + x, y: top_left.y + y};
+
+    for (index, bar) in levels.iter().enumerate() {
+        let color = DrawStyle::new(*bar, PixelColor::Dark, 1);
+
+        let r = match index {
+            0 => {
+                gam::Rectangle::new_coords_with_style(
+                    top_left.x,
+                    top_left.y,
+                    bottom_right.x as i16,
+                    bottom_right.y,
+                    color,
+                )
+            },
+            _ => {
+                let last = match dl.last().unwrap() {
+                    gam::GamObjectType::Rect(r) => r,
+                    _ => panic!("expected only rects, found other stuff"),
+                };
+
+                gam::Rectangle::new_coords_with_style(
+                    last.x1() as i16+bars_spacing,
+                    last.y0() as i16-growth,
+                    last.x1() as i16+growth+bars_spacing,
+                    bottom_right.y,
+                    color,
+                )
+            }
+        };
+
+        dl.push(gam::GamObjectType::Rect(r)).unwrap();
+    }
+
+    g.draw_list(dl).unwrap();
+
 }

@@ -287,11 +287,11 @@
         "zh": "重新加密数据库..."
     },
     "pddb.requestformat": {
-        "en": "The PDDB needs to be cryptographically formatted. This takes about 15 minutes and can't be interrupted.\n\nProceed?",
-        "en-tts": "The PDDB storage needs formatting. It will take about 15 minutes and can't be interrupted. Proceed?",
-        "fr": "Le PDDB doit être reformater cryptographiquement. Cela prend environ 15 minutes et ne peut pas être interrompu.\n\nContinuer?",
-        "ja": "PDDBストレージのフォーマットが必要です。これは約15分かかり、中断することはできません。\n\n続行しますか？",
-        "zh": "存储需要格式化。这需要15分钟。继续？"
+        "en": "The PDDB needs to be cryptographically formatted. This takes about 15 minutes and can't be interrupted.\n\nYou will also be asked to create a PIN code for logins.\n\nProceed?",
+        "en-tts": "The PDDB storage needs formatting. It will take about 15 minutes and can't be interrupted. You will also be asked to create a PIN code for logins. Proceed?",
+        "fr": "Le PDDB doit être reformater cryptographiquement. Cela prend environ 15 minutes et ne peut pas être interrompu.\n\nIl vous sera également demandé de créer un code PIN pour vous connecter.\n\nContinuer?",
+        "ja": "PDDBストレージのフォーマットが必要です。これは約15分かかり、中断することはできません。\n\nまた、ログイン用の PIN コードを作成するよう求められます。\n\n続行しますか？",
+        "zh": "存储需要格式化。这需要15分钟。您还将被要求创建用于登录的 PIN 码。\n继续？"
     },
     "pddb.structure": {
         "en": "Commit root\n(6/6)",

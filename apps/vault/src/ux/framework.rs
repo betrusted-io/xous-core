@@ -20,15 +20,34 @@ pub(crate) struct ListItem {
     pub(crate) dirty: bool,
     /// this is the name of the key used to refer to the item
     pub(crate) guid: String,
+    /// stash a copy so we can compare to the DB record and avoid re-generating the atime/count string if it hasn't changed.
+    pub(crate) atime: u64,
+    pub(crate) count: u64,
 }
 impl ListItem {
     pub fn clone(&self) -> ListItem {
-        ListItem { name: self.name.to_string(), extra: self.extra.to_string(), dirty: self.dirty, guid: self.guid.to_string() }
+        ListItem {
+            name: self.name.to_string(),
+            extra: self.extra.to_string(),
+            dirty: self.dirty,
+            guid: self.guid.to_string(),
+            atime: self.atime,
+            count: self.count,
+        }
+    }
+    pub fn key(&self) -> String {
+        self.name.to_string() + &self.guid.to_string()
     }
 }
 impl Ord for ListItem {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.name.cmp(&other.name)
+        match self.name.cmp(&other.name) {
+            Ordering::Equal => {
+                self.guid.cmp(&other.guid)
+            },
+            Ordering::Greater => Ordering::Greater,
+            Ordering::Less => Ordering::Less,
+        }
     }
 }
 impl PartialOrd for ListItem {
@@ -38,7 +57,7 @@ impl PartialOrd for ListItem {
 }
 impl PartialEq for ListItem {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        self.name == other.name && self.guid == other.guid
     }
 }
 impl Eq for ListItem {}
@@ -69,7 +88,7 @@ pub(crate) struct VaultUx {
     action_active: Arc::<AtomicBool>,
 
     /// list of all items to be displayed
-    item_list: Arc::<Mutex::<Vec::<ListItem>>>,
+    item_lists: Arc::<Mutex::<ItemLists>>,
     /// list of items displayable after filtering
     filtered_list: Vec::<ListItem>,
     /// the index into the item_list that is selected
@@ -139,7 +158,7 @@ impl VaultUx {
         menu_mgr: MenuMatic,
         actions_conn: xous::CID,
         mode: Arc::<Mutex::<VaultMode>>,
-        item_list: Arc::<Mutex::<Vec::<ListItem>>>,
+        item_lists: Arc::<Mutex::<ItemLists>>,
         action_active: Arc::<AtomicBool>,
     ) -> Self {
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
@@ -166,7 +185,7 @@ impl VaultUx {
             token,
             mode,
             title_dirty: true,
-            item_list,
+            item_lists,
             selection_index: 0,
             filtered_list: Vec::new(),
             pddb: RefCell::new(pddb),
@@ -183,6 +202,12 @@ impl VaultUx {
             last_query: String::new(),
             usb_type: UsbDeviceType::FidoKbd,
         }
+    }
+
+    pub(crate) fn basis_change(&mut self) {
+        self.item_lists.lock().unwrap().pw.clear();
+        self.item_lists.lock().unwrap().fido.clear();
+        self.item_lists.lock().unwrap().totp.clear();
     }
 
     pub(crate) fn update_mode(&mut self) {
@@ -305,16 +330,15 @@ impl VaultUx {
             item.dirty = true;
         }
     }
-    fn backpropagate_item(&mut self, updated_item: ListItem) -> bool {
-        for item in self.item_list.lock().unwrap().iter_mut() {
-            if item.guid == updated_item.guid {
-                item.name = updated_item.name.to_string();
-                item.extra = updated_item.extra.to_string();
-                item.dirty = true;
-                return true;
-            }
-        }
-        false
+    fn backpropagate_item(&mut self, mut updated_item: ListItem) -> bool {
+        let il = &mut self.item_lists.lock().unwrap();
+        let item_list = match self.mode.lock().unwrap().clone() {
+            VaultMode::Fido => &mut il.fido,
+            VaultMode::Totp => &mut il.totp,
+            VaultMode::Password => &mut il.pw,
+        };
+        updated_item.dirty = true;
+        item_list.insert(updated_item.key(), updated_item).is_some()
     }
     pub(crate) fn nav(&mut self, dir: NavDir) {
         match dir {
@@ -648,7 +672,13 @@ impl VaultUx {
 
     pub(crate) fn filter(&mut self, criteria: &str) {
         self.filtered_list.clear();
-        for item in self.item_list.lock().unwrap().iter() {
+        let il = &self.item_lists.lock().unwrap();
+        let item_list = match self.mode.lock().unwrap().clone() {
+            VaultMode::Fido => &il.fido,
+            VaultMode::Totp => &il.totp,
+            VaultMode::Password => &il.pw,
+        };
+        for item in item_list.values() {
             if item.name.starts_with(criteria) {
                 let mut staged_item = item.clone();
                 staged_item.dirty = true;

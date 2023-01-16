@@ -362,6 +362,7 @@ fn handle_backup(
                         _ => panic!("invalid algorithm"),
                     },
                     name: raw_code.name,
+                    hotp: raw_code.is_hotp,
                 });
             }
 

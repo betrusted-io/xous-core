@@ -601,7 +601,10 @@ impl Com {
                 log::error!("got an error code in fetching the RSSI data: 0x{:x}", rssi_usize);
                 Err(xous::Error::UnknownError)
             } else {
-                Ok((rssi_usize & 0xFF) as u8)
+                // must convert raw code to signal strength here
+                let rssi = 110u8 - (rssi_usize & 0xFF) as u8;
+                log::debug!("RSSI (lib): -{}dBm", rssi);
+                Ok(rssi)
             }
         } else {
             Err(xous::Error::InternalError)

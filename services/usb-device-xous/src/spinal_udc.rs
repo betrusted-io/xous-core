@@ -177,7 +177,7 @@ bitfield! {
     pub force_nack, set_force_nack: 2;
     // selects DATA0/DATA1; 0 => DATA0. Also set by the controller automatically
     pub data_phase, set_data_phase: 3;
-    // specifies the offset of the endpoint's descriptor in RAM. 0 => empty, otherwise multply by 16 to get the address
+    // specifies the offset of the endpoint's descriptor in RAM. 0 => empty, otherwise multiply by 16 to get the address
     pub head_offset, set_head_offset: 15, 4;
     pub isochronous, set_isochronous: 16;
     pub max_packet_size, set_max_packet_size: 31, 22;
@@ -241,8 +241,8 @@ impl SpinalUdcDescriptor {
     }
     fn write(&self, offset: usize, data: u32) {
         // -16 for the dedicated ep0-out space
-        assert!((self.base.load(Ordering::SeqCst) as u32) & 0xFFF >= crate::START_OFFSET - 16, "descriptor is illegal (too low)!");
-        assert!((self.base.load(Ordering::SeqCst) as u32) & 0xFFF < crate::END_OFFSET, "descriptor is illegal (too high)!");
+        assert!((self.base.load(Ordering::SeqCst) as u32) & 0xFFF >= crate::START_OFFSET - 16, "descriptor is illegal (too low)! 0x{:x}", self.base.load(Ordering::SeqCst) as u32);
+        assert!((self.base.load(Ordering::SeqCst) as u32) & 0xFFF < crate::END_OFFSET, "descriptor is illegal (too high)! 0x{:x}", self.base.load(Ordering::SeqCst) as u32);
         unsafe{self.base.load(Ordering::SeqCst).add(offset).write_volatile(data)}
     }
     pub fn offset(&self) -> usize {
@@ -318,7 +318,7 @@ impl SpinalUdcDescriptor {
 }
 impl fmt::Debug for SpinalUdcDescriptor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Desc({}){}: {} of {} -> 0x{:x} ({}{}{}) [{:x?},{:x?},..]",
+        write!(f, "Desc({}){}: {} of {} -> 0x{:x} ({}{}{}) [{:x?},{:x?},..] @ {:x?}",
             if self.in_progress() {"<>"} else {"--"},
             match self.direction() {
                 UsbDirection::In => "IN",
@@ -332,6 +332,7 @@ impl fmt::Debug for SpinalUdcDescriptor {
             if self.data1_on_completion() {"1"} else {"0"},
             self.read_data(0).to_le_bytes(),
             self.read_data(1).to_le_bytes(),
+            self.base,
         )
     }
 }

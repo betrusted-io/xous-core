@@ -99,12 +99,18 @@ impl TextEntry {
         }
     }
 
-    pub fn reset_action_payloads(&mut self, fields: u32, placeholders: Option<[Option<xous_ipc::String<256>>; 10]>) {
+    pub fn reset_action_payloads(&mut self, fields: u32, placeholders: Option<[Option<(xous_ipc::String<256>, bool)>; 10]>) {
         let mut payload = vec![TextEntryPayload::default(); fields as usize];
 
         if let Some(placeholders) = placeholders {
             for (index, element) in payload.iter_mut().enumerate() {
-                element.placeholder = placeholders[index];
+                if let Some((p, persist)) = placeholders[index] {
+                    element.placeholder = Some(p);
+                    element.placeholder_persist = persist;
+                } else {
+                    element.placeholder = None;
+                    element.placeholder_persist = false;
+                }
             }
         }
 
@@ -467,6 +473,10 @@ impl ActionApi for TextEntry {
                     let tts = tts_frontend::TtsFrontend::new(&xns).unwrap();
                     tts.tts_blocking(locales::t!("input.delete-tts", xous::LANG)).unwrap();
                 }
+                if payload.placeholder_persist && payload.placeholder.is_some() && payload.content.len() == 0 {
+                    // copy the placeholder into the content string before processing the backspace
+                    payload.content.append(payload.placeholder.unwrap().to_str()).ok();
+                }
                 // coded in a conservative manner to avoid temporary allocations that can leave the plaintext on the stack
                 if payload.content.len() > 0 { // don't backspace if we have no string.
                     let mut temp_str = String::<256>::from_str(payload.content.as_str().unwrap());
@@ -480,6 +490,13 @@ impl ActionApi for TextEntry {
                 }
             }
             _ => { // text entry
+                if !self.keys_hit[self.selected_field as usize]
+                && payload.placeholder_persist
+                && payload.placeholder.is_some()
+                && payload.content.len() == 0 {
+                    // copy the placeholder into the content string before processing the backspace
+                    payload.content.append(payload.placeholder.unwrap().to_str()).ok();
+                }
                 self.keys_hit[self.selected_field as usize] = true;
                 #[cfg(feature="tts")]
                 {

@@ -12,7 +12,7 @@ use std::env;
 
 /// gitrev of the current precursor SoC version targeted by this build. This must
 /// be manually updated every time the SoC version is bumped.
-const PRECURSOR_SOC_VERSION: &str = "a0912d6";
+const PRECURSOR_SOC_VERSION: &str = "70190e2";
 
 /*
   Some notes on kernel versions versus backups.
@@ -117,12 +117,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // packages located on crates.io. For testing non-local build configs that are less
     // concerned about software supply chain and more focused on developer convenience.
     let base_pkgs_remote = [
-        "xous-log@0.1.15",         // "well known" service: debug logging
-        "xous-names@0.9.24",      // "well known" service: manage inter-server connection lookup
-        "xous-susres@0.1.20",     // ticktimer registers with susres to coordinate time continuity across sleeps
-        "xous-ticktimer@0.1.19",   // "well known" service: thread scheduling
+        "xous-log@0.1.22",         // "well known" service: debug logging
+        "xous-names@0.9.31",      // "well known" service: manage inter-server connection lookup
+        "xous-susres@0.1.27",     // ticktimer registers with susres to coordinate time continuity across sleeps
+        "xous-ticktimer@0.1.26",   // "well known" service: thread scheduling
     ].to_vec();
-    let xous_kernel_remote = "xous-kernel@0.9.20";
+    let xous_kernel_remote = "xous-kernel@0.9.26";
 
     // ---- extract position independent args ----
     let lkey = get_flag("--lkey")?;
@@ -269,6 +269,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("app-image") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION)
                    .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                   .add_feature("mass-storage") // add this in by default to help with testing
                    .add_apps(&get_cratespecs());
         }
         Some("perf-image") => {
@@ -302,6 +303,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_precursor("2753c12-dvt")
                    .add_services(&services)
                    .add_feature("no-codec")
+                   .add_feature("dvt")
                    .add_apps(&get_cratespecs());
         }
         Some("tts") => {
@@ -326,9 +328,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("usbdev") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
+                   .add_services(&base_pkgs.into_iter().map(String::from).collect())
                    .add_services(&get_cratespecs());
-            builder.add_service("usb-test");
+            //builder.add_service("usb-test");
+            builder.add_service("usb-device-xous");
         }
         Some("pddb-dev") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION)
@@ -423,10 +426,10 @@ Hardware images:
  app-image               Precursor user image. [cratespecs] are apps
  perf-image              Precursor user image, with performance profiling. [cratespecs] are apps
  tts                     builds an image with text to speech support via externally linked C executable. [cratespecs] are apps
- usbdev                  minimal, insecure build for new USB core bringup. [cratespecs] are services
+ usbdev                  minimal, insecure build for new USB core bring-up. [cratespecs] are services
  trng-test               automation framework for TRNG testing (CPRNG seeded by RO^AV). [cratespecs] ignored.
  ro-test                 automation framework for TRNG testing (RO directly, no CPRNG). [cratespecs] ignored.
- av-test                 automation framework for TRNG testing (AV dircetly, no CPRNG). [cratespecs] ignored.
+ av-test                 automation framework for TRNG testing (AV directly, no CPRNG). [cratespecs] ignored.
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
 
 Hosted emulation:
@@ -434,7 +437,7 @@ Hosted emulation:
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors). [cratespecs] ignored.
  pddb-btest              PDDB stress tester for secret basis creation/deletion [cratespecs] ignored.
  hosted-debug            Run user image in hosted mode with debug flags. [cratespecs] are apps
- gfx-dev                 Testing mode for graphics primitves. [cratespecs] are services
+ gfx-dev                 Testing mode for graphics primitives. [cratespecs] are services
  pddb-dev                Testing for compilation errors on hardware targets on the PDDB.
 
 Renode emulation:

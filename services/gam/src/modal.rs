@@ -92,6 +92,7 @@ pub struct TextEntryPayload {
     dirty: bool,
     pub content: String::<256>,
     pub placeholder: Option<String::<256>>,
+    pub placeholder_persist: bool,
 }
 
 impl TextEntryPayload {
@@ -100,11 +101,12 @@ impl TextEntryPayload {
             dirty: Default::default(),
             content: Default::default(),
             placeholder: Default::default(),
+            placeholder_persist: false,
         }
     }
 
     pub fn new_with_fields(content: String::<256>, placeholder: Option<String::<256>>) -> Self {
-        TextEntryPayload { dirty: false, content: content, placeholder: placeholder }
+        TextEntryPayload { dirty: false, content: content, placeholder: placeholder, placeholder_persist: false }
     }
     /// Ensures that 0's are written to the storage of this struct, and not optimized out; important for password fields.
     pub fn volatile_clear(&mut self) {

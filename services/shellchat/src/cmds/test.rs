@@ -4,13 +4,13 @@ use xous_ipc::String;
 use xous::{MessageEnvelope, Message};
 
 use codec::*;
-use spectrum_analyzer::{FrequencyLimit, FrequencySpectrum, samples_fft_to_spectrum};
-use spectrum_analyzer::windows::hann_window;
+use base64::encode;
 use core::fmt::Write;
+use core::mem::size_of;
 use core::sync::atomic::{AtomicBool, Ordering, AtomicU32};
 use std::sync::Arc;
 use num_traits::*;
-
+#[cfg(feature="extra-tests")]
 use std::time::Instant;
 
 static AUDIO_OQC: AtomicBool = AtomicBool::new(false);
@@ -20,7 +20,7 @@ pub struct Test {
     state: u32,
     // audio
     codec: codec::Codec,
-    recbuf: xous::MemoryRange,
+    recbuf: Option<xous::MemoryRange>,
     callback_id: Option<u32>,
     callback_conn: u32,
     framecount: u32,
@@ -44,18 +44,11 @@ impl Test {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         let codec = codec::Codec::new(xns).unwrap();
 
-        let recbuf = xous::syscall::map_memory(
-            None,
-            None,
-            0x8000,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        ).expect("couldn't allocate record buffer");
-
         let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
 
         Test {
             codec,
-            recbuf,
+            recbuf: None,
             state: 0,
             callback_id: None,
             callback_conn,
@@ -136,9 +129,11 @@ impl<'a> ShellCmdApi<'a> for Test {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                #[cfg(feature="extra-tests")]
                 "panic" => {
                     assert!(1 == 0, "Panic test: 1 == 0 failure!");
                 }
+                #[cfg(feature="extra-tests")]
                 "instant" => {
                     write!(ret, "start elapsed_ms {}\n", env.ticktimer.elapsed_ms()).unwrap();
                     let now = Instant::now();
@@ -397,36 +392,25 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     // now do FFT analysis on the sample buffer
                     // analyze one channel at a time
-                    let mut right_samples = Vec::<f32>::new();
-                    let recslice = self.recbuf.as_slice::<u32>();
-                    for &sample in recslice[recslice.len()-4096..].iter() {
-                        right_samples.push( ((sample & 0xFFFF) as i16) as f32 );
-                        //left_samples.push( (((sample >> 16) & 0xFFFF) as i16) as f32 ); // reminder of how to extract the right channel
+                    if self.recbuf.is_none() { // lazy allocate recbuf
+                        self.recbuf = Some(xous::syscall::map_memory(
+                            None,
+                            None,
+                            0x8000,
+                            xous::MemoryFlags::R | xous::MemoryFlags::W,
+                        ).expect("couldn't allocate record buffer"));
                     }
-                    // only one channel is considered, because in reality the left is just a copy of the right, as
-                    // we are taking a mono microphone signal and mixing it into both ADCs
-
-                    let db = db_compute(&right_samples);
-                    let hann_right = hann_window(&right_samples);
-                    let spectrum_right = samples_fft_to_spectrum(
-                        &hann_right,
-                        SAMPLE_RATE_HZ as _,
-                        FrequencyLimit::All,
-                        None,
-                        None
-                    );
-                    asciiplot(&spectrum_right);
-                    let ratio = analyze(&spectrum_right, self.freq);
-                    // ratio typical range 0.35 (speaker) to 3.5 (headphones)
-                    // speaker has a wider spectrum because we don't have a filter on the PWM, so there are sampling issues feeding it back into the mic
-                    // db typical <10 (silence) to 78 (full amplitude)
-                    if (ratio > 0.25) && (db > 60.0) {
-                        log::info!("{}|ARESULT|PASS|{}|{}|{}|{}|{}|", SENTINEL, ratio, db, self.freq, self.left_play, self.right_play);
+                    if let Some(recbuf) = self.recbuf {
+                        let recslice = recbuf.as_slice::<u8>();
+                        const BUFLEN: usize = 512;
+                        // serialize and send audio as b64 encoded data
+                        for (i, sample) in recslice[recslice.len()-4096 * size_of::<u32>()..].chunks_exact(BUFLEN).enumerate() {
+                            let b64str = encode(sample);
+                            log::info!("{}|ASAMP|{}|{}", SENTINEL, i, b64str);
+                        }
                     } else {
-                        log::info!("{}|ARESULT|FAIL|{}|{}|{}|{}|{}|", SENTINEL, ratio, db, self.freq, self.left_play, self.right_play);
+                        panic!("recbuf was not allocated");
                     }
-                    log::debug!("off-target 1 {}", analyze(&spectrum_right, 329.63));
-                    log::debug!("off-target 2 {}", analyze(&spectrum_right, 261.63));
                     log::info!("{}|ASTOP|", SENTINEL);
                 }
                 "oqc" => {
@@ -607,10 +591,12 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     env.llio.wfi_override(false).unwrap();
                 }
+                #[cfg(feature="extra-tests")]
                 "devboot" => {
                     env.gam.set_devboot(true).unwrap();
                     write!(ret, "devboot on").unwrap();
                 }
+                #[cfg(feature="extra-tests")]
                 "devbootoff" => {
                     // this should do nothing if devboot was already set
                     env.gam.set_devboot(false).unwrap();
@@ -647,6 +633,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                 "modals" => {
                     modals::tests::spawn_test();
                 }
+                #[cfg(feature="extra-tests")]
                 "bip39" => {
                     let modals = modals::Modals::new(&env.xns).unwrap();
                     // 4. bip39 display test
@@ -680,6 +667,91 @@ impl<'a> ShellCmdApi<'a> for Test {
                     ).unwrap();
                     write!(ret, "\nDid EC auto update command").unwrap();
                 }
+                #[cfg(feature="benchmarks")]
+                "bench" => {
+                    let bench_original_sid = xous::create_server().unwrap();
+                    let bench_original_cid = xous::connect(bench_original_sid).unwrap();
+                    std::thread::spawn({
+                        move || {
+                            loop {
+                                let msg = xous::receive_message(bench_original_sid).unwrap();
+                                xous::msg_blocking_scalar_unpack!(msg, a1, _, _, _, {
+                                    xous::return_scalar(msg.sender, a1 + 1).unwrap();
+                                });
+                                if msg.id() == 1 {
+                                    break;
+                                }
+                            }
+                            log::info!("Quitting old bench thread");
+                        }
+                    });
+
+                    let bench_new_sid = xous::create_server().unwrap();
+                    let bench_new_cid = xous::connect(bench_new_sid).unwrap();
+                    std::thread::spawn({
+                        move || {
+                            let mut msg_opt = None;
+                            let mut return_type = 0;
+                            loop {
+                                xous::reply_and_receive_next_legacy(bench_new_sid, &mut msg_opt, &mut return_type)
+                                    .unwrap();
+                                let msg = msg_opt.as_mut().unwrap();
+                                if let Some(scalar) = msg.body.scalar_message_mut() {
+                                    scalar.arg1 += 1;
+                                    return_type = 1;
+                                    if scalar.id == 1 {
+                                        scalar.id = 1;
+                                        xous::return_scalar(msg.sender, scalar.arg1).ok();
+                                        core::mem::forget(msg_opt.take());
+                                        break;
+                                    } else {
+                                        scalar.id = 0;
+                                    }
+                                }
+                            }
+                            log::info!("Quitting new bench thread");
+                        }
+                    });
+                    const ITERS: usize = 10_000;
+                    let tt = ticktimer_server::Ticktimer::new().unwrap();
+                    let start_time = tt.elapsed_ms();
+                    let mut a = 0;
+                    while a < ITERS {
+                        a = match xous::send_message(bench_original_cid,
+                            Message::new_blocking_scalar(0, a, 0, 0, 0)
+                        ) {
+                            Ok(xous::Result::Scalar1(a_prime)) => a_prime,
+                            _ => panic!("incorrect return type")
+                        }
+                    }
+                    let result = format!("Original took {}ms for {} iters\n", tt.elapsed_ms() - start_time, ITERS);
+                    log::info!("{}", result);
+                    write!(ret, "{}\n", result).ok();
+                    // this quits the thread
+                    xous::send_message(bench_original_cid,
+                        Message::new_blocking_scalar(1, 0, 0, 0, 0)
+                    ).ok();
+                    unsafe {xous::disconnect(bench_original_cid).ok()};
+
+                    let start_time = tt.elapsed_ms();
+                    let mut a = 0;
+                    while a < ITERS {
+                        a = match xous::send_message(bench_new_cid,
+                            Message::new_blocking_scalar(0, a, 0, 0, 0)
+                        ) {
+                            Ok(xous::Result::Scalar1(a_prime)) => a_prime,
+                            _ => panic!("incorrect return type")
+                        }
+                    }
+                    let result = format!("New took {}ms for {} iters\n", tt.elapsed_ms() - start_time, ITERS);
+                    write!(ret, "{}", result).ok();
+                    log::info!("{}", result);
+                    // this quits the thread
+                    xous::send_message(bench_new_cid,
+                        Message::new_blocking_scalar(1, 0, 0, 0, 0)
+                    ).ok();
+                    unsafe {xous::disconnect(bench_new_cid).ok()};
+                }
                 _ => {
                     () // do nothing
                 }
@@ -709,7 +781,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     // put the "expensive" f32 comparison outside the cosine wave table computation loop
                     let omega = self.freq * 2.0 * std::f32::consts::PI / SAMPLE_RATE_HZ;
                     for sample in frame.iter_mut() {
-                        let raw_sine: i16 = (AMPLITUDE * f32::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
+                        let raw_sine: i16 = (AMPLITUDE * cos_table::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
                         let left = if self.left_play { raw_sine as u16 } else { ZERO_PCM };
                         let right = if self.right_play { raw_sine as u16 } else { ZERO_PCM };
                         *sample = right as u32 | (left as u32) << 16;
@@ -722,23 +794,35 @@ impl<'a> ShellCmdApi<'a> for Test {
                 self.codec.swap_frames(&mut frames).unwrap();
 
                 if !AUDIO_OQC.load(Ordering::Relaxed) {
-                    let rec_samples = self.recbuf.as_slice_mut::<u32>();
-                    let rec_len = rec_samples.len();
-                    loop {
-                        if let Some(frame) = frames.dq_frame() {
-                            for &sample in frame.iter() {
-                                rec_samples[self.rec_sample] = sample;
-                                // increment and wrap around on overflow
-                                // we should be sampling a continuous tone, so we'll get a small phase discontinutity once in the buffer.
-                                // should be no problem for the analysis phase.
-                                self.rec_sample += 1;
-                                if self.rec_sample >= rec_len {
-                                    self.rec_sample = 0;
+                    if self.recbuf.is_none() { // lazy allocate recbuf
+                        self.recbuf = Some(xous::syscall::map_memory(
+                            None,
+                            None,
+                            0x8000,
+                            xous::MemoryFlags::R | xous::MemoryFlags::W,
+                        ).expect("couldn't allocate record buffer"));
+                    }
+                    if let Some(mut recbuf) = self.recbuf {
+                        let rec_samples = recbuf.as_slice_mut::<u32>();
+                        let rec_len = rec_samples.len();
+                        loop {
+                            if let Some(frame) = frames.dq_frame() {
+                                for &sample in frame.iter() {
+                                    rec_samples[self.rec_sample] = sample;
+                                    // increment and wrap around on overflow
+                                    // we should be sampling a continuous tone, so we'll get a small phase discontinutity once in the buffer.
+                                    // should be no problem for the analysis phase.
+                                    self.rec_sample += 1;
+                                    if self.rec_sample >= rec_len {
+                                        self.rec_sample = 0;
+                                    }
                                 }
-                            }
-                        } else {
-                            break;
-                        };
+                            } else {
+                                break;
+                            };
+                        }
+                    } else {
+                        panic!("recbuf was not allocated");
                     }
                 } else {
                     let elapsed = env.ticktimer.elapsed_ms();
@@ -784,71 +868,6 @@ impl<'a> ShellCmdApi<'a> for Test {
         log::debug!("audio callback");
         Ok(None)
     }
-}
-
-// plus minus this amount for frequencing searching
-// this is set less by our desired accuracy of the frequency
-// than by the artifacts of the analysis: the FFT window has some "skirt" to it
-// by a few Hz, and this ratio tries to capture about 90% of the power within the hanning window's skirt.
-const ANALYSIS_DELTA: f32 = 10.0;
-fn analyze(fs: &FrequencySpectrum, target: f32) -> f32 {
-    let mut total_power: f32 = 0.0;
-    let mut h1_power: f32 = 0.0;
-    let mut h2_power: f32 = 0.0;
-    let mut outside_power: f32 = 0.0;
-
-    for &(freq, mag) in fs.data().iter() {
-        let f = freq.val();
-        let m = mag.val();
-        total_power += m;
-        if (f >= target - ANALYSIS_DELTA) && (f <= target + ANALYSIS_DELTA) {
-            h1_power += m;
-        } else if (f >= (target * 2.0 - ANALYSIS_DELTA)) && (f <= (target * 2.0 + ANALYSIS_DELTA)) {
-            h2_power += m;
-        } else if f >= ANALYSIS_DELTA { // don't count the DC offset
-            outside_power += m;
-        } else {
-            log::debug!("ignoring {}Hz @ {}", f, m);
-        }
-    }
-    log::debug!("h1: {}, h2: {}, outside: {}, total: {}", h1_power, h2_power, outside_power, total_power);
-
-    let ratio = if outside_power > 0.0 {
-        (h1_power + h2_power) / outside_power
-    } else {
-        1_000_000.0
-    };
-    ratio
-}
-
-fn db_compute(samps: &[f32]) -> f32 {
-    let mut cum = 0.0;
-    for &s in samps.iter() {
-        cum += s;
-    }
-    let mid = cum / samps.len() as f32;
-    cum = 0.0;
-    for &s in samps.iter() {
-        let a = s - mid;
-        cum += a * a;
-    }
-    cum /= samps.len() as f32;
-    let db = 10.0 * f32::log10(cum);
-    db
-}
-
-fn asciiplot(fs: &FrequencySpectrum) {
-    let (max_f, max_val) = fs.max();
-    const LINES: usize = 100;
-    const WIDTH: usize = 80;
-    const MAX_F: usize = 1000;
-
-    for f in (0..MAX_F).step_by(MAX_F / LINES) {
-        let (freq, val) = fs.freq_val_closest(f as f32);
-        let pos = ((val.val() / max_val.val()) * WIDTH as f32) as usize;
-        log::debug!("{:>5} | {:width$}*", freq.val() as u32, " ", width = pos);
-    }
-    log::debug!("max freq: {}, max_val: {}", max_f, max_val);
 }
 
 fn oqc_status(conn: xous::CID) -> Option<bool> { // None if still running or not yet run; Some(true) if pass; Some(false) if fail

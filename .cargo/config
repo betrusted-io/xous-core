@@ -6,3 +6,12 @@ xtask = "run --package xtask --"
 
 [build]
 rustflags = ["--cfg", "crossbeam_no_atomic_64"]
+
+# [target.riscv32imac-unknown-xous-elf]
+# linker = "/usr/bin/mold"
+# rustflags = [
+#     "-C", "linker-flavor=ld",
+#     "-C", "relocation-model=pic",
+#     "-C", "link-arg=-shared",
+#     "--cfg", "crossbeam_no_atomic_64"
+#     ]

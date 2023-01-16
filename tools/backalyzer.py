@@ -14,10 +14,6 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from pddbcommon import *
 
-from bip_utils import (
-   Bip39MnemonicValidator, Bip39MnemonicDecoder
-)
-
 def bytes_to_semverstr(b):
     maj = int.from_bytes(b[0:2], 'little')
     min = int.from_bytes(b[2:4], 'little')
@@ -88,11 +84,8 @@ def main():
 
     # insert your mnemonic here. This is the "zero-key" mnemonic.
     mnemonic = args.backup_key
-    # Get if a mnemonic is valid with automatic language detection, return bool
-    assert(Bip39MnemonicValidator().IsValid(mnemonic))
-
     # Like before with automatic language detection
-    key = Bip39MnemonicDecoder().Decode(mnemonic)
+    key = bip39_to_bits(mnemonic)
     logging.debug("Using backup key: 0x{}".format(key.hex()))
 
     with open(args.file, "rb") as backup_file:

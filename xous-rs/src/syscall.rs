@@ -158,7 +158,7 @@ pub enum SysCall {
     ///
     /// # Returns
     ///
-    /// * **Message**: A valid message from the queue
+    /// * **MessageEnvelope**: A valid message from the queue
     ///
     /// # Errors
     ///
@@ -324,11 +324,14 @@ pub enum SysCall {
     ///
     /// # Returns
     ///
-    /// * **Ok**: The Scalar / Send message was successfully sent, or the Borrow has finished
+    /// * **Ok**: The Scalar / Send message was successfully sent
     /// * **Scalar1**: The Server returned a `Scalar1` value
     /// * **Scalar2**: The Server returned a `Scalar2` value
     /// * **Scalar5**: The Server returned a `Scalar5` value
     /// * **BlockedProcess**: In Hosted mode, the target process is now blocked
+    /// * **Message**: For Scalar messages, this includes the args as returned
+    ///                 by the server. For MemoryMessages, this will include
+    ///                 the Opcode, Offset, and Valid fields.
     ///
     /// # Errors
     ///
@@ -475,6 +478,45 @@ pub enum SysCall {
     /// Return five scalars to the sender
     ReturnScalar5(MessageSender, usize, usize, usize, usize, usize),
 
+    /// Return a message with the given Message ID and the provided parameters,
+    /// and listen for another message on the server ID that sent this message.
+    /// This call is meant to be used in the main loop of a server in order to
+    /// reduce latency when that server is called frequently.
+    ///
+    /// This call works on both `MemoryMessages` and `BlockingScalars`, and does
+    /// not distinguish between the two from the API.
+    ///
+    /// ## Arguments
+    ///
+    ///     * **MessageSender**: This is the `sender` from the message envelope.
+    ///                         It is a unique ID that identifies this message,
+    ///                         as well as the server it came from.
+    ///
+    /// The remaining arguments depend on whether the message was a `BlockingScalar`
+    /// message or a `MemoryMessage`. Note that this function should NOT be called
+    /// on non-blocking messages such as `Send` or `Scalar`.
+    ///
+    /// ## Returns
+    ///
+    /// * **Message**: A valid message from the queue
+    ///
+    /// # Errors
+    ///
+    /// * **ServerNotFound**: The given SID is not active or has terminated
+    /// * **ProcessNotFound**: The parent process terminated when we were getting ready
+    ///                        to block. This is an internal error.
+    /// * **BlockedProcess**: When running in Hosted mode, this indicates that this
+    ///                       thread is blocking.
+    ReplyAndReceiveNext(
+        MessageSender, /* ID if the sender that sent this message */
+        usize,         /* Return code to the caller */
+        usize,         /* arg1 (BlockingScalar) or the memory address (MemoryMesage) */
+        usize,         /* arg2 (BlockingScalar) or the memory length (MemoryMesage) */
+        usize,         /* arg3 (BlockingScalar) or the memory offset (MemoryMesage) */
+        usize,         /* arg4 (BlockingScalar) or the memory valid (MemoryMesage) */
+        usize,         /* how many args are valid (BlockingScalar) or usize::MAX (MemoryMessge) */
+    ),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -522,6 +564,7 @@ pub enum SysCallNumber {
     #[cfg(feature = "v2p")]
     VirtToPhys = 39,
     ReturnScalar5 = 40,
+    ReplyAndReceiveNext = 41,
     Invalid,
 }
 
@@ -569,6 +612,7 @@ impl SysCallNumber {
             #[cfg(feature = "v2p")]
             39 => VirtToPhys,
             40 => ReturnScalar5,
+            41 => ReplyAndReceiveNext,
             _ => Invalid,
         }
     }
@@ -806,6 +850,17 @@ impl SysCall {
                 0,
                 0,
             ],
+            SysCall::ReplyAndReceiveNext(sender, arg0, arg1, arg2, arg3, arg4, return_type) => [
+                SysCallNumber::ReplyAndReceiveNext as usize,
+                sender.to_usize(),
+                *arg0,
+                *arg1,
+                *arg2,
+                *arg3,
+                *arg4,
+                *return_type,
+            ],
+
             SysCall::CreateThread(init) => {
                 crate::arch::thread_to_args(SysCallNumber::CreateThread as usize, init)
             }
@@ -1030,6 +1085,9 @@ impl SysCall {
                 MemorySize::new(a4),
                 MemorySize::new(a5),
             ),
+            SysCallNumber::ReplyAndReceiveNext => {
+                SysCall::ReplyAndReceiveNext(MessageSender::from_usize(a1), a2, a3, a4, a5, a6, a7)
+            }
             SysCallNumber::CreateThread => {
                 SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
             }
@@ -1130,6 +1188,7 @@ impl SysCall {
                 )
             }
             SysCall::ReturnMemory(_, _, _, _) => true,
+            SysCall::ReplyAndReceiveNext(_, _, _, _, _, _, usize::MAX) => true,
             _ => false,
         }
     }
@@ -1166,7 +1225,10 @@ impl SysCall {
 
     /// Returns `true` if the associated syscall is returning memory
     pub fn is_return_memory(&self) -> bool {
-        matches!(self, SysCall::ReturnMemory(_, _, _, _))
+        matches!(
+            self,
+            SysCall::ReturnMemory(..) | SysCall::ReplyAndReceiveNext(_, _, _, _, _, _, usize::MAX)
+        )
     }
 
     /// If the syscall has memory attached to it, return the memory
@@ -1179,26 +1241,33 @@ impl SysCall {
                 _ => None,
             },
             SysCall::ReturnMemory(_, range, _, _) => Some(*range),
+            SysCall::ReplyAndReceiveNext(_, _, a1, a2, _, _, usize::MAX) => unsafe {
+                MemoryRange::new(*a1, *a2).ok()
+            },
             _ => None,
         }
     }
 
-    /// If the syscall has memory attached to it, return the memory, mutably
+    /// If the syscall has memory attached to it, replace the memory.
     ///
     /// # Safety
     ///
-    /// This function is only safe to call to fixup the pointer. It should
-    /// not be used for any other purpose.
-    pub unsafe fn memory_mut(&mut self) -> Option<&mut MemoryRange> {
+    /// This function is only safe to call to fixup the pointer, particularly
+    /// when running in hosted mode. It should not be used for any other purpose.
+    pub unsafe fn replace_memory(&mut self, new: MemoryRange) {
         match self {
             SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => match msg {
                 Message::Move(memory_message)
                 | Message::Borrow(memory_message)
-                | Message::MutableBorrow(memory_message) => Some(&mut memory_message.buf),
-                _ => None,
+                | Message::MutableBorrow(memory_message) => memory_message.buf = new,
+                _ => (),
             },
-            SysCall::ReturnMemory(_, range, _, _) => Some(range),
-            _ => None,
+            SysCall::ReturnMemory(_, range, _, _) => *range = new,
+            SysCall::ReplyAndReceiveNext(_, _, a1, a2, _, _, usize::MAX) => {
+                *a1 = new.addr.get();
+                *a2 = new.size.get();
+            }
+            _ => (),
         }
     }
 
@@ -1516,7 +1585,7 @@ pub fn try_connect(server: SID) -> core::result::Result<CID, Error> {
 ///
 pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Error> {
     let result = rsyscall(SysCall::ReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
-    if let Result::Message(envelope) = result {
+    if let Result::MessageEnvelope(envelope) = result {
         Ok(envelope)
     } else if let Result::Error(e) = result {
         Err(e)
@@ -1533,7 +1602,7 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 pub fn try_receive_message(server: SID) -> core::result::Result<Option<MessageEnvelope>, Error> {
     let result =
         rsyscall(SysCall::TryReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
-    if let Result::Message(envelope) = result {
+    if let Result::MessageEnvelope(envelope) = result {
         Ok(Some(envelope))
     } else if result == Result::None {
         Ok(None)
@@ -1563,6 +1632,7 @@ pub fn try_send_message(connection: CID, message: Message) -> core::result::Resu
         Ok(Result::Scalar2(a, b)) => Ok(Result::Scalar2(a, b)),
         Ok(Result::Scalar5(a, b, c, d, e)) => Ok(Result::Scalar5(a, b, c, d, e)),
         Ok(Result::MemoryReturned(offset, valid)) => Ok(Result::MemoryReturned(offset, valid)),
+        Ok(Result::MessageEnvelope(msg)) => Ok(Result::MessageEnvelope(msg)),
         Err(e) => Err(e),
         v => panic!("Unexpected return value: {:?}", v),
     }
@@ -1870,6 +1940,73 @@ pub fn join_thread(tid: TID) -> core::result::Result<usize, Error> {
         }
     })
 }
+
+/// Reply to the message, if one exists, and receive the next one.
+/// If no message exists, delegate the call to `receive_syscall()`.
+pub fn reply_and_receive_next(
+    server: SID,
+    msg: &mut Option<MessageEnvelope>,
+) -> core::result::Result<(), crate::Error> {
+    reply_and_receive_next_legacy(server, msg, &mut 0)
+}
+
+/// Reply to the message, if one exists, and receive the next one.
+/// If no message exists, delegate the call to `receive_syscall()`.
+/// Allow specifying the scalar return type.
+///
+/// This is named `_legacy` because it is meant to work with calls that
+/// expect both `Scalar1` and `Scalar2` values, in addition to `Scalar5`.
+///
+/// ## Arguments
+///
+///  * **server**: The SID of the server to receive messages from
+///  * **msg**: An Option<MessageEnvelope> specifying the message to return.
+///  * **return_type**: If 1 or 2, responds to a BlockingScalarMessage
+///                 with a Scalar1 or a Scalar2. Otherwise, will respond
+///                 as normal.
+pub fn reply_and_receive_next_legacy(
+    server: SID,
+    msg: &mut Option<MessageEnvelope>,
+    return_type: &mut usize,
+) -> core::result::Result<(), crate::Error> {
+    let mut rt = *return_type;
+    *return_type = 0;
+    if let Some(envelope) = msg.take() {
+        // If the message inside is nonblocking, then there's nothing to return.
+        // Delegate reception to the `receive_message()` call
+        if !envelope.body.is_blocking() {
+            *msg = Some(receive_message(server)?);
+            return Ok(());
+        }
+
+        let args = if let Some(mem) = envelope.body.memory_message() {
+            // Allow hosted mode to detect this is a memory message by giving a sentinal value here
+            rt = usize::MAX;
+            mem.to_usize()
+        } else if let Some(scalar) = envelope.body.scalar_message() {
+            scalar.to_usize()
+        } else {
+            panic!("unrecognized message type")
+        };
+        let sender = envelope.sender;
+        core::mem::forget(envelope);
+        let call =
+            SysCall::ReplyAndReceiveNext(sender, args[0], args[1], args[2], args[3], args[4], rt);
+        match rsyscall(call) {
+            Ok(crate::Result::MessageEnvelope(envelope)) => {
+                *msg = Some(envelope);
+                Ok(())
+            }
+            Ok(crate::Result::Error(e)) => Err(e),
+            _ => Err(crate::Error::InternalError),
+        }
+    } else {
+        // No waiting message -- call the existing `receive_message()` function
+        *msg = Some(receive_message(server)?);
+        Ok(())
+    }
+}
+
 /* https://github.com/betrusted-io/xous-core/issues/90
 static EXCEPTION_HANDLER: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 fn handle_exception(exception_type: usize, arg1: usize, arg2: usize) -> isize {

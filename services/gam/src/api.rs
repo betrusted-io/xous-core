@@ -43,6 +43,12 @@ impl GamObjectList {
             Err(item)
         }
     }
+    pub fn last(&self) -> Option<GamObjectType> {
+        match self.free {
+            0 => self.list[self.free],
+            _ => self.list[self.free-1],
+        }
+    }
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]

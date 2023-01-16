@@ -1,0 +1,8 @@
+[package]
+name = "cos_table"
+version = "0.1.0"
+edition = "2021"
+authors = ["bunnie <bunnie@kosagi.com>"]
+description = "Space-optimized cosine table lookup"
+
+[dependencies]
