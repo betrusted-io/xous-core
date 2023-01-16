@@ -30,10 +30,37 @@ extern "C" {
     fn flush_mmu();
 }
 
-pub unsafe fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8 {
+const CACHE_LINE_SIZE_IN_U32: usize = 8;
+/// `memset` loop-unrolled to the width of a cache line.
+///
+/// `n` is the number of cache-line sized elements to set; by
+/// specifying `n` this way, we eliminate the possibility of
+/// specifying and unaligned memset, at the expense of a more
+/// obtuse API. However, this call is only used in this module,
+/// so each invocation can be manually checked for correctness.
+///
+/// Thus, in order to zero out a page, this is called with an `n`
+/// that is equal to 4096 (bytes in a page), divided by 4 (bytes
+/// per u32), divided by 8 (number of u32 per cache line)
+unsafe fn memset(s: *mut u32, c: i32, n: usize) -> *mut u32 {
+    // unroll loop to the width of a cache line
     let mut i = 0;
-    while i < n {
-        *s.add(i) = c as u8;
+    while i < n * CACHE_LINE_SIZE_IN_U32 {
+        *s.add(i) = c as u32;
+        i += 1;
+        *s.add(i) = c as u32;
+        i += 1;
+        *s.add(i) = c as u32;
+        i += 1;
+        *s.add(i) = c as u32;
+        i += 1;
+        *s.add(i) = c as u32;
+        i += 1;
+        *s.add(i) = c as u32;
+        i += 1;
+        *s.add(i) = c as u32;
+        i += 1;
+        *s.add(i) = c as u32;
         i += 1;
     }
     s
@@ -351,7 +378,9 @@ impl MemoryMapping {
 
             // Zero-out the new page
             let page_addr = l0pt_virt as *mut usize;
-            unsafe { memset(page_addr as *mut u8, 0, PAGE_SIZE) };
+            unsafe { memset(page_addr as *mut u32, 0,
+                PAGE_SIZE / (core::mem::size_of::<u32>() * CACHE_LINE_SIZE_IN_U32))
+            };
         }
 
         let l0_pt = &mut unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
@@ -620,7 +649,9 @@ pub fn map_page_inner(
         )?;
 
         // Zero-out the new page
-        unsafe { memset(l0_pt as *mut u8, 0, PAGE_SIZE) };
+        unsafe { memset(l0_pt as *mut u32, 0,
+            PAGE_SIZE / (core::mem::size_of::<u32>() * CACHE_LINE_SIZE_IN_U32)
+        ) };
     }
 
     // Ensure the entry hasn't already been mapped.
@@ -922,7 +953,9 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
         flush_mmu();
 
         // Zero-out the page
-        memset(virt as *mut u8, 0, PAGE_SIZE);
+        memset(virt as *mut u32, 0,
+            PAGE_SIZE / (core::mem::size_of::<u32>() * CACHE_LINE_SIZE_IN_U32)
+        );
 
         // Move the page into userspace
         *entry = (ppn1 << 20)
