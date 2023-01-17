@@ -251,3 +251,27 @@ _xous_syscall_return_result:
 flush_mmu:
     sfence.vma
     ret
+
+/*
+    Endcap of valid RISC-V code, to ensure speculative reads
+    past the end of the .text section to not trigger an illegal
+    instuction opcode. This cap is equal to the width of a cache line,
+    using the 2-byte RV32C encoding.
+*/
+.section .endcap, "ax"
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
