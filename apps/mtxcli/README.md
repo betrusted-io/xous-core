@@ -64,6 +64,10 @@ Xous please see the [locales README](https://github.com/betrusted-io/xous-core/b
 
 ## Troubleshooting
 
+Prequisites: it is essential that the PDDB is mounted and WiFi is
+connected before running mtxcli. You can verify these in Shellchat
+with `net ping 1.1.1.1`.
+
 If you see the message `WARNING: clock not set` that is likely because
 the Precursor real time clock needs to be set (e.g. if the battery
 has been completely discharged). Please go to the menu

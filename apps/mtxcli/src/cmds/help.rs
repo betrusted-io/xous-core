@@ -1,5 +1,5 @@
 use crate::{ShellCmdApi,CommonEnv,
-            cmds::CLOCK_NOT_SET_ID};
+            cmds::{CLOCK_NOT_SET_ID,PDDB_NOT_MOUNTED_ID,WIFI_NOT_CONNECTED_ID}};
 use xous::{MessageEnvelope, Message,StringBuffer};
 use xous_ipc::String as XousString;
 use core::fmt::Write;
@@ -78,13 +78,24 @@ impl<'a> ShellCmdApi<'a> for Help {
         match &msg.body {
             Message::Scalar(xous::ScalarMessage{id: _, arg1: _, arg2: _,
                                                 arg3: _, arg4: async_msg_id}) => {
-                if *async_msg_id == CLOCK_NOT_SET_ID {
-                    let mut ret = XousString::<1024>::new();
-                    let warning = t!("mtxcli.clock.warning", xous::LANG);
-                    write!(ret, "{}", warning).unwrap();
-                    log::warn!("{}", warning);
-                    return Ok(Some(ret));
-                }
+                let mut ret = XousString::<1024>::new();
+                let warning = match *async_msg_id {
+                    CLOCK_NOT_SET_ID => {
+                        t!("mtxcli.clock.warning", xous::LANG)
+                    },
+                    PDDB_NOT_MOUNTED_ID => {
+                        t!("mtxcli.pddb.warning", xous::LANG)
+                    },
+                    WIFI_NOT_CONNECTED_ID => {
+                        t!("mtxcli.wifi.warning", xous::LANG)
+                    },
+                    _ => {
+                       "unknown async_msg_id"
+                    },
+                };
+                write!(ret, "{}", warning).unwrap();
+                log::warn!("{}", warning);
+                return Ok(Some(ret));
             },
             Message::Move(mm) => {
                 let str_buf = unsafe { StringBuffer::from_memory_message(mm) };
