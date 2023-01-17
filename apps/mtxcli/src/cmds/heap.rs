@@ -6,7 +6,7 @@ use core::fmt::Write;
 pub struct Heap {
 }
 impl Heap {
-    pub fn new(_xns: &xous_names::XousNames) -> Self {
+    pub fn new() -> Self {
         Heap {
         }
     }

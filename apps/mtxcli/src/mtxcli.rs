@@ -14,7 +14,6 @@ struct History {
     pub is_input: bool,
 }
 
-#[allow(dead_code)]
 pub(crate) struct Mtxcli {
     // optional structures that indicate new input to the Mtxcli loop per iteration
     // an input string
@@ -38,9 +37,6 @@ pub(crate) struct Mtxcli {
 
     // command environment
     env: CmdEnv,
-
-    // our security token for making changes to our record on the GAM
-    token: [u32; 4],
 }
 impl Mtxcli{
     pub(crate) fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self {
@@ -60,10 +56,12 @@ impl Mtxcli{
 
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
         let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
+        let history: Vec::<History> = vec![History{text: String::from(t!("mtxcli.greeting", xous::LANG)), is_input: false}];
+        let env = CmdEnv::new();
         Mtxcli {
             input: None,
             msg: None,
-            history: vec![History{text: String::from(t!("mtxcli.greeting", xous::LANG)), is_input: false}],
+            history,
             history_len: 10,
             content,
             gam,
@@ -73,8 +71,7 @@ impl Mtxcli{
             bubble_margin: Point::new(4, 4),
             bubble_radius: 4,
             bubble_space: 4,
-            env: CmdEnv::new(xns),
-            token: token.unwrap(),
+            env,
         }
     }
 

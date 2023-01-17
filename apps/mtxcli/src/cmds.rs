@@ -1,4 +1,4 @@
-use xous::{MessageEnvelope};
+use xous::{MessageEnvelope, Message,StringBuffer};
 use xous_ipc::String as XousString;
 use core::fmt::Write;
 use locales::t;
@@ -8,11 +8,13 @@ use std::fs::File;
 use std::io::{Read, Write as StdWrite, Error, ErrorKind};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH}; // to help gen_txn_id
+use core::str::FromStr;
 
 mod migrations;  use migrations::run_migrations;
 mod url;
 mod web;
 
+const DATE_2023: u64 = 1672538401; // for clock_not_set()
 const APP: &str = "mtxcli";
 
 /// PDDB Dict for mtxcli keys
@@ -35,6 +37,8 @@ const SERVER_MATRIX: &str = "https://matrix.org";
 
 const EMPTY: &str = "";
 const MTX_TIMEOUT: i32 = 300; // ms
+
+pub const CLOCK_NOT_SET_ID: usize = 1;
 
 /// Returns a version string which is more likely to string compare
 /// correctly vs. another version. FFI please see
@@ -90,14 +94,11 @@ macro_rules! cmd_api {
 use trng::*;
 /////////////////////////// Command shell integration
 #[derive(Debug)]
-#[allow(dead_code)] // there's more in the envornment right now than we need for the demo
 pub struct CommonEnv {
-    llio: llio::Llio,
-    com: com::Com,
-    codec: codec::Codec,
     ticktimer: ticktimer_server::Ticktimer,
-    gam: gam::Gam,
     cb_registrations: HashMap::<u32, XousString::<256>>,
+    async_msg_callback_id: u32,
+    async_msg_conn: u32,
     trng: Trng,
     xns: xous_names::XousNames,
     user: String,
@@ -110,8 +111,72 @@ pub struct CommonEnv {
     since: String,
     first_line: bool,
     version: String,
+    initialized: bool,
 }
 impl CommonEnv {
+    pub fn new() -> CommonEnv {
+        let xns = xous_names::XousNames::new().unwrap();
+        let ticktimer = ticktimer_server::Ticktimer::new()
+            .expect("Couldn't connect to Ticktimer");
+        let cb_registrations = HashMap::new();
+        let async_msg_callback_id: u32 = 0;
+        let async_msg_conn: u32 = 0;
+        let common = CommonEnv {
+            ticktimer,
+            cb_registrations,
+            async_msg_callback_id,
+            async_msg_conn,
+            trng: Trng::new(&xns).unwrap(),
+            xns,
+            user: EMPTY.to_string(),
+            username: EMPTY.to_string(),
+            server: SERVER_MATRIX.to_string(),
+            token: EMPTY.to_string(),
+            logged_in: false,
+            room_id: EMPTY.to_string(),
+            filter: EMPTY.to_string(),
+            since: EMPTY.to_string(),
+            first_line: true,
+            version: EMPTY.to_string(),
+            initialized: false,
+        };
+        common
+    }
+
+    pub fn register_handler(&mut self, verb: XousString::<256>) -> u32 {
+        let mut key: u32;
+        loop {
+            key = self.trng.get_u32().unwrap();
+            // reserve the bottom 1000 IDs for the main loop enums.
+            if !self.cb_registrations.contains_key(&key) && (key > 1000) {
+                break;
+            }
+        }
+        self.cb_registrations.insert(key, verb);
+        key
+    }
+
+    // NOTE: Here the async callbacks will be managed by the command "help"
+    // as it is already an unsual command
+    pub fn register_async_msg(&mut self) {
+        self.async_msg_conn = self.xns.request_connection_blocking(crate::SERVER_NAME_MTXCLI).unwrap();
+        self.async_msg_callback_id = self.register_handler(XousString::<256>::from_str("help"));
+    }
+
+    pub fn scalar_async_msg(&self, async_msg_id: usize) {
+        let msg = Message::new_scalar(self.async_msg_callback_id as usize,
+                                      0, 0, 0, async_msg_id);
+        xous::send_message(self.async_msg_conn, msg).unwrap();
+    }
+
+    pub fn send_async_msg(&self, async_msg: &str) {
+        let str_buf = StringBuffer::from_str(async_msg)
+            .expect("unable to create string message");
+        str_buf.send(self.async_msg_conn, self.async_msg_callback_id)
+            .expect("unable to send string message");
+        // let msg = str_buf.create_memory_message(self.async_msg_callback_id);
+        // xous::send_message(self.async_msg_conn, msg).unwrap();
+    }
 
     pub fn gen_txn_id(&mut self) -> String {
         let mut txn_id = self.trng.get_u32()
@@ -131,7 +196,7 @@ impl CommonEnv {
             let mut keypath = PathBuf::new();
             keypath.push(MTXCLI_DICT);
             if std::fs::metadata(&keypath).is_ok() { // keypath exists
-                log::info!("dict '{}' exists", MTXCLI_DICT);
+                // log::info!("dict '{}' exists", MTXCLI_DICT);
             } else {
                 log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
                 std::fs::create_dir_all(&keypath)?;
@@ -139,9 +204,14 @@ impl CommonEnv {
             keypath.push(key);
             File::create(keypath)?.write_all(value.as_bytes())?;
             match key { // special case side effects
-                USER_KEY => { self.set_user(value); }
+                FILTER_KEY => { self.filter = value.to_string(); }
                 PASSWORD_KEY => { self.set_password(); }
+                ROOM_ID_KEY => { self.room_id = value.to_string(); }
                 ROOM_KEY => { self.set_room(); }
+                SERVER_KEY => { self.server = value.to_string(); }
+                SINCE_KEY => { self.since = value.to_string(); }
+                USERNAME_KEY => { self.username = value.to_string(); }
+                USER_KEY => { self.set_user(value); }
                 _ => { }
             }
             Ok(())
@@ -194,8 +264,11 @@ impl CommonEnv {
     pub fn set_room(&mut self) {
         log::debug!("# ROOM_KEY set '{}' => clearing ROOM_ID_KEY, SINCE_KEY, FILTER_KEY", ROOM_KEY);
         self.unset_debug(ROOM_ID_KEY);
+        self.room_id = EMPTY.to_string();
         self.unset_debug(SINCE_KEY);
+        self.since = EMPTY.to_string();
         self.unset_debug(FILTER_KEY);
+        self.filter = EMPTY.to_string();
     }
 
     pub fn unset(&mut self, key: &str) -> Result<(), Error> {
@@ -207,7 +280,7 @@ impl CommonEnv {
             let mut keypath = PathBuf::new();
             keypath.push(MTXCLI_DICT);
             if std::fs::metadata(&keypath).is_ok() { // keypath exists
-                log::info!("dict '{}' exists", MTXCLI_DICT);
+                // log::info!("dict '{}' exists", MTXCLI_DICT);
             } else {
                 log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
                 std::fs::create_dir_all(&keypath)?;
@@ -217,6 +290,15 @@ impl CommonEnv {
                 log::info!("dict:key = '{}:{}' exists.. deleting it", MTXCLI_DICT, key);
 
                 std::fs::remove_file(keypath)?;
+            }
+            match key { // special case side effects -- update cached values
+                FILTER_KEY => { self.filter = EMPTY.to_string(); }
+                ROOM_ID_KEY => { self.room_id = EMPTY.to_string(); }
+                SINCE_KEY => { self.since = EMPTY.to_string(); }
+                SERVER_KEY => { self.server = EMPTY.to_string(); }
+                USER_KEY => { self.user = EMPTY.to_string(); }
+                USERNAME_KEY => { self.username = EMPTY.to_string(); }
+                _ => { }
             }
             Ok(())
         }
@@ -242,7 +324,7 @@ impl CommonEnv {
             let mut keypath = PathBuf::new();
             keypath.push(MTXCLI_DICT);
             if std::fs::metadata(&keypath).is_ok() { // keypath exists
-                log::info!("dict '{}' exists", MTXCLI_DICT);
+                // log::info!("dict '{}' exists", MTXCLI_DICT);
             } else {
                 log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
                 std::fs::create_dir_all(&keypath)?;
@@ -481,45 +563,21 @@ pub struct CmdEnv {
     unset_cmd: Unset,
 }
 impl CmdEnv {
-    pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
-        let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
-        let version = get_version(&ticktimer);
-        log::info!("creating CommonEnv");
-        let mut common = CommonEnv {
-            llio: llio::Llio::new(&xns),
-            com: com::Com::new(&xns).expect("could't connect to COM"),
-            codec: codec::Codec::new(&xns).expect("couldn't connect to CODEC"),
-            ticktimer,
-            gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
-            cb_registrations: HashMap::new(),
-            trng: Trng::new(&xns).unwrap(),
-            xns: xous_names::XousNames::new().unwrap(),
-            user: EMPTY.to_string(),
-            username: EMPTY.to_string(),
-
-            server: SERVER_MATRIX.to_string(),
-            token: EMPTY.to_string(),
-            logged_in: false,
-            room_id: EMPTY.to_string(),
-            filter: EMPTY.to_string(),
-            since: EMPTY.to_string(),
-            first_line: true,
-            version,
-        };
-        log::info!("done creating CommonEnv");
-        run_migrations(&mut common);
+    pub fn new() -> CmdEnv {
+        let mut common_env = CommonEnv::new();
+        common_env.register_async_msg();
         CmdEnv {
-            common_env: common,
+            common_env,
             lastverb: XousString::<256>::new(),
             ///// 3. initialize your storage, by calling new()
-            get_cmd: Get::new(&xns),
-            heap_cmd: Heap::new(&xns),
-            help_cmd: Help::new(&xns),
-            login_cmd: Login::new(&xns),
-            logout_cmd: Logout::new(&xns),
-            set_cmd: Set::new(&xns),
-            status_cmd: Status::new(&xns),
-            unset_cmd: Unset::new(&xns),
+            get_cmd: Get::new(),
+            heap_cmd: Heap::new(),
+            help_cmd: Help::new(),
+            login_cmd: Login::new(),
+            logout_cmd: Logout::new(),
+            set_cmd: Set::new(),
+            status_cmd: Status::new(),
+            unset_cmd: Unset::new(),
         }
     }
 
@@ -539,16 +597,27 @@ impl CmdEnv {
             &mut self.unset_cmd,
         ];
 
-        if self.common_env.username.len() == 0 { // first time initialization
-            self.common_env.user = self.common_env.get_default(USER_KEY, EMPTY);
-            self.common_env.username = self.common_env.get_default(USERNAME_KEY, USERNAME_KEY);
-            self.common_env.server = self.common_env.get_default(SERVER_KEY, SERVER_MATRIX);
-            self.common_env.room_id = self.common_env.get_default(ROOM_ID_KEY, EMPTY);
-            self.common_env.filter = self.common_env.get_default(FILTER_KEY, EMPTY);
-            self.common_env.since = self.common_env.get_default(SINCE_KEY, EMPTY);
-        }
-
         if let Some(cmdline) = maybe_cmdline {
+            // Initialization (must wait until PDDB is mounted and llio can
+            // report accurate time). Here we wait to check for initialization
+            // once the user has typed something
+            if ! self.initialized {
+                log::info!("initializing");
+                if clock_not_set() {
+                    self.common_env.scalar_async_msg(CLOCK_NOT_SET_ID);
+                }
+                self.common_env.user = self.common_env.get_default(USER_KEY, EMPTY);
+                self.common_env.username = self.common_env.get_default(USERNAME_KEY, USERNAME_KEY);
+                self.common_env.server = self.common_env.get_default(SERVER_KEY, SERVER_MATRIX);
+                self.common_env.room_id = self.common_env.get_default(ROOM_ID_KEY, EMPTY);
+                self.common_env.filter = self.common_env.get_default(FILTER_KEY, EMPTY);
+                self.common_env.since = self.common_env.get_default(SINCE_KEY, EMPTY);
+                self.common_env.version = get_version(&self.common_env.ticktimer);
+
+                run_migrations(&mut self.common_env);
+                self.initialized = true;
+            }
+
             let maybe_verb = tokenize(cmdline);
 
             let mut cmd_ret: Result<Option<XousString::<1024>>, xous::Error> = Ok(None);
@@ -675,5 +744,18 @@ pub(crate) fn heap_usage() -> usize {
             log::error!("Couldn't measure heap usage");
             0
          },
+    }
+}
+
+
+pub fn clock_not_set() -> bool {
+    let now = SystemTime::now();
+    let since_the_epoch = now.duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+    let seconds: u64 = since_the_epoch.as_secs();
+    if seconds < DATE_2023 {
+        true
+    } else {
+        false
     }
 }

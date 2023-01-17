@@ -1,4 +1,11 @@
 {
+    "mtxcli.clock.warning": {
+        "en": "WARNING: clock not set",
+        "en-tts": "WARNING: clock not set",
+        "fr": "AVERTISSEMENT : horloge non réglée",
+        "ja": "WARNING: clock not set *EN*",
+        "zh": "WARNING: clock not set *EN*"
+    },
     "mtxcli.filter.failed": {
         "en": "error: could not create filter",
         "en-tts": "error: could not create filter",
@@ -83,6 +90,13 @@
         "ja": "/logout *EN*",
         "zh": "/logout *EN*"
     },
+    "mtxcli.migration.completed": {
+        "en": "migration completed",
+        "en-tts": "migration completed",
+        "fr": "migration terminée",
+        "ja": "migration completed *EN*",
+        "zh": "migration completed *EN*"
+    },
     "mtxcli.not.connected": {
         "en": "not connected",
         "en-tts": "not conntected",
@@ -124,6 +138,13 @@
         "fr": "erreur: impossible de trouver chambre",
         "ja": "error: could not find room_id *EN*",
         "zh": "error: could not find room_id *EN*"
+    },
+    "mtxcli.running.migrations": {
+        "en": "Running migrations from version",
+        "en-tts": "Running migrations from version",
+        "fr": "Exécution des migrations à partir de la version",
+        "ja": "Running migrations from version *EN*",
+        "zh": "Running migrations from version *EN*"
     },
     "mtxcli.send.failed": {
         "en": "failed to send!",

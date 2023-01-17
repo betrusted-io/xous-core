@@ -1,4 +1,6 @@
-use crate::{ShellCmdApi,CommonEnv};
+use crate::{ShellCmdApi,CommonEnv,
+            cmds::CLOCK_NOT_SET_ID};
+use xous::{MessageEnvelope, Message,StringBuffer};
 use xous_ipc::String as XousString;
 use core::fmt::Write;
 use locales::t;
@@ -7,7 +9,7 @@ use locales::t;
 pub struct Help {
 }
 impl Help {
-    pub fn new(_xns: &xous_names::XousNames) -> Self {
+    pub fn new() -> Self {
         Help {
         }
     }
@@ -68,7 +70,34 @@ impl<'a> ShellCmdApi<'a> for Help {
                 }
             }
         }
-
         Ok(Some(ret))
+    }
+
+    // NOTE: the help callback is used to process async messages
+    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error> {
+        match &msg.body {
+            Message::Scalar(xous::ScalarMessage{id: _, arg1: _, arg2: _,
+                                                arg3: _, arg4: async_msg_id}) => {
+                if *async_msg_id == CLOCK_NOT_SET_ID {
+                    let mut ret = XousString::<1024>::new();
+                    let warning = t!("mtxcli.clock.warning", xous::LANG);
+                    write!(ret, "{}", warning).unwrap();
+                    log::warn!("{}", warning);
+                    return Ok(Some(ret));
+                }
+            },
+            Message::Move(mm) => {
+                let str_buf = unsafe { StringBuffer::from_memory_message(mm) };
+                let msg = str_buf.to_str();
+                let mut ret = XousString::<1024>::new();
+                write!(ret, "{}", msg).unwrap();
+                // log::info!("async message \"{}\"", msg);
+                return Ok(Some(ret));
+            },
+            _ => {
+                log::error!("received unknown callback type: {:?}", msg)
+            }
+        }
+        Ok(None)
     }
 }
