@@ -30,21 +30,30 @@ impl<'a> ShellCmdApi<'a> for Set {
                         match value {
                             "" => {
                                 write!(ret, "{}", t!("mtxcli.set.help", xous::LANG)).unwrap();
-                           }
+                            }
                             _ => {
                                 match env.set(key, value) {
                                     Ok(()) => {
                                         write!(ret, "set {}", key).unwrap();
                                     },
                                     Err(e) => {
-                                        // write!(ret, "error setting key {}: {:?}", key, e).unwrap();
                                         log::error!("error setting key {}: {:?}", key, e);
                                     }
                                 }
                             }
                         }
                     } else {
-                        write!(ret, "{}", t!("mtxcli.set.help", xous::LANG)).unwrap();
+                        // Instead of an error -- set to the empty string
+                        // write!(ret, "{}", t!("mtxcli.set.help", xous::LANG)).unwrap();
+                        // write!(ret, "{}", t!("mtxcli.set.help", xous::LANG)).unwrap();
+                        match env.set(key, "") {
+                            Ok(()) => {
+                                write!(ret, "set {} EMPTY", key).unwrap();
+                            },
+                            Err(e) => {
+                                log::error!("error setting key {}: {:?}", key, e);
+                            }
+                        }
                     }
                 }
             }

@@ -29,6 +29,8 @@ codec = {path = "../../services/codec"}
 percent-encoding = "2.2"
 serde = { version = "1.0", features = [ "derive" ] }
 ureq = { version = "2.5", features = ["json"] }
+# Xous APIs
+pddb = {path = "../../services/pddb" }
 
 [features]
 default = []

@@ -39,6 +39,8 @@ const EMPTY: &str = "";
 const MTX_TIMEOUT: i32 = 300; // ms
 
 pub const CLOCK_NOT_SET_ID: usize = 1;
+pub const PDDB_NOT_MOUNTED_ID: usize = 2;
+pub const WIFI_NOT_CONNECTED_ID: usize = 3;
 
 /// Returns a version string which is more likely to string compare
 /// correctly vs. another version. FFI please see
@@ -196,7 +198,7 @@ impl CommonEnv {
             let mut keypath = PathBuf::new();
             keypath.push(MTXCLI_DICT);
             if std::fs::metadata(&keypath).is_ok() { // keypath exists
-                // log::info!("dict '{}' exists", MTXCLI_DICT);
+                log::info!("dict '{}' exists", MTXCLI_DICT);
             } else {
                 log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
                 std::fs::create_dir_all(&keypath)?;
@@ -280,15 +282,19 @@ impl CommonEnv {
             let mut keypath = PathBuf::new();
             keypath.push(MTXCLI_DICT);
             if std::fs::metadata(&keypath).is_ok() { // keypath exists
-                // log::info!("dict '{}' exists", MTXCLI_DICT);
+                log::info!("dict '{}' exists", MTXCLI_DICT);
             } else {
                 log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
                 std::fs::create_dir_all(&keypath)?;
             }
             keypath.push(key);
+            // NOTE: the std:fs::metadata call may return Ok() even when
+            // the file does not exist.
+            // As a workaround WE COULD set the variable to the empty string
+            // log::info!("dict:key = '{}:{}' set to empty string (not deleting it)", MTXCLI_DICT, key);
+            // File::create(keypath)?.write_all(EMPTY.as_bytes())?;
             if std::fs::metadata(&keypath).is_ok() { // keypath exists
                 log::info!("dict:key = '{}:{}' exists.. deleting it", MTXCLI_DICT, key);
-
                 std::fs::remove_file(keypath)?;
             }
             match key { // special case side effects -- update cached values
@@ -324,7 +330,7 @@ impl CommonEnv {
             let mut keypath = PathBuf::new();
             keypath.push(MTXCLI_DICT);
             if std::fs::metadata(&keypath).is_ok() { // keypath exists
-                // log::info!("dict '{}' exists", MTXCLI_DICT);
+                log::info!("dict '{}' exists", MTXCLI_DICT);
             } else {
                 log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
                 std::fs::create_dir_all(&keypath)?;
@@ -333,7 +339,7 @@ impl CommonEnv {
             if let Ok(mut file)= File::open(keypath) {
                 let mut value = String::new();
                 file.read_to_string(&mut value)?;
-                // log::info!("get '{}' = '{}'", key, value);
+                log::info!("get '{}' = '{}'", key, value);
                 Ok(Some(value))
             } else {
                 Ok(None)
@@ -601,21 +607,30 @@ impl CmdEnv {
             // Initialization (must wait until PDDB is mounted and llio can
             // report accurate time). Here we wait to check for initialization
             // once the user has typed something
-            if ! self.initialized {
+            if ! self.common_env.initialized {
                 log::info!("initializing");
                 if clock_not_set() {
                     self.common_env.scalar_async_msg(CLOCK_NOT_SET_ID);
-                }
-                self.common_env.user = self.common_env.get_default(USER_KEY, EMPTY);
-                self.common_env.username = self.common_env.get_default(USERNAME_KEY, USERNAME_KEY);
-                self.common_env.server = self.common_env.get_default(SERVER_KEY, SERVER_MATRIX);
-                self.common_env.room_id = self.common_env.get_default(ROOM_ID_KEY, EMPTY);
-                self.common_env.filter = self.common_env.get_default(FILTER_KEY, EMPTY);
-                self.common_env.since = self.common_env.get_default(SINCE_KEY, EMPTY);
-                self.common_env.version = get_version(&self.common_env.ticktimer);
+                } else {
+                    let pddb = pddb::PddbMountPoller::new();
+                    if ! pddb.is_mounted_nonblocking() {
+                        self.common_env.scalar_async_msg(PDDB_NOT_MOUNTED_ID);
+                    } else {
+                        // FUTURE: Check if Wifi is connected
+                        // if not then
+                        // self.common_env.scalar_async_msg(WIFI_NOT_CONNECTED_ ID);
+                        self.common_env.user = self.common_env.get_default(USER_KEY, EMPTY);
+                        self.common_env.username = self.common_env.get_default(USERNAME_KEY, USERNAME_KEY);
+                        self.common_env.server = self.common_env.get_default(SERVER_KEY, SERVER_MATRIX);
+                        self.common_env.room_id = self.common_env.get_default(ROOM_ID_KEY, EMPTY);
+                        self.common_env.filter = self.common_env.get_default(FILTER_KEY, EMPTY);
+                        self.common_env.since = self.common_env.get_default(SINCE_KEY, EMPTY);
+                        self.common_env.version = get_version(&self.common_env.ticktimer);
 
-                run_migrations(&mut self.common_env);
-                self.initialized = true;
+                        run_migrations(&mut self.common_env);
+                        self.common_env.initialized = true;
+                    }
+                }
             }
 
             let maybe_verb = tokenize(cmdline);

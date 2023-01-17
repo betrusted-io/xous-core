@@ -104,6 +104,13 @@
         "ja": "not connected *EN*",
         "zh": "not connected *EN*"
     },
+    "mtxcli.pddb.warning": {
+        "en": "WARNING: pddb not mounted",
+        "en-tts": "WARNING: pddb not mounted",
+        "fr": "AVERTISSEMENT: pddb pas monté",
+        "ja": "WARNING: pddb not mounted *EN*",
+        "zh": "WARNING: pddb not mounted *EN*"
+    },
     "mtxcli.please.set.password": {
         "en": "please /set password my-password",
         "en-tts": "please /set password my-password",
@@ -180,5 +187,12 @@
         "fr": "/unset clé",
         "ja": "/unset key *EN*",
         "zh": "/unset key *EN*"
+    },
+    "mtxcli.wifi.warning": {
+        "en": "WARNING: WiFi not connected",
+        "en-tts": "WARNING: WiFi not connected",
+        "fr": "AVERTISSEMENT: WiFi pas connecté",
+        "ja": "WARNING: WiFi not connected *EN*",
+        "zh": "WARNING: WiFi not connected *EN*"
     }
 }
