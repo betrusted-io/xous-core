@@ -7,7 +7,7 @@ use locales::t;
 pub struct Set {
 }
 impl Set {
-    pub fn new(_xns: &xous_names::XousNames) -> Self {
+    pub fn new() -> Self {
         Set {
         }
     }

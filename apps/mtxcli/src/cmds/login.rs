@@ -5,7 +5,7 @@ use xous_ipc::String as XousString;
 pub struct Login {
 }
 impl Login {
-    pub fn new(_xns: &xous_names::XousNames) -> Self {
+    pub fn new() -> Self {
         Login {
         }
     }

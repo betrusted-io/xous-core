@@ -4,6 +4,7 @@
 
 use std::io::Error;
 use crate::cmds::{CommonEnv,VERSION_KEY};
+use locales::t;
 
 mod v0_9_11_0120;  use v0_9_11_0120::*;
 
@@ -41,16 +42,21 @@ macro_rules! migration_api {
 pub fn run_migrations(common: &mut CommonEnv) {
     let version = common.get_default(VERSION_KEY, DEFAULT_VERSION);
     if version.ne(&common.version) {
-        log::info!("Running migrations from version {} to {}",
-                   version, common.version);
+        let running_migrations = t!("mtxcli.running.migrations", xous::LANG);
+        let msg = format!("{} {} .. {}",
+                          running_migrations, version, common.version);
+        log::info!("{}", msg);
+        common.send_async_msg(&msg);
         let mut migrations: Vec<Box<dyn MigrationApi>> = Vec::new();
         migrations.push(Box::new(V0_9_11_0120::new()));
         for migration in migrations.iter() {
             if migration.applies(&version) {
                 match migration.process(common) {
                     Ok(boolean) => {
-                        log::info!("migration competed: {}: {}",
-                                   migration.version(), boolean);
+                        let migration_completed = t!("mtxcli.migration.completed", xous::LANG);
+                        let msg = format!("{}: {}: {}",
+                                          migration_completed, migration.version(), boolean);
+                        common.send_async_msg(&msg);
                         if boolean {
                             common.set(VERSION_KEY, migration.version())
                                 .expect("cannot set _version");
