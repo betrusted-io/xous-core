@@ -312,7 +312,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - More optimizations to `vault` passwords path. Records are re-used instead of re-allocated if they don't change. This should speedup switching to `vault` passwords by about 2x after the very first time the records are loaded (the first time will take longer because the records have to be built up).
 - Extend watchdog reset time to ~30s from 7s, to enable easier guru meditation reporting.
 - Add USB mass-storage drivers (thanks @gsora for all the help there!). Currently able to emulate a blank USB drive in RAM; more to come soon.
-- Performance fixes to xous scalar and memory messanges. A subtle bug was uncovered and fixed in the way scalar messages were being returned, and memory messages now initialize memory using an unrolled loop that takes better advantage of the 32-bit architecture and cache line size. A corresponding `std` fix to an unnecessary `yield_slice()` inside `dl_malloc` improves `vault` PDDB large-key readout performance by 30%.
+- Performance fixes to xous scalar and memory messages. A subtle bug was uncovered and fixed in the way scalar messages were being returned, and memory messages now initialize memory using an unrolled loop that takes better advantage of the 32-bit architecture and cache line size. A corresponding `std` fix to an unnecessary `yield_slice()` inside `dl_malloc` improves `vault` PDDB large-key readout performance by 30%.
 
 ## Roadmap
 - Lots of testing and bug fixes
