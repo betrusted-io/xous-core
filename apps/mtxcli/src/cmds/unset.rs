@@ -7,7 +7,7 @@ use locales::t;
 pub struct Unset {
 }
 impl Unset {
-    pub fn new(_xns: &xous_names::XousNames) -> Self {
+    pub fn new() -> Self {
         Unset {
         }
     }

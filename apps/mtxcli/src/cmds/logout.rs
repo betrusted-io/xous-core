@@ -5,7 +5,7 @@ use xous_ipc::String as XousString;
 pub struct Logout {
 }
 impl Logout {
-    pub fn new(_xns: &xous_names::XousNames) -> Self {
+    pub fn new() -> Self {
         Logout {
         }
     }

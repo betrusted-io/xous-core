@@ -6,7 +6,7 @@ use locales::t;
 pub struct Status {
 }
 impl Status {
-    pub fn new(_xns: &xous_names::XousNames) -> Self {
+    pub fn new() -> Self {
         Status {
         }
     }
