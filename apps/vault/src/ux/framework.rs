@@ -35,8 +35,13 @@ impl ListItem {
             count: self.count,
         }
     }
+    /// This is made available for edit/delete routines to generate the key without having to
+    /// make a whole ListItem record (which is somewhat expensive).
+    pub fn key_from_parts(name: &str, guid: &str) -> String {
+        name.to_lowercase() + &guid.to_string()
+    }
     pub fn key(&self) -> String {
-        self.guid.to_string()
+        Self::key_from_parts(&self.name, &self.guid)
     }
 }
 impl Ord for ListItem {
