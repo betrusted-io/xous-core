@@ -523,6 +523,11 @@ fn main() -> ! {
                     }
                 }
                 modals.dynamic_notification_close().ok();
+                // force the one entry to update its UX cache so that the autotype time increments up
+                if let Some(entry) = vaultux.selected_entry() {
+                    let buf = Buffer::into_buf(entry).expect("IPC error");
+                    buf.send(actions_conn, ActionOp::UpdateOneItem.to_u32().unwrap()).expect("messaging error");
+                }
             }
             Some(VaultOp::MenuDeleteStage1) => {
                 // stage 1 happens here because the filtered list and selection entry are in the responsive UX section.

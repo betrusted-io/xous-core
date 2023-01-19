@@ -44,6 +44,7 @@ pub(crate) enum ActionOp {
     MenuManageBasis,
     /// Internal ops
     UpdateMode,
+    UpdateOneItem,
     Quit,
     #[cfg(feature="vault-testing")]
     /// Testing
@@ -68,6 +69,8 @@ pub(crate) fn start_actions_thread(
                         manager.activate();
                         manager.menu_addnew();
                         // this is necessary so the next redraw shows the newly added entry
+                        // no cache clear is called for because new entries will always add to the list;
+                        // there is no risk of "stale" entries persisting
                         manager.retrieve_db();
                         manager.deactivate();
                     },
@@ -90,12 +93,14 @@ pub(crate) fn start_actions_thread(
                     Some(ActionOp::MenuUnlockBasis) => {
                         manager.activate();
                         manager.unlock_basis();
+                        manager.item_lists.lock().unwrap().pw.clear(); // clear the cached item list for passwords (totp/fido are not cached and don't need clearing)
                         manager.retrieve_db();
                         manager.deactivate();
                     },
                     Some(ActionOp::MenuManageBasis) => {
                         manager.activate();
                         manager.manage_basis();
+                        manager.item_lists.lock().unwrap().pw.clear(); // clear the cached item list for passwords
                         manager.retrieve_db();
                         manager.deactivate();
                     }
@@ -104,6 +109,13 @@ pub(crate) fn start_actions_thread(
                         manager.activate();
                         manager.deactivate();
                     },
+                    Some(ActionOp::UpdateOneItem) => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
+                        manager.activate();
+                        manager.update_db_entry(entry);
+                        manager.deactivate();
+                    }
                     Some(ActionOp::UpdateMode) => msg_blocking_scalar_unpack!(msg, _, _, _, _,{
                         manager.retrieve_db();
                         xous::return_scalar(msg.sender, 1).unwrap();
@@ -507,15 +519,78 @@ impl<'a> ActionManager<'a> {
                 }
             } else {
                 // we're deleting either a password, or a totp
-                match self.storage.borrow_mut().delete(choice.unwrap(), entry.key_name.as_str().unwrap_or("UTF-8 error")) {
+                let choice = choice.unwrap();
+                let guid = entry.key_name.as_str().unwrap_or("UTF8-error");
+                if entry.mode == VaultMode::Password {
+                    // self.modals.show_notification(&format!("deleting key {}", guid), None).ok();
+                    // if it's a password, we have to pull the full record, and then reconstitute the item_lists index key so we can remove it from the UX cache
+                    let storage = self.storage.borrow_mut();
+                    let pw: storage::PasswordRecord =  match storage.get_record(&choice, guid) {
+                        Ok(record) => record,
+                        Err(error) => {
+                            self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
+                            return;
+                        }
+                    };
+                    let mut desc = String::with_capacity(256);
+                    make_pw_name(&pw.description, &pw.username, &mut desc);
+                    let key = ListItem::key_from_parts(&desc, guid);
+                    self.item_lists.lock().unwrap().pw.remove(&key);
+                    /*
+                    if self.item_lists.lock().unwrap().pw.remove(&key).is_some() {
+                        self.modals.show_notification(&format!("deleted UX {}", &key), None).ok();
+                    } else {
+                        self.modals.show_notification(&format!("could not delete UX {}", &key), None).ok();
+                    }; */
+                }
+                match self.storage.borrow_mut().delete(choice, guid) {
                     Ok(_) => self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok().unwrap(),
                     Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                 }
-                if entry.mode == VaultMode::Password {
-                    self.item_lists.lock().unwrap().pw.remove(entry.key_name.as_str().unwrap_or("UTF-8 error"));
-                }
             }
+            self.pddb.borrow().sync().ok();
         }
+    }
+
+    /// Update UX cached data for just one entry
+    pub(crate) fn update_db_entry(&mut self, entry: SelectedEntry) {
+        match entry.mode {
+            VaultMode::Password => {
+                let choice = storage::ContentKind::Password;
+                let guid = entry.key_name.as_str().unwrap_or("UTF8-error");
+                let storage = self.storage.borrow_mut();
+                let pw: storage::PasswordRecord =  match storage.get_record(&choice, guid) {
+                    Ok(record) => record,
+                    Err(error) => {
+                        self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
+                        return;
+                    }
+                };
+                // create the list item from the updated entry
+                let mut desc = String::with_capacity(256);
+                make_pw_name(&pw.description, &pw.username, &mut desc);
+                let mut extra = String::with_capacity(256);
+                let human_time = crate::ux::atime_to_str(pw.atime);
+                extra.push_str(&human_time);
+                extra.push_str("; ");
+                extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
+                extra.push_str(&pw.count.to_string());
+                let li = ListItem {
+                    name: desc.to_string(), // these allocs will be slow, but we do it only once on boot
+                    extra: extra.to_string(),
+                    dirty: true,
+                    guid: guid.to_string(),
+                    atime: pw.atime,
+                    count: pw.count,
+                };
+                log::debug!("updating {} to list item {}", li.extra, li.key());
+                let il = &mut self.item_lists.lock().unwrap().pw;
+                assert!(il.insert(li.key(), li).is_some(), "Somehow, the autotyped record isn't in the UX list for updating!");
+            },
+            _ => {
+                // no cached data, no action
+            }
+        };
     }
 
     pub(crate) fn menu_edit(&mut self, entry: SelectedEntry) {
@@ -654,7 +729,12 @@ impl<'a> ActionManager<'a> {
                         return;
                     }
                 };
+                // remove the entry from the old UX list
+                let mut desc = String::new();
+                make_pw_name(&pw.description, &pw.username, &mut desc);
+                self.item_lists.lock().unwrap().pw.remove(&ListItem::key_from_parts(&desc, key_name));
 
+                // display previous data for edit
                 let edit_data = if pw.notes != t!("vault.notes", xous::LANG) {
                     self.modals
                     .alert_builder(t!("vault.edit_dialog", xous::LANG))
@@ -759,15 +839,12 @@ impl<'a> ActionManager<'a> {
                                 if pw_rec.from_vec(data).is_ok() {
                                     // reset the re-usable structures
                                     lookup_key.clear();
-                                    desc.clear();
                                     extra.clear();
                                     #[cfg(feature="vaultperf")]
                                     self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
 
                                     // build the description string
-                                    desc.push_str(&pw_rec.description);
-                                    desc.push_str("/");
-                                    desc.push_str(&pw_rec.username);
+                                    make_pw_name(&pw_rec.description, &pw_rec.username, &mut desc);
 
                                     // build the storage key in the list array
                                     lookup_key.push_str(&desc);
@@ -784,6 +861,7 @@ impl<'a> ActionManager<'a> {
                                         if prev_entry.atime != pw_rec.atime || prev_entry.count != pw_rec.count {
                                             // this is expensive, so don't run it unless we have to
                                             let human_time = crate::ux::atime_to_str(pw_rec.atime);
+                                            // note this code is duplicated in update_db_entry()
                                             extra.push_str(&human_time);
                                             extra.push_str("; ");
                                             extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
@@ -1454,4 +1532,11 @@ pub(crate) fn heap_usage() -> usize {
             0
          },
     }
+}
+
+fn make_pw_name(description: &str, username: &str, dest: &mut String) {
+    dest.clear();
+    dest.push_str(description);
+    dest.push_str("/");
+    dest.push_str(username);
 }
