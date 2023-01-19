@@ -49,7 +49,7 @@ pub(crate) struct DictCacheEntry {
     /// read in, and is the "master" for tracking purposes. We always fill this from index 0 and go up; if a KeySmallPool
     /// goes completely empty, the entry should still exist but indicate that it's got space. Thus if a key was found allocated
     /// to the Nth index position, but the previous N-1 positions are empty, the only way we could have gotten there was if we
-    /// had allocated lots of small data, filled upo the pool to the Nth position, and then deleted all of that prior data.
+    /// had allocated lots of small data, filled up the pool to the Nth position, and then deleted all of that prior data.
     /// This situation could create pathologies in the memory usage overhead of the small_pool, which until we have a "defrag"
     /// operation for the small pool, we may just have to live with.
     pub(crate) small_pool: Vec<KeySmallPool>,
