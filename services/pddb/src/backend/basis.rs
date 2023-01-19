@@ -571,14 +571,15 @@ impl BasisCache {
                     } else {
                         // this implementation is still in progress
                         dict_entry.key_erase(key);
-
-                        // encrypt and write the dict entry to disk
-                        basis.dict_sync(hw, dict)?;
-                        // sync the root basis structure as well, while we're at it...
-                        basis.basis_sync(hw);
-                        // finally, sync the page tables.
-                        basis.pt_sync(hw);
                     }
+                    // sync the key pools to disk
+                    dict_entry.sync_large_pool();
+                    // encrypt and write the dict entry to disk
+                    basis.dict_sync(hw, dict)?;
+                    // sync the root basis structure as well, while we're at it...
+                    basis.basis_sync(hw);
+                    // finally, sync the page tables.
+                    basis.pt_sync(hw);
                     return Ok(())
                 } else {
                     return Err(Error::new(ErrorKind::NotFound, "key not found"));
