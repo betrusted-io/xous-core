@@ -511,6 +511,9 @@ impl<'a> ActionManager<'a> {
                     Ok(_) => self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok().unwrap(),
                     Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                 }
+                if entry.mode == VaultMode::Password {
+                    self.item_lists.lock().unwrap().pw.remove(entry.key_name.as_str().unwrap_or("UTF-8 error"));
+                }
             }
         }
     }

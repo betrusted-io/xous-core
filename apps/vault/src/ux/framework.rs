@@ -36,7 +36,7 @@ impl ListItem {
         }
     }
     pub fn key(&self) -> String {
-        self.name.to_string() + &self.guid.to_string()
+        self.guid.to_string()
     }
 }
 impl Ord for ListItem {
