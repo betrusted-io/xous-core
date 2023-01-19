@@ -182,11 +182,11 @@
         "zh": "键盘布局..."
     },
     "mainmenu.lockdevice": {
-        "en": "Lock device",
-        "en-tts": "Lock device",
-        "fr": "Verrouiller l'appareil",
-        "ja": "ロック装置",
-        "zh": "锁定装置"
+        "en": "Lock device (reboot)",
+        "en-tts": "Lock device (reboot)",
+        "fr": "Verrouiller l'appareil (redémarrer)",
+        "ja": "ロック装置 (リブート)",
+        "zh": "锁定装置 (重启)"
     },
     "mainmenu.pddb": {
         "en": "PDDB submenu...",
