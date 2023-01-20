@@ -393,6 +393,96 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         }
                     }
                 }
+                #[cfg(feature="pddbtest")]
+                "deltest" => {
+                    const JUNK_MIN: usize = 512;
+                    const JUNK_VAR: usize = 1500;
+                    const TOTAL_KEYS: usize = 40;
+                    self.pddb.delete_dict("deltest", None).ok();
+                    for outer_iter in 0..512 {
+                        log::info!("fill junk iter {}", outer_iter);
+                        let mut junk_keys = Vec::<std::string::String>::new();
+                        let mut junk_checksum = std::collections::HashMap::<std::string::String, usize>::new();
+                        for index in 0..TOTAL_KEYS { // this should allocate a few key small pools
+                            let mut junk = Vec::<u8>::new();
+                            let total_junk = JUNK_MIN + _env.trng.get_u32().unwrap() as usize % JUNK_VAR;
+                            let mut checksum = 0;
+                            for i in 0..total_junk {
+                                junk.push((i as usize + index) as u8);
+                                checksum += ((i as usize + index) as u8) as usize;
+                            }
+                            let junkname = format!("junk{}", index);
+                            match self.pddb.get(
+                                "deltest",
+                                &junkname,
+                                None, true, true,
+                                None,
+                                None::<fn()>
+                            ) {
+                                Ok(mut junk_key) => {
+                                    match junk_key.write_all(&junk) {
+                                        Ok(_) => {
+                                            log::debug!("wrote {} of len {}", junkname, total_junk);
+                                        }
+                                        Err(e) => {
+                                            log::error!("couldn't write {}: {:?}", junkname, e);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!("couldn't allocate junk key {}: {:?}", junkname, e);
+                                }
+                            }
+                            log::debug!("name: {}, checksum: {}", junkname, checksum);
+                            junk_checksum.insert(junkname.to_string(), checksum);
+                            junk_keys.push(junkname);
+                        }
+                        while junk_keys.len() > 0 {
+                            let to_remove = _env.trng.get_u32().unwrap() as usize % junk_keys.len();
+                            match self.pddb.delete_key("deltest", &junk_keys[to_remove], None) {
+                                Ok(_) => log::debug!("remove {} OK", junk_keys[to_remove]),
+                                Err(e) => log::error!("remove {} error: {:?}", junk_keys[to_remove], e),
+                            }
+                            self.pddb.sync().ok();
+                            let check = self.pddb.list_keys("deltest", None).unwrap();
+                            assert!(check.len() == (junk_keys.len() - 1));
+                            for (_key_index, key) in check.iter().enumerate() {
+                                if key == &junk_keys[to_remove] {
+                                    panic!("Removed key was not removed");
+                                }
+                                assert!(junk_keys.contains(key), "Unexpected key returned in key list");
+                                let mut junk = Vec::<u8>::new();
+                                match self.pddb.get(
+                                    "deltest",
+                                    &key,
+                                    None, false, false, None, None::<fn()>
+                                ) {
+                                    Ok(mut junk_key) => {
+                                        let readback_len = junk_key.read_to_end(&mut junk).unwrap();
+                                        let mut checksum = 0;
+                                        for &d in junk.iter() {
+                                            checksum += d as usize;
+                                        }
+                                        if checksum != *junk_checksum.get(key).unwrap() {
+                                            log::info!("readback {}", readback_len);
+                                            log::info!("array: {:?}", junk);
+                                            log::error!("Key data did not match name: {}, checksum: {}, expected: {}",
+                                                key,
+                                                checksum,
+                                                *junk_checksum.get(key).unwrap()
+                                            );
+                                            panic!("data mismatch!");
+                                        }
+                                    }
+                                    Err(e) => log::error!("error reading back key that should exist: {:?}", e),
+                                }
+                            }
+                            junk_keys.remove(to_remove);
+                        }
+                        assert!(self.pddb.list_keys("deltest", None).unwrap().len() == 0, "Not all keys were deleted!");
+                        // self.pddb.sync().ok();
+                    }
+                }
                 #[cfg(feature="test-rekey")]
                 "rekey" => {
                     let old_dna = if let Some(dna_str) = tokens.next() {
