@@ -71,5 +71,8 @@ pub fn run_migrations(common: &mut CommonEnv) {
         }
         common.set(VERSION_KEY, &common.version.clone())
             .expect("cannot set _version");
+        let migrations_complete = t!("mtxcli.migrations.complete", xous::LANG);
+        log::info!("{}", migrations_complete);
+        common.send_async_msg(&migrations_complete);
     }
 }
