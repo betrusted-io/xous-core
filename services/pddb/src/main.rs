@@ -528,6 +528,15 @@ fn wrapped_main() -> ! {
         }
     });
 
+    // our menu handler
+    let my_cid = xous::connect(pddb_sid).unwrap();
+    let _ = thread::spawn({
+        let my_cid = my_cid.clone();
+        move || {
+            pddb_menu(my_cid);
+        }
+    });
+
     // run the CI tests if the option has been selected
     #[cfg(all(
         not(target_os = "xous"),
@@ -539,14 +548,6 @@ fn wrapped_main() -> ! {
         hw_testcase(&mut pddb_os);
     }
 
-    // our menu handler
-    let my_cid = xous::connect(pddb_sid).unwrap();
-    let _ = thread::spawn({
-        let my_cid = my_cid.clone();
-        move || {
-            pddb_menu(my_cid);
-        }
-    });
     // a thread to trigger period scrubbing of the PDDB
     let scrub_run = Arc::new(AtomicBool::new(false));
     let _ = thread::spawn({
