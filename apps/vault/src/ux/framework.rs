@@ -684,7 +684,7 @@ impl VaultUx {
             VaultMode::Password => &il.pw,
         };
         for item in item_list.values() {
-            if item.name.starts_with(criteria) {
+            if item.name.to_lowercase().starts_with(criteria) {
                 let mut staged_item = item.clone();
                 staged_item.dirty = true;
                 self.filtered_list.push(staged_item);
