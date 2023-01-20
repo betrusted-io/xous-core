@@ -307,6 +307,10 @@ impl DictCacheEntry {
     fn try_fill_small_key(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         data_cache: &mut PlaintextCache, key_name: &str) {
         if let Some(kcache) = self.keys.get_mut(key_name) {
+            if !kcache.flags.valid() {
+                // nothing to fill, the key entry isn't valid
+                return;
+            }
             if let Some(pool_index) = small_storage_index_from_key(&kcache, self.index) {
                 // if the key is within the small pool space, create a bookkeeping record for it, and pre-cache its data.
                 // generate the index within the small pool based on the address
@@ -1014,7 +1018,8 @@ impl DictCacheEntry {
                         log::error!("Double-free error in free_keys()");
                         log::info!("free_key_vec[i].0: {:?}", free_key_vec[i].0);
                         log::info!("index: {}", index);
-                        panic!("Double-free error in free_keys()");
+                        panic!("Double-free error in free_keys(). free_key_vec[i].0: {:?}, index: {}, free_key_vec.len(): {}",
+                            free_key_vec[i].0, index, free_key_vec.len());
                     }
                     FreeKeyCases::RightAdjacent => {
                         // see if we should merge to the right

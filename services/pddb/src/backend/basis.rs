@@ -572,7 +572,11 @@ impl BasisCache {
                         // this implementation is still in progress
                         dict_entry.key_erase(key);
                     }
+
                     // sync the key pools to disk
+                    if !dict_entry.sync_small_pool(hw, &mut basis.v2p_map, &basis.cipher) {
+                        return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of memory syncing small pool"));
+                    }
                     dict_entry.sync_large_pool();
                     // encrypt and write the dict entry to disk
                     basis.dict_sync(hw, dict)?;
@@ -1697,6 +1701,13 @@ impl BasisCacheEntry {
             }
         }
         for dict in dictnames {
+            if let Some(dict_entry) = self.dicts.get_mut(&dict) {
+                if !dict_entry.sync_small_pool(hw, &mut self.v2p_map, &self.cipher) {
+                    return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of memory syncing small pool"));
+                }
+                dict_entry.sync_large_pool();
+            }
+
             match self.dict_sync(hw, &dict) {
                 Ok(_) => {},
                 Err(e) => {
