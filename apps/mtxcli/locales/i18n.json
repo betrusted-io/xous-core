@@ -48,6 +48,13 @@
         "ja": "available mtxcli commands: *EN*",
         "zh": "available mtxcli commands: *EN*"
     },
+    "mtxcli.initialized": {
+        "en": "MTXCLI ready",
+        "en-tts": "MTXCLI ready",
+        "fr": "MTXCLI prêt",
+        "ja": "MTXCLI ready *EN*",
+        "zh": "MTXCLI ready *EN*"
+    },
     "mtxcli.logged.in": {
         "en": "logged in",
         "en-tts": "logged in",
@@ -97,6 +104,13 @@
         "ja": "migration completed *EN*",
         "zh": "migration completed *EN*"
     },
+    "mtxcli.migrations.complete": {
+        "en": "migrations complete",
+        "en-tts": "migrations complete",
+        "fr": "tous les migrations terminées",
+        "ja": "migrations complete *EN*",
+        "zh": "migrations complete *EN*"
+    },
     "mtxcli.not.connected": {
         "en": "not connected",
         "en-tts": "not conntected",
@@ -110,6 +124,13 @@
         "fr": "AVERTISSEMENT: pddb pas monté",
         "ja": "WARNING: pddb not mounted *EN*",
         "zh": "WARNING: pddb not mounted *EN*"
+    },
+    "mtxcli.please.login": {
+        "en": "please /login",
+        "en-tts": "please /login",
+        "fr": "Veuillez /login",
+        "ja": "please /login *EN*",
+        "zh": "please /login *EN*"
     },
     "mtxcli.please.set.password": {
         "en": "please /set password my-password",
@@ -187,6 +208,13 @@
         "fr": "/unset clé",
         "ja": "/unset key *EN*",
         "zh": "/unset key *EN*"
+    },
+    "mtxcli.wifi.connected": {
+        "en": "WiFi connected",
+        "en-tts": "WiFi connected",
+        "fr": "WiFi connecté",
+        "ja": "WiFi connected *EN*",
+        "zh": "WiFi connected *EN*"
     },
     "mtxcli.wifi.warning": {
         "en": "WARNING: WiFi not connected",

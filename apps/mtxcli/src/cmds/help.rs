@@ -1,6 +1,6 @@
-use crate::{ShellCmdApi,CommonEnv,
-            cmds::{CLOCK_NOT_SET_ID,PDDB_NOT_MOUNTED_ID,WIFI_NOT_CONNECTED_ID}};
-use xous::{MessageEnvelope, Message,StringBuffer};
+use crate::{ShellCmdApi, CommonEnv};
+use crate::cmds::*;
+use xous::{MessageEnvelope, Message, StringBuffer};
 use xous_ipc::String as XousString;
 use core::fmt::Write;
 use locales::t;
@@ -74,7 +74,7 @@ impl<'a> ShellCmdApi<'a> for Help {
     }
 
     // NOTE: the help callback is used to process async messages
-    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error> {
+    fn callback(&mut self, msg: &MessageEnvelope, env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error> {
         match &msg.body {
             Message::Scalar(xous::ScalarMessage{id: _, arg1: _, arg2: _,
                                                 arg3: _, arg4: async_msg_id}) => {
@@ -89,6 +89,51 @@ impl<'a> ShellCmdApi<'a> for Help {
                     WIFI_NOT_CONNECTED_ID => {
                         t!("mtxcli.wifi.warning", xous::LANG)
                     },
+                    MTXCLI_INITIALIZED_ID => {
+                        t!("mtxcli.initialized", xous::LANG)
+                    },
+                    WIFI_CONNECTED_ID => {
+                        t!("mtxcli.wifi.connected", xous::LANG)
+                    },
+                    SET_USER_ID => {
+                        t!("mtxcli.please.set.user", xous::LANG)
+                    },
+                    SET_PASSWORD_ID => {
+                        t!("mtxcli.please.set.password", xous::LANG)
+                    },
+                    LOGGED_IN_ID => {
+                        t!("mtxcli.logged.in", xous::LANG)
+                    },
+                    LOGIN_FAILED_ID => {
+                        t!("mtxcli.login.failed", xous::LANG)
+                    },
+                    SET_ROOM_ID => {
+                        t!("mtxcli.please.set.room", xous::LANG)
+                    },
+                    ROOMID_FAILED_ID => {
+                        t!("mtxcli.roomid.failed", xous::LANG)
+                    },
+                    FILTER_FAILED_ID => {
+                        t!("mtxcli.filter.failed", xous::LANG)
+                    },
+                    SET_SERVER_ID => {
+                        t!("mtxcli.please.set.server", xous::LANG)
+                    },
+                    LOGGING_IN_ID => {
+                        t!("mtxcli.logging.in", xous::LANG)
+                    },
+                    LOGGED_OUT_ID => {
+                        t!("mtxcli.logged.out", xous::LANG)
+                    },
+                    NOT_CONNECTED_ID => {
+                        t!("mtxcli.not.connected", xous::LANG)
+                    },
+                    FAILED_TO_SEND_ID => {
+                        t!("mtxcli.send.failed", xous::LANG)
+                    },
+                    PLEASE_LOGIN_ID => {
+                        t!("mtxcli.please.login", xous::LANG)
+                    },
                     _ => {
                        "unknown async_msg_id"
                     },
@@ -100,10 +145,27 @@ impl<'a> ShellCmdApi<'a> for Help {
             Message::Move(mm) => {
                 let str_buf = unsafe { StringBuffer::from_memory_message(mm) };
                 let msg = str_buf.to_str();
-                let mut ret = XousString::<1024>::new();
-                write!(ret, "{}", msg).unwrap();
                 // log::info!("async message \"{}\"", msg);
-                return Ok(Some(ret));
+                let mut ret = XousString::<1024>::new();
+                if msg.starts_with(SENTINEL) {
+                    let msgv: Vec<&str> = msg.split(SENTINEL).collect();
+                    if msgv.len() == 4 {
+                        env.listen_over(msgv[1]);
+                        if msgv[2].len() > 0 {
+                            write!(ret, "{}", msgv[2]).unwrap();
+                            return Ok(Some(ret));
+                        } else {
+                            return Ok(None);
+                        }
+                    } else {
+                        log::info!("client_sync had an error");
+                        env.listen_over(msgv[0]);
+                        return Ok(None);
+                    }
+                } else {
+                    write!(ret, "{}", msg).unwrap();
+                    return Ok(Some(ret));
+                }
             },
             _ => {
                 log::error!("received unknown callback type: {:?}", msg)

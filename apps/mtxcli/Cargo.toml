@@ -1,6 +1,6 @@
 [package]
 name = "mtxcli"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Matrix chat"
@@ -8,29 +8,31 @@ description = "Matrix chat"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 log = "0.4.14"
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
+num-derive = { version = "0.3.3", default-features = false}
+num-traits = { version = "0.2.14", default-features = false}
 xous = "0.9.31"
 xous-ipc = "0.9.31"
 log-server = { package = "xous-api-log", version = "0.1.26" }
 ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.26" }
 xous-names = { package = "xous-api-names", version = "0.9.28" }
-gam = {path = "../../services/gam" }
-graphics-server = {path = "../../services/graphics-server" }
-trng = {path = "../../services/trng"}
-locales = {path = "../../locales"}
-ime-plugin-api = {path = "../../services/ime-plugin-api"}
-ime-plugin-shell = {path = "../../services/ime-plugin-shell"}
-content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
-com = {path = "../../services/com"}
-llio = {path = "../../services/llio"}
-codec = {path = "../../services/codec"}
+gam = { path = "../../services/gam" }
+graphics-server = { path = "../../services/graphics-server" }
+trng = { path = "../../services/trng"}
+locales = { path = "../../locales"}
+ime-plugin-api = { path = "../../services/ime-plugin-api"}
+ime-plugin-shell = { path = "../../services/ime-plugin-shell"}
+content-plugin-api = { path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
+codec = { path = "../../services/codec"}
+com = { path = "../../services/com"}
+com_rs-ref = { path = "../../imports/com_rs-ref"}
+llio = { path = "../../services/llio"}
+net = { path = "../../services/net" }
+pddb = { path = "../../services/pddb" }
+status = { path = "../../services/status" }
 # new dependencies for mtxcli
 percent-encoding = "2.2"
 serde = { version = "1.0", features = [ "derive" ] }
 ureq = { version = "2.5", features = ["json"] }
-# Xous APIs
-pddb = {path = "../../services/pddb" }
 
 [features]
 default = []
