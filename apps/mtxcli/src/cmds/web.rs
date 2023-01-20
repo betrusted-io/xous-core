@@ -30,7 +30,7 @@ fn serialize<T: ?Sized + Serialize>(object: &T) -> Option<String> {
             Some(value)
         },
         Err(e) => {
-            log::error!("ERROR in serialize: {:?}", e);
+            log::info!("ERROR in serialize: {:?}", e);
             None
         }
     }
@@ -42,7 +42,7 @@ pub fn handle_response(maybe_response: Result<ureq::Response,ureq::Error>) -> Op
             if let Ok(body) = response.into_json() {
                 Some(body)
             } else {
-                log::error!("Error: could not convert response into JSON");
+                log::info!("Error: could not convert response into JSON");
                 None
             }
         },
@@ -50,11 +50,11 @@ pub fn handle_response(maybe_response: Result<ureq::Response,ureq::Error>) -> Op
             /* the server returned an unexpected status
             code (such as 400, 500 etc) */
             let err_body = response.into_string().unwrap();
-            log::error!("ERROR code {} err_body = {}", code, err_body);
+            log::info!("ERROR code {} err_body = {}", code, err_body);
             None
         }
         Err(e) => {
-            log::error!("ERROR in handle_response: {:?}", e);
+            log::info!("ERROR in handle_response: {:?}", e);
             None
         }
     }
@@ -107,10 +107,10 @@ pub fn whoami(server: &str, token: &str) -> bool {
     if let Some(value) = handle_response(get_json_auth(&url, token)) {
         if let Value::Object(body) = value {
             if let Some(Value::String(device_id)) = body.get("device_id") {
-                log::debug!("device_id = {}", device_id);
+                log::info!("device_id = {}", device_id);
             }
             if let Some(Value::String(user_id)) = body.get("user_id") {
-                log::debug!("user_id = {}", user_id);
+                log::info!("user_id = {}", user_id);
             }
         }
         true
@@ -192,21 +192,21 @@ pub fn get_room_id(server: &str, room_server: &str, token: &str) -> Option<Strin
     let mut url = String::from(server);
     url.push_str("/_matrix/client/v3/directory/room/");
     url.push_str(&room_encoded);
-    log::debug!("get_room_id = {}", url);
+    log::info!("get_room_id = {}", url);
     if let Some(value) = handle_response(get_json_auth(&url, token)) {
         if let Value::Object(body) = value {
             if let Some(Value::String(room_id)) = body.get("room_id") {
                 Some(room_id.to_string())
             } else {
-                log::error!("invalid response for get_room_id");
+                log::info!("invalid response for get_room_id");
                 None
             }
         } else {
-            log::error!("invalid response for get_room_id");
+            log::info!("invalid response for get_room_id");
             None
         }
     } else {
-        log::error!("Error for get_room_id");
+        log::info!("Error for get_room_id");
         None
     }
 }
@@ -309,34 +309,34 @@ pub fn get_filter(user: &str, server: &str, room_id: &str, token: &str)
     url.push_str("/_matrix/client/v3/user/");
     url.push_str(&user_encoded);
     url.push_str("/filter");
-    log::debug!("get_filter = {}", url);
+    log::info!("get_filter = {}", url);
     let filter_request = FilterRequest::new(room_id);
     if let Some(request_body) = serialize(&filter_request) {
         if let Some(value) = handle_response(post_string_auth(&url, &request_body, token)) {
             if let Value::Object(body) = value {
                 if let Some(Value::String(filter_id)) = body.get("filter_id") {
-                    log::debug!("filter_id = {}", filter_id);
+                    log::info!("filter_id = {}", filter_id);
                     Some(filter_id.to_string())
                 } else {
-                    log::error!("invalid response for get_filter");
+                    log::info!("invalid response for get_filter");
                     None
                 }
             } else {
-                log::error!("invalid response for get_filter");
+                log::info!("invalid response for get_filter");
                 None
             }
         } else {
-            log::error!("Error for get_filter");
+            log::info!("Error for get_filter");
             None
         }
     } else {
-        log::error!("Error unable to serialize request for get_filter");
+        log::info!("Error unable to serialize request for get_filter");
         None
     }
 }
 
 fn get_messages(body: Map<String, Value>, room_id: &str) -> String {
-    log::debug!("heap usage: {}", crate::cmds::heap_usage());
+    log::info!("heap usage: {}", crate::cmds::heap_usage());
     let mut messages = String::new();
     if let Some(Value::Object(rooms)) = body.get("rooms") {
         if let Some(Value::Object(join)) = rooms.get("join") {
@@ -378,7 +378,7 @@ fn get_messages(body: Map<String, Value>, room_id: &str) -> String {
 
 pub fn client_sync(server: &str, filter: &str, since: &str, timeout: i32,
                    room_id: &str, token: &str) -> Option<(String, String)> {
-    log::debug!("heap usage: {}", crate::cmds::heap_usage());
+    log::info!("heap usage: {}", crate::cmds::heap_usage());
     let mut url = String::from(server);
     url.push_str("/_matrix/client/r0/sync?filter=");
     url.push_str(filter);
@@ -388,17 +388,17 @@ pub fn client_sync(server: &str, filter: &str, since: &str, timeout: i32,
         url.push_str("&since=");
         url.push_str(since);
     }
-    log::debug!("client_sync = {}", url);
+    log::info!("client_sync = {}", url);
     if let Some(value) = handle_response(get_json_auth(&url, token)) {
         if let Value::Object(body) = value {
             if let Some(Value::String(next_batch)) = body.get("next_batch") {
                 Some((next_batch.to_string(), get_messages(body, room_id)))
             } else {
-                log::error!("invalid response for client_sync");
+                log::info!("invalid response for client_sync");
                 None
             }
         } else {
-            log::error!("Error for client_sync: deserialization");
+            log::info!("Error for client_sync: deserialization");
             None
         }
     } else {
@@ -424,29 +424,29 @@ impl MessageRequest {
 }
 
 pub fn send_message(server: &str, room_id: &str, text: &str, txn_id: &str, token: &str) -> bool {
-    log::debug!("heap usage: {}", crate::cmds::heap_usage());
+    log::info!("heap usage: {}", crate::cmds::heap_usage());
     let room_id_encoded = url::encode(room_id);
     let mut url = String::from(server);
     url.push_str("/_matrix/client/r0/rooms/");
     url.push_str(&room_id_encoded);
     url.push_str("/send/m.room.message/");
     url.push_str(txn_id);
-    log::debug!("send_message = {}", url);
+    log::info!("send_message = {}", url);
     let message_request = MessageRequest::new(text);
     if let Some(request_body) = serialize(&message_request) {
         if let Some(value) = handle_response(put_string_auth(&url, &request_body, token)) {
             if let Value::Object(_body) = value {
                 true
             } else {
-                log::error!("invalid response for send_message");
+                log::info!("invalid response for send_message");
                 false
             }
         } else {
-            log::error!("Error for send_message");
+            log::info!("Error for send_message");
             false
         }
     } else {
-        log::error!("Error unable to serialize request for send_message");
+        log::info!("Error unable to serialize request for send_message");
         false
     }
 }

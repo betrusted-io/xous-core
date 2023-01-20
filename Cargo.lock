@@ -2240,10 +2240,11 @@ dependencies = [
 
 [[package]]
 name = "mtxcli"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "codec",
  "com",
+ "com_rs-ref",
  "content-plugin-api",
  "gam",
  "graphics-server",
@@ -2252,11 +2253,13 @@ dependencies = [
  "llio",
  "locales",
  "log",
+ "net",
  "num-derive",
  "num-traits",
  "pddb",
  "percent-encoding",
  "serde",
+ "status",
  "trng",
  "ureq",
  "xous 0.9.31 (registry+https://github.com/rust-lang/crates.io-index)",
