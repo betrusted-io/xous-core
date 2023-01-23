@@ -5,6 +5,7 @@ use std::{
     io::Write,
     time::{SystemTime, UNIX_EPOCH},
 };
+use crate::totp::TotpAlgorithm;
 
 use ctap_crypto::Hash256;
 
@@ -98,7 +99,7 @@ impl Manager {
             false,
             false,
             None,
-            Some(crate::basis_change),
+            Some(vault::basis_change),
         ) {
             Ok(_) => return true,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
@@ -131,7 +132,7 @@ impl Manager {
             // exist
             true,
             alloc_hint,
-            Some(crate::basis_change),
+            Some(vault::basis_change),
         ) {
             Ok(mut data) => match data.write(payload) {
                 Ok(_) => match sync {
@@ -152,7 +153,7 @@ impl Manager {
             false,
             false,
             None,
-            Some(crate::basis_change),
+            Some(vault::basis_change),
         ) {
             Ok(mut record) => {
                 let mut data = Vec::<u8>::new();
@@ -171,7 +172,7 @@ impl Manager {
             false,
             false,
             None,
-            Some(crate::basis_change),
+            Some(vault::basis_change),
         ) {
             Ok(record) => Ok(record
                 .attributes()
@@ -317,7 +318,7 @@ pub struct TotpRecord {
     // as base32, RFC4648 no padding
     pub secret: String,
     pub name: String,
-    pub algorithm: crate::totp::TotpAlgorithm,
+    pub algorithm: TotpAlgorithm,
     pub notes: String,
     pub digits: u32,
     pub timestep: u64,
@@ -368,7 +369,7 @@ impl StorageContent for TotpRecord {
                     "secret" => pr.secret.push_str(data),
                     "name" => pr.name.push_str(data),
                     "algorithm" => {
-                        pr.algorithm = match crate::totp::TotpAlgorithm::try_from(data) {
+                        pr.algorithm = match TotpAlgorithm::try_from(data) {
                             Ok(a) => a,
                             Err(_) => return Err(TOTPSerializationError::BadAlgorithm)?,
                         }
@@ -468,7 +469,7 @@ impl TryFrom<Vec<u8>> for TotpRecord {
             version: VAULT_TOTP_REC_VERSION,
             secret: String::new(),
             name: String::new(),
-            algorithm: crate::totp::TotpAlgorithm::HmacSha1,
+            algorithm: TotpAlgorithm::HmacSha1,
             notes: String::new(),
             digits: 0,
             ctime: 0,
@@ -490,7 +491,7 @@ impl TryFrom<Vec<u8>> for TotpRecord {
                     "secret" => pr.secret.push_str(data),
                     "name" => pr.name.push_str(data),
                     "algorithm" => {
-                        pr.algorithm = match crate::totp::TotpAlgorithm::try_from(data) {
+                        pr.algorithm = match TotpAlgorithm::try_from(data) {
                             Ok(a) => a,
                             Err(_) => return Err(TOTPSerializationError::BadAlgorithm),
                         }

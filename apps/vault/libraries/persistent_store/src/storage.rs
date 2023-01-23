@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Flash storage abstraction.
+
+use std::borrow::Cow;
+
 /// Represents a byte position in a storage.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct StorageIndex {
@@ -30,6 +34,13 @@ pub enum StorageError {
 
     /// Implementation-specific error.
     CustomError,
+}
+
+#[cfg(feature = "std")]
+impl From<std::io::Error> for StorageError {
+    fn from(_: std::io::Error) -> Self {
+        Self::CustomError
+    }
 }
 
 pub type StorageResult<T> = Result<T, StorageError>;
@@ -58,19 +69,24 @@ pub trait Storage {
     /// Reads a byte slice from the storage.
     ///
     /// The `index` must designate `length` bytes in the storage.
-    fn read_slice(&self, index: StorageIndex, length: usize) -> StorageResult<&[u8]>;
+    ///
+    /// Note that we use `Cow` just because it derefs to `[u8]`. We don't really need the fact that
+    /// one can convert it to a `Vec`. In particular we don't do it in the store implementation.
+    fn read_slice(&self, index: StorageIndex, length: usize) -> StorageResult<Cow<[u8]>>;
 
     /// Writes a word slice to the storage.
     ///
     /// The following pre-conditions must hold:
     /// - The `index` must designate `value.len()` bytes in the storage.
     /// - Both `index` and `value.len()` must be word-aligned.
-    /// - The written words should not have been written too many times since last page erasure.
+    /// - The written words should not have been written [too many](Self::max_word_writes) times
+    ///   since the last page erasure.
     fn write_slice(&mut self, index: StorageIndex, value: &[u8]) -> StorageResult<()>;
 
     /// Erases a page of the storage.
     ///
-    /// The `page` must be in the storage.
+    /// The `page` must be in the storage, i.e. less than [`Storage::num_pages`]. And the page
+    /// should not have been erased [too many](Self::max_page_erases) times.
     fn erase_page(&mut self, page: usize) -> StorageResult<()>;
 }
 

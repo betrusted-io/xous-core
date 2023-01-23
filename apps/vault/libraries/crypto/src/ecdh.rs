@@ -107,6 +107,13 @@ impl SecKey {
         hasher.update(shared.as_bytes().as_slice().try_into().unwrap());
         hasher.finalize()
     }
+
+    pub fn exchange_x(&self, other: &PubKey) -> [u8; 32] {
+        let shared = self.a.diffie_hellman(&other.p);
+        let mut ret = [0u8; 32];
+        ret.copy_from_slice(shared.as_bytes().as_slice());
+        ret
+    }
 }
 
 #[cfg(test)]

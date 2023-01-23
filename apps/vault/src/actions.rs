@@ -11,22 +11,24 @@ use std::io::{Write, Read};
 use passwords::PasswordGenerator;
 use std::cell::RefCell;
 
-use crate::{ux::{ListItem, deserialize_app_info}, ctap::FIDO_CRED_DICT, storage::{self, PasswordRecord, StorageContent}, ItemLists};
-use crate::{VaultMode, SelectedEntry};
-use crate::utc_now;
-
-use crate::fido::U2F_APP_DICT;
+use vault::{
+    deserialize_app_info, serialize_app_info, AppInfo, basis_change,
+    VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, VAULT_ALLOC_HINT, utc_now,
+    atime_to_str
+};
+use crate::ux::framework::ListItem;
+use crate::{ItemLists, VaultMode, SelectedEntry};
+use crate::storage::{self, PasswordRecord, StorageContent};
 use crate::totp::TotpAlgorithm;
+use persistent_store::store::OPENSK2_DICT;
+
+use vault::env::xous::U2F_APP_DICT;
 
 #[cfg(feature="vaultperf")]
 use perflib::*;
 #[cfg(feature="vaultperf")]
 const FILE_ID_APPS_VAULT_SRC_ACTIONS: u32 = 1;
 
-pub(crate) const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
-pub(crate) const VAULT_TOTP_DICT: &'static str = "vault.totp";
-/// bytes to reserve for a key entry. Making this slightly larger saves on some churn as stuff gets updated
-pub(crate) const VAULT_ALLOC_HINT: usize = 256;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 const VAULT_TOTP_REC_VERSION: u32 = 1;
 /// time allowed between dialog box swaps for background operations to redraw
@@ -34,7 +36,7 @@ const VAULT_TOTP_REC_VERSION: u32 = 1;
 const SWAP_DELAY_MS: usize = 300;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub(crate) enum ActionOp {
+pub enum ActionOp {
     /// Menu items
     MenuAddnew,
     MenuEditStage2,
@@ -570,7 +572,7 @@ impl<'a> ActionManager<'a> {
                 let mut desc = String::with_capacity(256);
                 make_pw_name(&pw.description, &pw.username, &mut desc);
                 let mut extra = String::with_capacity(256);
-                let human_time = crate::ux::atime_to_str(pw.atime);
+                let human_time = atime_to_str(pw.atime);
                 extra.push_str(&human_time);
                 extra.push_str("; ");
                 extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
@@ -606,7 +608,7 @@ impl<'a> ActionManager<'a> {
             // storage format that's a bit funkier to edit.
             let maybe_update = match self.pddb.borrow().get(
                 dict, entry.key_name.as_str().unwrap(), None,
-                false, false, None, Some(crate::basis_change)
+                false, false, None, Some(basis_change)
             ) {
                 Ok(mut record) => {
                     // resolve the basis of the key, so that we are editing it "in place"
@@ -614,7 +616,7 @@ impl<'a> ActionManager<'a> {
                     let mut data = Vec::<u8>::new();
                     let maybe_update = match record.read_to_end(&mut data) {
                         Ok(_len) => {
-                            if let Some(mut ai) = crate::fido::deserialize_app_info(data) {
+                            if let Some(mut ai) = deserialize_app_info(data) {
                                 let edit_data = if ai.notes != t!("vault.notes", xous::LANG) {
                                     self.modals
                                     .alert_builder(t!("vault.edit_dialog", xous::LANG))
@@ -654,10 +656,10 @@ impl<'a> ActionManager<'a> {
                 match self.pddb.borrow().get(
                     dict, entry.key_name.as_str().unwrap(), Some(&basis),
                     false, true, Some(VAULT_ALLOC_HINT),
-                    Some(crate::basis_change)
+                    Some(basis_change)
                 ) {
                     Ok(mut record) => {
-                        let ser = crate::fido::serialize_app_info(&update);
+                        let ser = serialize_app_info(&update);
                         record.write(&ser).unwrap_or_else(|e| {
                             self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); 0});
                     }
@@ -860,7 +862,7 @@ impl<'a> ActionManager<'a> {
                                         self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
                                         if prev_entry.atime != pw_rec.atime || prev_entry.count != pw_rec.count {
                                             // this is expensive, so don't run it unless we have to
-                                            let human_time = crate::ux::atime_to_str(pw_rec.atime);
+                                            let human_time = atime_to_str(pw_rec.atime);
                                             // note this code is duplicated in update_db_entry()
                                             extra.push_str(&human_time);
                                             extra.push_str("; ");
@@ -887,7 +889,7 @@ impl<'a> ActionManager<'a> {
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 4, std::line!());
 
-                                        let human_time = crate::ux::atime_to_str(pw_rec.atime);
+                                        let human_time = atime_to_str(pw_rec.atime);
 
                                         extra.push_str(&human_time);
                                         extra.push_str("; ");
@@ -951,7 +953,7 @@ impl<'a> ActionManager<'a> {
                             if let Some(data) = key.data {
                                 if let Some(ai) = deserialize_app_info(data) {
                                     let extra = format!("{}; {}{}",
-                                        crate::ux::atime_to_str(ai.atime),
+                                        atime_to_str(ai.atime),
                                         t!("vault.u2f.appinfo.authcount", xous::LANG),
                                         ai.count,
                                     );
@@ -993,13 +995,13 @@ impl<'a> ActionManager<'a> {
                     },
                 }
 
-                log::debug!("listing in {}", FIDO_CRED_DICT);
-                match self.pddb.borrow().read_dict(FIDO_CRED_DICT, None, Some(256 * 1024)) {
+                log::debug!("listing in {}", OPENSK2_DICT);
+                match self.pddb.borrow().read_dict(OPENSK2_DICT, None, Some(256 * 1024)) {
                     Ok(keys) => {
                         let mut oom_keys = 0;
                         for key in keys {
                             if let Some(data) = key.data {
-                                match crate::ctap::storage::deserialize_credential(&data) {
+                                match vault::ctap::storage::deserialize_credential(&data) {
                                     Some(result) => {
                                         let name = if let Some(display_name) = result.user_display_name {
                                             display_name
@@ -1019,10 +1021,13 @@ impl<'a> ActionManager<'a> {
                                         il.insert(li.key(), li);
                                     }
                                     None => {
+                                        // this is "harmless" because we're now returning, like, everything
+                                        // print to info! for now, so we can be more selective down the road about
+                                        // deserializations and maybe save some time
                                         let err = format!("{}:{}:{}: ({}){:x?}...",
-                                            key.basis, FIDO_CRED_DICT, key.name, key.len, &data[..16]
+                                            key.basis, OPENSK2_DICT, key.name, key.len, &data[..16]
                                         );
-                                        self.report_err("Couldn't deserialize FIDO2:", Some(err))
+                                        log::info!("Couldn't deserialize FIDO2 key {}", err);
                                     },
                                 }
                             } else {
@@ -1239,7 +1244,7 @@ impl<'a> ActionManager<'a> {
 
     #[cfg(feature="vault-testing")]
     pub(crate) fn populate_tests(&mut self) {
-        use crate::ux::serialize_app_info;
+        use serialize_app_info;
 
         self.modals.dynamic_notification(Some("Creating test entries..."), None).ok();
         let words = [
@@ -1292,7 +1297,7 @@ impl<'a> ActionManager<'a> {
             }
         }
         // --- U2F + FIDO ---
-        let fido = self.pddb.borrow().list_keys(FIDO_CRED_DICT, None).unwrap_or(Vec::new());
+        let fido = self.pddb.borrow().list_keys(OPENSK2_DICT, None).unwrap_or(Vec::new());
         let u2f = self.pddb.borrow().list_keys(U2F_APP_DICT, None).unwrap_or(Vec::new());
         let total = fido.len() + u2f.len();
         if total < TARGET_ENTRIES {
@@ -1304,7 +1309,7 @@ impl<'a> ActionManager<'a> {
                 let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
                 let mut id = [0u8; 32];
                 self.trng.borrow_mut().fill_bytes(&mut id);
-                let record = crate::AppInfo {
+                let record = AppInfo {
                     name,
                     id,
                     notes,
@@ -1318,7 +1323,7 @@ impl<'a> ActionManager<'a> {
                     U2F_APP_DICT,
                     &app_id_str,
                     None, true, true,
-                    Some(256), Some(crate::basis_change)
+                    Some(256), Some(basis_change)
                 ) {
                     Ok(mut app_data) => {
                         match app_data.write(&ser) {
@@ -1335,16 +1340,17 @@ impl<'a> ActionManager<'a> {
             let xns = xous_names::XousNames::new().unwrap();
             let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
             for index in 0..extra_fido {
-                use crate::ctap::data_formats::*;
-                let c_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
-                let cred_id = format!("{} {} {}", c_id[0], c_id[1], index);
+                use vault::ctap::data_formats::*;
+                use ctap_crypto::rng256::Rng256;
+                let _c_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
+                let cred_id = format!("{}", index + 1800); // 1800 is extracted from ctap/storage/keys.rs; 1700 is the start of the credential region, this sticks it...somewhere "above" that
                 let r_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
                 let rp_id = format!("{} {}", r_id[0], r_id[1]);
                 let handle = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
                 let new_credential = PublicKeyCredentialSource {
                     key_type: PublicKeyCredentialType::PublicKey,
-                    credential_id: cred_id.as_bytes().to_vec(),
-                    private_key: ctap_crypto::ecdsa::SecKey::gensk(&mut rng),
+                    credential_id: rng.gen_uniform_u8x32().to_vec(),
+                    private_key: vault::ctap::crypto_wrapper::PrivateKey::Ecdsa(rng.gen_uniform_u8x32()),
                     rp_id,
                     user_handle: handle.as_bytes().to_vec(),
                     user_display_name: None,
@@ -1352,16 +1358,18 @@ impl<'a> ActionManager<'a> {
                     creation_order: 0,
                     user_name: None,
                     user_icon: None,
+                    cred_blob: None,
+                    large_blob_key: None,
                 };
                 let shortid = &cred_id;
                 match self.pddb.borrow().get(
-                    FIDO_CRED_DICT,
+                    OPENSK2_DICT,
                     shortid,
                     None, true, true,
-                    Some(crate::ctap::storage::CRED_INITAL_SIZE), Some(crate::basis_change)
+                    Some(128), Some(basis_change)
                 ) {
                     Ok(mut cred) => {
-                        let value = crate::ctap::storage::serialize_credential(new_credential).unwrap();
+                        let value = vault::ctap::storage::serialize_credential(new_credential).unwrap();
                         match cred.write(&value) {
                             Ok(len) => {
                                 log::debug!("fido2 wrote {} bytes", len);

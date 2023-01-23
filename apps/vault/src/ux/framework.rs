@@ -1,28 +1,34 @@
-use crate::*;
-use crate::totp::{TotpAlgorithm, generate_totp_code};
+use vault::{VaultOp, utc_now};
+use crate::{ItemLists, VaultMode, SelectedEntry};
+use crate::actions::ActionOp;
+use crate::totp::{TotpAlgorithm, generate_totp_code, get_current_unix_time, TotpEntry};
+
 use gam::{GlyphStyle, MenuMatic, MenuItem, MenuPayload};
 use graphics_server::{Gid, Point, Rectangle, DrawStyle, PixelColor, TextView};
 use std::fmt::Write;
 use pddb::Pddb;
 use std::cell::RefCell;
-use std::cmp::Ordering;
 use std::io::{Read, Write as FsWrite};
-use actions::ActionOp;
 use std::sync::atomic::Ordering as AtomicOrdering;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicBool;
 use std::convert::TryFrom;
+use std::cmp::Ordering;
 use usb_device_xous::UsbDeviceType;
+use locales::t;
+use num_traits::*;
 
 /// Display list for items. "name" is the key by which the list is sorted.
 /// "extra" is more information about the item, which should not be part of the sort.
-pub(crate) struct ListItem {
-    pub(crate) name: String,
-    pub(crate) extra: String,
-    pub(crate) dirty: bool,
+pub struct ListItem {
+    pub name: String,
+    pub extra: String,
+    pub dirty: bool,
     /// this is the name of the key used to refer to the item
-    pub(crate) guid: String,
+    pub guid: String,
     /// stash a copy so we can compare to the DB record and avoid re-generating the atime/count string if it hasn't changed.
-    pub(crate) atime: u64,
-    pub(crate) count: u64,
+    pub atime: u64,
+    pub count: u64,
 }
 impl ListItem {
     pub fn clone(&self) -> ListItem {
@@ -56,6 +62,7 @@ impl Ord for ListItem {
     }
 }
 impl PartialOrd for ListItem {
+
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -67,7 +74,7 @@ impl PartialEq for ListItem {
 }
 impl Eq for ListItem {}
 
-pub(crate) enum NavDir {
+pub enum NavDir {
     Up,
     Down,
     PageUp,
@@ -75,7 +82,7 @@ pub(crate) enum NavDir {
 }
 
 #[allow(dead_code)]
-pub(crate) struct VaultUx {
+pub struct VaultUx {
     /// the content area
     content: Gid,
     gam: gam::Gam,
@@ -123,12 +130,12 @@ pub(crate) struct VaultUx {
     current_time: u64,
 }
 
-pub(crate) const DEFAULT_FONT: GlyphStyle = GlyphStyle::Regular;
-pub(crate) const FONT_LIST: [&'static str; 6] = [
+pub const DEFAULT_FONT: GlyphStyle = GlyphStyle::Regular;
+pub const FONT_LIST: [&'static str; 6] = [
     "regular", "mono", "cjk",
     "bold", "large", "small"
 ];
-pub(crate) fn name_to_style(name: &str) -> Option<GlyphStyle> {
+pub fn name_to_style(name: &str) -> Option<GlyphStyle> {
     match name {
         "regular" => Some(GlyphStyle::Regular),
         "mono" => Some(GlyphStyle::Monospace),
@@ -180,7 +187,7 @@ impl VaultUx {
         let item_height = (glyph_height * 2) as i16 + margin.y * 2 + 2; // +2 because of the border width
         let items_per_screen = available_height / item_height;
 
-        let current_time = totp::get_current_unix_time().unwrap_or(0);
+        let current_time = get_current_unix_time().unwrap_or(0);
 
         VaultUx {
             content,
@@ -272,7 +279,7 @@ impl VaultUx {
             VAULT_CONFIG_DICT,
             VAULT_CONFIG_KEY_FONT,
             Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
-            Some(32), Some(crate::basis_change)
+            Some(32), Some(vault::basis_change)
         ) {
             Ok(mut style_key) => {
                 let mut name_bytes = Vec::<u8>::new();
@@ -309,7 +316,7 @@ impl VaultUx {
             VAULT_CONFIG_DICT,
             VAULT_CONFIG_KEY_FONT,
             Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
-            Some(32), Some(crate::basis_change)
+            Some(32), Some(vault::basis_change)
         ) {
             Ok(mut style_key) => {
                 style_key.write(style_to_name(&style).as_bytes()).ok();
@@ -510,7 +517,7 @@ impl VaultUx {
         if mode_at_entry == VaultMode::Totp { // always redraw the title in TOTP mode
             self.title_dirty = true;
             // always grab the current time, regardless of the mode? saves an extra call to get time...
-            self.current_time = totp::get_current_unix_time().unwrap_or(0);
+            self.current_time = get_current_unix_time().unwrap_or(0);
             // duration bar is hard-coded to once every 30 seconds, even if the keys may not change that often.
             let epoch = self.current_time / 30;
             if self.last_epoch != epoch {
@@ -626,7 +633,7 @@ impl VaultUx {
                             let step_seconds = u64::from_str_radix(fields[2], 10).unwrap_or(30);
                             let algorithm = TotpAlgorithm::try_from(fields[3]).unwrap_or(TotpAlgorithm::HmacSha1);
                             let is_hotp = fields[4].to_uppercase() == "HOTP";
-                            let totp = totp::TotpEntry {
+                            let totp = TotpEntry {
                                 step_seconds: if !is_hotp {step_seconds} else {1},  // step_seconds is re-used by hotp as the code.
                                 shared_secret,
                                 digit_count,
@@ -634,7 +641,7 @@ impl VaultUx {
                             };
                             if !is_hotp {
                                 let code = generate_totp_code(
-                                    totp::get_current_unix_time().unwrap_or(0),
+                                    get_current_unix_time().unwrap_or(0),
                                     &totp
                                 ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
                                 // why code on top? because the item.name can be very long, and it can wrap which would cause
@@ -710,17 +717,17 @@ impl VaultUx {
                 let entry = &self.filtered_list[self.selection_index].guid;
                 // we re-fetch the entry for autotype, because the PDDB could have unmounted a basis.
                 let updated_pw = match self.pddb.borrow().get(
-                    crate::actions::VAULT_PASSWORD_DICT,
+                    vault::VAULT_PASSWORD_DICT,
                     entry,
                     None,
                     false, false, None,
-                    Some(crate::basis_change)
+                    Some(vault::basis_change)
                 ) {
                     Ok(mut record) => {
                         let mut data = Vec::<u8>::new();
                         match record.read_to_end(&mut data) {
                             Ok(_len) => {
-                                if let Some(mut pw) = storage::PasswordRecord::try_from(data).ok() {
+                                if let Some(mut pw) = crate::storage::PasswordRecord::try_from(data).ok() {
                                     match self.usb_dev.send_str(&pw.password) {
                                         Ok(_) => {
                                             pw.count += 1;
@@ -751,10 +758,10 @@ impl VaultUx {
 
                 // this get determines which basis the key is in
                 let basis = match self.pddb.borrow().get(
-                    crate::actions::VAULT_PASSWORD_DICT,
+                    vault::VAULT_PASSWORD_DICT,
                     entry,
                     None, true, true,
-                    Some(256), Some(crate::basis_change)
+                    Some(256), Some(vault::basis_change)
                 ) {
                     Ok(app_data) => {
                         let attr = app_data.attributes().expect("couldn't get attributes");
@@ -766,19 +773,19 @@ impl VaultUx {
                     }
                 };
 
-                match self.pddb.borrow().delete_key(crate::actions::VAULT_PASSWORD_DICT, entry, Some(&basis)) {
+                match self.pddb.borrow().delete_key(vault::VAULT_PASSWORD_DICT, entry, Some(&basis)) {
                     Ok(_) => {}
                     Err(_e) => {
                         return Err(xous::Error::InternalError);
                     }
                 }
                 match self.pddb.borrow().get(
-                    crate::actions::VAULT_PASSWORD_DICT, entry, Some(&basis),
-                    false, true, Some(crate::actions::VAULT_ALLOC_HINT),
-                    Some(crate::basis_change)
+                    vault::VAULT_PASSWORD_DICT, entry, Some(&basis),
+                    false, true, Some(vault::VAULT_ALLOC_HINT),
+                    Some(vault::basis_change)
                 ) {
                     Ok(mut record) => {
-                        let ser: Vec<u8> = storage::PasswordRecord::into(updated_pw);
+                        let ser: Vec<u8> = crate::storage::PasswordRecord::into(updated_pw);
                         match record.write(&ser) {
                             Ok(_) => {}
                             Err(e) => {
@@ -807,7 +814,7 @@ impl VaultUx {
                     let step_seconds = u64::from_str_radix(fields[2], 10).unwrap_or(30);
                     let algorithm = TotpAlgorithm::try_from(fields[3]).unwrap_or(TotpAlgorithm::HmacSha1);
                     let is_hotp = fields[4].to_uppercase() == "HOTP";
-                    let totp = totp::TotpEntry {
+                    let totp = TotpEntry {
                         step_seconds: if !is_hotp {step_seconds} else {1}, // step_seconds is re-used by hotp as the code.
                         shared_secret,
                         digit_count,
@@ -815,7 +822,7 @@ impl VaultUx {
                     };
                     let code = if !is_hotp {
                         generate_totp_code(
-                            totp::get_current_unix_time().unwrap_or(0),
+                            get_current_unix_time().unwrap_or(0),
                             &totp
                         ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string())
                     } else {
@@ -832,10 +839,10 @@ impl VaultUx {
 
                                 // this get determines which basis the key is in
                                 let (basis, hotp_rec) = match self.pddb.borrow().get(
-                                    crate::actions::VAULT_TOTP_DICT,
+                                    vault::VAULT_TOTP_DICT,
                                     &entry,
                                     None, true, true,
-                                    Some(256), Some(crate::basis_change)
+                                    Some(256), Some(vault::basis_change)
                                 ) {
                                     Ok(mut app_data) => {
                                         let attr = app_data.attributes().expect("couldn't get attributes");
@@ -844,7 +851,7 @@ impl VaultUx {
                                         data.resize(len, 0);
                                         match app_data.read_exact(&mut data) {
                                             Ok(_len) => {
-                                                if let Some(mut totp_rec) = storage::TotpRecord::try_from(data).ok() {
+                                                if let Some(mut totp_rec) = crate::storage::TotpRecord::try_from(data).ok() {
                                                     totp_rec.timestep += 1;
                                                     (attr.basis, totp_rec)
                                                 } else {
@@ -864,7 +871,7 @@ impl VaultUx {
                                     }
                                 };
                                 // remove the old entry, specifically only in the most recently open basis.
-                                match self.pddb.borrow().delete_key(crate::actions::VAULT_TOTP_DICT, &entry, Some(&basis)) {
+                                match self.pddb.borrow().delete_key(vault::VAULT_TOTP_DICT, &entry, Some(&basis)) {
                                     Ok(_) => {}
                                     Err(_e) => {
                                         return Err(xous::Error::InternalError);
@@ -882,12 +889,12 @@ impl VaultUx {
                                 self.backpropagate_item(self.filtered_list[self.selection_index].clone());
                                 // now write to disk
                                 match self.pddb.borrow().get(
-                                    crate::actions::VAULT_TOTP_DICT, &entry, Some(&basis),
-                                    false, true, Some(crate::actions::VAULT_ALLOC_HINT),
-                                    Some(crate::basis_change)
+                                    vault::VAULT_TOTP_DICT, &entry, Some(&basis),
+                                    false, true, Some(vault::VAULT_ALLOC_HINT),
+                                    Some(vault::basis_change)
                                 ) {
                                     Ok(mut record) => {
-                                        let ser: Vec<u8> = storage::TotpRecord::into(hotp_rec);
+                                        let ser: Vec<u8> = crate::storage::TotpRecord::into(hotp_rec);
                                         match record.write(&ser) {
                                             Ok(_) => {}
                                             Err(e) => {
