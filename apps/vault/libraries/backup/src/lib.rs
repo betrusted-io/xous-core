@@ -1,4 +1,4 @@
-use cbor::{self, cbor_array_vec, cbor_key_int, cbor_map, cbor_unsigned, destructure_cbor_map};
+use cbor::{self, cbor_array_vec, cbor_int, cbor_map, cbor_unsigned, destructure_cbor_map};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
@@ -63,14 +63,12 @@ impl From<HashAlgorithms> for cbor::Value {
 
 impl TryFrom<cbor::Value> for HashAlgorithms {
     fn try_from(value: cbor::Value) -> Result<Self, Self::Error> {
-        match value {
-            cbor::Value::KeyValue(cbor::KeyType::Unsigned(unsigned)) => match unsigned {
-                1 => Ok(HashAlgorithms::SHA1),
-                2 => Ok(HashAlgorithms::SHA256),
-                3 => Ok(HashAlgorithms::SHA512),
-                other => Err(CborConversionError::UnknownAlgorithm(other)),
-            },
-            _ => Err(CborConversionError::BadCbor),
+        let v = extract_unsigned(value)?;
+        match v {
+            1 => Ok(HashAlgorithms::SHA1),
+            2 => Ok(HashAlgorithms::SHA256),
+            3 => Ok(HashAlgorithms::SHA512),
+            _ => Err(CborConversionError::UnknownAlgorithm(v)),
         }
     }
 
@@ -104,11 +102,11 @@ pub struct TotpEntry {
 impl From<TotpEntry> for cbor::Value {
     fn from(te: TotpEntry) -> Self {
         cbor_map! {
-            cbor_key_int!(1) => te.step_seconds as i64,
-            cbor_key_int!(2) => te.shared_secret,
-            cbor_key_int!(3) => te.digit_count as i64,
-            cbor_key_int!(4) => te.algorithm,
-            cbor_key_int!(5) => te.name,
+            cbor_int!(1) => te.step_seconds as i64,
+            cbor_int!(2) => te.shared_secret,
+            cbor_int!(3) => te.digit_count as i64,
+            cbor_int!(4) => te.algorithm,
+            cbor_int!(5) => te.name,
         }
     }
 }
@@ -179,7 +177,7 @@ impl From<&TotpEntries> for Vec<u8> {
     fn from(te: &TotpEntries) -> Self {
         let mut ret = vec![];
         let te_cbor: cbor::Value = te.into();
-        cbor::write(te_cbor, &mut ret);
+        cbor::write(te_cbor, &mut ret).ok();
         ret
     }
 }
@@ -195,10 +193,10 @@ pub struct PasswordEntry {
 impl From<PasswordEntry> for cbor::Value {
     fn from(te: PasswordEntry) -> Self {
         cbor_map! {
-            cbor_key_int!(1) => te.description,
-            cbor_key_int!(2) => te.username,
-            cbor_key_int!(3) => te.password,
-            cbor_key_int!(4) => te.notes,
+            cbor_int!(1) => te.description,
+            cbor_int!(2) => te.username,
+            cbor_int!(3) => te.password,
+            cbor_int!(4) => te.notes,
         }
     }
 }
@@ -248,7 +246,7 @@ impl From<&PasswordEntries> for Vec<u8> {
     fn from(te: &PasswordEntries) -> Self {
         let mut ret = vec![];
         let te_cbor: cbor::Value = te.into();
-        cbor::write(te_cbor, &mut ret);
+        cbor::write(te_cbor, &mut ret).ok();
         ret
     }
 }
@@ -287,7 +285,7 @@ impl From<DataPacket> for Vec<u8> {
     fn from(dp: DataPacket) -> Self {
         let mut ret = vec![];
         let te_cbor: cbor::Value = dp.into();
-        cbor::write(te_cbor, &mut ret);
+        cbor::write(te_cbor, &mut ret).ok();
         ret
     }
 }
@@ -298,14 +296,14 @@ impl From<DataPacket> for cbor::Value {
         match dp {
             DataPacket::Password(ref p) => {
                 cbor_map! {
-                    cbor_key_int!(1) => dpt,
-                    cbor_key_int!(2) => p,
+                    cbor_int!(1) => dpt,
+                    cbor_int!(2) => p,
                 }
             }
             DataPacket::TOTP(ref t) => {
                 cbor_map! {
-                    cbor_key_int!(1) => dpt,
-                    cbor_key_int!(2) => t,
+                    cbor_int!(1) => dpt,
+                    cbor_int!(2) => t,
                 }
             }
         }
@@ -401,7 +399,7 @@ impl TryFrom<cbor::Value> for PayloadSize {
 impl From<&PayloadSize> for cbor::Value {
     fn from(te: &PayloadSize) -> Self {
         cbor_map! {
-            cbor_key_int!(0) => te.0,
+            cbor_int!(0) => te.0,
         }
     }
 }
@@ -410,7 +408,7 @@ impl From<&PayloadSize> for Vec<u8> {
     fn from(te: &PayloadSize) -> Self {
         let mut ret = vec![];
         let te_cbor: cbor::Value = te.into();
-        cbor::write(te_cbor, &mut ret);
+        cbor::write(te_cbor, &mut ret).ok();
         ret
     }
 }
@@ -468,10 +466,10 @@ impl TryFrom<Vec<Wire>> for DataPacket {
 impl From<&Wire> for cbor::Value {
     fn from(te: &Wire) -> Self {
         cbor_map! {
-            cbor_key_int!(1) => te.index,
-            cbor_key_int!(2) => te.size,
-            cbor_key_int!(3) => te.more_data,
-            cbor_key_int!(4) => te.data.clone(),
+            cbor_int!(1) => te.index,
+            cbor_int!(2) => te.size,
+            cbor_int!(3) => te.more_data,
+            cbor_int!(4) => te.data.clone(),
         }
     }
 }
@@ -480,7 +478,7 @@ impl From<&Wire> for Vec<u8> {
     fn from(te: &Wire) -> Self {
         let mut ret = vec![];
         let te_cbor: cbor::Value = te.into();
-        cbor::write(te_cbor, &mut ret);
+        cbor::write(te_cbor, &mut ret).ok();
         ret
     }
 }
@@ -527,14 +525,14 @@ fn extract_bool(cbor_value: cbor::Value) -> Result<bool, CborConversionError> {
 
 fn extract_unsigned(cbor_value: cbor::Value) -> Result<u64, CborConversionError> {
     match cbor_value {
-        cbor::Value::KeyValue(cbor::KeyType::Unsigned(unsigned)) => Ok(unsigned),
+        cbor::Value::Unsigned(unsigned) => Ok(unsigned),
         _ => Err(CborConversionError::BadCbor),
     }
 }
 
 fn extract_byte_string(cbor_value: cbor::Value) -> Result<Vec<u8>, CborConversionError> {
     match cbor_value {
-        cbor::Value::KeyValue(cbor::KeyType::ByteString(byte_string)) => Ok(byte_string),
+        cbor::Value::ByteString(byte_string) => Ok(byte_string),
         _ => Err(CborConversionError::BadCbor),
     }
 }
@@ -548,7 +546,7 @@ fn extract_array(cbor_value: cbor::Value) -> Result<Vec<cbor::Value>, CborConver
 
 fn extract_string(cbor_value: cbor::Value) -> Result<String, CborConversionError> {
     match cbor_value {
-        cbor::Value::KeyValue(cbor::KeyType::TextString(string)) => Ok(string),
+        cbor::Value::TextString(text_string) => Ok(text_string),
         _ => Err(CborConversionError::BadCbor),
     }
 }

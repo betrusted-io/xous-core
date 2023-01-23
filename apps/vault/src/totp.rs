@@ -8,8 +8,8 @@ use std::{
 use std::sync::{Arc, Mutex};
 use xous::{Message, send_message};
 use std::thread;
-use crate::VaultMode;
 use num_traits::*;
+use crate::VaultMode;
 
 // Derived from https://github.com/blakesmith/xous-core/blob/xtotp-time/apps/xtotp/src/main.rs
 #[derive(Clone, Copy)]
@@ -60,7 +60,7 @@ impl core::fmt::Display for TotpAlgorithm {
 }
 
 #[derive(Debug)]
-pub(crate) struct TotpEntry {
+pub struct TotpEntry {
     pub step_seconds: u64,
     pub shared_secret: Vec<u8>,
     pub digit_count: u8,
@@ -68,7 +68,7 @@ pub(crate) struct TotpEntry {
 }
 
 #[derive(Debug)]
-pub(crate) enum Error {
+pub enum Error {
     Io(std::io::Error),
     DigestLength(InvalidKeyLength),
 }
@@ -85,7 +85,7 @@ impl From<InvalidKeyLength> for Error {
     }
 }
 
-pub(crate) fn get_current_unix_time() -> Result<u64, SystemTimeError> {
+pub fn get_current_unix_time() -> Result<u64, SystemTimeError> {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|duration| duration.as_secs())
@@ -136,7 +136,7 @@ fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Ve
     Ok(computed_hmac)
 }
 
-pub(crate) fn generate_totp_code(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<String, Error> {
+pub fn generate_totp_code(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<String, Error> {
     let hash = generate_hmac_bytes(unix_timestamp, totp_entry)?;
     let offset: usize = (hash.last().unwrap_or(&0) & 0xf) as usize;
     let binary: u64 = (((hash[offset] & 0x7f) as u64) << 24)

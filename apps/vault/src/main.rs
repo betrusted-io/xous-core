@@ -2,19 +2,6 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod ux;
-use ux::*;
-use num_traits::*;
-use xous_ipc::Buffer;
-use xous::{send_message, Message};
-use usbd_human_interface_device::device::fido::*;
-use std::thread;
-use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-
-mod ctap;
-use ctap::hid::{ChannelID, CtapHid};
-use ctap::status_code::Ctap2StatusCode;
-use ctap::CtapState;
 mod shims;
 use shims::*;
 mod submenu;
@@ -26,12 +13,32 @@ mod storage;
 
 use locales::t;
 
-use framework::ListItem;
-use actions::{ActionOp, start_actions_thread};
+use vault::ctap::status_code::Ctap2StatusCode;
+use vault::ctap::hid::HidPacketIterator;
+use vault::env::xous::XousEnv;
+use vault::api::connection::{HidConnection, SendOrRecvStatus};
+use vault::env::Env;
+use vault::{
+    SELF_CONN, Transport, VaultOp
+};
 
+use actions::{ActionOp, start_actions_thread};
+use crate::ux::framework::{ListItem, NavDir};
 use crate::prereqs::ntp_updater;
 use crate::vendor_commands::VendorSession;
+
+use ux::framework::{VaultUx, DEFAULT_FONT, FONT_LIST, name_to_style};
+use xous_ipc::Buffer;
+use xous::{send_message, Message};
+use usbd_human_interface_device::device::fido::*;
+use num_traits::*;
+
+use std::thread;
+use core::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Instant, Duration};
 use std::collections::BTreeMap;
+
 
 // CTAP2 testing notes:
 // run our branch and use this to forward the prompts on to the device:
@@ -114,53 +121,20 @@ To clear test entries:
 
 */
 
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub(crate) enum VaultOp {
-    /// a line of text has arrived
-    Line = 0, // make sure we occupy opcodes with discriminants < 1000, as the rest are used for callbacks
-    /// incremental line of text
-    IncrementalLine,
-    /// redraw our UI
-    Redraw,
-    /// ignore dirty rectangles and redraw everything
-    FullRedraw,
-    /// reload the database (slow), and ignore dirty rectangles and redraw everything
-    ReloadDbAndFullRedraw,
-    /// change focus
-    ChangeFocus,
-
-    /// Partial menu
-    MenuChangeFont,
-    MenuDeleteStage1,
-    MenuEditStage1,
-    MenuAutotype,
-    MenuReadoutMode,
-
-    /// PDDB basis change
-    BasisChange,
-
-    /// Nop while waiting for prerequisites to be filled
-    Nop,
-
-    /// exit the application
-    Quit,
-}
-
 #[derive(Copy, Clone, PartialEq, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-enum VaultMode {
+pub enum VaultMode {
     Fido,
     Totp,
     Password,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
-struct SelectedEntry {
-    key_name: xous_ipc::String::<256>,
-    description: xous_ipc::String::<256>,
-    mode: VaultMode,
+pub struct SelectedEntry {
+    pub key_name: xous_ipc::String::<256>,
+    pub description: xous_ipc::String::<256>,
+    pub mode: VaultMode,
 }
-
-struct ItemLists {
+pub struct ItemLists {
     pub fido: BTreeMap::<String, ListItem>,
     pub totp: BTreeMap::<String, ListItem>,
     pub pw: BTreeMap::<String, ListItem>,
@@ -171,12 +145,55 @@ impl ItemLists {
     }
 }
 
-static SELF_CONN: AtomicU32 = AtomicU32::new(0);
 const ERR_TIMEOUT_MS: usize = 5000;
+const SEND_TIMEOUT: Duration = Duration::from_millis(1000);
+const KEEPALIVE_DELAY: Duration = Duration::from_millis(100);
+// The reply/replies that are queued for each endpoint.
+struct EndpointReply {
+    reply: HidPacketIterator,
+}
+
+impl EndpointReply {
+    pub fn new() -> Self {
+        EndpointReply {
+            reply: HidPacketIterator::none(),
+        }
+    }
+}
+const NUM_ENDPOINTS: usize = 1;
+// A single packet to send.
+struct SendPacket {
+    packet: [u8; 64],
+}
+
+struct EndpointReplies {
+    replies: [EndpointReply; NUM_ENDPOINTS],
+}
+
+impl EndpointReplies {
+    pub fn new() -> Self {
+        EndpointReplies {
+            replies: [
+                EndpointReply::new(),
+            ],
+        }
+    }
+
+    pub fn next_packet(&mut self) -> Option<SendPacket> {
+        for ep in self.replies.iter_mut() {
+            if let Some(packet) = ep.reply.next() {
+                return Some(SendPacket {
+                    packet,
+                });
+            }
+        }
+        None
+    }
+}
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -184,8 +201,6 @@ fn main() -> ! {
     // TODO: fix this so there is a uniform public API for the time server
     let time_conn = xous::connect(xous::SID::from_bytes(b"timeserverpublic").unwrap()).unwrap();
     let conn = xous::connect(sid).unwrap();
-
-    start_fido_ux_thread(conn);
 
     // global shared state between threads.
     let mode = Arc::new(Mutex::new(VaultMode::Fido));
@@ -211,94 +226,75 @@ fn main() -> ! {
     // spawn the FIDO2 USB handler
     let _ = thread::spawn({
         let allow_host = allow_host.clone();
+        let conn = conn.clone();
         move || {
             let xns = xous_names::XousNames::new().unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
-            let boot_time = ClockValue::new(tt.elapsed_ms() as i64, 1000);
 
             let mut vendor_session = VendorSession::default();
+            // block until the PDDB is mounted
+            let pddb = pddb::Pddb::new();
+            pddb.is_mounted_blocking();
 
-            let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
-            // this call will block until the PDDB is mounted.
-            let usb = usb_device_xous::UsbHid::new();
+            let env = XousEnv::new(conn);
+            let mut replies = EndpointReplies::new();
             // only run the main loop if the SoC is compatible
-            if usb.is_soc_compatible() {
-                let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
-                let mut ctap_hid = CtapHid::new();
+            if env.is_soc_compatible() {
+                let mut ctap = vault::Ctap::new(env, Instant::now());
+                let mut pkt_request: Option::<[u8; 64]> = None;
                 loop {
-                    match usb.u2f_wait_incoming() {
-                        Ok(msg) => {
-                            log::trace!("FIDO listener got message: {:?}", msg);
-                            let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-                            let reply = match ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state) {
-                                ctap::hid::send::CTAPHIDResponse::StandardCommand(iter) => iter,
-                                ctap::hid::send::CTAPHIDResponse::VendorCommand(cmd, cid, payload) => {
-                                    match vendor_commands::handle_vendor_data(cmd, cid, payload, &mut vendor_session) {
-                                        Ok(return_payload) => {
-                                            // if None, this means we've finished parsing all that
-                                            // was needed, and we handle/respond with real data
-
-                                            match return_payload {
-                                                Some(data) => data,
-                                                None => {
-                                                    log::debug!("starting processing of vendor data...");
-                                                    let resp = vendor_commands::handle_vendor_command(
-                                                        &mut vendor_session,
-                                                        allow_host.load(Ordering::SeqCst)
-                                                    );
-                                                    log::debug!("finished processing of vendor data!");
-
-                                                    match vendor_session.is_backup() {
-                                                        true => {
-                                                            if vendor_session.has_backup_data() {
-                                                                resp
-                                                            } else {
-                                                                vendor_session = VendorSession::default();
-                                                                resp
-                                                            }
-                                                        },
-                                                        false => {
-                                                            vendor_session = VendorSession::default();
-                                                            resp
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        Err(session_error) => {
-                                            // reset the session
-                                            vendor_session = VendorSession::default();
-
-                                            session_error.ctaphid_error(cid)
-                                        }
-                                    }
-                                    //vendor_commands::handle_vendor_command(cmd, cid, payload)
-                                }
-                            };
-                            // This block handles sending packets.
-                            for pkt_reply in reply {
-                                let mut reply = RawFidoMsg::default();
-                                reply.packet.copy_from_slice(&pkt_reply);
-                                let status = usb.u2f_send(reply);
-                                match status {
-                                    Ok(()) => {
-                                        log::trace!("Sent U2F packet");
-                                    }
-                                    Err(e) => {
-                                        log::error!("Error sending U2F packet: {:?}", e);
-                                    }
-                                }
+                    ///////////
+                    // TODO: vendor command for gsora backup protocol has disappeared.
+                    ///////////
+                    if let Some(mut packet) = replies.next_packet() {
+                        // send and receive.
+                        match ctap.env().main_hid_connection().send_and_maybe_recv(&mut packet.packet, SEND_TIMEOUT) {
+                            Ok(SendOrRecvStatus::Timeout) => {
+                                log::debug!("Sending packet timed out");
+                                // TODO: reset the ctap_hid state.
+                                // Since sending the packet timed out, we cancel this reply.
+                                break;
                             }
+                            Ok(SendOrRecvStatus::Sent) => {
+                                log::debug!("Sent packet");
+                            }
+                            Ok(SendOrRecvStatus::Received) => {
+                                log::debug!("Received another packet");
+
+                                // Copy to incoming packet to local buffer to be consistent
+                                // with the receive flow.
+                                pkt_request = Some(packet.packet);
+                            }
+                            Err(_) => panic!("Error sending packet"),
                         }
-                        Err(e) => {
-                            match e {
-                                xous::Error::ProcessTerminated => { // unplug happened, reset the authenticator
-                                    log::info!("CTAP unplug_reset");
-                                    ctap_state.unplug_reset();
-                                },
-                                _ => {
-                                    log::warn!("FIDO listener got an error: {:?}", e);
+                    } else {
+                        // receive
+                        let mut rx_buf = [0u8; 64];
+                        pkt_request = match ctap.env().main_hid_connection().recv_with_timeout(&mut rx_buf, KEEPALIVE_DELAY)
+                        {
+                            SendOrRecvStatus::Received => {
+                                log::debug!("Received packet");
+                                Some(rx_buf)
+                            }
+                            SendOrRecvStatus::Sent => {
+                                panic!("Returned transmit status on receive");
+                            }
+                            SendOrRecvStatus::Timeout => {
+                                None
+                            },
+                        };
+                    }
+
+                    if let Some(pkt_request) = pkt_request.take() {
+                        let reply = ctap.process_hid_packet(&pkt_request, Transport::MainHid, Instant::now());
+                        if reply.has_data() {
+                            // Update endpoint with the reply.
+                            for ep in replies.replies.iter_mut() {
+                                if ep.reply.has_data() {
+                                    log::warn!("Warning overwriting existing reply");
                                 }
+                                ep.reply = reply;
+                                break;
                             }
                         }
                     }
@@ -312,7 +308,7 @@ fn main() -> ! {
     // spawn the icontray handler
     let _ = thread::spawn({
         move || {
-            icontray_server(conn);
+            crate::ux::icontray::icontray_server(conn);
         }
     });
     // spawn the TOTP pumper
@@ -335,10 +331,6 @@ fn main() -> ! {
         item_lists,
         action_active.clone()
     );
-    // Trigger the mode update in the actions
-    send_message(actions_conn,
-        Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
-    ).ok();
     vaultux.update_mode();
     vaultux.get_glyph_style();
 
@@ -474,6 +466,11 @@ fn main() -> ! {
                         // HID is always selected if the vault is foregrounded
                         vaultux.ensure_hid();
                         allow_redraw = true;
+                        // Update database & configs
+                        send_message(actions_conn,
+                            Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).ok();
+                        vaultux.update_mode();
                     }
                 }
             }),
@@ -581,14 +578,3 @@ fn main() -> ! {
     xous::terminate_process(0)
 }
 
-fn check_user_presence(_cid: ChannelID) -> Result<(), Ctap2StatusCode> {
-    log::warn!("check user presence called, but not implemented!");
-    Ok(())
-}
-
-pub(crate) fn basis_change() {
-    log::info!("got basis change");
-    xous::send_message(SELF_CONN.load(Ordering::SeqCst),
-        Message::new_scalar(VaultOp::BasisChange.to_usize().unwrap(), 0, 0, 0, 0)
-    ).unwrap();
-}

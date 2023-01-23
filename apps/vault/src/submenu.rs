@@ -2,7 +2,7 @@ use gam::*;
 use num_traits::*;
 
 use locales::t;
-use crate::VaultOp;
+use vault::VaultOp;
 use crate::actions::ActionOp;
 
 pub fn create_submenu(vault_conn: xous::CID, actions_conn: xous::CID, menu_mgr: xous::SID) -> MenuMatic {
