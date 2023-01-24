@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(feature="xous")]
+pub mod key; // allows us to access the table of key names so we can inspect the contents of OpenSK's database
+#[cfg(not(feature="xous"))]
 mod key;
 
 use crate::api::attestation_store::{self, AttestationStore};

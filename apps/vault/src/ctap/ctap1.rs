@@ -201,6 +201,7 @@ impl Ctap1Command {
                 }
                 #[cfg(feature="xous")]
                 let regstr = String::from(t!("vault.u2f.register", xous::LANG));
+                #[cfg(feature="xous")]
                 if !ctap_state.u2f_up_state.consume_up(env, regstr, application) {
                     log::debug!("still waiting...");
                     return Err(Ctap1StatusCode::SW_COND_USE_NOT_SATISFIED);
@@ -224,6 +225,7 @@ impl Ctap1Command {
                 #[cfg(feature="xous")]
                 let authstr = String::from(t!("vault.u2f.authenticate", xous::LANG));
                 // The order is important due to side effects of checking user presence.
+                #[cfg(feature="xous")]
                 if flags == Ctap1Flags::EnforceUpAndSign
                     && !ctap_state.u2f_up_state.consume_up(env, authstr, application)
                 {

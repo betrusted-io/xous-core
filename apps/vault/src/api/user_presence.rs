@@ -37,13 +37,16 @@ pub trait UserPresence {
     /// Must be called between calls to [`Self::check_init`] and [`Self::check_complete`].
     #[cfg(feature="xous")]
     fn wait_with_timeout(&mut self, timeout: Duration, reason: Option<String>, cid: [u8; 4]) -> UserPresenceResult;
+    #[cfg(feature="xous")]
+    fn recently_requested(&mut self) -> bool;
     #[cfg(not(feature="xous"))]
     fn wait_with_timeout(&mut self, timeout: Duration) -> UserPresenceResult;
 
-    /// CTAP1 waits don't require keepalive packets. They just block. However, they also have
-    /// an `app_id` which we have to lookup to turn into a human-readable identifier.
+    /// On the first call, pops up a request box for user presence approval
+    /// Subsequent calls simply return true/false if the user has finally approved.
+    /// The request box eventually times out on its own.
     #[cfg(feature="xous")]
-    fn wait_ctap1(&mut self, reason: String, app_id: [u8; 32]) -> bool;
+    fn poll_approval_ctap1(&mut self, reason: String, app_id: [u8; 32]) -> bool;
 
     /// Finalizes a user presence check.
     ///

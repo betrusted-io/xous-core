@@ -69,7 +69,7 @@ UI concept:
   |-----------------|
 
   F1-F4: switch between functions using F-keys. Functions are:
-    - FIDO2   (U2F authenicators)
+    - FIDO2   (U2F authenticators)
     - TOTP    (time based authenticators)
     - Vault   (passwords)
     - Prefs   (preferences)
@@ -193,7 +193,7 @@ impl EndpointReplies {
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -207,6 +207,8 @@ fn main() -> ! {
     let item_lists = Arc::new(Mutex::new(ItemLists::new()));
     let action_active = Arc::new(AtomicBool::new(false));
     let allow_host = Arc::new(AtomicBool::new(false));
+    // Protects access to the openSK PDDB entries from simultaneous readout on the UX while OpenSK is updating it
+    let opensk_mutex = Arc::new(Mutex::new(0));
 
     // spawn the actions server. This is responsible for grooming the UX elements. It
     // has to be in its own thread because it uses blocking modal calls that would cause
@@ -218,7 +220,8 @@ fn main() -> ! {
         actions_sid,
         mode.clone(),
         item_lists.clone(),
-        action_active.clone()
+        action_active.clone(),
+        opensk_mutex.clone(),
     );
     let actions_conn = xous::connect(actions_sid).unwrap();
 
@@ -226,6 +229,7 @@ fn main() -> ! {
     // spawn the FIDO2 USB handler
     let _ = thread::spawn({
         let allow_host = allow_host.clone();
+        let opensk_mutex = opensk_mutex.clone();
         let conn = conn.clone();
         move || {
             let xns = xous_names::XousNames::new().unwrap();
@@ -236,7 +240,11 @@ fn main() -> ! {
             let pddb = pddb::Pddb::new();
             pddb.is_mounted_blocking();
 
-            let env = XousEnv::new(conn);
+            let mut env = XousEnv::new(conn);
+            {
+                let mutex = opensk_mutex.lock().unwrap();
+                env.attestation_check_init(); // ensures that our attestation keys have been created
+            }
             let mut replies = EndpointReplies::new();
             // only run the main loop if the SoC is compatible
             if env.is_soc_compatible() {
@@ -246,55 +254,31 @@ fn main() -> ! {
                     ///////////
                     // TODO: vendor command for gsora backup protocol has disappeared.
                     ///////////
-                    if let Some(mut packet) = replies.next_packet() {
-                        // send and receive.
-                        match ctap.env().main_hid_connection().send_and_maybe_recv(&mut packet.packet, SEND_TIMEOUT) {
-                            Ok(SendOrRecvStatus::Timeout) => {
-                                log::debug!("Sending packet timed out");
-                                // TODO: reset the ctap_hid state.
-                                // Since sending the packet timed out, we cancel this reply.
-                                break;
-                            }
-                            Ok(SendOrRecvStatus::Sent) => {
-                                log::debug!("Sent packet");
-                            }
-                            Ok(SendOrRecvStatus::Received) => {
-                                log::debug!("Received another packet");
-
-                                // Copy to incoming packet to local buffer to be consistent
-                                // with the receive flow.
-                                pkt_request = Some(packet.packet);
-                            }
-                            Err(_) => panic!("Error sending packet"),
-                        }
-                    } else {
-                        // receive
-                        let mut rx_buf = [0u8; 64];
-                        pkt_request = match ctap.env().main_hid_connection().recv_with_timeout(&mut rx_buf, KEEPALIVE_DELAY)
-                        {
-                            SendOrRecvStatus::Received => {
-                                log::debug!("Received packet");
-                                Some(rx_buf)
-                            }
-                            SendOrRecvStatus::Sent => {
-                                panic!("Returned transmit status on receive");
-                            }
-                            SendOrRecvStatus::Timeout => {
-                                None
-                            },
-                        };
-                    }
-
-                    if let Some(pkt_request) = pkt_request.take() {
-                        let reply = ctap.process_hid_packet(&pkt_request, Transport::MainHid, Instant::now());
-                        if reply.has_data() {
-                            // Update endpoint with the reply.
-                            for ep in replies.replies.iter_mut() {
-                                if ep.reply.has_data() {
-                                    log::warn!("Warning overwriting existing reply");
+                    match ctap.env().main_hid_connection().u2f_wait_incoming() {
+                        Ok(msg) => {
+                            let mutex = opensk_mutex.lock().unwrap();
+                            log::debug!("Received U2F packet");
+                            let reply = ctap.process_hid_packet(&msg.packet, Transport::MainHid, Instant::now());
+                            for pkt_reply in reply {
+                                let mut reply = RawFidoMsg::default();
+                                reply.packet.copy_from_slice(&pkt_reply);
+                                let status = ctap.env().main_hid_connection().u2f_send(reply);
+                                match status {
+                                    Ok(()) => {
+                                        log::debug!("Sent U2F packet");
+                                    }
+                                    Err(e) => {
+                                        log::error!("Error sending U2F packet: {:?}", e);
+                                    }
                                 }
-                                ep.reply = reply;
-                                break;
+                            }
+                            // mutex goes out of scope here, and is released
+                        }
+                        Err(e) => {
+                            match e {
+                                _ => {
+                                    log::warn!("FIDO listener got an error: {:?}", e);
+                                }
                             }
                         }
                     }

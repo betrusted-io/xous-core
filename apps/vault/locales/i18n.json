@@ -461,6 +461,13 @@
         "ja": "アプリ名:",
         "zh": "应用名称:"
     },
+    "vault.u2f.appinfo.newapp": {
+        "en": "New app: ",
+        "en-tts": "New app: ",
+        "fr": "Nouvelle application: ",
+        "ja": "新しいアプリ: ",
+        "zh": "新应用: "
+    },
     "vault.u2f.appinfo.never": {
         "en": "never",
         "en-tts": "never",
