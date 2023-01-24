@@ -217,7 +217,7 @@ impl Pddb {
         }
     }
     /// This is a non-blocking message that permanently halts the PDDB server by wedging it in an infinite loop.
-    /// It is meant to be called prior to system shutdows or backups, to ensure that other auto-mounting procesess
+    /// It is meant to be called prior to system shutdows or backups, to ensure that other auto-mounting processes
     /// don't undo the shutdown procedure because of an ill-timed "cron" job (the system doesn't literally have
     /// a cron daemon, but it does have the notion of long-running background jobs that might do something like
     /// trigger an NTP update, which would then try to write the updated time to the PDDB).
@@ -819,14 +819,14 @@ impl Pddb {
 
            The main server then receives this, and if there are no tokens pending for `DictBulkRead`, it allocates
            a 128-bit token for this transaction and records it, locking out any other potential requests.
-           If a token is already allocated, it responds immedaitely with an error code.
+           If a token is already allocated, it responds immediately with an error code.
 
            The main server proceeds to serialize keys out of the dictionary into `PddbKeyRecord` structures.
            It will serialize exactly as many as can fit into the given buffer. In case the data is larger than
            the allocated buffer, the data will always be returned as `None`; in case the data is larger than
            the available space, the serialization stops, and the record is returned.
 
-           Subsequent calls from the client to the main server requries a `PddbDictRequest` structure
+           Subsequent calls from the client to the main server requires a `PddbDictRequest` structure
            to be in the buffer, but only the "token" field is considered. The rest of the fields are disregarded;
            changing the requested dictionary or other parameters has no impact on the call trajectory.
 
