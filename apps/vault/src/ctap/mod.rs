@@ -113,7 +113,7 @@ pub const TOUCH_TIMEOUT_MS: u64 = 30000;
 #[cfg(feature = "with_ctap1")]
 pub const TOUCH_TIMEOUT: Duration = Duration::from_millis(TOUCH_TIMEOUT_MS);
 #[cfg(feature = "with_ctap1")]
-const U2F_UP_PROMPT_TIMEOUT: Duration = Duration::from_millis(10000);
+pub const U2F_UP_PROMPT_TIMEOUT: Duration = Duration::from_millis(10000);
 // TODO(kaczmarczyck) 2.1 allows Reset after Reset and 15 seconds?
 const RESET_TIMEOUT_DURATION: Duration = Duration::from_millis(10000);
 const STATEFUL_COMMAND_TIMEOUT_DURATION: Duration = Duration::from_millis(30000);
@@ -569,10 +569,10 @@ impl CtapState {
         now: Instant,
     ) -> Vec<u8> {
         let cmd = Command::deserialize(command_cbor);
-        log::debug!("Received command: {:#?}", cmd);
+        log::debug!("Received command: {:?}", cmd);
         let response =
             cmd.and_then(|command| self.process_parsed_command(env, command, channel, now));
-        log::debug!("Sending response: {:#?}", response);
+        log::debug!("Sending response: {:?}", response);
         match response {
             Ok(response_data) => {
                 let mut response_vec = vec![Ctap2StatusCode::CTAP2_OK as u8];
@@ -1552,8 +1552,8 @@ impl CtapState {
     }
 
     #[cfg(feature = "with_ctap1")]
-    pub fn u2f_needs_user_presence(&mut self, now: Instant) -> bool {
-        self.u2f_up_state.is_up_needed(now)
+    pub fn u2f_needs_user_presence(&mut self, env: &mut impl Env, now: Instant) -> bool {
+        self.u2f_up_state.is_up_needed(env, now)
     }
 }
 

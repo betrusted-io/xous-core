@@ -96,7 +96,7 @@ impl U2fUserPresenceState {
     // This marks user presence as needed or uses it up if already granted. Also cleans up.
     #[cfg(feature="xous")]
     pub fn consume_up(&mut self, env: &mut impl Env, reason: String, app_id: [u8; 32]) -> bool {
-        env.user_presence().wait_ctap1(String::from(reason), app_id)
+        env.user_presence().poll_approval_ctap1(String::from(reason), app_id)
     }
     #[cfg(not(feature="xous"))]
     pub fn consume_up(&mut self, now: Instant) -> bool {
@@ -117,8 +117,8 @@ impl U2fUserPresenceState {
         self.needs_up.is_granted(now)
     }
     #[cfg(feature="xous")]
-    pub fn is_up_needed(&mut self, _now: Instant) -> bool {
-        false
+    pub fn is_up_needed(&mut self, env: &mut impl Env, _now: Instant) -> bool {
+        env.user_presence().recently_requested()
     }
 
     // If you don't regularly call any other function, not cleaning up leads to overflow problems.

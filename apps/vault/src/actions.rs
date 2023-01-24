@@ -58,10 +58,11 @@ pub(crate) fn start_actions_thread(
     sid: SID, mode: Arc::<Mutex::<VaultMode>>,
     item_lists: Arc::<Mutex::<ItemLists>>,
     action_active: Arc::<AtomicBool>,
+    opensk_mutex: Arc::<Mutex::<i32>>,
 ) {
     let _ = thread::spawn({
         move || {
-            let mut manager = ActionManager::new(main_conn, mode, item_lists, action_active);
+            let mut manager = ActionManager::new(main_conn, mode, item_lists, action_active, opensk_mutex);
             loop {
                 let msg = xous::receive_message(sid).unwrap();
                 let opcode: Option<ActionOp> = FromPrimitive::from_usize(msg.body.id());
@@ -152,6 +153,7 @@ struct ActionManager<'a> {
     pddb: RefCell::<pddb::Pddb>,
     tt: ticktimer_server::Ticktimer,
     action_active: Arc::<AtomicBool>,
+    opensk_mutex: Arc::<Mutex::<i32>>,
     mode_cache: VaultMode,
     main_conn: xous::CID,
     #[cfg(feature="vaultperf")]
@@ -168,7 +170,8 @@ impl<'a> ActionManager<'a> {
         main_conn: xous::CID,
         mode: Arc::<Mutex::<VaultMode>>,
         item_lists: Arc::<Mutex::<ItemLists>>,
-        action_active: Arc::<AtomicBool>
+        action_active: Arc::<AtomicBool>,
+        opensk_mutex: Arc::<Mutex::<i32>>,
     ) -> ActionManager<'a> {
         let xns = xous_names::XousNames::new().unwrap();
         let storage_manager = storage::Manager::new(&xns);
@@ -199,6 +202,7 @@ impl<'a> ActionManager<'a> {
             pddb: RefCell::new(pddb::Pddb::new()),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             action_active,
+            opensk_mutex,
             main_conn,
             #[cfg(feature="vaultperf")]
             perfbuf,
@@ -957,7 +961,7 @@ impl<'a> ActionManager<'a> {
                                         t!("vault.u2f.appinfo.authcount", xous::LANG),
                                         ai.count,
                                     );
-                                    let desc = format!("{}", ai.name);
+                                    let desc = format!("{} (U2F)", ai.name);
                                     let li = ListItem {
                                         name: desc,
                                         extra,
@@ -995,61 +999,67 @@ impl<'a> ActionManager<'a> {
                     },
                 }
 
-                log::debug!("listing in {}", OPENSK2_DICT);
-                match self.pddb.borrow().read_dict(OPENSK2_DICT, None, Some(256 * 1024)) {
-                    Ok(keys) => {
-                        let mut oom_keys = 0;
-                        for key in keys {
-                            if let Some(data) = key.data {
-                                match vault::ctap::storage::deserialize_credential(&data) {
-                                    Some(result) => {
-                                        let name = if let Some(display_name) = result.user_display_name {
-                                            display_name
-                                        } else {
-                                            String::from_utf8(result.user_handle).unwrap_or("".to_string())
-                                        };
-                                        let desc = format!("{} / {}", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
-                                        let extra = format!("FIDO2 {}", name);
-                                        let li = ListItem {
-                                            name: desc,
-                                            extra,
-                                            dirty: true,
-                                            guid: key.name,
-                                            count: 0,
-                                            atime: 0,
-                                        };
-                                        il.insert(li.key(), li);
+                {   // this brace creates a block that defines the lifetime of `mutex`; it is released on drop as it goes out of scope
+                    // access to OPENSK2_DICT has to be mutex-guarded, otherwise we get errors as the
+                    // OpenSK thread mutates the dictionary while we query it
+                    let mutex = self.opensk_mutex.lock().unwrap();
+                    log::debug!("listing in {}", OPENSK2_DICT);
+                    match self.pddb.borrow().read_dict(OPENSK2_DICT, None, Some(256 * 1024)) {
+                        Ok(keys) => {
+                            let mut oom_keys = 0;
+                            for key in keys {
+                                let key_number = key.name.parse::<usize>().unwrap_or(0);
+                                if vault::ctap::storage::key::CREDENTIALS.contains(&key_number) {
+                                    if let Some(data) = key.data {
+                                        match vault::ctap::storage::deserialize_credential(&data) {
+                                            Some(result) => {
+                                                let name = if let Some(display_name) = result.user_display_name {
+                                                    display_name
+                                                } else {
+                                                    String::from_utf8(result.user_handle).unwrap_or("".to_string())
+                                                };
+                                                let desc = format!("{} / {} (FIDO2)", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
+                                                let extra = format!("{}", name);
+                                                let li = ListItem {
+                                                    name: desc,
+                                                    extra,
+                                                    dirty: true,
+                                                    guid: key.name,
+                                                    count: 0,
+                                                    atime: 0,
+                                                };
+                                                il.insert(li.key(), li);
+                                            }
+                                            None => {
+                                                // Probably more indicative of a mismatch in OpenSK key range mapping, rather than a hard error.
+                                                let err = format!("{}:{}:{}: ({}){:x?}...",
+                                                    key.basis, OPENSK2_DICT, key.name, key.len, &data[..16]
+                                                );
+                                                log::info!("Couldn't deserialize FIDO2 key {}", err);
+                                            },
+                                        }
+                                    } else {
+                                        oom_keys += 1;
                                     }
-                                    None => {
-                                        // this is "harmless" because we're now returning, like, everything
-                                        // print to info! for now, so we can be more selective down the road about
-                                        // deserializations and maybe save some time
-                                        let err = format!("{}:{}:{}: ({}){:x?}...",
-                                            key.basis, OPENSK2_DICT, key.name, key.len, &data[..16]
-                                        );
-                                        log::info!("Couldn't deserialize FIDO2 key {}", err);
-                                    },
                                 }
-                            } else {
-                                oom_keys += 1;
+                            }
+                            if oom_keys != 0 {
+                                log::warn!("Ran out of cache space handling FIDO2 tokens. {} tokens are not loaded.", oom_keys);
+                                self.report_err(&format!("Ran out of cache space handling FIDO2 entries. {} tokens not loaded", oom_keys), None::<crate::storage::Error>);
                             }
                         }
-                        if oom_keys != 0 {
-                            log::warn!("Ran out of cache space handling FIDO2 tokens. {} tokens are not loaded.", oom_keys);
-                            self.report_err(&format!("Ran out of cache space handling FIDO2 entries. {} tokens not loaded", oom_keys), None::<crate::storage::Error>);
-                        }
+                        Err(e) => {
+                            match e.kind() {
+                                ErrorKind::NotFound => {
+                                    // this is fine, it just means no entries have been entered yet
+                                },
+                                _ => {
+                                    log::error!("Error opening FIDO2 dictionary");
+                                    self.report_err("Error opening FIDO2 dictionary", Some(e))
+                                }
+                            }
+                        },
                     }
-                    Err(e) => {
-                        match e.kind() {
-                            ErrorKind::NotFound => {
-                                // this is fine, it just means no entries have been entered yet
-                            },
-                            _ => {
-                                log::error!("Error opening FIDO2 dictionary");
-                                self.report_err("Error opening FIDO2 dictionary", Some(e))
-                            }
-                        }
-                    },
                 }
             }
             VaultMode::Totp => {
