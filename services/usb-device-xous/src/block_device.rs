@@ -24,16 +24,18 @@ impl usbd_scsi::BlockDevice for BlockDevice {
     const BLOCK_BYTES: usize = 512;
 
     fn read_block(&self, lba: u32, block: &mut [u8]) -> Result<(), usbd_scsi::BlockDeviceError> {
+        let block_bytes = Self::BLOCK_BYTES;
         let backing_slice: &[u8] = self.backing.as_slice();
         block.copy_from_slice(
-            &backing_slice[lba as usize * Self::BLOCK_BYTES..(lba as usize + 1) * Self::BLOCK_BYTES]
+            &backing_slice[lba as usize * block_bytes..(lba as usize + 1) * block_bytes]
         );
         Ok(())
     }
 
     fn write_block(&mut self, lba: u32, block: &[u8]) -> Result<(), usbd_scsi::BlockDeviceError> {
+        let block_bytes = Self::BLOCK_BYTES;
         let backing_slice: &mut [u8] = self.backing.as_slice_mut();
-        backing_slice[lba as usize * Self::BLOCK_BYTES..(lba as usize + 1) * Self::BLOCK_BYTES].copy_from_slice(block);
+        backing_slice[lba as usize * block_bytes..(lba as usize + 1) * block_bytes].copy_from_slice(block);
         Ok(())
     }
 

@@ -31,6 +31,9 @@ pub(crate) enum Opcode {
     /// Query if the HID driver was able to start
     IsSocCompatible,
 
+    SetBlockDevice,
+    SetBlockDeviceSID,
+
     /// Handle the USB interrupt
     UsbIrqHandler,
     /// Suspend/resume callback
