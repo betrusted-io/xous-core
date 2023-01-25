@@ -433,7 +433,7 @@ impl XousEnv {
                 }
                 Err(_) => panic!("Error sending KEEPALIVE packet"),
                 Ok(SendOrRecvStatus::Sent) => {
-                    log::debug!("Sent KEEPALIVE packet");
+                    log::trace!("Sent KEEPALIVE packet");
                 }
                 Ok(SendOrRecvStatus::Received) => {
                     // We only parse one packet, because we only care about CANCEL.
@@ -478,6 +478,7 @@ impl UserPresence for XousEnv {
     }
     /// Implements FIDO behavior (CTAP2 protocol)
     fn wait_with_timeout(&mut self, timeout: Duration, reason: Option::<String>, cid: [u8; 4]) -> UserPresenceResult {
+        log::info!("{}VAULT.PERMISSION,{}", xous::BOOKEND_START, xous::BOOKEND_END);
         let reason = reason.unwrap_or(String::new());
         let kbhit = Arc::new(AtomicU32::new(0));
         let expiration = Instant::now().checked_add(timeout).expect("duration bug");
@@ -511,6 +512,7 @@ impl UserPresence for XousEnv {
             let mut request_str = String::from(&reason);
             let remaining = expiration.duration_since(Instant::now()).as_secs();
             if last_remaining != remaining {
+                log::info!("countdown: {}", remaining);
                 // only update the UX once per second
                 request_str.push_str(
                     &format!("\n\n⚠   {}{}   ⚠\n",

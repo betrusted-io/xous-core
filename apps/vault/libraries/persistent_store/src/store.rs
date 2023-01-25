@@ -278,13 +278,13 @@ impl<S: Storage> Store<S> {
             match *update {
                 StoreUpdate::Insert { key, ref value } => {
                     // if it exists, remove the key; if it doesn't exist, ignore the error
-                    log::debug!("delete key: {}:{}", crate::store::OPENSK2_DICT, key.to_string());
+                    log::debug!("pre-delete key: {}:{}", crate::store::OPENSK2_DICT, key.to_string());
                     self.pddb.delete_key(
                         crate::store::OPENSK2_DICT,
                         &key.to_string(),
                         None
                     ).ok();
-                    log::debug!("access key: {}:{}", crate::store::OPENSK2_DICT, key.to_string());
+                    log::debug!("write key: {}:{}", crate::store::OPENSK2_DICT, key.to_string());
                     match self.pddb.get(
                         crate::store::OPENSK2_DICT,
                         &key.to_string(),
@@ -308,11 +308,21 @@ impl<S: Storage> Store<S> {
                     }
                 }
                 StoreUpdate::Remove { key } => {
-                    self.pddb.delete_key(
+                    log::debug!("remove key: {}:{}", crate::store::OPENSK2_DICT, key.to_string());
+                    match self.pddb.delete_key(
                         crate::store::OPENSK2_DICT,
                         &key.to_string(),
                         None
-                    ).map_err(|_|StoreError::StorageError)?
+                    ) {
+                        Ok(_) => {},
+                        Err(e) => match e.kind() {
+                            std::io::ErrorKind::NotFound => {},
+                            _ => {
+                                log::warn!("Encountered error in StorageUpdate::Remove: {:?}", e);
+                                return Err(StoreError::StorageError)
+                            },
+                        }
+                    }
                 }
             }
         }
@@ -363,6 +373,7 @@ impl<S: Storage> Store<S> {
 
     /// Returns the value of an entry given its key.
     pub fn find(&self, key: usize) -> StoreResult<Option<Vec<u8>>> {
+        log::debug!("find key: {}", key);
         match self.pddb.get(
             crate::store::OPENSK2_DICT,
             &key.to_string(),
@@ -453,14 +464,14 @@ impl<S: Storage> Store<S> {
                 let attr = record.attributes().map_err(|_| StoreError::StorageError)?;
                 Ok(attr.len)
             }
-            _ => Err(StoreError::StorageError)
+            _ => Err(StoreError::InvalidArgument) // key didn't exist
         }
     }
 
     fn get_value(&self, handle: &StoreHandle) -> StoreResult<Vec<u8>> {
         self.find(
             handle.key
-        ).map(|val| val.ok_or(StoreError::StorageError))?
+        ).map(|val| val.ok_or(StoreError::InvalidArgument))?
     }
 
 }
