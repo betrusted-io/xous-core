@@ -502,9 +502,15 @@ impl<'a> ActionManager<'a> {
 
             if choice.is_none() {
                 // we're dealing with FIDO stuff, use the custom code path
-                let dictionary = match entry.key_name.as_str().unwrap_or("UTF8-error").parse::<usize>() {
-                    Ok(fido_key) => persistent_store::store::OPENSK2_DICT,
-                    Err(_) => U2F_APP_DICT,
+                let dictionary = match usize::from_str_radix(entry.key_name.as_str().unwrap_or("UTF8-error"), 10) {
+                    Ok(fido_key) => {
+                        if vault::ctap::storage::key::CREDENTIALS.contains(&fido_key) {
+                            persistent_store::store::OPENSK2_DICT // heuristic: all fido2 keys are simple integers
+                        } else {
+                            U2F_APP_DICT
+                        }
+                    }
+                    Err(_) => U2F_APP_DICT, // u2f keys are long hex strings
                 };
                 match self.pddb.borrow().get(dictionary, entry.key_name.as_str().unwrap_or("UTF8-error"),
                 None, false, false, None, None::<fn()>
