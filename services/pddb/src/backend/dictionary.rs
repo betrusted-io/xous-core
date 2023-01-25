@@ -376,26 +376,28 @@ impl DictCacheEntry {
     pub (crate) fn refill_small_key(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         data_cache: &mut PlaintextCache, key_name: &str) {
         if let Some(kcache) = self.keys.get_mut(key_name) {
-            if let Some(pool_index) = small_storage_index_from_key(&kcache, self.index) {
-                let ksp = &mut self.small_pool[pool_index];
-                assert!(ksp.contents.contains(&key_name.to_string()), "refill called on a non-existent key. This is an illegal state.");
-                // now grab the *data* referred to by this key. Maybe this is a "bad" idea -- this can really eat up RAM fast to hold
-                // all the small pool data right away, but let's give it a try and see how it works. Later on we can always skip this.
-                // manage a separate small cache for data blocks, under the theory that small keys tend to be packed together
-                let data_vaddr = small_storage_base_vaddr_from_indices(self.index, pool_index);
-                data_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(data_vaddr).unwrap());
-                if let Some(page) = data_cache.data.as_ref() {
-                    let start_offset = size_of::<JournalType>() + (kcache.start % VPAGE_SIZE as u64) as usize;
-                    let mut data = page[start_offset..start_offset + kcache.len as usize].to_vec();
-                    data.reserve_exact((kcache.reserved - kcache.len) as usize);
-                    kcache.data = Some(KeyCacheData::Small(
-                        KeySmallData {
-                            clean: true,
-                            data
-                        }
-                    ));
-                } else {
-                    log::error!("Key {}'s data region at pp: {:x?} va: {:x} is unreadable", key_name, data_cache.tag, kcache.start);
+            if kcache.flags.valid() { // invalid keys were previously deleted, and have nothing to fill
+                if let Some(pool_index) = small_storage_index_from_key(&kcache, self.index) {
+                    let ksp = &mut self.small_pool[pool_index];
+                    assert!(ksp.contents.contains(&key_name.to_string()), "refill called on a non-existent key. This is an illegal state.");
+                    // now grab the *data* referred to by this key. Maybe this is a "bad" idea -- this can really eat up RAM fast to hold
+                    // all the small pool data right away, but let's give it a try and see how it works. Later on we can always skip this.
+                    // manage a separate small cache for data blocks, under the theory that small keys tend to be packed together
+                    let data_vaddr = small_storage_base_vaddr_from_indices(self.index, pool_index);
+                    data_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(data_vaddr).unwrap());
+                    if let Some(page) = data_cache.data.as_ref() {
+                        let start_offset = size_of::<JournalType>() + (kcache.start % VPAGE_SIZE as u64) as usize;
+                        let mut data = page[start_offset..start_offset + kcache.len as usize].to_vec();
+                        data.reserve_exact((kcache.reserved - kcache.len) as usize);
+                        kcache.data = Some(KeyCacheData::Small(
+                            KeySmallData {
+                                clean: true,
+                                data
+                            }
+                        ));
+                    } else {
+                        log::error!("Key {}'s data region at pp: {:x?} va: {:x} is unreadable", key_name, data_cache.tag, kcache.start);
+                    }
                 }
             }
         } else {
