@@ -286,6 +286,13 @@
         "ja": "シークレットベースのロックを解除",
         "zh": "解锁秘密基础"
     },
+    "vault.migration_error": {
+        "en": "Migration from previous FIDO database encountered errors:",
+        "en-tts": "Migration from previous FIDO database encountered errors:",
+        "fr": "La migration depuis la base de données FIDO précédente a rencontré des erreurs: *MT*",
+        "ja": "以前の FIDO データベースからの移行でエラーが発生しました:",
+        "zh": "从以前的 FIDO 数据库迁移遇到错误："
+    },
     "vault.newitem.approve": {
         "en": "Is this password okay?",
         "en-tts": "Is this password okay?",
@@ -461,19 +468,19 @@
         "ja": "アプリ名:",
         "zh": "应用名称:"
     },
-    "vault.u2f.appinfo.newapp": {
-        "en": "New app: ",
-        "en-tts": "New app: ",
-        "fr": "Nouvelle application: ",
-        "ja": "新しいアプリ: ",
-        "zh": "新应用: "
-    },
     "vault.u2f.appinfo.never": {
         "en": "never",
         "en-tts": "never",
         "fr": "jamais",
         "ja": "使われたことがない",
         "zh": "没用过"
+    },
+    "vault.u2f.appinfo.newapp": {
+        "en": "New app: ",
+        "en-tts": "New app: ",
+        "fr": "Nouvelle application: ",
+        "ja": "新しいアプリ: ",
+        "zh": "新应用: "
     },
     "vault.u2f.appinfo.seconds_ago": {
         "en": " secs ago",

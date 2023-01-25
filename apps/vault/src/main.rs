@@ -10,6 +10,7 @@ mod totp;
 mod prereqs;
 mod vendor_commands;
 mod storage;
+mod migration_v1;
 
 use locales::t;
 
@@ -30,6 +31,7 @@ use crate::vendor_commands::VendorSession;
 use ux::framework::{VaultUx, DEFAULT_FONT, FONT_LIST, name_to_style};
 use xous_ipc::Buffer;
 use xous::{send_message, Message};
+use pddb::Pddb;
 use usbd_human_interface_device::device::fido::*;
 use num_traits::*;
 
@@ -193,7 +195,7 @@ impl EndpointReplies {
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -239,12 +241,19 @@ fn main() -> ! {
             // block until the PDDB is mounted
             let pddb = pddb::Pddb::new();
             pddb.is_mounted_blocking();
+            // Attempt a migration, if necessary. If none is necessary this call is fairly lightweight.
+            match crate::migration_v1::migrate(&pddb) {
+                Ok(_) => {},
+                Err(e) => {
+                    log::warn!("Migration encountered errors! {:?}", e);
+                    let modals = modals::Modals::new(&xns).unwrap();
+                    modals.show_notification(
+                        &format!("{}\n{:?}", t!("vault.migration_error", xous::LANG), e), None
+                    ).ok();
+                }
+            };
 
             let mut env = XousEnv::new(conn);
-            {
-                let mutex = opensk_mutex.lock().unwrap();
-                env.attestation_check_init(); // ensures that our attestation keys have been created
-            }
             let mut replies = EndpointReplies::new();
             // only run the main loop if the SoC is compatible
             if env.is_soc_compatible() {
@@ -323,6 +332,7 @@ fn main() -> ! {
 
     let modals = modals::Modals::new(&xns).unwrap();
     let tt = ticktimer_server::Ticktimer::new().unwrap();
+    let mut first_time = true;
     loop {
         let msg = xous::receive_message(sid).unwrap();
         let opcode: Option<VaultOp> = FromPrimitive::from_usize(msg.body.id());
@@ -450,11 +460,14 @@ fn main() -> ! {
                         // HID is always selected if the vault is foregrounded
                         vaultux.ensure_hid();
                         allow_redraw = true;
-                        // Update database & configs
-                        send_message(actions_conn,
-                            Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).ok();
-                        vaultux.update_mode();
+                        if first_time {
+                            // Populate the initial fields, just the first time
+                            send_message(actions_conn,
+                                Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                            ).ok();
+                            vaultux.update_mode();
+                            first_time = false;
+                        }
                     }
                 }
             }),
@@ -561,4 +574,3 @@ fn main() -> ! {
     log::trace!("quitting");
     xous::terminate_process(0)
 }
-
