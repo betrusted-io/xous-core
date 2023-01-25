@@ -1586,7 +1586,7 @@ fn wrapped_main() -> ! {
                                                 age: attr.age,
                                                 index: attr.index,
                                                 basis: attr.basis,
-                                                data: Some(d)
+                                                data: if d.len() > 0 { Some(d) } else { None }
                                             };
                                             state.read_total += attr.len; // commit the read length early
                                             let (prebuf, sbuf) = buf.split_at_mut(size_of::<u32>()*2);

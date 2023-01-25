@@ -801,7 +801,8 @@ impl Pddb {
 
     /// Retrieve an entire dictionary of data in a single call. Will return data records up to but not
     /// over a total of `size_limit`. Keys that exceed the limit are still enumerated, but their
-    /// data sections are `None`, instead of `Some(Vec::<u8>)`.
+    /// data sections are `None`, instead of `Some(Vec::<u8>)`. Keys that are zero-length are also returned
+    /// with a data section of `None`; check the `len` field of the PddbKeyRecord to determine which is which.
     /// Defaults to a size limit of up to 32k of bulk data returned, if it is not explicitly specified.
     pub fn read_dict(&self, dict: &str, basis: Option<&str>, size_limit: Option<usize>) -> Result<Vec::<PddbKeyRecord>> {
         // about the biggest we can move around in Precursor and not break heap.
