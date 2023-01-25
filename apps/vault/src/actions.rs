@@ -502,14 +502,18 @@ impl<'a> ActionManager<'a> {
 
             if choice.is_none() {
                 // we're dealing with FIDO stuff, use the custom code path
-                match self.pddb.borrow().get(U2F_APP_DICT, entry.key_name.as_str().unwrap_or("UTF8-error"),
-                    None, false, false, None, None::<fn()>
+                let dictionary = match entry.key_name.as_str().unwrap_or("UTF8-error").parse::<usize>() {
+                    Ok(fido_key) => persistent_store::store::OPENSK2_DICT,
+                    Err(_) => U2F_APP_DICT,
+                };
+                match self.pddb.borrow().get(dictionary, entry.key_name.as_str().unwrap_or("UTF8-error"),
+                None, false, false, None, None::<fn()>
                 ) {
                     Ok(candidate) => {
                         let attr = candidate.attributes().expect("couldn't get key attributes");
                         match self.pddb.borrow()
                         .delete_key(
-                            U2F_APP_DICT,
+                            dictionary,
                             entry.key_name.as_str().unwrap_or("UTF8-error"),
                             Some(&attr.basis)
                         ) {
@@ -519,7 +523,7 @@ impl<'a> ActionManager<'a> {
                             Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
                     }
-                     Err(e) => {
+                    Err(e) => {
                         self.report_err(t!("vault.error.not_found", xous::LANG), Some(e));
                     }
                 }
