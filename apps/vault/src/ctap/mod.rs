@@ -1385,6 +1385,7 @@ impl CtapState {
         env: &mut impl Env,
         channel: Channel,
     ) -> Result<ResponseData, Ctap2StatusCode> {
+        #[cfg(not(feature="autotest"))]
         match self.stateful_command_permission.get_command()? {
             StatefulCommand::Reset => (),
             _ => return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED),
