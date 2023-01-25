@@ -142,6 +142,17 @@ pub(crate) fn main_hosted() -> ! {
                     buffer.replace(u2f_ipc).unwrap();
                 }
             }
+            Some(Opcode::U2fRxTimeout) => {
+                if let Some(mut listener) = fido_listener.take() {
+                    let mut response = unsafe {
+                        Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                    };
+                    let mut buf = response.to_original::<U2fMsgIpc, _>().unwrap();
+                    assert_eq!(buf.code, U2fCode::RxWait, "Expected U2fcode::RxWait in wrapper");
+                    buf.code = U2fCode::RxTimeout;
+                    response.replace(buf).unwrap();
+                }
+            }
             Some(Opcode::U2fTx) => {
                 if fido_listener_pid.is_none() {
                     fido_listener_pid = msg.sender.pid();

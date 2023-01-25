@@ -24,14 +24,19 @@ trng = {path="../../services/trng"}
 susres = {package = "xous-api-susres", version = "0.9.26"}
 ime-plugin-api = {path = "../../services/ime-plugin-api"}
 content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
-ctap-crypto = {path = "libraries/crypto"}
-cbor = {path = "libraries/cbor"}
 backup = {path = "libraries/backup"}
 byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.2.3", default-features = false, features = ["nightly"] }
 rand_core = "0.6.3"
 ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.26"}
+
+# opensk
+ctap-crypto = {path = "libraries/crypto"}
+cbor = {path = "libraries/cbor"}
+persistent_store = { path = "libraries/persistent_store" }
+ed25519-compact = { version = "1", default-features = false, optional = true }
+rand = { version = "0.8.4", optional = true }
 
 # ux formatting
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
@@ -66,12 +71,13 @@ hosted = []
 renode = []
 tts = []
 with_ctap1 = ["ctap-crypto/with_ctap1"]
-with_ctap2_1 = []
 autotest = []
 multireset = [] # allows credential reset more than once per boot
 vaultperf = ["perflib", "xous/v2p", "utralib", "utralib/precursor"] # vault is the performance logging manager. Do not use concurrently with "shellperf", as there can only be one manager.
 vault-testing = ["random-pick"]
 # introduce a slight delay after UX boxes swap, in case of race conditions. Shouldn't be necessary anymore, but kept around in case there's a new edge case we missed.
 ux-swap-delay = []
-
-default = ["with_ctap1", "with_ctap2_1"] # testing removed for release tag
+osk-upgrade = [] # placeholder to select out OpenSK's "vendor upgrade" over HID, which we don't use because we have our own upgrade path.
+xous = [] # marks xous-specific code segments deep inside the CTAP crate. Mostly to help evaluate if a patch is even feasible in the future.
+ed25519 = ["ed25519-compact"]
+default = ["with_ctap1", "ed25519", "xous"] # testing removed for release tag

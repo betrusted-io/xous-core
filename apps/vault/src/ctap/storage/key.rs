@@ -12,40 +12,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::stringify;
-
 /// Number of keys that persist the CTAP reset command.
-#[allow(dead_code)] // OpenSK legacy
 pub const NUM_PERSISTENT_KEYS: usize = 20;
 
-/// Helper to define keys as a partial partition of a range.
-macro_rules! define_names {
-     ($(
-         $(#[$doc: meta])*
-         $name: ident = $key: literal $(.. $end: literal)?;
-     )*) => {
-        $(
-            pub const $name: &'static str = stringify!($name);
-        )*
+/// Defines a key given its name and value or range of values.
+macro_rules! make_key {
+    ($(#[$doc: meta])* $name: ident = $key: literal..$end: literal) => {
+        $(#[$doc])* pub const $name: core::ops::Range<usize> = $key..$end;
+    };
+    ($(#[$doc: meta])* $name: ident = $key: literal) => {
+        $(#[$doc])* pub const $name: usize = $key;
     };
 }
 
-define_names! {
+/// Returns the range of values of a key given its value description.
+#[cfg(test)]
+macro_rules! make_range {
+    ($key: literal..$end: literal) => {
+        $key..$end
+    };
+    ($key: literal) => {
+        $key..$key + 1
+    };
+}
+
+/// Helper to define keys as a partial partition of a range.
+macro_rules! make_partition {
+        ($range: expr,
+         $(
+             $(#[$doc: meta])*
+             $name: ident = $key: literal $(.. $end: literal)?;
+         )*) => {
+            $(
+                make_key!($(#[$doc])* $name = $key $(.. $end)?);
+            )*
+            #[cfg(test)]
+            const KEY_RANGE: core::ops::Range<usize> = $range;
+            #[cfg(test)]
+            const ALL_KEYS: &[core::ops::Range<usize>] = &[$(make_range!($key $(.. $end)?)),*];
+        };
+    }
+
+make_partition! {
+    // We reserve 0 and 2048+ for possible migration purposes. We add persistent entries starting
+    // from 1 and going up. We add non-persistent entries starting from 2047 and going down. This
+    // way, we don't commit to a fixed number of persistent keys.
+    1..2048,
+
     // WARNING: Keys should not be deleted but prefixed with `_` to avoid accidentally reusing them.
-    // the range information is not used by Xous' PDDB, but it is kept around for easy comparison against
-    // the original OpenSK reference code.
 
-    /// The attestation private key.
-    ATTESTATION_PRIVATE_KEY = 1;
-
-    /// The attestation certificate.
-    ATTESTATION_CERTIFICATE = 2;
+    /// Reserved for the attestation store implementation of the environment.
+    _RESERVED_ATTESTATION_STORE = 1..3;
 
     /// The aaguid.
     AAGUID = 3;
-
-    // In Xous, you can have as many persistent keys as you want, but, you just have to put them
-    // in the FIDO_PERSISTENT_DICT. This is controlled in the implementation in the storage.rs file.
 
     // This is the persistent key limit:
     // - When adding a (persistent) key above this message, make sure its value is smaller than
@@ -61,40 +81,81 @@ define_names! {
 
     /// The credentials.
     ///
-    /// Depending on `MAX_SUPPORTED_RESIDENTIAL_KEYS`, only a prefix of those keys is used. Each
-    /// board may configure `MAX_SUPPORTED_RESIDENTIAL_KEYS` depending on the storage size.
-    // CREDENTIALS = 1700..2000;
+    /// Depending on `Customization::max_supported_resident_keys()`, only a prefix of those keys is used.
+    /// Each board may configure `Customization::max_supported_resident_keys()` depending on the
+    /// storage size.
+    CREDENTIALS = 1700..2000;
+
+    /// Storage for the serialized large blob array.
+    ///
+    /// The stored large blob can be too big for one key, so it has to be sharded.
+    LARGE_BLOB_SHARDS = 2000..2004;
+
+    /// If this entry exists and is empty, alwaysUv is enabled.
+    ALWAYS_UV = 2038;
+
+    /// If this entry exists and is empty, enterprise attestation is enabled.
+    ENTERPRISE_ATTESTATION = 2039;
+
+    /// If this entry exists and is empty, the PIN needs to be changed.
+    FORCE_PIN_CHANGE = 2040;
 
     /// The secret of the CredRandom feature.
     CRED_RANDOM_SECRET = 2041;
 
     /// List of RP IDs allowed to read the minimum PIN length.
-    #[cfg(feature = "with_ctap2_1")]
-    _MIN_PIN_LENGTH_RP_IDS = 2042;
+    MIN_PIN_LENGTH_RP_IDS = 2042;
 
     /// The minimum PIN length.
     ///
-    /// If the entry is absent, the minimum PIN length is `DEFAULT_MIN_PIN_LENGTH`.
-    #[cfg(feature = "with_ctap2_1")]
+    /// If the entry is absent, the minimum PIN length is `Customization::default_min_pin_length()`.
     MIN_PIN_LENGTH = 2043;
 
     /// The number of PIN retries.
     ///
-    /// If the entry is absent, the number of PIN retries is `MAX_PIN_RETRIES`.
+    /// If the entry is absent, the number of PIN retries is `Customization::max_pin_retries()`.
     PIN_RETRIES = 2044;
 
-    /// The PIN hash.
+    /// The PIN hash and length.
     ///
-    /// If the entry is absent, there is no PIN set.
-    PIN_HASH = 2045;
+    /// If the entry is absent, there is no PIN set. The first byte represents
+    /// the length, the following are an array with the hash.
+    PIN_PROPERTIES = 2045;
 
-    /// The encryption and hmac keys.
-    ///
-    /// This entry is always present. It is generated at startup if absent.
-    MASTER_KEYS = 2046;
+    /// Reserved for the key store implementation of the environment.
+    _RESERVED_KEY_STORE = 2046;
 
     /// The global signature counter.
     ///
     /// If the entry is absent, the counter is 0.
     GLOBAL_SIGNATURE_COUNTER = 2047;
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::api::customization::Customization;
+    use crate::env::test::TestEnv;
+    use crate::env::Env;
+
+    #[test]
+    fn enough_credentials() {
+        let env = TestEnv::new();
+        assert!(
+            env.customization().max_supported_resident_keys()
+                <= CREDENTIALS.end - CREDENTIALS.start
+        );
+    }
+
+    #[test]
+    fn keys_are_disjoint() {
+        // Check that keys are in the range.
+        for keys in ALL_KEYS {
+            assert!(KEY_RANGE.start <= keys.start && keys.end <= KEY_RANGE.end);
+        }
+        // Check that keys are assigned at most once, essentially partitioning the range.
+        for key in KEY_RANGE {
+            assert!(ALL_KEYS.iter().filter(|keys| keys.contains(&key)).count() <= 1);
+        }
+    }
 }

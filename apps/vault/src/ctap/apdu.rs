@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC
+// Copyright 2020-2021 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,13 +15,14 @@
 use std::vec::Vec;
 use byteorder::{BigEndian, ByteOrder};
 use core::convert::TryFrom;
-use crate::ctap::array_ref;
+use arrayref::array_ref;
+
+use crate::api::attestation_store;
 
 const APDU_HEADER_LEN: usize = 4;
 
-#[cfg_attr(test, derive(Clone))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types, dead_code)]
-#[derive(PartialEq, Debug)]
 pub enum ApduStatusCode {
     SW_SUCCESS = 0x90_00,
     /// Command successfully executed; 'XX' bytes of data are
@@ -31,6 +32,7 @@ pub enum ApduStatusCode {
     SW_WRONG_DATA = 0x6a_80,
     SW_WRONG_LENGTH = 0x67_00,
     SW_COND_USE_NOT_SATISFIED = 0x69_85,
+    SW_COMMAND_NOT_ALLOWED = 0x69_86,
     SW_FILE_NOT_FOUND = 0x6a_82,
     SW_INCORRECT_P1P2 = 0x6a_86,
     /// Instruction code not supported or invalid
@@ -45,6 +47,17 @@ impl From<ApduStatusCode> for u16 {
     }
 }
 
+impl From<attestation_store::Error> for ApduStatusCode {
+    fn from(error: attestation_store::Error) -> Self {
+        use attestation_store::Error;
+        match error {
+            Error::Storage => ApduStatusCode::SW_MEMERR,
+            Error::Internal => ApduStatusCode::SW_INTERNAL_EXCEPTION,
+            Error::NoSupport => ApduStatusCode::SW_INTERNAL_EXCEPTION,
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub enum ApduInstructions {
     Select = 0xA4,
@@ -52,9 +65,8 @@ pub enum ApduInstructions {
     GetResponse = 0xC0,
 }
 
-#[cfg_attr(test, derive(Clone, Debug))]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[allow(dead_code)]
-#[derive(Default, PartialEq)]
 pub struct ApduHeader {
     pub cla: u8,
     pub ins: u8,
@@ -73,9 +85,8 @@ impl From<&[u8; APDU_HEADER_LEN]> for ApduHeader {
     }
 }
 
-#[cfg_attr(test, derive(Clone, Debug))]
-#[derive(PartialEq)]
-/// The Apdu cases
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// The APDU cases
 pub enum Case {
     Le1,
     Lc1Data,
@@ -86,18 +97,16 @@ pub enum Case {
     Le3,
 }
 
-#[cfg_attr(test, derive(Clone, Debug))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(dead_code)]
-#[derive(PartialEq)]
 pub enum ApduType {
     Instruction,
     Short(Case),
     Extended(Case),
 }
 
-#[cfg_attr(test, derive(Clone, Debug))]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(dead_code)]
-#[derive(PartialEq)]
 pub struct Apdu {
     pub header: ApduHeader,
     pub lc: u16,
@@ -187,7 +196,7 @@ impl TryFrom<&[u8]> for Apdu {
             if byte_0 == 0 && extended_apdu_le_len <= 3 {
                 // If first byte is zero AND the next two bytes can be parsed as a big-endian
                 // length that covers the rest of the block (plus few additional bytes for Le), we
-                // have an extended-length Apdu
+                // have an extended-length APDU
                 let last_byte: u32 = (*payload.last().unwrap()).into();
                 return Ok(Apdu {
                     header: array_ref!(header, 0, APDU_HEADER_LEN).into(),

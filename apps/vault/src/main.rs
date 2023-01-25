@@ -2,36 +2,40 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod ux;
-use ux::*;
-use num_traits::*;
-use xous_ipc::Buffer;
-use xous::{send_message, Message};
-use usbd_human_interface_device::device::fido::*;
-use std::thread;
-use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-
-mod ctap;
-use ctap::hid::{ChannelID, CtapHid};
-use ctap::status_code::Ctap2StatusCode;
-use ctap::CtapState;
-mod shims;
-use shims::*;
 mod submenu;
 mod actions;
 mod totp;
 mod prereqs;
 mod vendor_commands;
 mod storage;
+mod migration_v1;
 
 use locales::t;
 
-use framework::ListItem;
-use actions::{ActionOp, start_actions_thread};
+use vault::ctap::main_hid::HidIterType;
+use vault::env::xous::XousEnv;
+use vault::env::Env;
+use vault::{
+    SELF_CONN, Transport, VaultOp
+};
 
+use actions::{ActionOp, start_actions_thread};
+use crate::ux::framework::{ListItem, NavDir};
 use crate::prereqs::ntp_updater;
 use crate::vendor_commands::VendorSession;
+
+use ux::framework::{VaultUx, DEFAULT_FONT, FONT_LIST, name_to_style};
+use xous_ipc::Buffer;
+use xous::{send_message, Message};
+use usbd_human_interface_device::device::fido::*;
+use num_traits::*;
+
+use std::thread;
+use core::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use std::collections::BTreeMap;
+
 
 // CTAP2 testing notes:
 // run our branch and use this to forward the prompts on to the device:
@@ -62,7 +66,7 @@ UI concept:
   |-----------------|
 
   F1-F4: switch between functions using F-keys. Functions are:
-    - FIDO2   (U2F authenicators)
+    - FIDO2   (U2F authenticators)
     - TOTP    (time based authenticators)
     - Vault   (passwords)
     - Prefs   (preferences)
@@ -114,53 +118,20 @@ To clear test entries:
 
 */
 
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub(crate) enum VaultOp {
-    /// a line of text has arrived
-    Line = 0, // make sure we occupy opcodes with discriminants < 1000, as the rest are used for callbacks
-    /// incremental line of text
-    IncrementalLine,
-    /// redraw our UI
-    Redraw,
-    /// ignore dirty rectangles and redraw everything
-    FullRedraw,
-    /// reload the database (slow), and ignore dirty rectangles and redraw everything
-    ReloadDbAndFullRedraw,
-    /// change focus
-    ChangeFocus,
-
-    /// Partial menu
-    MenuChangeFont,
-    MenuDeleteStage1,
-    MenuEditStage1,
-    MenuAutotype,
-    MenuReadoutMode,
-
-    /// PDDB basis change
-    BasisChange,
-
-    /// Nop while waiting for prerequisites to be filled
-    Nop,
-
-    /// exit the application
-    Quit,
-}
-
 #[derive(Copy, Clone, PartialEq, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-enum VaultMode {
+pub enum VaultMode {
     Fido,
     Totp,
     Password,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
-struct SelectedEntry {
-    key_name: xous_ipc::String::<256>,
-    description: xous_ipc::String::<256>,
-    mode: VaultMode,
+pub struct SelectedEntry {
+    pub key_name: xous_ipc::String::<256>,
+    pub description: xous_ipc::String::<256>,
+    pub mode: VaultMode,
 }
-
-struct ItemLists {
+pub struct ItemLists {
     pub fido: BTreeMap::<String, ListItem>,
     pub totp: BTreeMap::<String, ListItem>,
     pub pw: BTreeMap::<String, ListItem>,
@@ -171,7 +142,6 @@ impl ItemLists {
     }
 }
 
-static SELF_CONN: AtomicU32 = AtomicU32::new(0);
 const ERR_TIMEOUT_MS: usize = 5000;
 
 fn main() -> ! {
@@ -185,13 +155,13 @@ fn main() -> ! {
     let time_conn = xous::connect(xous::SID::from_bytes(b"timeserverpublic").unwrap()).unwrap();
     let conn = xous::connect(sid).unwrap();
 
-    start_fido_ux_thread(conn);
-
     // global shared state between threads.
     let mode = Arc::new(Mutex::new(VaultMode::Fido));
     let item_lists = Arc::new(Mutex::new(ItemLists::new()));
     let action_active = Arc::new(AtomicBool::new(false));
     let allow_host = Arc::new(AtomicBool::new(false));
+    // Protects access to the openSK PDDB entries from simultaneous readout on the UX while OpenSK is updating it
+    let opensk_mutex = Arc::new(Mutex::new(0));
 
     // spawn the actions server. This is responsible for grooming the UX elements. It
     // has to be in its own thread because it uses blocking modal calls that would cause
@@ -203,7 +173,8 @@ fn main() -> ! {
         actions_sid,
         mode.clone(),
         item_lists.clone(),
-        action_active.clone()
+        action_active.clone(),
+        opensk_mutex.clone(),
     );
     let actions_conn = xous::connect(actions_sid).unwrap();
 
@@ -211,29 +182,60 @@ fn main() -> ! {
     // spawn the FIDO2 USB handler
     let _ = thread::spawn({
         let allow_host = allow_host.clone();
+        let opensk_mutex = opensk_mutex.clone();
+        let conn = conn.clone();
         move || {
             let xns = xous_names::XousNames::new().unwrap();
-            let tt = ticktimer_server::Ticktimer::new().unwrap();
-            let boot_time = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-
             let mut vendor_session = VendorSession::default();
+            // block until the PDDB is mounted
+            let pddb = pddb::Pddb::new();
+            pddb.is_mounted_blocking();
+            // Attempt a migration, if necessary. If none is necessary this call is fairly lightweight.
+            match crate::migration_v1::migrate(&pddb) {
+                Ok(_) => {},
+                Err(e) => {
+                    log::warn!("Migration encountered errors! {:?}", e);
+                    let modals = modals::Modals::new(&xns).unwrap();
+                    modals.show_notification(
+                        &format!("{}\n{:?}", t!("vault.migration_error", xous::LANG), e), None
+                    ).ok();
+                }
+            };
 
-            let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
-            // this call will block until the PDDB is mounted.
-            let usb = usb_device_xous::UsbHid::new();
+            let env = XousEnv::new(conn);
             // only run the main loop if the SoC is compatible
-            if usb.is_soc_compatible() {
-                let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
-                let mut ctap_hid = CtapHid::new();
+            if env.is_soc_compatible() {
+                let mut ctap = vault::Ctap::new(env, Instant::now());
                 loop {
-                    match usb.u2f_wait_incoming() {
+                    match ctap.env().main_hid_connection().u2f_wait_incoming() {
                         Ok(msg) => {
-                            log::trace!("FIDO listener got message: {:?}", msg);
-                            let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-                            let reply = match ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state) {
-                                ctap::hid::send::CTAPHIDResponse::StandardCommand(iter) => iter,
-                                ctap::hid::send::CTAPHIDResponse::VendorCommand(cmd, cid, payload) => {
-                                    match vendor_commands::handle_vendor_data(cmd, cid, payload, &mut vendor_session) {
+                            let mutex = opensk_mutex.lock().unwrap();
+                            log::trace!("Received U2F packet");
+                            let typed_reply = ctap.process_hid_packet(&msg.packet, Transport::MainHid, Instant::now());
+                            match typed_reply {
+                                HidIterType::Ctap(reply) => {
+                                    for pkt_reply in reply {
+                                        let mut reply = RawFidoMsg::default();
+                                        reply.packet.copy_from_slice(&pkt_reply);
+                                        let status = ctap.env().main_hid_connection().u2f_send(reply);
+                                        match status {
+                                            Ok(()) => {
+                                                log::trace!("Sent U2F packet");
+                                            }
+                                            Err(e) => {
+                                                log::error!("Error sending U2F packet: {:?}", e);
+                                            }
+                                        }
+                                    }
+                                }
+                                HidIterType::Vendor(msg) => {
+                                    let reply =
+                                    match vendor_commands::handle_vendor_data(
+                                        msg.cmd as u8,
+                                        msg.cid,
+                                        msg.payload,
+                                        &mut vendor_session
+                                    ) {
                                         Ok(return_payload) => {
                                             // if None, this means we've finished parsing all that
                                             // was needed, and we handle/respond with real data
@@ -269,33 +271,28 @@ fn main() -> ! {
                                             // reset the session
                                             vendor_session = VendorSession::default();
 
-                                            session_error.ctaphid_error(cid)
+                                            session_error.ctaphid_error(msg.cid)
                                         }
-                                    }
-                                    //vendor_commands::handle_vendor_command(cmd, cid, payload)
-                                }
-                            };
-                            // This block handles sending packets.
-                            for pkt_reply in reply {
-                                let mut reply = RawFidoMsg::default();
-                                reply.packet.copy_from_slice(&pkt_reply);
-                                let status = usb.u2f_send(reply);
-                                match status {
-                                    Ok(()) => {
-                                        log::trace!("Sent U2F packet");
-                                    }
-                                    Err(e) => {
-                                        log::error!("Error sending U2F packet: {:?}", e);
+                                    };
+                                    for pkt_reply in reply {
+                                        let mut reply = RawFidoMsg::default();
+                                        reply.packet.copy_from_slice(&pkt_reply);
+                                        let status = ctap.env().main_hid_connection().u2f_send(reply);
+                                        match status {
+                                            Ok(()) => {
+                                                log::trace!("Sent U2F packet");
+                                            }
+                                            Err(e) => {
+                                                log::error!("Error sending U2F packet: {:?}", e);
+                                            }
+                                        }
                                     }
                                 }
                             }
+                            drop(mutex);
                         }
                         Err(e) => {
                             match e {
-                                xous::Error::ProcessTerminated => { // unplug happened, reset the authenticator
-                                    log::info!("CTAP unplug_reset");
-                                    ctap_state.unplug_reset();
-                                },
                                 _ => {
                                     log::warn!("FIDO listener got an error: {:?}", e);
                                 }
@@ -312,7 +309,7 @@ fn main() -> ! {
     // spawn the icontray handler
     let _ = thread::spawn({
         move || {
-            icontray_server(conn);
+            crate::ux::icontray::icontray_server(conn);
         }
     });
     // spawn the TOTP pumper
@@ -335,10 +332,6 @@ fn main() -> ! {
         item_lists,
         action_active.clone()
     );
-    // Trigger the mode update in the actions
-    send_message(actions_conn,
-        Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
-    ).ok();
     vaultux.update_mode();
     vaultux.get_glyph_style();
 
@@ -347,6 +340,7 @@ fn main() -> ! {
 
     let modals = modals::Modals::new(&xns).unwrap();
     let tt = ticktimer_server::Ticktimer::new().unwrap();
+    let mut first_time = true;
     loop {
         let msg = xous::receive_message(sid).unwrap();
         let opcode: Option<VaultOp> = FromPrimitive::from_usize(msg.body.id());
@@ -474,6 +468,14 @@ fn main() -> ! {
                         // HID is always selected if the vault is foregrounded
                         vaultux.ensure_hid();
                         allow_redraw = true;
+                        if first_time {
+                            // Populate the initial fields, just the first time
+                            send_message(actions_conn,
+                                Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                            ).ok();
+                            vaultux.update_mode();
+                            first_time = false;
+                        }
                     }
                 }
             }),
@@ -579,16 +581,4 @@ fn main() -> ! {
     xous::destroy_server(sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
-}
-
-fn check_user_presence(_cid: ChannelID) -> Result<(), Ctap2StatusCode> {
-    log::warn!("check user presence called, but not implemented!");
-    Ok(())
-}
-
-pub(crate) fn basis_change() {
-    log::info!("got basis change");
-    xous::send_message(SELF_CONN.load(Ordering::SeqCst),
-        Message::new_scalar(VaultOp::BasisChange.to_usize().unwrap(), 0, 0, 0, 0)
-    ).unwrap();
 }

@@ -18,29 +18,17 @@ use p256::{
 use p256::ecdsa::VerifyingKey;
 use rand_core::OsRng;
 
-use cbor::{cbor_bytes, cbor_map_options};
-
 use super::rng256::Rng256;
 use super::Hash256;
 
 const INT256_NBYTES: usize = 32;
+pub const NBYTES: usize = INT256_NBYTES;
 
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "derive_debug", derive(Debug))]
 pub struct SecKey {
     k: SigningKey,
     // k: NonZeroExponentP256,
-}
-
-pub struct Signature {
-    sig: P256Signature,
-    // r: NonZeroExponentP256,
-    // s: NonZeroExponentP256,
-}
-
-pub struct PubKey {
-    p: VerifyingKey,
-    // p: PointP256,
 }
 
 impl SecKey {
@@ -114,6 +102,11 @@ impl SecKey {
     }
 }
 
+pub struct Signature {
+    sig: P256Signature,
+    // r: NonZeroExponentP256,
+    // s: NonZeroExponentP256,
+}
 impl Signature {
     pub fn to_asn1_der(&self) -> Vec<u8> {
         // let's hope this shakes out in testing.
@@ -196,6 +189,10 @@ impl Signature {
     }
 }
 
+pub struct PubKey {
+    p: VerifyingKey,
+    // p: PointP256,
+}
 impl PubKey {
     pub const ES256_ALGORITHM: i64 = -7;
     #[cfg(feature = "with_ctap1")]
@@ -208,6 +205,17 @@ impl PubKey {
             _ => None
         }
     }
+
+    /// Creates a new PubKey from its coordinates on the elliptic curve.
+    pub fn from_coordinates(x: &[u8; INT256_NBYTES], y: &[u8; INT256_NBYTES]) -> Option<PubKey> {
+        let encoded_point: p256::EncodedPoint =
+            p256::EncodedPoint::from_affine_coordinates(x.into(), y.into(), false);
+        match VerifyingKey::from_encoded_point(&encoded_point) {
+            Ok(p) => Some(PubKey{p}),
+            _ => None
+        }
+    }
+
     //#[cfg(test)] - commented out because for some reason we can't get the test configs to work right
     #[allow(dead_code)]
     fn to_bytes_uncompressed(&self, bytes: &mut [u8; 65]) {
@@ -246,39 +254,20 @@ impl PubKey {
         representation
     }
 
-    // Encodes the key according to CBOR Object Signing and Encryption, defined in RFC 8152.
-    pub fn to_cose_key(&self) -> Option<Vec<u8>> {
-        const EC2_KEY_TYPE: i64 = 2;
-        const P_256_CURVE: i64 = 1;
-        let mut x_bytes = vec![0; INT256_NBYTES];
-        x_bytes.copy_from_slice(
+    /// Writes the coordinates into the passed in arrays.
+    pub fn to_coordinates(&self, x: &mut [u8; NBYTES], y: &mut [u8; NBYTES]) {
+        x.copy_from_slice(
             self.p
             .to_encoded_point(false)
             .x().unwrap()
             .as_slice()
         );
-        let x_byte_cbor: cbor::Value = cbor_bytes!(x_bytes);
-        let mut y_bytes = vec![0; INT256_NBYTES];
-        y_bytes.copy_from_slice(
+        y.copy_from_slice(
             self.p
             .to_encoded_point(false)
             .y().unwrap()
             .as_slice()
         );
-        let y_byte_cbor: cbor::Value = cbor_bytes!(y_bytes);
-        let cbor_value = cbor_map_options! {
-            1 => EC2_KEY_TYPE,
-            3 => PubKey::ES256_ALGORITHM,
-            -1 => P_256_CURVE,
-            -2 => x_byte_cbor,
-            -3 => y_byte_cbor,
-        };
-        let mut encoded_key = Vec::new();
-        if cbor::write(cbor_value, &mut encoded_key) {
-            Some(encoded_key)
-        } else {
-            None
-        }
     }
 
     // #[cfg(feature = "std")]

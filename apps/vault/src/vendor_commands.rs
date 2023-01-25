@@ -2,16 +2,15 @@ use cbor::reader::DecoderError;
 use core::convert::TryFrom;
 use locales::t;
 
-use crate::{
-    ctap::hid::{send::HidPacketIterator, ChannelID, Message},
-    storage::{Error, PasswordRecord, TotpRecord},
+use vault::{
+    ctap::hid::{send::HidPacketIterator, ChannelID, Message, CtapHidCommand}
 };
+use crate::totp::TotpAlgorithm;
+use crate::storage::{Error, PasswordRecord, TotpRecord};
 
-// Vault-specific command to upload TOTP codes
-pub const COMMAND_RESTORE_TOTP_CODES: u8 = 0x71;
-pub const COMMAND_BACKUP_TOTP_CODES: u8 = 0x72;
-pub const COMMAND_RESET_SESSION: u8 = 0x74;
-
+use vault::vault_api::{
+    COMMAND_BACKUP_TOTP_CODES, COMMAND_RESTORE_TOTP_CODES, COMMAND_RESET_SESSION
+};
 // TODO(gsora): add something that checks whether or not a command works.
 
 pub enum SessionError {
@@ -102,7 +101,7 @@ pub fn handle_vendor_data(
         return Ok(Some(
             HidPacketIterator::new(Message {
                 cid: channel_id,
-                cmd,
+                cmd: cmd.into(),
                 payload: vec![0xca, 0xfe, 0xba, 0xbe],
             })
             .unwrap(),
@@ -156,7 +155,7 @@ pub fn handle_vendor_data(
         false => Ok(Some(
             HidPacketIterator::new(Message {
                 cid: channel_id,
-                cmd,
+                cmd: cmd.into(),
                 payload: backup::CONTINUE_RESPONSE.to_vec(),
             })
             .unwrap(),
@@ -177,7 +176,7 @@ pub fn handle_vendor_command(session: &mut VendorSession, allow_host: bool) -> H
             COMMAND_RESTORE_TOTP_CODES => match handle_restore(payload, &xns) {
                 Ok(payload) => Message {
                     cid: channel_id,
-                    cmd,
+                    cmd: cmd.into(),
                     payload,
                 },
                 Err(error) => {
@@ -190,7 +189,7 @@ pub fn handle_vendor_command(session: &mut VendorSession, allow_host: bool) -> H
                     log::debug!("sending over chunk: {:?}", payload);
                     Message {
                         cid: channel_id,
-                        cmd,
+                        cmd: cmd.into(),
                         payload,
                     }
                 }
@@ -266,9 +265,9 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
                     name: elem.name,
                     secret: elem.shared_secret,
                     algorithm: match elem.algorithm {
-                        backup::HashAlgorithms::SHA1 => crate::totp::TotpAlgorithm::HmacSha1,
-                        backup::HashAlgorithms::SHA256 => crate::totp::TotpAlgorithm::HmacSha256,
-                        backup::HashAlgorithms::SHA512 => crate::totp::TotpAlgorithm::HmacSha512,
+                        backup::HashAlgorithms::SHA1 => TotpAlgorithm::HmacSha1,
+                        backup::HashAlgorithms::SHA256 => TotpAlgorithm::HmacSha256,
+                        backup::HashAlgorithms::SHA512 => TotpAlgorithm::HmacSha512,
                     },
                     digits: elem.digit_count,
                     timestep: elem.step_seconds,
@@ -356,9 +355,9 @@ fn handle_backup(
                     shared_secret: raw_code.secret,
                     digit_count: raw_code.digits,
                     algorithm: match raw_code.algorithm {
-                        crate::totp::TotpAlgorithm::HmacSha1 => backup::HashAlgorithms::SHA1,
-                        crate::totp::TotpAlgorithm::HmacSha256 => backup::HashAlgorithms::SHA256,
-                        crate::totp::TotpAlgorithm::HmacSha512 => backup::HashAlgorithms::SHA512,
+                        TotpAlgorithm::HmacSha1 => backup::HashAlgorithms::SHA1,
+                        TotpAlgorithm::HmacSha256 => backup::HashAlgorithms::SHA256,
+                        TotpAlgorithm::HmacSha512 => backup::HashAlgorithms::SHA512,
                         _ => panic!("invalid algorithm"),
                     },
                     name: raw_code.name,
@@ -417,7 +416,7 @@ pub(crate) fn error_message(cid: ChannelID, error_code: u8) -> Message {
     // This unwrap is safe because the payload length is 1 <= 7609 bytes.
     Message {
         cid,
-        cmd: 0x3F, // COMMAND_ERROR
+        cmd: CtapHidCommand::Error, // COMMAND_ERROR
         payload: vec![error_code],
     }
 }

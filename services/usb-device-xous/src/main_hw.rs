@@ -9,6 +9,8 @@ use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 #[cfg(not(feature="minimal"))]
 use xous_semver::SemVer;
 use core::num::NonZeroU8;
+use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
+use std::sync::Arc;
 use utralib::generated::*;
 
 use usb_device::prelude::*;
@@ -53,6 +55,13 @@ enum Views {
     FidoOnly = 1,
     #[cfg(feature="mass-storage")]
     MassStorage = 2,
+}
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+enum TimeoutOp {
+    Pump,
+    InvalidCall,
+    Quit,
 }
 
 pub(crate) fn main_hw() -> ! {
@@ -237,12 +246,12 @@ pub(crate) fn main_hw() -> ! {
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
-    // under the theory that PIDs are unforgeable. TODO: check that PIDs are unforgeable.
+    // under the theory that PIDs cannot be forged. TODO: check that PIDs cannot be forged.
     // also if someone commandeers a process, all bets are off within that process (this is a general statement)
     let mut fido_listener_pid: Option<NonZeroU8> = None;
     let mut fido_rx_queue = VecDeque::<[u8; 64]>::new();
 
-    let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
+    let mut lockstatus_force_update = true; // some state to track if we've been through a suspend/resume, to help out the status thread with its UX update after a restart-from-cold
     let mut was_suspend = true;
 
     #[cfg(feature="minimal")]
@@ -264,6 +273,77 @@ pub(crate) fn main_hw() -> ! {
         tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
         usbmgmt.ll_reset(false);
     }
+    // manage FIDO Rx timeouts -- not tested yet
+    let to_server = xous::create_server().unwrap();
+    let to_conn = xous::connect(to_server).unwrap();
+    // we don't have AtomicU64 on this platform, so we suffer from a rollover condition in timeouts once every 46 days
+    // this manifests as a timeout that happens to be scheduled on the rollover being rounded to a max limit timeout of
+    // 5 seconds, and/or an immediate timeout happening during the 5 seconds before the 46-day limit
+    let target_time_lsb = Arc::new(AtomicU32::new(0));
+    let to_run = Arc::new(AtomicBool::new(false));
+    const MAX_TIMEOUT_LIMIT_MS: u32 = 5000;
+    const POLL_INTERVAL_MS: u64 = 50;
+    std::thread::spawn({
+        let cid = cid;
+        let to_conn = to_conn;
+        let target_time_lsb = target_time_lsb.clone();
+        let to_run = to_run.clone();
+        move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            let mut msg_opt = None;
+            let mut return_type = 0;
+            let mut next_wake = tt.elapsed_ms();
+            loop {
+                xous::reply_and_receive_next_legacy(to_server, &mut msg_opt, &mut return_type)
+                .unwrap();
+                let msg = msg_opt.as_mut().unwrap();
+                // loop only consumes CPU time when a timeout is active. Once it has timed out,
+                // it will wait for a new pump call.
+                let now = tt.elapsed_ms();
+                match num_traits::FromPrimitive::from_usize(msg.body.id())
+                .unwrap_or(TimeoutOp::InvalidCall)
+                {
+                    TimeoutOp::Pump => {
+                        if to_run.load(Ordering::SeqCst) {
+                            let tt_lsb = target_time_lsb.load(Ordering::SeqCst);
+                            if tt_lsb >= (now as u32) ||
+                                (now as u32) - tt_lsb > MAX_TIMEOUT_LIMIT_MS // limits rollover case
+                            {
+                                xous::try_send_message(cid,
+                                    xous::Message::new_scalar(Opcode::U2fRxTimeout.to_usize().unwrap(),
+                                        0, 0, 0, 0)
+                                ).ok();
+                                // no need to set to_run to `false` because a Pump message isn't initiated;
+                                // the loop de-facto stops from a lack of new Pump messages
+                            } else {
+                                if next_wake <= now {
+                                    next_wake = now + POLL_INTERVAL_MS;
+                                    tt.sleep_ms(POLL_INTERVAL_MS as usize).ok();
+                                    xous::try_send_message(to_conn,
+                                        xous::Message::new_scalar(TimeoutOp::Pump.to_usize().unwrap(),
+                                            0, 0, 0, 0)
+                                    ).ok();
+                                } else {
+                                    // don't issue more wakeups if we already have a wakeup scheduled
+                                }
+                            }
+                        }
+                    }
+                    TimeoutOp::Quit => {
+                        if let Some(scalar) = msg.body.scalar_message_mut() {
+                            scalar.id = 0;
+                            scalar.arg1 = 1;
+                            break;
+                        }
+                    }
+                    TimeoutOp::InvalidCall => {
+                        log::error!("Unknown opcode received in FIDO Rx timeout handler: {:?}", msg.body.id());
+                    }
+                }
+            }
+            xous::destroy_server(to_server).unwrap();
+        }
+    });
 
     loop {
         let mut msg = xous::receive_message(usbdev_sid).unwrap();
@@ -327,6 +407,21 @@ pub(crate) fn main_hw() -> ! {
                         response.replace(buf).unwrap();
                     } else {
                         log::trace!("registering deferred listener");
+                        { // not tested
+                            let spec = unsafe {
+                                Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                            };
+                            if let Some(to) = spec.to_original::<U2fMsgIpc, _>().unwrap().timeout_ms {
+                                let target = tt.elapsed_ms() + to;
+                                target_time_lsb.store(target as u32, Ordering::SeqCst); // this will keep updating the target time later and later
+                                // run must always be set *after* target time is updated, because there is always a chance
+                                // we timed out and checked target time between these two steps
+                                to_run.store(true, Ordering::SeqCst);
+                                xous::try_send_message(to_conn,
+                                    xous::Message::new_scalar(TimeoutOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)
+                                ).ok();
+                            }
+                        };
                         fido_listener = Some(msg);
                     }
                 } else {
@@ -335,6 +430,18 @@ pub(crate) fn main_hw() -> ! {
                     let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
                     u2f_ipc.code = U2fCode::Denied;
                     buffer.replace(u2f_ipc).unwrap();
+                }
+            }
+            // Note: not tested
+            Some(Opcode::U2fRxTimeout) => {
+                if let Some(mut listener) = fido_listener.take() {
+                    let mut response = unsafe {
+                        Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                    };
+                    let mut buf = response.to_original::<U2fMsgIpc, _>().unwrap();
+                    assert_eq!(buf.code, U2fCode::RxWait, "Expected U2fcode::RxWait in wrapper");
+                    buf.code = U2fCode::RxTimeout;
+                    response.replace(buf).unwrap();
                 }
             }
             Some(Opcode::U2fTx) => {
@@ -397,6 +504,7 @@ pub(crate) fn main_hw() -> ! {
                     match u2f.read_report() {
                         Ok(u2f_report) => {
                             if let Some(mut listener) = fido_listener.take() {
+                                to_run.store(false, Ordering::SeqCst); // stop the timeout process from running
                                 let mut response = unsafe {
                                     Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
                                 };
@@ -426,6 +534,7 @@ pub(crate) fn main_hw() -> ! {
                     if was_suspend == false {
                         // FIDO listener needs to know when USB was unplugged, so that it can reset state per FIDO2 spec
                         if let Some(mut listener) = fido_listener.take() {
+                            to_run.store(false, Ordering::SeqCst);
                             let mut response = unsafe {
                                 Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
                             };

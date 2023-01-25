@@ -235,7 +235,8 @@ impl UsbHid {
     pub fn u2f_wait_incoming(&self) -> Result<RawFidoMsg, xous::Error> {
         let req = U2fMsgIpc {
             data: [0; 64],
-            code: U2fCode::RxWait
+            code: U2fCode::RxWait,
+            timeout_ms: None,
         };
         let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::U2fRxDeferred.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
@@ -249,13 +250,42 @@ impl UsbHid {
             U2fCode::Hangup => {
                 Err(xous::Error::ProcessTerminated)
             },
+            U2fCode::RxTimeout => {
+                Err(xous::Error::Timeout)
+            },
+            _ => Err(xous::Error::InternalError)
+        }
+    }
+    /// Note: this variant is not tested.
+    pub fn u2f_wait_incoming_timeout(&self, timeout_ms: u64) -> Result<RawFidoMsg, xous::Error> {
+        let req = U2fMsgIpc {
+            data: [0; 64],
+            code: U2fCode::RxWait,
+            timeout_ms: Some(timeout_ms),
+        };
+        let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::U2fRxDeferred.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let ack = buf.to_original::<U2fMsgIpc, _>().unwrap();
+        match ack.code {
+            U2fCode::RxAck => {
+                let mut u2fmsg = RawFidoMsg::default();
+                u2fmsg.packet.copy_from_slice(&ack.data);
+                Ok(u2fmsg)
+            },
+            U2fCode::Hangup => {
+                Err(xous::Error::ProcessTerminated)
+            },
+            U2fCode::RxTimeout => {
+                Err(xous::Error::Timeout)
+            },
             _ => Err(xous::Error::InternalError)
         }
     }
     pub fn u2f_send(&self, msg: RawFidoMsg) -> Result<(), xous::Error> {
         let mut req = U2fMsgIpc {
             data: [0; 64],
-            code: U2fCode::Tx
+            code: U2fCode::Tx,
+            timeout_ms: None,
         };
         req.data.copy_from_slice(&msg.packet);
         let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError))?;

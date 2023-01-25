@@ -376,9 +376,10 @@ pub struct PddbKeyRecord {
     pub age: usize,
     pub index: NonZeroU32,
     pub basis: String,
-    /// If this is None, it means that the data read exceeded the bulk read limit
-    /// and the record must be explicitly re-read with a non-bulk call to fetch its data.
-    /// If the key is actually zero-length, a zero-length Some(Vec) is returned.
+    /// If this is None, it means either that the data read exceeded the bulk read limit
+    /// and the record must be explicitly re-read with a non-bulk call to fetch its data,
+    /// or the key has zero length. Check the `len` field to differentiate the two.
+    /// (Turns out that `rkyv` crashes when deserializing a zero-length Vec)
     pub data: Option<Vec::<u8>>,
 }
 
