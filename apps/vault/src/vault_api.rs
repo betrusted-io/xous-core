@@ -7,6 +7,10 @@ use chrono::{Utc, DateTime, NaiveDateTime};
 
 // This file contains items that are used simultaneously within OpenSK and the `vault` app itself.
 // These items need to be pulled in via both `lib` and `main` scopes.
+// Vault-specific command to upload TOTP codes
+pub const COMMAND_RESTORE_TOTP_CODES: u8 = 0x71;
+pub const COMMAND_BACKUP_TOTP_CODES: u8 = 0x72;
+pub const COMMAND_RESET_SESSION: u8 = 0x74;
 
 pub const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
 pub const VAULT_TOTP_DICT: &'static str = "vault.totp";

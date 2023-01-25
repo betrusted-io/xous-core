@@ -134,7 +134,9 @@ impl TryFrom<cbor::Value> for TotpEntry {
         let digit_count = extract_unsigned(digit_count.unwrap())? as u32;
         let algorithm: HashAlgorithms = algorithm.unwrap().try_into()?;
         let name = extract_string(name.unwrap())?;
-        let hotp = extract_bool(hotp.unwrap())?;
+        let hotp = extract_bool(hotp.unwrap_or(
+            cbor::Value::Simple(cbor::SimpleValue::FalseValue)
+        )).unwrap_or(false);
 
         Ok(TotpEntry {
             step_seconds,

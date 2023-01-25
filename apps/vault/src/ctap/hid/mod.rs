@@ -31,6 +31,10 @@ use std::time::Duration;
 #[cfg(test)]
 use enum_iterator::IntoEnumIterator;
 
+use crate::vault_api::{
+    COMMAND_BACKUP_TOTP_CODES, COMMAND_RESTORE_TOTP_CODES, COMMAND_RESET_SESSION
+};
+
 pub type HidPacket = [u8; 64];
 pub type ChannelID = [u8; 4];
 
@@ -51,6 +55,9 @@ pub enum CtapHidCommand {
     Keepalive = 0x3B,
     Error = 0x3F,
     // The vendor range starts here, going from 0x40 to 0x7F.
+    RestoreTotpCodes = COMMAND_RESTORE_TOTP_CODES as _,
+    BackupTotpCodes = COMMAND_BACKUP_TOTP_CODES as _,
+    ResetSession = COMMAND_RESET_SESSION as _,
 }
 
 impl From<u8> for CtapHidCommand {
@@ -64,6 +71,9 @@ impl From<u8> for CtapHidCommand {
             x if x == CtapHidCommand::Cbor as u8 => CtapHidCommand::Cbor,
             x if x == CtapHidCommand::Cancel as u8 => CtapHidCommand::Cancel,
             x if x == CtapHidCommand::Keepalive as u8 => CtapHidCommand::Keepalive,
+            x if x == CtapHidCommand::RestoreTotpCodes as u8 => CtapHidCommand::RestoreTotpCodes,
+            x if x == CtapHidCommand::BackupTotpCodes as u8 => CtapHidCommand::BackupTotpCodes,
+            x if x == CtapHidCommand::ResetSession as u8 => CtapHidCommand::ResetSession,
             // This includes the actual error code 0x3F. Error is not used for incoming packets in
             // the specification, so we can safely reuse it for unknown bytes.
             _ => CtapHidCommand::Error,
@@ -237,7 +247,7 @@ impl CtapHid {
     ) -> Option<Message> {
         match self.assembler.parse_packet(env, packet, clock_value) {
             Ok(Some(message)) => {
-                log::debug!("Received message: {:02x?}", message);
+                log::trace!("Received message: {:02x?}", message);
                 self.preprocess_message(message)
             }
             Ok(None) => {
@@ -315,6 +325,11 @@ impl CtapHid {
                 None
             }
             CtapHidCommand::Wink => Some(message),
+            CtapHidCommand::BackupTotpCodes |
+            CtapHidCommand::RestoreTotpCodes |
+            CtapHidCommand::ResetSession => {
+                Some(message)
+            }
             _ => {
                 // Unknown or unsupported command.
                 Some(CtapHid::error_message(cid, CtapHidError::InvalidCmd))
