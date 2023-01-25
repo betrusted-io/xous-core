@@ -2,8 +2,6 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod ux;
-mod shims;
-use shims::*;
 mod submenu;
 mod actions;
 mod totp;
@@ -14,10 +12,8 @@ mod migration_v1;
 
 use locales::t;
 
-use vault::ctap::status_code::Ctap2StatusCode;
-use vault::ctap::hid::HidPacketIterator;
+use vault::ctap::main_hid::HidIterType;
 use vault::env::xous::XousEnv;
-use vault::api::connection::{HidConnection, SendOrRecvStatus};
 use vault::env::Env;
 use vault::{
     SELF_CONN, Transport, VaultOp
@@ -31,14 +27,13 @@ use crate::vendor_commands::VendorSession;
 use ux::framework::{VaultUx, DEFAULT_FONT, FONT_LIST, name_to_style};
 use xous_ipc::Buffer;
 use xous::{send_message, Message};
-use pddb::Pddb;
 use usbd_human_interface_device::device::fido::*;
 use num_traits::*;
 
 use std::thread;
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Instant, Duration};
+use std::time::Instant;
 use std::collections::BTreeMap;
 
 
@@ -148,50 +143,6 @@ impl ItemLists {
 }
 
 const ERR_TIMEOUT_MS: usize = 5000;
-const SEND_TIMEOUT: Duration = Duration::from_millis(1000);
-const KEEPALIVE_DELAY: Duration = Duration::from_millis(100);
-// The reply/replies that are queued for each endpoint.
-struct EndpointReply {
-    reply: HidPacketIterator,
-}
-
-impl EndpointReply {
-    pub fn new() -> Self {
-        EndpointReply {
-            reply: HidPacketIterator::none(),
-        }
-    }
-}
-const NUM_ENDPOINTS: usize = 1;
-// A single packet to send.
-struct SendPacket {
-    packet: [u8; 64],
-}
-
-struct EndpointReplies {
-    replies: [EndpointReply; NUM_ENDPOINTS],
-}
-
-impl EndpointReplies {
-    pub fn new() -> Self {
-        EndpointReplies {
-            replies: [
-                EndpointReply::new(),
-            ],
-        }
-    }
-
-    pub fn next_packet(&mut self) -> Option<SendPacket> {
-        for ep in self.replies.iter_mut() {
-            if let Some(packet) = ep.reply.next() {
-                return Some(SendPacket {
-                    packet,
-                });
-            }
-        }
-        None
-    }
-}
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
@@ -235,8 +186,6 @@ fn main() -> ! {
         let conn = conn.clone();
         move || {
             let xns = xous_names::XousNames::new().unwrap();
-            let tt = ticktimer_server::Ticktimer::new().unwrap();
-
             let mut vendor_session = VendorSession::default();
             // block until the PDDB is mounted
             let pddb = pddb::Pddb::new();
@@ -253,35 +202,94 @@ fn main() -> ! {
                 }
             };
 
-            let mut env = XousEnv::new(conn);
-            let mut replies = EndpointReplies::new();
+            let env = XousEnv::new(conn);
             // only run the main loop if the SoC is compatible
             if env.is_soc_compatible() {
                 let mut ctap = vault::Ctap::new(env, Instant::now());
-                let mut pkt_request: Option::<[u8; 64]> = None;
                 loop {
-                    ///////////
-                    // TODO: vendor command for gsora backup protocol has disappeared.
-                    ///////////
                     match ctap.env().main_hid_connection().u2f_wait_incoming() {
                         Ok(msg) => {
                             let mutex = opensk_mutex.lock().unwrap();
-                            log::debug!("Received U2F packet");
-                            let reply = ctap.process_hid_packet(&msg.packet, Transport::MainHid, Instant::now());
-                            for pkt_reply in reply {
-                                let mut reply = RawFidoMsg::default();
-                                reply.packet.copy_from_slice(&pkt_reply);
-                                let status = ctap.env().main_hid_connection().u2f_send(reply);
-                                match status {
-                                    Ok(()) => {
-                                        log::debug!("Sent U2F packet");
+                            log::trace!("Received U2F packet");
+                            let typed_reply = ctap.process_hid_packet(&msg.packet, Transport::MainHid, Instant::now());
+                            match typed_reply {
+                                HidIterType::Ctap(reply) => {
+                                    for pkt_reply in reply {
+                                        let mut reply = RawFidoMsg::default();
+                                        reply.packet.copy_from_slice(&pkt_reply);
+                                        let status = ctap.env().main_hid_connection().u2f_send(reply);
+                                        match status {
+                                            Ok(()) => {
+                                                log::trace!("Sent U2F packet");
+                                            }
+                                            Err(e) => {
+                                                log::error!("Error sending U2F packet: {:?}", e);
+                                            }
+                                        }
                                     }
-                                    Err(e) => {
-                                        log::error!("Error sending U2F packet: {:?}", e);
+                                }
+                                HidIterType::Vendor(msg) => {
+                                    let reply =
+                                    match vendor_commands::handle_vendor_data(
+                                        msg.cmd as u8,
+                                        msg.cid,
+                                        msg.payload,
+                                        &mut vendor_session
+                                    ) {
+                                        Ok(return_payload) => {
+                                            // if None, this means we've finished parsing all that
+                                            // was needed, and we handle/respond with real data
+
+                                            match return_payload {
+                                                Some(data) => data,
+                                                None => {
+                                                    log::debug!("starting processing of vendor data...");
+                                                    let resp = vendor_commands::handle_vendor_command(
+                                                        &mut vendor_session,
+                                                        allow_host.load(Ordering::SeqCst)
+                                                    );
+                                                    log::debug!("finished processing of vendor data!");
+
+                                                    match vendor_session.is_backup() {
+                                                        true => {
+                                                            if vendor_session.has_backup_data() {
+                                                                resp
+                                                            } else {
+                                                                vendor_session = VendorSession::default();
+                                                                resp
+                                                            }
+                                                        },
+                                                        false => {
+                                                            vendor_session = VendorSession::default();
+                                                            resp
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Err(session_error) => {
+                                            // reset the session
+                                            vendor_session = VendorSession::default();
+
+                                            session_error.ctaphid_error(msg.cid)
+                                        }
+                                    };
+                                    for pkt_reply in reply {
+                                        let mut reply = RawFidoMsg::default();
+                                        reply.packet.copy_from_slice(&pkt_reply);
+                                        let status = ctap.env().main_hid_connection().u2f_send(reply);
+                                        match status {
+                                            Ok(()) => {
+                                                log::trace!("Sent U2F packet");
+                                            }
+                                            Err(e) => {
+                                                log::error!("Error sending U2F packet: {:?}", e);
+                                            }
+                                        }
                                     }
                                 }
                             }
-                            // mutex goes out of scope here, and is released
+                            drop(mutex);
                         }
                         Err(e) => {
                             match e {

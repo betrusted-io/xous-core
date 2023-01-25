@@ -15,7 +15,6 @@ use ctap_crypto::rng256::XousRng256;
 use xous_names::XousNames;
 use crate::env::xous::storage::XousUpgradeStorage;
 use usbd_human_interface_device::device::fido::*;
-use pddb::Pddb;
 use modals::Modals;
 use locales::t;
 use std::io::{Read, Write};
@@ -92,8 +91,6 @@ pub struct XousEnv {
     #[cfg(feature = "vendor_hid")]
     vendor_connection: XousHidConnection,
     modals: Modals,
-    pddb: Pddb,
-    main_cid: xous::CID,
     last_user_presence_request: Option::<Instant>,
     ctap1_cid: xous::CID,
 }
@@ -212,7 +209,7 @@ impl XousEnv {
                                 }
                                 // determine the application info string
                                 let app_id_str = hex::encode(request.app_id);
-                                if let Some(mut info) = {
+                                if let Some(info) = {
                                     // fetch the application info, if it exists
                                     log::debug!("querying U2F record {}", app_id_str);
                                     // add code to query the PDDB here to look for the k/v mapping of this app ID
@@ -413,8 +410,6 @@ impl XousEnv {
                 endpoint: UsbEndpoint::VendorHid,
             },
             modals: modals::Modals::new(&xns).unwrap(),
-            pddb: pddb::Pddb::new(),
-            main_cid: conn,
             last_user_presence_request: None,
             ctap1_cid,
         }

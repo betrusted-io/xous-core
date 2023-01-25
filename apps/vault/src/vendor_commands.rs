@@ -8,11 +8,9 @@ use vault::{
 use crate::totp::TotpAlgorithm;
 use crate::storage::{Error, PasswordRecord, TotpRecord};
 
-// Vault-specific command to upload TOTP codes
-pub const COMMAND_RESTORE_TOTP_CODES: u8 = 0x71;
-pub const COMMAND_BACKUP_TOTP_CODES: u8 = 0x72;
-pub const COMMAND_RESET_SESSION: u8 = 0x74;
-
+use vault::vault_api::{
+    COMMAND_BACKUP_TOTP_CODES, COMMAND_RESTORE_TOTP_CODES, COMMAND_RESET_SESSION
+};
 // TODO(gsora): add something that checks whether or not a command works.
 
 pub enum SessionError {

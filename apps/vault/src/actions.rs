@@ -1070,6 +1070,7 @@ impl<'a> ActionManager<'a> {
                             }
                         },
                     }
+                    drop(mutex);
                 }
             }
             VaultMode::Totp => {
@@ -1264,8 +1265,6 @@ impl<'a> ActionManager<'a> {
 
     #[cfg(feature="vault-testing")]
     pub(crate) fn populate_tests(&mut self) {
-        use serialize_app_info;
-
         self.modals.dynamic_notification(Some("Creating test entries..."), None).ok();
         let words = [
             "bunnie", "foo", "turtle.net", "Fox.ng", "Bear", "dog food", "Cat.com", "FUzzy", "1off", "www_test_site_com/long_name/stupid/foo.htm",

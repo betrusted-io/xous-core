@@ -39,6 +39,9 @@ fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
 /// `./configure.py --private-key=crypto_data/opensk.key --certificate=crypto_data/opensk_cert.pem`
 pub fn migrate(pddb: &Pddb) -> Result<(), xous::Error> {
     if !pddb.list_dict(None).unwrap().contains(&persistent_store::store::OPENSK2_DICT.to_string()) {
+        let xns = xous_names::XousNames::new().unwrap();
+        let modals = modals::Modals::new(&xns).unwrap();
+        modals.dynamic_notification(Some("Migrating FIDO Database"), Some("Please wait...")).ok();
         // build the attestation keys
         let pk = decode_hex("b8c3abd05cbe17b2faf87659c6f73e8467832112a0e609807cb68996c9a0c6a8").unwrap();
         pddb.get(
@@ -72,17 +75,16 @@ pub fn migrate(pddb: &Pddb) -> Result<(), xous::Error> {
         migrate_one(pddb, FIDO_PERSISTENT_DICT, "AAGUID", key::AAGUID)?;
         // port master keys
         migrate_one(pddb, FIDO_DICT, "MASTER_KEYS", key::_RESERVED_KEY_STORE)?;
+        migrate_one(pddb, FIDO_DICT, "GLOBAL_SIGNATURE_COUNTER", key::GLOBAL_SIGNATURE_COUNTER)?;
 
         // port other settings
         // Turns out that porting over the PIN is a mistake. Just clear it.
-
-        // migrate_one(pddb, FIDO_DICT, "MIN_PIN_LENGTH", key::MIN_PIN_LENGTH)?;
-        // migrate_one(pddb, FIDO_DICT, "PIN_RETRIES", key::PIN_RETRIES)?;
-        migrate_one(pddb, FIDO_DICT, "GLOBAL_SIGNATURE_COUNTER", key::GLOBAL_SIGNATURE_COUNTER)?;
+        migrate_one(pddb, FIDO_DICT, "MIN_PIN_LENGTH", key::MIN_PIN_LENGTH)?;
+        migrate_one(pddb, FIDO_DICT, "PIN_RETRIES", key::PIN_RETRIES)?;
         // PIN_HASH requires appending a length to the end. This is an `advisory` field, so we...just make up a value of 8.
         // This may not actually be the length used, but it's likely to be long enough to avoid forcing a re-PIN event because
         // the PIN hash is too short.
-        // migrate_pin(pddb)?;
+        migrate_pin(pddb)?;
 
         // migrate credentials
         let creds = match pddb.list_keys(FIDO_CRED_DICT, None) {
@@ -122,6 +124,7 @@ pub fn migrate(pddb: &Pddb) -> Result<(), xous::Error> {
             }
         }
         pddb.sync().ok();
+        modals.dynamic_notification_close().ok();
         if successful_migrations == expected_creds {
             Ok(())
         } else {
@@ -173,6 +176,12 @@ fn migrate_one (
 fn migrate_pin (
     pddb: &Pddb,
 ) -> Result<(), xous::Error> {
+    // create the key for a forced PIN change
+    // pddb.get(
+    //     persistent_store::store::OPENSK2_DICT,
+    //     &key::FORCE_PIN_CHANGE.to_string(),
+    //     None, true, true, None, None::<fn()>
+    // ).ok();
     let legacy_dict = FIDO_DICT;
     let legacy_key = "PIN_HASH";
     let new_key = key::PIN_PROPERTIES;
@@ -183,8 +192,8 @@ fn migrate_pin (
     ) {
         Ok(mut key) => {
             let mut data = Vec::<u8>::new();
+            data.push(8);  // add a bogus "length" advisory field of 8
             let len = key.read_to_end(&mut data).map_err(|_| xous::Error::AccessDenied)? + 1;
-            data.push(5); // add a bogus "length" advisory field of 8
             let mut new_key = pddb.get(
                 persistent_store::store::OPENSK2_DICT,
                 &new_key.to_string(),

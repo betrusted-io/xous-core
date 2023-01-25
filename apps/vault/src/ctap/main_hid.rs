@@ -30,6 +30,11 @@ pub struct MainHid {
     wink_permission: TimedPermission,
 }
 
+pub enum HidIterType {
+    Ctap(HidPacketIterator),
+    Vendor(Message),
+}
+
 impl MainHid {
     const WINK_TIMEOUT_DURATION: Duration = Duration::from_millis(5000);
 
@@ -56,13 +61,22 @@ impl MainHid {
         packet: &HidPacket,
         now: Instant,
         ctap_state: &mut CtapState,
-    ) -> HidPacketIterator {
+    ) -> HidIterType {
         if let Some(message) = self.hid.parse_packet(env, packet, now) {
             let processed_message = self.process_message(env, message, now, ctap_state);
-            log::debug!("Sending message: {:02x?}", processed_message);
-            CtapHid::split_message(processed_message)
+            match processed_message.cmd {
+                CtapHidCommand::RestoreTotpCodes |
+                CtapHidCommand::BackupTotpCodes |
+                CtapHidCommand::ResetSession => {
+                    HidIterType::Vendor(processed_message)
+                }
+                _ => {
+                    log::trace!("Sending message: {:02x?}", processed_message);
+                    HidIterType::Ctap(CtapHid::split_message(processed_message))
+                }
+            }
         } else {
-            HidPacketIterator::none()
+            HidIterType::Ctap(HidPacketIterator::none())
         }
     }
 

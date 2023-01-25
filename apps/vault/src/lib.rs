@@ -17,7 +17,7 @@
 #[macro_use]
 extern crate arrayref;
 
-use crate::ctap::hid::{HidPacket, HidPacketIterator};
+use crate::ctap::hid::HidPacket;
 use crate::ctap::main_hid::MainHid;
 #[cfg(feature = "vendor_hid")]
 use crate::ctap::vendor_hid::VendorHid;
@@ -25,6 +25,8 @@ use crate::ctap::CtapState;
 pub use crate::ctap::Transport;
 use crate::env::Env;
 use std::time::{Instant, Duration};
+#[cfg(feature="xous")]
+use ctap::main_hid::HidIterType;
 
 // Those macros should eventually be split into trace, debug, info, warn, and error macros when
 // adding either the defmt or log feature and crate dependency.
@@ -90,7 +92,7 @@ impl<E: Env> Ctap<E> {
         packet: &HidPacket,
         transport: Transport,
         now: Instant,
-    ) -> HidPacketIterator {
+    ) -> HidIterType {
         match transport {
             Transport::MainHid => {
                 self.hid

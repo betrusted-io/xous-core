@@ -57,6 +57,7 @@ impl TimedPermission {
 
 #[cfg(feature = "with_ctap1")]
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct U2fUserPresenceState {
     // If user presence was recently requested, its timeout is saved here.
     needs_up: TimedPermission,
@@ -128,6 +129,7 @@ impl U2fUserPresenceState {
         self.has_up = self.has_up.check_expiration(now);
     }
     #[cfg(feature="xous")]
+    #[allow(dead_code)]
     pub fn check_expiration(&mut self, _now: Instant) {
     }
 }
