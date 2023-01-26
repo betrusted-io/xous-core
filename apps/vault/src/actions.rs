@@ -12,7 +12,7 @@ use passwords::PasswordGenerator;
 use std::cell::RefCell;
 
 use vault::{
-    deserialize_app_info, serialize_app_info, AppInfo, basis_change,
+    deserialize_app_info, serialize_app_info, basis_change,
     VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, VAULT_ALLOC_HINT, utc_now,
     atime_to_str
 };
