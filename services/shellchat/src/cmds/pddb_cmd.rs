@@ -436,14 +436,25 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                             log::debug!("name: {}, checksum: {}", junkname, checksum);
                             junk_checksum.insert(junkname.to_string(), checksum);
                             junk_keys.push(junkname);
+
+                            #[cfg(not(target_os = "xous"))]
+                            if _env.trng.get_u32().unwrap() as usize % 1024 == 13 {
+                                log::info!("pruning 1");
+                                self.pddb.dbg_prune().ok();
+                            }
+                            if _env.trng.get_u32().unwrap() as usize % 8192 == 27 {
+                                log::info!("flushing fscb 1");
+                                self.pddb.flush_space_update();
+                            }
                         }
+                        let mut prev_del = "uninit".to_string();
                         while junk_keys.len() > 0 {
                             let to_remove = _env.trng.get_u32().unwrap() as usize % junk_keys.len();
                             match self.pddb.delete_key("deltest", &junk_keys[to_remove], None) {
                                 Ok(_) => log::debug!("remove {} OK", junk_keys[to_remove]),
                                 Err(e) => log::error!("remove {} error: {:?}", junk_keys[to_remove], e),
                             }
-                            self.pddb.sync().ok();
+                            // self.pddb.sync().ok();
                             let check = self.pddb.list_keys("deltest", None).unwrap();
                             assert!(check.len() == (junk_keys.len() - 1));
                             for (_key_index, key) in check.iter().enumerate() {
@@ -465,19 +476,30 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                                         }
                                         if checksum != *junk_checksum.get(key).unwrap() {
                                             log::info!("readback {}", readback_len);
+                                            log::info!("previously deleted: {} / just deleted: {}", prev_del, junk_keys[to_remove]);
                                             log::info!("array: {:?}", junk);
                                             log::error!("Key data did not match name: {}, checksum: {}, expected: {}",
                                                 key,
                                                 checksum,
                                                 *junk_checksum.get(key).unwrap()
                                             );
+                                            self.pddb.dbg_dump("deltest").unwrap();
                                             panic!("data mismatch!");
                                         }
                                     }
                                     Err(e) => log::error!("error reading back key that should exist: {:?}", e),
                                 }
                             }
-                            junk_keys.remove(to_remove);
+                            prev_del = junk_keys.remove(to_remove);
+                            #[cfg(not(target_os = "xous"))]
+                            if _env.trng.get_u32().unwrap() as usize % 1024 == 13 {
+                                log::info!("pruning 2");
+                                self.pddb.dbg_prune().ok();
+                            }
+                            if _env.trng.get_u32().unwrap() as usize % 8192 == 27 {
+                                log::info!("flushing fscb 2");
+                                self.pddb.flush_space_update();
+                            }
                         }
                         assert!(self.pddb.list_keys("deltest", None).unwrap().len() == 0, "Not all keys were deleted!");
                         // self.pddb.sync().ok();
