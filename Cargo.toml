@@ -77,6 +77,7 @@ members = [
   "apps/repl",
   "apps/vault",
   "apps/vault/tools/vaultbackup-rs",
+  "apps/transientdisk",
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
