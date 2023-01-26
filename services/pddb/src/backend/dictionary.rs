@@ -92,19 +92,19 @@ impl DictCacheEntry {
     /// Requires a descriptor for the hardware, and our virtual to physical page mapping.
     /// Does not overwrite existing cache entries, if they already exist -- only loads in ones that are missing.
     /// Todo: condense routines in common with ensure_key_entry() to make it easier to maintain.
+    ///
+    /// ASSUMES: all small/large pools have been sync'd prior to calling this
     pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) -> VirtAddr {
         let mut try_entry = 1;
         let mut key_count = 0;
         let mut alloc_top = VirtAddr::new(LARGE_POOL_START).unwrap();
 
-        let mut valid_keys = 0;
-        for key in self.keys.values() {
-            if key.flags.valid() {
-                valid_keys += 1;
-            }
-        }
-        assert!(valid_keys <= self.key_count, "Inconsistency in key count. See note on basis/dict_count for logic on why this assert should be true...");
-        if valid_keys == self.key_count {
+        // prune invalid entries, then count how many we have
+        self.keys.retain(|_name, entry| entry.flags.valid());
+        let valid_keys = self.keys.len();
+
+        assert!(valid_keys <= self.key_count as usize, "Inconsistency in key count. See note on basis/dict_count for logic on why this assert should be true...");
+        if valid_keys == self.key_count as usize {
             // we've got an entry for every key, so we can safely skip the deep index search
             let mut smallkeys_to_fill = Vec::<String>::new(); // work around inner mutability problem by copying the names of keys to fill
             for (name, key) in self.keys.iter() {
@@ -771,6 +771,7 @@ impl DictCacheEntry {
             let mut need_free_key: Option<u32> = None;
             if let Some(kcache) = self.keys.get_mut(&name) {
                 if !kcache.flags.valid() {
+                    assert!(kcache.clean == false, "keys that are invalidated should be marked as not clean");
                     // key was previously deleted, already in cache, but not flushed. Nothing to do here.
                     return;
                 }
@@ -910,6 +911,7 @@ impl DictCacheEntry {
                     let kcache = self.keys.get_mut(key_name).expect("data record without index");
                     if kcache.flags.valid() { // only sync valid keys, not ones that were marked for deletion but not yet synced.
                         log::debug!("sync {}/{}:0x{:x}..{}->{}", key_name, index, kcache.start, kcache.len, kcache.reserved);
+                        let old_start = kcache.start;
                         kcache.start = pool_vaddr.get() + pool_offset as u64;
                         kcache.age = kcache.age.saturating_add(1);
                         kcache.clean = false;
@@ -928,7 +930,7 @@ impl DictCacheEntry {
                                 log::debug!("Small key sync filling {}", key_name);
                                 data_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(pool_vaddr.get()).unwrap());
                                 if let Some(old_page) = data_cache.data.as_ref() {
-                                    let start_offset = size_of::<JournalType>() + (kcache.start % VPAGE_SIZE as u64) as usize;
+                                    let start_offset = size_of::<JournalType>() + (old_start % VPAGE_SIZE as u64) as usize;
                                     // the delta of len-reserved bytes is assumed zeroed by the original space allocator; we just copy that
                                     // here. However, if this assumption is broken, we could have leakage between keys in the reserved area!!!
                                     page[size_of::<JournalType>() + pool_offset ..
