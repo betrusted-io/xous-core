@@ -1,11 +1,9 @@
-use core::num::NonZeroUsize;
-use core::{cell::RefCell, convert::TryInto};
+use core::convert::TryInto;
 use num_traits::*;
-use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 use std::sync::Arc;
 use std::sync::Mutex;
 use usbd_scsi::BlockDevice;
-use xous::MemoryRange;
+use xous::msg_blocking_scalar_unpack;
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum BlockDeviceOp {
@@ -49,7 +47,7 @@ pub struct AppsBlockDevice {
 impl AppsBlockDevice {
     pub fn new() -> AppsBlockDevice {
         let app_cid = Arc::new(Mutex::new(None));
-        let rw_ids = Arc::new(Mutex::new(RwOp{
+        let rw_ids = Arc::new(Mutex::new(RwOp {
             read_id: 0,
             write_id: 0,
             max_lba_id: 0,
@@ -60,12 +58,12 @@ impl AppsBlockDevice {
 
         let mgmt_sid = xous::create_server().unwrap();
 
-        std::thread::spawn(move || {
-            loop {
-                let mut msg = xous::receive_message(mgmt_sid).unwrap();
-                let opcode: Option<BlockDeviceMgmtOp> = FromPrimitive::from_usize(msg.body.id());
-                match opcode {
-                    Some(BlockDeviceMgmtOp::SetOps) => msg_blocking_scalar_unpack!(msg, read_id, write_id, max_lba_id, _, {
+        std::thread::spawn(move || loop {
+            let msg = xous::receive_message(mgmt_sid).unwrap();
+            let opcode: Option<BlockDeviceMgmtOp> = FromPrimitive::from_usize(msg.body.id());
+            match opcode {
+                Some(BlockDeviceMgmtOp::SetOps) => {
+                    msg_blocking_scalar_unpack!(msg, read_id, write_id, max_lba_id, _, {
                         let mut ids = rw_ids_clone.lock().unwrap();
 
                         *ids = RwOp {
@@ -76,18 +74,21 @@ impl AppsBlockDevice {
 
                         log::info!("setting new app block device handler: {:?}", ids);
                         xous::return_scalar(msg.sender, 0).unwrap();
-                    }),
-                    Some(BlockDeviceMgmtOp::SetSID) => msg_blocking_scalar_unpack!(msg, sid1, sid2, sid3, sid4, {
-                        let app_sid = xous::SID::from_u32(sid1 as u32, sid2 as u32, sid3 as u32, sid4 as u32);
+                    })
+                }
+                Some(BlockDeviceMgmtOp::SetSID) => {
+                    msg_blocking_scalar_unpack!(msg, sid1, sid2, sid3, sid4, {
+                        let app_sid =
+                            xous::SID::from_u32(sid1 as u32, sid2 as u32, sid3 as u32, sid4 as u32);
                         let app_cid = xous::connect(app_sid).unwrap();
                         let mut ac = app_cid_clone.lock().unwrap();
 
                         *ac = Some(app_cid as u32);
                         log::info!("setting new app block device handler SID: {:?}", app_sid);
                         xous::return_scalar(msg.sender, 0).unwrap();
-                    }),
-                    None => unimplemented!("missing opcode for appsblockdevice mgmt interface"),
+                    })
                 }
+                None => unimplemented!("missing opcode for appsblockdevice mgmt interface"),
             }
         });
 
@@ -131,7 +132,8 @@ impl BlockDevice for AppsBlockDevice {
                 xous::MemoryAddress::new(lba as usize),
                 None,
             ),
-        ).unwrap();
+        )
+        .unwrap();
 
         block.copy_from_slice(&request.raw[..Self::BLOCK_BYTES as usize]);
 
@@ -165,8 +167,8 @@ impl BlockDevice for AppsBlockDevice {
                 xous::MemoryAddress::new(lba as usize),
                 None,
             ),
-        ).unwrap();
-
+        )
+        .unwrap();
 
         Ok(())
     }
@@ -182,19 +184,11 @@ impl BlockDevice for AppsBlockDevice {
 
         match xous::send_message(
             cid,
-            xous::Message::new_blocking_scalar(
-                rw_ids.max_lba_id,
-                0,
-                0,
-                0,
-                0,
-            ),
+            xous::Message::new_blocking_scalar(rw_ids.max_lba_id, 0, 0, 0, 0),
         )
         .expect("cannot send message to block device app")
         {
-            xous::Result::Scalar1(max_lba) => {
-                max_lba.try_into().unwrap()
-            }
+            xous::Result::Scalar1(max_lba) => max_lba.try_into().unwrap(),
             _ => panic!("received response to max_lba that isn't a Scalar1!"),
         }
     }

@@ -214,9 +214,9 @@ pub(crate) fn main_hw() -> ! {
 
     // Mass storage
     #[cfg(feature="mass-storage")]
-    let mut ums_alloc = UsbBusAllocator::new(ums_dev);
+    let ums_alloc = UsbBusAllocator::new(ums_dev);
     #[cfg(feature="mass-storage")]
-    let mut abd = apps_block_device::AppsBlockDevice::new();
+    let abd = apps_block_device::AppsBlockDevice::new();
     let abdcid = abd.conn();
     
     let mut ums = usbd_scsi::Scsi::new(
