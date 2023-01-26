@@ -427,6 +427,7 @@ impl VaultUx {
                     stroke_width: 0
                 }
             )).expect("can't clear content area");
+            self.title_dirty = true; // just blanked the whole area, have to redraw the title.
             return;
         } else if self.title_dirty && self.filtered_list.len() != 0 {
             // handle the title region separately
