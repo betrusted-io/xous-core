@@ -289,6 +289,14 @@ pub(crate) fn main_hw() -> ! {
                 ).unwrap();
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
+            Some(Opcode::ResetBlockDevice) => msg_blocking_scalar_unpack!(msg, 0, 0, 0, 0, {
+                xous::send_message(abdcid,
+                    xous::Message::new_blocking_scalar(
+                        apps_block_device::BlockDeviceMgmtOp::Reset.to_usize().unwrap(), 0, 0, 0, 0,
+                    )
+                ).unwrap();
+                xous::return_scalar(msg.sender, 0).unwrap();
+            }),
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 usbmgmt.xous_suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");

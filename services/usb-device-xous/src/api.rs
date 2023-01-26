@@ -33,6 +33,7 @@ pub(crate) enum Opcode {
 
     SetBlockDevice,
     SetBlockDeviceSID,
+    ResetBlockDevice,
 
     /// Handle the USB interrupt
     UsbIrqHandler,

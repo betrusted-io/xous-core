@@ -50,6 +50,18 @@ impl UsbHid {
         ).unwrap();
     }
 
+    pub fn reset_block_device(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(
+                Opcode::ResetBlockDevice.to_usize().unwrap(), 
+                0,
+                0,
+                0,
+                0,
+            )
+        ).unwrap();
+    }
+
     /// used to query if the HID core was able to start. Mainly to handle edge cases between updates.
     pub fn is_soc_compatible(&self) -> bool {
         match send_message(

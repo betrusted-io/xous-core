@@ -6,24 +6,10 @@ use usbd_scsi::BlockDevice;
 use xous::msg_blocking_scalar_unpack;
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum BlockDeviceOp {
-    // Read signals the application on the other side to read some data into
-    // the shared MemoryRange and return.
-    Read,
-
-    // Write signals the application on the other side to write some data in to the
-    // shared MemoryRange and return.
-    Write,
-
-    // MaxLBA signals the application on the other side to return the max amount of
-    // LBA and return.
-    MaxLBA,
-}
-
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum BlockDeviceMgmtOp {
     SetOps,
     SetSID,
+    Reset,
 }
 
 #[repr(C, align(4096))]
@@ -88,6 +74,19 @@ impl AppsBlockDevice {
                         xous::return_scalar(msg.sender, 0).unwrap();
                     })
                 }
+                Some(BlockDeviceMgmtOp::Reset) => msg_blocking_scalar_unpack!(msg, 0, 0, 0, 0, {
+                    let mut ac = app_cid_clone.lock().unwrap();
+                    let mut ids = rw_ids_clone.lock().unwrap();
+
+                    *ac = None;
+                    *ids = RwOp {
+                        read_id: 0,
+                        write_id: 0,
+                        max_lba_id: 0,
+                    };
+
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }),
                 None => unimplemented!("missing opcode for appsblockdevice mgmt interface"),
             }
         });
