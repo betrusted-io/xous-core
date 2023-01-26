@@ -15,8 +15,6 @@ gam = {path = "../../services/gam" }
 graphics-server = {path = "../../services/graphics-server" }
 locales = {path = "../../locales"}
 tts-frontend = {path="../../services/tts"}
-usb-device-xous = {path="../../services/usb-device-xous"}
-
 
 [features]
 tts = []

@@ -20,12 +20,6 @@ pub(crate) enum HelloOp {
     /// Redraw the screen
     Redraw = 0,
 
-    FocusChange,
-
-    Read,
-    Write,
-    MaxLba,
-
     /// Quit the application
     Quit,
 }
@@ -52,7 +46,7 @@ impl Hello {
                 gotinput_id: None,
                 audioframe_id: None,
                 rawkeys_id: None,
-                focuschange_id: Some(HelloOp::FocusChange.to_u32().unwrap()),
+                focuschange_id: None,
             })
             .expect("Could not register GAM UX")
             .unwrap();
@@ -136,88 +130,19 @@ fn main() -> ! {
 
     let mut hello = Hello::new(&xns, sid);
 
-    let conn = xous::connect(sid).unwrap();
-
-    const CAPACITY: usize = 256 * 1024; // must be a multiple of one page (4096)
-    let mut backing = xous::syscall::map_memory(
-        None,
-        None,
-        CAPACITY,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    ).unwrap();
-    {
-        let backing_slice: &mut [u32] = backing.as_slice_mut();
-        for (index, d) in backing_slice.iter_mut().enumerate() {
-            *d = index as u32;
-        }
-    }
-
-    let mut usb_setup = false;
     loop {
-        let mut msg = xous::receive_message(sid).unwrap();
+        let msg = xous::receive_message(sid).unwrap();
         log::debug!("Got message: {:?}", msg);
 
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(HelloOp::Redraw) => {
-                log::info!("Got redraw");
+                log::debug!("Got redraw");
                 hello.redraw();
             }
             Some(HelloOp::Quit) => {
                 log::info!("Quitting application");
                 break;
             }
-            Some(HelloOp::FocusChange) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
-                if usb_setup {
-                    continue;
-                }
-                
-                let new_state = gam::FocusState::convert_focus_change(new_state_code);
-                match new_state {
-                    gam::FocusState::Background => {
-                    }
-                    gam::FocusState::Foreground => {
-                        let usb = usb_device_xous::UsbHid::new();
-
-                        usb.set_block_device(
-                            HelloOp::Read.to_usize().unwrap(), 
-                            HelloOp::Write.to_usize().unwrap(),
-                            HelloOp::MaxLba.to_usize().unwrap(),
-                        );
-
-                        usb.set_block_device_sid(sid.clone());
-
-                        usb.switch_to_core(usb_device_xous::UsbDeviceType::MassStorage).unwrap();
-                        usb_setup = true;
-                    }
-                }
-            }),
-            Some(HelloOp::Read) => {
-                let body = msg.body.memory_message_mut().expect("incorrect message type received");
-                let lba = body.offset.map(|v| v.get()).unwrap_or_default();
-                let data = body.buf.as_slice_mut::<u8>();
-                let block_bytes: usize = 512;
-
-                let backing_slice: &[u8] = backing.as_slice();
-
-                let rawdata = &backing_slice[lba as usize * block_bytes..(lba as usize + 1) * block_bytes];
-
-                data[..block_bytes].copy_from_slice(
-                    rawdata
-                );
-            },
-            Some(HelloOp::Write) => {
-                let body = msg.body.memory_message_mut().expect("incorrect message type received");
-                let lba = body.offset.map(|v| v.get()).unwrap_or_default();
-                let data = body.buf.as_slice_mut::<u8>();
-
-                let block_bytes: usize = 512;
-
-                let backing_slice: &mut [u8] = backing.as_slice_mut();
-                backing_slice[lba as usize * block_bytes..(lba as usize + 1) * block_bytes].copy_from_slice(&data[..block_bytes]);
-            },
-            Some(HelloOp::MaxLba) => {
-                xous::return_scalar(msg.sender, (CAPACITY / 512) - 1).unwrap();
-            },
             _ => {
                 log::error!("Got unknown message");
             }

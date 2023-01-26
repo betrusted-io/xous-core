@@ -1695,7 +1695,6 @@ dependencies = [
  "num-derive",
  "num-traits",
  "tts-frontend",
- "usb-device-xous",
  "xous 0.9.31 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
