@@ -90,32 +90,6 @@ UI concept:
     - Actions thread (actions object): "blocking" UI operations - manages multi-sequence dialog queries, database access
     - Fido thread: handles USB interactions. Can always pop up a dialog box, but it cannot override a dialog-in-progress.
     - Icontray thread: a simple server that serves as a shim between the IME structure and this to create an icontray function
- */
-
- // TOTP test I65VU7K5ZQL7WB4E https://authenticationtest.com/totpChallenge/
- // otpauth-migration://offline?data=Ci8KCke7Wn1dzBf7B4QSG3RvdHBAYXV0aGVudGljYXRpb250ZXN0LmNvbSABKAEwAhABGAEgACjh8Yv%2B%2BP%2F%2F%2F%2F8B
-/*
-otp_parameters {
-  secret: "G\273Z}]\314\027\373\007\204"
-  name: "totp@authenticationtest.com"
-  algorithm: SHA1
-  digits: SIX
-  type: TOTP
-}
-version: 1
-batch_size: 1
-batch_index: 0
-batch_id: -1883047711
-
->>> b32decode("I65VU7K5ZQL7WB4E").hex()
-'47bb5a7d5dcc17fb0784'
-
-To clear test entries:
-  pddb dictdelete vault.passwords
-  pddb dictdelete vault.totp
-  pddb dictdelete fido.cred
-  pddb dictdelete fido.u2fapps
-
 */
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
