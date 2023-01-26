@@ -527,6 +527,56 @@ impl Pddb {
             _ => Err(Error::new(ErrorKind::Other, "Internal error"))
         }
     }
+    /// deletes a list of keys from a dictionary. The list of keys must be less than MAX_PDDB_DELETE_LEN characters long.
+    pub fn delete_key_list(&self, dict_name: &str, key_list: Vec::<String>, basis_name: Option<&str>) -> Result<()> {
+        if key_list.len() == 0 {
+            return Ok(())
+        }
+        if dict_name.len() > (DICT_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
+        }
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+        let mut request = PddbDeleteList {
+            basis_specified: basis_name.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+            retcode: PddbRetcode::Uninit,
+            data: [0u8; MAX_PDDB_DELETE_LEN]
+        };
+        let mut index = 0;
+        for keyname in key_list {
+            if keyname.len() > (KEY_NAME_LEN - 1) {
+                return Err(Error::new(ErrorKind::InvalidInput, "one of the key names is too long"));
+            }
+            if keyname.len() + 1 + index < MAX_PDDB_DELETE_LEN {
+                assert!(keyname.len() < u8::MAX as usize); // this should always be true due to other limits in the PDDB
+                request.data[index] = keyname.len() as u8;
+                index += 1;
+                request.data[index..index + keyname.len()].copy_from_slice(keyname.as_bytes());
+                index += keyname.len();
+            } else {
+                return Err(Error::new(ErrorKind::OutOfMemory, "Key list total size exceeds MAX_PDDBKLISTLEN"));
+            }
+        }
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::DictBulkDelete.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        let response = buf.as_flat::<PddbKeyList, _>().unwrap();
+        match response.retcode {
+            ArchivedPddbRetcode::Ok => Ok(()),
+            ArchivedPddbRetcode::AccessDenied => Err(Error::new(ErrorKind::NotFound, "Dictionary not found, or inaccessible")),
+            ArchivedPddbRetcode::Uninit => Err(Error::new(ErrorKind::ConnectionAborted, "Return code not set processing bulk delete, server aborted?")),
+            _ => Err(Error::new(ErrorKind::Other, "Internal Error handling bulk delete list")),
+        }
+    }
     /// deletes the entire dictionary
     pub fn delete_dict(&self, dict_name: &str, basis_name: Option<&str>) -> Result<()> {
         if dict_name.len() > (DICT_NAME_LEN - 1) {
