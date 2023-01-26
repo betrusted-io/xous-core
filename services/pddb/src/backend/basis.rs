@@ -572,6 +572,7 @@ impl BasisCache {
                         // this implementation is still in progress
                         dict_entry.key_erase(key);
                     }
+                    assert!(dict_entry.clean == false, "dictionary entry should have been marked unclean");
 
                     // sync the key pools to disk
                     if !dict_entry.sync_small_pool(hw, &mut basis.v2p_map, &basis.cipher) {
@@ -1042,16 +1043,20 @@ impl BasisCache {
         let mut candidates = BinaryHeap::new();
         for basis in self.cache.iter() {
             for (dict_name, dict) in basis.dicts.iter() {
-                for (key_name, key) in dict.keys.iter() {
-                    candidates.push(Reverse(
-                        KeyAge {
-                            atime: key.atime(),
-                            _size: key.size(),
-                            key: key_name.to_string(),
-                            dict: dict_name.to_string(),
-                            basis: basis.name.to_string(),
+                if dict.flags.valid() {
+                    for (key_name, key) in dict.keys.iter() {
+                        if key.flags.valid() {
+                            candidates.push(Reverse(
+                                KeyAge {
+                                    atime: key.atime(),
+                                    _size: key.size(),
+                                    key: key_name.to_string(),
+                                    dict: dict_name.to_string(),
+                                    basis: basis.name.to_string(),
+                                }
+                            ));
                         }
-                    ));
+                    }
                 }
             }
         }
@@ -1063,7 +1068,7 @@ impl BasisCache {
                         match basis.dicts.get_mut(&ka.dict) {
                             Some(dentry) => {
                                 let freed = dentry.evict_keycache_entry(&ka.key);
-                                log::debug!("pruned {} bytes from atime {} / total {}", freed, ka.atime, pruned);
+                                log::debug!("pruned {} bytes from atime {} / total {} key {}", freed, ka.atime, pruned, ka.key);
                                 pruned += freed;
                                 if pruned >= target_bytes {
                                     return pruned;
@@ -1475,7 +1480,7 @@ impl BasisCacheEntry {
         }
     }
 
-    /// This will sync the named Dictionary header + dirty *key descriptors*. It does not
+    /// This will sync the named Dictionary header + valid *key descriptors*. It does not
     /// sync the key data itself. Note this does not mark the surrounding basis structure as clean
     /// when it exits, even if there are no more dirty entries within.
     ///
@@ -1502,7 +1507,8 @@ impl BasisCacheEntry {
                 // but definitely all the dirty ones are in there (if they aren't, where else would they be??)
 
                 // this is the virtual page within the dictionary region that we're currently serializing
-                let mut vpage_num = 0;
+                let mut vpage_num = 0; // because the root record is dirty, we always need to regenerate page 0.
+                // note: other pages are only generated on-demand, based on if there is a dirty key in that page or not.
                 let mut loopcheck= 0;
                 let mut sync_count = 0;
                 loop {
@@ -1534,7 +1540,7 @@ impl BasisCacheEntry {
                     }
 
                     // 2(b). fill in the target vpage with data: general key case
-                    // Scan the DictCacheEntry.keys record for dirty keys within the current target vpage's range
+                    // Scan the DictCacheEntry.keys record for valid keys within the current target vpage's range
                     // this is not a terribly efficient operation right now, because the DictCacheEntry is designed to
                     // be searched by name, but in this case, we want to check for an index range. There's a lot
                     // of things we could do to optimize this, depending on the memory/time trade-off we want to
@@ -1548,7 +1554,7 @@ impl BasisCacheEntry {
                                 key.start, key.clean, key.flags, key.descriptor_index,
                             );
                         }*/
-                        if !key.clean && key.flags.valid() {
+                        if key.flags.valid() {
                             if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
                             key.descriptor_vaddr(dict_offset) < next_vpage {
                                 log::debug!("merging in key {}", key_name);
@@ -1589,9 +1595,10 @@ impl BasisCacheEntry {
                     };
                     for (index, stride) in page[size_of::<JournalType>()..].chunks_mut(DK_STRIDE).enumerate() {
                         if let Some(elem) = dk_vpage.elements[index] {
-                            for (&src, dst) in elem.data.iter().zip(stride.iter_mut()) {
-                                *dst = src;
-                            }
+                            stride.copy_from_slice(&elem.data);
+                        } else {
+                            // actively zero-ize fields that are `None` so they don't decrypt to valid records later on.
+                            stride.copy_from_slice(&[0u8; DK_STRIDE]);
                         }
                     }
                     // generate nonce and write out
@@ -1615,6 +1622,9 @@ impl BasisCacheEntry {
                     }
                     sync_count += 1;
                 }
+                // remove invalid keys from the dictionary cache
+                dict.keys.retain(|_name, entry| entry.flags.valid());
+
                 log::debug!("done syncing dict");
                 dict.clean = true;
             }
@@ -1691,6 +1701,7 @@ impl BasisCacheEntry {
     }
 
     pub(crate) fn sync(&mut self, hw: &mut PddbOs) -> Result<()> {
+        self.dicts.retain(|_name, entry| entry.flags.valid()); // prune any invalid dictionary entries, as they have been deleted
         // this is a bit awkward, but we have to make a copy of all the dictionary names
         // because otherwise we borrow self as immutable to enumerate the names, and then
         // we borrow it as mutable to do the sync. This deep-copy works around the issue.
