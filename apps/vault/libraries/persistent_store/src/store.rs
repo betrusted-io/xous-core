@@ -339,6 +339,7 @@ impl<S: Storage> Store<S> {
         for key in keys {
             if let Ok(key_as_usize) = usize::from_str_radix(&key, 10) {
                 if key_as_usize >= min_key {
+                    log::debug!("clear deleting: {}", key);
                     self.pddb.delete_key(crate::store::OPENSK2_DICT,
                         &key,
                         None
@@ -394,7 +395,7 @@ impl<S: Storage> Store<S> {
 
     /// Returns a handle to an entry given its key.
     pub fn find_handle(&self, key: usize) -> StoreResult<Option<StoreHandle>> {
-        log::debug!("listing keys");
+        log::debug!("listing all keys to find_handle {}", key);
         let keys = match self.pddb.list_keys(
             crate::store::OPENSK2_DICT,
             None
@@ -402,16 +403,18 @@ impl<S: Storage> Store<S> {
             Ok(k) => k,
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => {
-                    log::debug!("didn't find any keys, returning empty list");
+                    log::debug!("Dictionary does not exist, returning empty list");
                     Vec::new()
                 },
                 _ => return Err(StoreError::StorageError)
             }
         };
-
+        log::debug!("keylist: {:?}", keys);
         if keys.contains(&key.to_string()) {
+            log::debug!("find_handle found: {}", key);
             Ok(Some(StoreHandle {key}))
         } else {
+            log::debug!("find_handle did not find: {}", key);
             Ok(None)
         }
     }
