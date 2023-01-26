@@ -115,7 +115,10 @@ pub const TOUCH_TIMEOUT: Duration = Duration::from_millis(TOUCH_TIMEOUT_MS);
 #[cfg(feature = "with_ctap1")]
 pub const U2F_UP_PROMPT_TIMEOUT: Duration = Duration::from_millis(10000);
 // TODO(kaczmarczyck) 2.1 allows Reset after Reset and 15 seconds?
-// Needs more tolerance for Xous automated test bench, expanded to 20 seconds.
+#[cfg(not(feature="xous"))]
+const RESET_TIMEOUT_DURATION: Duration = Duration::from_millis(10000);
+// Needs more timing tolerance for Xous automated test bench, expanded to 20 seconds.
+#[cfg(feature="xous")]
 const RESET_TIMEOUT_DURATION: Duration = Duration::from_millis(20000);
 const STATEFUL_COMMAND_TIMEOUT_DURATION: Duration = Duration::from_millis(30000);
 
