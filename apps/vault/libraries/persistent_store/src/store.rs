@@ -334,16 +334,14 @@ impl<S: Storage> Store<S> {
     ///
     /// Entries with a key larger or equal to `min_key` are deleted.
     pub fn clear(&mut self, min_key: usize) -> StoreResult<()> {
+        let mut to_delete = Vec::new();
         let keys = self.pddb.list_keys(crate::store::OPENSK2_DICT, None)
             .map_err(|_| StoreError::StorageError)?;
         for key in keys {
             if let Ok(key_as_usize) = usize::from_str_radix(&key, 10) {
                 if key_as_usize >= min_key {
                     log::debug!("clear deleting: {}", key);
-                    self.pddb.delete_key(crate::store::OPENSK2_DICT,
-                        &key,
-                        None
-                    ).map_err(|_| StoreError::StorageError)?;
+                    to_delete.push(key);
                 }
             } else {
                 log::error!("Internal coding error: all keys in {} should be numeric. Got: {}",
@@ -351,6 +349,16 @@ impl<S: Storage> Store<S> {
                     &key
                 );
                 return Err(StoreError::InvalidArgument);
+            }
+        }
+        match self.pddb.delete_key_list(crate::store::OPENSK2_DICT, to_delete, None) {
+            Ok(_) => {}
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => {},
+                _ => {
+                    log::warn!("Encountered error in StorageUpdate::clear {:?}", e);
+                    return Err(StoreError::StorageError)
+                },
             }
         }
         self.entries = self.pddb.list_keys(crate::store::OPENSK2_DICT, None).ok();
