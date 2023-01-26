@@ -784,8 +784,9 @@ impl DictCacheEntry {
                 if let Some(small_index) = small_storage_index_from_key(kcache, self.index) {
                     // handle the small pool case
                     let ksp = &mut self.small_pool[small_index];
+                    let err_static = format!("Small pool did not contain the element we expected: {}, len: {}", &name, kcache.len);
                     ksp.contents.swap_remove(ksp.contents.iter().position(|s| *s == name)
-                        .expect("Small pool did not contain the element we expected"));
+                        .expect(&err_static));
                     assert!(kcache.reserved <= SMALL_CAPACITY as u64, "error in small key entry size");
                     ksp.avail += kcache.reserved as u16;
                     assert!(ksp.avail <= SMALL_CAPACITY as u16, "bookkeeping error in small pool capacity");
