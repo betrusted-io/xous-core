@@ -1148,6 +1148,48 @@ fn wrapped_main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
+            Opcode::DictBulkDelete => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbDeleteList, _>().unwrap();
+                let mut key_list = Vec::<String>::new();
+                // the [u8] data is structured as a packed list of u8-len + u8 data slice. The max length of
+                // a PDDB key name is guaranteed to be shorter than a u8. If the length field is 0, then this
+                // particular response has no more data in it to read.
+                let mut index = 0;
+                while req.data[index] != 0 && index < MAX_PDDB_DELETE_LEN {
+                    let strlen = req.data[index] as usize;
+                    index += 1;
+                    if strlen + index >= MAX_PDDB_DELETE_LEN {
+                        log::error!("Logic error in key list, index would be out of bounds. Aborting");
+                        req.retcode = PddbRetcode::InternalError;
+                        break;
+                    }
+                    let key = String::from(std::str::from_utf8(&req.data[index..index+strlen]).unwrap_or("UTF8 error"));
+                    key_list.push(key);
+                    index += strlen;
+                }
+                if req.retcode == PddbRetcode::InternalError {
+                    buffer.replace(req).ok();
+                    continue;
+                }
+                log::info!("Deleting key list: {:?}", key_list);
+                let start = tt.elapsed_ms();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                match basis_cache.key_list_remove(&mut pddb_os, dict, key_list, bname) {
+                    Ok(_) => req.retcode = PddbRetcode::Ok,
+                    Err(e) => match e.kind() {
+                        std::io::ErrorKind::NotFound => req.retcode = PddbRetcode::AccessDenied,
+                        _ => req.retcode = PddbRetcode::InternalError,
+                    }
+                }
+                log::info!("Bulk delete finished in {}ms", tt.elapsed_ms() - start);
+                buffer.replace(req).ok();
+            }
             Opcode::DeleteKeyStd => {
                 if let Some(mem) = msg.body.memory_message_mut() {
                     mem.offset = None;

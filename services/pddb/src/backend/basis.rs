@@ -597,6 +597,43 @@ impl BasisCache {
         }
     }
 
+    pub(crate) fn key_list_remove(&mut self,
+        hw: &mut PddbOs, dict: &str, key_list: Vec::<String>, basis_name: Option<&str>
+    ) -> Result<()> {
+        if let Some(basis_index) = self.select_basis(basis_name) {
+            let basis = &mut self.cache[basis_index];
+            if !basis.ensure_dict_in_cache(hw, dict) {
+                return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
+            }
+            if let Some(dict_entry) = basis.dicts.get_mut(dict) {
+                basis.age = basis.age.saturating_add(1);
+                basis.clean = false;
+                for key in key_list {
+                    if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, &key) {
+                        dict_entry.key_remove(hw, &mut basis.v2p_map, &basis.cipher, &key, false);
+                        assert!(dict_entry.clean == false, "dictionary entry should have been marked unclean");
+                    }
+                }
+                // sync the key pools to disk
+                if !dict_entry.sync_small_pool(hw, &mut basis.v2p_map, &basis.cipher) {
+                    return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of memory syncing small pool"));
+                }
+                dict_entry.sync_large_pool();
+                // encrypt and write the dict entry to disk
+                basis.dict_sync(hw, dict)?;
+                // sync the root basis structure as well, while we're at it...
+                basis.basis_sync(hw);
+                // finally, sync the page tables.
+                basis.pt_sync(hw);
+                Ok(())
+            } else {
+                Err(Error::new(ErrorKind::NotFound, "dictionary not found"))
+            }
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
+        }
+    }
+
     /// Updates a key in a dictionary; if it doesn't exist, creates it. User can specify a basis,
     /// or rely upon the auto-basis select algorithm.
     pub(crate) fn key_update(&mut self,
