@@ -42,9 +42,9 @@ use std::collections::BTreeMap;
 // netcat -k -u -l 6502 > /dev/ttyS0
 // use the "autotest" feature to remove some excess prompts that interfere with the test
 
-// the OpenSK code is based off of commit f2496a8e6d71a4e838884996a1c9b62121f87df2 from the
-// Google OpenSK repository. The last push was Nov 19 2021, and the initial merge into Xous
-// was finished on June 9 2022. Any patches to this code base will have to be manually
+// the OpenSK code is based off of commit 0db393bd1e9c3901f772b3c2107dbbeb71ff2dc5 from the
+// Google OpenSK repository. This commit is dated Jan 4 2023. The initial merge into Xous
+// was finished on Jan 27 2023. Any patches to this code base will have to be manually
 // applied. Please update the information here to reflect the latest patch status.
 
 /*
