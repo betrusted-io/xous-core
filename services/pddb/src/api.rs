@@ -308,6 +308,10 @@ pub struct PddbDictRequest {
     pub code: PddbRequestCode,
     /// used only to specify a readback size limit for bulk-return requests
     pub bulk_limit: Option<usize>,
+    /// return value for key_count metadata (informative only)
+    pub key_count: u32,
+    /// return value for found_key_count metadata (informative only)
+    pub found_key_count: u32,
 }
 
 /// A structure for requesting a token to access a particular key/value pair

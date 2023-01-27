@@ -393,6 +393,26 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         }
                     }
                 }
+                "consistency" => {
+                    if let Some(dict) = tokens.next() {
+                        match self.pddb.list_keys(dict, None) {
+                            Ok(_list) => {
+                                unsafe{
+                                    let (keys, found_keys) = self.pddb.was_listed_dict_consistent();
+                                    write!(ret, "reported keys: {}, found keys: {}", keys, found_keys).ok();
+                                    log::info!("reported keys: {}, found keys: {}", keys, found_keys);
+                                };
+                            }
+                            Err(_) => write!(ret, "{} does not exist or other error", dict).ok().unwrap_or(()),
+                        }
+                    } else {
+                        write!(ret, "Missing dictionary name").unwrap();
+                    }
+                }
+                // Warning: this is experimental, it's advised you don't call this unless you know what you're doing.
+                "cleanup" => {
+                    write!(ret, "Cleanup result code: {:?}\n", self.pddb.sync_cleanup()).ok();
+                }
                 #[cfg(feature="pddbtest")]
                 "deltest" => {
                     const JUNK_MIN: usize = 512;

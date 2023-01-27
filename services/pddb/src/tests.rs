@@ -161,7 +161,7 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     #[cfg(not(feature = "deterministic"))]
     let dict_list = basis_cache.dict_list(hw, None);
     for dict in dict_list.iter() {
-        if let Ok(key_list_unord) = basis_cache.key_list(hw, dict, None) {
+        if let Ok((key_list_unord, _, _)) = basis_cache.key_list(hw, dict, None) {
             #[cfg(feature = "deterministic")]
             let mut key_list = BTreeSet::<String>::new();
             #[cfg(feature = "deterministic")]
@@ -244,7 +244,7 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     let mut evict_iter = 0;
     for (evicted, evict_dict) in dict_list.iter().enumerate() {
         if evicted < evict_count {
-            let key_list_unord = basis_cache.key_list(hw, evict_dict, None).unwrap();
+            let (key_list_unord, _, _) = basis_cache.key_list(hw, evict_dict, None).unwrap();
             let mut key_list = BTreeSet::<String>::new();
             for s in key_list_unord {
                 key_list.insert(s);
@@ -320,7 +320,7 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     }
 
     log::info!("doing all-basis sync");
-    basis_cache.sync(hw, None).unwrap();
+    basis_cache.sync(hw, None, false).unwrap();
     log::info!("all-basis sync done");
 
     list_all(hw, basis_cache);
@@ -366,7 +366,8 @@ pub(crate) fn list_all(hw: &mut PddbOs, basis_cache: &mut BasisCache) {
         };
         log::debug!("{:?}", da);
         let mut sanity_count = 0;
-        for key in basis_cache.key_list(hw, dict, None).unwrap().iter() {
+        let (key_list, _, _) = basis_cache.key_list(hw, dict, None).unwrap();
+        for key in key_list.iter() {
             let attrs = match basis_cache.key_attributes(hw, dict, key, None) {
                 Ok(a) => a,
                 Err(e) => {log::debug!("key not in basis, searching another basis, {:?}", e);  continue},
@@ -475,7 +476,8 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
 
         let mut pre_list = HashSet::<String>::new();
         for dict in basis_cache.dict_list(pddb_os, None).iter() {
-            for key in basis_cache.key_list(pddb_os, dict, None).unwrap().iter() {
+            let (key_list, _, _) = basis_cache.key_list(pddb_os, dict, None).unwrap();
+            for key in key_list.iter() {
                 pre_list.insert(key.to_string());
             }
         }
@@ -504,7 +506,8 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
 
         let mut merge_list = HashSet::<String>::new();
         for dict in basis_cache.dict_list(pddb_os, None).iter() {
-            for key in basis_cache.key_list(pddb_os, dict, None).unwrap().iter() {
+            let (key_list, _, _) = basis_cache.key_list(pddb_os, dict, None).unwrap();
+            for key in key_list.iter() {
                 merge_list.insert(key.to_string());
             }
         }
@@ -512,7 +515,8 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
 
         let mut b2_list = HashSet::<String>::new();
         for dict in basis_cache.dict_list(pddb_os, Some(EXTRA_BASIS)).iter() {
-            for key in basis_cache.key_list(pddb_os, dict, Some(EXTRA_BASIS)).unwrap().iter() {
+            let (key_list, _, _) = basis_cache.key_list(pddb_os, dict, Some(EXTRA_BASIS)).unwrap();
+            for key in key_list.iter() {
                 b2_list.insert(key.to_string());
             }
         }
@@ -521,7 +525,8 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         basis_cache.basis_unmount(pddb_os, EXTRA_BASIS).unwrap();
         let mut post_list = HashSet::<String>::new();
         for dict in basis_cache.dict_list(pddb_os, None).iter() {
-            for key in basis_cache.key_list(pddb_os, dict, None).unwrap().iter() {
+            let (key_list, _, _) = basis_cache.key_list(pddb_os, dict, None).unwrap();
+            for key in key_list.iter() {
                 post_list.insert(key.to_string());
             }
         }
@@ -533,7 +538,8 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         }
         let mut remount_list = HashSet::<String>::new();
         for dict in basis_cache.dict_list(pddb_os, None).iter() {
-            for key in basis_cache.key_list(pddb_os, dict, None).unwrap().iter() {
+            let (key_list, _, _) = basis_cache.key_list(pddb_os, dict, None).unwrap();
+            for key in key_list.iter() {
                 remount_list.insert(key.to_string());
             }
         }
@@ -546,7 +552,8 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         }
         let mut merge2_list = HashSet::<String>::new();
         for dict in basis_cache.dict_list(pddb_os, None).iter() {
-            for key in basis_cache.key_list(pddb_os, dict, None).unwrap().iter() {
+            let (key_list, _, _) = basis_cache.key_list(pddb_os, dict, None).unwrap();
+            for key in key_list.iter() {
                 merge2_list.insert(key.to_string());
             }
         }

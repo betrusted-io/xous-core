@@ -99,6 +99,9 @@ pub struct Pddb {
     /// like this are probably OK.
     keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>>,
     trng: trng::Trng,
+    /// These are temporary fields only to be used by the consistency check feature.
+    key_count: RefCell<u32>,
+    found_key_count: RefCell<u32>,
 }
 impl Pddb {
     pub fn new() -> Self {
@@ -112,6 +115,9 @@ impl Pddb {
             cb_handle: RefCell::new(None),
             keys,
             trng: trng::Trng::new(&xns).unwrap(),
+            /// These are record the result of the most recent call to list_keys()
+            key_count: RefCell::new(0),
+            found_key_count: RefCell::new(0),
         }
     }
     fn ensure_async_responder(&self) {
@@ -640,6 +646,32 @@ impl Pddb {
             Err(Error::new(ErrorKind::Other, "Xous internal error"))
         }
     }
+    /// cleans up inconsistencies in the PDDB. fsck-like.
+    pub fn sync_cleanup(&self) -> Result<()> {
+        let response = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::WriteKeyFlush.to_usize().unwrap(), 1, 0, 0, 0)
+        ).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        if let xous::Result::Scalar1(rcode) = response {
+            match FromPrimitive::from_u8(rcode as u8) {
+                Some(PddbRetcode::Ok) => Ok(()),
+                Some(PddbRetcode::BasisLost) => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
+                Some(PddbRetcode::DiskFull) => Err(Error::new(ErrorKind::OutOfMemory, "Out of disk space, some data lost on sync")),
+                _ => Err(Error::new(ErrorKind::Interrupted, "Flush failed for unspecified reasons")),
+            }
+        } else {
+            Err(Error::new(ErrorKind::Other, "Xous internal error"))
+        }
+    }
+
+    /// Returns a tuple of (recorded, found) keys. If record != found then the dictionary is inconsistent.
+    /// Only valid if the most recent call to the pddb object was list_keys() (as called below)
+    /// This is meant to be used only for certain maintenance routines, so the ergonomics are crap on it.
+    ///
+    /// SAFETY: caller must guarantee that list_keys() was called prior to calling this
+    pub unsafe fn was_listed_dict_consistent(&self) -> (u32, u32) {
+        (*self.key_count.borrow(), *self.found_key_count.borrow())
+    }
 
     pub fn list_keys(&self, dict_name: &str, basis_name: Option<&str>) -> Result<Vec::<String>> {
         if dict_name.len() > (DICT_NAME_LEN - 1) {
@@ -664,6 +696,8 @@ impl Pddb {
             code: PddbRequestCode::Uninit,
             token,
             bulk_limit: None,
+            key_count: 0,
+            found_key_count: 0,
         };
         let mut buf = Buffer::into_buf(request)
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
@@ -678,6 +712,8 @@ impl Pddb {
             PddbRequestCode::Uninit => return Err(Error::new(ErrorKind::ConnectionAborted, "Return code not set getting key count, server aborted?")),
             _ => return Err(Error::new(ErrorKind::Other, "Internal error generating key count")),
         };
+        *self.key_count.borrow_mut() = response.key_count;
+        *self.found_key_count.borrow_mut() = response.found_key_count;
         // v2 key listing packs the key list into a larger [u8] field that should cut down on the number of messages
         // required to list a large dictionary by about a factor of 50.
         let mut key_list = Vec::<String>::new();
@@ -749,6 +785,8 @@ impl Pddb {
             code: PddbRequestCode::Uninit,
             token,
             bulk_limit: None,
+            key_count: 0,
+            found_key_count: 0,
         };
         let mut buf = Buffer::into_buf(request)
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
@@ -774,6 +812,8 @@ impl Pddb {
                 code: PddbRequestCode::Uninit,
                 token,
                 bulk_limit: None,
+                key_count: 0,
+                found_key_count: 0,
             };
             let mut buf = Buffer::into_buf(request)
                 .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
@@ -939,6 +979,8 @@ impl Pddb {
             token: [0u32; 4],
             code: PddbRequestCode::BulkRead,
             bulk_limit: Some(size_limit.unwrap_or(DEFAULT_LIMIT)),
+            key_count: 0,
+            found_key_count: 0,
         };
         // main loop
         let mut ret = Vec::new();
