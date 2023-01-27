@@ -557,12 +557,12 @@ def main():
         "--peek", required=False, help="Inspect an address", type=auto_int, metavar=('ADDR')
     )
     parser.add_argument(
-        "--output", help="Output file name. Defaults to ./backup_<current_iso_time>.pddb", type=str, default=None
+        "--output", help="Output file name. Defaults to ./backup_<current_time>.pddb", type=str, default=None
     )
     args = parser.parse_args()
 
     if args.output is None:
-        ofile = "backup_{}.pddb".format(datetime.now().isoformat())
+        ofile = "backup_{}.pddb".format(datetime.now().strftime('%Y%m%d_%H%M%S'))
     else:
         ofile = args.output
 
