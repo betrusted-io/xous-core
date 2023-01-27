@@ -1306,8 +1306,10 @@ fn wrapped_main() -> ! {
                 #[cfg(feature="perfcounter")]
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 0, std::line!());
                 key_list = match basis_cache.key_list(&mut pddb_os, dict, bname) {
-                    Ok(list) => {
+                    Ok((list, key_count, found_key_count)) => {
                         log::debug!("count: {}", list.len());
+                        req.key_count = key_count;
+                        req.found_key_count = found_key_count;
                         req.code = PddbRequestCode::NoErr;
                         Some(list)
                     }
@@ -1528,7 +1530,7 @@ fn wrapped_main() -> ! {
                             None
                         }
                     ) {
-                        Ok(list) => list.into_iter().rev().collect(), // reverse order so Vec can just pop and get "first" item
+                        Ok((list, _, _)) => list.into_iter().rev().collect(), // reverse order so Vec can just pop and get "first" item
                         Err(e) => {
                             match e.kind() {
                                 std::io::ErrorKind::NotFound => {
@@ -1773,7 +1775,7 @@ fn wrapped_main() -> ! {
                 // we don't need a "replace" operation because all ops happen in-place
 
                 // for now, do an expensive sync operation after every write to ensure data integrity
-                basis_cache.sync(&mut pddb_os, None).expect("couldn't sync basis");
+                basis_cache.sync(&mut pddb_os, None, false).expect("couldn't sync basis");
             }
 
             Opcode::WriteKeyStd => {
@@ -1786,8 +1788,8 @@ fn wrapped_main() -> ! {
                 }
             }
 
-            Opcode::WriteKeyFlush => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                match basis_cache.sync(&mut pddb_os, None) {
+            Opcode::WriteKeyFlush => msg_blocking_scalar_unpack!(msg, cleanup, _, _, _, {
+                match basis_cache.sync(&mut pddb_os, None, if cleanup == 1 { true } else { false }) {
                     Ok(_) => xous::return_scalar(msg.sender, PddbRetcode::Ok.to_usize().unwrap()).unwrap(),
                     Err(e) => match e.kind() {
                         std::io::ErrorKind::OutOfMemory => xous::return_scalar(msg.sender, PddbRetcode::DiskFull.to_usize().unwrap()).unwrap(),
@@ -1898,7 +1900,7 @@ fn wrapped_main() -> ! {
                     xous::return_scalar(msg.sender, 1).unwrap(); // nothing to do, nothing mounted. success!
                     continue;
                 }
-                basis_cache.sync(&mut pddb_os, None).expect("can't sync for unmount");
+                basis_cache.sync(&mut pddb_os, None, false).expect("can't sync for unmount");
                 // unmount all the open basis first
                 let mut mounted_bases = basis_cache.basis_list();
                 mounted_bases.retain(|x| x != PDDB_DEFAULT_SYSTEM_BASIS);

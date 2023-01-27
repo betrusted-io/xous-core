@@ -34,6 +34,8 @@ pub(crate) struct DictCacheEntry {
     pub(crate) keys: HashMap::<String, KeyCacheEntry>,
     /// count of total keys in the dictionary -- may be equal to or larger than the number of elements in `keys`
     pub(crate) key_count: u32,
+    /// actual count of keys found -- this drifts from the actual key count due to write errors and ungraceful powerdowns
+    pub(crate) found_key_count: u32,
     /// track the pool of free key indices. Wrapped in a refcell so we can work the index mechanism while updating the keys HashMap
     pub(crate) free_keys: BinaryHeap::<Reverse<FreeKeyRange>>,
     /// hint for when to stop doing a brute-force search for the existence of a key in the disk records.
@@ -77,6 +79,7 @@ impl DictCacheEntry {
             index: NonZeroU32::new(index as u32).unwrap(),
             keys: HashMap::<String, KeyCacheEntry>::new(),
             key_count: dict.num_keys,
+            found_key_count: dict.num_keys,
             free_keys,
             last_disk_key_index: dict.free_key_index,
             clean: false,
@@ -94,7 +97,7 @@ impl DictCacheEntry {
     /// Todo: condense routines in common with ensure_key_entry() to make it easier to maintain.
     ///
     /// ASSUMES: all small/large pools have been sync'd prior to calling this
-    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) -> VirtAddr {
+    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv, cleanup: bool) -> VirtAddr {
         let mut try_entry = 1;
         let mut key_count = 0;
         let mut alloc_top = VirtAddr::new(LARGE_POOL_START).unwrap();
@@ -133,7 +136,7 @@ impl DictCacheEntry {
             let mut index_cache = PlaintextCache { data: None, tag: None };
             let mut data_cache = PlaintextCache { data: None, tag: None };
             let mut errcnt = 0;
-            while try_entry < KEY_MAXCOUNT && key_count < self.key_count {
+            while try_entry < KEY_MAXCOUNT && (cleanup || (key_count < self.key_count)) {
                 #[cfg(feature="perfcounter")]
                 hw.perf_entry(FILE_ID_SERVICES_PDDB_SRC_DICTIONARY, PERFMETA_NONE, key_count, std::line!());
                 // cache our decryption data -- there's about 32 entries per page, and the scan is largely linear/sequential, so this should
@@ -198,6 +201,8 @@ impl DictCacheEntry {
             }
             // note where the scan left off, so we don't have to brute-force it in the future
             self.last_disk_key_index = try_entry as u32;
+            // note the actual number of keys found
+            self.found_key_count = key_count;
 
             // now build the small_pool_free binary heap structure
             #[cfg(feature="perfcounter")]
@@ -215,7 +220,7 @@ impl DictCacheEntry {
         hw.perf_entry(FILE_ID_SERVICES_PDDB_SRC_DICTIONARY, PERFMETA_STARTBLOCK, 0, std::line!());
         // ensure that the key cache is filled
         if self.keys.len() < self.key_count as usize {
-            self.fill(hw, v2p_map, cipher);
+            self.fill(hw, v2p_map, cipher, false);
         }
         #[cfg(feature="perfcounter")]
         hw.perf_entry(FILE_ID_SERVICES_PDDB_SRC_DICTIONARY, PERFMETA_NONE, 0, std::line!());

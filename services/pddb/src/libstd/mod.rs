@@ -114,7 +114,7 @@ pub(crate) fn stat_path(
     // Find all keys that are in this dict. Ignore errors, since sometimes
     // the dict doesn't exist, which is fine.
     if let Some((dict_path, key_path)) = stripped_path.rsplit_once(std::path::MAIN_SEPARATOR) {
-        if let Some(key_list) = basis_cache
+        if let Some((key_list, _, _)) = basis_cache
             .key_list(pddb_os, dict_path, basis.as_deref())
             .map_err(|e| {
                 // log::error!("unable to get key list: {:?}", e);
@@ -196,7 +196,7 @@ pub(crate) fn list_path(
     let dict_list = basis_cache.dict_list(pddb_os, basis.as_deref());
     // Find all keys that are in this dict. Ignore errors, since sometimes
     // the dict doesn't exist, which is fine.
-    let key_list = basis_cache
+    let (key_list, _, _) = basis_cache
         .key_list(pddb_os, dict, basis.as_deref())
         .map_err(|e| {
             // log::error!("unable to get key list: {:?}", e);
@@ -809,7 +809,7 @@ pub(crate) fn list_key(
         .writer(*b"LiKR")
         .ok_or(crate::PddbRetcode::InternalError)?;
 
-    let key_list = basis_cache
+    let (key_list, _, _) = basis_cache
         .key_list(pddb_os, &key, bname.as_deref())
         .or_else(|e| {
             log::error!(
@@ -848,7 +848,7 @@ pub(crate) fn delete_dict(
             .or(Err(crate::PddbRetcode::InternalError))?;
     let dict = dict.ok_or(crate::PddbRetcode::InternalError)?;
 
-    if let Some(key_list) = basis_cache
+    if let Some((key_list, _, _)) = basis_cache
         .key_list(pddb_os, &dict, bname.as_deref())
         .map_err(|e| {
             // log::error!("unable to get key list: {:?}", e);
