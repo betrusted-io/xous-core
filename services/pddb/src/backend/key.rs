@@ -181,7 +181,10 @@ pub(crate) struct KeySmallPool {
     pub(crate) contents: Vec::<String>,
     /// keeps track of the available space within the pool, avoiding an expensive lookup every time we want to query the available space
     pub(crate) avail: u16,
+    /// if false, contents are modified and need syncing to disk
     pub(crate) clean: bool,
+    /// if true, some elements of this pool were evicted to make room in RAM
+    pub(crate) evicted: bool,
 }
 impl KeySmallPool {
     pub(crate) fn new() -> KeySmallPool {
@@ -189,6 +192,7 @@ impl KeySmallPool {
             contents: Vec::<String>::new(),
             avail: SMALL_CAPACITY as u16,
             clean: false,
+            evicted: false,
         }
     }
 }
