@@ -240,16 +240,19 @@ impl DictCacheEntry {
     pub(crate) fn ensure_key_entry(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name_str: &str) -> bool {
         let mut data_cache = PlaintextCache { data: None, tag: None };
-        // if the key isn't valid, evict it now
-        self.keys.retain(|name, value| (name != name_str) || ((name == name_str) && value.flags.valid()));
         // only fill if the key isn't in the cache, or if the data section has been evicted
         let needs_fill = if let Some(entry) = self.keys.get(name_str) {
-            if entry.data.is_none() {
-                self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, name_str);
-                // it should be filled, so no further processing is needed
-                false
+            if entry.flags.valid() {
+                if entry.data.is_none() {
+                    self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, name_str);
+                    // it should be filled, so no further processing is needed
+                    false
+                } else {
+                    // data is already there
+                    false
+                }
             } else {
-                // data is already there
+                // invalid entry
                 false
             }
         } else {
@@ -287,12 +290,12 @@ impl DictCacheEntry {
                     assert!(cache_pp.page_number() == pp.page_number(), "cache inconsistency error");
                     let mut keydesc = KeyDescriptor::default();
                     let start = size_of::<JournalType>() + (try_entry % DK_PER_VPAGE) * DK_STRIDE;
-                    for (&src, dst) in cache[start..start + DK_STRIDE].iter().zip(keydesc.deref_mut().iter_mut()) {
-                        *dst = src;
-                    }
+                    // there is 1 byte of extra padding that causes the slices of keydesc.deref_mut() to be 128 bytes long instead of 127 bytes...
+                    keydesc.deref_mut()[..DK_STRIDE].copy_from_slice(&cache[start..start + DK_STRIDE]);
                     let kname = std::str::from_utf8(&keydesc.name.data[..keydesc.name.len as usize]).expect("key is not valid utf-8");
                     if keydesc.flags.valid() {
                         if kname == name_str {
+                            log::debug!("found {} at entry {}/{}", name_str, try_entry, start);
                             let kcache = KeyCacheEntry {
                                 start: keydesc.start,
                                 len: keydesc.len,
@@ -326,6 +329,7 @@ impl DictCacheEntry {
     }
     fn try_fill_small_key(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         data_cache: &mut PlaintextCache, key_name: &str) {
+        let mut filled_index: Option<usize> = None;
         if let Some(kcache) = self.keys.get_mut(key_name) {
             if !kcache.flags.valid() {
                 // nothing to fill, the key entry isn't valid
@@ -344,7 +348,7 @@ impl DictCacheEntry {
                     self.small_pool.push(ksp);
                 }
                 let ksp = &mut self.small_pool[pool_index];
-                if !ksp.clean {
+                if !ksp.clean || ksp.evicted {
                     if !ksp.contents.contains(&key_name.to_string()) {
                         log::trace!("creating ksp entry for {}", key_name);
                         ksp.contents.push(key_name.to_string());
@@ -380,6 +384,7 @@ impl DictCacheEntry {
                                 data
                             }
                         ));
+                        filled_index = Some(pool_index);
                     } else {
                         log::error!("Key {}'s data region at pp: {:x?} va: {:x} is unreadable", key_name, data_cache.tag, kcache.start);
                     }
@@ -390,6 +395,24 @@ impl DictCacheEntry {
         } else {
             log::error!("try_fill_small_key() can only be called after the key cache entry has been allocated");
             panic!("consistency error");
+        }
+        if let Some(index) = filled_index {
+            // check to see if this fill can clear the eviction status of the entire pool
+            let ksp = &mut self.small_pool[index];
+            let mut all_present = true;
+            for key in ksp.contents.iter() {
+                if let Some(kcache) = self.keys.get(key) {
+                    if kcache.flags.valid() {
+                        if kcache.data.is_none() {
+                            all_present = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            if all_present {
+                ksp.evicted = false;
+            }
         }
     }
     /// To be called only to re-fill key entries whose data have been evicted by a prune.
@@ -474,6 +497,7 @@ impl DictCacheEntry {
                     log::debug!("update/extend: removing {}", name);
                     // now remove the old key entirely
                     self.key_remove(hw, v2p_map, cipher, name, false);
+                    self.sync_small_pool(hw, v2p_map, cipher);
                     if update_data.len() > 4 { // just make sure that this log call doesn't fail on an index violation...
                         log::debug!("update/extend: re-adding {} with data len {}: {:x?}...", name, update_data.len(), &update_data[..4]);
                     }
@@ -530,7 +554,12 @@ impl DictCacheEntry {
                         assert!(kcache.flags.valid(), "Entry to be filled should be valid");
                         let pool_index = small_storage_index_from_key(&kcache, self.index).expect("pool should be valid");
                         let ksp = &mut self.small_pool[pool_index];
-                        assert!(ksp.contents.contains(&name.to_string()), "Entry to fill isn't in the expected pool");
+                        if !ksp.contents.contains(&name.to_string()) {
+                            log::warn!("illegal state: key_update fill key pool contents: {:?}", ksp.contents);
+                            let tt = ticktimer_server::Ticktimer::new().unwrap();
+                            tt.sleep_ms(1000).ok();
+                            panic!("Entry to fill isn't in the expected pool");
+                        }
                         let data_vaddr = small_storage_base_vaddr_from_indices(self.index, pool_index);
                         let mut data_cache = PlaintextCache { data: None, tag: None };
                         data_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(data_vaddr).unwrap());
@@ -697,6 +726,7 @@ impl DictCacheEntry {
                     ksp.contents.push(name.to_string());
                     ksp.avail -= reservation as u16;
                     ksp.clean = false;
+                    log::debug!("ksp.clean = false {}", name);
                     self.small_pool_free.push(KeySmallPoolOrd { avail: ksp.avail, index: pool_candidate.index });
                     pool_candidate.index
                 } else {
@@ -706,6 +736,7 @@ impl DictCacheEntry {
                     ksp.contents.push(name.to_string());
                     ksp.avail -= reservation as u16;
                     ksp.clean = false;
+                    log::debug!("ksp.clean = false {}", name);
                     // update the free pool with the current candidate
                     // we don't subtract 1 from len because we're about to push the ksp onto the end of the small_pool, consuming it
                     self.small_pool_free.push(KeySmallPoolOrd { avail: ksp.avail, index: self.small_pool.len() });
@@ -808,6 +839,7 @@ impl DictCacheEntry {
     /// overwritten in paranoid mode, but large keys are.
     pub fn key_remove(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name_str: &str, paranoid: bool) {
+        log::debug!("removing key {}", name_str);
         if paranoid {
             // large records are paranoid-erased, by default, because of the pool-reuse problem.
             unimplemented!("Paranoid erase for small records not yet implemented. Calling sync after an update, however, effectively does a paranoid erase.");
@@ -819,6 +851,7 @@ impl DictCacheEntry {
             let mut need_free_key: Option<u32> = None;
             if let Some(kcache) = self.keys.get_mut(&name) {
                 if !kcache.flags.valid() {
+                    log::debug!("ensure of invalid key: {}", name_str);
                     assert!(kcache.clean == false, "keys that are invalidated should be marked as not clean");
                     // key was previously deleted, already in cache, but not flushed. Nothing to do here.
                     return;
@@ -834,6 +867,7 @@ impl DictCacheEntry {
                     // handle the small pool case
                     let ksp = &mut self.small_pool[small_index];
                     let err_static = format!("Small pool did not contain the element we expected: {}, len: {}", &name, kcache.len);
+                    log::debug!("ksp swap_remove({}) flags: {:?}", name, kcache.flags);
                     ksp.contents.swap_remove(ksp.contents.iter().position(|s| *s == name)
                         .expect(&err_static));
                     assert!(kcache.reserved <= SMALL_CAPACITY as u64, "error in small key entry size");
@@ -865,6 +899,7 @@ impl DictCacheEntry {
             }
             // free up the key index in the dictionary, if necessary
             if let Some(key_to_free) = need_free_key {
+                log::debug!("freeing key: {}", key_to_free);
                 self.put_free_key_index(key_to_free);
                 self.key_count -= 1;
                 log::debug!("key_count: {}", self.key_count);
@@ -984,6 +1019,12 @@ impl DictCacheEntry {
                                     page[size_of::<JournalType>() + pool_offset ..
                                         size_of::<JournalType>() + pool_offset + kcache.len as usize]
                                         .copy_from_slice(&old_page[start_offset..start_offset + kcache.len as usize]);
+                                    // now take the previous data and shove it back in our cache
+                                    let data = old_page[start_offset..start_offset + kcache.len as usize].to_vec();
+                                    kcache.data = Some(KeyCacheData::Small(KeySmallData {
+                                        clean: true,
+                                        data,
+                                    }));
                                 } else {
                                     log::error!("Key {}'s data region at pp: {:x?} va: {:x} is unreadable", key_name, data_cache.tag, kcache.start);
                                 }
@@ -999,8 +1040,10 @@ impl DictCacheEntry {
                 // now commit the sector to disk
                 hw.data_encrypt_and_patch_page(cipher, &self.aad, &mut page, &pp);
                 entry.clean = true;
+                entry.evicted = false;
+                log::debug!("Key pool[{}] is now clean, and not evicted: {:?}", index, entry.contents);
             } else {
-                log::debug!("Key pool entry was clean, no need to sync: {:?}", entry.contents);
+                log::debug!("Key pool[{}] was clean, no need to sync: {:?}", index, entry.contents);
             }
         }
         // we now have a bunch of dirty kcache entries. You should call `dict_sync` shortly after this to synchronize those entries to disk.
@@ -1130,12 +1173,13 @@ impl DictCacheEntry {
             if kcache.flags.valid() && !kcache.clean {
                 return 0;
             }
-            if kcache.data.is_some() {
+            if let Some(KeyCacheData::Small(_)) = kcache.data { // can only prune small records
                 let pruned = kcache.size();
                 kcache.data.take(); // this effectively frees up the key cache data
                 // mark the key's pool as unclean, so it is processed for filling
                 let pool_index = small_storage_index_from_key(&kcache, self.index).expect("index missing");
-                self.small_pool[pool_index].clean = false;
+                self.small_pool[pool_index].evicted = true;
+                log::debug!("pruned {} bytes from key {} / evicted ksp index: {}", pruned, key, pool_index);
                 pruned
             } else {
                 0
