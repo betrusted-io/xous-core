@@ -928,6 +928,19 @@ impl<'a> ActionManager<'a> {
                                     log::warn!("Couldn't interpret password record: {}", key.name);
                                 }
                             } else {
+                                /* // this code helps to trace down which key had OOM'd, if it turns out to be an issue
+                                let mut oom_key = String::new();
+                                make_pw_name(&pw_rec.description, &pw_rec.username, &mut oom_key);
+                                let li = ListItem {
+                                    name: oom_key.to_string(),
+                                    extra: "Maybe OOM record".to_string(),
+                                    dirty: true,
+                                    guid: key.name,
+                                    atime: 0,
+                                    count: 0,
+                                };
+                                il.insert(li.key(), li); // this push is very slow, but we only have to do it once on boot
+                                */
                                 oom_keys += 1;
                             }
                             #[cfg(feature="vaultperf")]
