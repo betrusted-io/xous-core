@@ -239,10 +239,25 @@ impl DictCacheEntry {
     /// if cache is hot or key was found on search.
     pub(crate) fn ensure_key_entry(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name_str: &str) -> bool {
-        // only fill if the key isn't in the cache.
-        if !self.keys.contains_key(name_str) {
+        let mut data_cache = PlaintextCache { data: None, tag: None };
+        // if the key isn't valid, evict it now
+        self.keys.retain(|name, value| (name != name_str) || ((name == name_str) && value.flags.valid()));
+        // only fill if the key isn't in the cache, or if the data section has been evicted
+        let needs_fill = if let Some(entry) = self.keys.get(name_str) {
+            if entry.data.is_none() {
+                self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, name_str);
+                // it should be filled, so no further processing is needed
+                false
+            } else {
+                // data is already there
+                false
+            }
+        } else {
+            // entry doesn't exist
+            true
+        };
+        if needs_fill {
             log::debug!("searching for key {}", name_str);
-            let mut data_cache = PlaintextCache { data: None, tag: None };
             let mut try_entry = 1;
             let mut key_count = 0;
             let mut index_cache = PlaintextCache { data: None, tag: None };
@@ -496,17 +511,45 @@ impl DictCacheEntry {
                 kcache.clean = false;
                 // it's a small key; note that we didn't consult the *size* of the key to determine its pool type:
                 // small-sized keys can still end up in the "large" space if the small pool allocation is exhausted.
-                if let KeyCacheData::Small(cache_data) = kcache.data.as_mut().expect("small pool should all have their data 'hot' if the index entry is also in cache") {
-                    cache_data.clean = false;
-                    // grow the data cache to accommodate the necessary length; this should be efficient because we reserved space when the vector was allocated
-                    while cache_data.data.len() < data.len() + offset {
-                        cache_data.data.push(0);
+                match kcache.data.as_mut() {
+                    Some(KeyCacheData::Small(cache_data)) => {
+                        cache_data.clean = false;
+                        // grow the data cache to accommodate the necessary length; this should be efficient because we reserved space when the vector was allocated
+                        while cache_data.data.len() < data.len() + offset {
+                            cache_data.data.push(0);
+                        }
+                        for (&src, dst) in data.iter().zip(cache_data.data[offset..].iter_mut()) {
+                            *dst = src;
+                        }
                     }
-                    for (&src, dst) in data.iter().zip(cache_data.data[offset..].iter_mut()) {
-                        *dst = src;
+                    Some(KeyCacheData::Large(_)) => {
+                        panic!("Key allocated to small area but its cache data was not of the small type");
                     }
-                } else {
-                    panic!("Key allocated to small area but its cache data was not of the small type");
+                    None => {
+                        // cache data was evicted, fill it
+                        assert!(kcache.flags.valid(), "Entry to be filled should be valid");
+                        let pool_index = small_storage_index_from_key(&kcache, self.index).expect("pool should be valid");
+                        let ksp = &mut self.small_pool[pool_index];
+                        assert!(ksp.contents.contains(&name.to_string()), "Entry to fill isn't in the expected pool");
+                        let data_vaddr = small_storage_base_vaddr_from_indices(self.index, pool_index);
+                        let mut data_cache = PlaintextCache { data: None, tag: None };
+                        data_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(data_vaddr).unwrap());
+                        if let Some(page) = data_cache.data.as_ref() {
+                            let start_offset = size_of::<JournalType>() + (kcache.start % VPAGE_SIZE as u64) as usize;
+                            let mut data = page[start_offset..start_offset + kcache.len as usize].to_vec();
+                            data.reserve_exact((kcache.reserved - kcache.len) as usize);
+                            kcache.data = Some(KeyCacheData::Small(
+                                KeySmallData {
+                                    clean: true,
+                                    data
+                                }
+                            ));
+                        } else {
+                            let error =
+                                format!("Key {}'s data region at pp: {:x?} va: {:x} is unreadable", name, data_cache.tag, kcache.start);
+                            panic!("{}", error);
+                        }
+                    }
                 }
                 // check if we grew the length
                 if kcache.len < (data.len() + offset) as u64 {
@@ -1090,6 +1133,9 @@ impl DictCacheEntry {
             if kcache.data.is_some() {
                 let pruned = kcache.size();
                 kcache.data.take(); // this effectively frees up the key cache data
+                // mark the key's pool as unclean, so it is processed for filling
+                let pool_index = small_storage_index_from_key(&kcache, self.index).expect("index missing");
+                self.small_pool[pool_index].clean = false;
                 pruned
             } else {
                 0

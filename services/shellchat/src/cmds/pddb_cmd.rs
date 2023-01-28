@@ -1135,9 +1135,11 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         }
                     }
                 }
-                #[cfg(not(target_os = "xous"))]
                 "prune" => {
+                    #[cfg(not(target_os = "xous"))]
                     self.pddb.dbg_prune().ok();
+                    #[cfg(target_os = "xous")]
+                    self.pddb.manual_prune();
                     write!(ret, "Prune finished").ok();
                 }
                 #[cfg(not(target_os = "xous"))]

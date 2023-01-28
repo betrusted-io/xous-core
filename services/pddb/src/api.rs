@@ -245,6 +245,9 @@ pub(crate) enum Opcode {
     /// Bulk delete of keys within a dictionary; if non-existent keys are specified, no error is returned.
     DictBulkDelete = 55,
 
+    /// Prune the cache. Used mainly for diagnostics.
+    Prune = 56,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }
