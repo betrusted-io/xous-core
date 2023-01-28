@@ -482,7 +482,7 @@ impl BasisCache {
                                     bytes_read += 1;
                                 }
                                 if bytes_read != data.len() {
-                                    log::debug!("Key shorter than read buffer {}:{} ({}/{})", dict, key, bytes_read, data.len());
+                                    log::trace!("Key shorter than read buffer {}:{} ({}/{})", dict, key, bytes_read, data.len());
                                 }
                                 return Ok(bytes_read)
                             } else {
@@ -1115,7 +1115,7 @@ impl BasisCache {
                         match basis.dicts.get_mut(&ka.dict) {
                             Some(dentry) => {
                                 let freed = dentry.evict_keycache_entry(&ka.key);
-                                log::debug!("pruned {} bytes from atime {} / total {} key {}", freed, ka.atime, pruned, ka.key);
+                                log::trace!("pruned {} bytes from atime {} / total {} key {}", freed, ka.atime, pruned, ka.key);
                                 pruned += freed;
                                 if pruned >= target_bytes {
                                     return pruned;
@@ -1612,7 +1612,7 @@ impl BasisCacheEntry {
                         if key.flags.valid() {
                             if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
                             key.descriptor_vaddr(dict_offset) < next_vpage {
-                                log::debug!("merging in key {}", key_name);
+                                log::trace!("merging in key {}", key_name);
                                 // key is within the current page, add it to the target list
                                 let mut dk_entry = DictKeyEntry::default();
                                 let kn = KeyName::try_from_str(key_name).or(Err(Error::new(ErrorKind::InvalidInput, "key name invalid: invalid utf-8 or length")))?;
@@ -1633,11 +1633,16 @@ impl BasisCacheEntry {
                                 log::debug!("proposed key fell outside of our vpage: {} vpage{:x}/vaddr{:x}", key_name, cur_vpage.get(), key.descriptor_vaddr(dict_offset));
                             }
                         } else {
-                            invalidate.push(key_name.to_string());
+                            if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
+                            key.descriptor_vaddr(dict_offset) < next_vpage {
+                                dk_vpage.elements[key.descriptor_index.get() as usize % DK_PER_VPAGE] = None;
+                                invalidate.push(key_name.to_string());
+                            }
                         }
                     }
                     // remove the invalidated keys from the cache
                     for key in invalidate {
+                        log::debug!("removing invalidated key: {}", key);
                         dict.keys.remove(&key);
                     }
 
@@ -1669,16 +1674,18 @@ impl BasisCacheEntry {
                     // 4. Check for dirty keys, if there are still some, update vpage_num to target them; otherwise
                     // exit the loop
                     let mut found_next = false;
-                    for key in dict.keys.values() {
+                    for (name, key) in dict.keys.iter() {
                         if !key.clean && key.flags.valid() || !key.flags.valid() {
                             found_next = true;
                             // note: we don't care *which* vpage we do next -- so we just break after finding the first one
                             vpage_num = key.descriptor_vpage_num();
+                            log::debug!("sync searching again because key {} was valid {} clean {}", name, key.clean, key.flags.valid());
+                            sync_count += 1;
                             break;
                         }
                     }
                     if !found_next {
-                        log::debug!("breaking after syncing {} keys", sync_count);
+                        log::debug!("breaking after syncing {} iterations", sync_count);
                         break;
                     }
                     sync_count += 1;
