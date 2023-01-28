@@ -420,7 +420,10 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     const TOTAL_KEYS: usize = 40;
                     self.pddb.delete_dict("deltest", None).ok();
                     for outer_iter in 0..512 {
-                        log::info!("fill junk iter {}", outer_iter);
+                        log::info!("***************************fill junk iter {}*************************", outer_iter);
+                        if outer_iter == 246 {
+                            // self.pddb.dbg_set_debug().unwrap(); // used to dump debug when we find an error
+                        }
                         let mut junk_keys = Vec::<std::string::String>::new();
                         let mut junk_checksum = std::collections::HashMap::<std::string::String, usize>::new();
                         for index in 0..TOTAL_KEYS { // this should allocate a few key small pools
@@ -467,6 +470,57 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                                 self.pddb.flush_space_update();
                             }
                         }
+                        // single delete and re-create
+                        // _env.ticktimer.sleep_ms(1000).ok();
+                        log::info!("***************************recreate junk iter {}*************************", outer_iter);
+                        log::info!("key list: {:?}", self.pddb.list_keys("deltest", None).unwrap());
+                        for test_index in (0..TOTAL_KEYS).rev() { // test both rev and non-rev variants to catch more corner cases
+                            log::debug!("recreating test index {}", test_index);
+                            let junkname = format!("junk{}", test_index);
+                            self.pddb.delete_key("deltest", &junkname, None).ok();
+                            let mut junk = Vec::<u8>::new();
+                            let total_junk = JUNK_MIN + _env.trng.get_u32().unwrap() as usize % JUNK_VAR;
+                            let mut checksum = 0;
+                            for i in 0..total_junk {
+                                junk.push((i as usize + test_index) as u8);
+                                checksum += ((i as usize + test_index) as u8) as usize;
+                            }
+                            match self.pddb.get(
+                                "deltest",
+                                &junkname,
+                                None, true, true,
+                                None,
+                                None::<fn()>
+                            ) {
+                                Ok(mut junk_key) => {
+                                    match junk_key.write_all(&junk) {
+                                        Ok(_) => {
+                                            log::debug!("wrote {} of len {}", junkname, total_junk);
+                                        }
+                                        Err(e) => {
+                                            log::error!("couldn't write {}: {:?}", junkname, e);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!("couldn't allocate junk key {}: {:?}", junkname, e);
+                                }
+                            }
+                            log::debug!("name: {}, checksum: {}", junkname, checksum);
+                            junk_checksum.insert(junkname.to_string(), checksum);
+                            junk_keys[test_index] = junkname;
+
+                            #[cfg(not(target_os = "xous"))]
+                            if _env.trng.get_u32().unwrap() as usize % 1024 == 13 {
+                                log::info!("pruning 1");
+                                self.pddb.dbg_prune().ok();
+                            }
+                            if _env.trng.get_u32().unwrap() as usize % 8192 == 27 {
+                                log::info!("flushing fscb 1");
+                                self.pddb.flush_space_update();
+                            }
+                        }
+                        log::info!("***************************delete junk iter {}*************************", outer_iter);
                         let mut prev_del = "uninit".to_string();
                         while junk_keys.len() > 0 {
                             let to_remove = _env.trng.get_u32().unwrap() as usize % junk_keys.len();
@@ -477,7 +531,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                             // self.pddb.sync().ok();
                             let check = self.pddb.list_keys("deltest", None).unwrap();
                             assert!(check.len() == (junk_keys.len() - 1));
-                            for (_key_index, key) in check.iter().enumerate() {
+                            for (key_index, key) in check.iter().enumerate() {
                                 if key == &junk_keys[to_remove] {
                                     panic!("Removed key was not removed");
                                 }
@@ -497,12 +551,25 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                                         if checksum != *junk_checksum.get(key).unwrap() {
                                             log::info!("readback {}", readback_len);
                                             log::info!("previously deleted: {} / just deleted: {}", prev_del, junk_keys[to_remove]);
-                                            log::info!("array: {:?}", junk);
+                                            log::info!("array start: {:?}", junk);
+                                            log::info!("array end: {:?}", &junk[readback_len - 128..readback_len]);
                                             log::error!("Key data did not match name: {}, checksum: {}, expected: {}",
                                                 key,
                                                 checksum,
                                                 *junk_checksum.get(key).unwrap()
                                             );
+                                            let mut check: u8 = key_index as u8;
+                                            let mut deviations = 0;
+                                            for (index, &j) in junk.iter().enumerate() {
+                                                if j != check {
+                                                    log::error!("deviation at {} {} <- {}", index, j, check);
+                                                    deviations += 1;
+                                                    if deviations > 32 {
+                                                        break;
+                                                    }
+                                                }
+                                                check += 1;
+                                            }
                                             self.pddb.dbg_dump("deltest").unwrap();
                                             panic!("data mismatch!");
                                         }
