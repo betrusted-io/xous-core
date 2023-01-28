@@ -856,6 +856,13 @@ impl Pddb {
             Message::new_blocking_scalar(Opcode::FlushSpaceUpdate.to_usize().unwrap(), 0, 0, 0, 0)
         ).expect("couldn't send FlushSpaceUpdate");
     }
+    /// Manually prune the PDDB cache.
+    /// Mostly provided for force-triggering for testing; normally this is done automatically
+    pub fn manual_prune(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::Prune.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send FlushSpaceUpdate");
+    }
     /// Rekey the PDDB. This can be a very long-running blocking operation that will definitely.
     /// interrupt normal user flow.
     pub fn rekey_pddb(&self, op: PddbRekeyOp) -> Result<()> {

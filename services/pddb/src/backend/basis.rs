@@ -1601,6 +1601,7 @@ impl BasisCacheEntry {
                     // make, but for now, let's do it with a dumb O(N) scan through the KeyCacheEntry, running under
                     // the assumption that the KeyCacheEntry doesn't ever get to a very large N.
                     let next_vpage = VirtAddr::new(cur_vpage.get() + VPAGE_SIZE as u64).unwrap();
+                    let mut invalidate = Vec::<String>::new(); // remember which keys to invalidate
                     for (key_name, key) in dict.keys.iter_mut() {
                         /*if key_name.contains("dict2|key6|len2347") {
                             log::warn!("TRACING: {}", key_name);
@@ -1631,7 +1632,13 @@ impl BasisCacheEntry {
                             } else {
                                 log::debug!("proposed key fell outside of our vpage: {} vpage{:x}/vaddr{:x}", key_name, cur_vpage.get(), key.descriptor_vaddr(dict_offset));
                             }
+                        } else {
+                            invalidate.push(key_name.to_string());
                         }
+                    }
+                    // remove the invalidated keys from the cache
+                    for key in invalidate {
+                        dict.keys.remove(&key);
                     }
 
                     // 3. merge the vpage modifications into the disk
@@ -1663,7 +1670,7 @@ impl BasisCacheEntry {
                     // exit the loop
                     let mut found_next = false;
                     for key in dict.keys.values() {
-                        if !key.clean && key.flags.valid() {
+                        if !key.clean && key.flags.valid() || !key.flags.valid() {
                             found_next = true;
                             // note: we don't care *which* vpage we do next -- so we just break after finding the first one
                             vpage_num = key.descriptor_vpage_num();
@@ -1676,8 +1683,6 @@ impl BasisCacheEntry {
                     }
                     sync_count += 1;
                 }
-                // remove invalid keys from the dictionary cache
-                dict.keys.retain(|_name, entry| entry.flags.valid());
 
                 log::debug!("done syncing dict");
                 dict.clean = true;

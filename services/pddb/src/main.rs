@@ -1838,6 +1838,13 @@ fn wrapped_main() -> ! {
                 pddb_os.reset_dont_ask_init();
                 xous::return_scalar(msg.sender, 1).ok();
             }
+            Opcode::Prune => {
+                log::info!("PDDB prune manual request: {} heap, {} cache", latest_heap, basis_cache.cache_size());
+                let pruned = basis_cache.cache_prune(&mut pddb_os, HEAP_GC_TARGET);
+                latest_heap = heap_usage();
+                log::info!("{} pruned, now: {} heap, {} cache", pruned, latest_heap, basis_cache.cache_size());
+                xous::return_scalar(msg.sender, 1).ok();
+            }
             #[cfg(not(target_os = "xous"))]
             Opcode::DangerousDebug => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
