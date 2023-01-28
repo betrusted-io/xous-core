@@ -601,8 +601,8 @@ fn wrapped_main() -> ! {
     let mut latest_heap: usize = 0;
     let mut latest_cache: usize = 0;
     const HEAP_LARGER_LIMIT: usize = 2048 * 1024;
-    const HEAP_GC_THRESH: usize = 1500 * 1024; // the largel limit is at 2048kiB, so try cleaning up at 1500k
-    const HEAP_GC_TARGET: usize = 1300 * 1024; // how much to try cleaning out in any one go.
+    const HEAP_GC_THRESH: usize = 1800 * 1024; // the larger limit is at 2048kiB, set this smaller
+    const HEAP_GC_TARGET: usize = 1500 * 1024; // how much to try cleaning out in any one go.
     let new_limit = HEAP_LARGER_LIMIT;
     let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
         xous::Limits::HeapMaximum as usize,
@@ -747,11 +747,11 @@ fn wrapped_main() -> ! {
                 }
                 latest_heap = current_heap;
                 latest_cache = current_cache;
-                if (latest_heap > initial_heap
-                && (latest_heap - initial_heap) > HEAP_GC_THRESH)
+                if ((latest_heap > initial_heap)
+                && ((latest_heap - initial_heap) > HEAP_GC_THRESH))
                 // this line is mostly so this triggers occasionally in hosted mode where heap usage is faked;
                 // in practice heap threshold will always hit before cache threshold
-                || current_cache > HEAP_GC_THRESH {
+                || (current_cache > HEAP_GC_THRESH) {
                     log::info!("PDDB trim threshold reached: {} heap, {} cache", latest_heap, basis_cache.cache_size());
                     let pruned = basis_cache.cache_prune(&mut pddb_os, HEAP_GC_TARGET);
                     latest_heap = heap_usage();
@@ -1451,8 +1451,8 @@ fn wrapped_main() -> ! {
                 let token = pbuf.token;
                 if let Some(rec) = token_dict.get(&token) {
                     for basis in basis_cache.access_list().iter() {
-                        let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
-                        log::debug!("read (spec: {:?}){:?} {} len {} pos {}", rec.basis, temp, rec.key, pbuf.len, pbuf.position);
+                        // let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
+                        // log::debug!("read (spec: {:?}){:?} {} len {} pos {}", rec.basis, temp, rec.key, pbuf.len, pbuf.position);
                         #[cfg(feature="perfcounter")]
                         pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 4, std::line!());
                         match basis_cache.key_read(&mut pddb_os,
@@ -1872,10 +1872,11 @@ fn wrapped_main() -> ! {
                     },
                     DebugRequest::Prune => {
                         log::info!("initiating prune");
-                        log::set_max_level(log::LevelFilter::Debug);
                         basis_cache.cache_prune(&mut pddb_os, 262144);
-                        log::set_max_level(log::LevelFilter::Info);
                         log::info!("prune finished");
+                    }
+                    DebugRequest::SetDebug => {
+                        log::set_max_level(log::LevelFilter::Debug);
                     }
                 }
             }
