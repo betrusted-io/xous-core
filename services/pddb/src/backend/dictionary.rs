@@ -555,9 +555,7 @@ impl DictCacheEntry {
                         let pool_index = small_storage_index_from_key(&kcache, self.index).expect("pool should be valid");
                         let ksp = &mut self.small_pool[pool_index];
                         if !ksp.contents.contains(&name.to_string()) {
-                            log::warn!("illegal state: key_update fill key pool contents: {:?}", ksp.contents);
-                            let tt = ticktimer_server::Ticktimer::new().unwrap();
-                            tt.sleep_ms(1000).ok();
+                            log::warn!("illegal state: key_update fill key pool contents: {:?}, missing {}", ksp.contents, name);
                             panic!("Entry to fill isn't in the expected pool");
                         }
                         let data_vaddr = small_storage_base_vaddr_from_indices(self.index, pool_index);
