@@ -558,6 +558,7 @@ pub enum DebugRequest {
     Dump = 0,
     Remount = 1,
     Prune = 2,
+    SetDebug = 3,
 }
 
 #[cfg(test)]
