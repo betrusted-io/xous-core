@@ -85,8 +85,7 @@ mod implementation {
         // Safe because we're in an interrupt, and this interrupt is only
         // enabled when this value is not None.
         let response = xtt.current_response.take().unwrap();
-        xous::return_scalar(response.sender, response.kind as usize)
-            .expect("couldn't send response");
+        xous::return_scalar(response.sender, response.kind as usize).ok();
 
         // Disable the timer
         xtt.csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, 0);
