@@ -694,6 +694,35 @@ impl SystemServices {
         Ok(())
     }
 
+    fn find_next_thread(thread_mask: usize, current_thread: usize) -> usize {
+        // If there's only one thread runnable, run that one
+        if thread_mask == 0 {
+            panic!("no threads were available to run");
+        }
+
+        if thread_mask.count_ones() == 1 {
+            let new_tid = thread_mask.ilog2() as usize;
+            // println!(
+            //     "thread mask: {:b} -- only one thread was ready -- picking thread {} ({:b})",
+            //     thread_mask,
+            //     new_tid,
+            //     1 << new_tid
+            // );
+            new_tid
+        } else {
+            let mut new_tmask = (1usize << current_thread).rotate_left(1);
+            // println!("looking for a new thread -- existing thread was {} ({:b}) and new mask is {:b} (starting with {:b})", current_thread, 1<<current_thread, thread_mask, new_tmask);
+            while thread_mask & new_tmask == 0 {
+                new_tmask = new_tmask.rotate_left(1);
+                if new_tmask == (1 << current_thread as usize) {
+                    // If we've looped around, return an error.
+                    panic!("Looked through all contexts and couldn't find one that was ready");
+                }
+            }
+            new_tmask.ilog2() as usize
+        }
+    }
+
     /// Mark the current process as "Ready to run".
     ///
     /// # Panics
@@ -753,26 +782,11 @@ impl SystemServices {
                 panic!("ProcessState was `Ready(0)`, which is invalid!");
             }
             ProcessState::Ready(x) => {
-                let new_thread = match tid {
-                    None => {
-                        let mut new_context = 0;
-
-                        while x & (1 << new_context) == 0 {
-                            new_context += 1;
-                            if new_context > arch::process::MAX_THREAD {
-                                new_context = 0;
-                            }
-                        }
-                        new_context
-                    }
-                    Some(ctx) => {
-                        // Ensure the specified context is ready to run
-                        if x & (1 << ctx) == 0 {
-                            return Err(xous_kernel::Error::InvalidThread);
-                        }
-                        ctx
-                    }
-                };
+                let new_thread =
+                    tid.unwrap_or_else(|| Self::find_next_thread(x, process.current_thread));
+                if x & (1 << new_thread) == 0 {
+                    panic!("invalid thread ID");
+                }
 
                 process.activate()?;
                 let mut p = ArchProcess::current();
@@ -809,9 +823,7 @@ impl SystemServices {
                     Some(tid) => {
                         // Ensure the specified context is ready to run, or is
                         // currently running.
-                        if ready_threads & (1 << tid) == 0
-                        /*&& ctx != current_thread*/
-                        {
+                        if ready_threads & (1 << tid) == 0 {
                             return Err(xous_kernel::Error::InvalidThread);
                         }
                         tid
@@ -973,32 +985,20 @@ impl SystemServices {
                     // search for the next available context.
                     assert!(
                         x != 0,
-                        "process was {:?} but had no free contexts",
+                        "process was {:?} but had no runnable threads",
                         new.state
                     );
                     if new_tid == 0 {
-                        new_tid = (new.current_thread + 1) as usize;
-                        while x & (1 << new_tid) == 0 {
-                            new_tid += 1;
-                            if new_tid > arch::process::MAX_THREAD {
-                                new_tid = 0;
-                            } else if new_tid == (new.current_thread + 1) as usize {
-                                // If we've looped around, return an error.
-                                // println!("Looked through all contexts and couldn't find one that was ready");
-                                return Err(xous_kernel::Error::ProcessNotFound);
-                            }
-                        }
-                        new.current_thread = new_tid as _;
-                        klog!("picked thread ID {}", new_tid);
-                    } else if x & (1 << new_tid) == 0 {
-                        // println!(
-                        //     "thread is {:?}, which is not valid for new thread {}",
-                        //     new.state, new_tid
-                        // );
-                        return Err(xous_kernel::Error::ProcessNotFound);
-                    } else {
-                        new.current_thread = new_tid as _;
+                        new_tid = Self::find_next_thread(x, new.current_thread);
                     }
+                    if x & (1 << new_tid) == 0 {
+                        println!(
+                            "process state is {:?}, but new thread {} is not runnable",
+                            new.state, new_tid
+                        );
+                        return Err(xous_kernel::Error::ProcessNotFound);
+                    }
+                    new.current_thread = new_tid as _;
                 }
                 ProcessState::Sleeping
                 | ProcessState::Debug(_)
@@ -1121,21 +1121,18 @@ impl SystemServices {
                 // If no new thread is specified, take the previous
                 // thread.  If that is not runnable, do a round-robin
                 // search for the next available thread.
-                if new_tid == 0 {
-                    new_tid = (new.current_thread + 1) as usize;
-                    while x & (1 << new_tid) == 0 {
-                        new_tid += 1;
-                        if new_tid > arch::process::MAX_THREAD {
-                            new_tid = 0;
-                        } else if new_tid == (new.current_thread + 1) as usize {
-                            // If we've looped around, return an error.
-                            return Err(xous_kernel::Error::ProcessNotFound);
-                        }
-                    }
-                    new.current_thread = new_tid as _;
-                } else if x & (1 << new_tid) == 0 {
-                    return Err(xous_kernel::Error::ProcessNotFound);
+                let new_tid = if new_tid == 0 {
+                    Self::find_next_thread(x, new.current_thread)
+                } else {
+                    new_tid
+                };
+
+                if x & (1 << new_tid) == 0 {
+                    return Err(xous_kernel::Error::ThreadNotAvailable);
                 }
+
+                new.current_thread = new_tid as _;
+
                 // Mark the previous TID as being runnable, and remove the new TID
                 // from the list of threads that can be run.
                 ProcessState::Running(
