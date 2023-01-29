@@ -1,4 +1,11 @@
 {
+    "mtxcli.clock.warning": {
+        "en": "WARNING: clock not set",
+        "en-tts": "WARNING: clock not set",
+        "fr": "AVERTISSEMENT : horloge non réglée",
+        "ja": "WARNING: clock not set *EN*",
+        "zh": "WARNING: clock not set *EN*"
+    },
     "mtxcli.filter.failed": {
         "en": "error: could not create filter",
         "en-tts": "error: could not create filter",
@@ -20,6 +27,13 @@
         "ja": "シンプルなMTXCLIデモへようこそ",
         "zh": "简单的 mtxcli 演示活动"
     },
+    "mtxcli.heap.help": {
+        "en": "/heap",
+        "en-tts": "heap",
+        "fr": "/heap",
+        "ja": "/heap",
+        "zh": "/heap"
+    },
     "mtxcli.help.help": {
         "en": "/help [cmd]",
         "en-tts": "help [cmd]",
@@ -33,6 +47,13 @@
         "fr": "commandes mtxcli disponibles:",
         "ja": "available mtxcli commands: *EN*",
         "zh": "available mtxcli commands: *EN*"
+    },
+    "mtxcli.initialized": {
+        "en": "MTXCLI ready",
+        "en-tts": "MTXCLI ready",
+        "fr": "MTXCLI prêt",
+        "ja": "MTXCLI ready *EN*",
+        "zh": "MTXCLI ready *EN*"
     },
     "mtxcli.logged.in": {
         "en": "logged in",
@@ -76,12 +97,40 @@
         "ja": "/logout *EN*",
         "zh": "/logout *EN*"
     },
+    "mtxcli.migration.completed": {
+        "en": "migration completed",
+        "en-tts": "migration completed",
+        "fr": "migration terminée",
+        "ja": "migration completed *EN*",
+        "zh": "migration completed *EN*"
+    },
+    "mtxcli.migrations.complete": {
+        "en": "migrations complete",
+        "en-tts": "migrations complete",
+        "fr": "tous les migrations terminées",
+        "ja": "migrations complete *EN*",
+        "zh": "migrations complete *EN*"
+    },
     "mtxcli.not.connected": {
         "en": "not connected",
         "en-tts": "not conntected",
         "fr": "déconnecté",
         "ja": "not connected *EN*",
         "zh": "not connected *EN*"
+    },
+    "mtxcli.pddb.warning": {
+        "en": "WARNING: pddb not mounted",
+        "en-tts": "WARNING: pddb not mounted",
+        "fr": "AVERTISSEMENT: pddb pas monté",
+        "ja": "WARNING: pddb not mounted *EN*",
+        "zh": "WARNING: pddb not mounted *EN*"
+    },
+    "mtxcli.please.login": {
+        "en": "please /login",
+        "en-tts": "please /login",
+        "fr": "Veuillez /login",
+        "ja": "please /login *EN*",
+        "zh": "please /login *EN*"
     },
     "mtxcli.please.set.password": {
         "en": "please /set password my-password",
@@ -118,6 +167,13 @@
         "ja": "error: could not find room_id *EN*",
         "zh": "error: could not find room_id *EN*"
     },
+    "mtxcli.running.migrations": {
+        "en": "Running migrations from version",
+        "en-tts": "Running migrations from version",
+        "fr": "Exécution des migrations à partir de la version",
+        "ja": "Running migrations from version *EN*",
+        "zh": "Running migrations from version *EN*"
+    },
     "mtxcli.send.failed": {
         "en": "failed to send!",
         "en-tts": "failed to send!",
@@ -152,5 +208,19 @@
         "fr": "/unset clé",
         "ja": "/unset key *EN*",
         "zh": "/unset key *EN*"
+    },
+    "mtxcli.wifi.connected": {
+        "en": "WiFi connected",
+        "en-tts": "WiFi connected",
+        "fr": "WiFi connecté",
+        "ja": "WiFi connected *EN*",
+        "zh": "WiFi connected *EN*"
+    },
+    "mtxcli.wifi.warning": {
+        "en": "WARNING: WiFi not connected",
+        "en-tts": "WARNING: WiFi not connected",
+        "fr": "AVERTISSEMENT: WiFi pas connecté",
+        "ja": "WARNING: WiFi not connected *EN*",
+        "zh": "WARNING: WiFi not connected *EN*"
     }
 }

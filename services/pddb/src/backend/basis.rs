@@ -339,6 +339,7 @@ impl BasisCache {
                 last_disk_key_index: 1, // we know we don't have to search past this in a new dictionary
                 flags: init_flags,
                 key_count: 0,
+                found_key_count: 0,
                 small_pool: Vec::<KeySmallPool>::new(),
                 small_pool_free: BinaryHeap::<KeySmallPoolOrd>::new(),
                 aad: my_aad,
@@ -348,7 +349,7 @@ impl BasisCache {
             basis.dicts.insert(String::from(name), dict_cache);
             basis.num_dicts += 1;
             // encrypt and write the dict entry to disk
-            basis.dict_sync(hw, name)?;
+            basis.dict_sync(hw, name, false)?;
             // sync the root basis structure as well, while we're at it...
             basis.basis_sync(hw);
             // finally, sync the page tables.
@@ -386,9 +387,11 @@ impl BasisCache {
         }
         dict_set
     }
-    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<BTreeSet::<String>> {
+    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<(BTreeSet::<String>, u32, u32)> {
         let mut merge_list = BTreeSet::<String>::new();
         let mut found_dict = false;
+        let mut key_count: u32 = 0;
+        let mut found_key_count: u32 = 0;
         if basis_name.is_some() {
             if let Some(basis_index) = self.select_basis(basis_name) {
                 let basis = &mut self.cache[basis_index];
@@ -396,6 +399,8 @@ impl BasisCache {
                 if let Some(dcache) = basis.dicts.get_mut(dict) {
                     dcache.key_list(hw, &basis.v2p_map, &basis.cipher, &mut merge_list);
                     found_dict = true;
+                    key_count += dcache.key_count;
+                    found_key_count += dcache.found_key_count;
                 }
             }
         } else {
@@ -404,11 +409,13 @@ impl BasisCache {
                 if let Some(dcache) = basis.dicts.get_mut(dict) {
                     dcache.key_list(hw, &basis.v2p_map, &basis.cipher, &mut merge_list);
                     found_dict = true;
+                    key_count += dcache.key_count;
+                    found_key_count += dcache.found_key_count;
                 }
             }
         }
         if found_dict {
-            Ok(merge_list)
+            Ok((merge_list, key_count, found_key_count))
         } else {
             return Err(Error::new(ErrorKind::NotFound, "dictionary not found"))
         }
@@ -475,7 +482,7 @@ impl BasisCache {
                                     bytes_read += 1;
                                 }
                                 if bytes_read != data.len() {
-                                    log::debug!("Key shorter than read buffer {}:{} ({}/{})", dict, key, bytes_read, data.len());
+                                    log::trace!("Key shorter than read buffer {}:{} ({}/{})", dict, key, bytes_read, data.len());
                                 }
                                 return Ok(bytes_read)
                             } else {
@@ -571,20 +578,63 @@ impl BasisCache {
                     } else {
                         // this implementation is still in progress
                         dict_entry.key_erase(key);
-
-                        // encrypt and write the dict entry to disk
-                        basis.dict_sync(hw, dict)?;
-                        // sync the root basis structure as well, while we're at it...
-                        basis.basis_sync(hw);
-                        // finally, sync the page tables.
-                        basis.pt_sync(hw);
                     }
+                    assert!(dict_entry.clean == false, "dictionary entry should have been marked unclean");
+
+                    // sync the key pools to disk
+                    if !dict_entry.sync_small_pool(hw, &mut basis.v2p_map, &basis.cipher) {
+                        return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of memory syncing small pool"));
+                    }
+                    dict_entry.sync_large_pool();
+                    // encrypt and write the dict entry to disk
+                    basis.dict_sync(hw, dict, false)?;
+                    // sync the root basis structure as well, while we're at it...
+                    basis.basis_sync(hw);
+                    // finally, sync the page tables.
+                    basis.pt_sync(hw);
                     return Ok(())
                 } else {
                     return Err(Error::new(ErrorKind::NotFound, "key not found"));
                 }
             } else {
                 return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
+            }
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
+        }
+    }
+
+    pub(crate) fn key_list_remove(&mut self,
+        hw: &mut PddbOs, dict: &str, key_list: Vec::<String>, basis_name: Option<&str>
+    ) -> Result<()> {
+        if let Some(basis_index) = self.select_basis(basis_name) {
+            let basis = &mut self.cache[basis_index];
+            if !basis.ensure_dict_in_cache(hw, dict) {
+                return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
+            }
+            if let Some(dict_entry) = basis.dicts.get_mut(dict) {
+                basis.age = basis.age.saturating_add(1);
+                basis.clean = false;
+                for key in key_list {
+                    if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, &key) {
+                        dict_entry.key_remove(hw, &mut basis.v2p_map, &basis.cipher, &key, false);
+                        assert!(dict_entry.clean == false, "dictionary entry should have been marked unclean");
+                    }
+                }
+                // sync the key pools to disk
+                if !dict_entry.sync_small_pool(hw, &mut basis.v2p_map, &basis.cipher) {
+                    return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of memory syncing small pool"));
+                }
+                dict_entry.sync_large_pool();
+                // encrypt and write the dict entry to disk
+                basis.dict_sync(hw, dict, false)?;
+                // sync the root basis structure as well, while we're at it...
+                basis.basis_sync(hw);
+                // finally, sync the page tables.
+                basis.pt_sync(hw);
+                Ok(())
+            } else {
+                Err(Error::new(ErrorKind::NotFound, "dictionary not found"))
             }
         } else {
             Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
@@ -722,7 +772,7 @@ impl BasisCache {
                 dict_entry.sync_large_pool();
 
                 // encrypt and write the dict entry to disk
-                basis.dict_sync(hw, dict)?;
+                basis.dict_sync(hw, dict, false)?;
                 // sync the root basis structure as well, while we're at it...
                 basis.basis_sync(hw);
                 // finally, sync the page tables.
@@ -943,7 +993,7 @@ impl BasisCache {
     pub(crate) fn basis_unmount(&mut self, hw: &mut PddbOs, basis_name: &str) -> Result<()> {
         if let Some(basis_index) = self.select_basis(Some(basis_name)) {
             let basis = &mut self.cache[basis_index];
-            basis.sync(hw)?;
+            basis.sync(hw, false)?;
             self.cache.retain(|x| x.name != basis_name);
             Ok(())
         } else {
@@ -971,22 +1021,25 @@ impl BasisCache {
         }
     }
 
-    pub(crate) fn sync(&mut self, hw: &mut PddbOs, basis_name: Option<&str>) -> Result<()> {
+    pub(crate) fn sync(&mut self, hw: &mut PddbOs, basis_name: Option<&str>, cleanup: bool) -> Result<()> {
+        if cleanup {
+            log::info!("calling sync with cleanup!");
+        }
         if basis_name.is_some() {
             if let Some(basis_index) = self.select_basis(basis_name) {
-                self.cache[basis_index].sync(hw)?
+                self.cache[basis_index].sync(hw, cleanup)?
             }
         } else {
             for basis in self.cache.iter_mut() {
                 log::debug!("syncing {}", basis.name);
-                basis.sync(hw)?;
+                basis.sync(hw, cleanup)?;
             }
         }
         Ok(())
     }
 
     pub(crate) fn suspend(&mut self, hw: &mut PddbOs) {
-        self.sync(hw, None).expect("couldn't sync on suspend");
+        self.sync(hw, None, false).expect("couldn't sync on suspend");
         let mut lock_list = Vec::<String>::new();
         for basis in self.cache.iter_mut() {
             match basis.policy {
@@ -1032,21 +1085,25 @@ impl BasisCache {
         // 1. iterate through all the known keys, creating a sorted heap of fully-specified keys (basis/dict/key)
         //    sorted by access time
         // 2. evict keys with the oldest access time, until target_bytes is hit.
-        self.sync(hw, None).unwrap();
+        self.sync(hw, None, false).unwrap();
 
         let mut candidates = BinaryHeap::new();
         for basis in self.cache.iter() {
             for (dict_name, dict) in basis.dicts.iter() {
-                for (key_name, key) in dict.keys.iter() {
-                    candidates.push(Reverse(
-                        KeyAge {
-                            atime: key.atime(),
-                            _size: key.size(),
-                            key: key_name.to_string(),
-                            dict: dict_name.to_string(),
-                            basis: basis.name.to_string(),
+                if dict.flags.valid() {
+                    for (key_name, key) in dict.keys.iter() {
+                        if key.flags.valid() {
+                            candidates.push(Reverse(
+                                KeyAge {
+                                    atime: key.atime(),
+                                    _size: key.size(),
+                                    key: key_name.to_string(),
+                                    dict: dict_name.to_string(),
+                                    basis: basis.name.to_string(),
+                                }
+                            ));
                         }
-                    ));
+                    }
                 }
             }
         }
@@ -1058,7 +1115,7 @@ impl BasisCache {
                         match basis.dicts.get_mut(&ka.dict) {
                             Some(dentry) => {
                                 let freed = dentry.evict_keycache_entry(&ka.key);
-                                log::debug!("pruned {} bytes from atime {} / total {}", freed, ka.atime, pruned);
+                                log::trace!("pruned {} bytes from atime {} / total {} key {}", freed, ka.atime, pruned, ka.key);
                                 pruned += freed;
                                 if pruned >= target_bytes {
                                     return pruned;
@@ -1238,7 +1295,7 @@ impl BasisCacheEntry {
             let mut largest_extent = 0;
             for dict in self.dicts.values_mut() {
                 if dict.flags.valid() {
-                    let extent = dict.fill(hw, &mut self.v2p_map, &self.cipher).get();
+                    let extent = dict.fill(hw, &mut self.v2p_map, &self.cipher, false).get();
                     if extent > largest_extent {
                         largest_extent = extent;
                     }
@@ -1262,12 +1319,12 @@ impl BasisCacheEntry {
                             };
                             if !dict_present_and_valid {
                                 let mut dcache = DictCacheEntry::new(dict, try_entry, &self.aad);
-                                let max_large_alloc = dcache.fill(hw, &self.v2p_map, &self.cipher);
+                                let max_large_alloc = dcache.fill(hw, &self.v2p_map, &self.cipher, false);
                                 self.dicts.insert(dict_name.to_string(), dcache);
                                 self.large_pool_update(max_large_alloc.get());
                             } else {
                                 let dcache = self.dicts.get_mut(&dict_name).expect("dict should be present, as we checked for it already...");
-                                let extent = dcache.fill(hw, &mut self.v2p_map, &self.cipher).get();
+                                let extent = dcache.fill(hw, &mut self.v2p_map, &self.cipher, false).get();
                                 self.large_pool_update(extent);
                             }
                             dict_count += 1;
@@ -1300,7 +1357,7 @@ impl BasisCacheEntry {
             let dcache = self.dicts.get_mut(name).expect("entry was ensured, but somehow missing");
             log::trace!("dcache {} index {}, key_count {}", name, dcache.index, dcache.key_count);
             // ensure all the keys are in RAM
-            dcache.fill(hw, &self.v2p_map, &self.cipher);
+            dcache.fill(hw, &self.v2p_map, &self.cipher, false);
 
             // allocate a copy of the key list, to avoid interior mutability problems with the next remove step
             let mut key_list = Vec::<String>::new();
@@ -1470,7 +1527,7 @@ impl BasisCacheEntry {
         }
     }
 
-    /// This will sync the named Dictionary header + dirty *key descriptors*. It does not
+    /// This will sync the named Dictionary header + valid *key descriptors*. It does not
     /// sync the key data itself. Note this does not mark the surrounding basis structure as clean
     /// when it exits, even if there are no more dirty entries within.
     ///
@@ -1478,10 +1535,17 @@ impl BasisCacheEntry {
     /// allocated. You can try calling it without pre-allocating the entries, but if the FastSpace structure
     /// doesn't have enough space, the routine will return an error indicating we're out of memory.
     /// You could then try to allocate more FastSpace, and re-try the sync operation.
-    pub(crate) fn dict_sync(&mut self, hw: &mut PddbOs, name: &str) -> Result<()> {
+    ///
+    /// If `cleanup` is true, then the keycount field is set to the number of keys actually found. This
+    /// "fixes" inconsistencies by just trimming records that got lost.
+    pub(crate) fn dict_sync(&mut self, hw: &mut PddbOs, name: &str, cleanup: bool) -> Result<()> {
         self.last_sync = Some(hw.timestamp_now());
         if let Some(dict) = self.dicts.get_mut(&String::from(name)) {
             let dict_offset = VirtAddr::new(dict.index.get() as u64 * DICT_VSIZE).unwrap();
+            if cleanup && (dict.key_count != dict.found_key_count) {
+                log::info!("Cleaning up key_count inconsistency: {} -> {}", dict.key_count, dict.found_key_count);
+                dict.key_count = dict.found_key_count;
+            }
             if !dict.clean {
                 let dict_name = DictName::try_from_str(name).or(Err(Error::new(ErrorKind::InvalidInput, "dictionary name invalid: invalid utf-8 or length")))?;
                 let dict_disk = Dictionary {
@@ -1497,7 +1561,8 @@ impl BasisCacheEntry {
                 // but definitely all the dirty ones are in there (if they aren't, where else would they be??)
 
                 // this is the virtual page within the dictionary region that we're currently serializing
-                let mut vpage_num = 0;
+                let mut vpage_num = 0; // because the root record is dirty, we always need to regenerate page 0.
+                // note: other pages are only generated on-demand, based on if there is a dirty key in that page or not.
                 let mut loopcheck= 0;
                 let mut sync_count = 0;
                 loop {
@@ -1529,13 +1594,14 @@ impl BasisCacheEntry {
                     }
 
                     // 2(b). fill in the target vpage with data: general key case
-                    // Scan the DictCacheEntry.keys record for dirty keys within the current target vpage's range
+                    // Scan the DictCacheEntry.keys record for valid keys within the current target vpage's range
                     // this is not a terribly efficient operation right now, because the DictCacheEntry is designed to
                     // be searched by name, but in this case, we want to check for an index range. There's a lot
                     // of things we could do to optimize this, depending on the memory/time trade-off we want to
                     // make, but for now, let's do it with a dumb O(N) scan through the KeyCacheEntry, running under
                     // the assumption that the KeyCacheEntry doesn't ever get to a very large N.
                     let next_vpage = VirtAddr::new(cur_vpage.get() + VPAGE_SIZE as u64).unwrap();
+                    let mut invalidate = Vec::<String>::new(); // remember which keys to invalidate
                     for (key_name, key) in dict.keys.iter_mut() {
                         /*if key_name.contains("dict2|key6|len2347") {
                             log::warn!("TRACING: {}", key_name);
@@ -1543,10 +1609,10 @@ impl BasisCacheEntry {
                                 key.start, key.clean, key.flags, key.descriptor_index,
                             );
                         }*/
-                        if !key.clean && key.flags.valid() {
+                        if key.flags.valid() {
                             if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
                             key.descriptor_vaddr(dict_offset) < next_vpage {
-                                log::debug!("merging in key {}", key_name);
+                                log::trace!("merging in key {}", key_name);
                                 // key is within the current page, add it to the target list
                                 let mut dk_entry = DictKeyEntry::default();
                                 let kn = KeyName::try_from_str(key_name).or(Err(Error::new(ErrorKind::InvalidInput, "key name invalid: invalid utf-8 or length")))?;
@@ -1566,7 +1632,18 @@ impl BasisCacheEntry {
                             } else {
                                 log::debug!("proposed key fell outside of our vpage: {} vpage{:x}/vaddr{:x}", key_name, cur_vpage.get(), key.descriptor_vaddr(dict_offset));
                             }
+                        } else {
+                            if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
+                            key.descriptor_vaddr(dict_offset) < next_vpage {
+                                dk_vpage.elements[key.descriptor_index.get() as usize % DK_PER_VPAGE] = None;
+                                invalidate.push(key_name.to_string());
+                            }
                         }
+                    }
+                    // remove the invalidated keys from the cache
+                    for key in invalidate {
+                        log::debug!("removing invalidated key: {}", key);
+                        dict.keys.remove(&key);
                     }
 
                     // 3. merge the vpage modifications into the disk
@@ -1584,9 +1661,10 @@ impl BasisCacheEntry {
                     };
                     for (index, stride) in page[size_of::<JournalType>()..].chunks_mut(DK_STRIDE).enumerate() {
                         if let Some(elem) = dk_vpage.elements[index] {
-                            for (&src, dst) in elem.data.iter().zip(stride.iter_mut()) {
-                                *dst = src;
-                            }
+                            stride.copy_from_slice(&elem.data);
+                        } else {
+                            // actively zero-ize fields that are `None` so they don't decrypt to valid records later on.
+                            stride.copy_from_slice(&[0u8; DK_STRIDE]);
                         }
                     }
                     // generate nonce and write out
@@ -1596,20 +1674,23 @@ impl BasisCacheEntry {
                     // 4. Check for dirty keys, if there are still some, update vpage_num to target them; otherwise
                     // exit the loop
                     let mut found_next = false;
-                    for key in dict.keys.values() {
-                        if !key.clean && key.flags.valid() {
+                    for (name, key) in dict.keys.iter() {
+                        if !key.clean && key.flags.valid() || !key.flags.valid() {
                             found_next = true;
                             // note: we don't care *which* vpage we do next -- so we just break after finding the first one
                             vpage_num = key.descriptor_vpage_num();
+                            log::debug!("sync searching again because key {} was valid {} clean {}", name, key.clean, key.flags.valid());
+                            sync_count += 1;
                             break;
                         }
                     }
                     if !found_next {
-                        log::debug!("breaking after syncing {} keys", sync_count);
+                        log::debug!("breaking after syncing {} iterations", sync_count);
                         break;
                     }
                     sync_count += 1;
                 }
+
                 log::debug!("done syncing dict");
                 dict.clean = true;
             }
@@ -1685,7 +1766,8 @@ impl BasisCacheEntry {
         dict_found
     }
 
-    pub(crate) fn sync(&mut self, hw: &mut PddbOs) -> Result<()> {
+    pub(crate) fn sync(&mut self, hw: &mut PddbOs, cleanup: bool) -> Result<()> {
+        self.dicts.retain(|_name, entry| entry.flags.valid()); // prune any invalid dictionary entries, as they have been deleted
         // this is a bit awkward, but we have to make a copy of all the dictionary names
         // because otherwise we borrow self as immutable to enumerate the names, and then
         // we borrow it as mutable to do the sync. This deep-copy works around the issue.
@@ -1696,7 +1778,19 @@ impl BasisCacheEntry {
             }
         }
         for dict in dictnames {
-            match self.dict_sync(hw, &dict) {
+            if let Some(dict_entry) = self.dicts.get_mut(&dict) {
+                if !dict_entry.sync_small_pool(hw, &mut self.v2p_map, &self.cipher) {
+                    return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of memory syncing small pool"));
+                }
+                dict_entry.sync_large_pool();
+                if cleanup {
+                    // this will do a full-scan through all the key entries to discover any extra
+                    // ones that are "way out" in the storage space that could have been lost
+                    dict_entry.fill(hw, &mut self.v2p_map, &self.cipher, cleanup);
+                }
+            }
+
+            match self.dict_sync(hw, &dict, cleanup) {
                 Ok(_) => {},
                 Err(e) => {
                     log::error!("Error encountered syncing dict {}: {:?}", dict, e);

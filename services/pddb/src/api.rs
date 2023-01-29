@@ -242,6 +242,12 @@ pub(crate) enum Opcode {
     /// Basis monitoring - reports when the basis order has changed
     BasisMonitor = 54,
 
+    /// Bulk delete of keys within a dictionary; if non-existent keys are specified, no error is returned.
+    DictBulkDelete = 55,
+
+    /// Prune the cache. Used mainly for diagnostics.
+    Prune = 56,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }
@@ -305,6 +311,10 @@ pub struct PddbDictRequest {
     pub code: PddbRequestCode,
     /// used only to specify a readback size limit for bulk-return requests
     pub bulk_limit: Option<usize>,
+    /// return value for key_count metadata (informative only)
+    pub key_count: u32,
+    /// return value for found_key_count metadata (informative only)
+    pub found_key_count: u32,
 }
 
 /// A structure for requesting a token to access a particular key/value pair
@@ -332,9 +342,20 @@ pub (crate) struct PddbKeyList {
     pub end: bool,
 }
 
+/// A structure for bulk deletion of keys
+pub(crate) const MAX_PDDB_DELETE_LEN: usize = 3800; // approximate limit, might be a little higher if we cared to calculate it out
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub (crate) struct PddbDeleteList {
+    pub basis_specified: bool,
+    pub basis: xous_ipc::String::<BASIS_NAME_LEN>,
+    pub dict: xous_ipc::String::<DICT_NAME_LEN>,
+    pub data: [u8; MAX_PDDB_DELETE_LEN],
+    pub retcode: PddbRetcode,
+}
+
 /// Return codes for Read/Write API calls to the main server
 #[repr(u8)]
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
 pub(crate) enum PddbRetcode {
     Uninit = 0,
     Ok = 1,
@@ -376,9 +397,10 @@ pub struct PddbKeyRecord {
     pub age: usize,
     pub index: NonZeroU32,
     pub basis: String,
-    /// If this is None, it means that the data read exceeded the bulk read limit
-    /// and the record must be explicitly re-read with a non-bulk call to fetch its data.
-    /// If the key is actually zero-length, a zero-length Some(Vec) is returned.
+    /// If this is None, it means either that the data read exceeded the bulk read limit
+    /// and the record must be explicitly re-read with a non-bulk call to fetch its data,
+    /// or the key has zero length. Check the `len` field to differentiate the two.
+    /// (Turns out that `rkyv` crashes when deserializing a zero-length Vec)
     pub data: Option<Vec::<u8>>,
 }
 
@@ -536,6 +558,7 @@ pub enum DebugRequest {
     Dump = 0,
     Remount = 1,
     Prune = 2,
+    SetDebug = 3,
 }
 
 #[cfg(test)]

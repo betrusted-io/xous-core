@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC
+// Copyright 2019-2022 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,19 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{ChannelID, CtapHid, HidPacket, Message, ProcessedPacket};
+use super::{
+    ChannelID, CtapHid, CtapHidCommand, CtapHidError, HidPacket, Message, ProcessedPacket,
+};
+use crate::api::customization::Customization;
+use std::time::Instant;
+use crate::env::Env;
 use std::vec::Vec;
 use core::mem::swap;
-use crate::shims::Timestamp;
 
-// A structure to assemble CTAPHID commands from a series of incoming USB HID packets.
+/// A structure to assemble CTAPHID commands from a series of incoming USB HID packets.
 pub struct MessageAssembler {
     // Whether this is waiting to receive an initialization packet.
     idle: bool,
     // Current channel ID.
     cid: ChannelID,
     // Timestamp of the last packet received on the current channel.
-    last_timestamp: Timestamp<i64>,
+    last_timestamp: Instant,
     // Current command.
     cmd: u8,
     // Sequence number expected for the next packet.
@@ -35,26 +39,12 @@ pub struct MessageAssembler {
     payload: Vec<u8>,
 }
 
-#[derive(PartialEq, Debug)]
-pub enum Error {
-    // Expected a continuation packet on a specific channel, got a packet on another channel.
-    UnexpectedChannel,
-    // Expected a continuation packet, got an init packet.
-    UnexpectedInit,
-    // Expected an init packet, got a continuation packet.
-    UnexpectedContinuation,
-    // Expected a continuation packet with a specific sequence number, got another sequence number.
-    UnexpectedSeq,
-    // This packet arrived after a timeout.
-    Timeout,
-}
-
 impl MessageAssembler {
     pub fn new() -> MessageAssembler {
         MessageAssembler {
             idle: true,
             cid: [0, 0, 0, 0],
-            last_timestamp: Timestamp::from_ms(0),
+            last_timestamp: Instant::now(),
             cmd: 0,
             seq: 0,
             remaining_payload_len: 0,
@@ -64,10 +54,10 @@ impl MessageAssembler {
 
     // Resets the message assembler to the idle state.
     // The caller can reset the assembler for example due to a timeout.
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         self.idle = true;
         self.cid = [0, 0, 0, 0];
-        self.last_timestamp = Timestamp::from_ms(0);
+        self.last_timestamp = Instant::now();
         self.cmd = 0;
         self.seq = 0;
         self.remaining_payload_len = 0;
@@ -83,16 +73,15 @@ impl MessageAssembler {
     // packet was received.
     pub fn parse_packet(
         &mut self,
+        env: &mut impl Env,
         packet: &HidPacket,
-        timestamp: Timestamp<i64>,
-    ) -> Result<Option<Message>, (ChannelID, Error)> {
+        timestamp: Instant,
+    ) -> Result<Option<Message>, (ChannelID, CtapHidError)> {
         // TODO: Support non-full-speed devices (i.e. packet len != 64)? This isn't recommended by
         // section 8.8.1
-        let (cid, processed_packet) = CtapHid::process_single_packet(&packet);
-        log::trace!("parsed cid: {:x?}", cid);
+        let (cid, processed_packet) = CtapHid::process_single_packet(packet);
 
-        if !self.idle && timestamp - self.last_timestamp >= CtapHid::TIMEOUT_DURATION {
-            log::debug!("parse timeout");
+        if !self.idle && timestamp >= self.last_timestamp + CtapHid::TIMEOUT_DURATION {
             // The current channel timed out.
             // Save the channel ID and reset the state.
             let current_cid = self.cid;
@@ -100,8 +89,8 @@ impl MessageAssembler {
 
             // If the packet is from the timed-out channel, send back a timeout error.
             // Otherwise, proceed with processing the packet.
-            if *cid == current_cid {
-                return Err((*cid, Error::Timeout));
+            if cid == current_cid {
+                return Err((cid, CtapHidError::MsgTimeout));
             }
         }
 
@@ -109,14 +98,12 @@ impl MessageAssembler {
             // Expecting an initialization packet.
             match processed_packet {
                 ProcessedPacket::InitPacket { cmd, len, data } => {
-                    log::trace!("init packet cmd: {:x}", cmd);
-                    Ok(self.accept_init_packet(*cid, cmd, len, data, timestamp))
+                    self.parse_init_packet(env, cid, cmd, len, data, timestamp)
                 }
                 ProcessedPacket::ContinuationPacket { .. } => {
-                    log::debug!("spurious continuation");
                     // CTAP specification (version 20190130) section 8.1.5.4
                     // Spurious continuation packets will be ignored.
-                    Err((*cid, Error::UnexpectedContinuation))
+                    Err((cid, CtapHidError::UnexpectedContinuation))
                 }
             }
         } else {
@@ -124,28 +111,25 @@ impl MessageAssembler {
 
             // CTAP specification (version 20190130) section 8.1.5.1
             // Reject packets from other channels.
-            if *cid != self.cid {
-                log::debug!("unexpected channel");
-                return Err((*cid, Error::UnexpectedChannel));
+            if cid != self.cid {
+                return Err((cid, CtapHidError::ChannelBusy));
             }
 
             match processed_packet {
                 // Unexpected initialization packet.
                 ProcessedPacket::InitPacket { cmd, len, data } => {
-                    log::debug!("unexpected init");
                     self.reset();
-                    if cmd == CtapHid::COMMAND_INIT {
-                        Ok(self.accept_init_packet(*cid, cmd, len, data, timestamp))
+                    if cmd == CtapHidCommand::Init as u8 {
+                        self.parse_init_packet(env, cid, cmd, len, data, timestamp)
                     } else {
-                        Err((*cid, Error::UnexpectedInit))
+                        Err((cid, CtapHidError::InvalidSeq))
                     }
                 }
                 ProcessedPacket::ContinuationPacket { seq, data } => {
-                    log::trace!("continuation");
                     if seq != self.seq {
                         // Reject packets with the wrong sequence number.
                         self.reset();
-                        Err((*cid, Error::UnexpectedSeq))
+                        Err((cid, CtapHidError::InvalidSeq))
                     } else {
                         // Update the last timestamp.
                         self.last_timestamp = timestamp;
@@ -158,24 +142,26 @@ impl MessageAssembler {
         }
     }
 
-    fn accept_init_packet(
+    fn parse_init_packet(
         &mut self,
+        env: &mut impl Env,
         cid: ChannelID,
         cmd: u8,
         len: usize,
         data: &[u8],
-        timestamp: Timestamp<i64>,
-    ) -> Option<Message> {
-        // TODO: Should invalid commands/payload lengths be rejected early, i.e. as soon as the
-        // initialization packet is received, or should we build a message and then catch the
-        // error?
-        // The specification (version 20190130) isn't clear on this point.
+        timestamp: Instant,
+    ) -> Result<Option<Message>, (ChannelID, CtapHidError)> {
+        // Reject invalid lengths early to reduce the risk of running out of memory.
+        // TODO: also reject invalid commands early?
+        if len > env.customization().max_msg_size() {
+            return Err((cid, CtapHidError::InvalidLen));
+        }
         self.cid = cid;
         self.last_timestamp = timestamp;
         self.cmd = cmd;
         self.seq = 0;
         self.remaining_payload_len = len;
-        self.append_payload(data)
+        Ok(self.append_payload(data))
     }
 
     fn append_payload(&mut self, data: &[u8]) -> Option<Message> {
@@ -192,7 +178,7 @@ impl MessageAssembler {
             swap(&mut self.payload, &mut payload);
             Some(Message {
                 cid: self.cid,
-                cmd: self.cmd,
+                cmd: CtapHidCommand::from(self.cmd),
                 payload,
             })
         }
@@ -201,12 +187,11 @@ impl MessageAssembler {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::shims::Duration;
+    use crate::ctap::hid::CtapHid;
+    use crate::env::test::TestEnv;
+    use std::time::Duration;
 
-    // Except for tests that exercise timeouts, all packets are synchronized at the same dummy
-    // timestamp.
-    const DUMMY_TIMESTAMP: Timestamp<i64> = Timestamp::from_ms(0);
+    use super::*;
 
     fn byte_extend(bytes: &[u8], padding: u8) -> HidPacket {
         let len = bytes.len();
@@ -225,15 +210,19 @@ mod test {
 
     #[test]
     fn test_empty_payload() {
+        let mut env = TestEnv::new();
         let mut assembler = MessageAssembler::new();
+        // Except for tests that exercise timeouts, all packets are synchronized at the same dummy
+        // timestamp.
         assert_eq!(
             assembler.parse_packet(
-                &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x80]),
-                DUMMY_TIMESTAMP
+                &mut env,
+                &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x90]),
+                Instant::new(0)
             ),
             Ok(Some(Message {
                 cid: [0x12, 0x34, 0x56, 0x78],
-                cmd: 0x00,
+                cmd: CtapHidCommand::Cbor,
                 payload: vec![]
             }))
         );
@@ -241,15 +230,17 @@ mod test {
 
     #[test]
     fn test_one_packet() {
+        let mut env = TestEnv::new();
         let mut assembler = MessageAssembler::new();
         assert_eq!(
             assembler.parse_packet(
-                &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x80, 0x00, 0x10]),
-                DUMMY_TIMESTAMP
+                &mut env,
+                &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x90, 0x00, 0x10]),
+                Instant::new(0)
             ),
             Ok(Some(Message {
                 cid: [0x12, 0x34, 0x56, 0x78],
-                cmd: 0x00,
+                cmd: CtapHidCommand::Cbor,
                 payload: vec![0x00; 0x10]
             }))
         );
@@ -257,18 +248,20 @@ mod test {
 
     #[test]
     fn test_nonzero_padding() {
+        let mut env = TestEnv::new();
         // CTAP specification (version 20190130) section 8.1.4
         // It is written that "Unused bytes SHOULD be set to zero", so we test that non-zero
         // padding is accepted as well.
         let mut assembler = MessageAssembler::new();
         assert_eq!(
             assembler.parse_packet(
-                &byte_extend(&[0x12, 0x34, 0x56, 0x78, 0x80, 0x00, 0x10], 0xFF),
-                DUMMY_TIMESTAMP
+                &mut env,
+                &byte_extend(&[0x12, 0x34, 0x56, 0x78, 0x90, 0x00, 0x10], 0xFF),
+                Instant::new(0)
             ),
             Ok(Some(Message {
                 cid: [0x12, 0x34, 0x56, 0x78],
-                cmd: 0x00,
+                cmd: CtapHidCommand::Cbor,
                 payload: vec![0xFF; 0x10]
             }))
         );
@@ -276,22 +269,25 @@ mod test {
 
     #[test]
     fn test_two_packets() {
+        let mut env = TestEnv::new();
         let mut assembler = MessageAssembler::new();
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x81, 0x00, 0x40]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(None)
         );
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x00]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(Some(Message {
                 cid: [0x12, 0x34, 0x56, 0x78],
-                cmd: 0x01,
+                cmd: CtapHidCommand::Ping,
                 payload: vec![0x00; 0x40]
             }))
         );
@@ -299,29 +295,33 @@ mod test {
 
     #[test]
     fn test_three_packets() {
+        let mut env = TestEnv::new();
         let mut assembler = MessageAssembler::new();
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x81, 0x00, 0x80]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(None)
         );
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x00]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(None)
         );
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x01]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(Some(Message {
                 cid: [0x12, 0x34, 0x56, 0x78],
-                cmd: 0x01,
+                cmd: CtapHidCommand::Ping,
                 payload: vec![0x00; 0x80]
             }))
         );
@@ -329,31 +329,35 @@ mod test {
 
     #[test]
     fn test_max_packets() {
+        let mut env = TestEnv::new();
         let mut assembler = MessageAssembler::new();
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x81, 0x1D, 0xB9]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(None)
         );
         for seq in 0..0x7F {
             assert_eq!(
                 assembler.parse_packet(
+                    &mut env,
                     &zero_extend(&[0x12, 0x34, 0x56, 0x78, seq]),
-                    DUMMY_TIMESTAMP
+                    Instant::new(0)
                 ),
                 Ok(None)
             );
         }
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x7F]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(Some(Message {
                 cid: [0x12, 0x34, 0x56, 0x78],
-                cmd: 0x01,
+                cmd: CtapHidCommand::Ping,
                 payload: vec![0x00; 0x1DB9]
             }))
         );
@@ -361,31 +365,38 @@ mod test {
 
     #[test]
     fn test_multiple_messages() {
+        let mut env = TestEnv::new();
         // Check that after yielding a message, the assembler is ready to process new messages.
         let mut assembler = MessageAssembler::new();
         for i in 0..10 {
             // Introduce some variability in the messages.
-            let cmd = 2 * i;
+            let cmd = CtapHidCommand::from(i + 1);
             let byte = 3 * i;
 
             assert_eq!(
                 assembler.parse_packet(
-                    &byte_extend(&[0x12, 0x34, 0x56, 0x78, 0x80 | cmd, 0x00, 0x80], byte),
-                    DUMMY_TIMESTAMP
+                    &mut env,
+                    &byte_extend(
+                        &[0x12, 0x34, 0x56, 0x78, 0x80 | cmd as u8, 0x00, 0x80],
+                        byte
+                    ),
+                    Instant::new(0)
                 ),
                 Ok(None)
             );
             assert_eq!(
                 assembler.parse_packet(
+                    &mut env,
                     &byte_extend(&[0x12, 0x34, 0x56, 0x78, 0x00], byte),
-                    DUMMY_TIMESTAMP
+                    Instant::new(0)
                 ),
                 Ok(None)
             );
             assert_eq!(
                 assembler.parse_packet(
+                    &mut env,
                     &byte_extend(&[0x12, 0x34, 0x56, 0x78, 0x01], byte),
-                    DUMMY_TIMESTAMP
+                    Instant::new(0)
                 ),
                 Ok(Some(Message {
                     cid: [0x12, 0x34, 0x56, 0x78],
@@ -398,32 +409,36 @@ mod test {
 
     #[test]
     fn test_channel_switch() {
+        let mut env = TestEnv::new();
         // Check that the assembler can process messages from multiple channels, sequentially.
         let mut assembler = MessageAssembler::new();
         for i in 0..10 {
             // Introduce some variability in the messages.
             let cid = 0x78 + i;
-            let cmd = 2 * i;
+            let cmd = CtapHidCommand::from(i + 1);
             let byte = 3 * i;
 
             assert_eq!(
                 assembler.parse_packet(
-                    &byte_extend(&[0x12, 0x34, 0x56, cid, 0x80 | cmd, 0x00, 0x80], byte),
-                    DUMMY_TIMESTAMP
+                    &mut env,
+                    &byte_extend(&[0x12, 0x34, 0x56, cid, 0x80 | cmd as u8, 0x00, 0x80], byte),
+                    Instant::new(0)
                 ),
                 Ok(None)
             );
             assert_eq!(
                 assembler.parse_packet(
+                    &mut env,
                     &byte_extend(&[0x12, 0x34, 0x56, cid, 0x00], byte),
-                    DUMMY_TIMESTAMP
+                    Instant::new(0)
                 ),
                 Ok(None)
             );
             assert_eq!(
                 assembler.parse_packet(
+                    &mut env,
                     &byte_extend(&[0x12, 0x34, 0x56, cid, 0x01], byte),
-                    DUMMY_TIMESTAMP
+                    Instant::new(0)
                 ),
                 Ok(Some(Message {
                     cid: [0x12, 0x34, 0x56, cid],
@@ -436,36 +451,41 @@ mod test {
 
     #[test]
     fn test_unexpected_channel() {
+        let mut env = TestEnv::new();
         let mut assembler = MessageAssembler::new();
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x81, 0x00, 0x40]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(None)
         );
 
         // Check that many sorts of packets on another channel are ignored.
-        for cmd in 0..=0xFF {
+        for i in 0..=0xFF {
+            let cmd = CtapHidCommand::from(i);
             for byte in 0..=0xFF {
                 assert_eq!(
                     assembler.parse_packet(
-                        &byte_extend(&[0x12, 0x34, 0x56, 0x9A, cmd, 0x00], byte),
-                        DUMMY_TIMESTAMP
+                        &mut env,
+                        &byte_extend(&[0x12, 0x34, 0x56, 0x9A, cmd as u8, 0x00], byte),
+                        Instant::new(0)
                     ),
-                    Err(([0x12, 0x34, 0x56, 0x9A], Error::UnexpectedChannel))
+                    Err(([0x12, 0x34, 0x56, 0x9A], CtapHidError::ChannelBusy))
                 );
             }
         }
 
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x00]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(Some(Message {
                 cid: [0x12, 0x34, 0x56, 0x78],
-                cmd: 0x01,
+                cmd: CtapHidCommand::Ping,
                 payload: vec![0x00; 0x40]
             }))
         );
@@ -473,6 +493,7 @@ mod test {
 
     #[test]
     fn test_spurious_continuation_packets() {
+        let mut env = TestEnv::new();
         // CTAP specification (version 20190130) section 8.1.5.4
         // Spurious continuation packets appearing without a prior initialization packet will be
         // ignored.
@@ -482,12 +503,13 @@ mod test {
             let byte = 2 * i;
             assert_eq!(
                 assembler.parse_packet(
-                    &byte_extend(&[0x12, 0x34, 0x56, 0x78, 0x80, 0x00, 0x10], byte),
-                    DUMMY_TIMESTAMP
+                    &mut env,
+                    &byte_extend(&[0x12, 0x34, 0x56, 0x78, 0x81, 0x00, 0x10], byte),
+                    Instant::new(0)
                 ),
                 Ok(Some(Message {
                     cid: [0x12, 0x34, 0x56, 0x78],
-                    cmd: 0x00,
+                    cmd: CtapHidCommand::Ping,
                     payload: vec![byte; 0x10]
                 }))
             );
@@ -496,98 +518,121 @@ mod test {
             let seq = i;
             assert_eq!(
                 assembler.parse_packet(
+                    &mut env,
                     &zero_extend(&[0x12, 0x34, 0x56, 0x78, seq]),
-                    DUMMY_TIMESTAMP
+                    Instant::new(0)
                 ),
-                Err(([0x12, 0x34, 0x56, 0x78], Error::UnexpectedContinuation))
+                Err((
+                    [0x12, 0x34, 0x56, 0x78],
+                    CtapHidError::UnexpectedContinuation
+                ))
             );
         }
     }
 
     #[test]
     fn test_unexpected_init() {
+        let mut env = TestEnv::new();
         let mut assembler = MessageAssembler::new();
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x81, 0x00, 0x40]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(None)
         );
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x80]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
-            Err(([0x12, 0x34, 0x56, 0x78], Error::UnexpectedInit))
+            Err(([0x12, 0x34, 0x56, 0x78], CtapHidError::InvalidSeq))
         );
     }
 
     #[test]
     fn test_unexpected_seq() {
+        let mut env = TestEnv::new();
         let mut assembler = MessageAssembler::new();
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x81, 0x00, 0x40]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(None)
         );
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x01]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
-            Err(([0x12, 0x34, 0x56, 0x78], Error::UnexpectedSeq))
+            Err(([0x12, 0x34, 0x56, 0x78], CtapHidError::InvalidSeq))
         );
     }
 
     #[test]
     fn test_timed_out_packet() {
+        let mut env = TestEnv::new();
         let mut assembler = MessageAssembler::new();
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x81, 0x00, 0x40]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(None)
         );
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x00]),
-                DUMMY_TIMESTAMP + CtapHid::TIMEOUT_DURATION
+                Instant::new(0) + CtapHid::TIMEOUT_DURATION
             ),
-            Err(([0x12, 0x34, 0x56, 0x78], Error::Timeout))
+            Err(([0x12, 0x34, 0x56, 0x78], CtapHidError::MsgTimeout))
         );
     }
 
     #[test]
     fn test_just_in_time_packets() {
-        let mut timestamp = DUMMY_TIMESTAMP;
+        let mut env = TestEnv::new();
+        let mut timestamp: Instant = Instant::new(0);
         // Delay between each packet is just below the threshold.
-        let delay = CtapHid::TIMEOUT_DURATION - Duration::from_ms(1);
+        let delay = CtapHid::TIMEOUT_DURATION - Duration::from_millis(1_u32);
 
         let mut assembler = MessageAssembler::new();
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x81, 0x1D, 0xB9]),
                 timestamp
             ),
             Ok(None)
         );
         for seq in 0..0x7F {
-            timestamp += delay;
+            timestamp = timestamp + delay;
             assert_eq!(
-                assembler.parse_packet(&zero_extend(&[0x12, 0x34, 0x56, 0x78, seq]), timestamp),
+                assembler.parse_packet(
+                    &mut env,
+                    &zero_extend(&[0x12, 0x34, 0x56, 0x78, seq]),
+                    timestamp
+                ),
                 Ok(None)
             );
         }
-        timestamp += delay;
+        timestamp = timestamp + delay;
         assert_eq!(
-            assembler.parse_packet(&zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x7F]), timestamp),
+            assembler.parse_packet(
+                &mut env,
+                &zero_extend(&[0x12, 0x34, 0x56, 0x78, 0x7F]),
+                timestamp
+            ),
             Ok(Some(Message {
                 cid: [0x12, 0x34, 0x56, 0x78],
-                cmd: 0x01,
+                cmd: CtapHidCommand::Ping,
                 payload: vec![0x00; 0x1DB9]
             }))
         );
@@ -595,27 +640,30 @@ mod test {
 
     #[test]
     fn test_init_sync() {
+        let mut env = TestEnv::new();
         let mut assembler = MessageAssembler::new();
         // Ping packet with a length longer than one packet.
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &byte_extend(&[0x12, 0x34, 0x56, 0x78, 0x81, 0x02, 0x00], 0x51),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(None)
         );
         // Init packet on the same channel.
         assert_eq!(
             assembler.parse_packet(
+                &mut env,
                 &zero_extend(&[
                     0x12, 0x34, 0x56, 0x78, 0x86, 0x00, 0x08, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC,
                     0xDE, 0xF0
                 ]),
-                DUMMY_TIMESTAMP
+                Instant::new(0)
             ),
             Ok(Some(Message {
                 cid: [0x12, 0x34, 0x56, 0x78],
-                cmd: 0x06,
+                cmd: CtapHidCommand::Init,
                 payload: vec![0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0]
             }))
         );

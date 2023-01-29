@@ -1117,6 +1117,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519-compact"
+version = "1.0.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e18997d4604542d0736fae2c5ad6de987f0a50530cbcc14a7ce5a685328a252d"
+
+[[package]]
 name = "ed25519-dalek"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2240,10 +2246,11 @@ dependencies = [
 
 [[package]]
 name = "mtxcli"
-version = "0.1.0"
+version = "0.7.0"
 dependencies = [
  "codec",
  "com",
+ "com_rs-ref",
  "content-plugin-api",
  "gam",
  "graphics-server",
@@ -2252,10 +2259,13 @@ dependencies = [
  "llio",
  "locales",
  "log",
+ "net",
  "num-derive",
  "num-traits",
+ "pddb",
  "percent-encoding",
  "serde",
+ "status",
  "trng",
  "ureq",
  "xous 0.9.31 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2644,6 +2654,15 @@ dependencies = [
  "log",
  "utralib",
  "xous 0.9.31 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "persistent_store"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "pddb",
+ "tempfile",
 ]
 
 [[package]]
@@ -4418,6 +4437,7 @@ dependencies = [
  "crypto-mac",
  "ctap-crypto",
  "digest 0.9.0",
+ "ed25519-compact",
  "enum-iterator",
  "gam",
  "graphics-server",
@@ -4433,6 +4453,8 @@ dependencies = [
  "passwords",
  "pddb",
  "perflib",
+ "persistent_store",
+ "rand 0.8.5",
  "rand_core 0.6.3",
  "random-pick",
  "rkyv",

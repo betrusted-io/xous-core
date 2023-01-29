@@ -99,6 +99,9 @@ pub struct Pddb {
     /// like this are probably OK.
     keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>>,
     trng: trng::Trng,
+    /// These are temporary fields only to be used by the consistency check feature.
+    key_count: RefCell<u32>,
+    found_key_count: RefCell<u32>,
 }
 impl Pddb {
     pub fn new() -> Self {
@@ -112,6 +115,9 @@ impl Pddb {
             cb_handle: RefCell::new(None),
             keys,
             trng: trng::Trng::new(&xns).unwrap(),
+            /// These are record the result of the most recent call to list_keys()
+            key_count: RefCell::new(0),
+            found_key_count: RefCell::new(0),
         }
     }
     fn ensure_async_responder(&self) {
@@ -217,7 +223,7 @@ impl Pddb {
         }
     }
     /// This is a non-blocking message that permanently halts the PDDB server by wedging it in an infinite loop.
-    /// It is meant to be called prior to system shutdows or backups, to ensure that other auto-mounting procesess
+    /// It is meant to be called prior to system shutdows or backups, to ensure that other auto-mounting processes
     /// don't undo the shutdown procedure because of an ill-timed "cron" job (the system doesn't literally have
     /// a cron daemon, but it does have the notion of long-running background jobs that might do something like
     /// trigger an NTP update, which would then try to write the updated time to the PDDB).
@@ -527,6 +533,56 @@ impl Pddb {
             _ => Err(Error::new(ErrorKind::Other, "Internal error"))
         }
     }
+    /// deletes a list of keys from a dictionary. The list of keys must be less than MAX_PDDB_DELETE_LEN characters long.
+    pub fn delete_key_list(&self, dict_name: &str, key_list: Vec::<String>, basis_name: Option<&str>) -> Result<()> {
+        if key_list.len() == 0 {
+            return Ok(())
+        }
+        if dict_name.len() > (DICT_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
+        }
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+        let mut request = PddbDeleteList {
+            basis_specified: basis_name.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+            retcode: PddbRetcode::Uninit,
+            data: [0u8; MAX_PDDB_DELETE_LEN]
+        };
+        let mut index = 0;
+        for keyname in key_list {
+            if keyname.len() > (KEY_NAME_LEN - 1) {
+                return Err(Error::new(ErrorKind::InvalidInput, "one of the key names is too long"));
+            }
+            if keyname.len() + 1 + index < MAX_PDDB_DELETE_LEN {
+                assert!(keyname.len() < u8::MAX as usize); // this should always be true due to other limits in the PDDB
+                request.data[index] = keyname.len() as u8;
+                index += 1;
+                request.data[index..index + keyname.len()].copy_from_slice(keyname.as_bytes());
+                index += keyname.len();
+            } else {
+                return Err(Error::new(ErrorKind::OutOfMemory, "Key list total size exceeds MAX_PDDBKLISTLEN"));
+            }
+        }
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::DictBulkDelete.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        let response = buf.as_flat::<PddbKeyList, _>().unwrap();
+        match response.retcode {
+            ArchivedPddbRetcode::Ok => Ok(()),
+            ArchivedPddbRetcode::AccessDenied => Err(Error::new(ErrorKind::NotFound, "Dictionary not found, or inaccessible")),
+            ArchivedPddbRetcode::Uninit => Err(Error::new(ErrorKind::ConnectionAborted, "Return code not set processing bulk delete, server aborted?")),
+            _ => Err(Error::new(ErrorKind::Other, "Internal Error handling bulk delete list")),
+        }
+    }
     /// deletes the entire dictionary
     pub fn delete_dict(&self, dict_name: &str, basis_name: Option<&str>) -> Result<()> {
         if dict_name.len() > (DICT_NAME_LEN - 1) {
@@ -590,6 +646,32 @@ impl Pddb {
             Err(Error::new(ErrorKind::Other, "Xous internal error"))
         }
     }
+    /// cleans up inconsistencies in the PDDB. fsck-like.
+    pub fn sync_cleanup(&self) -> Result<()> {
+        let response = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::WriteKeyFlush.to_usize().unwrap(), 1, 0, 0, 0)
+        ).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        if let xous::Result::Scalar1(rcode) = response {
+            match FromPrimitive::from_u8(rcode as u8) {
+                Some(PddbRetcode::Ok) => Ok(()),
+                Some(PddbRetcode::BasisLost) => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
+                Some(PddbRetcode::DiskFull) => Err(Error::new(ErrorKind::OutOfMemory, "Out of disk space, some data lost on sync")),
+                _ => Err(Error::new(ErrorKind::Interrupted, "Flush failed for unspecified reasons")),
+            }
+        } else {
+            Err(Error::new(ErrorKind::Other, "Xous internal error"))
+        }
+    }
+
+    /// Returns a tuple of (recorded, found) keys. If record != found then the dictionary is inconsistent.
+    /// Only valid if the most recent call to the pddb object was list_keys() (as called below)
+    /// This is meant to be used only for certain maintenance routines, so the ergonomics are crap on it.
+    ///
+    /// SAFETY: caller must guarantee that list_keys() was called prior to calling this
+    pub unsafe fn was_listed_dict_consistent(&self) -> (u32, u32) {
+        (*self.key_count.borrow(), *self.found_key_count.borrow())
+    }
 
     pub fn list_keys(&self, dict_name: &str, basis_name: Option<&str>) -> Result<Vec::<String>> {
         if dict_name.len() > (DICT_NAME_LEN - 1) {
@@ -614,6 +696,8 @@ impl Pddb {
             code: PddbRequestCode::Uninit,
             token,
             bulk_limit: None,
+            key_count: 0,
+            found_key_count: 0,
         };
         let mut buf = Buffer::into_buf(request)
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
@@ -628,6 +712,8 @@ impl Pddb {
             PddbRequestCode::Uninit => return Err(Error::new(ErrorKind::ConnectionAborted, "Return code not set getting key count, server aborted?")),
             _ => return Err(Error::new(ErrorKind::Other, "Internal error generating key count")),
         };
+        *self.key_count.borrow_mut() = response.key_count;
+        *self.found_key_count.borrow_mut() = response.found_key_count;
         // v2 key listing packs the key list into a larger [u8] field that should cut down on the number of messages
         // required to list a large dictionary by about a factor of 50.
         let mut key_list = Vec::<String>::new();
@@ -699,6 +785,8 @@ impl Pddb {
             code: PddbRequestCode::Uninit,
             token,
             bulk_limit: None,
+            key_count: 0,
+            found_key_count: 0,
         };
         let mut buf = Buffer::into_buf(request)
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
@@ -724,6 +812,8 @@ impl Pddb {
                 code: PddbRequestCode::Uninit,
                 token,
                 bulk_limit: None,
+                key_count: 0,
+                found_key_count: 0,
             };
             let mut buf = Buffer::into_buf(request)
                 .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
@@ -766,6 +856,13 @@ impl Pddb {
             Message::new_blocking_scalar(Opcode::FlushSpaceUpdate.to_usize().unwrap(), 0, 0, 0, 0)
         ).expect("couldn't send FlushSpaceUpdate");
     }
+    /// Manually prune the PDDB cache.
+    /// Mostly provided for force-triggering for testing; normally this is done automatically
+    pub fn manual_prune(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::Prune.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send FlushSpaceUpdate");
+    }
     /// Rekey the PDDB. This can be a very long-running blocking operation that will definitely.
     /// interrupt normal user flow.
     pub fn rekey_pddb(&self, op: PddbRekeyOp) -> Result<()> {
@@ -801,7 +898,8 @@ impl Pddb {
 
     /// Retrieve an entire dictionary of data in a single call. Will return data records up to but not
     /// over a total of `size_limit`. Keys that exceed the limit are still enumerated, but their
-    /// data sections are `None`, instead of `Some(Vec::<u8>)`.
+    /// data sections are `None`, instead of `Some(Vec::<u8>)`. Keys that are zero-length are also returned
+    /// with a data section of `None`; check the `len` field of the PddbKeyRecord to determine which is which.
     /// Defaults to a size limit of up to 32k of bulk data returned, if it is not explicitly specified.
     pub fn read_dict(&self, dict: &str, basis: Option<&str>, size_limit: Option<usize>) -> Result<Vec::<PddbKeyRecord>> {
         // about the biggest we can move around in Precursor and not break heap.
@@ -819,14 +917,14 @@ impl Pddb {
 
            The main server then receives this, and if there are no tokens pending for `DictBulkRead`, it allocates
            a 128-bit token for this transaction and records it, locking out any other potential requests.
-           If a token is already allocated, it responds immedaitely with an error code.
+           If a token is already allocated, it responds immediately with an error code.
 
            The main server proceeds to serialize keys out of the dictionary into `PddbKeyRecord` structures.
            It will serialize exactly as many as can fit into the given buffer. In case the data is larger than
            the allocated buffer, the data will always be returned as `None`; in case the data is larger than
            the available space, the serialization stops, and the record is returned.
 
-           Subsequent calls from the client to the main server requries a `PddbDictRequest` structure
+           Subsequent calls from the client to the main server requires a `PddbDictRequest` structure
            to be in the buffer, but only the "token" field is considered. The rest of the fields are disregarded;
            changing the requested dictionary or other parameters has no impact on the call trajectory.
 
@@ -888,6 +986,8 @@ impl Pddb {
             token: [0u32; 4],
             code: PddbRequestCode::BulkRead,
             bulk_limit: Some(size_limit.unwrap_or(DEFAULT_LIMIT)),
+            key_count: 0,
+            found_key_count: 0,
         };
         // main loop
         let mut ret = Vec::new();
@@ -1023,6 +1123,18 @@ impl Pddb {
     pub fn dbg_prune(&self) -> Result<()> {
         let ipc = PddbDangerousDebug {
             request: DebugRequest::Prune,
+            dump_name: xous_ipc::String::new(),
+        };
+        let buf = Buffer::into_buf(ipc)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())
+    }
+    /// Turns on debug spew
+    #[cfg(not(target_os = "xous"))]
+    pub fn dbg_set_debug(&self) -> Result<()> {
+        let ipc = PddbDangerousDebug {
+            request: DebugRequest::SetDebug,
             dump_name: xous_ipc::String::new(),
         };
         let buf = Buffer::into_buf(ipc)

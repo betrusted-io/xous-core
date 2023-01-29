@@ -312,7 +312,12 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - More optimizations to `vault` passwords path. Records are re-used instead of re-allocated if they don't change. This should speedup switching to `vault` passwords by about 2x after the very first time the records are loaded (the first time will take longer because the records have to be built up).
 - Extend watchdog reset time to ~30s from 7s, to enable easier guru meditation reporting.
 - Add USB mass-storage drivers (thanks @gsora for all the help there!). Currently able to emulate a blank USB drive in RAM; more to come soon.
-- Performance fixes to xous scalar and memory messanges. A subtle bug was uncovered and fixed in the way scalar messages were being returned, and memory messages now initialize memory using an unrolled loop that takes better advantage of the 32-bit architecture and cache line size. A corresponding `std` fix to an unnecessary `yield_slice()` inside `dl_malloc` improves `vault` PDDB large-key readout performance by 30%.
+- Performance fixes to xous scalar and memory messages. A subtle bug was uncovered and fixed in the way scalar messages were being returned, and memory messages now initialize memory using an unrolled loop that takes better advantage of the 32-bit architecture and cache line size. A corresponding `std` fix to an unnecessary `yield_slice()` inside `dl_malloc` improves `vault` PDDB large-key readout performance by 30%.
+- Find and fix some edge cases in key deletion.
+  - Keys that were supposed to be deleted were being re-fetched from RAM cache, which leads to them re-appearing in the UX and when one attempts to re-delete the key it triggers a double-free error.
+  - Small pool key packing was incorrectly using an old key offset when repacking keys, leading to data corruption/loss after deletion events
+- `mtxcli` has a message filter and async message updates! (thanks @tmarble)
+- OpenSK FIDO code upgraded to handle FIDO2.1, which means among other things Precursor now supports residential SSH keys (e.g. you can use it with ssh to log in, sign commits, etc.). Upgrading to the latest version will trigger a migration to the new database format. If there is a bug or compatibility issue, don't fear: the previous database is not affected, and you can downgrade to the previous version and continue using your original keys.
 
 ## Roadmap
 - Lots of testing and bug fixes

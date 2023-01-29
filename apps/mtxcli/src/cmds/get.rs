@@ -7,7 +7,7 @@ use locales::t;
 pub struct Get {
 }
 impl Get {
-    pub fn new(_xns: &xous_names::XousNames) -> Self {
+    pub fn new() -> Self {
         Get {
         }
     }
