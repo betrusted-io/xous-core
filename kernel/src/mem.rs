@@ -330,12 +330,12 @@ impl MemoryManager {
                 }
                 xous_kernel::MemoryType::Default => (
                     process_inner.mem_default_base,
-                    process_inner.mem_default_base + 0x1000_0000,
+                    process_inner.mem_default_base + 0x40_0000, // Limit to one superpage
                     process_inner.mem_default_last,
                 ),
                 xous_kernel::MemoryType::Messages => (
                     process_inner.mem_message_base,
-                    process_inner.mem_message_base + 0x1000_0000,
+                    process_inner.mem_message_base + 0x40_0000, // Limit to one superpage
                     process_inner.mem_message_last,
                 ),
             };
