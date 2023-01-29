@@ -465,11 +465,7 @@ fn start_sleep(
     sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
 ) {
     // If there are items in the sleep heap, take the next item that will expire.
-    // TODO: Replace this with `.min()` when it's stabilized:
-    // https://github.com/rust-lang/rust/issues/62924
-    let next_timeout_msec = sleep_heap.iter().min().map(|(msec, _)| *msec);
-    if let Some(msec) = next_timeout_msec {
-        let next_response = sleep_heap.remove(&msec).unwrap();
+    if let Some((_msec, next_response)) = sleep_heap.pop_first() {
         #[cfg(feature = "debug-print")]
         info!(
             "scheduling a response at {} to {} (heap: {:?})",
