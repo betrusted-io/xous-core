@@ -655,41 +655,58 @@ fn main() -> ! {
                 }
             }
             api::Opcode::RecalculateSleep => {
-                // let timeout_queue = timeout_heap.entry(msg.sender.pid()).or_default();
-                if let Some(args) = msg.body.scalar_message() {
-                    // If this is a Timeout message that fired, remove it from the Notification list
-                    let sender = args.arg1;
-                    let request_kind = args.arg2;
-                    let condvar = args.arg3;
-                    let sender_pid = xous::MessageSender::from_usize(sender).pid();
+                if msg.sender.pid().map(|p| p.get()).unwrap_or_default() as u32
+                    != xous::process::id()
+                {
+                    recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
+                    continue;
+                }
 
-                    // If we're being asked to recalculate due to a timeout expiring, drop the sent
-                    // message from the `entries` list.
-                    // the first check confirms that the origin of the RecalculateSleep message is the Ticktimer,
-                    // to prevent third-party servers from issuing the command and thus distorting the sleep
-                    // calculations (since this is a public API, anything could happen).
-                    if (msg.sender.pid().map(|p| p.get()).unwrap_or_default() as u32)
-                        == xous::process::id()
-                        && (request_kind == RequestKind::Timeout as usize)
-                        && (sender > 0)
-                    {
-                        let entries = notify_hash
-                            .entry(sender_pid)
-                            .or_default()
-                            .entry(condvar)
-                            .or_default();
-                        let mut idx = None;
-                        for (i, val) in entries.iter().enumerate() {
-                            if val.to_usize() == sender {
-                                idx = Some(i);
-                                break;
-                            }
+                let Some(args) = msg.body.scalar_message() else {
+                    continue
+                };
+
+                // If this is a Timeout message that fired, remove it from the Notification list
+                let sender = args.arg1;
+                let request_kind = args.arg2;
+                let condvar = args.arg3;
+                let sender_pid = xous::MessageSender::from_usize(sender).pid();
+
+                // If we're being asked to recalculate due to a timeout expiring, drop the sent
+                // message from the `entries` list.
+                if (request_kind == RequestKind::Timeout as usize) && (sender > 0) {
+                    let mut expired_values = 0;
+                    let awaiting = notify_hash
+                        .entry(sender_pid)
+                        .or_default()
+                        .entry(condvar)
+                        .or_default();
+
+                    awaiting.retain(|e| {
+                        if e.to_usize() == sender {
+                            expired_values += 1;
+                            false
+                        } else {
+                            true
                         }
-                        if let Some(idx) = idx {
-                            entries.remove(idx);
+                    });
+
+                    // Remove each entry in the timeout set
+                    for (_msecs, timer_request) in sleep_heap.iter() {
+                        if timer_request.sender.to_usize() == sender {
+                            log::error!("we were just notified of PID {:?}/condvar {:08x} expiring, yet it's still in the sleep heap with sender {:08x}", sender_pid, condvar, timer_request.sender.to_usize());
                         }
-                        // log::trace!("new entries for PID {:?}/condvar {:08x}: {:?}", sender_pid, condvar, notify_hash.get(&sender_pid).unwrap().get(&condvar));
                     }
+
+                    // log::info!(
+                    //     "removed {} entries for PID {:?}/condvar {:08x}, {} to start, {} remain",
+                    //     expired_values,
+                    //     sender_pid,
+                    //     condvar,
+                    //     len_before,
+                    //     awaiting.len(),
+                    // );
+                    // log::trace!("new entries for PID {:?}/condvar {:08x}: {:?}", sender_pid, condvar, notify_hash.get(&sender_pid).unwrap().get(&condvar));
                 }
                 recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
             }
