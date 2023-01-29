@@ -330,11 +330,11 @@ fn return_memory(
             }
             WaitingMessage::ScalarMessage(_pid, _tid) => {
                 println!("WARNING: Tried to wait on a message that was a scalar");
-                return Err(xous_kernel::Error::InternalError);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                println!("WARNING: Tried to wait on a message that didn't exist -- return memory");
+                return Err(xous_kernel::Error::DoubleFree);
             }
         };
         // println!(
@@ -415,23 +415,23 @@ fn return_scalar(
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually forgettingmemory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::MovedMemory => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually moved memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                println!("WARNING ({}:{}): Tried to wait on a message that didn't exist (irq? {}) -- return Scalar1({})", server_pid.get(), server_tid, if in_irq { "yes"} else {"no"}, arg);
+                return Err(xous_kernel::Error::DoubleFree);
             }
         };
 
@@ -486,23 +486,25 @@ fn return_scalar2(
             WaitingMessage::ScalarMessage(pid, tid) => (pid, tid),
             WaitingMessage::ForgetMemory(_) => {
                 println!("WARNING: Tried to wait on a scalar message that was actually forgetting memory");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::MovedMemory => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually moved memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                println!(
+                    "WARNING: Tried to wait on a message that didn't exist -- return scalar 2"
+                );
+                return Err(xous_kernel::Error::DoubleFree);
             }
         };
 
@@ -564,23 +566,25 @@ fn return_scalar5(
             WaitingMessage::ScalarMessage(pid, tid) => (pid, tid),
             WaitingMessage::ForgetMemory(_) => {
                 println!("WARNING: Tried to wait on a scalar message that was actually forgetting memory");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::MovedMemory => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually moved memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                println!(
+                    "WARNING: Tried to wait on a message that didn't exist -- return scalar 5"
+                );
+                return Err(xous_kernel::Error::DoubleFree);
             }
         };
 
@@ -675,7 +679,7 @@ fn reply_and_receive_next(
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually forgetting memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::BorrowedMemory(pid, tid, _server_addr, client_addr, len) => {
                 #[cfg(baremetal)]
@@ -699,11 +703,11 @@ fn reply_and_receive_next(
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually moved memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                println!("WARNING: Tried to wait on a message that didn't exist -- receive and return scalar");
+                return Err(xous_kernel::Error::DoubleFree);
             }
         };
 
