@@ -1048,11 +1048,16 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }),
         SysCall::CreateThread(thread_init) => SystemServices::with_mut(|ss| {
             ss.create_thread(pid, thread_init).map(|new_tid| {
-                if !cfg!(baremetal) {
-                    ss.switch_to_thread(pid, Some(new_tid))
-                        .expect("couldn't activate new thread");
-                }
-                xous_kernel::Result::ThreadID(new_tid)
+                // Immediately switch to the new thread
+                ss.switch_to_thread(pid, Some(new_tid))
+                    .expect("couldn't activate new thread");
+
+                // Set the return value of the existing thread to be the new thread ID
+                ss.set_thread_result(pid, tid, xous_kernel::Result::ThreadID(new_tid))
+                    .expect("couldn't set new thread ID");
+
+                // Return `ResumeProcess` since we're switching threads
+                xous_kernel::Result::ResumeProcess
             })
         }),
         SysCall::CreateProcess(process_init) => SystemServices::with_mut(|ss| {
