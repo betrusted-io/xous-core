@@ -1145,7 +1145,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }),
         SysCall::JoinThread(other_tid) => {
             SystemServices::with_mut(|ss| ss.join_thread(pid, tid, other_tid)).map(|ret| {
-                unsafe { SWITCHTO_CALLER = None };
+                // Successfully joining a thread causes this thread to sleep while the parent process
+                // is resumed. This is the same as a `Yield`
+                if ret == xous_kernel::Result::ResumeProcess {
+                    unsafe { SWITCHTO_CALLER = None };
+                }
                 ret
             })
         }
