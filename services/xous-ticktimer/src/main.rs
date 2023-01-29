@@ -763,6 +763,7 @@ fn main() -> ! {
                     info!("sender made LockMutex request that was not blocking");
                 }
             }
+
             api::Opcode::UnlockMutex => {
                 let pid = msg.sender.pid();
                 if msg.body.is_blocking() {
@@ -785,6 +786,20 @@ fn main() -> ! {
                     }
                 }
             }
+
+            api::Opcode::FreeMutex => {
+                let Some(scalar) = msg.body.scalar_message() else {
+                    info!("sender tried to free a mutex using a non-scalar message");
+                    continue;
+                };
+
+                // Remove all instances of this mutex from the mutex hash
+                mutex_hash
+                    .entry(msg.sender.pid())
+                    .or_default()
+                    .remove(&scalar.arg1);
+            }
+
             api::Opcode::WaitForCondition => {
                 let pid = msg.sender.pid();
                 let Some(scalar) = msg.body.scalar_message_mut() else {
@@ -930,6 +945,42 @@ fn main() -> ! {
                 // next timer event to fire.
                 start_sleep(&mut ticktimer, &mut sleep_heap);
             }
+
+            api::Opcode::FreeCondition => {
+                let pid = msg.sender.pid();
+                let Some(scalar) = msg.body.scalar_message() else {
+                    info!(
+                        "sender made FreeCondition request that wasn't a Scalar or BlockingScalar Message"
+                    );
+                    continue;
+                };
+
+                if msg.body.is_blocking() {
+                    return_type = 0;
+                }
+
+                let condvar = scalar.arg1;
+
+                let awaiting = notify_hash
+                    .entry(pid)
+                    .or_default()
+                    .entry(condvar)
+                    .or_default();
+
+                // Free all entries in the sleep heap that are waiting for this condition
+                stop_sleep(&mut ticktimer, &mut sleep_heap);
+                for entry in awaiting.drain(..) {
+                    // Remove each entry in the timeout set
+                    sleep_heap.retain(|_, v| v.sender != entry);
+                }
+
+                // Remove all instances of this condvar
+                notify_hash.entry(pid).or_default().remove(&condvar);
+
+                // Resume sleeping
+                start_sleep(&mut ticktimer, &mut sleep_heap);
+            }
+
             api::Opcode::InvalidCall => {
                 error!("couldn't convert opcode");
             }
