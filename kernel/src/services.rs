@@ -272,7 +272,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         ppid: unsafe { PID::new_unchecked(1) },
         pid: unsafe { PID::new_unchecked(1) },
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
-        current_thread: 0_usize,
+        current_thread: INITIAL_TID,
         previous_thread: INITIAL_TID as TID,
         exception_handler: None,
     }; MAX_PROCESS_COUNT],
