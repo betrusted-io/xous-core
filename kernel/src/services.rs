@@ -433,7 +433,11 @@ impl SystemServices {
             entry.state = ProcessState::Ready(1 << INITIAL_TID);
         }
         // entry.ppid = _ppid;
-        klog!("created new process for PID {} with PPID {}", new_pid, _ppid);
+        klog!(
+            "created new process for PID {} with PPID {}",
+            new_pid,
+            _ppid
+        );
         return Ok(startup);
     }
 
@@ -1570,7 +1574,6 @@ impl SystemServices {
                 other
             ),
         };
-        // log_process_update(file!(), line!(), process, old_state);
 
         Ok(new_tid)
     }
@@ -2120,7 +2123,7 @@ impl SystemServices {
         Ok(parent_pid)
     }
 
-    #[cfg(feature="gdb-stub")]
+    #[cfg(feature = "gdb-stub")]
     pub fn suspend_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let (process_state, parent_pid) = {
             let process = self.get_process_mut(pid)?;
@@ -2174,7 +2177,7 @@ impl SystemServices {
         Ok(())
     }
 
-    #[cfg(feature="gdb-stub")]
+    #[cfg(feature = "gdb-stub")]
     pub fn continue_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
         // let old_state = process.state;

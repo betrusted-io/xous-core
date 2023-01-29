@@ -45,7 +45,7 @@ pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) {
     PREVIOUS_PAIR = Some((pid, tid));
 }
 
-#[cfg(feature="gdb-stub")]
+#[cfg(feature = "gdb-stub")]
 pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
     PREVIOUS_PAIR.take()
 }
