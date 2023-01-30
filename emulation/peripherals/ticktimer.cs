@@ -100,7 +100,7 @@ namespace Antmicro.Renode.Peripherals.Timers.Betrusted
             Registers.MsleepTarget1.Define32(this)
                 .WithValueField(0, 32, name: "MsleepTarget1", writeCallback: (_, value) =>
                 {
-                    this.msleepTarget = (this.msleepTarget & 0x00000000ffffffff) | (value << 32);
+                    this.msleepTarget = (this.msleepTarget & 0x00000000ffffffff) | (((ulong)value) << 32);
                     this.Log(LogLevel.Noisy, "Setting MsleepTarget1: {0}, sleep target now: {1}", value, this.msleepTarget);
                 },
                 valueProviderCallback: _ =>
@@ -142,7 +142,7 @@ namespace Antmicro.Renode.Peripherals.Timers.Betrusted
 
         public bool paused;
         public long tickValue;
-        ulong msleepTarget;
+        public ulong msleepTarget;
         public GPIO IRQ { get; private set; }
 
         private enum Registers
