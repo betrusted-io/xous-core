@@ -103,7 +103,6 @@ exclude = [
   "api/xous-api-log",
   "api/xous-api-names",
   "api/xous-api-susres",
-  "api/xous-api-susres",
   "api/xous-api-ticktimer",
   # The "packing" crate is forked and is a separate workspace
   "libs/mass-storage/packing",
