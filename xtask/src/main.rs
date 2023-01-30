@@ -316,7 +316,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             builder.add_services(&pkgs.into_iter().map(String::from).collect())
                 .add_apps(&get_cratespecs())
-                .add_feature("mass-storage") // add this in by default to help with testing
                 .add_service("espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded")
                 .override_locale("en-tts")
                 .add_feature("tts")
