@@ -698,32 +698,32 @@ impl SystemServices {
         Ok(())
     }
 
-    fn find_next_thread(thread_mask: usize, current_thread: usize) -> usize {
+    pub fn find_next_thread(thread_mask: usize, current_thread: usize) -> usize {
+        // From https://graphics.stanford.edu/~seander/bithacks.html#ZerosOnRightMultLookup
+        // This platform has a multiplier, so this is fast
+        fn trailing_zeros(v: usize) -> usize {
+            const MULTIPLY_DEBRUIJN_BIT_POSITION: [usize; 32] = [
+                0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 31, 27, 13, 23, 21, 19,
+                16, 7, 26, 12, 18, 6, 11, 5, 10, 9,
+            ];
+
+            MULTIPLY_DEBRUIJN_BIT_POSITION[((!v.wrapping_sub(1) & v) * 0x077CB531) >> 27]
+        }
         // If there's only one thread runnable, run that one
         if thread_mask == 0 {
             panic!("no threads were available to run");
         }
 
-        if thread_mask.count_ones() == 1 {
-            let new_tid = thread_mask.ilog2() as usize;
-            // println!(
-            //     "thread mask: {:b} -- only one thread was ready -- picking thread {} ({:b})",
-            //     thread_mask,
-            //     new_tid,
-            //     1 << new_tid
-            // );
-            new_tid
+        // if thread_mask.is_power_of_two() {
+        if thread_mask & (thread_mask - 1) == 0 {
+            trailing_zeros(thread_mask)
         } else {
-            let mut new_tmask = (1usize << current_thread).rotate_left(1);
-            // println!("looking for a new thread -- existing thread was {} ({:b}) and new mask is {:b} (starting with {:b})", current_thread, 1<<current_thread, thread_mask, new_tmask);
-            while thread_mask & new_tmask == 0 {
-                new_tmask = new_tmask.rotate_left(1);
-                if new_tmask == (1 << current_thread as usize) {
-                    // If we've looped around, return an error.
-                    panic!("Looked through all contexts and couldn't find one that was ready");
-                }
+            let upper_bits = thread_mask & !((2usize << current_thread) - 1);
+            if upper_bits != 0 {
+                trailing_zeros(upper_bits)
+            } else {
+                trailing_zeros(thread_mask)
             }
-            new_tmask.ilog2() as usize
         }
     }
 
