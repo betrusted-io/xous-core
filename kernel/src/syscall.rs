@@ -7,7 +7,6 @@ use crate::irq::interrupt_claim;
 use crate::mem::{MemoryManager, PAGE_SIZE};
 use crate::server::{SenderID, WaitingMessage};
 use crate::services::SystemServices;
-use core::mem;
 use xous_kernel::*;
 
 /* Quoth Xobs:
@@ -64,7 +63,7 @@ fn do_yield(_pid: PID, tid: TID) -> SysCallResult {
     })
 }
 
-fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallResult {
+fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         let sidx = ss
             .sidx_from_cid(cid)
@@ -155,7 +154,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             //     server_pid
             // );
             let sender_idx = if message.is_blocking() {
-                ss.remember_server_message(sidx, pid, thread, &message, client_address)
+                ss.remember_server_message(sidx, pid, tid, &message, client_address)
                     .map_err(|e| {
                         klog!("error remembering server message: {:?}", e);
                         ss.server_from_sidx_mut(sidx)
@@ -202,19 +201,19 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                         xous_kernel::Result::MessageEnvelope(envelope),
                     )
                     .expect("couldn't set result for server thread");
-                    ss.activate_process_thread(thread, ppid, ptid, false)
+                    ss.activate_process_thread(tid, ppid, ptid, false)
                         .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
                 } else {
                     // Switch to the server, since it's in a state to be run.
                     klog!("Activating Server context and switching away from Client");
-                    ss.activate_process_thread(thread, server_pid, server_tid, false)
+                    ss.activate_process_thread(tid, server_pid, server_tid, false)
                         .map(|_| Ok(xous_kernel::Result::MessageEnvelope(envelope)))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
                 }
             } else if blocking && !cfg!(baremetal) {
                 klog!("Blocking client, since it sent a blocking message");
-                ss.unschedule_thread(pid, thread)?;
+                ss.unschedule_thread(pid, tid)?;
                 ss.switch_to_thread(server_pid, Some(server_tid))?;
                 ss.set_thread_result(
                     server_pid,
@@ -253,7 +252,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
         );
         // Add this message to the queue.  If the queue is full, this
         // returns an error.
-        let _queue_idx = ss.queue_server_message(sidx, pid, thread, message, client_address)?;
+        let _queue_idx = ss.queue_server_message(sidx, pid, tid, message, client_address)?;
         klog!("queued into index {:x}", _queue_idx);
 
         // Park this context if it's blocking.  This is roughly
@@ -264,11 +263,11 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 let process = ss.get_process(pid).expect("Can't get current process");
                 let ppid = process.ppid;
                 unsafe { SWITCHTO_CALLER = None };
-                ss.activate_process_thread(thread, ppid, 0, false)
+                ss.activate_process_thread(tid, ppid, 0, false)
                     .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                     .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
             } else {
-                ss.unschedule_thread(pid, thread)?;
+                ss.unschedule_thread(pid, tid)?;
                 Ok(xous_kernel::Result::BlockedProcess)
             }
         } else {
@@ -1000,7 +999,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 MemoryRange::new(start, length).unwrap()
             }))
         }
-        SysCall::SwitchTo(new_pid, new_context) => SystemServices::with_mut(|ss| {
+        SysCall::SwitchTo(new_pid, new_tid) => SystemServices::with_mut(|ss| {
             unsafe {
                 assert!(
                     SWITCHTO_CALLER.is_none(),
@@ -1013,7 +1012,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             //     "Activating process thread {} in pid {} coming from pid {} thread {}",
             //     new_context, new_pid, pid, tid
             // );
-            ss.activate_process_thread(tid, new_pid, new_context, true)
+            ss.activate_process_thread(tid, new_pid, new_tid, true)
                 .map(|_ctx| xous_kernel::Result::ResumeProcess)
         }),
         SysCall::ClaimInterrupt(no, callback, arg) => {
