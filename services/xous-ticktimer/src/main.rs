@@ -72,6 +72,7 @@ mod implementation {
     pub struct XousTickTimer {
         csr: utralib::CSR<u32>,
         current_response: Option<TimerRequest>,
+        last_response: Option<TimerRequest>,
         connection: xous::CID,
         ticktimer_sr_manager: RegManager<{ utra::ticktimer::TICKTIMER_NUMREGS }>,
         wdt_sr_manager: RegManager<{ utra::wdt::WDT_NUMREGS }>,
@@ -105,6 +106,9 @@ mod implementation {
             }),
         )
         .ok();
+
+        // Save the response so we can be sure we don't double-return messages.
+        xtt.last_response = Some(response);
     }
 
     impl XousTickTimer {
@@ -131,6 +135,7 @@ mod implementation {
             let mut xtt = XousTickTimer {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 current_response: None,
+                last_response: None,
                 connection,
                 ticktimer_sr_manager,
                 wdt_sr_manager,
@@ -162,6 +167,14 @@ mod implementation {
                 .push(RegOrField::Reg(utra::ticktimer::EV_ENABLE), None);
 
             xtt
+        }
+
+        pub fn last_response(&self) -> &Option<TimerRequest> {
+            &self.last_response
+        }
+
+        pub fn clear_last_response(&mut self) {
+            self.last_response = None;
         }
 
         pub fn reset(&mut self) {
@@ -393,6 +406,12 @@ mod implementation {
             }
         }
 
+        pub fn last_response(&self) -> &Option<TimerRequest> {
+            &None
+        }
+
+        pub fn clear_last_response(&mut self) {}
+
         pub fn reset(&mut self) {
             self.start = std::time::Instant::now();
         }
@@ -493,6 +512,8 @@ fn recalculate_sleep(
     new: Option<TimerRequest>,
 ) {
     stop_sleep(ticktimer, sleep_heap);
+
+    ticktimer.clear_last_response();
 
     // If we have a new sleep request, add it to the heap.
     if let Some(mut request) = new {
@@ -621,6 +642,7 @@ fn main() -> ! {
                     return_type = 2;
                 }
             }
+
             api::Opcode::SleepMs => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
                     let ms = scalar.arg1 as i64;
@@ -654,6 +676,7 @@ fn main() -> ! {
                     );
                 }
             }
+
             api::Opcode::RecalculateSleep => {
                 if msg.sender.pid().map(|p| p.get()).unwrap_or_default() as u32
                     != xous::process::id()
@@ -674,7 +697,7 @@ fn main() -> ! {
 
                 // If we're being asked to recalculate due to a timeout expiring, drop the sent
                 // message from the `entries` list.
-                if (request_kind == RequestKind::Timeout as usize) && (sender > 0) {
+                if (request_kind == RequestKind::Timeout as usize) && (sender != 0) {
                     let mut expired_values = 0;
                     let awaiting = notify_hash
                         .entry(sender_pid)
@@ -710,6 +733,7 @@ fn main() -> ! {
                 }
                 recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
             }
+
             api::Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 ticktimer.suspend();
                 susres
@@ -717,9 +741,11 @@ fn main() -> ! {
                     .expect("couldn't execute suspend/resume");
                 ticktimer.resume();
             }),
+
             api::Opcode::PingWdt => {
                 ticktimer.reset_wdt();
             }
+
             api::Opcode::GetVersion => {
                 let mut buf = unsafe {
                     xous_ipc::Buffer::from_memory_message_mut(
@@ -736,62 +762,75 @@ fn main() -> ! {
                     buf.replace(v).unwrap();
                 }
             }
+
             api::Opcode::LockMutex => {
+                let Some(scalar) = msg.body.scalar_message_mut() else {
+                    log::error!("sender made LockMutex request that was not blocking");
+                    continue;
+                };
+
                 let pid = msg.sender.pid();
-                if let Some(scalar) = msg.body.scalar_message_mut() {
-                    let ready = mutex_ready_hash.entry(pid).or_default();
 
-                    // If this item is in the Ready list, return right away without blocking
-                    if ready.remove(&scalar.arg1) {
-                        scalar.id = 0;
-                        continue;
-                    }
+                let ready = mutex_ready_hash.entry(pid).or_default();
 
-                    // This item is not in the Ready list, so add our sender to the list of processes
-                    // to get called when UnlockMutex is invoked
-                    let awaiting = mutex_hash.entry(pid).or_default();
-
-                    // Add this to the end of the list of entries to call so that when `UnlockMutex` is sent
-                    // the message will get a response.
-                    let mutex_entry = awaiting.entry(scalar.arg1).or_default();
-                    mutex_entry.push_back(msg.sender);
-
-                    // We've saved the `msg.sender` above and will return the lock as part of the mutex
-                    // work thread. Forget the contents of `msg_opt` without running its destructor.
-                    core::mem::forget(msg_opt.take());
-                } else {
-                    info!("sender made LockMutex request that was not blocking");
+                // If this item is in the Ready list, return right away without blocking
+                if ready.remove(&scalar.arg1) {
+                    scalar.id = 0;
+                    continue;
                 }
+
+                // This item is not in the Ready list, so add our sender to the list of processes
+                // to get called when UnlockMutex is invoked
+                let awaiting = mutex_hash.entry(pid).or_default();
+
+                // Add this to the end of the list of entries to call so that when `UnlockMutex` is sent
+                // the message will get a response.
+                let mutex_entry = awaiting.entry(scalar.arg1).or_default();
+                mutex_entry.push_back(msg.sender);
+
+                // We've saved the `msg.sender` above and will return the lock as part of the mutex
+                // work thread. Forget the contents of `msg_opt` without running its destructor.
+                core::mem::forget(msg_opt.take());
             }
 
             api::Opcode::UnlockMutex => {
-                let pid = msg.sender.pid();
                 if msg.body.is_blocking() {
-                    info!("sender made UnlockMutex request that was blocking");
+                    log::error!("sender made UnlockMutex request that was blocking");
                     continue;
                 }
-                if let Some(scalar) = msg.body.scalar_message() {
-                    // Get a list of awaiting mutexes for this process
-                    let awaiting = mutex_hash.entry(pid).or_default();
+                let Some(scalar) = msg.body.scalar_message() else {
+                    log::error!("made a call to UnlockMutex with a non-scalar message");
+                    continue;
+                };
 
-                    // Get the vector of awaiting mutex entries.
-                    let mutex_entry = awaiting.entry(scalar.arg1).or_default();
+                let pid = msg.sender.pid();
 
-                    // If there's something waiting in the queue, respond to that message
-                    if let Some(sender) = mutex_entry.pop_front() {
-                        xous::return_scalar(sender, 0).unwrap();
-                    } else {
-                        // Otherwise, mark this scalar as being ready to run
-                        mutex_ready_hash.entry(pid).or_default().insert(scalar.arg1);
-                    }
+                // Get a list of awaiting mutexes for this process
+                let awaiting = mutex_hash.entry(pid).or_default();
+
+                // Get the vector of awaiting mutex entries.
+                let mutex_entry = awaiting.entry(scalar.arg1).or_default();
+
+                // If there's something waiting in the queue, respond to that message
+                if let Some(sender) = mutex_entry.pop_front() {
+                    xous::return_scalar(sender, 0).unwrap();
+                } else {
+                    // Otherwise, mark this scalar as being ready to run
+                    mutex_ready_hash.entry(pid).or_default().insert(scalar.arg1);
                 }
             }
 
             api::Opcode::FreeMutex => {
                 let Some(scalar) = msg.body.scalar_message() else {
-                    info!("sender tried to free a mutex using a non-scalar message");
+                    log::error!("sender tried to free a mutex using a non-scalar message");
                     continue;
                 };
+
+                // log::info!(
+                //     "PID {}: freeing mutex {}",
+                //     msg.sender.pid().map(|v| v.get()).unwrap_or_default(),
+                //     scalar.arg1
+                // );
 
                 // Remove all instances of this mutex from the mutex hash
                 mutex_hash
@@ -803,7 +842,7 @@ fn main() -> ! {
             api::Opcode::WaitForCondition => {
                 let pid = msg.sender.pid();
                 let Some(scalar) = msg.body.scalar_message_mut() else {
-                    info!(
+                    log::trace!(
                         "sender made WaitForCondition request that wasn't a BlockingScalar Message"
                     );
                     continue;
@@ -869,7 +908,7 @@ fn main() -> ! {
             api::Opcode::NotifyCondition => {
                 let pid = msg.sender.pid();
                 let Some(scalar) = msg.body.scalar_message() else {
-                    info!(
+                    log::error!(
                         "sender made WaitForCondition request that wasn't a Scalar or BlockingScalar Message"
                     );
                     continue;
@@ -897,17 +936,34 @@ fn main() -> ! {
                 // Wake threads, ensuring we don't run off the end.
                 let requested_count = scalar.arg2;
                 let available_count = core::cmp::min(requested_count, awaiting.len());
+                let remaining_count = awaiting.len() - available_count;
 
-                if requested_count > awaiting.len() {
-                    log::trace!("requested to wake {} entries, which is more than the current {} waiting entries", requested_count, awaiting.len());
+                if remaining_count > 0 {
+                    log::error!("requested to wake {} entries, which is more than the current {} waiting entries", requested_count, awaiting.len());
+                    if let Some(entry) = ticktimer.last_response() {
+                        log::error!("but there is a last_response present");
+                        if entry.data == condvar {
+                            log::error!("...which matches the condvar that was being unlocked");
+                        }
+                    }
                 }
                 if requested_count == 0 {
-                    log::trace!("requested to wake no entries! weird, huh?");
+                    log::error!("requested to wake no entries!");
                 }
+
                 stop_sleep(&mut ticktimer, &mut sleep_heap);
                 for entry in awaiting.drain(..available_count) {
                     // Remove each entry in the timeout set
-                    sleep_heap.retain(|_, v| if v.sender == entry { false } else { true });
+                    sleep_heap.retain(|_, v| v.sender != entry);
+
+                    if let Some(last_response) = ticktimer.last_response() {
+                        if last_response.sender == entry {
+                            log::error!(
+                                "got a request to wake a condvar ({:08x}) that we just responded to with entry {:08x} -- suspect there's a thread waiting in the server queue to clean it up",
+                            condvar, entry.to_usize());
+                            continue;
+                        }
+                    }
 
                     // If there's an error waking up the sender, deal with it
                     match xous::return_scalar(entry, 0) {
@@ -967,15 +1023,48 @@ fn main() -> ! {
                     .entry(condvar)
                     .or_default();
 
+                if !awaiting.is_empty() {
+                    log::info!(
+                        "PID {}: freeing condvar {:08x} -- {} entries waiting",
+                        pid.map(|v| v.get()).unwrap_or_default(),
+                        condvar,
+                        awaiting.len()
+                    );
+                }
+
                 // Free all entries in the sleep heap that are waiting for this condition
                 stop_sleep(&mut ticktimer, &mut sleep_heap);
                 for entry in awaiting.drain(..) {
                     // Remove each entry in the timeout set
                     sleep_heap.retain(|_, v| v.sender != entry);
+
+                    if let Some(last_response) = ticktimer.last_response() {
+                        if last_response.sender == entry {
+                            log::error!(
+                                "got a request to destroy a condvar ({:08x}) that we just responded to with entry {:08x} -- suspect there's a thread waiting in the server queue to clean it up",
+                            condvar, entry.to_usize());
+                            continue;
+                        }
+                    }
+
+                    // If there's an error waking up the sender, deal with it
+                    xous::return_scalar(entry, 0).ok();
                 }
 
                 // Remove all instances of this condvar
                 notify_hash.entry(pid).or_default().remove(&condvar);
+
+                let immediate_notifications = immedaite_notifications
+                    .entry(pid)
+                    .or_default()
+                    .remove(&condvar)
+                    .unwrap_or_default();
+                if immediate_notifications != 0 {
+                    log::error!(
+                        "there were {} threads that were notified without first waiting",
+                        immediate_notifications
+                    );
+                }
 
                 // Resume sleeping
                 start_sleep(&mut ticktimer, &mut sleep_heap);
