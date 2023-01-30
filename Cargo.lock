@@ -4043,6 +4043,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "transientdisk"
+version = "0.1.0"
+dependencies = [
+ "gam",
+ "graphics-server",
+ "log",
+ "num-derive",
+ "num-traits",
+ "usb-device-xous",
+ "xous 0.9.31 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-ipc 0.9.31 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "trng"
 version = "0.1.0"
 dependencies = [
