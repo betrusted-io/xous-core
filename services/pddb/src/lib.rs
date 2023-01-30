@@ -575,7 +575,7 @@ impl Pddb {
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
         buf.lend_mut(self.conn, Opcode::DictBulkDelete.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-        let response = buf.as_flat::<PddbKeyList, _>().unwrap();
+        let response = buf.as_flat::<PddbDeleteList, _>().unwrap();
         match response.retcode {
             ArchivedPddbRetcode::Ok => Ok(()),
             ArchivedPddbRetcode::AccessDenied => Err(Error::new(ErrorKind::NotFound, "Dictionary not found, or inaccessible")),

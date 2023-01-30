@@ -183,6 +183,7 @@ fn main() -> ! {
                 loop {
                     match ctap.env().main_hid_connection().u2f_wait_incoming() {
                         Ok(msg) => {
+                            ctap.update_timeouts(Instant::now());
                             let mutex = opensk_mutex.lock().unwrap();
                             log::trace!("Received U2F packet");
                             let typed_reply = ctap.process_hid_packet(&msg.packet, Transport::MainHid, Instant::now());

@@ -123,6 +123,8 @@ pub fn migrate(pddb: &Pddb) -> Result<(), xous::Error> {
                 }
             }
         }
+
+        // sync & cleanup
         pddb.sync().ok();
         modals.dynamic_notification_close().ok();
         if successful_migrations == expected_creds {
