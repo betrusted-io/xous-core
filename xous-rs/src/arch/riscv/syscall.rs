@@ -16,14 +16,21 @@ use crate::definitions::SysCallResult;
 use crate::syscall::SysCall;
 
 pub fn syscall(call: SysCall) -> SysCallResult {
-    let mut ret = crate::Result::Ok;
-    let args = call.as_args();
+    let mut args = call.as_args();
     unsafe {
-        _xous_syscall(
-            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], &mut ret,
+        core::arch::asm!(
+            "ecall",
+            inlateout("a0") args[0],
+            inlateout("a1") args[1],
+            inlateout("a2") args[2],
+            inlateout("a3") args[3],
+            inlateout("a4") args[4],
+            inlateout("a5") args[5],
+            inlateout("a6") args[6],
+            inlateout("a7") args[7],
         )
     };
-    match ret {
+    match crate::definitions::Result::from_args(args) {
         crate::Result::Error(e) => Err(e),
         other => Ok(other),
     }

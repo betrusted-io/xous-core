@@ -50,6 +50,26 @@ pub enum Opcode {
     /// *arg2*: The number of conditions to notify
     NotifyCondition = 9,
 
+    /// Free a Mutex
+    ///
+    /// This call will free a Mutex that was previously Locked or Unlocked.
+    /// Doing so causes the Mutex to be unlocked.
+    ///
+    /// # Arguments
+    ///
+    /// *arg1*: The integer that matches the Mutex value
+    FreeMutex = 10,
+
+    /// Free a Condition
+    ///
+    /// This call will free a Condition that was previously waited upon. All
+    /// pending threads will be forgotten.
+    ///
+    /// # Arguments
+    ///
+    /// *arg1*: The integer that matches the Condition value
+    FreeCondition = 11,
+
     /// Invalid call -- an error occurred decoding the opcode
     InvalidCall = u32::MAX as usize,
 }

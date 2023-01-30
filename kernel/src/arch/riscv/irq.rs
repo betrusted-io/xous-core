@@ -45,7 +45,7 @@ pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) {
     PREVIOUS_PAIR = Some((pid, tid));
 }
 
-#[cfg(feature="gdb-stub")]
+#[cfg(feature = "gdb-stub")]
 pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
     PREVIOUS_PAIR.take()
 }
@@ -132,7 +132,10 @@ pub extern "C" fn trap_handler(
         && sstatus::read().spp() == sstatus::SPP::Supervisor
         && sc.bits() == 0xf
     {
-        panic!("Ran out of kernel stack");
+        let pid = current_pid();
+        let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
+        print!("KERNEL({}): RISC-V fault: {} - ", pid, ex);
+        panic!("Maybe ran out of kernel stack?");
     }
 
     let pid = current_pid();

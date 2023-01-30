@@ -272,7 +272,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         ppid: unsafe { PID::new_unchecked(1) },
         pid: unsafe { PID::new_unchecked(1) },
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
-        current_thread: 0_usize,
+        current_thread: INITIAL_TID,
         previous_thread: INITIAL_TID as TID,
         exception_handler: None,
     }; MAX_PROCESS_COUNT],
@@ -285,9 +285,10 @@ impl core::fmt::Debug for Process {
     fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::result::Result<(), core::fmt::Error> {
         write!(
             fmt,
-            "Process {} state: {:?}  Memory mapping: {:?}",
+            "Process {} state: {:?}  TID: {}  Memory mapping: {:?}",
             self.pid.get(),
             self.state,
+            self.current_thread,
             self.mapping
         )
     }
@@ -433,7 +434,11 @@ impl SystemServices {
             entry.state = ProcessState::Ready(1 << INITIAL_TID);
         }
         // entry.ppid = _ppid;
-        klog!("created new process for PID {} with PPID {}", new_pid, _ppid);
+        klog!(
+            "created new process for PID {} with PPID {}",
+            new_pid,
+            _ppid
+        );
         return Ok(startup);
     }
 
@@ -543,8 +548,7 @@ impl SystemServices {
             process.activate()?;
 
             // Activate the current context
-            let mut arch_process = ArchProcess::current();
-            arch_process.set_tid(tid)?;
+            ArchProcess::current().set_tid(tid)?;
             process.current_thread = tid;
         }
         // self.pid = pid;
@@ -583,11 +587,10 @@ impl SystemServices {
             let mut current = self
                 .get_process_mut(current_pid)
                 .expect("couldn't get current PID");
+            assert!(arch::process::current_tid() == current.current_thread);
             // let old_state = current.state;
             current.state = match current.state {
-                ProcessState::Running(x) => {
-                    ProcessState::Ready(x | (1 << arch::process::current_tid()))
-                }
+                ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_thread)),
                 y => panic!("current process was {:?}, not 'Running(_)'", y),
             };
             // log_process_update(file!(), line!(), current, old_state);
@@ -653,7 +656,8 @@ impl SystemServices {
         let process = self.get_process(pid)?;
         if let Some(tid) = tid {
             Ok(match process.state {
-                ProcessState::Running(x) | ProcessState::Ready(x) if x & (1 << tid) != 0 => true,
+                ProcessState::Running(x) => tid == process.current_thread || x & (1 << tid) != 0,
+                ProcessState::Ready(x) if x & (1 << tid) != 0 => true,
                 ProcessState::Sleeping => true,
                 _ => false,
             })
@@ -692,6 +696,35 @@ impl SystemServices {
         // log_process_update(file!(), line!(), process, old_state);
         klog!("Readying ({}:{}) -> {:?}", pid, tid, process.state);
         Ok(())
+    }
+
+    pub fn find_next_thread(thread_mask: usize, current_thread: usize) -> usize {
+        // From https://graphics.stanford.edu/~seander/bithacks.html#ZerosOnRightMultLookup
+        // This platform has a multiplier, so this is fast
+        fn trailing_zeros(v: usize) -> usize {
+            const MULTIPLY_DEBRUIJN_BIT_POSITION: [usize; 32] = [
+                0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 31, 27, 13, 23, 21, 19,
+                16, 7, 26, 12, 18, 6, 11, 5, 10, 9,
+            ];
+
+            MULTIPLY_DEBRUIJN_BIT_POSITION[((!v.wrapping_sub(1) & v) * 0x077CB531) >> 27]
+        }
+        // If there's only one thread runnable, run that one
+        if thread_mask == 0 {
+            panic!("no threads were available to run");
+        }
+
+        // if thread_mask.is_power_of_two() {
+        if thread_mask & (thread_mask - 1) == 0 {
+            trailing_zeros(thread_mask)
+        } else {
+            let upper_bits = thread_mask & !((2usize << current_thread) - 1);
+            if upper_bits != 0 {
+                trailing_zeros(upper_bits)
+            } else {
+                trailing_zeros(thread_mask)
+            }
+        }
     }
 
     /// Mark the current process as "Ready to run".
@@ -752,80 +785,39 @@ impl SystemServices {
             ProcessState::Ready(0) => {
                 panic!("ProcessState was `Ready(0)`, which is invalid!");
             }
-            ProcessState::Ready(x) => {
-                let new_thread = match tid {
-                    None => {
-                        let mut new_context = 0;
+            ProcessState::Ready(ready_threads) => {
+                let new_thread = tid.unwrap_or_else(|| {
+                    Self::find_next_thread(ready_threads, process.current_thread)
+                });
 
-                        while x & (1 << new_context) == 0 {
-                            new_context += 1;
-                            if new_context > arch::process::MAX_THREAD {
-                                new_context = 0;
-                            }
-                        }
-                        new_context
-                    }
-                    Some(ctx) => {
-                        // Ensure the specified context is ready to run
-                        if x & (1 << ctx) == 0 {
-                            return Err(xous_kernel::Error::InvalidThread);
-                        }
-                        ctx
-                    }
-                };
+                if ready_threads & (1 << new_thread) == 0 {
+                    panic!("invalid thread ID");
+                }
 
                 process.activate()?;
-                let mut p = ArchProcess::current();
-                // FIXME: What happens if this fails? We're currently in the new process
-                // but without a context to switch to.
-                p.set_tid(new_thread)?;
+
+                ArchProcess::current().set_tid(new_thread)?;
                 process.current_thread = new_thread as _;
-
-                // Remove the new context from the available context list
-                ProcessState::Running(x & !(1 << new_thread))
-            }
-            ProcessState::Running(0) => {
-                // TODO: If `context` is not `None`, what do we do here?
-
-                // This process is already running, and there aren't any new available
-                // contexts, so keep on going.
-                ProcessState::Running(0)
+                ProcessState::Running(ready_threads & !(1 << new_thread))
             }
             ProcessState::Running(ready_threads) => {
-                let mut p = ArchProcess::current();
-                // let current_thread = p.current_thread();
-                let new_thread = match tid {
-                    None => {
-                        let mut new_thread = 0;
+                // Ensure we can switch back to this thread, if necessary
+                let ready_threads = ready_threads | (1 << process.current_thread);
 
-                        while ready_threads & (1 << new_thread) == 0 {
-                            new_thread += 1;
-                            if new_thread > arch::process::MAX_THREAD {
-                                new_thread = 0;
-                            }
-                        }
-                        new_thread
-                    }
-                    Some(tid) => {
-                        // Ensure the specified context is ready to run, or is
-                        // currently running.
-                        if ready_threads & (1 << tid) == 0
-                        /*&& ctx != current_thread*/
-                        {
-                            return Err(xous_kernel::Error::InvalidThread);
-                        }
-                        tid
-                    }
-                };
+                let new_thread = tid.unwrap_or_else(|| {
+                    Self::find_next_thread(ready_threads, process.current_thread)
+                });
 
-                // Remove the new thread ID from the list of thread IDs
-                let new_mask = ready_threads & !(1 << new_thread);
+                // Ensure the specified context is ready to run, or is
+                // currently running.
+                if ready_threads & (1 << new_thread) == 0 {
+                    return Err(xous_kernel::Error::InvalidThread);
+                }
 
                 // Activate this process on this CPU
-                process.activate()?;
-                p.set_tid(new_thread)?;
+                ArchProcess::current().set_tid(new_thread)?;
                 process.current_thread = new_thread as _;
-                ProcessState::Running(new_mask)
+                ProcessState::Running(ready_threads & !(1 << new_thread))
             }
         };
         // log_process_update(file!(), line!(), process, old_state);
@@ -917,6 +909,11 @@ impl SystemServices {
         // Temporarily switch into the target process memory space
         // in order to pass the return value.
         let current_pid = self.current_pid();
+        if current_pid == pid {
+            ArchProcess::current().set_thread_result(tid, result);
+            return Ok(());
+        }
+
         {
             let target_process = self.get_process(pid)?;
             target_process.activate()?;
@@ -967,38 +964,29 @@ impl SystemServices {
                     new_tid = crate::arch::process::EXCEPTION_TID;
                     // new.current_thread = new_tid;
                 }
-                ProcessState::Running(x) | ProcessState::Ready(x) => {
+                ProcessState::Ready(x) => {
                     // If no new context is specified, take the previous
                     // context.  If that is not runnable, do a round-robin
                     // search for the next available context.
                     assert!(
                         x != 0,
-                        "process was {:?} but had no free contexts",
+                        "process was {:?} but had no runnable threads",
                         new.state
                     );
                     if new_tid == 0 {
-                        new_tid = (new.current_thread + 1) as usize;
-                        while x & (1 << new_tid) == 0 {
-                            new_tid += 1;
-                            if new_tid > arch::process::MAX_THREAD {
-                                new_tid = 0;
-                            } else if new_tid == (new.current_thread + 1) as usize {
-                                // If we've looped around, return an error.
-                                // println!("Looked through all contexts and couldn't find one that was ready");
-                                return Err(xous_kernel::Error::ProcessNotFound);
-                            }
-                        }
-                        new.current_thread = new_tid as _;
-                        klog!("picked thread ID {}", new_tid);
-                    } else if x & (1 << new_tid) == 0 {
-                        // println!(
-                        //     "thread is {:?}, which is not valid for new thread {}",
-                        //     new.state, new_tid
-                        // );
-                        return Err(xous_kernel::Error::ProcessNotFound);
-                    } else {
-                        new.current_thread = new_tid as _;
+                        new_tid = Self::find_next_thread(x, new.current_thread);
                     }
+                    if x & (1 << new_tid) == 0 {
+                        println!(
+                            "process state is {:?}, but new thread {} is not runnable",
+                            new.state, new_tid
+                        );
+                        return Err(xous_kernel::Error::ProcessNotFound);
+                    }
+                    new.current_thread = new_tid as _;
+                }
+                ProcessState::Running(_) => {
+                    panic!("process was running even though the pid was different")
                 }
                 ProcessState::Sleeping
                 | ProcessState::Debug(_)
@@ -1049,15 +1037,20 @@ impl SystemServices {
                 .get_process_mut(previous_pid)
                 .expect("couldn't get previous pid");
             let _oldstate = previous.state; // for tracking state in the debug print after the following closure
+            if previous.current_thread != previous_tid {
+                println!(
+                    "WARNING: previous.current_thread {} != previous_tid {}",
+                    previous.current_thread, previous_tid
+                );
+            }
+            previous.current_thread = previous_tid;
             previous.state = match previous.state {
                 // If the previous process had exactly one thread that can be
                 // run, then the Running thread list will be 0.  In that case,
                 // we will either need to Sleep this process, or mark it as
                 // being Ready to run.
                 ProcessState::Running(x) if x == 0 => {
-                    if can_resume
-                    /*|| advance_thread*/
-                    {
+                    if can_resume {
                         ProcessState::Ready(1 << previous_tid)
                     } else {
                         ProcessState::Sleeping
@@ -1117,30 +1110,31 @@ impl SystemServices {
             // Transition to the new state.
             // let old_state = new.state;
             new.state = if let ProcessState::Running(x) = new.state {
-                let previous_tid = new.current_thread;
+                assert!(x & (1 << new.current_thread) == 0);
+
+                // If the current process can be resumed, add it to the list
+                // of potential threads
+                let x = x | if can_resume {
+                    1 << new.current_thread
+                } else {
+                    0
+                };
+
                 // If no new thread is specified, take the previous
                 // thread.  If that is not runnable, do a round-robin
                 // search for the next available thread.
                 if new_tid == 0 {
-                    new_tid = (new.current_thread + 1) as usize;
-                    while x & (1 << new_tid) == 0 {
-                        new_tid += 1;
-                        if new_tid > arch::process::MAX_THREAD {
-                            new_tid = 0;
-                        } else if new_tid == (new.current_thread + 1) as usize {
-                            // If we've looped around, return an error.
-                            return Err(xous_kernel::Error::ProcessNotFound);
-                        }
-                    }
-                    new.current_thread = new_tid as _;
-                } else if x & (1 << new_tid) == 0 {
-                    return Err(xous_kernel::Error::ProcessNotFound);
+                    new_tid = Self::find_next_thread(x, new.current_thread);
                 }
-                // Mark the previous TID as being runnable, and remove the new TID
-                // from the list of threads that can be run.
-                ProcessState::Running(
-                    x & !(1 << new_tid) | if can_resume { 1 << previous_tid } else { 0 },
-                )
+
+                if x & (1 << new_tid) == 0 {
+                    return Err(xous_kernel::Error::ThreadNotAvailable);
+                }
+
+                new.current_thread = new_tid as _;
+
+                // Remove the new TID from the list of threads that can be run.
+                ProcessState::Running(x & !(1 << new_tid))
             } else {
                 panic!(
                     "PID {} invalid process state (not Running): {:?}",
@@ -1150,10 +1144,8 @@ impl SystemServices {
             // log_process_update(file!(), line!(), new, old_state);
         }
 
-        let mut process = ArchProcess::current();
-
         // Restore the previous thread, if one exists.
-        process.set_tid(new_tid)?;
+        ArchProcess::current().set_tid(new_tid)?;
 
         klog!(
             "Activated process {}:{}, new state: {:?}",
@@ -1573,7 +1565,6 @@ impl SystemServices {
                 other
             ),
         };
-        // log_process_update(file!(), line!(), process, old_state);
 
         Ok(new_tid)
     }
@@ -2123,7 +2114,7 @@ impl SystemServices {
         Ok(parent_pid)
     }
 
-    #[cfg(feature="gdb-stub")]
+    #[cfg(feature = "gdb-stub")]
     pub fn suspend_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let (process_state, parent_pid) = {
             let process = self.get_process_mut(pid)?;
@@ -2177,7 +2168,7 @@ impl SystemServices {
         Ok(())
     }
 
-    #[cfg(feature="gdb-stub")]
+    #[cfg(feature = "gdb-stub")]
     pub fn continue_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
         // let old_state = process.state;
