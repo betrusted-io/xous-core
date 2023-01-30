@@ -31,13 +31,16 @@ use usbd_human_interface_device::device::fido::*;
 use num_traits::*;
 
 use std::thread;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use std::collections::BTreeMap;
 
 
 // CTAP2 testing notes:
+//
+// Set a PIN for a token from the command line: `fido2-token -S /dev/hidraw0`
+//
 // run our branch and use this to forward the prompts on to the device:
 // netcat -k -u -l 6502 > /dev/ttyS0
 // use the "autotest" feature to remove some excess prompts that interfere with the test
@@ -152,6 +155,50 @@ fn main() -> ! {
     );
     let actions_conn = xous::connect(actions_sid).unwrap();
 
+    // spawn the FIDO USB->UX update kicker thread. It is responsible for issuing a UX refresh command
+    // a few moments after FIDO traffic ceases. The purpose is to get the UX to reflect credential manipulaitons that happen via USB.
+    let kicker_sid = xous::create_server().unwrap();
+    let kicker_cid = xous::connect(kicker_sid).unwrap();
+    // 64-bit elapsed time has to be split into two atomic U32s, because there is no atomic U64 on a 32-bit system :-/
+    let kick_target_msb = Arc::new(AtomicU32::new(0));
+    let kick_target_lsb = Arc::new(AtomicU32::new(0));
+    let kicker_running = Arc::new(AtomicBool::new(false));
+    const KICKER_DELAY_MS: u64 = 1500;
+    let _ = thread::spawn({
+        let main_conn = conn.clone();
+        let self_conn = kicker_cid.clone();
+        let kicker_running = kicker_running.clone();
+        let kick_target_msb = kick_target_msb.clone();
+        let kick_target_lsb = kick_target_lsb.clone();
+        let mode = mode.clone();
+        move || {
+            let mut _msg_opt = None;
+            let mut _return_type = 0;
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            loop {
+                xous::reply_and_receive_next_legacy(kicker_sid, &mut _msg_opt, &mut _return_type)
+                .unwrap();
+                let now = tt.elapsed_ms();
+                let target = ((kick_target_msb.load(Ordering::SeqCst) as u64) << 32)
+                    | (kick_target_lsb.load(Ordering::SeqCst)) as u64;
+                if now > target {
+                    kicker_running.store(false, Ordering::SeqCst);
+                    if *mode.lock().unwrap() == VaultMode::Fido {
+                        log::debug!("kick!");
+                        xous::send_message(main_conn,
+                            xous::Message::new_scalar(VaultOp::ReloadDbAndFullRedraw.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).ok();
+                    }
+                } else {
+                    // keep the poll alive until we exhaust our target time
+                    tt.sleep_ms(KICKER_DELAY_MS as usize / 2).ok();
+                    xous::send_message(self_conn,
+                        xous::Message::new_scalar(0, 0, 0, 0, 0) // only one message type, any message will wake us up
+                    ).ok();
+                }
+            }
+        }
+    });
 
     // spawn the FIDO2 USB handler
     let _ = thread::spawn({
@@ -161,6 +208,7 @@ fn main() -> ! {
         move || {
             let xns = xous_names::XousNames::new().unwrap();
             let mut vendor_session = VendorSession::default();
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
             // block until the PDDB is mounted
             let pddb = pddb::Pddb::new();
             pddb.is_mounted_blocking();
@@ -273,6 +321,20 @@ fn main() -> ! {
                                 }
                             }
                         }
+                    }
+                    // note the traffic to a UX kicker. After KICKER_DELAY_MS of no USB activity, a redraw will be issued.
+                    let target = tt.elapsed_ms() + KICKER_DELAY_MS;
+                    if !kicker_running.swap(true, Ordering::SeqCst) {
+                        // update the MSB first, so in case of rollover the only negative effect is we wait an extra KICKER_DELAY_MS
+                        kick_target_msb.store((target >> 32) as u32, Ordering::SeqCst);
+                        kick_target_lsb.store(target as u32, Ordering::SeqCst);
+                        // kick the kicker!
+                        xous::send_message(kicker_cid,
+                            xous::Message::new_scalar(0, 0, 0, 0, 0) // only one message type, any message will do
+                        ).ok();
+                    } else {
+                        kick_target_msb.store((target >> 32) as u32, Ordering::SeqCst);
+                        kick_target_lsb.store(target as u32, Ordering::SeqCst);
                     }
                 }
             } else {
