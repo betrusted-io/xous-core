@@ -435,7 +435,7 @@ impl Process {
     pub fn print_all_threads(&self) {
         let process = unsafe { &mut *PROCESS };
         for (tid_idx, &thread) in process.threads.iter().enumerate() {
-            let tid = tid_idx + 1;
+            let tid = tid_idx;
             if thread.registers[1] != 0 {
                 Self::print_thread(tid, &thread);
             }
