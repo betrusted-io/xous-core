@@ -5,7 +5,7 @@
     "rust-analyzer.server.extraEnv": {
         "XOUS_SVD_FILE": "../precursors/soc.svd"
     },
-    "rust-analyzer.cargo.features": ["precursor"],
+    "rust-analyzer.cargo.features": ["precursor", "mass-storage"],
     "rust-analyzer.files.excludeDirs": ["./loader/**"],
     "files.exclude": {
         "**/.git": true,

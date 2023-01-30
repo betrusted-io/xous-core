@@ -225,16 +225,18 @@ pub(crate) fn main_hw() -> ! {
     #[cfg(feature="mass-storage")]
     let ums_alloc = UsbBusAllocator::new(ums_dev);
     #[cfg(feature="mass-storage")]
-    let bd = block_device::BlockDevice::new();
-    #[cfg(feature="mass-storage")]
+    let abd = apps_block_device::AppsBlockDevice::new();
+    let abdcid = abd.conn();
+    
     let mut ums = usbd_scsi::Scsi::new(
         &ums_alloc,
         64,
-        bd,
+        abd,
         "Kosagi".as_bytes(),
         "Kosagi Precursor".as_bytes(),
         "1".as_bytes()
     );
+
     #[cfg(feature="mass-storage")]
     let mut ums_device = UsbDeviceBuilder::new(&ums_alloc, UsbVidPid(0x1209, 0x3613))
         .manufacturer("Kosagi")
@@ -350,6 +352,31 @@ pub(crate) fn main_hw() -> ! {
         let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("{:?}", opcode);
         match opcode {
+            Some(Opcode::SetBlockDevice) => msg_blocking_scalar_unpack!(msg, read_id, write_id, max_lba_id, _, {
+                xous::send_message(
+                    abdcid, 
+                    xous::Message::new_blocking_scalar(
+                        apps_block_device::BlockDeviceMgmtOp::SetOps.to_usize().unwrap(), read_id, write_id, max_lba_id, 0,
+                    )
+                ).unwrap();
+                xous::return_scalar(msg.sender, 0).unwrap();
+            }),
+            Some(Opcode::SetBlockDeviceSID) => msg_blocking_scalar_unpack!(msg, sid1, sid2, sid3, sid4, {
+                xous::send_message(abdcid,
+                    xous::Message::new_blocking_scalar(
+                        apps_block_device::BlockDeviceMgmtOp::SetSID.to_usize().unwrap(), sid1, sid2, sid3, sid4
+                    )
+                ).unwrap();
+                xous::return_scalar(msg.sender, 0).unwrap();
+            }),
+            Some(Opcode::ResetBlockDevice) => msg_blocking_scalar_unpack!(msg, 0, 0, 0, 0, {
+                xous::send_message(abdcid,
+                    xous::Message::new_blocking_scalar(
+                        apps_block_device::BlockDeviceMgmtOp::Reset.to_usize().unwrap(), 0, 0, 0, 0,
+                    )
+                ).unwrap();
+                xous::return_scalar(msg.sender, 0).unwrap();
+            }),
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 usbmgmt.xous_suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
