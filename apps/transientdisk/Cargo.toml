@@ -16,3 +16,6 @@ xous-names = { package = "xous-api-names", version = "0.9.28" }
 gam = {path = "../../services/gam" }
 graphics-server = {path = "../../services/graphics-server" }
 usb-device-xous = {path="../../services/usb-device-xous"}
+
+[features]
+mass-storage = ["usb-device-xous/mass-storage"]
