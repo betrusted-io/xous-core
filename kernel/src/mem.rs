@@ -312,7 +312,7 @@ impl MemoryManager {
         kind: xous_kernel::MemoryType,
     ) -> Result<*mut u8, xous_kernel::Error> {
         // If we were supplied a perfectly good address, return that.
-        if virt_ptr as usize != 0 {
+        if !virt_ptr.is_null() {
             return Ok(virt_ptr);
         }
 
@@ -330,7 +330,7 @@ impl MemoryManager {
                 }
                 xous_kernel::MemoryType::Default => (
                     process_inner.mem_default_base,
-                    process_inner.mem_default_base + 0x40_0000, // Limit to one superpage
+                    process_inner.mem_default_base + 0x1000_0000,
                     process_inner.mem_default_last,
                 ),
                 xous_kernel::MemoryType::Messages => (
