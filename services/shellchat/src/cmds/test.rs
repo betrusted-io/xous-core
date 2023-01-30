@@ -629,6 +629,21 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "Ship mode request denied").unwrap();
                     }
                 }
+                #[cfg(feature-"extra-tests")]
+                "timeblock" => {
+                    let time_cid = xous::connect(xous::SID::from_bytes(b"timeserverpublic").unwrap()).unwrap();
+                    let result = xous::send_message(time_cid,
+                        xous::Message::new_blocking_scalar(3, 0, 0, 0, 0)
+                    ).unwrap();
+                    match result {
+                        xous::Result::Scalar2(msb, lsb) => {
+                            log::info!("GetTimeUtc: {}, {}", msb, lsb);
+                        }
+                        _ => {
+                            log::info!("GetTimeUtc returned an unexpected result");
+                        }
+                    }
+                }
                 #[cfg(feature="ditherpunk")]
                 "modals" => {
                     modals::tests::spawn_test();
