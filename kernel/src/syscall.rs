@@ -434,9 +434,11 @@ fn return_scalar(
             }
         };
 
-        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
+        if cfg!(baremetal) {
+            ss.ready_thread(client_pid, client_tid)?;
+        }
 
-        if !cfg!(baremetal) || in_irq || !client_is_runnable {
+        if !cfg!(baremetal) || in_irq || !ss.runnable(client_pid, Some(client_tid))? {
             // In a hosted environment, `switch_to_thread()` doesn't continue
             // execution from the new thread. Instead it continues in the old
             // thread. Therefore, we need to instruct the client to resume, and
@@ -444,9 +446,6 @@ fn return_scalar(
             // In a baremetal environment, the opposite is true -- we instruct
             // the server to resume and return to the client.
             ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
-            if cfg!(baremetal) {
-                ss.ready_thread(client_pid, client_tid)?;
-            }
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
@@ -455,7 +454,6 @@ fn return_scalar(
             ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
             // Switch to the client
-            ss.ready_thread(client_pid, client_tid)?;
             ss.switch_to_thread(client_pid, Some(client_tid))?;
             Ok(xous_kernel::Result::Scalar1(arg))
         }
