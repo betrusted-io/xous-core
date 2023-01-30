@@ -90,25 +90,6 @@ namespace Antmicro.Renode.Peripherals.Timers.Betrusted
                 })
             ;
 
-            Registers.TimerUpdateValue.Define32(this)
-                .WithFlag(0, FieldMode.WriteOneToClear, name: "UPDATE_VALUE", writeCallback: (_, val) =>
-                {
-                    if(val)
-                    {
-                        latchedValue = (uint)innerTimer.Value;
-                    }
-                });
-            ;
-
-            // VALUE0 contains most significant 8 bits
-            // VALUE3 contains least significant 8 bits
-            Registers.Value.Define32(this)
-                .WithValueField(0, 32, FieldMode.Read, name: "VALUE", valueProviderCallback: _ =>
-                {
-                    return latchedValue;
-                });
-            ;
-
             Registers.EventStatus.Define32(this)
                 .WithFlag(0, FieldMode.Read, name: "EV_STATUS", valueProviderCallback: _ => innerTimer.Value == 0)
             ;
@@ -144,13 +125,10 @@ namespace Antmicro.Renode.Peripherals.Timers.Betrusted
             Reload = 0x04,
 
             TimerEnable = 0x08,
-            TimerUpdateValue = 0x0C,
 
-            Value = 0x10,
-
-            EventStatus = 0x14,
-            EventPending = 0x18,
-            EventEnable = 0x1C
+            EventStatus = 0x0c,
+            EventPending = 0x10,
+            EventEnable = 0x14
         }
     }
 }
