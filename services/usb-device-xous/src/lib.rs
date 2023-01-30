@@ -24,24 +24,24 @@ impl UsbHid {
             conn
         }
     }
-
+    #[cfg(feature="mass-storage")]
     pub fn set_block_device(&self, read_id: usize, write_id: usize, max_lba_id: usize) {
         send_message(self.conn,
             Message::new_blocking_scalar(
-                Opcode::SetBlockDevice.to_usize().unwrap(), 
-                read_id, 
-                write_id, 
+                Opcode::SetBlockDevice.to_usize().unwrap(),
+                read_id,
+                write_id,
                 max_lba_id,
                 0,
             )
         ).unwrap();
     }
-
+    #[cfg(feature="mass-storage")]
     pub fn set_block_device_sid(&self, app_sid: xous::SID) {
         let sid = app_sid.to_u32();
         send_message(self.conn,
             Message::new_blocking_scalar(
-                Opcode::SetBlockDeviceSID.to_usize().unwrap(), 
+                Opcode::SetBlockDeviceSID.to_usize().unwrap(),
                 sid.0 as usize,
                 sid.1 as usize,
                 sid.2 as usize,
@@ -49,11 +49,11 @@ impl UsbHid {
             )
         ).unwrap();
     }
-
+    #[cfg(feature="mass-storage")]
     pub fn reset_block_device(&self) {
         send_message(self.conn,
             Message::new_blocking_scalar(
-                Opcode::ResetBlockDevice.to_usize().unwrap(), 
+                Opcode::ResetBlockDevice.to_usize().unwrap(),
                 0,
                 0,
                 0,

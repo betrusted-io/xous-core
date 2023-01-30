@@ -226,8 +226,9 @@ pub(crate) fn main_hw() -> ! {
     let ums_alloc = UsbBusAllocator::new(ums_dev);
     #[cfg(feature="mass-storage")]
     let abd = apps_block_device::AppsBlockDevice::new();
+    #[cfg(feature="mass-storage")]
     let abdcid = abd.conn();
-    
+    #[cfg(feature="mass-storage")]
     let mut ums = usbd_scsi::Scsi::new(
         &ums_alloc,
         64,
@@ -352,6 +353,7 @@ pub(crate) fn main_hw() -> ! {
         let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("{:?}", opcode);
         match opcode {
+            #[cfg(feature="mass-storage")]
             Some(Opcode::SetBlockDevice) => msg_blocking_scalar_unpack!(msg, read_id, write_id, max_lba_id, _, {
                 xous::send_message(
                     abdcid, 
@@ -361,6 +363,7 @@ pub(crate) fn main_hw() -> ! {
                 ).unwrap();
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
+            #[cfg(feature="mass-storage")]
             Some(Opcode::SetBlockDeviceSID) => msg_blocking_scalar_unpack!(msg, sid1, sid2, sid3, sid4, {
                 xous::send_message(abdcid,
                     xous::Message::new_blocking_scalar(
@@ -369,6 +372,7 @@ pub(crate) fn main_hw() -> ! {
                 ).unwrap();
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
+            #[cfg(feature="mass-storage")]
             Some(Opcode::ResetBlockDevice) => msg_blocking_scalar_unpack!(msg, 0, 0, 0, 0, {
                 xous::send_message(abdcid,
                     xous::Message::new_blocking_scalar(
