@@ -885,19 +885,31 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 // If we're handing back an address in main RAM, zero it out. If
                 // phys is 0, then the page will be lazily allocated, so we
                 // don't need to do this.
-                if phys.is_some() {
+                // if !phys_ptr.is_null() {
+                //     for (phys, virt) in (phys_ptr as usize..range.len()).step_by(PAGE_SIZE).zip(
+                //         (range.as_ptr() as usize..(range.as_ptr() as usize + range.len()))
+                //             .step_by(PAGE_SIZE),
+                //     ) {
+                //         // Zero out the virtual page if it's in main memory
+                //         if mm.is_main_memory(phys as *mut u8) {
+                //             let start = virt as *mut usize;
+                //             for offset in 0..(PAGE_SIZE / core::mem::size_of::<usize>()) {
+                //                 unsafe { start.add(offset).write_volatile(0) };
+                //             }
+                //         }
+
+                //         // Hand the virtual page to the process
+                //         crate::arch::mem::hand_page_to_user(virt as *mut u8)
+                //             .expect("couldn't hand page to user");
+                //       }
+
+                if !phys_ptr.is_null() {
                     if mm.is_main_memory(phys_ptr) {
-                        // println!(
-                        //     "Going to zero out {} bytes @ {:08x}",
-                        //     range.len(),
-                        //     range.as_ptr() as usize,
-                        // );
                         unsafe {
                             range
                                 .as_mut_ptr()
-                                .write_bytes(0, range.len() / mem::size_of::<usize>())
+                                .write_bytes(0, range.len() / core::mem::size_of::<usize>())
                         };
-                        // println!("Done zeroing out");
                     }
                     for offset in (range.as_ptr() as usize..(range.as_ptr() as usize + range.len()))
                         .step_by(PAGE_SIZE)
