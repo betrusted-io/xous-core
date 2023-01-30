@@ -823,7 +823,30 @@ impl CtapState {
                     return Err(Ctap2StatusCode::CTAP2_ERR_PUAT_REQUIRED);
                 }
                 // Corresponds to makeCredUvNotRqd set to true.
-                if options.rk && storage::pin_hash(env)?.is_some() {
+                /*
+                    Should fail regardless of options.rk setting, because of MakeCredentialPinAuthMissingParameterTest()
+                    https://github.com/google/CTAP2-test-tool/blob/1afd50bd1b700dc86d6dffeca70a331771d24e45/src/tests/make_credential.cc#L593-L609
+
+                    Testbench sends the following options:
+                    AuthenticatorMakeCredential(
+                        AuthenticatorMakeCredentialParameters {
+                            client_data_hash: [205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205, 205],
+                            rp: PublicKeyCredentialRpEntity { rp_id: "make_credential_pin_auth_missing_parameter.example.com", rp_name: None, rp_icon: None },
+                            user: PublicKeyCredentialUserEntity { user_id: [29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29],
+                            user_name: Some("Adam"),
+                            user_display_name: None,
+                            user_icon: None
+                        },
+                        pub_key_cred_params: [PublicKeyCredentialParameter { cred_type: PublicKey, alg: Es256 }],
+                        exclude_list: None,
+                        extensions: MakeCredentialExtensions { hmac_secret: false, cred_protect: None, min_pin_length: false, cred_blob: None, large_blob_key: None },
+                        options: MakeCredentialOptions { rk: false, uv: false },
+                        pin_uv_auth_param: None, pin_uv_auth_protocol: None, enterprise_attestation: None }
+                    )
+                    Note that options.rk = false.
+                    (Original code had `if options.rk && storage::pin_hash(env)?.is_some() {` in the line below)
+                 */
+                if storage::pin_hash(env)?.is_some() {
                     return Err(Ctap2StatusCode::CTAP2_ERR_PUAT_REQUIRED);
                 }
                 0x00
