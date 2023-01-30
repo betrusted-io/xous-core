@@ -9,9 +9,9 @@ version = "0.1.0"
 [dependencies]
 graphics-server = {path = "../graphics-server"}# this is used by the IMEF portion of the API
 log = "0.4.14"
-xous = "0.9.31"
-xous-ipc = "0.9.31"
-xous-names = {package = "xous-api-names", version = "0.9.28"}# used by the IMEF for registering listeners
+xous = "0.9.32"
+xous-ipc = "0.9.32"
+xous-names = {package = "xous-api-names", version = "0.9.29"}# used by the IMEF for registering listeners
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}

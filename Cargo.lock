@@ -5003,8 +5003,6 @@ dependencies = [
 [[package]]
 name = "xous-api-ticktimer"
 version = "0.9.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bffbc3b62a8fa4375b978254b6fa7a989480803b95033179b419a22248164181"
 dependencies = [
  "log",
  "num-derive",
