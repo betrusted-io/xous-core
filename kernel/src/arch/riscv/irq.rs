@@ -132,7 +132,10 @@ pub extern "C" fn trap_handler(
         && sstatus::read().spp() == sstatus::SPP::Supervisor
         && sc.bits() == 0xf
     {
-        panic!("Ran out of kernel stack");
+        let pid = current_pid();
+        let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
+        print!("KERNEL({}): RISC-V fault: {} - ", pid, ex);
+        panic!("Maybe ran out of kernel stack?");
     }
 
     let pid = current_pid();
