@@ -241,6 +241,7 @@ pub fn start_time_server() {
         move || {
             let xns = xous_names::XousNames::new().unwrap();
             let llio = llio::Llio::new(&xns);
+            #[cfg(not(feature="minimal-testing"))]
             let prefs = userprefs::Manager::new();
 
             let tt = ticktimer_server::Ticktimer::new().unwrap();
@@ -253,14 +254,17 @@ pub fn start_time_server() {
             log::trace!("start_rtc_secs: {}", start_rtc_secs);
             log::trace!("start_tt_ms: {}", start_tt_ms);
 
+            #[cfg(not(feature="minimal-testing"))]
             let pddb_poller = PddbMountPoller::new();
             // enqueue a the first mount poll message
+            #[cfg(not(feature="minimal-testing"))]
             xous::send_message(self_cid,
                 xous::Message::new_scalar(TimeOp::PddbMountPoll.to_usize().unwrap(), 0, 0, 0, 0)
             ).expect("couldn't check mount poll");
             // an initial behavior which just retuns the raw RTC time, until the PDDB is mounted.
             let mut temp = 0;
             loop {
+                #[cfg(not(feature="minimal-testing"))]
                 if pddb_poller.is_mounted_nonblocking() {
                     log::debug!("PDDB mount detected, transitioning to real-time adjusted server");
                     break;
@@ -311,16 +315,20 @@ pub fn start_time_server() {
                     _ => log::warn!("Time server can't handle this message yet: {:?}", msg),
                 }
             }
-
+            #[cfg(not(feature="minimal-testing"))]
             let mut utc_offset_ms = prefs.utc_offset().unwrap_or_else(|error| {
                 log::error!("cannot read utc offset: {:?}", error);
                 0
             });
-
+            #[cfg(not(feature="minimal-testing"))]
             let mut tz_offset_ms = prefs.timezone_offset().unwrap_or_else(|error| {
                 log::error!("cannot read timezone offset: {:?}", error);
                 None
             }).unwrap_or_default();
+            #[cfg(feature="minimal-testing")]
+            let mut utc_offset_ms = 0;
+            #[cfg(feature="minimal-testing")]
+            let mut tz_offset_ms = 0;
 
             log::debug!("offset_key: {}", utc_offset_ms / 1000);
             log::debug!("tz_key: {}", tz_offset_ms / 1000);
@@ -387,7 +395,7 @@ pub fn start_time_server() {
                             utc_time_ms -
                             (start_rtc_secs as i64) * 1000;
                         utc_offset_ms = offset;
-
+                        #[cfg(not(feature="minimal-testing"))]
                         prefs.set_utc_offset(offset).unwrap_or_else(|err| {
                             log::error!("cannot set utc offset: {:?}", err);
                         });
@@ -402,7 +410,7 @@ pub fn start_time_server() {
                             continue;
                         } else {
                             tz_offset_ms = tz_ms;
-
+                            #[cfg(not(feature="minimal-testing"))]
                             prefs.set_timezone_offset(tz_ms).unwrap_or_else(|err| {
                                 log::error!("cannot set timezone offset: {:?}", err);
                             });
