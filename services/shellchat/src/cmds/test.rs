@@ -629,7 +629,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "Ship mode request denied").unwrap();
                     }
                 }
-                #[cfg(feature-"extra-tests")]
+                #[cfg(feature="extra-tests")]
                 "timeblock" => {
                     let time_cid = xous::connect(xous::SID::from_bytes(b"timeserverpublic").unwrap()).unwrap();
                     let result = xous::send_message(time_cid,
