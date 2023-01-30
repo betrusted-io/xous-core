@@ -7,7 +7,7 @@ cpu: CPU.Betrusted.AesVexRiscv @ sysbus
 // Platform Peripherals
 // Unrecognized peripheral: reboot @ 0xf0000000
 
-timer0: Timers.LiteX_Timer_CSR32 @ sysbus 0xf0001000
+timer0: Timers.Betrusted.LiteX_Timer_32 @ sysbus 0xf0001000
     frequency: 100000000
     IRQ -> cpu @ 1000
 
