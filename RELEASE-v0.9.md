@@ -318,6 +318,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - Small pool key packing was incorrectly using an old key offset when repacking keys, leading to data corruption/loss after deletion events
 - `mtxcli` has a message filter and async message updates! (thanks @tmarble)
 - OpenSK FIDO code upgraded to handle FIDO2.1, which means among other things Precursor now supports residential SSH keys (e.g. you can use it with ssh to log in, sign commits, etc.). Upgrading to the latest version will trigger a migration to the new database format. If there is a bug or compatibility issue, don't fear: the previous database is not affected, and you can downgrade to the previous version and continue using your original keys.
+- `transientdisk` by @gsora: a RAM-based 1.44MiB USB disk that one can use to transfer sensitive materials (such as private keys) between computers, and sleep well at night knowing the disk's data is completely erased on the next reboot.
 
 ## Roadmap
 - Lots of testing and bug fixes
