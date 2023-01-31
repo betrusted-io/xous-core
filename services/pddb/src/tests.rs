@@ -561,7 +561,7 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         list_all(pddb_os, &mut basis_cache);
 
         log::info!("CI done");
-
+        xous::rsyscall(xous::SysCall::Shutdown).unwrap();
         Ok(())
     }
 }
