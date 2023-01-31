@@ -61,6 +61,9 @@ pub(crate) enum I2cOpcode {
     IrqI2cTrace,
     /// checks if the I2C engine is currently busy, for polling implementations
     I2cIsBusy,
+    /// grabs a mutex on the I2C block, for multiple transactions that can't be separated
+    I2cMutexAcquire,
+    I2cMutexRelease,
     /// SuspendResume callback
     SuspendResume,
     Quit,

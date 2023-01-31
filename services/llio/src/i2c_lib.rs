@@ -25,6 +25,25 @@ impl I2c {
     pub fn i2c_set_timeout(&mut self, timeout: u32) {
         self.timeout_ms = timeout;
     }
+    /// Blocks if another I2C operation is in progress, and resumes once the mutex is released
+    /// This *must* be called before doing any I2C transaction -- even if a single action. This
+    /// operation exists because multiple I2C operations may have to be executed in sequence without
+    /// another thread interrupting the operation for the result to be valid. However, the API
+    /// only speaks I2C transactions at a single register read/write level, and can't know if a
+    /// subsequent read or write depends on the current state. Thus, we must acquire this mutex.
+    /// The mutex sharing is collaborative, so someone without the mutex could, in theory, just
+    /// barge in and perform an operation.
+    pub fn i2c_mutex_acquire(&self) {
+        xous::send_message(self.conn,
+            xous::Message::new_blocking_scalar(I2cOpcode::I2cMutexAcquire.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("error handling i2c mutex acquire");
+    }
+    /// Must be called after acquire to release the mutex, otherwise the block retains a hold on the system.
+    pub fn i2c_mutex_release(&self) {
+        xous::send_message(self.conn,
+            xous::Message::new_blocking_scalar(I2cOpcode::I2cMutexRelease.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("error handling i2c mutex release");
+    }
 
     /// initiate an i2c write. This is always a blocking call. In practice, it turns out it's not terribly
     /// useful to just "fire and forget" i2c writes, because actually we cared about the side effect of the

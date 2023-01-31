@@ -172,9 +172,14 @@ pub fn start_time_server() {
             // on boot, do the validation checks of the RTC. If it is not initialized or corrupted, fix it.
             let mut settings = [0u8; 8];
             loop {
+                i2c.i2c_mutex_acquire();
                 match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
-                    Ok(I2cStatus::ResponseReadOk) => break,
+                    Ok(I2cStatus::ResponseReadOk) => {
+                        i2c.i2c_mutex_release();
+                        break
+                    },
                     _ => {
+                        i2c.i2c_mutex_release();
                         log::error!("Couldn't check RTC, retrying!");
                         xous::yield_slice(); // recheck in a fast loop, we really should be able to grab this resource on boot.
                     },
@@ -196,7 +201,9 @@ pub fn start_time_server() {
                 settings[MONTHS] = to_bcd((start_time & 0xFF) as u8 % 12 + 1);
                 start_time >>= 8;
                 settings[YEARS] = to_bcd((start_time & 0xFF) as u8 % 10 + 1);
+                i2c.i2c_mutex_acquire();
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &settings).expect("RTC access error");
+                i2c.i2c_mutex_release();
             }
             rtc_checked.store(true, Ordering::SeqCst);
             loop {
@@ -218,7 +225,9 @@ pub fn start_time_server() {
                         settings[MONTHS] = to_bcd((start_time & 0xFF) as u8 % 12 + 1);
                         start_time >>= 8;
                         settings[YEARS] = to_bcd((start_time & 0xFF) as u8 % 10 + 1);
+                        i2c.i2c_mutex_acquire();
                         i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &settings).expect("RTC access error");
+                        i2c.i2c_mutex_release();
                         xous::return_scalar(msg.sender, 0).unwrap();
                     }),
                     Some(PrivTimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
