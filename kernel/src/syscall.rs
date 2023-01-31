@@ -372,12 +372,19 @@ fn return_memory(
             // execution from the new thread. Instead it continues in the old
             // thread. Therefore, we need to instruct the client to resume, and
             // return to the server.
+            #[cfg(not(baremetal))]
+            ss.switch_to_thread(client_pid, Some(client_tid))?;
+
             // In a baremetal environment, the opposite is true -- we instruct
             // the server to resume and return to the client.
             ss.set_thread_result(client_pid, client_tid, return_value)?;
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
+            if cfg!(baremetal) {
+                ss.unschedule_thread(server_pid, server_tid)?;
+                ss.ready_thread(server_pid, server_tid)?
+            }
             ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
             // Switch to the client
@@ -444,6 +451,10 @@ fn return_result(
             ss.set_thread_result(client_pid, client_tid, return_value)?;
             Ok(xous_kernel::Result::Ok)
         } else {
+            if cfg!(baremetal) {
+                ss.unschedule_thread(server_pid, server_tid)?;
+                ss.ready_thread(server_pid, server_tid)?
+            }
             // Switch away from the server, but leave it as Runnable
             ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
