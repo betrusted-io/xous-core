@@ -425,8 +425,6 @@ fn main() -> ! {
                 }
                 let seconds = delay as u8;
                 i2c.i2c_mutex_acquire();
-                // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-                // i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[RTC_PWR_MODE]).expect("RTC access error");
                 // set clock units to 1 second, output pulse length to ~218ms
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB_CLK, &[(TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]).expect("RTC access error");
                 // program elapsed time
@@ -449,8 +447,6 @@ fn main() -> ! {
             }),
             Some(Opcode::ClearWakeupAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 i2c.i2c_mutex_acquire();
-                // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-                // i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[RTC_PWR_MODE]).expect("RTC access error");
                 let config = Config::CLKOUT_DISABLE.bits();
                 // turn off RTC wakeup timer, in case previously set
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");

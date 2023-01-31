@@ -93,6 +93,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                             loop {
                                 log::info!("suspend/resume cycle: {}", iters);
                                 llio.set_wakeup_alarm(4).unwrap();
+                                ticktimer.sleep_ms(1000).ok();
                                 match susres.initiate_suspend() {
                                     Err(xous::Error::Timeout) => {
                                         log::warn!("Couldn't suspend, a server was blocking suspend.\n");
