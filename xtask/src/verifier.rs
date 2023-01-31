@@ -10,17 +10,17 @@ use crate::DynError;
 pub fn check_project_consistency() -> Result<(), DynError> {
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous@0.9.32",
-        "xous-kernel@0.9.28",
-        "xous-ipc@0.9.32",
-        "xous-api-log@0.1.27",
-        "xous-api-names@0.9.29",
-        "xous-api-susres@0.9.27",
-        "xous-api-ticktimer@0.9.27",
-        "xous-log@0.1.24",
-        "xous-names@0.9.33",
-        "xous-susres@0.1.29",
-        "xous-ticktimer@0.1.28",
+        "xous@0.9.33",
+        "xous-kernel@0.9.29",
+        "xous-ipc@0.9.33",
+        "xous-api-log@0.1.28",
+        "xous-api-names@0.9.30",
+        "xous-api-susres@0.9.28",
+        "xous-api-ticktimer@0.9.28",
+        "xous-log@0.1.25",
+        "xous-names@0.9.34",
+        "xous-susres@0.1.30",
+        "xous-ticktimer@0.1.29",
         // this set is only updated if the utralib changes
         "utralib@0.1.13",
         "svd2utra@0.1.11",
