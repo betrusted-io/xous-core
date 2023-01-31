@@ -40,7 +40,7 @@ fn i2c_thread(i2c_sid: xous::SID) {
         log::trace!("i2c message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(I2cOpcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                if !i2c.is_busy() {
+                if !i2c_mutex_acquired && !i2c.is_busy() {
                     i2c.suspend();
                     susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                     i2c.resume();
@@ -50,19 +50,23 @@ fn i2c_thread(i2c_sid: xous::SID) {
                 }
             }),
             Some(I2cOpcode::IrqI2cTxrxWriteDone) => msg_scalar_unpack!(msg, _, _, _, _, {
-                if let Some(token) = suspend_pending_token.take() {
-                    i2c.suspend();
-                    susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                    i2c.resume();
+                if !i2c_mutex_acquired && suspend_pending_token.is_some() {
+                    if let Some(token) = suspend_pending_token.take() {
+                        i2c.suspend();
+                        susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                        i2c.resume();
+                    }
                 }
                 // I2C state machine handler irq result
                 i2c.report_write_done();
             }),
             Some(I2cOpcode::IrqI2cTxrxReadDone) => msg_scalar_unpack!(msg, _, _, _, _, {
-                if let Some(token) = suspend_pending_token.take() {
-                    i2c.suspend();
-                    susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                    i2c.resume();
+                if !i2c_mutex_acquired && suspend_pending_token.is_some() {
+                    if let Some(token) = suspend_pending_token.take() {
+                        i2c.suspend();
+                        susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                        i2c.resume();
+                    }
                 }
                 // I2C state machine handler irq result
                 i2c.report_read_done();
@@ -82,6 +86,12 @@ fn i2c_thread(i2c_sid: xous::SID) {
                     Some(next_in_line)
                 } else {
                     i2c_mutex_acquired = false;
+                    // check to see if a suspend was pending
+                    if let Some(token) = suspend_pending_token.take() {
+                        i2c.suspend();
+                        susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                        i2c.resume();
+                    }
                     None
                 };
                 xous::return_scalar(msg.sender, 1).ok(); // acknowledge the release, after the mutex is marked false
