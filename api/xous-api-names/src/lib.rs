@@ -161,45 +161,37 @@ impl XousNames {
     /// This call uses the API already in place in `libstd`, hence the different style of
     /// argument passing, and tons of `unsafe` code.
     pub fn request_connection_blocking(&self, name: &str) -> Result<xous::CID, xous::Error> {
-        match self.request_connection(name) { // try a direct connection first
-            Ok(val) => Ok(val),
-            Err(xous::Error::AccessDenied) => Err(xous::Error::AccessDenied),
-            _ => {
-                // if it fails, yield the slice, and then register ourselves for the blocking path
-                xous::yield_slice();
-                let mut cr: ConnectRequest = Default::default();
-                let name_bytes = name.as_bytes();
+        let mut cr: ConnectRequest = Default::default();
+        let name_bytes = name.as_bytes();
 
-                // Set the string length to the length of the passed-in String,
-                // or the maximum possible length. Which ever is smaller.
-                cr.len = cr.name.len().min(name_bytes.len()) as u32;
+        // Set the string length to the length of the passed-in String,
+        // or the maximum possible length. Which ever is smaller.
+        cr.len = cr.name.len().min(name_bytes.len()) as u32;
 
-                // Copy the string into our backing store.
-                for (&src_byte, dest_byte) in name_bytes.iter().zip(&mut cr.name) {
-                    *dest_byte = src_byte;
-                }
-                log::info!("connection requested {}", name);
-                let msg = xous::MemoryMessage {
-                    id: api::Opcode::BlockingConnect.to_usize().unwrap(),
-                    buf: unsafe{ // safety: `cr` is #[repr(C, align(4096))], and should be exactly on page in size
-                        xous::MemoryRange::new(&mut cr as *mut _ as *mut u8 as usize, core::mem::size_of::<ConnectRequest>())?
-                    },
-                    offset: None,
-                    valid: xous::MemorySize::new(cr.len as usize),
-                };
-                xous::send_message(self.conn, xous::Message::MutableBorrow(msg))?;
+        // Copy the string into our backing store.
+        for (&src_byte, dest_byte) in name_bytes.iter().zip(&mut cr.name) {
+            *dest_byte = src_byte;
+        }
+        log::debug!("connection requested {}", name);
+        let msg = xous::MemoryMessage {
+            id: api::Opcode::BlockingConnect.to_usize().unwrap(),
+            buf: unsafe{ // safety: `cr` is #[repr(C, align(4096))], and should be exactly on page in size
+                xous::MemoryRange::new(&mut cr as *mut _ as *mut u8 as usize, core::mem::size_of::<ConnectRequest>())?
+            },
+            offset: None,
+            valid: xous::MemorySize::new(cr.len as usize),
+        };
+        xous::send_message(self.conn, xous::Message::MutableBorrow(msg))?;
 
-                let response_ptr = &cr as *const ConnectRequest as *const u32;
-                let result = unsafe { response_ptr.read() }; // safety: because that's how it was packed on the server, a naked u32
+        let response_ptr = &cr as *const ConnectRequest as *const u32;
+        let result = unsafe { response_ptr.read() }; // safety: because that's how it was packed on the server, a naked u32
 
-                if result == 0 {
-                    let cid = unsafe { response_ptr.add(1).read() }.into(); // safety: because that's how it was packed on the server
-                    log::info!("connected to {}:{}", name, cid);
-                    Ok(cid)
-                } else {
-                    Err(xous::Error::InternalError)
-                }
-            }
+        if result == 0 {
+            let cid = unsafe { response_ptr.add(1).read() }.into(); // safety: because that's how it was packed on the server
+            log::debug!("connected to {}:{}", name, cid);
+            Ok(cid)
+        } else {
+            Err(xous::Error::InternalError)
         }
     }
 

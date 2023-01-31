@@ -437,10 +437,10 @@ fn main() -> ! {
                     // See if we have any requests matching this server ID. If so, make the
                     // connection. Note that this could be replaced by `drain_filter()` when
                     // that is stabilized
-                    let mut i = 0;
-                    while i < waiting_connections.len() {
-                        if name_from_msg(&waiting_connections[i]) == Ok(name) {
-                            let mut msg = waiting_connections.remove(i);
+                    let mut i = waiting_connections.len() as isize - 1;
+                    while i >= 0 {
+                        if name_from_msg(&waiting_connections[i as usize]) == Ok(name) {
+                            let mut msg = waiting_connections.remove(i as usize);
                             match blocking_connect(&mut msg, &mut name_table) {
                                 Err(e) => respond_connect_error(msg, e),
                                 Ok(ConnectSuccess::Connected(cid, disc)) => {
@@ -450,9 +450,8 @@ fn main() -> ! {
                                     panic!("message connection attempt resulted in `Wait` even though it ought to exist");
                                 }
                             }
-                        } else {
-                            i += 1;
                         }
+                        i -= 1;
                     }
                 }
             }
