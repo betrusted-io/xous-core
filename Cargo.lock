@@ -5040,7 +5040,7 @@ dependencies = [
 
 [[package]]
 name = "xous-kernel"
-version = "0.9.29"
+version = "0.9.30"
 dependencies = [
  "bitflags",
  "crossbeam-channel",
@@ -5100,7 +5100,7 @@ checksum = "6ed3278bb4e7be4895c1c597434e5269f7357ffb800ebc644f0398bb008a15ad"
 
 [[package]]
 name = "xous-susres"
-version = "0.1.30"
+version = "0.1.31"
 dependencies = [
  "log",
  "num-derive",
