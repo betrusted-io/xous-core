@@ -119,10 +119,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let base_pkgs_remote = [
         "xous-log@0.1.25",         // "well known" service: debug logging
         "xous-names@0.9.34",      // "well known" service: manage inter-server connection lookup
-        "xous-susres@0.1.30",     // ticktimer registers with susres to coordinate time continuity across sleeps
+        "xous-susres@0.1.31",     // ticktimer registers with susres to coordinate time continuity across sleeps
         "xous-ticktimer@0.1.29",   // "well known" service: thread scheduling
     ].to_vec();
-    let xous_kernel_remote = "xous-kernel@0.9.29";
+    let xous_kernel_remote = "xous-kernel@0.9.30";
 
     // ---- extract position independent args ----
     let lkey = get_flag("--lkey")?;

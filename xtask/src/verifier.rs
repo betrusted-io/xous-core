@@ -11,7 +11,7 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     let check_pkgs = [
         // this set updates with kernel API changes
         "xous@0.9.33",
-        "xous-kernel@0.9.29",
+        "xous-kernel@0.9.30",
         "xous-ipc@0.9.33",
         "xous-api-log@0.1.28",
         "xous-api-names@0.9.30",
@@ -19,7 +19,7 @@ pub fn check_project_consistency() -> Result<(), DynError> {
         "xous-api-ticktimer@0.9.28",
         "xous-log@0.1.25",
         "xous-names@0.9.34",
-        "xous-susres@0.1.30",
+        "xous-susres@0.1.31",
         "xous-ticktimer@0.1.29",
         // this set is only updated if the utralib changes
         "utralib@0.1.13",
