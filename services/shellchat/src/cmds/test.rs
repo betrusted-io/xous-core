@@ -466,6 +466,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("initiating suspend");
                     env.ticktimer.sleep_ms(250).unwrap(); // give a moment for all the command queues to clear
                     susres.initiate_suspend().unwrap();
+                    log::info!("resumed");
                     env.ticktimer.sleep_ms(1000).unwrap(); // pause for the suspend/resume cycle
 
                     let timeout = 60_000;

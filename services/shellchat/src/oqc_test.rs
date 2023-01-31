@@ -53,7 +53,9 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
     oqc_cid.store(xous::connect(oqc_sid).unwrap(), Ordering::SeqCst);
     loop {
         let msg = xous::receive_message(oqc_sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option<OqcOp> = FromPrimitive::from_usize(msg.body.id());
+        log::info!("{:?}", opcode);
+        match opcode {
             Some(OqcOp::Trigger) => xous::msg_blocking_scalar_unpack!(msg, timeout_set, _, _, _, {
                 if !test_run {
                     // test the screen
