@@ -179,6 +179,7 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
 
             // Mark the server's context as "Ready". If this fails, return the context
             // to the blocking list.
+            #[cfg(target_os = "xous")]
             ss.ready_thread(server_pid, server_tid).map_err(|e| {
                 ss.server_from_sidx_mut(sidx)
                     .expect("server couldn't be located")
@@ -366,6 +367,7 @@ fn return_memory(
         if !cfg!(baremetal) || in_irq || !client_is_runnable {
             // Send a message to the client, in order to wake it up
             // print!(" [waking up PID {}:{}]", client_pid, client_tid);
+            #[cfg(baremetal)]
             ss.ready_thread(client_pid, client_tid)?;
             #[cfg(not(baremetal))]
             ss.switch_to_thread(client_pid, Some(client_tid))?;
@@ -724,7 +726,7 @@ fn reply_and_receive_next(
                     .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
             } else {
                 // Switch to the client and return the result
-                ss.ready_thread(response.pid, response.tid)?;
+                //ss.ready_thread(response.pid, response.tid)?;
                 ss.switch_to_thread(response.pid, Some(response.tid))?;
                 ss.set_thread_result(response.pid, response.tid, response.result)?;
 
@@ -1057,16 +1059,19 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }),
         SysCall::CreateThread(thread_init) => SystemServices::with_mut(|ss| {
             ss.create_thread(pid, thread_init).map(|new_tid| {
-                // Immediately switch to the new thread
-                ss.switch_to_thread(pid, Some(new_tid))
-                    .expect("couldn't activate new thread");
-
                 // Set the return value of the existing thread to be the new thread ID
-                ss.set_thread_result(pid, tid, xous_kernel::Result::ThreadID(new_tid))
-                    .expect("couldn't set new thread ID");
+                if cfg!(target_os = "xous") {
+                    // Immediately switch to the new thread
+                    ss.switch_to_thread(pid, Some(new_tid))
+                        .expect("couldn't activate new thread");
+                    ss.set_thread_result(pid, tid, xous_kernel::Result::ThreadID(new_tid))
+                        .expect("couldn't set new thread ID");
 
-                // Return `ResumeProcess` since we're switching threads
-                xous_kernel::Result::ResumeProcess
+                    // Return `ResumeProcess` since we're switching threads
+                    xous_kernel::Result::ResumeProcess
+                } else {
+                    xous_kernel::Result::ThreadID(new_tid)
+                }
             })
         }),
         SysCall::CreateProcess(process_init) => SystemServices::with_mut(|ss| {

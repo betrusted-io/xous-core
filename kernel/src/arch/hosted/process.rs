@@ -222,35 +222,22 @@ impl Process {
         PROCESS_TABLE.with(|pt| {
             let process_table = &mut *pt.borrow_mut();
             Self::setup_thread_inner(thread, process_table);
-            // println!(
-            //     "KERNEL({}): self.contexts[{}].allocated = {}",
-            //     current_pid_idx,
-            //     context - 1,
-            //     process.contexts[context - 1].allocated
-            // );
         });
         Ok(())
     }
 
-    // pub fn current_thread(&mut self) -> TID {
-    //     PROCESS_TABLE.with(|pt| {
-    //         let mut process_table = pt.borrow_mut();
-    //         let current_pid_idx = process_table.current.get() as usize - 1;
-    //         let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
-    //         process.current_context
-    //     })
-    // }
-
-    /// Set the current context number.
+    /// Set the current thread ID.
     pub fn set_tid(&mut self, thread: TID) -> Result<(), xous_kernel::Error> {
         assert!(thread > 0);
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
-            let current_pid_idx = process_table.current.get() as usize - 1;
+            let current_pid = process_table.current.get();
+            let current_pid_idx = current_pid as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
             assert!(
                 process.threads[thread - 1].allocated,
-                "tried to switch to thread {} which wasn't allocated",
+                "process {} tried to switch to thread {} which wasn't allocated",
+                current_pid,
                 thread
             );
             process.current_thread = thread;
@@ -273,8 +260,20 @@ impl Process {
         })
     }
 
-    pub fn thread_exists(&self, _tid: TID) -> bool {
-        false
+    pub fn thread_exists(&self, tid: TID) -> bool {
+        if tid == 0 {
+            return false;
+        }
+        PROCESS_TABLE.with(|pt| {
+            let process_table = pt.borrow();
+            let current_pid = process_table.current.get();
+            let current_pid_idx = current_pid as usize - 1;
+            if let Some(Some(process)) = process_table.table.get(current_pid_idx) {
+                process.threads.get(tid - 1).map(|t| t.allocated).unwrap_or(false)
+            } else {
+                false
+            }
+        })
     }
 
     pub fn set_thread_result(&mut self, tid: TID, result: xous_kernel::Result) {
@@ -283,11 +282,11 @@ impl Process {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
-            assert!(
-                process.threads[tid - 1].allocated,
-                "thread {} is not allocated",
-                tid,
-            );
+            // assert!(
+            //     process.threads[tid - 1].allocated,
+            //     "thread {} is not allocated",
+            //     tid,
+            // );
 
             let mut response = vec![];
             // Add the destination thread ID to the start of the packet.
@@ -305,7 +304,11 @@ impl Process {
             }
 
             // If there is memory to return for this thread, also return that.
-            if let Some(buf) = process.memory_to_return[tid - 1].take() {
+            if let Some(buf) = process
+                .memory_to_return
+                .get_mut(tid - 1)
+                .and_then(|v| v.take())
+            {
                 if result.memory().is_some() {
                     panic!("Result has memory and we're also returning memory!");
                 }

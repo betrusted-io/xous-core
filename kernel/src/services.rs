@@ -698,6 +698,7 @@ impl SystemServices {
         Ok(())
     }
 
+    #[cfg(target_pointer_width = "32")]
     pub fn find_next_thread(thread_mask: usize, current_thread: usize) -> usize {
         // From https://graphics.stanford.edu/~seander/bithacks.html#ZerosOnRightMultLookup
         // This platform has a multiplier, so this is fast
@@ -723,6 +724,23 @@ impl SystemServices {
                 trailing_zeros(upper_bits)
             } else {
                 trailing_zeros(thread_mask)
+            }
+        }
+    }
+
+    #[cfg(not(target_pointer_width = "32"))]
+    pub fn find_next_thread(thread_mask: usize, current_thread: usize) -> usize {
+        if thread_mask == 0 {
+            panic!("no threads were available to run");
+        }
+        if thread_mask.is_power_of_two() {
+            thread_mask.trailing_zeros() as usize
+        } else {
+            let upper_bits = thread_mask & !((2usize << current_thread) - 1);
+            if upper_bits != 0 {
+                upper_bits.trailing_zeros() as usize
+            } else {
+                thread_mask.trailing_zeros() as usize
             }
         }
     }
@@ -815,6 +833,8 @@ impl SystemServices {
                 }
 
                 // Activate this process on this CPU
+                #[cfg(not(target_os = "xous"))]
+                process.activate()?;
                 ArchProcess::current().set_tid(new_thread)?;
                 process.current_thread = new_thread as _;
                 ProcessState::Running(ready_threads & !(1 << new_thread))
@@ -1549,7 +1569,6 @@ impl SystemServices {
 
         // println!("KERNEL({}): Created new thread {}", pid, new_tid);
 
-        // let old_state = process.state;
         // Queue the thread to run
         process.state = match process.state {
             ProcessState::Running(x) => ProcessState::Running(x | (1 << new_tid)),
@@ -1825,15 +1844,21 @@ impl SystemServices {
             // existing connection
             for (connection_idx, server_idx) in process_inner.connection_map.iter().enumerate() {
                 // If we find an empty slot, use it
-                if server_idx.is_none() {
+                let Some(server_idx) = server_idx else {
                     if slot_idx.is_none() {
                         slot_idx = Some(connection_idx);
                     }
                     continue;
+                };
+                let server_idx = server_idx.get() as usize;
+
+                // Tombstone or unallocated server index
+                if server_idx < 2 {
+                    continue;
                 }
 
                 // If a connection to this server ID exists already, return it.
-                let server_idx = (server_idx.unwrap().get() as usize) - 2;
+                let server_idx = server_idx - 2;
                 if let Some(allocated_server) = &self.servers[server_idx] {
                     if allocated_server.sid == sid {
                         // println!("KERNEL({}): Existing connection to SID {:?} found in this process @ {}, process connection map is: {:?}",
