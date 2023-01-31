@@ -11,6 +11,7 @@ use num_traits::{ToPrimitive, FromPrimitive};
 use xous_ipc::Buffer;
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack, send_message, Message};
 use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
+use xous::messages::sender::Sender;
 
 #[cfg(feature = "debugprint")]
 #[macro_use]
@@ -42,7 +43,7 @@ mod implementation {
 
     fn timer_tick(_irq_no: usize, arg: *mut usize) {
         let mut timer = CSR::new(arg as *mut u32);
-        // this call forces pre-emption every timer tick
+        // this call forces preemption every timer tick
         // rsyscalls are "raw syscalls" -- used for syscalls that don't have a friendly wrapper around them
         // since ReturnToParent is only used here, we haven't wrapped it, so we use an rsyscall
         xous::rsyscall(xous::SysCall::ReturnToParent(xous::PID::new(1).unwrap(), 0))
@@ -393,12 +394,12 @@ mod implementation {
                 self.os_timer.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
                 // clear any pending interrupts so we have some time to exit
                 self.os_timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
-                // Set EV_ENABLE, this starts pre-emption
+                // Set EV_ENABLE, this starts preemption
                 self.os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0b1);
-                // enable the pre-emption timer
+                // enable the preemption timer
                 self.os_timer.wfo(utra::timer0::EN_EN, 0b1);
 
-                // start the tickttimer running
+                // start the ticktimer running
                 self.csr.wo(utra::susres::CONTROL,
                     self.csr.ms(utra::susres::CONTROL_LOAD, 1)
                 );
@@ -581,7 +582,7 @@ fn main() -> ! {
     let timeout_outgoing_conn = xous::connect(timeout_sid).expect("couldn't connect to our timeout thread");
     susres_hw.setup_timeout_csr(timeout_outgoing_conn).expect("couldn't set hardware CSR for timeout thread");
 
-    let mut suspend_requested = false;
+    let mut suspend_requested: Option<Sender> = None;
     let mut timeout_pending = false;
     let mut reboot_requested: bool = false;
     let mut allow_suspend = true;
@@ -622,7 +623,7 @@ fn main() -> ! {
                     do_hook(hookdata, &mut suspend_subscribers);
                 },
                 Some(Opcode::SuspendingNow) => {
-                    if !suspend_requested {
+                    if suspend_requested.is_none() {
                         // this is harmless, it means a process' execution gate came a bit later than expected, so just ignore and tell it to resume
                         // the execution gate is only requested until *after* a process has checked in and said it is ready to suspend, anyways.
                         log::warn!("exec gate message received late from pid {:?}, ignoring", msg.sender.pid());
@@ -633,7 +634,7 @@ fn main() -> ! {
                 },
                 Some(Opcode::SuspendReady) => msg_scalar_unpack!(msg, token, _, _, _, {
                     log::debug!("SuspendReady with token {}", token);
-                    if !suspend_requested {
+                    if suspend_requested.is_none() {
                         log::error!("received a SuspendReady message when a suspend wasn't pending from token {}", token);
                         continue;
                     }
@@ -677,7 +678,8 @@ fn main() -> ! {
                         // ---- omg power came back! ---
 
                         // when do_suspend() returns, it means we've resumed
-                        suspend_requested = false;
+                        let sender = suspend_requested.take().expect("suspend was requested, but no requestor is on record!");
+
                         log_server::resume(); // log server is a special case, in order to avoid circular dependencies
                         if susres_hw.do_resume() {
                             log::error!("We did a clean shut-down, but bootloader is saying previous suspend was forced. Some peripherals may be in an unclean state!");
@@ -688,6 +690,9 @@ fn main() -> ! {
                             xous::return_scalar(pid, 0).expect("couldn't return dummy message to unblock execution");
                         }
                         susres_hw.restore_wfi();
+
+                        // this unblocks the requestor of the suspend
+                        xous::return_scalar(sender, 1).ok();
                     } else if all_ready {
                         log::debug!("finished with {:?} going to next round", current_op_order);
                         // the current order is finished, send the next tranche
@@ -716,11 +721,8 @@ fn main() -> ! {
                     // if the 2-second timeout is still pending from a previous suspend, deny the suspend request.
                     // ...just don't suspend that quickly after resuming???
                     if allow_suspend && !timeout_pending {
-                        // ack the request early
-                        xous::return_scalar(msg.sender, 1).ok();
-
                         susres_hw.ignore_wfi();
-                        suspend_requested = true;
+                        suspend_requested = Some(msg.sender);
                         // clear the resume gate
                         SHOULD_RESUME.store(false, Ordering::Relaxed);
                         // clear the ready to suspend flag and failed to suspend flag
@@ -779,7 +781,8 @@ fn main() -> ! {
                         // ---- omg power came back! ---
 
                         // when do_suspend() returns, it means we've resumed
-                        suspend_requested = false;
+                        let sender = suspend_requested.take().expect("suspend was requested, but no requestor is on record!");
+
                         log_server::resume(); // log server is a special case, in order to avoid circular dependencies
                         if susres_hw.do_resume() {
                             log::error!("We forced a suspend, some peripherals may be in an unclean state!");
@@ -790,6 +793,9 @@ fn main() -> ! {
                             xous::return_scalar(pid, 0).expect("couldn't return dummy message to unblock execution");
                         }
                         susres_hw.restore_wfi();
+
+                        // this unblocks the requestor of the suspend
+                        xous::return_scalar(sender, 1).ok();
                     } else {
                         log::trace!("clean suspend timeout received, ignoring");
                         // this means we did a clean suspend, we've resumed, and the timeout came back after the resume
