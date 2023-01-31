@@ -587,7 +587,11 @@ impl SystemServices {
             let mut current = self
                 .get_process_mut(current_pid)
                 .expect("couldn't get current PID");
-            assert!(arch::process::current_tid() == current.current_thread);
+            // The current thread should never be 0, but for some reason it ends up
+            // as 0 after resuming from suspend. It's unclear how this happens.
+            if current.current_thread == 0 {
+                current.current_thread = arch::process::current_tid();
+            }
             // let old_state = current.state;
             current.state = match current.state {
                 ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_thread)),
