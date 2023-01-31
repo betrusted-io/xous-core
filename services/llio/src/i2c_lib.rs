@@ -79,9 +79,8 @@ impl I2c {
         }
     }
 
-    /// initiate an i2c read. if asyncread_cb is `None`, one will be provided and the routine will synchronously block until read is complete.
-    /// synchronous reads will return the data in &mut `data`. Asynchronous reads will provide the result in the `rxbuf` field of the `I2cTransaction`
-    /// returned via the callback. Note that the callback API may be revised to return a smaller, more targeted structure in the future.
+    /// initiate an i2c read. always blocks until done. uses a "repeated start" to switch between
+    /// addressing and reading the device.
     pub fn i2c_read(&mut self, dev: u8, adr: u8, data: &mut [u8]) -> Result<I2cStatus, xous::Error> {
         if data.len() > I2C_MAX_LEN - 1 {
             return Err(xous::Error::OutOfMemory)
@@ -113,6 +112,41 @@ impl I2c {
             }
         }
     }
+
+    /// initiate an i2c read, but for devices that don't support repeated starts, such as the AB-RTCMC-32.768
+    pub fn i2c_read_no_repeated_start(&mut self, dev: u8, adr: u8, data: &mut [u8]) -> Result<I2cStatus, xous::Error> {
+        if data.len() > I2C_MAX_LEN - 1 {
+            return Err(xous::Error::OutOfMemory)
+        }
+        let mut transaction = I2cTransaction::new();
+        let mut txbuf = [0; I2C_MAX_LEN];
+        txbuf[0] = adr;
+        let rxbuf = [0; I2C_MAX_LEN];
+        transaction.bus_addr = dev;
+        transaction.txbuf = Some(txbuf);
+        transaction.txlen = 1;
+        transaction.rxbuf = Some(rxbuf);
+        transaction.rxlen = data.len() as u32;
+        transaction.timeout_ms = self.timeout_ms;
+        transaction.use_repeated_start = false;
+
+        let mut buf = Buffer::into_buf(transaction).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, I2cOpcode::I2cTxRx.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let result = buf.to_original::<I2cResult, _>().unwrap();
+        match result.status {
+            I2cStatus::ResponseReadOk => {
+                for (&src, dst) in result.rxbuf[..result.rxlen as usize].iter().zip(data.iter_mut()) {
+                    *dst = src;
+                }
+                Ok(I2cStatus::ResponseReadOk)
+            }
+            _ => {
+                log::error!("I2C error: {:?}", result);
+                Err(xous::Error::InternalError)
+            }
+        }
+    }
+
 }
 
 impl Drop for I2c {

@@ -320,7 +320,7 @@ impl I2cStateMachine {
                         // send next byte if there is one
                         if self.index < transaction.txlen {
                             self.i2c_csr.wfo(utra::i2c::TXR_TXR, txbuf[self.index as usize] as u32);
-                            if self.index == (transaction.txlen - 1) && transaction.rxbuf.is_none() {
+                            if self.index == (transaction.txlen - 1) && (transaction.rxbuf.is_none() || !transaction.use_repeated_start) {
                                 // send a stop bit if this is the very last in the series
                                 self.i2c_csr.wo(utra::i2c::COMMAND,
                                     self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |

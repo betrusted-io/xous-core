@@ -45,10 +45,11 @@ pub struct I2cTransaction {
     pub rxbuf: Option<[u8; I2C_MAX_LEN]>,
     pub rxlen: u32,
     pub timeout_ms: u32,
+    pub use_repeated_start: bool,
 }
 impl I2cTransaction {
     pub fn new() -> Self {
-        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 500 }
+        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 500, use_repeated_start: true }
     }
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
