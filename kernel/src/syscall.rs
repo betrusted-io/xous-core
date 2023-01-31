@@ -352,6 +352,8 @@ fn return_memory(
         #[cfg(not(baremetal))]
         let src_virt = buf.as_ptr() as _;
 
+        let return_value = xous_kernel::Result::MemoryReturned(offset, valid);
+
         // Return the memory to the calling process
         ss.return_memory(
             src_virt,
@@ -361,44 +363,36 @@ fn return_memory(
             len.get(),
         )?;
 
-        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
-
-        // Unblock the client context to allow it to continue.
-        if !cfg!(baremetal) || in_irq || !client_is_runnable {
-            // Send a message to the client, in order to wake it up
-            // print!(" [waking up PID {}:{}]", client_pid, client_tid);
-            #[cfg(baremetal)]
+        if cfg!(baremetal) {
             ss.ready_thread(client_pid, client_tid)?;
-            #[cfg(not(baremetal))]
-            ss.switch_to_thread(client_pid, Some(client_tid))?;
-            ss.set_thread_result(
-                client_pid,
-                client_tid,
-                xous_kernel::Result::MemoryReturned(offset, valid),
-            )?;
+        }
 
-            // Return success to the server
+        if !cfg!(baremetal) || in_irq || !ss.runnable(client_pid, Some(client_tid))? {
+            // In a hosted environment, `switch_to_thread()` doesn't continue
+            // execution from the new thread. Instead it continues in the old
+            // thread. Therefore, we need to instruct the client to resume, and
+            // return to the server.
+            // In a baremetal environment, the opposite is true -- we instruct
+            // the server to resume and return to the client.
+            ss.set_thread_result(client_pid, client_tid, return_value)?;
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
-            ss.unschedule_thread(server_pid, server_tid)?;
-            ss.ready_thread(server_pid, server_tid)?;
             ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
             // Switch to the client
-            ss.ready_thread(client_pid, client_tid)?;
             ss.switch_to_thread(client_pid, Some(client_tid))?;
-            Ok(xous_kernel::Result::MemoryReturned(offset, valid))
+            Ok(return_value)
         }
     })
 }
 
-fn return_scalar(
+fn return_result(
     server_pid: PID,
     server_tid: TID,
     in_irq: bool,
     sender: MessageSender,
-    arg: usize,
+    return_value: xous_kernel::Result,
 ) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from(sender);
@@ -431,7 +425,7 @@ fn return_scalar(
                 return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING ({}:{}): Tried to wait on a message that didn't exist (irq? {}) -- return Scalar1({})", server_pid.get(), server_tid, if in_irq { "yes"} else {"no"}, arg);
+                println!("WARNING ({}:{}): Tried to wait on a message that didn't exist (irq? {}) -- return {:?}", server_pid.get(), server_tid, if in_irq { "yes"} else {"no"}, result);
                 return Err(xous_kernel::Error::DoubleFree);
             }
         };
@@ -447,174 +441,15 @@ fn return_scalar(
             // return to the server.
             // In a baremetal environment, the opposite is true -- we instruct
             // the server to resume and return to the client.
-            ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
+            ss.set_thread_result(client_pid, client_tid, return_value)?;
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
-            ss.unschedule_thread(server_pid, server_tid)?;
-            ss.ready_thread(server_pid, server_tid)?;
             ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
             // Switch to the client
             ss.switch_to_thread(client_pid, Some(client_tid))?;
-            Ok(xous_kernel::Result::Scalar1(arg))
-        }
-    })
-}
-
-fn return_scalar2(
-    server_pid: PID,
-    server_tid: TID,
-    in_irq: bool,
-    sender: MessageSender,
-    arg1: usize,
-    arg2: usize,
-) -> SysCallResult {
-    SystemServices::with_mut(|ss| {
-        let sender = SenderID::from(sender);
-
-        let server = ss
-            .server_from_sidx_mut(sender.sidx)
-            .ok_or(xous_kernel::Error::ServerNotFound)?;
-        // .expect("Couldn't get server from SIDX");
-        if server.pid != server_pid {
-            return Err(xous_kernel::Error::ServerNotFound);
-        }
-        let result = server.take_waiting_message(sender.idx, None)?;
-        let (client_pid, client_tid) = match result {
-            WaitingMessage::ScalarMessage(pid, tid) => (pid, tid),
-            WaitingMessage::ForgetMemory(_) => {
-                println!("WARNING: Tried to wait on a scalar message that was actually forgetting memory");
-                return Err(xous_kernel::Error::DoubleFree);
-            }
-            WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
-                println!(
-                    "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
-                );
-                return Err(xous_kernel::Error::DoubleFree);
-            }
-            WaitingMessage::MovedMemory => {
-                println!(
-                    "WARNING: Tried to wait on a scalar message that was actually moved memory"
-                );
-                return Err(xous_kernel::Error::DoubleFree);
-            }
-            WaitingMessage::None => {
-                println!(
-                    "WARNING: Tried to wait on a message that didn't exist -- return scalar 2"
-                );
-                return Err(xous_kernel::Error::DoubleFree);
-            }
-        };
-
-        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
-
-        if !cfg!(baremetal) || in_irq || !client_is_runnable {
-            // In a hosted environment, `switch_to_thread()` doesn't continue
-            // execution from the new thread. Instead it continues in the old
-            // thread. Therefore, we need to instruct the client to resume, and
-            // return to the server.
-            // In a baremetal environment, the opposite is true -- we instruct
-            // the server to resume and return to the client.
-            ss.set_thread_result(
-                client_pid,
-                client_tid,
-                xous_kernel::Result::Scalar2(arg1, arg2),
-            )?;
-            if cfg!(baremetal) {
-                ss.ready_thread(client_pid, client_tid)?;
-            }
-            Ok(xous_kernel::Result::Ok)
-        } else {
-            // Switch away from the server, but leave it as Runnable
-            ss.unschedule_thread(server_pid, server_tid)?;
-            ss.ready_thread(server_pid, server_tid)?;
-            ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
-
-            // Switch to the client
-            ss.ready_thread(client_pid, client_tid)?;
-            ss.switch_to_thread(client_pid, Some(client_tid))?;
-            Ok(xous_kernel::Result::Scalar2(arg1, arg2))
-        }
-    })
-}
-
-fn return_scalar5(
-    server_pid: PID,
-    server_tid: TID,
-    in_irq: bool,
-    sender: MessageSender,
-    arg1: usize,
-    arg2: usize,
-    arg3: usize,
-    arg4: usize,
-    arg5: usize,
-) -> SysCallResult {
-    SystemServices::with_mut(|ss| {
-        let sender = SenderID::from(sender);
-
-        let server = ss
-            .server_from_sidx_mut(sender.sidx)
-            .ok_or(xous_kernel::Error::ServerNotFound)?;
-        // .expect("Couldn't get server from SIDX");
-        if server.pid != server_pid {
-            return Err(xous_kernel::Error::ServerNotFound);
-        }
-        let result = server.take_waiting_message(sender.idx, None)?;
-        let (client_pid, client_tid) = match result {
-            WaitingMessage::ScalarMessage(pid, tid) => (pid, tid),
-            WaitingMessage::ForgetMemory(_) => {
-                println!("WARNING: Tried to wait on a scalar message that was actually forgetting memory");
-                return Err(xous_kernel::Error::DoubleFree);
-            }
-            WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
-                println!(
-                    "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
-                );
-                return Err(xous_kernel::Error::DoubleFree);
-            }
-            WaitingMessage::MovedMemory => {
-                println!(
-                    "WARNING: Tried to wait on a scalar message that was actually moved memory"
-                );
-                return Err(xous_kernel::Error::DoubleFree);
-            }
-            WaitingMessage::None => {
-                println!(
-                    "WARNING: Tried to wait on a message that didn't exist -- return scalar 5"
-                );
-                return Err(xous_kernel::Error::DoubleFree);
-            }
-        };
-
-        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
-
-        if !cfg!(baremetal) || in_irq || !client_is_runnable {
-            // In a hosted environment, `switch_to_thread()` doesn't continue
-            // execution from the new thread. Instead it continues in the old
-            // thread. Therefore, we need to instruct the client to resume, and
-            // return to the server.
-            // In a baremetal environment, the opposite is true -- we instruct
-            // the server to resume and return to the client.
-            ss.set_thread_result(
-                client_pid,
-                client_tid,
-                xous_kernel::Result::Scalar5(arg1, arg2, arg3, arg4, arg5),
-            )?;
-            if cfg!(baremetal) {
-                ss.ready_thread(client_pid, client_tid)?;
-            }
-            Ok(xous_kernel::Result::Ok)
-        } else {
-            // Switch away from the server, but leave it as Runnable
-            ss.unschedule_thread(server_pid, server_tid)?;
-            ss.ready_thread(server_pid, server_tid)?;
-            ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
-
-            // Switch to the client
-            ss.ready_thread(client_pid, client_tid)?;
-            ss.switch_to_thread(client_pid, Some(client_tid))?;
-            Ok(xous_kernel::Result::Scalar5(arg1, arg2, arg3, arg4, arg5))
+            Ok(return_value)
         }
     })
 }
@@ -726,7 +561,6 @@ fn reply_and_receive_next(
                     .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
             } else {
                 // Switch to the client and return the result
-                //ss.ready_thread(response.pid, response.tid)?;
                 ss.switch_to_thread(response.pid, Some(response.tid))?;
                 ss.set_thread_result(response.pid, response.tid, response.result)?;
 
@@ -752,7 +586,6 @@ fn reply_and_receive_next(
             else {
                 ss.unschedule_thread(server_pid, server_tid)?;
                 // Switch to the client and return the result
-                ss.ready_thread(response.pid, response.tid)?;
                 ss.switch_to_thread(response.pid, Some(response.tid))?;
                 ss.set_thread_result(response.pid, response.tid, response.result)?;
 
@@ -1096,13 +929,23 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::ReturnMemory(sender, buf, offset, valid) => {
             return_memory(pid, tid, in_irq, sender, buf, offset, valid)
         }
-        SysCall::ReturnScalar1(sender, arg) => return_scalar(pid, tid, in_irq, sender, arg),
-        SysCall::ReturnScalar2(sender, arg1, arg2) => {
-            return_scalar2(pid, tid, in_irq, sender, arg1, arg2)
+        SysCall::ReturnScalar1(sender, arg) => {
+            return_result(pid, tid, in_irq, sender, xous_kernel::Result::Scalar1(arg))
         }
-        SysCall::ReturnScalar5(sender, arg1, arg2, arg3, arg4, arg5) => {
-            return_scalar5(pid, tid, in_irq, sender, arg1, arg2, arg3, arg4, arg5)
-        }
+        SysCall::ReturnScalar2(sender, arg1, arg2) => return_result(
+            pid,
+            tid,
+            in_irq,
+            sender,
+            xous_kernel::Result::Scalar2(arg1, arg2),
+        ),
+        SysCall::ReturnScalar5(sender, arg1, arg2, arg3, arg4, arg5) => return_result(
+            pid,
+            tid,
+            in_irq,
+            sender,
+            xous_kernel::Result::Scalar5(arg1, arg2, arg3, arg4, arg5),
+        ),
         SysCall::ReplyAndReceiveNext(sender, a0, a1, a2, a3, a4, scalar_type) => {
             reply_and_receive_next(pid, tid, in_irq, sender, a0, a1, a2, a3, a4, scalar_type)
         }
