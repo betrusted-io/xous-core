@@ -1,10 +1,10 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
-
 use core::fmt::Write;
 use graphics_server::api::GlyphStyle;
 use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
 use num_traits::*;
+mod flash_drive;
 
 pub(crate) const SERVER_NAME_TRANSIENTDISK: &str = "_Transient Disk_";
 
@@ -115,63 +115,6 @@ impl UI {
     }
 }
 
-struct FlashDrive {
-    capacity: usize,
-    block_size: usize,
-    memory: xous::MemoryRange,
-}
-
-#[derive(Debug)]
-enum FlashDriveError {
-    CapacityNotPageAligned,
-}
-
-impl FlashDrive {
-    fn new(capacity: usize, block_size: usize) -> Result<Self, FlashDriveError> {
-        if (capacity % 1024) != 0 {
-            return Err(FlashDriveError::CapacityNotPageAligned);
-        }
-
-        let mut backing = xous::syscall::map_memory(
-            None,
-            None,
-            capacity,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .unwrap();
-
-        // initialize backing slice with bogus data
-        let backing_slice: &mut [u32] = backing.as_slice_mut();
-        for (index, d) in backing_slice.iter_mut().enumerate() {
-            *d = index as u32;
-        }
-
-        Ok(Self {
-            capacity,
-            block_size,
-            memory: backing,
-        })
-    }
-
-    fn read(&mut self, lba: usize, data: &mut [u8]) {
-        let backing_slice: &[u8] = self.memory.as_slice();
-
-        let rawdata = &backing_slice[lba * self.block_size..(lba + 1) * self.block_size];
-
-        data[..self.block_size].copy_from_slice(rawdata);
-    }
-
-    fn write(&mut self, lba: usize, data: &mut [u8]) {
-        let backing_slice: &mut [u8] = self.memory.as_slice_mut();
-        backing_slice[lba * self.block_size..(lba + 1) * self.block_size]
-            .copy_from_slice(&data[..self.block_size]);
-    }
-
-    fn max_lba(&self) -> u32 {
-        (self.capacity as u32 / 512) - 1
-    }
-}
-
 fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -189,7 +132,8 @@ fn main() -> ! {
 
     let mut ui = UI::new(&xns, sid);
 
-    let mut fd = FlashDrive::new(1445888, 512).expect("cannot create flash drive instance");
+    let mut fd =
+        flash_drive::FlashDrive::new(1445888, 512).expect("cannot create flash drive instance");
 
     #[cfg(feature = "mass-storage")]
     let usb = usb_device_xous::UsbHid::new();
@@ -245,28 +189,12 @@ fn main() -> ! {
                 }
             }),
             Some(TradOp::Read) => {
-                let body = msg
-                    .body
-                    .memory_message_mut()
-                    .expect("incorrect message type received");
-                let lba = body.offset.map(|v| v.get()).unwrap_or_default();
-                let data = body.buf.as_slice_mut::<u8>();
-
-                fd.read(lba, data);
+                fd.read(&mut msg);
             }
             Some(TradOp::Write) => {
-                let body = msg
-                    .body
-                    .memory_message_mut()
-                    .expect("incorrect message type received");
-                let lba = body.offset.map(|v| v.get()).unwrap_or_default();
-                let data = body.buf.as_slice_mut::<u8>();
-
-                fd.write(lba, data);
+                fd.write(&mut msg);
             }
-            Some(TradOp::MaxLba) => {
-                xous::return_scalar(msg.sender, fd.max_lba() as usize).unwrap();
-            }
+            Some(TradOp::MaxLba) => fd.max_lba(&mut msg),
             _ => {
                 log::error!("Got unknown message");
             }
