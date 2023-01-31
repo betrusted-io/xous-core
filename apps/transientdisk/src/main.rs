@@ -184,20 +184,17 @@ fn main() -> ! {
         .register_name(SERVER_NAME_TRANSIENTDISK, None)
         .expect("can't register server");
 
+    #[cfg(not(feature = "mass-storage"))]
+    log::warn!("transientdisk has been compiled without the mass-storage feature, needed to make the USB subsystem behave like a mass-storage device.");
+
     let mut ui = UI::new(&xns, sid);
 
     let mut fd = FlashDrive::new(1445888, 512).expect("cannot create flash drive instance");
 
-    #[cfg(all(
-        any(feature = "precursor", feature = "renode"),
-        feature = "mass-storage"
-    ))]
+    #[cfg(feature = "mass-storage")]
     let usb = usb_device_xous::UsbHid::new();
 
-    #[cfg(all(
-        any(feature = "precursor", feature = "renode"),
-        feature = "mass-storage"
-    ))]
+    #[cfg(feature = "mass-storage")]
     let core_before_ms = usb.get_current_core().unwrap();
 
     let mut usb_setup = false;
@@ -219,10 +216,7 @@ fn main() -> ! {
                 let new_state = gam::FocusState::convert_focus_change(new_state_code);
                 match new_state {
                     gam::FocusState::Background => {
-                        #[cfg(all(
-                            any(feature = "precursor", feature = "renode"),
-                            feature = "mass-storage"
-                        ))]
+                        #[cfg(feature = "mass-storage")]
                         {
                             usb.reset_block_device();
                             usb.switch_to_core(core_before_ms).unwrap();
@@ -233,10 +227,7 @@ fn main() -> ! {
                             continue;
                         }
 
-                        #[cfg(all(
-                            any(feature = "precursor", feature = "renode"),
-                            feature = "mass-storage"
-                        ))]
+                        #[cfg(feature = "mass-storage")]
                         {
                             usb.set_block_device(
                                 TradOp::Read.to_usize().unwrap(),
