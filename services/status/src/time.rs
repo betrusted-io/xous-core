@@ -51,11 +51,14 @@ const MINS: usize = 2;
 const HOURS: usize = 3;
 #[allow(dead_code)]
 const DAYS: usize = 4;
-// note 5 is skipped - this is weekdays, and is unused
+#[allow(dead_code)]
+const WEEKDAYS: usize = 5;
 #[allow(dead_code)]
 const MONTHS: usize = 6;
 #[allow(dead_code)]
 const YEARS: usize = 7;
+
+use llio::RTC_PWR_MODE;
 
 /// Do not modify the discriminants in this structure. They are used in `libstd` directly.
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -137,6 +140,47 @@ impl NtpUdpSocket for UdpSocketWrapper {
     }
 }
 
+pub fn reset_rtc(i2c: &mut llio::I2c, start_time: u64, tt: &ticktimer_server::Ticktimer) {
+    log::debug!("performing rtc reset");
+    i2c.i2c_mutex_acquire();
+    // issue a "software reset" of the RTC
+    i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL1, &[0x58]).expect("RTC access error");
+    i2c.i2c_mutex_release();
+    tt.sleep_ms(1100).ok(); // give the RTC 1 second to resume register operations
+    // note: this readback seems necessary to get the RTC to behave after a reset
+    for i in 0..0x14 {
+        let mut d = [0u8; 1];
+        i2c.i2c_mutex_acquire();
+        i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, i, &mut d).ok();
+        log::debug!("reg {:x}: {:x}", i, d[0]);
+        i2c.i2c_mutex_release();
+    }
+
+    let reset_vals = [
+        0, // clear interrupts, normal run
+        0, // clear interrupts
+        RTC_PWR_MODE, // power mode
+        to_bcd((start_time & 0xFF) as u8 % 60), // seconds
+        to_bcd(((start_time >> 8) & 0xFF) as u8 % 60), // minutes
+        to_bcd(((start_time >> 16) & 0xFF) as u8 % 24), // hours
+        to_bcd(((start_time >> 24) & 0xFF) as u8 % 28 + 1), // days
+        0, // sunday
+        to_bcd(((start_time >> 32) & 0xFF) as u8 % 12 + 1), // months
+        to_bcd(((start_time >> 40) & 0xFF) as u8 % 5 + 1), // years
+    ];
+    i2c.i2c_mutex_acquire();
+    log::debug!("writing: {:x?}", reset_vals);
+    i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL1, &reset_vals).expect("RTC access error");
+    i2c.i2c_mutex_release();
+    tt.sleep_ms(1100).ok(); // give the RTC 1 second to resume register operations
+    i2c.i2c_mutex_acquire();
+    let mut readback = [0u8; 10];
+    // this readback seems necessary to get values to "stick" in the RTC
+    i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, 0, &mut readback).ok();
+    log::debug!("reset readback: {:x?}", readback);
+    i2c.i2c_mutex_release();
+}
+
 pub fn start_time_server() {
     let rtc_checked = Arc::new(AtomicBool::new(false));
 
@@ -173,7 +217,7 @@ pub fn start_time_server() {
             let mut settings = [0u8; 8];
             loop {
                 i2c.i2c_mutex_acquire();
-                match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
+                match i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
                     Ok(I2cStatus::ResponseReadOk) => {
                         i2c.i2c_mutex_release();
                         break
@@ -187,23 +231,7 @@ pub fn start_time_server() {
             }
             if is_rtc_invalid(&settings) {
                 log::warn!("RTC settings were invalid. Re-initializing! {:?}", settings);
-                settings[CTL3] = (Control3::BATT_STD_BL_EN).bits();
-                let mut start_time = trng.get_u64().unwrap();
-                // set the clock to a random start time from 1 to 10 years into its maximum range of 100 years
-                settings[SECS] = to_bcd((start_time & 0xFF) as u8 % 60);
-                start_time >>= 8;
-                settings[MINS] = to_bcd((start_time & 0xFF) as u8 % 60);
-                start_time >>= 8;
-                settings[HOURS] = to_bcd((start_time & 0xFF) as u8 % 24);
-                start_time >>= 8;
-                settings[DAYS] = to_bcd((start_time & 0xFF) as u8 % 28 + 1);
-                start_time >>= 8;
-                settings[MONTHS] = to_bcd((start_time & 0xFF) as u8 % 12 + 1);
-                start_time >>= 8;
-                settings[YEARS] = to_bcd((start_time & 0xFF) as u8 % 10 + 1);
-                i2c.i2c_mutex_acquire();
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &settings).expect("RTC access error");
-                i2c.i2c_mutex_release();
+                reset_rtc(&mut i2c, trng.get_u64().unwrap(), &tt);
             }
             rtc_checked.store(true, Ordering::SeqCst);
             loop {
@@ -211,23 +239,7 @@ pub fn start_time_server() {
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(PrivTimeOp::ResetRtc) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                         log::warn!("RTC time reset command received.");
-                        settings[CTL3] = (Control3::BATT_STD_BL_EN).bits();
-                        let mut start_time = trng.get_u64().unwrap();
-                        // set the clock to a random start time from 1 to 10 years into its maximum range of 100 years
-                        settings[SECS] = to_bcd((start_time & 0xFF) as u8 % 60);
-                        start_time >>= 8;
-                        settings[MINS] = to_bcd((start_time & 0xFF) as u8 % 60);
-                        start_time >>= 8;
-                        settings[HOURS] = to_bcd((start_time & 0xFF) as u8 % 24);
-                        start_time >>= 8;
-                        settings[DAYS] = to_bcd((start_time & 0xFF) as u8 % 28 + 1);
-                        start_time >>= 8;
-                        settings[MONTHS] = to_bcd((start_time & 0xFF) as u8 % 12 + 1);
-                        start_time >>= 8;
-                        settings[YEARS] = to_bcd((start_time & 0xFF) as u8 % 10 + 1);
-                        i2c.i2c_mutex_acquire();
-                        i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &settings).expect("RTC access error");
-                        i2c.i2c_mutex_release();
+                        reset_rtc(&mut i2c, trng.get_u64().unwrap(), &tt);
                         xous::return_scalar(msg.sender, 0).unwrap();
                     }),
                     Some(PrivTimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
@@ -258,7 +270,20 @@ pub fn start_time_server() {
             while !rtc_checked.load(Ordering::SeqCst) {
                 tt.sleep_ms(42).unwrap();
             }
-            let mut start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
+            let mut start_rtc_secs: u64;
+            // this loop allows us to fail slightly more gracefully in the case that there is an RTC hardware failure
+            loop {
+                match llio.get_rtc_secs() {
+                    Ok(s) => {
+                        start_rtc_secs = s;
+                        break;
+                    }
+                    Err(e) => {
+                        log::warn!("RTC HW should be initialized, but it's not: {:?}", e);
+                        tt.sleep_ms(2000).ok(); // wait before polling again
+                    }
+                }
+            }
             let mut start_tt_ms = tt.elapsed_ms();
             log::trace!("start_rtc_secs: {}", start_rtc_secs);
             log::trace!("start_tt_ms: {}", start_tt_ms);
@@ -372,7 +397,11 @@ pub fn start_time_server() {
                             start_rtc_secs as i64 * 1000i64
                             + (tt.elapsed_ms() - start_tt_ms) as i64
                             + utc_offset_ms;
-                        assert!(t > 0, "time result is negative, this is an error");
+                        if t < 0 { // the offset has some error in it, perhaps due to an RTC reset. reset the offset!
+                            log::warn!("Time was negative, recovering from time setting error by clearing utc offset to 0");
+                            prefs.set_utc_offset(0).ok();
+                            utc_offset_ms = 0;
+                        }
                         log::trace!("utc ms {}", t);
                         xous::return_scalar2(msg.sender,
                             (((t as u64) >> 32) & 0xFFFF_FFFF) as usize,
@@ -386,7 +415,13 @@ pub fn start_time_server() {
                             + (tt.elapsed_ms() - start_tt_ms) as i64
                             + utc_offset_ms
                             + tz_offset_ms;
-                        assert!(t > 0, "time result is negative, this is an error");
+                        if t < 0 {
+                            log::warn!("Time was negative, recovering from time setting error by clearing utc and timezone offsets to 0.");
+                            prefs.set_utc_offset(0).ok();
+                            prefs.set_timezone_offset(0).ok();
+                            utc_offset_ms = 0;
+                            tz_offset_ms = 0;
+                        }
                         log::trace!("local since epoch {}", t / 1000);
                         xous::return_scalar2(msg.sender,
                             (((t as u64) >> 32) & 0xFFFF_FFFF) as usize,
@@ -462,7 +497,7 @@ pub fn start_time_server() {
 
 #[allow(dead_code)]
 fn is_rtc_invalid(settings: &[u8]) -> bool {
-    ((settings[CTL3] & 0xE0) != (Control3::BATT_STD_BL_EN).bits()) // power switchover setting should be initialized
+    ((settings[CTL3] & 0xE0) != RTC_PWR_MODE) // power switchover setting should be initialized
     || ((settings[SECS] & 0x80) != 0)  // clock integrity should be guaranteed
     || (to_binary(settings[SECS]) > 59)
     || (to_binary(settings[MINS]) > 59)
