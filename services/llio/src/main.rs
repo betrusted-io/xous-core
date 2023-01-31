@@ -13,7 +13,7 @@ use llio_hw::*;
 mod llio_hosted;
 #[cfg(not(target_os = "xous"))]
 use llio_hosted::*;
-
+use crate::RTC_PWR_MODE;
 use num_traits::*;
 use xous_ipc::Buffer;
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
@@ -426,7 +426,7 @@ fn main() -> ! {
                 let seconds = delay as u8;
                 i2c.i2c_mutex_acquire();
                 // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[(Control3::BATT_STD_BL_EN).bits()]).expect("RTC access error");
+                // i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[RTC_PWR_MODE]).expect("RTC access error");
                 // set clock units to 1 second, output pulse length to ~218ms
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB_CLK, &[(TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]).expect("RTC access error");
                 // program elapsed time
@@ -438,12 +438,19 @@ fn main() -> ! {
                 let config = (Config::CLKOUT_DISABLE | Config::TIMER_B_ENABLE).bits();
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
                 i2c.i2c_mutex_release();
+
+                // this readback, even though it just goes to debug, seems necessary to get the values to "stick" in the RTC.
+                let mut d = [0u8; 0x14];
+                i2c.i2c_mutex_acquire();
+                i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, 0, &mut d).ok();
+                i2c.i2c_mutex_release();
+                log::debug!("reg after wakeup alarm: {:x?}", d);
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
             Some(Opcode::ClearWakeupAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 i2c.i2c_mutex_acquire();
                 // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[(Control3::BATT_STD_BL_EN).bits()]).expect("RTC access error");
+                // i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[RTC_PWR_MODE]).expect("RTC access error");
                 let config = Config::CLKOUT_DISABLE.bits();
                 // turn off RTC wakeup timer, in case previously set
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
@@ -468,7 +475,7 @@ fn main() -> ! {
                 while !success {
                     // retry loop is necessary because this function can get called during "congested" periods
                     i2c.i2c_mutex_acquire();
-                    match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
+                    match i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
                         Ok(llio::I2cStatus::ResponseReadOk) => {
                             i2c.i2c_mutex_release();
                             success = true
@@ -494,6 +501,21 @@ fn main() -> ! {
                 let total_secs = match rtc_to_seconds(&settings) {
                     Some(s) => s,
                     None => {
+                        i2c.i2c_mutex_acquire();
+                        let secs = if settings[1] & 0x7f < 60 {
+                            settings[1] & 0x7f
+                        } else {
+                            0
+                        };
+                        // do a "hot reset" -- just clears error flags, but doesn't rewrite time
+                        let reset_values = [
+                            0x0, // clear all interrupts, return to normal operations
+                            0x0, // clear all interrupts
+                            RTC_PWR_MODE,  // reset power mode
+                            secs  // write the seconds register back without the error flag
+                        ];
+                        i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL1, &reset_values).expect("RTC access error");
+                        i2c.i2c_mutex_release();
                         xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
                         continue;
                     }
@@ -660,7 +682,7 @@ mod tests {
 
                     let diff = rtc_test.signed_duration_since(rtc_base);
                     let settings = [
-                        (Control3::BATT_STD_BL_EN).bits(),
+                        RTC_PWR_MODE,
                         to_bcd(s as u8),
                         to_bcd(m as u8),
                         to_bcd(h as u8),
