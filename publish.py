@@ -325,7 +325,7 @@ def main():
                     continue
 
                 print("Process failed, waiting for crates.io to update and retrying...")
-                time.sleep(20)
+                time.sleep(2) # the latest Cargo seems to fix this problem
                 # just try running it again
                 try:
                     subprocess.run(cmd, cwd=path, check=True)
