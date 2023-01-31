@@ -7,7 +7,6 @@ use crate::irq::interrupt_claim;
 use crate::mem::{MemoryManager, PAGE_SIZE};
 use crate::server::{SenderID, WaitingMessage};
 use crate::services::SystemServices;
-use core::mem;
 use xous_kernel::*;
 
 /* Quoth Xobs:
@@ -64,7 +63,7 @@ fn do_yield(_pid: PID, tid: TID) -> SysCallResult {
     })
 }
 
-fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallResult {
+fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         let sidx = ss
             .sidx_from_cid(cid)
@@ -155,7 +154,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             //     server_pid
             // );
             let sender_idx = if message.is_blocking() {
-                ss.remember_server_message(sidx, pid, thread, &message, client_address)
+                ss.remember_server_message(sidx, pid, tid, &message, client_address)
                     .map_err(|e| {
                         klog!("error remembering server message: {:?}", e);
                         ss.server_from_sidx_mut(sidx)
@@ -180,6 +179,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
 
             // Mark the server's context as "Ready". If this fails, return the context
             // to the blocking list.
+            #[cfg(target_os = "xous")]
             ss.ready_thread(server_pid, server_tid).map_err(|e| {
                 ss.server_from_sidx_mut(sidx)
                     .expect("server couldn't be located")
@@ -202,19 +202,19 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                         xous_kernel::Result::MessageEnvelope(envelope),
                     )
                     .expect("couldn't set result for server thread");
-                    ss.activate_process_thread(thread, ppid, ptid, false)
+                    ss.activate_process_thread(tid, ppid, ptid, false)
                         .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
                 } else {
                     // Switch to the server, since it's in a state to be run.
                     klog!("Activating Server context and switching away from Client");
-                    ss.activate_process_thread(thread, server_pid, server_tid, false)
+                    ss.activate_process_thread(tid, server_pid, server_tid, false)
                         .map(|_| Ok(xous_kernel::Result::MessageEnvelope(envelope)))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
                 }
             } else if blocking && !cfg!(baremetal) {
                 klog!("Blocking client, since it sent a blocking message");
-                ss.unschedule_thread(pid, thread)?;
+                ss.unschedule_thread(pid, tid)?;
                 ss.switch_to_thread(server_pid, Some(server_tid))?;
                 ss.set_thread_result(
                     server_pid,
@@ -253,7 +253,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
         );
         // Add this message to the queue.  If the queue is full, this
         // returns an error.
-        let _queue_idx = ss.queue_server_message(sidx, pid, thread, message, client_address)?;
+        let _queue_idx = ss.queue_server_message(sidx, pid, tid, message, client_address)?;
         klog!("queued into index {:x}", _queue_idx);
 
         // Park this context if it's blocking.  This is roughly
@@ -264,11 +264,11 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 let process = ss.get_process(pid).expect("Can't get current process");
                 let ppid = process.ppid;
                 unsafe { SWITCHTO_CALLER = None };
-                ss.activate_process_thread(thread, ppid, 0, false)
+                ss.activate_process_thread(tid, ppid, 0, false)
                     .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                     .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
             } else {
-                ss.unschedule_thread(pid, thread)?;
+                ss.unschedule_thread(pid, tid)?;
                 Ok(xous_kernel::Result::BlockedProcess)
             }
         } else {
@@ -330,11 +330,11 @@ fn return_memory(
             }
             WaitingMessage::ScalarMessage(_pid, _tid) => {
                 println!("WARNING: Tried to wait on a message that was a scalar");
-                return Err(xous_kernel::Error::InternalError);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                println!("WARNING: Tried to wait on a message that didn't exist -- return memory");
+                return Err(xous_kernel::Error::DoubleFree);
             }
         };
         // println!(
@@ -367,6 +367,7 @@ fn return_memory(
         if !cfg!(baremetal) || in_irq || !client_is_runnable {
             // Send a message to the client, in order to wake it up
             // print!(" [waking up PID {}:{}]", client_pid, client_tid);
+            #[cfg(baremetal)]
             ss.ready_thread(client_pid, client_tid)?;
             #[cfg(not(baremetal))]
             ss.switch_to_thread(client_pid, Some(client_tid))?;
@@ -415,29 +416,31 @@ fn return_scalar(
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually forgettingmemory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::MovedMemory => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually moved memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                println!("WARNING ({}:{}): Tried to wait on a message that didn't exist (irq? {}) -- return Scalar1({})", server_pid.get(), server_tid, if in_irq { "yes"} else {"no"}, arg);
+                return Err(xous_kernel::Error::DoubleFree);
             }
         };
 
-        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
+        if cfg!(baremetal) {
+            ss.ready_thread(client_pid, client_tid)?;
+        }
 
-        if !cfg!(baremetal) || in_irq || !client_is_runnable {
+        if !cfg!(baremetal) || in_irq || !ss.runnable(client_pid, Some(client_tid))? {
             // In a hosted environment, `switch_to_thread()` doesn't continue
             // execution from the new thread. Instead it continues in the old
             // thread. Therefore, we need to instruct the client to resume, and
@@ -445,9 +448,6 @@ fn return_scalar(
             // In a baremetal environment, the opposite is true -- we instruct
             // the server to resume and return to the client.
             ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
-            if cfg!(baremetal) {
-                ss.ready_thread(client_pid, client_tid)?;
-            }
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
@@ -456,7 +456,6 @@ fn return_scalar(
             ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
             // Switch to the client
-            ss.ready_thread(client_pid, client_tid)?;
             ss.switch_to_thread(client_pid, Some(client_tid))?;
             Ok(xous_kernel::Result::Scalar1(arg))
         }
@@ -486,23 +485,25 @@ fn return_scalar2(
             WaitingMessage::ScalarMessage(pid, tid) => (pid, tid),
             WaitingMessage::ForgetMemory(_) => {
                 println!("WARNING: Tried to wait on a scalar message that was actually forgetting memory");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::MovedMemory => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually moved memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                println!(
+                    "WARNING: Tried to wait on a message that didn't exist -- return scalar 2"
+                );
+                return Err(xous_kernel::Error::DoubleFree);
             }
         };
 
@@ -564,23 +565,25 @@ fn return_scalar5(
             WaitingMessage::ScalarMessage(pid, tid) => (pid, tid),
             WaitingMessage::ForgetMemory(_) => {
                 println!("WARNING: Tried to wait on a scalar message that was actually forgetting memory");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::MovedMemory => {
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually moved memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                println!(
+                    "WARNING: Tried to wait on a message that didn't exist -- return scalar 5"
+                );
+                return Err(xous_kernel::Error::DoubleFree);
             }
         };
 
@@ -675,7 +678,7 @@ fn reply_and_receive_next(
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually forgetting memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::BorrowedMemory(pid, tid, _server_addr, client_addr, len) => {
                 #[cfg(baremetal)]
@@ -699,11 +702,11 @@ fn reply_and_receive_next(
                 println!(
                     "WARNING: Tried to wait on a scalar message that was actually moved memory"
                 );
-                return Err(xous_kernel::Error::ProcessNotFound);
+                return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist");
-                return Err(xous_kernel::Error::ProcessNotFound);
+                println!("WARNING: Tried to wait on a message that didn't exist -- receive and return scalar");
+                return Err(xous_kernel::Error::DoubleFree);
             }
         };
 
@@ -723,7 +726,7 @@ fn reply_and_receive_next(
                     .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
             } else {
                 // Switch to the client and return the result
-                ss.ready_thread(response.pid, response.tid)?;
+                //ss.ready_thread(response.pid, response.tid)?;
                 ss.switch_to_thread(response.pid, Some(response.tid))?;
                 ss.set_thread_result(response.pid, response.tid, response.result)?;
 
@@ -884,19 +887,31 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 // If we're handing back an address in main RAM, zero it out. If
                 // phys is 0, then the page will be lazily allocated, so we
                 // don't need to do this.
-                if phys.is_some() {
+                // if !phys_ptr.is_null() {
+                //     for (phys, virt) in (phys_ptr as usize..range.len()).step_by(PAGE_SIZE).zip(
+                //         (range.as_ptr() as usize..(range.as_ptr() as usize + range.len()))
+                //             .step_by(PAGE_SIZE),
+                //     ) {
+                //         // Zero out the virtual page if it's in main memory
+                //         if mm.is_main_memory(phys as *mut u8) {
+                //             let start = virt as *mut usize;
+                //             for offset in 0..(PAGE_SIZE / core::mem::size_of::<usize>()) {
+                //                 unsafe { start.add(offset).write_volatile(0) };
+                //             }
+                //         }
+
+                //         // Hand the virtual page to the process
+                //         crate::arch::mem::hand_page_to_user(virt as *mut u8)
+                //             .expect("couldn't hand page to user");
+                //       }
+
+                if !phys_ptr.is_null() {
                     if mm.is_main_memory(phys_ptr) {
-                        // println!(
-                        //     "Going to zero out {} bytes @ {:08x}",
-                        //     range.len(),
-                        //     range.as_ptr() as usize,
-                        // );
                         unsafe {
                             range
                                 .as_mut_ptr()
-                                .write_bytes(0, range.len() / mem::size_of::<usize>())
+                                .write_bytes(0, range.len() / core::mem::size_of::<usize>())
                         };
-                        // println!("Done zeroing out");
                     }
                     for offset in (range.as_ptr() as usize..(range.as_ptr() as usize + range.len()))
                         .step_by(PAGE_SIZE)
@@ -996,7 +1011,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 MemoryRange::new(start, length).unwrap()
             }))
         }
-        SysCall::SwitchTo(new_pid, new_context) => SystemServices::with_mut(|ss| {
+        SysCall::SwitchTo(new_pid, new_tid) => SystemServices::with_mut(|ss| {
             unsafe {
                 assert!(
                     SWITCHTO_CALLER.is_none(),
@@ -1009,7 +1024,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             //     "Activating process thread {} in pid {} coming from pid {} thread {}",
             //     new_context, new_pid, pid, tid
             // );
-            ss.activate_process_thread(tid, new_pid, new_context, true)
+            ss.activate_process_thread(tid, new_pid, new_tid, true)
                 .map(|_ctx| xous_kernel::Result::ResumeProcess)
         }),
         SysCall::ClaimInterrupt(no, callback, arg) => {
@@ -1044,11 +1059,19 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }),
         SysCall::CreateThread(thread_init) => SystemServices::with_mut(|ss| {
             ss.create_thread(pid, thread_init).map(|new_tid| {
-                if !cfg!(baremetal) {
+                // Set the return value of the existing thread to be the new thread ID
+                if cfg!(target_os = "xous") {
+                    // Immediately switch to the new thread
                     ss.switch_to_thread(pid, Some(new_tid))
                         .expect("couldn't activate new thread");
+                    ss.set_thread_result(pid, tid, xous_kernel::Result::ThreadID(new_tid))
+                        .expect("couldn't set new thread ID");
+
+                    // Return `ResumeProcess` since we're switching threads
+                    xous_kernel::Result::ResumeProcess
+                } else {
+                    xous_kernel::Result::ThreadID(new_tid)
                 }
-                xous_kernel::Result::ThreadID(new_tid)
             })
         }),
         SysCall::CreateProcess(process_init) => SystemServices::with_mut(|ss| {
@@ -1136,7 +1159,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }),
         SysCall::JoinThread(other_tid) => {
             SystemServices::with_mut(|ss| ss.join_thread(pid, tid, other_tid)).map(|ret| {
-                unsafe { SWITCHTO_CALLER = None };
+                // Successfully joining a thread causes this thread to sleep while the parent process
+                // is resumed. This is the same as a `Yield`
+                if ret == xous_kernel::Result::ResumeProcess {
+                    unsafe { SWITCHTO_CALLER = None };
+                }
                 ret
             })
         }

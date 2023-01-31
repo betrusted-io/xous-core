@@ -7,7 +7,7 @@ uart: UART.LiteX_UART @ {
     }
     -> cpu@1001
 
-timer0: Timers.LiteX_Timer_CSR32 @ {
+timer0: Timers.Betrusted.LiteX_Timer_32 @ {
         sysbus 0xe0001000
     }
     frequency: 100000000

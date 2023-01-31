@@ -112,7 +112,7 @@ and we can use heap-allocated Rust primitives...
 #[derive(Debug, Copy, Clone)]
 struct Connection {
     pub sid: xous::SID,
-    pub current_conns: u32, // number of unauthenticated (inherentely trusted) connections
+    pub current_conns: u32, // number of unauthenticated (inherently trusted) connections
     pub max_conns: Option<u32>, // if None, unlimited connections allowed
     pub _allow_authenticate: bool,
     pub _auth_conns: u32,        // number of authenticated connections
@@ -207,7 +207,7 @@ impl CheckedHashMap {
                     // because we had to loosen the restriction on the count of connections to
                     // the IME plugins -- because by essence, a disconnected IME plugin does
                     // not have its connection table full, and therefore, this would disallow
-                    // root key operations. However, we stil want some control over who
+                    // root key operations. However, we still want some control over who
                     // is allowed to initiate the disconnect, so, we've moved the access
                     // control to the server itself, thus allowing a permissive policy inside
                     // xous-names.
@@ -312,7 +312,7 @@ fn blocking_connect(
     );
 
     // If the server already exists, attempt to make the connection. The connection can
-    // only succeed if the
+    // only succeed if the server is in the name_table.
     if let (Some(server_sid), token) = name_table.connect(&name) {
         log::trace!("Found entry in the table (sid: {:?}, token: {:?}) -- attempting to call connect_for_process()", server_sid, token);
         let result = xous::connect_for_process(sender_pid, server_sid);
@@ -380,7 +380,7 @@ fn main() -> ! {
 
     let d11ctimeout = D11cTimeout::new();
 
-    // When a connection is requested but the serevr does not yet exist, it gets
+    // When a connection is requested but the server does not yet exist, it gets
     // placed into this pool.
     let mut waiting_connections: Vec<MessageEnvelope> = vec![];
 

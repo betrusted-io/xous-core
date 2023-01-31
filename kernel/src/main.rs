@@ -49,7 +49,11 @@ fn handle_panic(_arg: &PanicInfo) -> ! {
 /// # Safety
 ///
 /// This is safe to call only to initialize the kernel.
-pub unsafe extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offset: *mut u32) {
+pub unsafe extern "C" fn init(
+    arg_offset: *const u32,
+    init_offset: *const u32,
+    rpt_offset: *mut u32,
+) {
     args::KernelArguments::init(arg_offset);
     let args = args::KernelArguments::get();
     // Everything needs memory, so the first thing we should do is initialize the memory manager.
@@ -79,33 +83,15 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
     // PIDs are 1-indexed but arrays are 0-indexed.  By not subtracting
     // 1 from the PID when we use it as an array index, we automatically
     // pick the next process in the list.
-    let current_pid = last_pid.unwrap_or(unsafe { PID::new_unchecked(1) }).get() as usize;
+    let next_pid = last_pid.map(|v| v.get() as usize).unwrap_or(1);
 
     SystemServices::with(|system_services| {
-        for test_idx in current_pid..system_services.processes.len() {
-            if system_services.processes[test_idx].ppid.get() == 1 {
-                // print!("PID {} is owned by PID1... ", test_idx + 1);
-                if system_services.processes[test_idx].runnable() {
-                    // println!(" and is runnable");
-                    return match pid_from_usize(test_idx + 1) {
-                        Ok(x) => Some(x),
-                        Err(_) => None,
-                    };
-                }
-                // println!(" and is NOT RUNNABLE");
-            }
-        }
-        for test_idx in 0..current_pid {
-            if system_services.processes[test_idx].ppid.get() == 1 {
-                // print!("PID {} is owned by PID1... ", test_idx + 1);
-                if system_services.processes[test_idx].runnable() {
-                    // println!(" and is runnable");
-                    return match pid_from_usize(test_idx + 1) {
-                        Ok(x) => Some(x),
-                        Err(_) => None,
-                    };
-                }
-                // println!(" and is NOT RUNNABLE");
+        for process in system_services.processes[next_pid..]
+            .iter()
+            .chain(system_services.processes[..next_pid].iter())
+        {
+            if process.runnable() {
+                return Some(process.pid);
             }
         }
         None

@@ -77,6 +77,7 @@ members = [
   "apps/repl",
   "apps/vault",
   "apps/vault/tools/vaultbackup-rs",
+  "apps/transientdisk",
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
@@ -102,7 +103,6 @@ exclude = [
   # exclude the API crates, as they are domiciled here but referenced via crates.io
   "api/xous-api-log",
   "api/xous-api-names",
-  "api/xous-api-susres",
   "api/xous-api-susres",
   "api/xous-api-ticktimer",
   # The "packing" crate is forked and is a separate workspace

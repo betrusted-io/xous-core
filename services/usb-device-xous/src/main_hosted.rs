@@ -97,6 +97,18 @@ pub(crate) fn main_hosted() -> ! {
         let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("{:?}", opcode);
         match opcode {
+            #[cfg(feature="mass-storage")]
+            Some(Opcode::SetBlockDevice) => {
+                log::info!("ignoring SetBlockDevice in hosted mode");
+            },
+            #[cfg(feature="mass-storage")]
+            Some(Opcode::SetBlockDeviceSID) => {
+                log::info!("ignoring SetBlockDeviceSID in hosted mode");
+            },
+            #[cfg(feature="mass-storage")]
+            Some(Opcode::ResetBlockDevice) => {
+                log::info!("ignoring ResetBlockDevice in hosted mode");
+            },
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 usbmgmt.xous_suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
