@@ -24,6 +24,7 @@
 use std::thread;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(any(feature="precursor", feature="renode"))]
 use llio::*;
 use pddb::PddbMountPoller;
 use num_traits::*;
@@ -139,7 +140,7 @@ impl NtpUdpSocket for UdpSocketWrapper {
         }
     }
 }
-
+#[cfg(any(feature="precursor", feature="renode"))]
 pub fn reset_rtc(i2c: &mut llio::I2c, start_time: u64, tt: &ticktimer_server::Ticktimer) {
     log::debug!("performing rtc reset");
     i2c.i2c_mutex_acquire();
