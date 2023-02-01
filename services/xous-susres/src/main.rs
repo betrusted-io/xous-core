@@ -772,6 +772,8 @@ fn main() -> ! {
                                 }
                             }
                         }
+                        // In case of timeout, skip the suspend cycle and return a failure, instead of forcing the suspend.
+                        /*
                         susres_hw.debug_delay(500); // let the messages print
                         // force a suspend
                         susres_hw.do_suspend(true);
@@ -780,22 +782,21 @@ fn main() -> ! {
                         // ---- time passes while we are asleep ----
                         // ---- omg power came back! ---
 
-                        // when do_suspend() returns, it means we've resumed
-                        let sender = suspend_requested.take().expect("suspend was requested, but no requestor is on record!");
-
                         log_server::resume(); // log server is a special case, in order to avoid circular dependencies
                         if susres_hw.do_resume() {
                             log::error!("We forced a suspend, some peripherals may be in an unclean state!");
                         } else {
                             log::error!("We forced a suspend, but the bootloader is claiming we did a clean suspend. Internal state may be inconsistent.");
                         }
+                        */
+                        let sender = suspend_requested.take().expect("suspend was requested, but no requestor is on record!");
                         for pid in gated_pids.drain(..) {
                             xous::return_scalar(pid, 0).expect("couldn't return dummy message to unblock execution");
                         }
                         susres_hw.restore_wfi();
 
                         // this unblocks the requestor of the suspend
-                        xous::return_scalar(sender, 1).ok();
+                        xous::return_scalar(sender, 0).ok();
                     } else {
                         log::trace!("clean suspend timeout received, ignoring");
                         // this means we did a clean suspend, we've resumed, and the timeout came back after the resume

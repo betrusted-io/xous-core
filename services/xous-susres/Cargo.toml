@@ -1,6 +1,6 @@
 [package]
 name = "xous-susres"
-version = "0.1.32"
+version = "0.1.33"
 authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Manager of suspend/resume operations implementation"
