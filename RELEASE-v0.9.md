@@ -319,7 +319,23 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - `mtxcli` has a message filter and async message updates! (thanks @tmarble)
 - OpenSK FIDO code upgraded to handle FIDO2.1, which means among other things Precursor now supports residential SSH keys (e.g. you can use it with ssh to log in, sign commits, etc.). Upgrading to the latest version will trigger a migration to the new database format. If there is a bug or compatibility issue, don't fear: the previous database is not affected, and you can downgrade to the previous version and continue using your original keys.
 - `transientdisk` PoC demo app by @gsora: a RAM-based 1.44MiB USB disk that one can use to transfer sensitive materials (such as private keys) between computers. The disk is de-allocated by just backgrounding the app, and you can sleep well at night knowing RAM is completely erased on a reboot.
-- Lots of kernel upgrades by @xobs
+- Lots of kernel upgrades & fixes by @xobs:
+  - emulation: the ticktimer is now correctly able to handle delays of more than 49 days
+  - emulation: timer0 is now correctly modeled, and the system timer works correctly
+  - kernel: thread selection is now massively improved, and should be faster
+  - kernel: thread selection now correctly selects and parks threads
+  - kernel: the main loop is now simpler, though there is more room for improvement
+  - kernel: execution now immediately transfers to spawned threads
+  - kernel: fixed a bug where a thread immediately exited and the parent joined it
+  - kernel: when returning a message twice, the error DoubleFree is now returned instead of ProcessNotFound
+  - kernel: all `scalar` return calls are now unified
+  - kernel: servers get to use their full scheduled quantum
+  - libxous: syscalls now use asm! rather than external object files
+  - ticktimer: the condvar implementation has been completely overhauled
+  - ticktimer: implemented FreeMutex and FreeCondition api calls
+  - ticktimer: only respond to RecalculateSleep when sent internally
+  - ticktimer: use new .pop_first() function on BTreeHeap
+  - ticktimer: fix a potential panic in the interrupt handler
 - Fixed some edge cases in the I2C driver, and improved sleep/resume stability.
 
 ## Roadmap
