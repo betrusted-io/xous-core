@@ -213,9 +213,22 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                         xous_kernel::Result::MessageEnvelope(envelope),
                     )
                     .expect("couldn't set result for server thread");
-                    ss.activate_process_thread(tid, ppid, ptid, false)
+                    let result = ss
+                        .activate_process_thread(tid, ppid, ptid, false)
                         .map(|_| Ok(xous_kernel::Result::ResumeProcess))
-                        .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+                        .unwrap_or(Err(xous_kernel::Error::ProcessNotFound));
+
+                    // Keep track of which process owned the quantum. This ensures that the next
+                    // thread in sequence gets to run when this process is activated again.
+                    SystemServices::with_mut(|ss| {
+                        ss.set_last_thread(
+                            PID::new(ORIGINAL_PID.load(Relaxed)).unwrap(),
+                            ORIGINAL_TID.load(Relaxed),
+                        )
+                        .ok()
+                    });
+
+                    result
                 } else {
                     // Switch to the server, since it's in a state to be run.
                     klog!("Activating Server context and switching away from Client");
@@ -928,6 +941,16 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     crate::arch::irq::set_isr_return_pair(parent_pid, parent_ctx)
                 }
             };
+
+            // Keep track of which process owned the quantum. This ensures that the next
+            // thread in sequence gets to run when this process is activated again.
+            SystemServices::with_mut(|ss| {
+                ss.set_last_thread(
+                    PID::new(ORIGINAL_PID.load(Relaxed)).unwrap(),
+                    ORIGINAL_TID.load(Relaxed),
+                )
+                .ok()
+            });
             Ok(xous_kernel::Result::ResumeProcess)
         }
         SysCall::ReceiveMessage(sid) => receive_message(pid, tid, sid, ExecutionType::Blocking),
