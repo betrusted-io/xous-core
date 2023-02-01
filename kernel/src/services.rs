@@ -749,6 +749,30 @@ impl SystemServices {
         }
     }
 
+    /// Set the "current thread" of a given process. It is designed
+    /// to set where the next thread will run in order to avoid starving threads
+    /// when messages are passed around.
+    /// For example, if there are three threads (1, 2, 3), then there is a case where
+    /// thread 1 sends a message to thread 3, which yields. In this case, thread 1 will be
+    /// picked to run next, completely skipping thread 2.
+    /// Use `set_last_thread()` when a process' quantum is up in order to tell the scheduler
+    /// which thread to use as a reference for picking the next runnable thread.
+    pub fn set_last_thread(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
+        let process = self.get_process_mut(pid)?;
+
+        match process.state {
+            ProcessState::Ready(runnable) if runnable & (1 << tid) != 0 => {
+                process.current_thread = tid;
+                Ok(())
+            }
+            ProcessState::Ready(_) | ProcessState::Sleeping => {
+                Err(xous_kernel::Error::ThreadNotAvailable)
+            }
+            ProcessState::Running(_) => panic!("thread was still running"),
+            _ => Err(xous_kernel::Error::ProcessNotFound),
+        }
+    }
+
     /// Mark the current process as "Ready to run".
     ///
     /// # Panics
