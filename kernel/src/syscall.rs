@@ -7,6 +7,7 @@ use crate::irq::interrupt_claim;
 use crate::mem::{MemoryManager, PAGE_SIZE};
 use crate::server::{SenderID, WaitingMessage};
 use crate::services::SystemServices;
+use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering::Relaxed};
 use xous_kernel::*;
 
 /* Quoth Xobs:
@@ -22,6 +23,16 @@ use xous_kernel::*;
 */
 /// This is the PID/TID of the last person that called SwitchTo
 static mut SWITCHTO_CALLER: Option<(PID, TID)> = None;
+
+/// When a process is switched to, take note of the original PID and TID.
+/// That way we know whether to give the process its full quantum when
+/// messages are Returned. If a process Returns messages while it's in its
+/// own quantum, then don't immediately transfer control to the Client.
+/// However, for processes that are running on Borrowed Quantum (i.e. when
+/// another process sent them a message and they're immediately responding,)
+/// return control to the Client.
+static ORIGINAL_PID: AtomicU8 = AtomicU8::new(2);
+static ORIGINAL_TID: AtomicUsize = AtomicUsize::new(2);
 
 #[derive(PartialEq)]
 enum ExecutionType {
@@ -202,9 +213,22 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                         xous_kernel::Result::MessageEnvelope(envelope),
                     )
                     .expect("couldn't set result for server thread");
-                    ss.activate_process_thread(tid, ppid, ptid, false)
+                    let result = ss
+                        .activate_process_thread(tid, ppid, ptid, false)
                         .map(|_| Ok(xous_kernel::Result::ResumeProcess))
-                        .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+                        .unwrap_or(Err(xous_kernel::Error::ProcessNotFound));
+
+                    // Keep track of which process owned the quantum. This ensures that the next
+                    // thread in sequence gets to run when this process is activated again.
+                    SystemServices::with_mut(|ss| {
+                        ss.set_last_thread(
+                            PID::new(ORIGINAL_PID.load(Relaxed)).unwrap(),
+                            ORIGINAL_TID.load(Relaxed),
+                        )
+                        .ok()
+                    });
+
+                    result
                 } else {
                     // Switch to the server, since it's in a state to be run.
                     klog!("Activating Server context and switching away from Client");
@@ -367,7 +391,18 @@ fn return_memory(
             ss.ready_thread(client_pid, client_tid)?;
         }
 
-        if !cfg!(baremetal) || in_irq || !ss.runnable(client_pid, Some(client_tid))? {
+        // Return to the server if any of the following are true:
+        //
+        // 1. We're running in hosted mode -- hosted mode runs all threads simultaneously anyway
+        // 2. We're in an interrupt -- interrupts cannot cross process boundaries
+        // 3. The client isn't runnable -- it may be being debugged
+        // 4. We're in the quantum assigned to the server -- this prevents pipeline blockages
+        if !cfg!(baremetal)
+            || in_irq
+            || !ss.runnable(client_pid, Some(client_tid))?
+            || (ORIGINAL_PID.load(Relaxed) == server_pid.get()
+                && ORIGINAL_TID.load(Relaxed) == client_tid)
+        {
             // In a hosted environment, `switch_to_thread()` doesn't continue
             // execution from the new thread. Instead it continues in the old
             // thread. Therefore, we need to instruct the client to resume, and
@@ -441,7 +476,18 @@ fn return_result(
             ss.ready_thread(client_pid, client_tid)?;
         }
 
-        if !cfg!(baremetal) || in_irq || !ss.runnable(client_pid, Some(client_tid))? {
+        // Return to the server if any of the following are true:
+        //
+        // 1. We're running in hosted mode -- hosted mode runs all threads simultaneously anyway
+        // 2. We're in an interrupt -- interrupts cannot cross process boundaries
+        // 3. The client isn't runnable -- it may be being debugged
+        // 4. We're in the quantum assigned to the server -- this prevents pipeline blockages
+        if !cfg!(baremetal)
+            || in_irq
+            || !ss.runnable(client_pid, Some(client_tid))?
+            || (ORIGINAL_PID.load(Relaxed) == server_pid.get()
+                && ORIGINAL_TID.load(Relaxed) == client_tid)
+        {
             // In a hosted environment, `switch_to_thread()` doesn't continue
             // execution from the new thread. Instead it continues in the old
             // thread. Therefore, we need to instruct the client to resume, and
@@ -468,7 +514,7 @@ fn return_result(
 fn reply_and_receive_next(
     server_pid: PID,
     server_tid: TID,
-    _in_irq: bool,
+    in_irq: bool,
     sender: MessageSender,
     arg0: usize,
     arg1: usize,
@@ -555,35 +601,46 @@ fn reply_and_receive_next(
                 return Err(xous_kernel::Error::DoubleFree);
             }
         };
+        let client_pid = response.pid;
+        let client_tid = response.tid;
+
+        if cfg!(baremetal) {
+            ss.ready_thread(client_pid, client_tid)?;
+        }
 
         // If there is a pending message, fetch it and schedule the thread to run
         if let Some(msg) = next_message {
-            if cfg!(baremetal) {
+            if !cfg!(baremetal)
+                || in_irq
+                || !ss.runnable(client_pid, Some(client_tid))?
+                || (ORIGINAL_PID.load(Relaxed) == server_pid.get()
+                    && ORIGINAL_TID.load(Relaxed) == client_tid)
+            {
+                // Switch to the client and return the result
+                ss.set_thread_result(response.pid, response.tid, response.result)?;
+
+                // Return the new message envelope to the server
+                Ok(xous_kernel::Result::MessageEnvelope(msg))
+            } else {
+                if cfg!(baremetal) {
+                    ss.unschedule_thread(server_pid, server_tid)?;
+                    ss.ready_thread(server_pid, server_tid)?
+                }
+
                 // When the server is resumed, it will receive this as a return value.
                 ss.set_thread_result(
                     server_pid,
                     server_tid,
                     xous_kernel::Result::MessageEnvelope(msg),
                 )?;
-                ss.ready_thread(response.pid, response.tid).unwrap();
-                ss.set_thread_result(response.pid, response.tid, response.result)?;
-                ss.activate_process_thread(server_tid, response.pid, response.tid, true)
-                    .map(|_| Ok(xous_kernel::Result::ResumeProcess))
-                    .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
-            } else {
-                // Switch to the client and return the result
-                ss.switch_to_thread(response.pid, Some(response.tid))?;
-                ss.set_thread_result(response.pid, response.tid, response.result)?;
 
-                // Return the new message envelope to the server
-                Ok(xous_kernel::Result::MessageEnvelope(msg))
+                // Switch to the client
+                ss.switch_to_thread(response.pid, Some(response.tid))?;
+                Ok(response.result)
             }
         } else {
             // For baremetal targets, switch away from this process.
             if cfg!(baremetal) {
-                // Switch back to the client process.
-                ss.ready_thread(response.pid, response.tid)?;
-
                 // Set the thread result for the client
                 ss.set_thread_result(response.pid, response.tid, response.result)?;
 
@@ -868,8 +925,10 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             //     "Activating process thread {} in pid {} coming from pid {} thread {}",
             //     new_context, new_pid, pid, tid
             // );
-            ss.activate_process_thread(tid, new_pid, new_tid, true)
-                .map(|_ctx| xous_kernel::Result::ResumeProcess)
+            let new_tid = ss.activate_process_thread(tid, new_pid, new_tid, true)?;
+            ORIGINAL_PID.store(new_pid.get(), Relaxed);
+            ORIGINAL_TID.store(new_tid, Relaxed);
+            Ok(xous_kernel::Result::ResumeProcess)
         }),
         SysCall::ClaimInterrupt(no, callback, arg) => {
             interrupt_claim(no, pid as definitions::PID, callback, arg)
@@ -882,6 +941,16 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     crate::arch::irq::set_isr_return_pair(parent_pid, parent_ctx)
                 }
             };
+
+            // Keep track of which process owned the quantum. This ensures that the next
+            // thread in sequence gets to run when this process is activated again.
+            SystemServices::with_mut(|ss| {
+                ss.set_last_thread(
+                    PID::new(ORIGINAL_PID.load(Relaxed)).unwrap(),
+                    ORIGINAL_TID.load(Relaxed),
+                )
+                .ok()
+            });
             Ok(xous_kernel::Result::ResumeProcess)
         }
         SysCall::ReceiveMessage(sid) => receive_message(pid, tid, sid, ExecutionType::Blocking),
