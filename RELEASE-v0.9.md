@@ -320,6 +320,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - OpenSK FIDO code upgraded to handle FIDO2.1, which means among other things Precursor now supports residential SSH keys (e.g. you can use it with ssh to log in, sign commits, etc.). Upgrading to the latest version will trigger a migration to the new database format. If there is a bug or compatibility issue, don't fear: the previous database is not affected, and you can downgrade to the previous version and continue using your original keys.
 - `transientdisk` PoC demo app by @gsora: a RAM-based 1.44MiB USB disk that one can use to transfer sensitive materials (such as private keys) between computers. The disk is de-allocated by just backgrounding the app, and you can sleep well at night knowing RAM is completely erased on a reboot.
 - Lots of kernel upgrades by @xobs
+- Fixed some edge cases in the I2C driver, and improved sleep/resume stability.
 
 ## Roadmap
 - Lots of testing and bug fixes
