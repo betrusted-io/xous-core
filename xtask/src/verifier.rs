@@ -19,7 +19,7 @@ pub fn check_project_consistency() -> Result<(), DynError> {
         "xous-api-ticktimer@0.9.28",
         "xous-log@0.1.25",
         "xous-names@0.9.34",
-        "xous-susres@0.1.32",
+        "xous-susres@0.1.33",
         "xous-ticktimer@0.1.29",
         // this set is only updated if the utralib changes
         "utralib@0.1.13",
