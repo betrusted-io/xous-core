@@ -154,6 +154,11 @@ _xous_resume_context:
     move        sp, a0
 
     LOAD        x1, 0*REGBYTES(sp)
+    // Clear any reservations, invalidating any atomic operations
+#ifndef SKIP_MULTICORE
+    sc.w	    zero, x1, 0*REGBYTES(sp)
+#endif
+
     // Skip SP for now
     LOAD        x3, 2*REGBYTES(sp)
     LOAD        x4, 3*REGBYTES(sp)
@@ -206,6 +211,21 @@ _xous_syscall_return_result:
     csrw        sepc, t0
 
     LOAD        x1, 0*REGBYTES(sp)
+    // An atomic operation is broken up into multiple instructions.
+    // A program first issues a `lr` instruction, which basically
+    // raises a flag saying that an atomic operation is now live. It
+    // then issues an `sc` instruction, and if the flag is still held
+    // it succeeds and clears the flag.
+    //
+    // This flag is a bit of state within the processor, and the
+    // RISC-V spec doesn't say how to access it. However, it is only
+    // one bit, and we can clear the bit by performing a dummy `sc`
+    // here. This will cause a failure in any atomic operation in the
+    // program we're switching to.
+#ifndef SKIP_MULTICORE
+    sc.w	    zero, x1, 0*REGBYTES(sp)
+#endif
+
     // Skip SP for now
     LOAD        x3, 2*REGBYTES(sp)
     LOAD        x4, 3*REGBYTES(sp)
