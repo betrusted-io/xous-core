@@ -118,6 +118,73 @@ def main():
             check_region = backup[:offset]
             checksum = backup[offset:offset+CHECKSUM_LEN]
 
+            # Implement backup integrity checking without passwords. The metadata about the
+            # backup is "unchecked" because it's not coming from an encrypted region. Full restore
+            # routines use the checked version, but the purpose of this flow is to provide
+            # users with a way to confirm the integrity of backup files without having to
+            # disclose sensitive information.
+            i = 0
+            unchecked_backup_version = int.from_bytes(backup[i:i+4], 'little')
+            i += 96
+            unchecked_checksum_region_len = int.from_bytes(backup[i:i+4], 'little') * 4096
+            i += 4
+            unchecked_total_checksums = int.from_bytes(backup[i:i+4], 'little')
+            i += 4
+            unchecked_header_total_size = int.from_bytes(backup[i:i+4], 'little')
+
+            if args.checksum_only and (unchecked_backup_version == 0x10001):
+                checksum_errors = False
+                logging.info("Doing hash verification of pt+ct metadata based on unchecked plaintext parameters")
+                hasher = SHA512.new(truncate="256")
+                # this is where the backup upcode is located. It should be 1
+                # check_region = bytearray(check_region)
+                # check_region[144:148] = [1, 0, 0, 0] # should be at 0x90 offset
+                hasher.update(check_region)
+                computed_checksum = hasher.digest()
+                if computed_checksum != checksum:
+                    logging.error("Header failed hash integrity check!")
+                    logging.error("Calculated: {}".format(computed_checksum.hex()))
+                    logging.error("Expected:   {}".format(checksum.hex()))
+                    exit(1)
+                else:
+                    logging.info("Header passed integrity check.")
+
+                if unchecked_total_checksums != 0:
+                    raw_checksums = backup[unchecked_header_total_size-(unchecked_total_checksums * 16):unchecked_header_total_size]
+                    checksums = [raw_checksums[i:i+16] for i in range(0, len(raw_checksums), 16)]
+                    check_block_num = 0
+                    while check_block_num < unchecked_total_checksums:
+                        hasher = SHA512.new(truncate="256")
+                        hasher.update(
+                            backup[
+                                unchecked_header_total_size + check_block_num * unchecked_checksum_region_len:
+                                unchecked_header_total_size + (check_block_num + 1) * unchecked_checksum_region_len
+                            ])
+                        sum = hasher.digest()
+                        if sum[:16] != checksums[check_block_num]:
+                            logging.error("Bad checksum on block {} at offset 0x{:x}".format(check_block_num, check_block_num * checksum_region_len))
+                            logging.error("  Calculated: {}".format(sum[:16].hex()))
+                            logging.error("  Expected:   {}".format(checksums[check_block_num].hex()))
+                            checksum_errors = True
+                        check_block_num += 1
+
+                    if checksum_errors:
+                        logging.error("Media errors were detected! Backup may be unusable.")
+                        exit(1)
+                    else:
+                        logging.info("No media errors detected, {} blocks passed checksum tests".format(unchecked_total_checksums))
+                        if args.checksum_only:
+                            exit(0)
+                else:
+                    if args.checksum_only:
+                        logging.error("Can't perform checksum verification on backups that do not include checksums")
+                        exit(1)
+                    else:
+                        logging.info("Backup has no checksum block, skipping media integrity checks")
+            elif args.checksum_only:
+                logging.error("Can't perform checksum verification on backups with a version older than 1.1")
+                exit(1)
+
             h_enc = SHA512.new(truncate="256")
             h_enc.update(key)
             h_enc.update(bytes([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x01]))
