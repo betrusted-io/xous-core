@@ -641,6 +641,7 @@ def main():
             # now try to download all the artifacts and check their versions
             # this list should visit kernels in order from newest to oldest.
             URL_LIST = [
+                'https://ci.betrusted.io/releases/v0.9.12/',
                 'https://ci.betrusted.io/releases/v0.9.11/',
                 'https://ci.betrusted.io/releases/v0.9.10/',
                 'https://ci.betrusted.io/releases/v0.9.9/',
