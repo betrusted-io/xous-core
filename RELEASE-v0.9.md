@@ -338,6 +338,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - ticktimer: fix a potential panic in the interrupt handler
 - Fixed some edge cases in the I2C driver, and improved sleep/resume stability.
 
+## New in 0.9.13
+
 ## Roadmap
 - Lots of testing and bug fixes
 - Fixing performance issues in `pddb`
