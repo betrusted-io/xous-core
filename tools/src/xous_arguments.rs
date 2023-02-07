@@ -1,5 +1,5 @@
 use std::fmt;
-use std::io::{Cursor, Result, Write};
+use std::io::{Cursor, Result, Write, Seek};
 pub type XousArgumentCode = u32;
 pub type XousSize = u32;
 use crc::{crc16, Hasher16};
@@ -81,7 +81,7 @@ impl XousArguments {
     }
 
     pub fn finalize(&mut self) {
-        let mut running_offset = self.len() as usize;
+        let mut running_offset = crate::tags::align_size_up(self.len() as usize);
         for arg in &mut self.arguments {
             running_offset += arg.finalize(running_offset);
         }
@@ -96,7 +96,7 @@ impl XousArguments {
 
     pub fn write<T>(&mut self, mut w: T) -> Result<()>
     where
-        T: Write,
+        T: Write + Seek,
     {
         let total_length = self.len();
 
@@ -155,6 +155,12 @@ impl XousArguments {
             w.write_all(&((tag_data.get_ref().len() / 4) as u16).to_le_bytes())?; // Size (in words)
             w.write_all(tag_data.get_ref())?;
         }
+
+        // pad to the nearest page
+        let pos = w.stream_position()?;
+        let pad_len = crate::tags::align_size_up(pos as usize) - pos as usize;
+        let pad = vec![0u8; pad_len];
+        w.write_all(&pad)?;
 
         // Write any pending data, such as payloads
         for arg in &self.arguments {

@@ -77,6 +77,10 @@ impl XousArgument for XousKernel {
         self.load_offset = offset as u32;
         assert!(self.text_offset > 0xff00_0000,
         "kernel text section is invalid: 0x{:08x} < 0xff000000 -- was it linked with a linker script?", self.text_offset);
+
+        assert!(offset % crate::tags::PAGE_SIZE == 0, "XKrn load offset is not aligned");
+        self.program = crate::tags::align_data_up(&self.program);
+
         self.program.len()
     }
 

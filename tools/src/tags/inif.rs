@@ -4,8 +4,8 @@ use std::fmt;
 use std::io;
 
 #[derive(Debug)]
-pub struct IniE {
-    /// Address of Init in RAM (i.e. SPI flash)
+pub struct IniF {
+    /// Address in flash
     load_offset: u32,
 
     /// Virtual address entry point
@@ -18,11 +18,11 @@ pub struct IniE {
     data: Vec<u8>,
 }
 
-impl fmt::Display for IniE {
+impl fmt::Display for IniF {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
-            "    IniE: entrypoint @ {:08x}, loaded from {:08x}.  Sections:",
+            "    IniF: entrypoint @ {:08x}, loaded from {:08x}.  Sections:",
             self.entrypoint, self.load_offset
         )?;
         let mut load_offset = self.load_offset;
@@ -34,13 +34,13 @@ impl fmt::Display for IniE {
     }
 }
 
-impl IniE {
-    pub fn new(entrypoint: u32, sections: Vec<MiniElfSection>, mut data: Vec<u8>) -> IniE {
+impl IniF {
+    pub fn new(entrypoint: u32, sections: Vec<MiniElfSection>, mut data: Vec<u8>) -> IniF {
         // pad the data to 4 bytes
         while data.len() & 3 != 0 {
             data.push(0);
         }
-        IniE {
+        IniF {
             load_offset: 0,
             entrypoint,
             sections,
@@ -49,9 +49,9 @@ impl IniE {
     }
 }
 
-impl XousArgument for IniE {
+impl XousArgument for IniF {
     fn code(&self) -> XousArgumentCode {
-        u32::from_le_bytes(*b"IniE")
+        u32::from_le_bytes(*b"IniF")
     }
 
     fn length(&self) -> XousSize {
@@ -60,10 +60,10 @@ impl XousArgument for IniE {
 
     fn finalize(&mut self, offset: usize) -> usize {
         self.load_offset = offset as u32;
-
-        assert!(offset % crate::tags::PAGE_SIZE == 0, "IniE load offset is not aligned");
+        println!("{:x}", self.load_offset);
+        assert!(offset % crate::tags::PAGE_SIZE == 0, "IniF load offset is not aligned");
         self.data = crate::tags::align_data_up(&self.data);
-        self.data.len()
+        crate::tags::align_size_up(self.data.len())
     }
 
     fn last_data(&self) -> &[u8] {
