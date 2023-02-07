@@ -926,15 +926,8 @@ impl TryFrom<cbor::Value> for PinUvAuthProtocol {
         match extract_unsigned(cbor_value)? {
             1 => Ok(PinUvAuthProtocol::V1),
             2 => Ok(PinUvAuthProtocol::V2),
-            /*  from this test:
-                https://github.com/google/CTAP2-test-tool/blob/1afd50bd1b700dc86d6dffeca70a331771d24e45/src/tests/make_credential.cc#L503-L515
-
-                Test successful: Tests the response on an empty PIN auth without a PIN in MakeCredential.
-                Test successful: Tests if the PIN protocol parameter is checked in MakeCredential.
-                Expected error code `CTAP2_ERR_PIN_AUTH_INVALID`, got `CTAP1_ERR_INVALID_PARAMETER`.
-             */
             _ => {
-                Err(Ctap2StatusCode::CTAP2_ERR_PIN_AUTH_INVALID)
+                Err(Ctap2StatusCode::CTAP1_ERR_INVALID_PARAMETER)
             },
         }
     }
