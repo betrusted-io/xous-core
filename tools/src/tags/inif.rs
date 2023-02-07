@@ -74,6 +74,10 @@ impl XousArgument for IniF {
         &self.data
     }
 
+    fn alignment_offset(&self) -> usize {
+        self.alignment_offset
+    }
+
     fn serialize(&self, output: &mut dyn io::Write) -> io::Result<usize> {
         let mut written = 0;
         written += output.write(&self.load_offset.to_le_bytes())?;

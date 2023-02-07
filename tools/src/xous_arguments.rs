@@ -39,13 +39,16 @@ pub trait XousArgument: fmt::Display {
     fn last_data(&self) -> &[u8] {
         &[]
     }
+
+    fn alignment_offset(&self) -> usize {
+        0
+    }
 }
 
 pub struct XousArguments {
     ram_start: XousSize,
     ram_length: XousSize,
     ram_name: u32,
-    alignment_offset: usize,
     pub arguments: Vec<Box<dyn XousArgument>>,
 }
 
@@ -78,7 +81,6 @@ impl XousArguments {
             ram_length,
             ram_name,
             arguments: vec![],
-            alignment_offset: 0,
         }
     }
 
@@ -86,18 +88,10 @@ impl XousArguments {
         let mut running_offset = crate::tags::align_size_up(self.len() as usize, 0);
         // println!("offset: {:x}, alignment_offset: {:x}", running_offset, 0);
         for arg in &mut self.arguments {
-            if arg.name() == "IniF" {
-                running_offset = crate::tags::align_size_up(running_offset, self.alignment_offset);
-            } else {
-                running_offset = crate::tags::align_size_up(running_offset, 0);
-            }
+            running_offset = crate::tags::align_size_up(running_offset, arg.alignment_offset());
             // println!("offset: {:x}", running_offset);
             running_offset += arg.finalize(running_offset);
         }
-    }
-
-    pub fn set_alignment_offset(&mut self, alignment_offset: usize) {
-        self.alignment_offset = alignment_offset;
     }
 
     pub fn add<T: 'static>(&mut self, arg: T)
@@ -171,19 +165,12 @@ impl XousArguments {
 
         // Write any pending data, such as payloads
         for arg in &self.arguments {
-            if arg.name() == "IniF" {
-                // align for 1:1 FLASH mapping
-                let pos = w.stream_position()?;
-                let pad_len = crate::tags::align_size_up(pos as usize, self.alignment_offset) - pos as usize;
-                let pad = vec![0u8; pad_len];
-                w.write_all(&pad)?;
-            } else {
-                // pad to the nearest page
-                let pos = w.stream_position()?;
-                let pad_len = crate::tags::align_size_up(pos as usize, 0) - pos as usize;
-                let pad = vec![0u8; pad_len];
-                w.write_all(&pad)?;
-            }
+            // align for FLASH mapping
+            let pos = w.stream_position()?;
+            let pad_len = crate::tags::align_size_up(pos as usize, arg.alignment_offset()) - pos as usize;
+            let pad = vec![0u8; pad_len];
+            w.write_all(&pad)?;
+
             // println!("position: {:x}", w.stream_position()?);
             w.write_all(arg.last_data())
                 .expect("couldn't write extra arg data");
