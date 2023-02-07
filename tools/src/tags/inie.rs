@@ -62,7 +62,7 @@ impl XousArgument for IniE {
         self.load_offset = offset as u32;
 
         assert!(offset % crate::tags::PAGE_SIZE == 0, "IniE load offset is not aligned");
-        self.data = crate::tags::align_data_up(&self.data);
+        self.data = crate::tags::align_data_up(&self.data, 0);
         self.data.len()
     }
 

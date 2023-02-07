@@ -79,7 +79,7 @@ impl XousArgument for XousKernel {
         "kernel text section is invalid: 0x{:08x} < 0xff000000 -- was it linked with a linker script?", self.text_offset);
 
         assert!(offset % crate::tags::PAGE_SIZE == 0, "XKrn load offset is not aligned");
-        self.program = crate::tags::align_data_up(&self.program);
+        self.program = crate::tags::align_data_up(&self.program, 0);
 
         self.program.len()
     }

@@ -16,6 +16,9 @@ pub struct IniF {
 
     /// Actual program data
     data: Vec<u8>,
+
+    /// Alignment offset
+    alignment_offset: usize,
 }
 
 impl fmt::Display for IniF {
@@ -35,7 +38,7 @@ impl fmt::Display for IniF {
 }
 
 impl IniF {
-    pub fn new(entrypoint: u32, sections: Vec<MiniElfSection>, mut data: Vec<u8>) -> IniF {
+    pub fn new(entrypoint: u32, sections: Vec<MiniElfSection>, mut data: Vec<u8>, alignment_offset: usize) -> IniF {
         // pad the data to 4 bytes
         while data.len() & 3 != 0 {
             data.push(0);
@@ -45,6 +48,7 @@ impl IniF {
             entrypoint,
             sections,
             data,
+            alignment_offset,
         }
     }
 }
@@ -60,10 +64,10 @@ impl XousArgument for IniF {
 
     fn finalize(&mut self, offset: usize) -> usize {
         self.load_offset = offset as u32;
-        println!("{:x}", self.load_offset);
-        assert!(offset % crate::tags::PAGE_SIZE == 0, "IniF load offset is not aligned");
-        self.data = crate::tags::align_data_up(&self.data);
-        crate::tags::align_size_up(self.data.len())
+
+        assert!(offset % crate::tags::PAGE_SIZE == self.alignment_offset, "IniF load offset is not aligned");
+        self.data = crate::tags::align_data_up(&self.data, 0);
+        self.data.len()
     }
 
     fn last_data(&self) -> &[u8] {

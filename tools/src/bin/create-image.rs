@@ -276,7 +276,8 @@ fn main() {
             );
             pid += 1;
             let init = read_minielf(init_path).expect("couldn't parse init file");
-            args.add(IniF::new(init.entry_point, init.sections, init.program));
+            args.add(IniF::new(init.entry_point, init.sections, init.program, init.alignment_offset));
+            args.set_alignment_offset(init.alignment_offset);
         }
     }
 
