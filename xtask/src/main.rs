@@ -272,6 +272,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_feature("mass-storage") // add this in by default to help with testing
                    .add_apps(&get_cratespecs());
         }
+        Some("app-image-xip") => {
+            builder.target_precursor(PRECURSOR_SOC_VERSION)
+                   //.add_services(&user_pkgs.into_iter().map(String::from).collect())
+                   .add_feature("mass-storage"); // add this in by default to help with testing
+            for service in user_pkgs {
+                if (service != "shellchat") && (service != "ime-plugin-shell" && (service != "com") && (service != "status") && (service != "net")) {
+                    builder.add_service(service, false);
+                } else {
+                    builder.add_service(service, true);
+                }
+            }
+            for app in get_cratespecs() {
+                builder.add_app(&app, false);
+            }
+        }
         Some("perf-image") => {
             // `--feature vaultperf` will make `vault` the performance manager, in exclusion of shellchat
             if !builder.has_feature("shellperf") && !builder.has_feature("vaultperf") {

@@ -268,8 +268,10 @@ impl Builder {
 
     /// Add just one app
     #[allow(dead_code)]
-    pub fn add_app<'a>(&'a mut self, app_spec: &str) -> &'a mut Builder {
-        self.apps.push(app_spec.into());
+    pub fn add_app<'a>(&'a mut self, app_spec: &str, xip: bool) -> &'a mut Builder {
+        let mut spec: CrateSpec = app_spec.into();
+        spec.set_xip(xip);
+        self.apps.push(spec);
         self
     }
     /// Add a list of apps
