@@ -446,7 +446,8 @@ impl Builder {
             let mut found = false;
             for app in self.apps.iter() {
                 if let Some(n) = &app.name() {
-                    if Path::new(service).file_name().unwrap_or_default().to_str().unwrap_or_default() == n {
+                    if Path::new(service).file_name().unwrap_or_default().to_str().unwrap_or_default() ==
+                        Path::new(n).file_name().unwrap_or_default().to_str().unwrap_or_default() {
                         if app.is_xip() {
                             inif.push(service.to_string());
                         } else {
@@ -462,7 +463,8 @@ impl Builder {
             }
             for serv in self.services.iter() {
                 if let Some(n) = &serv.name() {
-                    if Path::new(service).file_name().unwrap_or_default().to_str().unwrap_or_default() == n {
+                    if Path::new(service).file_name().unwrap_or_default().to_str().unwrap_or_default() ==
+                        Path::new(n).file_name().unwrap_or_default().to_str().unwrap_or_default() {
                         if serv.is_xip() {
                             inif.push(service.to_string());
                         } else {
