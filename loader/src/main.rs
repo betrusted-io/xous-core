@@ -43,7 +43,7 @@ const MINIELF_FLG_NC: u8 = 2;
 #[allow(dead_code)]
 const MINIELF_FLG_X: u8 = 4;
 
-const VDBG: bool = true; // verbose debug
+const VDBG: bool = false; // verbose debug
 const VVDBG: bool = false; // very verbose debug
 
 mod debug;
@@ -438,8 +438,61 @@ impl MiniElf {
         println!("load allocated 0x{:x} bytes", allocated_bytes);
         allocated_bytes
     }
+
+    /// Page through a processes allocated pages and check against the file spec.
+    pub fn check(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid, xip: bool) {
+        println!("Checking {} PID {} starting at offset {:08x}", if xip {"xip"} else {"ram"}, pid, load_offset);
+        let image_phys_base = allocator.base_addr as usize + self.load_offset as usize;
+        // the process offset is always 1 less than the PID, because that's how we built the table.
+        let satp = allocator.processes[pid as usize - 1].satp;
+
+        let mut section_offset = 0;
+        for (index, section) in self.sections.iter().enumerate() {
+            if let Some(dest_offset) = pt_walk(satp, section.virt as usize) {
+                println!("  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), 0x{:x}(PA dst) len {}/0x{:x}",
+                    index, section_offset + image_phys_base, section.virt as usize + section_offset,
+                    dest_offset, section.len(), section.len()
+                );
+                // dumping routines
+                let dump_pa_src = section_offset + image_phys_base;
+                let dump_pa_dst = dest_offset;
+                dump_addr(dump_pa_src, "    Src [:20]  ");
+                dump_addr(dump_pa_dst, "    Dst [:20]  ");
+                dump_addr(dump_pa_src + section.len() - 20, "    Src [-20:] ");
+                dump_addr(dump_pa_dst + section.len() - 20, "    Dst [-20:] ");
+            } else {
+                println!("  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), ERR UNMAPPED!!",
+                    index, section_offset + image_phys_base, section.virt as usize + section_offset
+                );
+            }
+            section_offset += section.len();
+        }
+    }
 }
 
+fn dump_addr(addr: usize, label: &str) {
+    print!("{}", label);
+    let slice = unsafe{core::slice::from_raw_parts(addr as *const u8, 20)};
+    for &b in slice {
+        print!( "{:02x}", b);
+    }
+    print!("\n");
+}
+pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
+    let l1_pt = unsafe { &mut (*((root << 12) as *mut PageTable)) };
+    let l1_entry = l1_pt.entries[(va & 0xFFC0_0000) >> 22];
+    if l1_entry != 0 {
+        let l0_pt = unsafe { &mut (*(((l1_entry >> 10) << 12) as *mut PageTable)) };
+        let l0_entry = l0_pt.entries[(va & 0x003F_F000) >> 12];
+        if l0_entry & 1 != 0 { // bit 1 is the "valid" bit
+            Some(((l0_entry >> 10) << 12) | va & 0xFFF)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
 /// This describes the kernel as well as initially-loaded processes
 #[repr(C)]
 pub struct ProgramDescription {
@@ -641,25 +694,20 @@ where
     }
 }
 
-/// Copy _count_ **bytes** from src to dest.
 unsafe fn memcpy<T>(dest: *mut T, src: *const T, count: usize)
 where
     T: Copy,
 {
     if VDBG {println!(
-        "COPY: {:08x} - {:08x} {} {:08x} - {:08x}",
+        "COPY (align {}): {:08x} - {:08x} {} {:08x} - {:08x}",
+        mem::size_of::<T>(),
         src as usize,
         src as usize + count,
         count,
         dest as usize,
         dest as usize + count
     );}
-    let mut offset = 0;
-    while offset < (count / mem::size_of::<T>()) {
-        dest.add(offset)
-            .write_volatile(src.add(offset).read_volatile());
-        offset += 1
-    }
+    core::ptr::copy_nonoverlapping(src, dest, count / mem::size_of::<T>());
 }
 
 pub fn read_initial_config(cfg: &mut BootConfig) {
@@ -1470,6 +1518,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg);
+        if VDBG { check_load(&mut cfg); }
         println!("done initializing for cold boot.");
     } else {
         // resume path
@@ -1801,4 +1850,31 @@ pub fn phase_2(cfg: &mut BootConfig) {
     cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 1; // claim the loader stack -- do not allow tampering, as it contains backup kernel args
     cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 1; // 8k in total (to allow for digital signatures to be computed)
     cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 3] = 0; // allow clean suspend page to be mapped in Xous
+}
+
+/// This function allows us to check the final loader results
+/// It will print to the console the first 32 bytes of each loaded
+/// region top/bottom, based upon extractions from the page table.
+fn check_load(cfg: &mut BootConfig) {
+    let args = cfg.args;
+
+    // This is the offset in RAM where programs are loaded from.
+    println!("\n\nCHECKING LOAD");
+
+    // Go through all Init processes and the kernel, setting up their
+    // page tables and mapping memory to them.
+    let mut pid = 2;
+    for tag in args.iter() {
+        if tag.name == u32::from_le_bytes(*b"IniE") {
+            let inie = MiniElf::new(&tag);
+            println!("\n\nChecking IniE region");
+            inie.check(cfg, inie.load_offset as usize, pid, false);
+            pid += 1;
+        } else if tag.name == u32::from_le_bytes(*b"IniF") {
+            let inif = MiniElf::new(&tag);
+            println!("\n\nChecking IniF region");
+            inif.check(cfg, inif.load_offset as usize, pid, true);
+            pid += 1;
+        }
+    }
 }
