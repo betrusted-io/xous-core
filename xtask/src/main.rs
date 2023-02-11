@@ -284,7 +284,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             for app in get_cratespecs() {
-                builder.add_app(&app, false);
+                builder.add_app(&app, true);
             }
         }
         Some("perf-image") => {
