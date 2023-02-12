@@ -122,7 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "xous-susres@0.1.33",     // ticktimer registers with susres to coordinate time continuity across sleeps
         "xous-ticktimer@0.1.29",   // "well known" service: thread scheduling
     ].to_vec();
-    let xous_kernel_remote = "xous-kernel@0.9.32";
+    let xous_kernel_remote = "xous-kernel@0.9.33";
 
     // ---- extract position independent args ----
     let lkey = get_flag("--lkey")?;
