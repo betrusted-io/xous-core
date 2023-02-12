@@ -440,6 +440,7 @@ impl MiniElf {
     }
 
     /// Page through a processes allocated pages and check against the file spec.
+    #[cfg(feature="debug-print")]
     pub fn check(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid, xip: bool) {
         println!("Checking {} PID {} starting at offset {:08x}", if xip {"xip"} else {"ram"}, pid, load_offset);
         let image_phys_base = allocator.base_addr as usize + self.load_offset as usize;
@@ -469,7 +470,7 @@ impl MiniElf {
         }
     }
 }
-
+#[cfg(feature="debug-print")]
 fn dump_addr(addr: usize, label: &str) {
     print!("{}", label);
     let slice = unsafe{core::slice::from_raw_parts(addr as *const u8, 20)};
@@ -478,6 +479,7 @@ fn dump_addr(addr: usize, label: &str) {
     }
     print!("\n");
 }
+#[cfg(feature="debug-print")]
 pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
     let l1_pt = unsafe { &mut (*((root << 12) as *mut PageTable)) };
     let l1_entry = l1_pt.entries[(va & 0xFFC0_0000) >> 22];
@@ -1518,6 +1520,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg);
+        #[cfg(feature="debug-print")]
         if VDBG { check_load(&mut cfg); }
         println!("done initializing for cold boot.");
     } else {
@@ -1855,6 +1858,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
 /// This function allows us to check the final loader results
 /// It will print to the console the first 32 bytes of each loaded
 /// region top/bottom, based upon extractions from the page table.
+#[cfg(feature="debug-print")]
 fn check_load(cfg: &mut BootConfig) {
     let args = cfg.args;
 
