@@ -330,7 +330,7 @@ impl SystemServices {
         let init_offsets = {
             let mut init_count = 1;
             for arg in args.iter() {
-                if arg.name == u32::from_le_bytes(*b"IniE") {
+                if arg.name == u32::from_le_bytes(*b"IniE") || arg.name == u32::from_le_bytes(*b"IniF") {
                     init_count += 1;
                 }
             }

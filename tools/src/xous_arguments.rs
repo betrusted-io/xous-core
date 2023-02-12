@@ -1,5 +1,5 @@
 use std::fmt;
-use std::io::{Cursor, Result, Write};
+use std::io::{Cursor, Result, Write, Seek};
 pub type XousArgumentCode = u32;
 pub type XousSize = u32;
 use crc::{crc16, Hasher16};
@@ -38,6 +38,10 @@ pub trait XousArgument: fmt::Display {
     /// Any last data that needs to be written.
     fn last_data(&self) -> &[u8] {
         &[]
+    }
+
+    fn alignment_offset(&self) -> usize {
+        0
     }
 }
 
@@ -81,8 +85,11 @@ impl XousArguments {
     }
 
     pub fn finalize(&mut self) {
-        let mut running_offset = self.len() as usize;
+        let mut running_offset = crate::tags::align_size_up(self.len() as usize, 0);
+        // println!("offset: {:x}, alignment_offset: {:x}", running_offset, 0);
         for arg in &mut self.arguments {
+            running_offset = crate::tags::align_size_up(running_offset, arg.alignment_offset());
+            // println!("offset: {:x}", running_offset);
             running_offset += arg.finalize(running_offset);
         }
     }
@@ -96,7 +103,7 @@ impl XousArguments {
 
     pub fn write<T>(&mut self, mut w: T) -> Result<()>
     where
-        T: Write,
+        T: Write + Seek,
     {
         let total_length = self.len();
 
@@ -158,6 +165,13 @@ impl XousArguments {
 
         // Write any pending data, such as payloads
         for arg in &self.arguments {
+            // align for FLASH mapping
+            let pos = w.stream_position()?;
+            let pad_len = crate::tags::align_size_up(pos as usize, arg.alignment_offset()) - pos as usize;
+            let pad = vec![0u8; pad_len];
+            w.write_all(&pad)?;
+
+            // println!("position: {:x}", w.stream_position()?);
             w.write_all(arg.last_data())
                 .expect("couldn't write extra arg data");
         }

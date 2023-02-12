@@ -4,8 +4,8 @@ use std::fmt;
 use std::io;
 
 #[derive(Debug)]
-pub struct IniE {
-    /// Address of Init in RAM (i.e. SPI flash)
+pub struct IniF {
+    /// Address in flash
     load_offset: u32,
 
     /// Virtual address entry point
@@ -16,13 +16,16 @@ pub struct IniE {
 
     /// Actual program data
     data: Vec<u8>,
+
+    /// Alignment offset
+    alignment_offset: usize,
 }
 
-impl fmt::Display for IniE {
+impl fmt::Display for IniF {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
-            "    IniE: entrypoint @ {:08x}, loaded from {:08x}.  Sections:",
+            "    IniF: entrypoint @ {:08x}, loaded from {:08x}.  Sections:",
             self.entrypoint, self.load_offset
         )?;
         let mut load_offset = self.load_offset;
@@ -34,24 +37,25 @@ impl fmt::Display for IniE {
     }
 }
 
-impl IniE {
-    pub fn new(entrypoint: u32, sections: Vec<MiniElfSection>, mut data: Vec<u8>) -> IniE {
+impl IniF {
+    pub fn new(entrypoint: u32, sections: Vec<MiniElfSection>, mut data: Vec<u8>, alignment_offset: usize) -> IniF {
         // pad the data to 4 bytes
         while data.len() & 3 != 0 {
             data.push(0);
         }
-        IniE {
+        IniF {
             load_offset: 0,
             entrypoint,
             sections,
             data,
+            alignment_offset,
         }
     }
 }
 
-impl XousArgument for IniE {
+impl XousArgument for IniF {
     fn code(&self) -> XousArgumentCode {
-        u32::from_le_bytes(*b"IniE")
+        u32::from_le_bytes(*b"IniF")
     }
 
     fn length(&self) -> XousSize {
@@ -61,13 +65,17 @@ impl XousArgument for IniE {
     fn finalize(&mut self, offset: usize) -> usize {
         self.load_offset = offset as u32;
 
-        assert!(offset % crate::tags::PAGE_SIZE == 0, "IniE load offset is not aligned");
+        assert!(offset % crate::tags::PAGE_SIZE == self.alignment_offset, "IniF load offset is not aligned");
         self.data = crate::tags::align_data_up(&self.data, 0);
         self.data.len()
     }
 
     fn last_data(&self) -> &[u8] {
         &self.data
+    }
+
+    fn alignment_offset(&self) -> usize {
+        self.alignment_offset
     }
 
     fn serialize(&self, output: &mut dyn io::Write) -> io::Result<usize> {

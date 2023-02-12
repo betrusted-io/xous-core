@@ -71,6 +71,25 @@ pub unsafe extern "C" fn init(
     platform::init();
 
     println!("KMAIN (clean boot): Supervisor mode started...");
+    println!("RAM usage:");
+    let mut total_bytes = 0;
+    crate::services::SystemServices::with(|system_services| {
+        crate::mem::MemoryManager::with(|mm| {
+            for process in &system_services.processes {
+                if !process.free() {
+                    let bytes_used = mm.ram_used_by(process.pid);
+                    total_bytes += bytes_used;
+                    println!(
+                        "    PID {:>3}: {:>4} k {}",
+                        process.pid,
+                        bytes_used / 1024,
+                        system_services.process_name(process.pid).unwrap_or("")
+                    );
+                }
+            }
+        });
+    });
+    println!("{} k total", total_bytes / 1024);
 
     // rand::init() already clears the initial pipe, but pump the TRNG a little more out of no other reason than sheer paranoia
     platform::rand::get_u32();

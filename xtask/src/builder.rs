@@ -22,25 +22,55 @@ impl BuildStream {
     }
 }
 
+#[derive(Debug)]
 pub enum CrateSpec {
     /// name of the crate
-    Local(String),
+    Local(String, bool),
     /// crates.io: (name of crate, version)
-    CratesIo(String, String),
+    CratesIo(String, String, bool),
     /// a prebuilt package: (name of executable, URL for download)
-    Prebuilt(String, String),
+    Prebuilt(String, String, bool),
     /// a prebuilt binary, done using command line tools
-    BinaryFile(String),
+    BinaryFile(String, bool),
     /// an empty entry
     None,
+}
+impl CrateSpec {
+    pub fn is_xip(&self) -> bool {
+        match self {
+            CrateSpec::Local(_s, xip) => *xip,
+            CrateSpec::CratesIo(_n, _v, xip) => *xip,
+            CrateSpec::Prebuilt(_n, _u, xip) => *xip,
+            CrateSpec::BinaryFile(_path, xip) => *xip,
+            _ => false
+        }
+    }
+    pub fn set_xip(&mut self, xip: bool) {
+        *self = match self {
+            CrateSpec::Local(s, _xip) => CrateSpec::Local(s.to_string(), xip),
+            CrateSpec::CratesIo(n, v, _xip) => CrateSpec::CratesIo(n.to_string(), v.to_string(), xip),
+            CrateSpec::Prebuilt(n, u, _xip) => CrateSpec::Prebuilt(n.to_string(), u.to_string(), xip),
+            CrateSpec::BinaryFile(path, _xip) => CrateSpec::BinaryFile(path.to_string(), xip),
+            CrateSpec::None => CrateSpec::None,
+        }
+    }
+    pub fn name(&self) -> Option<String> {
+        match self {
+            CrateSpec::Local(s, _xip) => Some(s.to_string()),
+            CrateSpec::CratesIo(n, _v, _xip) => Some(n.to_string()),
+            CrateSpec::Prebuilt(n, _u, _xip) => Some(n.to_string()),
+            CrateSpec::BinaryFile(path, _xip) => Some(path.to_string()),
+            _ => None,
+        }
+    }
 }
 impl Clone for CrateSpec {
     fn clone(&self) -> CrateSpec {
         match self {
-            CrateSpec::Local(s) => CrateSpec::Local(s.to_string()),
-            CrateSpec::CratesIo(n, v) => CrateSpec::CratesIo(n.to_string(), v.to_string()),
-            CrateSpec::Prebuilt(n, u) => CrateSpec::Prebuilt(n.to_string(), u.to_string()),
-            CrateSpec::BinaryFile(path) => CrateSpec::BinaryFile(path.to_string()),
+            CrateSpec::Local(s, xip) => CrateSpec::Local(s.to_string(), *xip),
+            CrateSpec::CratesIo(n, v, xip) => CrateSpec::CratesIo(n.to_string(), v.to_string(), *xip),
+            CrateSpec::Prebuilt(n, u, xip) => CrateSpec::Prebuilt(n.to_string(), u.to_string(), *xip),
+            CrateSpec::BinaryFile(path, xip) => CrateSpec::BinaryFile(path.to_string(), *xip),
             CrateSpec::None => CrateSpec::None,
         }
     }
@@ -52,7 +82,8 @@ impl From<&str> for CrateSpec {
             let (name, version) = spec.split_once('@').expect("couldn't parse crate specifier");
             CrateSpec::CratesIo(
                 name.to_string(),
-                version.to_string()
+                version.to_string(),
+                false
             )
         // prebuilt crates are specified as "name#url"
         // i.e. "espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/"
@@ -60,16 +91,17 @@ impl From<&str> for CrateSpec {
             let (name, url) = spec.split_once('#').expect("couldn't parse crate specifier");
             CrateSpec::Prebuilt(
                 name.to_string(),
-                url.to_string()
+                url.to_string(),
+                false
             )
         // local files are specified as paths, which, at a minimum include one directory separator "/" or "\"
         // i.e. "./local_file"
         // Note that this is after a test for the '#' character, so that disambiguates URL slashes
         // It does mean that files with a '#' character in them are mistaken for URL coded paths, and '@' as remote crates.
         } else if spec.contains('/') || spec.contains('\\') {
-            CrateSpec::BinaryFile(spec.to_string())
+            CrateSpec::BinaryFile(spec.to_string(), false)
         } else {
-            CrateSpec::Local(spec.to_string())
+            CrateSpec::Local(spec.to_string(), false)
         }
     }
 }
@@ -103,11 +135,11 @@ pub(crate) struct Builder {
 impl Builder {
     pub fn new() -> Builder {
         Builder {
-            loader: CrateSpec::Local("loader".to_string()),
+            loader: CrateSpec::Local("loader".to_string(), false),
             loader_features: Vec::new(),
             loader_key: "devkey/dev.key".into(),
             loader_disable_defaults: false,
-            kernel: CrateSpec::Local("xous-kernel".to_string()),
+            kernel: CrateSpec::Local("xous-kernel".to_string(), false),
             kernel_features: Vec::new(),
             kernel_key: "devkey/dev.key".into(),
             kernel_disable_defaults: false,
@@ -189,8 +221,8 @@ impl Builder {
         self.stream = BuildStream::Release;
         self.run_svd2repl = true;
         self.utra_target = "renode".to_string();
-        self.loader = CrateSpec::Local("loader".to_string());
-        self.kernel = CrateSpec::Local("xous-kernel".to_string());
+        self.loader = CrateSpec::Local("loader".to_string(), false);
+        self.kernel = CrateSpec::Local("xous-kernel".to_string(), false);
         self
     }
     /// Configure for precursor targets. This is the default, but it's good practice
@@ -201,8 +233,8 @@ impl Builder {
         self.stream = BuildStream::Release;
         self.utra_target = format!("precursor-{}", soc_version).to_string();
         self.run_svd2repl = false;
-        self.loader = CrateSpec::Local("loader".to_string());
-        self.kernel = CrateSpec::Local("xous-kernel".to_string());
+        self.loader = CrateSpec::Local("loader".to_string(), false);
+        self.kernel = CrateSpec::Local("xous-kernel".to_string(), false);
         self
     }
 
@@ -220,9 +252,10 @@ impl Builder {
     }
 
     /// Add just one service
-    #[allow(dead_code)]
-    pub fn add_service<'a>(&'a mut self, service_spec: &str) -> &'a mut Builder {
-        self.services.push(service_spec.into());
+    pub fn add_service<'a>(&'a mut self, service_spec: &str, xip: bool) -> &'a mut Builder {
+        let mut spec: CrateSpec = service_spec.into();
+        spec.set_xip(xip);
+        self.services.push(spec);
         self
     }
     /// Add a list of services
@@ -235,8 +268,10 @@ impl Builder {
 
     /// Add just one app
     #[allow(dead_code)]
-    pub fn add_app<'a>(&'a mut self, app_spec: &str) -> &'a mut Builder {
-        self.apps.push(app_spec.into());
+    pub fn add_app<'a>(&'a mut self, app_spec: &str, xip: bool) -> &'a mut Builder {
+        let mut spec: CrateSpec = app_spec.into();
+        spec.set_xip(xip);
+        self.apps.push(spec);
         self
     }
     /// Add a list of apps
@@ -339,8 +374,8 @@ impl Builder {
         let mut remote_pkgs = Vec::<(&str, &str)>::new();
         for pkg in packages.iter() {
             match pkg {
-                CrateSpec::Local(name) => local_pkgs.push(&name),
-                CrateSpec::CratesIo(name, version) => remote_pkgs.push((&name, &version)),
+                CrateSpec::Local(name, _xip) => local_pkgs.push(&name),
+                CrateSpec::CratesIo(name, version, _xip) => remote_pkgs.push((&name, &version)),
                 _ => {},
             }
         }
@@ -404,6 +439,52 @@ impl Builder {
         Ok(artifacts)
     }
 
+    pub fn split_xip(&self, services: Vec<String>) -> (Vec<String>, Vec<String>) {
+        let mut inie = Vec::<String>::new();
+        let mut inif = Vec::<String>::new();
+        for service in services.iter() {
+            let mut found = false;
+            for app in self.apps.iter() {
+                if let Some(n) = &app.name() {
+                    if Path::new(service).file_name().unwrap_or_default().to_str().unwrap_or_default() ==
+                        Path::new(n).file_name().unwrap_or_default().to_str().unwrap_or_default() {
+                        if app.is_xip() {
+                            inif.push(service.to_string());
+                        } else {
+                            inie.push(service.to_string());
+                        }
+                        found = true;
+                        continue;
+                    }
+                }
+            }
+            if found {
+                continue;
+            }
+            for serv in self.services.iter() {
+                if let Some(n) = &serv.name() {
+                    if Path::new(service).file_name().unwrap_or_default().to_str().unwrap_or_default() ==
+                        Path::new(n).file_name().unwrap_or_default().to_str().unwrap_or_default() {
+                        if serv.is_xip() {
+                            inif.push(service.to_string());
+                        } else {
+                            inie.push(service.to_string());
+                        }
+                        found = true;
+                        continue;
+                    }
+                }
+            }
+            if found {
+                continue;
+            }
+            // the service wasn't found in any of the other lists, mark it as non-xip
+            inie.push(service.to_string());
+        }
+        assert!(inie.len() + inif.len() == services.len());
+        (inie, inif)
+    }
+
     /// Consume the builder and execute the configured build task. This handles dispatching all configurations,
     /// including renode, hosted, and hardware targets.
     pub fn build(mut self) -> Result<(), DynError> {
@@ -441,8 +522,8 @@ impl Builder {
         let mut app_names = Vec::<String>::new();
         for app in self.apps.iter() {
             match app {
-                CrateSpec::Local(name) => app_names.push(name.into()),
-                CrateSpec::CratesIo(name, _version) => app_names.push(name.into()),
+                CrateSpec::Local(name, _xip) => app_names.push(name.into()),
+                CrateSpec::CratesIo(name, _version, _xip) => app_names.push(name.into()),
                 _ => {}
             }
         }
@@ -460,7 +541,7 @@ impl Builder {
             // throw a warning if prebuilts are specified for hosted mode
             for item in [&self.services[..], &self.apps[..]].concat() {
                 match item {
-                    CrateSpec::Prebuilt(name, _) => println!("Warning! Pre-built binaries not supported for hosted mode ({})", name),
+                    CrateSpec::Prebuilt(name, _, _xip) => println!("Warning! Pre-built binaries not supported for hosted mode ({})", name),
                     _ => {},
                 }
             }
@@ -503,7 +584,7 @@ impl Builder {
             } else {
                 // confirm the kernel can build before quitting
                 let _ = self.builder(
-                    &vec![CrateSpec::Local("xous-kernel".into())],
+                    &vec![CrateSpec::Local("xous-kernel".into(), false)],
                     &self.kernel_features,
                     &target,
                     self.stream,
@@ -584,9 +665,11 @@ impl Builder {
             services_path.append(&mut self.enumerate_binary_files()?);
 
             // --------- package up and sign a binary image ----------
+            let (inie, inif) = self.split_xip(services_path);
             let output_bundle = self.create_image(
                 &kernel_path[0],
-                &services_path,
+                &inie,
+                &inif,
                 MemorySpec::SvdFile(svd_path)
             )?;
             println!();
@@ -679,6 +762,7 @@ impl Builder {
         &self,
         kernel: &String,
         init: &[String],
+        inif: &[String],
         memory_spec: MemorySpec,
     ) -> Result<PathBuf, DynError> {
         let stream = self.stream.to_str();
@@ -696,6 +780,11 @@ impl Builder {
 
         for i in init {
             args.push("--init");
+            args.push(i);
+        }
+
+        for i in inif {
+            args.push("--inif");
             args.push(i);
         }
 
@@ -721,7 +810,7 @@ impl Builder {
         let mut paths = Vec::<String>::new();
         for item in [&self.services[..], &self.apps[..]].concat() {
             match item {
-                CrateSpec::Prebuilt(name, url) => {
+                CrateSpec::Prebuilt(name, url, _xip) => {
                     let exec_name = format!("target/{}/{}/{}", TARGET_TRIPLE, self.stream.to_str(), name);
                     println!("Fetching {} executable from build server...", name);
                     let mut exec_file = OpenOptions::new()
@@ -752,7 +841,7 @@ impl Builder {
         let mut paths = Vec::<String>::new();
         for item in [&self.services[..], &self.apps[..]].concat() {
             match item {
-                CrateSpec::BinaryFile(path) => {
+                CrateSpec::BinaryFile(path, _xip) => {
                     paths.push(path);
                 }
                 _ => {}

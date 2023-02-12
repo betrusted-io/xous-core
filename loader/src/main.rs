@@ -37,7 +37,14 @@ const FLG_A: usize = 0x40;
 const FLG_D: usize = 0x80;
 const STACK_PAGE_COUNT: usize = 8;
 
+const MINIELF_FLG_W: u8 = 1;
+#[allow(dead_code)]
+const MINIELF_FLG_NC: u8 = 2;
+#[allow(dead_code)]
+const MINIELF_FLG_X: u8 = 4;
+
 const VDBG: bool = false; // verbose debug
+const VVDBG: bool = false; // very verbose debug
 
 mod debug;
 
@@ -187,7 +194,7 @@ impl MiniElfSection {
 
 /// Describes a Mini ELF file, suitable for loading into RAM
 pub struct MiniElf {
-    /// Physical source address of this program in RAM (i.e. SPI flash).
+    /// Offset of the source data relative to the start of the image file
     pub load_offset: u32,
 
     /// Virtual address of the entrypoint
@@ -215,12 +222,20 @@ impl MiniElf {
     /// Load the process into its own memory space.
     /// The process will have been already loaded in stage 1.  This simply assigns
     /// memory maps as necessary.
-    pub fn load(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid) -> usize {
+    pub fn load(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid, xip: bool) -> usize {
         println!("Mapping PID {} starting at offset {:08x}", pid, load_offset);
         let mut allocated_bytes = 0;
 
         let mut current_page_addr: usize = 0;
         let mut previous_addr: usize = 0;
+        let mut last_mapped_xip = 0;
+        let image_phys_base = allocator.base_addr as usize + self.load_offset as usize;
+        // It is a requirement that the image generator lay out the artifacts on disk such that
+        // the page offsets line up for XIP sections. This assert confirms this necessary pre-condition.
+        if xip {
+            assert!((image_phys_base & (PAGE_SIZE - 1)) == self.sections[0].virt as usize & (PAGE_SIZE - 1), "Image generator did not align load offsets to page offsets!");
+        }
+        println!("flash_map_offset: {:x} / base_addr {:x} load_offset {:x}", image_phys_base as usize, allocator.base_addr as usize, self.load_offset as usize);
 
         // The load offset is the end of this process.  Shift it down by one page
         // so we get the start of the first page.
@@ -266,6 +281,9 @@ impl MiniElf {
             }
         }
 
+        // this works to set the initial offset, but from here we have to track it by
+        // adding the length of each section as we see it
+        let mut section_start_phys_offset = 0;
         // Example: Page starts at 0xf0c0 and is 8192 bytes long.
         // 1. Copy 3094 bytes to page 1
         // 2. Copy 4096 bytes to page 2
@@ -282,78 +300,132 @@ impl MiniElf {
         for section in self.sections {
             if VDBG {println!("    Section @ {:08x}", section.virt as usize);}
             let flag_defaults = FLG_U
-                | FLG_R
-                | FLG_X
-                | FLG_VALID
-                | if section.flags() & 1 == 1 { FLG_W } else { 0 }
-                | if section.flags() & 4 == 4 { FLG_X } else { 0 };
+            | FLG_R
+            | FLG_X
+            | FLG_VALID
+            | if section.flags() & 1 == 1 { FLG_W } else { 0 }
+            | if section.flags() & 4 == 4 { FLG_X } else { 0 };
 
+            let copy_to_ram = ((section.flags() as u8) & MINIELF_FLG_W) != 0;
             if (section.virt as usize) < previous_addr {
                 panic!("init section addresses are not strictly increasing");
             }
 
-            let mut this_page = section.virt as usize & !(PAGE_SIZE - 1);
-            let mut bytes_to_copy = section.len();
+            if copy_to_ram || !xip {
+                let mut this_page = section.virt as usize & !(PAGE_SIZE - 1);
+                let mut bytes_to_copy = section.len();
 
-            // If this is not a new page, ensure the uninitialized values from between
-            // this section and the previous one are all zeroed out.
-            if this_page != current_page_addr || previous_addr == current_page_addr {
-                if VDBG {println!("1       {:08x} -> {:08x}", top as usize, this_page);}
-                allocator.map_page(satp, top as usize, this_page, flag_defaults);
-                allocator.change_owner(pid as XousPid, top as usize);
-                allocated_bytes += PAGE_SIZE;
-                top -= PAGE_SIZE;
-                this_page += PAGE_SIZE;
+                // If this is not a new page, ensure the uninitialized values from between
+                // this section and the previous one are all zeroed out.
+                if this_page != current_page_addr || previous_addr == current_page_addr {
+                    if VDBG {println!("1       {:08x} -> {:08x}", top as usize, this_page);}
+                    allocator.map_page(satp, top as usize, this_page, flag_defaults);
+                    allocator.change_owner(pid as XousPid, top as usize);
+                    allocated_bytes += PAGE_SIZE;
+                    top -= PAGE_SIZE;
+                    this_page += PAGE_SIZE;
 
-                // Part 1: Copy the first chunk over.
-                let mut first_chunk_size = PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
-                if first_chunk_size > section.len() {
-                    first_chunk_size = section.len();
-                }
-                bytes_to_copy -= first_chunk_size;
-            } else {
-                if VDBG {println!(
-                    "This page is {:08x}, and last page was {:08x}",
-                    this_page, current_page_addr
-                );}
-                // This is a continuation of the previous section, and as a result
-                // the memory will have been copied already. Avoid copying this data
-                // to a new page.
-                let first_chunk_size = PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
-                if VDBG {println!("First chunk size: {}", first_chunk_size);}
-                if bytes_to_copy < first_chunk_size {
-                    bytes_to_copy = 0;
-                    if VDBG {println!("Clamping to 0 bytes");}
-                } else {
+                    // Part 1: Copy the first chunk over.
+                    let mut first_chunk_size = PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
+                    if first_chunk_size > section.len() {
+                        first_chunk_size = section.len();
+                    }
                     bytes_to_copy -= first_chunk_size;
+                } else {
                     if VDBG {println!(
-                        "Clamping to {} bytes by cutting off {} bytes",
-                        bytes_to_copy, first_chunk_size
+                        "This page is {:08x}, and last page was {:08x}",
+                        this_page, current_page_addr
                     );}
+                    // This is a continuation of the previous section, and as a result
+                    // the memory will have been copied already. Avoid copying this data
+                    // to a new page.
+                    let first_chunk_size = PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
+                    if VDBG {println!("First chunk size: {}", first_chunk_size);}
+                    if bytes_to_copy < first_chunk_size {
+                        bytes_to_copy = 0;
+                        if VDBG {println!("Clamping to 0 bytes");}
+                    } else {
+                        bytes_to_copy -= first_chunk_size;
+                        if VDBG {println!(
+                            "Clamping to {} bytes by cutting off {} bytes",
+                            bytes_to_copy, first_chunk_size
+                        );}
+                    }
+                    this_page += PAGE_SIZE;
                 }
-                this_page += PAGE_SIZE;
-            }
 
-            // Part 2: Copy any full pages.
-            while bytes_to_copy >= PAGE_SIZE {
-                if VDBG {println!("2       {:08x} -> {:08x}", top as usize, this_page);}
-                allocator.map_page(satp, top as usize, this_page, flag_defaults);
-                allocator.change_owner(pid as XousPid, top as usize);
-                allocated_bytes += PAGE_SIZE;
-                top -= PAGE_SIZE;
-                this_page += PAGE_SIZE;
-                bytes_to_copy -= PAGE_SIZE;
-            }
+                // Part 2: Copy any full pages.
+                while bytes_to_copy >= PAGE_SIZE {
+                    if VDBG {println!("2       {:08x} -> {:08x}", top as usize, this_page);}
+                    allocator.map_page(satp, top as usize, this_page, flag_defaults);
+                    allocator.change_owner(pid as XousPid, top as usize);
+                    allocated_bytes += PAGE_SIZE;
+                    top -= PAGE_SIZE;
+                    this_page += PAGE_SIZE;
+                    bytes_to_copy -= PAGE_SIZE;
+                }
 
-            // Part 3: Copy the final residual partial page
-            if bytes_to_copy > 0 {
-                let this_page = (section.virt as usize + section.len()) & !(PAGE_SIZE - 1);
-                if VDBG {println!("3       {:08x} -> {:08x}", top as usize, this_page);}
-                allocator.map_page(satp, top as usize, this_page, flag_defaults);
-                allocator.change_owner(pid as XousPid, top as usize);
-                allocated_bytes += PAGE_SIZE;
-                top -= PAGE_SIZE;
+                // Part 3: Copy the final residual partial page
+                if bytes_to_copy > 0 {
+                    let this_page = (section.virt as usize + section.len()) & !(PAGE_SIZE - 1);
+                    if VDBG {println!("3       {:08x} -> {:08x}", top as usize, this_page);}
+                    allocator.map_page(satp, top as usize, this_page, flag_defaults);
+                    allocator.change_owner(pid as XousPid, top as usize);
+                    allocated_bytes += PAGE_SIZE;
+                    top -= PAGE_SIZE;
+                }
+            } else {
+                // --- calculate how many pages need mapping ---
+                let mut bytes_to_map = section.len();
+                assert!(bytes_to_map > 0, "no data to map");
+                let mut pages_to_map = 1;
+                let start_page = section.virt as usize & !(PAGE_SIZE - 1);
+
+                let unaligned_start_len = (start_page + PAGE_SIZE) - section.virt as usize;
+                if unaligned_start_len >= bytes_to_map {
+                     // we're done: the page is already mapped and it holds all the data we intend to map
+                } else {
+                    // remaining data from the first aligned page to end of mapped region
+                    bytes_to_map -= unaligned_start_len;
+                    // convert this to pages_to_map
+                    pages_to_map += bytes_to_map / PAGE_SIZE;
+                    if (bytes_to_map % PAGE_SIZE) != 0 {
+                        // unaligned end page adds one more mapped page
+                        pages_to_map += 1;
+                    }
+                }
+
+                // --- calculate starting offset of section from image base ---
+                let mut section_map_phys_offset = section_start_phys_offset;
+
+                // --- avoid double-mapping the previous section's end ---
+                // check if last_mapped_xip has already been mapped so we don't double-map overlapping pages
+                // assume: sections are always increasing in size
+                let mut virt_page = start_page;
+                if last_mapped_xip == start_page {
+                    if VDBG {println!("Skipping a page to avoid double-mapping: pa {:x} -> va {:x}",
+                        (image_phys_base + section_start_phys_offset) & !(PAGE_SIZE - 1), virt_page);}
+                    virt_page += PAGE_SIZE;
+                    section_map_phys_offset += PAGE_SIZE;
+                    pages_to_map -= 1;
+                }
+                if VDBG {
+                    println!("section is 0x{:x} bytes long; mapping {} pages", section.len(), pages_to_map);
+                }
+
+                // --- map FLASH pages to virtual memory ---
+                while pages_to_map > 0 {
+                    let map_phys_addr = (image_phys_base + section_map_phys_offset) & !(PAGE_SIZE - 1);
+                    allocator.map_page(satp, map_phys_addr, virt_page, flag_defaults);
+                    last_mapped_xip = virt_page;
+                    allocator.change_owner(pid as XousPid, top as usize);
+
+                    section_map_phys_offset += PAGE_SIZE;
+                    virt_page += PAGE_SIZE;
+                    pages_to_map -= 1;
+                }
             }
+            section_start_phys_offset += section.len(); // the length of the section on disk
 
             previous_addr = section.virt as usize + section.len();
             current_page_addr = previous_addr & !(PAGE_SIZE - 1);
@@ -363,11 +435,64 @@ impl MiniElf {
         process.entrypoint = self.entry_point as usize;
         process.sp = stack_addr;
         process.satp = 0x8000_0000 | ((pid as usize) << 22) | (satp_address >> 12);
-
+        println!("load allocated 0x{:x} bytes", allocated_bytes);
         allocated_bytes
+    }
+
+    /// Page through a processes allocated pages and check against the file spec.
+    pub fn check(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid, xip: bool) {
+        println!("Checking {} PID {} starting at offset {:08x}", if xip {"xip"} else {"ram"}, pid, load_offset);
+        let image_phys_base = allocator.base_addr as usize + self.load_offset as usize;
+        // the process offset is always 1 less than the PID, because that's how we built the table.
+        let satp = allocator.processes[pid as usize - 1].satp;
+
+        let mut section_offset = 0;
+        for (index, section) in self.sections.iter().enumerate() {
+            if let Some(dest_offset) = pt_walk(satp, section.virt as usize) {
+                println!("  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), 0x{:x}(PA dst) len {}/0x{:x}",
+                    index, section_offset + image_phys_base, section.virt as usize + section_offset,
+                    dest_offset, section.len(), section.len()
+                );
+                // dumping routines
+                let dump_pa_src = section_offset + image_phys_base;
+                let dump_pa_dst = dest_offset;
+                dump_addr(dump_pa_src, "    Src [:20]  ");
+                dump_addr(dump_pa_dst, "    Dst [:20]  ");
+                dump_addr(dump_pa_src + section.len() - 20, "    Src [-20:] ");
+                dump_addr(dump_pa_dst + section.len() - 20, "    Dst [-20:] ");
+            } else {
+                println!("  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), ERR UNMAPPED!!",
+                    index, section_offset + image_phys_base, section.virt as usize + section_offset
+                );
+            }
+            section_offset += section.len();
+        }
     }
 }
 
+fn dump_addr(addr: usize, label: &str) {
+    print!("{}", label);
+    let slice = unsafe{core::slice::from_raw_parts(addr as *const u8, 20)};
+    for &b in slice {
+        print!( "{:02x}", b);
+    }
+    print!("\n");
+}
+pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
+    let l1_pt = unsafe { &mut (*((root << 12) as *mut PageTable)) };
+    let l1_entry = l1_pt.entries[(va & 0xFFC0_0000) >> 22];
+    if l1_entry != 0 {
+        let l0_pt = unsafe { &mut (*(((l1_entry >> 10) << 12) as *mut PageTable)) };
+        let l0_entry = l0_pt.entries[(va & 0x003F_F000) >> 12];
+        if l0_entry & 1 != 0 { // bit 1 is the "valid" bit
+            Some(((l0_entry >> 10) << 12) | va & 0xFFF)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
 /// This describes the kernel as well as initially-loaded processes
 #[repr(C)]
 pub struct ProgramDescription {
@@ -569,25 +694,20 @@ where
     }
 }
 
-/// Copy _count_ **bytes** from src to dest.
 unsafe fn memcpy<T>(dest: *mut T, src: *const T, count: usize)
 where
     T: Copy,
 {
     if VDBG {println!(
-        "COPY: {:08x} - {:08x} {} {:08x} - {:08x}",
+        "COPY (align {}): {:08x} - {:08x} {} {:08x} - {:08x}",
+        mem::size_of::<T>(),
         src as usize,
         src as usize + count,
         count,
         dest as usize,
         dest as usize + count
     );}
-    let mut offset = 0;
-    while offset < (count / mem::size_of::<T>()) {
-        dest.add(offset)
-            .write_volatile(src.add(offset).read_volatile());
-        offset += 1
-    }
+    core::ptr::copy_nonoverlapping(src, dest, count / mem::size_of::<T>());
 }
 
 pub fn read_initial_config(cfg: &mut BootConfig) {
@@ -629,7 +749,7 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
                 "invalid XKrn size"
             );
             kernel_seen = true;
-        } else if tag.name == u32::from_le_bytes(*b"IniE") {
+        } else if tag.name == u32::from_le_bytes(*b"IniE") || tag.name == u32::from_le_bytes(*b"IniF") {
             assert!(tag.size >= 4, "invalid Init size");
             init_seen = true;
             cfg.init_process_count += 1;
@@ -671,6 +791,8 @@ fn copy_processes(cfg: &mut BootConfig) {
             // Example: Page starts at oxf0c0 and is 128 bytes long
             // 1. Copy 128 bytes to page 1
             println!("\n\nIniE {} has {} sections", _pid, inie.sections.len());
+            println!("Initial top: {:x}, extra_pages: {:x}, init_size: {:x}, base_addr: {:x}",
+                cfg.get_top() as *mut u8 as u32, cfg.extra_pages, cfg.init_size, cfg.base_addr as u32);
             for section in inie.sections.iter() {
                 if (section.virt as usize) < previous_addr {
                     panic!("init section addresses are not strictly increasing (new virt: {:08x}, last virt: {:08x})", section.virt, previous_addr);
@@ -783,7 +905,11 @@ fn copy_processes(cfg: &mut BootConfig) {
 
                 previous_addr = section.virt as usize + section.len();
                 page_addr = previous_addr & !(PAGE_SIZE - 1);
-                if VDBG {println!("Looping to the next section");}
+                if VDBG {
+                    println!("Looping to the next section");
+                    println!("top: {:x}, extra_pages: {:x}, init_size: {:x}, base_addr: {:x}", cfg.get_top() as *mut u8 as u32, cfg.extra_pages, cfg.init_size, cfg.base_addr as u32);
+                    println!("previous_addr: {:x}, page_addr: {:x}", previous_addr, page_addr);
+                }
             }
 
             println!("Done with sections");
@@ -807,6 +933,7 @@ fn copy_processes(cfg: &mut BootConfig) {
             let load_size_rounded = (prog.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
             cfg.extra_pages += load_size_rounded / PAGE_SIZE;
             let top = cfg.get_top();
+            println!("\n\nKernel top: {:x}, extra_pages: {:x}", top as u32, cfg.extra_pages);
             unsafe {
                 // Copy the program to the target address, rounding it off to the load size.
                 let src_addr = cfg
@@ -867,6 +994,165 @@ fn copy_processes(cfg: &mut BootConfig) {
                     top.add(load_size_rounded as usize / mem::size_of::<usize>()),
                 )
             };
+        } else if tag.name == u32::from_le_bytes(*b"IniF") {
+            _pid += 1;
+            let mut page_addr: usize = 0;
+            let mut previous_addr: usize = 0;
+            let mut previous_ram_zero_addr: usize = 0;
+            let mut top = core::ptr::null_mut::<u8>();
+
+            let inif = MiniElf::new(&tag);
+            let mut src_addr = unsafe {
+                cfg.base_addr
+                    .add(inif.load_offset as usize / mem::size_of::<usize>())
+            } as *const u8;
+            // let mut accumulated_len = 0;
+
+            println!("\n\nIniF {} has {} sections", _pid, inif.sections.len());
+            println!("Initial top: {:x}, extra_pages: {:x}, init_size: {:x}, base_addr: {:x}", cfg.get_top() as *mut u8 as u32, cfg.extra_pages, cfg.init_size, cfg.base_addr as u32);
+            for section in inif.sections.iter() {
+                let flags = section.flags() as u8;
+                // any section that requires "write" must be copied to RAM
+                // note that ELF helpfully adds a 4096-byte gap between non-write pages and write-pages
+                // allowing us to just trundle through the pages and not have to deal with partially
+                // writeable pages.
+                let copy_to_ram = flags & MINIELF_FLG_W != 0;
+                if (section.virt as usize) < previous_addr {
+                    panic!("init section addresses are not strictly increasing (new virt: {:08x}, last virt: {:08x})", section.virt, previous_addr);
+                }
+                if copy_to_ram {
+                    let this_page = section.virt as usize & !(PAGE_SIZE - 1);
+                    let mut bytes_to_copy = section.len();
+
+                    if VDBG {println!(
+                        "Section is {} bytes long, loaded to {:08x}",
+                        bytes_to_copy, section.virt
+                    );}
+                    // If this is not a new page, ensure the uninitialized values from between
+                    // this section and the previous one are all zeroed out.
+                    if this_page != page_addr || previous_addr == page_addr {
+                        if VDBG {println!("New page @ {:08x}", this_page);}
+                        if previous_ram_zero_addr != 0 && previous_ram_zero_addr != page_addr && cfg.extra_pages > 0 {
+                            if VDBG {println!(
+                                "Zeroing-out remainder of previous page: {:08x} (mapped to physical address {:08x})",
+                                previous_ram_zero_addr, top as usize,
+                            );}
+                            unsafe {
+                                bzero(
+                                    top.add(previous_ram_zero_addr as usize & (PAGE_SIZE - 1)),
+                                    top.add(PAGE_SIZE as usize),
+                                )
+                            };
+                        }
+
+                        // Allocate a new page.
+                        cfg.extra_pages += 1;
+                        top = cfg.get_top() as *mut u8;
+
+                        // Zero out the page, if necessary.
+                        unsafe { bzero(top, top.add(section.virt as usize & (PAGE_SIZE - 1))) };
+                    } else {
+                        if VDBG {println!("Reusing existing page @ {:08x}", this_page);}
+                    }
+
+                    // Part 1: Copy the first chunk over.
+                    let mut first_chunk_size = PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
+                    if first_chunk_size > section.len() {
+                        first_chunk_size = section.len();
+                    }
+                    let first_chunk_offset = section.virt as usize & (PAGE_SIZE - 1);
+                    if VDBG {println!(
+                        "Section chunk is {} bytes, {} from {:08x}:{:08x} -> {:08x}:{:08x} (virt: {:08x})",
+                        first_chunk_size,
+                        if section.no_copy() { "zeroing" } else { "copying" },
+                        src_addr as usize,
+                        unsafe { src_addr.add(first_chunk_size) as usize },
+                        unsafe { top.add(first_chunk_offset) as usize },
+                        unsafe { top.add(first_chunk_size + first_chunk_offset)
+                            as usize },
+                        this_page + first_chunk_offset,
+                    );}
+                    // Perform the copy, if NOCOPY is not set
+                    if !section.no_copy() {
+                        unsafe {
+                            memcpy(top.add(first_chunk_offset), src_addr, first_chunk_size);
+                            src_addr = src_addr.add(first_chunk_size);
+                        }
+                    } else {
+                        unsafe {
+                            bzero(
+                                top.add(first_chunk_offset),
+                                top.add(first_chunk_offset + first_chunk_size),
+                            );
+                        }
+                    }
+                    bytes_to_copy -= first_chunk_size;
+
+                    // Part 2: Copy any full pages.
+                    while bytes_to_copy >= PAGE_SIZE {
+                        cfg.extra_pages += 1;
+                        top = cfg.get_top() as *mut u8;
+                        // println!(
+                        //     "Copying next page from {:08x} {:08x} ({} bytes to go...)",
+                        //     src_addr as usize, top as usize, bytes_to_copy
+                        // );
+                        if !section.no_copy() {
+                            unsafe {
+                                memcpy(top, src_addr, PAGE_SIZE);
+                                src_addr = src_addr.add(PAGE_SIZE);
+                            }
+                        } else {
+                            unsafe { bzero(top, top.add(PAGE_SIZE)) };
+                        }
+                        bytes_to_copy -= PAGE_SIZE;
+                    }
+
+                    // Part 3: Copy the final residual partial page
+                    if bytes_to_copy > 0 {
+                        if VDBG {println!(
+                            "Copying final section -- {} bytes @ {:08x}",
+                            bytes_to_copy,
+                            section.virt + (section.len() as u32) - (bytes_to_copy as u32)
+                        );}
+                        cfg.extra_pages += 1;
+                        top = cfg.get_top() as *mut u8;
+                        if !section.no_copy() {
+                            unsafe {
+                                memcpy(top, src_addr, bytes_to_copy);
+                                src_addr = src_addr.add(bytes_to_copy);
+                            }
+                        } else {
+                            unsafe { bzero(top, top.add(bytes_to_copy)) };
+                        }
+                    }
+                    previous_ram_zero_addr = section.virt as usize + section.len();
+                } else {
+                    top = cfg.get_top() as *mut u8;
+                    src_addr = unsafe {src_addr.add(section.len())};
+                }
+
+                previous_addr = section.virt as usize + section.len();
+                page_addr = previous_addr & !(PAGE_SIZE - 1);
+                if VDBG {
+                    println!("Looping to the next section");
+                    println!("top: {:x}, extra_pages: {:x}, init_size: {:x}, base_addr: {:x}", cfg.get_top() as *mut u8 as u32, cfg.extra_pages, cfg.init_size, cfg.base_addr as u32);
+                    println!("previous_addr: {:x}, page_addr: {:x}", previous_addr, page_addr);
+                }
+            }
+
+            println!("Done with sections");
+            if previous_addr as usize & (PAGE_SIZE - 1) != 0 {
+                println!("Zeroing out remaining data");
+                // Zero-out the trailing bytes
+                unsafe {
+                    bzero(
+                        top.add(previous_addr as usize & (PAGE_SIZE - 1)),
+                        top.add(PAGE_SIZE as usize),
+                    )
+                };
+            } else {
+                println!("Skipping zero step -- we ended on a page boundary");
+            }
         }
     }
 }
@@ -944,6 +1230,7 @@ impl BootConfig {
     ///
     /// * If you try to map a page twice
     pub fn map_page(&mut self, root: &mut PageTable, phys: usize, virt: usize, flags: usize) {
+        if VDBG {println!("    map pa {:x} -> va {:x} (satp {:x})", phys, virt, root as *mut PageTable as u32);}
         match WORD_SIZE {
             4 => self.map_page_32(root, phys, virt, flags),
             8 => panic!("map_page doesn't work on 64-bit devices"),
@@ -973,8 +1260,8 @@ impl BootConfig {
         // Allocate a new level 1 pagetable entry if one doesn't exist.
         if l1_pt[vpn1] & FLG_VALID == 0 {
             let na = self.alloc() as usize;
-            println!("The Level 1 page table is invalid ({:08x}) @ {:08x} -- allocating a new one @ {:08x}",
-                unsafe { l1_pt.as_ptr().add(vpn1) } as usize, l1_pt[vpn1], na);
+            if VDBG {println!("The Level 1 page table is invalid ({:08x}) @ {:08x} -- allocating a new one @ {:08x}",
+                unsafe { l1_pt.as_ptr().add(vpn1) } as usize, l1_pt[vpn1], na);}
             // Mark this entry as a leaf node (WRX as 0), and indicate
             // it is a valid page by setting "V".
             l1_pt[vpn1] = ((na >> 12) << 10) | FLG_VALID;
@@ -1001,11 +1288,11 @@ impl BootConfig {
         // If we had to allocate a level 1 pagetable entry, ensure that it's
         // mapped into our address space, owned by PID 1.
         if let Some(addr) = new_addr {
-            println!(
+            if VDBG {println!(
                 ">>> Mapping new address {:08x} -> {:08x}",
                 addr.get(),
                 PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE
-            );
+            );}
             self.map_page(
                 root,
                 addr.get(),
@@ -1013,7 +1300,7 @@ impl BootConfig {
                 FLG_R | FLG_W | FLG_VALID,
             );
             self.change_owner(1 as XousPid, addr.get());
-            println!("<<< Done mapping new address");
+            if VDBG {println!("<<< Done mapping new address");}
         }
     }
 }
@@ -1231,6 +1518,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg);
+        if VDBG { check_load(&mut cfg); }
         println!("done initializing for cold boot.");
     } else {
         // resume path
@@ -1271,16 +1559,6 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         resume_csr.wfo(utra::susres::INTERRUPT_INTERRUPT, 1);
     }
 
-    println!("Font maps located as follows:");
-    println!("  Hanzi @ {:08x}", fonts::zh::ZH_GLYPHS.as_ptr() as u32);
-    println!("  Emoji @ {:08x}", fonts::emoji::EMOJI_GLYPHS.as_ptr() as u32);
-    println!(
-        "  Regular @ {:08x}",
-        fonts::regular::REGULAR_GLYPHS.as_ptr() as u32
-    );
-    println!("  Small @ {:08x}", fonts::small::SMALL_GLYPHS.as_ptr() as u32);
-    println!("  Bold @ {:08x}", fonts::bold::BOLD_GLYPHS.as_ptr() as u32);
-
     if !clean {
         // The MMU should be set up now, and memory pages assigned to their
         // respective processes.
@@ -1314,9 +1592,11 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             (*backup_args)[6] = if cfg.debug {1} else {0};
             #[cfg(feature="debug-print")]
             {
-                println!("Backup kernel args:");
-                for i in 0..7 {
-                    println!("0x{:08x}", (*backup_args)[i]);
+                if VDBG {
+                    println!("Backup kernel args:");
+                    for i in 0..7 {
+                        println!("0x{:08x}", (*backup_args)[i]);
+                    }
                 }
             }
         }
@@ -1491,7 +1771,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
 
     // This is the offset in RAM where programs are loaded from.
     let mut process_offset = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
-    println!("Procesess start out @ {:08x}", process_offset);
+    println!("\n\nPhase2: Processess start out @ {:08x}", process_offset);
 
     // Go through all Init processes and the kernel, setting up their
     // page tables and mapping memory to them.
@@ -1499,11 +1779,20 @@ pub fn phase_2(cfg: &mut BootConfig) {
     for tag in args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
-            println!("Mapping program into memory");
-            process_offset -= inie.load(cfg, process_offset, pid);
+            println!("\n\nCopying IniE program into memory");
+            let allocated = inie.load(cfg, process_offset, pid, false);
+            println!("IniE Allocated {:x}", allocated);
+            process_offset -= allocated;
+            pid += 1;
+        } else if tag.name == u32::from_le_bytes(*b"IniF") {
+            let inif = MiniElf::new(&tag);
+            println!("\n\nMapping IniF program into memory");
+            let allocated = inif.load(cfg, process_offset, pid, true);
+            println!("IniF Allocated {:x}", allocated);
+            process_offset -= allocated;
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"XKrn") {
-            println!("Mapping kernel into memory");
+            println!("\n\nCopying kernel into memory");
             let xkrn = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
             let load_size_rounded = ((xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
                 + (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1));
@@ -1541,7 +1830,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
         unsafe { (l1_pt_addr as *mut usize).add(1023).write(krn_pg1023_ptr) };
     }
 
-    if VDBG {
+    if VVDBG {
         println!("PID1 pagetables:");
         debug::print_pagetable(cfg.processes[0].satp);
         println!();
@@ -1561,4 +1850,31 @@ pub fn phase_2(cfg: &mut BootConfig) {
     cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 1; // claim the loader stack -- do not allow tampering, as it contains backup kernel args
     cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 1; // 8k in total (to allow for digital signatures to be computed)
     cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 3] = 0; // allow clean suspend page to be mapped in Xous
+}
+
+/// This function allows us to check the final loader results
+/// It will print to the console the first 32 bytes of each loaded
+/// region top/bottom, based upon extractions from the page table.
+fn check_load(cfg: &mut BootConfig) {
+    let args = cfg.args;
+
+    // This is the offset in RAM where programs are loaded from.
+    println!("\n\nCHECKING LOAD");
+
+    // Go through all Init processes and the kernel, setting up their
+    // page tables and mapping memory to them.
+    let mut pid = 2;
+    for tag in args.iter() {
+        if tag.name == u32::from_le_bytes(*b"IniE") {
+            let inie = MiniElf::new(&tag);
+            println!("\n\nChecking IniE region");
+            inie.check(cfg, inie.load_offset as usize, pid, false);
+            pid += 1;
+        } else if tag.name == u32::from_le_bytes(*b"IniF") {
+            let inif = MiniElf::new(&tag);
+            println!("\n\nChecking IniF region");
+            inif.check(cfg, inif.load_offset as usize, pid, true);
+            pid += 1;
+        }
+    }
 }

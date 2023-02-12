@@ -193,10 +193,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_services(&get_cratespecs());
             builder.add_loader_feature("renode-bypass")
                    .add_loader_feature("renode-minimal");
-            builder.add_service("net")
-                .add_service("com")
-                .add_service("llio")
-                .add_service("dns");
+            builder.add_service("net", false)
+                .add_service("com", false)
+                .add_service("llio", false)
+                .add_service("dns", false);
         }
         Some("renode-aes-test") => {
             builder.target_renode()
@@ -207,7 +207,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_renode()
                    .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
                    .add_services(&get_cratespecs());
-            builder.add_service("ffi-test");
+            builder.add_service("ffi-test", false);
             builder.add_loader_feature("renode-bypass");
         }
         Some("renode-remote") => {
@@ -272,6 +272,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_feature("mass-storage") // add this in by default to help with testing
                    .add_apps(&get_cratespecs());
         }
+        Some("app-image-xip") => {
+            builder.target_precursor(PRECURSOR_SOC_VERSION)
+                   //.add_services(&user_pkgs.into_iter().map(String::from).collect())
+                   .add_feature("mass-storage"); // add this in by default to help with testing
+            for service in user_pkgs {
+                if (service != "shellchat") && (service != "ime-plugin-shell" && (service != "com") && (service != "status") && (service != "net")) {
+                    builder.add_service(service, false);
+                } else {
+                    builder.add_service(service, true);
+                }
+            }
+            for app in get_cratespecs() {
+                builder.add_app(&app, true);
+            }
+        }
         Some("perf-image") => {
             // `--feature vaultperf` will make `vault` the performance manager, in exclusion of shellchat
             if !builder.has_feature("shellperf") && !builder.has_feature("vaultperf") {
@@ -316,7 +331,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             builder.add_services(&pkgs.into_iter().map(String::from).collect())
                 .add_apps(&get_cratespecs())
-                .add_service("espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded")
+                .add_service("espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded", false)
                 .override_locale("en-tts")
                 .add_feature("tts")
                 .add_feature("braille");
@@ -331,7 +346,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_services(&base_pkgs.into_iter().map(String::from).collect())
                    .add_services(&get_cratespecs());
             //builder.add_service("usb-test");
-            builder.add_service("usb-device-xous");
+            builder.add_service("usb-device-xous", false);
         }
         Some("pddb-dev") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION)

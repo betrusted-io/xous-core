@@ -32,7 +32,7 @@ pub fn check_project_consistency() -> Result<(), DynError> {
 }
 
 pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
-    if let CrateSpec::CratesIo(name, version) = spec {
+    if let CrateSpec::CratesIo(name, version, _xip) = spec {
         let mut cache_path = Path::new(&env::var("CARGO_HOME").unwrap()).to_path_buf();
         cache_path.push("registry");
         cache_path.push("src");
