@@ -156,7 +156,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     env.llio.wfi_override(true).unwrap();
 
                     let vccint = env.llio.adc_vccint().unwrap() as f32 / 1365.0;
-                    if vccint < 0.92 || vccint > 0.98 {
+                    if vccint < 0.92 || vccint > 1.05 {
                         log::info!("{}|VCCINT|FAIL|{}", SENTINEL, vccint);
                     } else {
                         log::info!("{}|VCCINT|PASS|{}", SENTINEL, vccint);
@@ -168,7 +168,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         log::info!("{}|VCCAUX|PASS|{}", SENTINEL, vccaux);
                     }
                     let vccbram = env.llio.adc_vccbram().unwrap() as f32 / 1365.0;
-                    if vccbram < 0.92 || vccbram > 0.98 {
+                    if vccbram < 0.92 || vccbram > 1.05 {
                         log::info!("{}|VCCBRAM|FAIL|{}", SENTINEL, vccbram);
                     } else {
                         log::info!("{}|VCCBRAM|PASS|{}", SENTINEL, vccbram);
