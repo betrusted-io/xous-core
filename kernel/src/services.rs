@@ -28,7 +28,9 @@ const MINIELF_FLG_W: u8 = 1;
 const MINIELF_FLG_NC: u8 = 2;
 #[allow(dead_code)]
 const MINIELF_FLG_X: u8 = 4;
+#[cfg(baremetal)]
 const MINIELF_FLG_EHF: u8 = 8;
+#[cfg(baremetal)]
 const MINIELF_FLG_EHH: u8 = 0x10;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
