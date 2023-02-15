@@ -42,6 +42,10 @@ const MINIELF_FLG_W: u8 = 1;
 const MINIELF_FLG_NC: u8 = 2;
 #[allow(dead_code)]
 const MINIELF_FLG_X: u8 = 4;
+#[allow(dead_code)]
+const MINIELF_FLG_EHF: u8 = 8;
+#[allow(dead_code)]
+const MINIELF_FLG_EHH: u8 = 0x10;
 
 const VDBG: bool = false; // verbose debug
 const VVDBG: bool = false; // very verbose debug

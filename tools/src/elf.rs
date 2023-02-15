@@ -17,6 +17,8 @@ bitflags! {
         const WRITE = 1;
         const NOCOPY = 2;
         const EXECUTE = 4;
+        const EH_FRAME = 8;
+        const EH_HEADER = 0x10;
     }
 }
 
@@ -349,6 +351,11 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
         }
         if s.flags() & SHF_WRITE != 0 {
             flags |= MiniElfFlags::WRITE;
+        }
+        if name == ".eh_frame_hdr" {
+            flags |= MiniElfFlags::EH_HEADER
+        } else if name == ".eh_frame" {
+            flags |= MiniElfFlags::EH_FRAME;
         }
 
         debug!("Adding {} to the file", name);
