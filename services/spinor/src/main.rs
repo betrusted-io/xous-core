@@ -248,11 +248,32 @@ mod implementation {
         failaddr2[2] = flash_rdcr2(&mut spinor.csr, 0x04000E00) as u8;
         failaddr2[3] = flash_rdcr2(&mut spinor.csr, 0x04000F00) as u8;
 
-        // write 0 into the register to clear it
+        // enable writes: set wren mode. required to unlock wrcr2
+        loop {
+            flash_wren(&mut spinor.csr);
+            let status = flash_rdsr(&mut spinor.csr, 1);
+            if status & 0x02 != 0 {
+                break;
+            }
+        }
+
+        // write 0 into the ECC register to clear the lower die
         spinor.csr.wfo(utra::spinor::WDATA_WDATA, 0);
-        flash_wrcr2(&mut spinor.csr, 0x800);
+        flash_wrcr2(&mut spinor.csr, 0x800); // this command auto-clears WREN
+
+        // enable writes again: set wren mode, as it was cleared by the completion of wrcr2
+        loop {
+            flash_wren(&mut spinor.csr);
+            let status = flash_rdsr(&mut spinor.csr, 1);
+            if status & 0x02 != 0 {
+                break;
+            }
+        }
+        // write 0 into the ECC register to clear the upper die
         spinor.csr.wfo(utra::spinor::WDATA_WDATA, 0);
         flash_wrcr2(&mut spinor.csr, 0x0400_0800);
+
+        flash_rdsr(&mut spinor.csr, 0); // dummy read to clear the "read lock" bit
 
         xous::try_send_message(spinor.handler_conn,
             xous::Message::new_scalar(Opcode::EccError.to_usize().unwrap(),
