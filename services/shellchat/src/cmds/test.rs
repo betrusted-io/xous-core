@@ -328,7 +328,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                 }
                 "kill" => {
                     log::info!("{}|KILL|", SENTINEL);
-                    env.ticktimer.sleep_ms(500).unwrap();
+                    env.llio.wfi_override(true).unwrap();
+                    env.com.set_backlight(0, 0).unwrap();
+                    env.ticktimer.sleep_ms(800).unwrap();
                     env.llio.self_destruct(0x2718_2818).unwrap();
                     env.llio.self_destruct(0x3141_5926).unwrap();
                     env.ticktimer.sleep_ms(100).unwrap();
