@@ -36,8 +36,9 @@ declare -a Crates=(
 if [ -e "$HOME/.cargo/env" ]; then
     . "$HOME/.cargo/env"
 fi
-RISCV_TOOLS=/opt/riscv64-unknown-elf
-export PATH=$RISCV_TOOLS/bin:$PATH
+# Now using xpack tools installed in standard path
+#RISCV_TOOLS=/opt/riscv64-unknown-elf
+#export PATH=$RISCV_TOOLS/bin:$PATH
 
 env | sort > env.txt
 
@@ -56,11 +57,11 @@ cargo xtask app-image ball repl vault
 echo "===== ANALYZING at $(date) ====="
 for val in ${Crates[@]}; do
     # dump the header summary
-    riscv64-unknown-elf-objdump -h target/riscv32imac-unknown-xous-elf/release/$val > reports/$val.txt
+    riscv-none-elf-objdump -h target/riscv32imac-unknown-xous-elf/release/$val > reports/$val.txt
     # dump the sorted list of objects
-    riscv64-unknown-elf-nm -r --size-sort --print-size target/riscv32imac-unknown-xous-elf/release/$val | rustfilt >> reports/$val.txt
+    riscv-none-elf-nm -r --size-sort --print-size target/riscv32imac-unknown-xous-elf/release/$val | rustfilt >> reports/$val.txt
     # dump the disassembly
-    riscv64-unknown-elf-objdump -S -d target/riscv32imac-unknown-xous-elf/release/$val | rustfilt > reports/$val.list
+    riscv-none-elf-objdump -S -d target/riscv32imac-unknown-xous-elf/release/$val | rustfilt > reports/$val.list
 done
 
 
