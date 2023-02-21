@@ -5,6 +5,7 @@
 mod args;
 use args::{KernelArgument, KernelArguments};
 
+#[cfg(feature="resume")]
 mod murmur3;
 mod platform;
 pub const BACKUP_ARGS_ADDR: usize = crate::platform::RAM_BASE + crate::platform::RAM_SIZE - 0x2000;
