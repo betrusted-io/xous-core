@@ -6,6 +6,8 @@ mod args;
 use args::{KernelArgument, KernelArguments};
 
 mod murmur3;
+mod platform;
+pub const BACKUP_ARGS_ADDR: usize = crate::platform::RAM_BASE + crate::platform::RAM_SIZE - 0x2000;
 
 use core::num::NonZeroUsize;
 use core::{mem, ptr, slice};
@@ -1409,105 +1411,14 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     boot_sequence(kab, signature);
 }
 
-fn memtest() {
-    let ram_ptr: *mut u32 = 0x4000_0000 as *mut u32;
-    let sram_ptr: *mut u32 = 0x1000_0000 as *mut u32;
-    use utralib::generated::*;
-
-    let mut sram_csr = CSR::new(utra::sram_ext::HW_SRAM_EXT_BASE as *mut u32);
-    sram_csr.wfo(utra::sram_ext::READ_CONFIG_TRIGGER, 1);
-
-    // give some time for the status to read
-    for i in 0..8 {
-        unsafe { sram_ptr.add(i).write_volatile(i as u32) };
-    }
-
-    println!("status: 0x{:08x}", sram_csr.rf(utra::sram_ext::CONFIG_STATUS_MODE));
-
-    for i in 0..(256*1024/4) {
-        unsafe {
-            ram_ptr.add(i).write_volatile( (0xACE0_0000 + i) as u32 );
-        }
-    }
-
-    let mut errcnt = 0;
-    for i in 0..(256*1024/4) {
-        unsafe {
-            let rd = ram_ptr.add(i).read_volatile();
-            if rd != (0xACE0_0000 + i) as u32 {
-                if errcnt < 16 || ((errcnt % 256) == 0) {
-                    println!("* 0x{:08x}: e:0x{:08x} o:0x{:08x}", i*4, 0xACE0_0000 + i, rd);
-                }
-                errcnt += 1;
-            } else if (i & 0x1FFF) == 8 {
-                println!("  0x{:08x}: e:0x{:08x} o:0x{:08x}", i*4, 0xACE0_0000 + i, rd);
-            };
-        }
-    }
-    // TRNG virtual memory mapping already set up, but we pump values out just to make sure
-    // the pipeline is fresh. Simulations show this isn't necessary, but I feel paranoid;
-    // I worry a subtle bug in the reset logic could leave deterministic values in the pipeline.
-    for _k in 0..8 {
-        let trng_csr = CSR::new(utra::trng_kernel::HW_TRNG_KERNEL_BASE as *mut u32);
-        for i in 0x3E_0000..0x3F_0000 {
-            while trng_csr.rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID) == 0 {}
-            unsafe {
-                ram_ptr.add(i).write_volatile(trng_csr.rf(utra::trng_kernel::URANDOM_URANDOM));
-            }
-        }
-        for i in 0x3D_0000..0x3E_0000 {
-            unsafe {
-                ram_ptr.add(i).write_volatile(ram_ptr.add(i + 0x10000).read_volatile());
-            }
-        }
-        let basecnt = errcnt;
-        println!("** take one **");
-        for i in 0x3D_0000..0x3E_0000 {
-            let rd1 = unsafe{ram_ptr.add(i).read_volatile()};
-            let rd2 = unsafe{ram_ptr.add(i+0x10000).read_volatile()};
-            if rd1 != rd2 {
-                if errcnt < 16 + basecnt || ((errcnt % 256) == 0) {
-                    println!("* 0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
-                }
-                errcnt += 1;
-            } else if (i & 0x1FFF) == 12 {
-                println!("  0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
-            }
-        }
-        println!("** take two (check for read errors)**");
-        let basecnt = errcnt;
-        for i in 0x3D_0000..0x3E_0000 {
-            let rd1 = unsafe{ram_ptr.add(i).read_volatile()};
-            let rd2 = unsafe{ram_ptr.add(i+0x10000).read_volatile()};
-            if rd1 != rd2 {
-                if errcnt < 16 + basecnt || ((errcnt % 256) == 0) {
-                    println!("* 0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
-                }
-                errcnt += 1;
-            } else if (i & 0x1FFF) == 12 {
-                println!("  0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
-            }
-        }
-    }
-
-    if errcnt != 0 {
-        println!("error count: {}", errcnt);
-        println!("0x01000: {:08x}", unsafe{ ram_ptr.add(0x1000/4).read_volatile() });
-        println!("0x00000: {:08x}", unsafe{ ram_ptr.add(0x0).read_volatile() });
-        println!("0x0FFFC: {:08x}", unsafe{ ram_ptr.add(0xFFFC/4).read_volatile() });
-        println!("0xfdff04: {:08x}", unsafe{ ram_ptr.add(0xfdff04/4).read_volatile() });
-    }
-}
 
 fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     // Store the initial boot config on the stack.  We don't know
     // where in heap this memory will go.
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
-    if false {
-        // note: memtest is "destructive" -- can't do a resume after suspend with memtest enabled
-        // use this mainly to trace down e.g. hardware issues with timing to the RAM.
-        memtest();
-    }
+    #[cfg(feature="platform-tests")]
+    platform_tests();
+
     let mut cfg = BootConfig {
         base_addr: args.base as *const usize,
         args,
@@ -1516,8 +1427,21 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     read_initial_config(&mut cfg);
 
     // check to see if we are recovering from a clean suspend or not
+    #[cfg(feature="resume")]
     let (clean, was_forced_suspend, susres_pid) = check_resume(&mut cfg);
-
+    #[cfg(not(feature="resume"))]
+    let clean = {
+        // cold boot path
+        println!("no suspend marker found, doing a cold boot!");
+        clear_ram(&mut cfg);
+        phase_1(&mut cfg);
+        phase_2(&mut cfg);
+        #[cfg(feature="debug-print")]
+        if VDBG { check_load(&mut cfg); }
+        println!("done initializing for cold boot.");
+        false
+    };
+    #[cfg(feature="resume")]
     if !clean {
         // cold boot path
         println!("no suspend marker found, doing a cold boot!");
@@ -1589,7 +1513,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         // so that attempts to mess with the args during a resume can't lead to overwriting
         // critical parameters like these kernel arguments.
         unsafe {
-            let backup_args: *mut [u32; 7] = 0x40FF_E000 as *mut[u32; 7];
+            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut[u32; 7];
             (*backup_args)[0] = arg_offset as u32;
             (*backup_args)[1] = ip_offset as u32;
             (*backup_args)[2] = rpt_offset as u32;
@@ -1625,7 +1549,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         }
     } else {
         unsafe {
-            let backup_args: *mut [u32; 7] = 0x40FF_E000 as *mut[u32; 7];
+            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut[u32; 7];
             #[cfg(feature="debug-print")]
             {
                 println!("Using backed up kernel args:");
@@ -1657,7 +1581,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         }
     }
 }
-
+#[cfg(feature="resume")]
 fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     use utralib::generated::*;
     const WORDS_PER_SECTOR: usize = 128;

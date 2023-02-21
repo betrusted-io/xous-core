@@ -1,0 +1,94 @@
+pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_EXT_MEM_LEN;
+pub const RAM_BASE: usize = utralib::generated::HW_SRAM_EXT_MEM;
+
+/// Note that this memory test is "destructive" -- supend/resume will fail if it is enabled
+#[cfg(feature="platform-tests")]
+pub fn platform_tests() {
+    let ram_ptr: *mut u32 = crate::platform::RAM_BASE as *mut u32;
+    let sram_ptr: *mut u32 = 0x1000_0000 as *mut u32;
+    use utralib::generated::*;
+
+    let mut sram_csr = CSR::new(utra::sram_ext::HW_SRAM_EXT_BASE as *mut u32);
+    sram_csr.wfo(utra::sram_ext::READ_CONFIG_TRIGGER, 1);
+
+    // give some time for the status to read
+    for i in 0..8 {
+        unsafe { sram_ptr.add(i).write_volatile(i as u32) };
+    }
+
+    println!("status: 0x{:08x}", sram_csr.rf(utra::sram_ext::CONFIG_STATUS_MODE));
+
+    for i in 0..(256*1024/4) {
+        unsafe {
+            ram_ptr.add(i).write_volatile( (0xACE0_0000 + i) as u32 );
+        }
+    }
+
+    let mut errcnt = 0;
+    for i in 0..(256*1024/4) {
+        unsafe {
+            let rd = ram_ptr.add(i).read_volatile();
+            if rd != (0xACE0_0000 + i) as u32 {
+                if errcnt < 16 || ((errcnt % 256) == 0) {
+                    println!("* 0x{:08x}: e:0x{:08x} o:0x{:08x}", i*4, 0xACE0_0000 + i, rd);
+                }
+                errcnt += 1;
+            } else if (i & 0x1FFF) == 8 {
+                println!("  0x{:08x}: e:0x{:08x} o:0x{:08x}", i*4, 0xACE0_0000 + i, rd);
+            };
+        }
+    }
+    // TRNG virtual memory mapping already set up, but we pump values out just to make sure
+    // the pipeline is fresh. Simulations show this isn't necessary, but I feel paranoid;
+    // I worry a subtle bug in the reset logic could leave deterministic values in the pipeline.
+    for _k in 0..8 {
+        let trng_csr = CSR::new(utra::trng_kernel::HW_TRNG_KERNEL_BASE as *mut u32);
+        for i in 0x3E_0000..0x3F_0000 {
+            while trng_csr.rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID) == 0 {}
+            unsafe {
+                ram_ptr.add(i).write_volatile(trng_csr.rf(utra::trng_kernel::URANDOM_URANDOM));
+            }
+        }
+        for i in 0x3D_0000..0x3E_0000 {
+            unsafe {
+                ram_ptr.add(i).write_volatile(ram_ptr.add(i + 0x10000).read_volatile());
+            }
+        }
+        let basecnt = errcnt;
+        println!("** take one **");
+        for i in 0x3D_0000..0x3E_0000 {
+            let rd1 = unsafe{ram_ptr.add(i).read_volatile()};
+            let rd2 = unsafe{ram_ptr.add(i+0x10000).read_volatile()};
+            if rd1 != rd2 {
+                if errcnt < 16 + basecnt || ((errcnt % 256) == 0) {
+                    println!("* 0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
+                }
+                errcnt += 1;
+            } else if (i & 0x1FFF) == 12 {
+                println!("  0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
+            }
+        }
+        println!("** take two (check for read errors)**");
+        let basecnt = errcnt;
+        for i in 0x3D_0000..0x3E_0000 {
+            let rd1 = unsafe{ram_ptr.add(i).read_volatile()};
+            let rd2 = unsafe{ram_ptr.add(i+0x10000).read_volatile()};
+            if rd1 != rd2 {
+                if errcnt < 16 + basecnt || ((errcnt % 256) == 0) {
+                    println!("* 0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
+                }
+                errcnt += 1;
+            } else if (i & 0x1FFF) == 12 {
+                println!("  0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
+            }
+        }
+    }
+
+    if errcnt != 0 {
+        println!("error count: {}", errcnt);
+        println!("0x01000: {:08x}", unsafe{ ram_ptr.add(0x1000/4).read_volatile() });
+        println!("0x00000: {:08x}", unsafe{ ram_ptr.add(0x0).read_volatile() });
+        println!("0x0FFFC: {:08x}", unsafe{ ram_ptr.add(0xFFFC/4).read_volatile() });
+        println!("0xfdff04: {:08x}", unsafe{ ram_ptr.add(0xfdff04/4).read_volatile() });
+    }
+}
