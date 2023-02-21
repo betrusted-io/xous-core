@@ -538,7 +538,11 @@ pub struct ProgramDescription {
 // Note: inline constants are not yet stable in Rust: https://github.com/rust-lang/rust/pull/104087
 #[link_section = ".text.init"]
 #[export_name = "_start"]
-pub extern "C" fn _start(kernel_args: usize, loader_sig: usize) {
+pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
+    #[cfg(feature="precursor")]
+    let _kernel_args = _kernel_args;
+    #[cfg(feature="cramium")]
+    let _kernel_args = _start as *const usize as usize + platform::KERNEL_OFFSET;
     unsafe {
         asm! (
             "li          t0, 0xffffffff",
@@ -567,7 +571,7 @@ pub extern "C" fn _start(kernel_args: usize, loader_sig: usize) {
             // Start Rust
             "j   rust_entry",
 
-            kernel_args = in(reg) kernel_args,
+            kernel_args = in(reg) _kernel_args,
             loader_sig = in(reg) loader_sig,
             ram_top = in(reg) (platform::RAM_BASE + platform::RAM_SIZE),
             // On Precursor - 0x40FFE01C: currently allowed stack extent - 8k - (7 words). 7 words are for kernel backup args - see bootloader in betrusted-soc
@@ -1539,7 +1543,10 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     #[cfg(not(feature="resume"))]
     let clean = {
         // cold boot path
-        println!("no suspend marker found, doing a cold boot!");
+        println!("No suspend marker found, doing a cold boot!");
+        #[cfg(feature="simulation-only")]
+        println!("Configured for simulation. Skipping RAM clear!");
+        #[cfg(not(feature="simulation-only"))]
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg);
@@ -1551,7 +1558,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     #[cfg(feature="resume")]
     if !clean {
         // cold boot path
-        println!("no suspend marker found, doing a cold boot!");
+        println!("No suspend marker found, doing a cold boot!");
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg);
@@ -1738,7 +1745,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
 
 fn clear_ram(cfg: &mut BootConfig) {
     // clear RAM on a cold boot.
-    // RAM is persistent and battery-backed. This means secret material could potentiall
+    // RAM is persistent and battery-backed. This means secret material could potentially
     // stay there forever, if not explicitly cleared. This clear adds a couple seconds
     // to a cold boot, but it's probably worth it. Note that it doesn't happen on a suspend/resume.
     let ram: *mut u32 = cfg.sram_start as *mut u32;

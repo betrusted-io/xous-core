@@ -25,6 +25,7 @@ debug-print = []
 earlyprintk = []
 renode-bypass = []
 secboot = []
+simulation-only = []
 #default = ["debug-print"]
 resume = [] # suspend/resume pathway code
 default = []
