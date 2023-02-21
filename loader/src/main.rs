@@ -1743,6 +1743,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     (clean, was_forced_suspend, pid)
 }
 
+#[cfg(not(feature="simulation-only"))]
 fn clear_ram(cfg: &mut BootConfig) {
     // clear RAM on a cold boot.
     // RAM is persistent and battery-backed. This means secret material could potentially
