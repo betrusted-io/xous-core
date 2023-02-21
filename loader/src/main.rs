@@ -535,9 +535,10 @@ pub struct ProgramDescription {
     entrypoint: u32,
 }
 
+// Note: inline constants are not yet stable in Rust: https://github.com/rust-lang/rust/pull/104087
 #[link_section = ".text.init"]
 #[export_name = "_start"]
-pub extern "C" fn _start() {
+pub extern "C" fn _start(kernel_args: usize, loader_sig: usize) {
     unsafe {
         asm! (
             "li          t0, 0xffffffff",
@@ -546,25 +547,31 @@ pub extern "C" fn _start() {
 
             // decorate our stack area with a canary pattern
             "li          t1, 0xACE0BACE",
-            "li          t0, 0x40FFE01C",  // currently allowed stack extent - 8k - (7 words) - 7 words for kernel backup args - see bootloader in betrusted-soc
-            "li          t2, 0x41000000",
+            "mv          t0, {stack_limit}",
+            "mv          t2, {ram_top}",
         "100:", // fillstack
             "sw          t1, 0(t0)",
             "addi        t0, t0, 4",
             "bltu        t0, t2, 100b",
 
             // Place the stack pointer at the end of RAM
-            "li          t0, 0x40000000", // SRAM start   hard-coded into loader -- don't trust kernel boot args to tell us where RAM is, we haven't validated them yet!
-            "li          t1, 0x01000000", // SRAM length
-            "add         sp, t0, t1",
+            "mv          sp, {ram_top}",
 
             // Install a machine mode trap handler
             "la          t0, abort",
             "csrw        mtvec, t0",
 
+            // this forces a0/a1 to be "used" and thus not allocated for other parameters passed in
+            "mv          a0, {kernel_args}",
+            "mv          a1, {loader_sig}",
             // Start Rust
             "j   rust_entry",
 
+            kernel_args = in(reg) kernel_args,
+            loader_sig = in(reg) loader_sig,
+            ram_top = in(reg) (platform::RAM_BASE + platform::RAM_SIZE),
+            // On Precursor - 0x40FFE01C: currently allowed stack extent - 8k - (7 words). 7 words are for kernel backup args - see bootloader in betrusted-soc
+            stack_limit = in(reg) (platform::RAM_BASE + platform::RAM_SIZE - 8192 + 7 * core::mem::size_of::<usize>()),
             options(noreturn)
         );
     }
