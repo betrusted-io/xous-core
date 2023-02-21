@@ -12,6 +12,7 @@ pub const BACKUP_ARGS_ADDR: usize = crate::platform::RAM_BASE + crate::platform:
 
 use core::num::NonZeroUsize;
 use core::{mem, ptr, slice};
+use core::arch::asm;
 
 pub type XousPid = u8;
 pub const PAGE_SIZE: usize = 4096;
@@ -534,19 +535,115 @@ pub struct ProgramDescription {
     entrypoint: u32,
 }
 
-extern "C" {
-    fn start_kernel(
-        args: usize,
-        ss: usize,
-        rpt: usize,
-        satp: usize,
-        entrypoint: usize,
-        stack: usize,
-        debug: bool,
-        resume: bool,
-    ) -> !;
+#[link_section = ".text.init"]
+#[export_name = "_start"]
+pub extern "C" fn _start() {
+    unsafe {
+        asm! (
+            "li          t0, 0xffffffff",
+            "csrw        mideleg, t0",
+            "csrw        medeleg, t0",
+
+            // decorate our stack area with a canary pattern
+            "li          t1, 0xACE0BACE",
+            "li          t0, 0x40FFE01C",  // currently allowed stack extent - 8k - (7 words) - 7 words for kernel backup args - see bootloader in betrusted-soc
+            "li          t2, 0x41000000",
+        "100:", // fillstack
+            "sw          t1, 0(t0)",
+            "addi        t0, t0, 4",
+            "bltu        t0, t2, 100b",
+
+            // Place the stack pointer at the end of RAM
+            "li          t0, 0x40000000", // SRAM start   hard-coded into loader -- don't trust kernel boot args to tell us where RAM is, we haven't validated them yet!
+            "li          t1, 0x01000000", // SRAM length
+            "add         sp, t0, t1",
+
+            // Install a machine mode trap handler
+            "la          t0, abort",
+            "csrw        mtvec, t0",
+
+            // Start Rust
+            "j   rust_entry",
+
+            options(noreturn)
+        );
+    }
 }
 
+#[link_section = ".text.init"]
+#[export_name = "abort"]
+/// This is only used in debug mode
+pub extern "C" fn abort() {
+    unsafe {
+        asm! (
+            "300:", // abort
+                "j 300b",
+            options(noreturn)
+        );
+    }
+}
+
+#[inline(never)]
+#[export_name = "start_kernel"]
+pub extern "C" fn start_kernel(
+    args: usize,
+    ss: usize,
+    rpt: usize,
+    satp: usize,
+    entrypoint: usize,
+    stack: usize,
+    debug_: bool,
+    resume_: bool,
+) -> ! {
+    let debug: usize = if debug_ { 1 } else { 0 };
+    let resume: usize = if resume_ { 1 } else { 0 };
+    unsafe {
+        asm! (
+            // these generate redundant mv's but it ensures that the arguments are marked as used
+            "mv          a0, {args}",
+            "mv          a1, {ss}",
+            "mv          a2, {rpt}",
+            "mv          a7, {resume}",
+            // Delegate as much as we can supervisor mode
+            "li          t0, 0xffffffff",
+            "csrw        mideleg, t0",
+            "csrw        medeleg, t0",
+
+            // Return to Supervisor mode (1 << 11) when we call `reti`.
+            // Disable interrupts (0 << 5)
+            "li		     t0, (1 << 11) | (0 << 5)",
+            // If arg6 is "true", also set mstatus.SUM to allow the kernel
+            // to access userspace memory.
+            "mv          a6, {debug}",
+            "andi        a6, a6, 1",
+            "slli        a6, a6, 18",
+            "or          t0, t0, a6",
+            "csrw	     mstatus, t0",
+
+            // Enable the MMU (once we issue `mret`) and flush the cache
+            "csrw        satp, {satp}",
+            "sfence.vma",
+
+            // Return to the address pointed to by $a4
+            "csrw        mepc, {entrypoint}",
+
+            // Reposition the stack at the offset passed by $a5
+            "mv          sp, {stack}",
+
+            // Issue the return, which will jump to $mepc in Supervisor mode
+            "mret",
+            args = in(reg) args,
+            ss = in(reg) ss,
+            rpt = in(reg) rpt,
+            satp = in(reg) satp,
+            entrypoint = in(reg) entrypoint,
+            stack = in(reg) stack,
+            debug = in(reg) debug,
+            resume = in(reg) resume,
+            options(noreturn)
+        );
+    }
+}
 
 impl ProgramDescription {
     /// Map this ProgramDescription into RAM.
@@ -1538,18 +1635,16 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
         gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // patch us over to a different UART for debug (1=LOG 2=APP, 0=KERNEL(hw reset default))
 
-        unsafe {
-            start_kernel(
-                arg_offset,
-                ip_offset,
-                rpt_offset,
-                cfg.processes[0].satp,
-                cfg.processes[0].entrypoint,
-                cfg.processes[0].sp,
-                cfg.debug,
-                clean,
-            );
-        }
+        start_kernel(
+            arg_offset,
+            ip_offset,
+            rpt_offset,
+            cfg.processes[0].satp,
+            cfg.processes[0].entrypoint,
+            cfg.processes[0].sp,
+            cfg.debug,
+            clean,
+        );
     } else {
         #[cfg(feature="resume")]
         unsafe {
@@ -1566,7 +1661,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             println!("Adjusting SATP to the sures process. Was: 0x{:08x} now: 0x{:08x}", (*backup_args)[3], satp);
 
             #[cfg(not(feature = "renode-bypass"))]
-            if true {
+            {
                 use utralib::generated::*;
                 let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
                 gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0); // patch us over to a different UART for debug (1=LOG 2=APP, 0=KERNEL(default))
