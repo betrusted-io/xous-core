@@ -30,6 +30,8 @@ const KERNEL_STACK_PAGE_COUNT: usize = 1;
 const KERNEL_ARGUMENT_OFFSET: usize = 0xffc0_0000;
 const GUARD_MEMORY_BYTES: usize = 2 * PAGE_SIZE;
 
+pub const SIGBLOCK_SIZE: usize = 0x1000;
+
 const FLG_VALID: usize = 0x1;
 const FLG_X: usize = 0x8;
 const FLG_W: usize = 0x4;
@@ -57,8 +59,6 @@ mod debug;
 mod fonts;
 #[cfg(feature="secboot")]
 mod secboot;
-#[cfg(feature="secboot")]
-use secboot::SIGBLOCK_SIZE;
 
 // Install a panic handler when not running tests.
 #[cfg(not(test))]
@@ -1550,6 +1550,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             );
         }
     } else {
+        #[cfg(feature="resume")]
         unsafe {
             let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut[u32; 7];
             #[cfg(feature="debug-print")]
@@ -1581,6 +1582,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
                 clean,
             );
         }
+        #[cfg(not(feature="resume"))]
+        panic!("Unreachable code executed");
     }
 }
 #[cfg(feature="resume")]
