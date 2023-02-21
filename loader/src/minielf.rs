@@ -305,16 +305,25 @@ impl MiniElf {
         for (index, section) in self.sections.iter().enumerate() {
             if let Some(dest_offset) = pt_walk(satp, section.virt as usize) {
                 println!("  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), 0x{:x}(PA dst) len {}/0x{:x}",
-                    index, section_offset + image_phys_base, section.virt as usize + section_offset,
-                    dest_offset, section.len(), section.len()
+                    index,
+                    section_offset + image_phys_base,
+                    section.virt as usize,
+                    dest_offset,
+                    section.len(), section.len()
                 );
                 // dumping routines
                 let dump_pa_src = section_offset + image_phys_base;
                 let dump_pa_dst = dest_offset;
+                let dump_pa_end_dst = pt_walk(satp, section.virt as usize + section.len() - 20);
                 dump_addr(dump_pa_src, "    Src [:20]  ");
                 dump_addr(dump_pa_dst, "    Dst [:20]  ");
                 dump_addr(dump_pa_src + section.len() - 20, "    Src [-20:] ");
-                dump_addr(dump_pa_dst + section.len() - 20, "    Dst [-20:] ");
+                // recompute the end section mapping, because PA/VA mappings don't have to be linear (in fact they go in the opposite direction)
+                if let Some(pa_dst_end) = dump_pa_end_dst {
+                    dump_addr(pa_dst_end, "    Dst [-20:] ");
+                } else {
+                    println!("   End of destination VA 0x{:x}, ERR UNMAPPED!", section.virt as usize + section.len() - 20);
+                }
             } else {
                 println!("  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), ERR UNMAPPED!!",
                     index, section_offset + image_phys_base, section.virt as usize + section_offset

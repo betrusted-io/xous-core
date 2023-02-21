@@ -339,6 +339,11 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Fixed some edge cases in the I2C driver, and improved sleep/resume stability.
 
 ## New in 0.9.13
+- Loader refactor & optimization:
+  - Better portability to different RAM sizes
+  - Assembly stubs eliminated and absorbed into Rust files
+  - Code modularized and re-organized
+  - Phase 1 cleaned up and optimized
 
 ## Roadmap
 - Lots of testing and bug fixes

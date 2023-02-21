@@ -8,7 +8,7 @@ const VERSION_STR: &'static str = "Xous OS Loader v0.9.5\n\r";
 // v0.9.2 -- add version and length check between header and signed area
 // v0.9.3 -- add lockout of key ROM in die() routine
 // v0.9.4 -- monorepo conversion
-// v0.9.5 -- multiplatform conversion
+// v0.9.5 -- multiplatform conversion and phase 1 optimization
 
 pub const STACK_LEN: u32 = 8192 - (7 * 4); // 7 words for backup kernel args
 pub const STACK_TOP: u32 = 0x4100_0000 - STACK_LEN;

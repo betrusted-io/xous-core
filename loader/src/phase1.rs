@@ -190,33 +190,20 @@ fn copy_processes(cfg: &mut BootConfig) {
             TagType::IniF |
             TagType::IniE => {
                 _pid += 1;
-                let mut page_addr: usize = 0;
-                let mut previous_addr: usize = 0;
-                let mut previous_ram_zero_addr: usize = 0;
                 let mut top = core::ptr::null_mut::<u8>();
 
                 let inie = MiniElf::new(&tag);
-                let mut src_addr = unsafe {
+                let mut src_paddr = unsafe {
                     cfg.base_addr
                         .add(inie.load_offset as usize / mem::size_of::<usize>())
                 } as *const u8;
 
-                // Example: Page starts at 0xf0c0 and is 8192 bytes long.
-                // 1. Copy 3094 bytes to page 1
-                // 2. Copy 4096 bytes to page 2
-                // 3. Copy 192 bytes to page 3
-                //
-                // Example: Page starts at 0xf000 and is 4096 bytes long
-                // 1. Copy 4096 bytes to page 1
-                //
-                // Example: Page starts at 0xf000 and is 128 bytes long
-                // 1. Copy 128 bytes to page 1
-                //
-                // Example: Page starts at oxf0c0 and is 128 bytes long
-                // 1. Copy 128 bytes to page 1
                 println!("\n\n{} {} has {} sections", tag_type.to_str(), _pid, inie.sections.len());
                 println!("Initial top: {:x}, extra_pages: {:x}, init_size: {:x}, base_addr: {:x}",
                     cfg.get_top() as *mut u8 as u32, cfg.extra_pages, cfg.init_size, cfg.base_addr as u32);
+
+                let mut last_page_vaddr = 0;
+
                 for section in inie.sections.iter() {
                     let flags = section.flags() as u8;
                     // any section that requires "write" must be copied to RAM
@@ -226,143 +213,92 @@ fn copy_processes(cfg: &mut BootConfig) {
                     // IniE is always copy_to_ram
                     let copy_to_ram = (flags & MINIELF_FLG_W != 0) || (tag_type == TagType::IniE);
 
-                    if (section.virt as usize) < previous_addr {
-                        panic!("init section addresses are not strictly increasing (new virt: {:08x}, last virt: {:08x})", section.virt, previous_addr);
+                    if (section.virt as usize) < last_page_vaddr {
+                        panic!("init section addresses are not strictly increasing (new virt: {:08x}, last virt: {:08x})",
+                            section.virt, last_page_vaddr);
                     }
 
+                    // cfg.extra_pages tracks how many pages of RAM we've allocated so far
+                    // cfg.top() points to the bottom of the most recently allocated page
+                    //    - so if cfg.extra_pages is 0, nothing is allocated, and cfg.top() points to previously reserved space
+                    //
+                    // The section length always matches the stride between sections in physical memory.
+                    //
+                    // However, the section length has nothing to do with the distance between sections in virtual memory;
+                    // the virtual start address is allowed to be an arbitrary number of bytes higher than the previous section
+                    // end, for alignment and padding reasons.
                     if copy_to_ram {
-                        let this_page = section.virt as usize & !(PAGE_SIZE - 1);
+                        let mut dst_page_vaddr = section.virt as usize;
                         let mut bytes_to_copy = section.len();
 
-                        if VDBG {println!(
-                            "Section is {} bytes long, loaded to {:08x}",
-                            bytes_to_copy, section.virt
-                        );}
-                        // If this is not a new page, ensure the uninitialized values from between
-                        // this section and the previous one are all zeroed out.
-                        if this_page != page_addr || previous_addr == page_addr {
-                            if VDBG {println!("New page @ {:08x}", this_page);}
-                            if previous_ram_zero_addr != 0 && previous_ram_zero_addr != page_addr && cfg.extra_pages > 0 {
-                                if VDBG {println!(
-                                    "Zeroing-out remainder of previous page: {:08x} (mapped to physical address {:08x})",
-                                    previous_ram_zero_addr, top as usize,
-                                );}
-                                unsafe {
-                                    bzero(
-                                        top.add(previous_ram_zero_addr as usize & (PAGE_SIZE - 1)),
-                                        top.add(PAGE_SIZE as usize),
-                                    )
-                                };
-                            }
-
-                            // Allocate a new page.
+                        if (last_page_vaddr & !(PAGE_SIZE - 1)) != (dst_page_vaddr & !(PAGE_SIZE - 1)) {
+                            // this condition is always true for the first section's first iteration, because
+                            // current_vpage_addr starts as NULL; thus we are guaranteed to always
+                            // trigger the page allocate/zero mechanism the first time through the loop
                             cfg.extra_pages += 1;
                             top = cfg.get_top() as *mut u8;
-
-                            // Zero out the page, if necessary.
-                            unsafe { bzero(top, top.add(section.virt as usize & (PAGE_SIZE - 1))) };
-                        } else {
-                            if VDBG {println!("Reusing existing page @ {:08x}", this_page);}
-                        }
-
-                        // Part 1: Copy the first chunk over.
-                        let mut first_chunk_size = PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
-                        if first_chunk_size > section.len() {
-                            first_chunk_size = section.len();
-                        }
-                        let first_chunk_offset = section.virt as usize & (PAGE_SIZE - 1);
-                        if VDBG {println!(
-                            "Section chunk is {} bytes, {} from {:08x}:{:08x} -> {:08x}:{:08x} (virt: {:08x})",
-                            first_chunk_size,
-                            if section.no_copy() { "zeroing" } else { "copying" },
-                            src_addr as usize,
-                            unsafe { src_addr.add(first_chunk_size) as usize },
-                            unsafe { top.add(first_chunk_offset) as usize },
-                            unsafe { top.add(first_chunk_size + first_chunk_offset)
-                                as usize },
-                            this_page + first_chunk_offset,
-                        );}
-                        // Perform the copy, if NOCOPY is not set
-                        if !section.no_copy() {
-                            unsafe {
-                                memcpy(top.add(first_chunk_offset), src_addr, first_chunk_size);
-                                src_addr = src_addr.add(first_chunk_size);
-                            }
-                        } else {
                             unsafe {
                                 bzero(
-                                    top.add(first_chunk_offset),
-                                    top.add(first_chunk_offset + first_chunk_size),
+                                top,
+                                top.add(PAGE_SIZE as usize)
                                 );
                             }
                         }
-                        bytes_to_copy -= first_chunk_size;
 
-                        // Part 2: Copy any full pages.
-                        while bytes_to_copy >= PAGE_SIZE {
-                            cfg.extra_pages += 1;
-                            top = cfg.get_top() as *mut u8;
-                            // println!(
-                            //     "Copying next page from {:08x} {:08x} ({} bytes to go...)",
-                            //     src_addr as usize, top as usize, bytes_to_copy
-                            // );
+                        // Copy the start copying the source data into virtual memory, until the current
+                        // page is exhausted.
+                        while bytes_to_copy > 0 {
+                            let bytes_remaining_in_vpage = PAGE_SIZE - (dst_page_vaddr & (PAGE_SIZE - 1));
+                            let copyable_bytes = bytes_remaining_in_vpage.min(bytes_to_copy);
                             if !section.no_copy() {
                                 unsafe {
-                                    memcpy(top, src_addr, PAGE_SIZE);
-                                    src_addr = src_addr.add(PAGE_SIZE);
+                                    memcpy(
+                                        top.add(dst_page_vaddr & (PAGE_SIZE - 1)),
+                                        src_paddr,
+                                        copyable_bytes,
+                                    );
+                                    src_paddr = src_paddr.add(copyable_bytes);
                                 }
                             } else {
-                                unsafe { bzero(top, top.add(PAGE_SIZE)) };
+                                // chunk is already zeroed, because we zeroed the whole page when we got it.
                             }
-                            bytes_to_copy -= PAGE_SIZE;
-                        }
+                            bytes_to_copy -= copyable_bytes;
+                            dst_page_vaddr += copyable_bytes;
 
-                        // Part 3: Copy the final residual partial page
-                        if bytes_to_copy > 0 {
-                            if VDBG {println!(
-                                "Copying final section -- {} bytes @ {:08x}",
-                                bytes_to_copy,
-                                section.virt + (section.len() as u32) - (bytes_to_copy as u32)
-                            );}
-                            cfg.extra_pages += 1;
-                            top = cfg.get_top() as *mut u8;
-                            if !section.no_copy() {
-                                unsafe {
-                                    memcpy(top, src_addr, bytes_to_copy);
-                                    src_addr = src_addr.add(bytes_to_copy);
+                            if copyable_bytes == bytes_remaining_in_vpage
+                            && bytes_to_copy > 0 {
+                                // we've reached the end of the vpage, and there's more to copy:
+                                // grab a new page
+                                cfg.extra_pages += 1;
+                                top = cfg.get_top() as *mut u8;
+                                if bytes_to_copy < PAGE_SIZE { // pre-zero out the page if the remaining data won't fill it.
+                                    unsafe {
+                                        bzero(
+                                        top,
+                                        top.add(PAGE_SIZE as usize)
+                                        );
+                                    }
                                 }
-                            } else {
-                                unsafe { bzero(top, top.add(bytes_to_copy)) };
                             }
                         }
-                        previous_ram_zero_addr = section.virt as usize + section.len();
+                        // set the vpage based on our current vpage. This allows us to allocate
+                        // a new vpage on the next iteration in case there is surprise padding in
+                        // the section load address.
+                        last_page_vaddr = dst_page_vaddr;
                     } else {
                         top = cfg.get_top() as *mut u8;
-                        src_addr = unsafe {src_addr.add(section.len())};
+                        // forward the FLASH address pointer by the length of the section.
+                        src_paddr = unsafe {src_paddr.add(section.len())};
                     }
 
-                    previous_addr = section.virt as usize + section.len();
-                    page_addr = previous_addr & !(PAGE_SIZE - 1);
                     if VDBG {
                         println!("Looping to the next section");
-                        println!("top: {:x}, extra_pages: {:x}, init_size: {:x}, base_addr: {:x}", cfg.get_top() as *mut u8 as u32, cfg.extra_pages, cfg.init_size, cfg.base_addr as u32);
-                        println!("previous_addr: {:x}, page_addr: {:x}", previous_addr, page_addr);
+                        println!("top: {:x}, extra_pages: {:x}, init_size: {:x}, base_addr: {:x}",
+                            cfg.get_top() as *mut u8 as u32, cfg.extra_pages, cfg.init_size, cfg.base_addr as u32);
+                        println!("last_page_vaddr: {:x}", last_page_vaddr);
                     }
                 }
-
                 println!("Done with sections");
-                if previous_addr as usize & (PAGE_SIZE - 1) != 0 {
-                    println!("Zeroing out remaining data");
-                    // Zero-out the trailing bytes
-                    unsafe {
-                        bzero(
-                            top.add(previous_addr as usize & (PAGE_SIZE - 1)),
-                            top.add(PAGE_SIZE as usize),
-                        )
-                    };
-                } else {
-                    println!("Skipping zero step -- we ended on a page boundary");
-                }
             }
             TagType::XKrn => {
                 let prog = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
