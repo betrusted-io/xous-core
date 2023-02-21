@@ -18,13 +18,13 @@ branch = "main"
 lazy_static = "1.4.0"
 
 [features]
-precursor = ["utralib/precursor", "ed25519-dalek-loader/precursor", "curve25519-dalek-loader/precursor", "resume"]
-renode = ["utralib/renode", "ed25519-dalek-loader/renode", "curve25519-dalek-loader/renode", "resume"]
-cramium = ["utralib/cramium"]
+precursor = ["utralib/precursor", "ed25519-dalek-loader/precursor", "curve25519-dalek-loader/precursor", "resume", "secboot"]
+renode = ["utralib/renode", "ed25519-dalek-loader/renode", "curve25519-dalek-loader/renode", "resume", "secboot"]
 platform-tests = []
 debug-print = []
 earlyprintk = []
 renode-bypass = []
+secboot = []
 #default = ["debug-print"]
 resume = [] # suspend/resume pathway code
 default = []
