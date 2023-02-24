@@ -344,6 +344,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - Assembly stubs eliminated and absorbed into Rust files
   - Code modularized and re-organized
   - Phase 1 cleaned up and optimized
+- VexRiscv core patch to D$ virtual memory flush bug
+  - Hopefully resolves issue #321
 
 ## Roadmap
 - Lots of testing and bug fixes
