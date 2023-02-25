@@ -192,7 +192,9 @@ impl CmdEnv {
         )
         .expect("couldn't map event1 CSR range");
 
-        let common = CommonEnv {
+        // _ prefix allows us to leave the `mut` here without creating a warning.
+        // the `mut` option is needed for some features.
+        let mut _common = CommonEnv {
             llio: llio::Llio::new(&xns),
             com: com::Com::new(&xns).expect("could't connect to COM"),
             ticktimer,
@@ -209,28 +211,28 @@ impl CmdEnv {
         };
         //let fcc = Fcc::new(&mut common);
         #[cfg(feature="benchmarks")]
-        let sha = Sha::new(&xns, &mut common);
+        let sha = Sha::new(&xns, &mut _common);
         #[cfg(feature="aestests")]
-        let aes = Aes::new(&xns, &mut common);
+        let aes = Aes::new(&xns, &mut _common);
         #[cfg(feature="benchmarks")]
-        let engine = Engine::new(&xns, &mut common);
+        let engine = Engine::new(&xns, &mut _common);
         //let memtest = Memtest::new(&xns, &mut common);
 
         // print our version info
-        let soc_ver = common.llio.soc_gitrev().unwrap();
+        let soc_ver = _common.llio.soc_gitrev().unwrap();
         log::info!("SoC git rev {}", soc_ver.to_string());
-        log::info!("{}PDDB.DNA,{:x},{}", xous::BOOKEND_START, common.llio.soc_dna().unwrap(), xous::BOOKEND_END);
-        let (rev, dirty) = common.com.get_ec_git_rev().unwrap();
+        log::info!("{}PDDB.DNA,{:x},{}", xous::BOOKEND_START, _common.llio.soc_dna().unwrap(), xous::BOOKEND_END);
+        let (rev, dirty) = _common.com.get_ec_git_rev().unwrap();
         let dirtystr = if dirty { "dirty" } else { "clean" };
         log::info!("EC gateware git commit: {:x}, {}", rev, dirtystr);
-        let ec_ver = common.com.get_ec_sw_tag().unwrap();
+        let ec_ver = _common.com.get_ec_sw_tag().unwrap();
         log::info!("EC sw tag: {}", ec_ver.to_string());
-        let wf_ver = common.com.get_wf200_fw_rev().unwrap();
+        let wf_ver = _common.com.get_wf200_fw_rev().unwrap();
         log::info!("WF200 fw rev {}.{}.{}", wf_ver.maj, wf_ver.min, wf_ver.rev);
 
 
         CmdEnv {
-            common_env: common,
+            common_env: _common,
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
             sleep_cmd: Sleep::new(&xns),

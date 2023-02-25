@@ -469,7 +469,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
                 }
                 "ed" => {
                     use ed25519_dalek::*;
-                    use ed25519::signature::Signature as _;
+                    // use ed25519::signature::Signature as _;
                     use hex::FromHex;
                     let secret_key: &[u8] = b"833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42";
                     let public_key: &[u8] = b"ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf";
@@ -521,6 +521,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
                         .filter_map(|test_index| WycheproofTestCase::read(test_index).run())
                         .collect();
                     write!(ret, "Ran {} tests. {} failures.", WYCHEPROOF_NO_TEST_CASES, failures.len()).unwrap();
+                    let num_failures = failures.len();
                     if failures.len() > 0 {
                         write!(ret, "\nFailed tests: {:?}", failures.iter().map(|tc| tc.test_id).collect::<Vec<usize>>()).unwrap();
                         for failure in failures {
@@ -528,6 +529,9 @@ impl<'a> ShellCmdApi<'a> for Engine {
                             log::error!("expected: {}", failure.expected.encode_hex::<std::string::String>());
                             log::error!("actual:   {}", failure.actual.encode_hex::<std::string::String>());
                         }
+                        log::info!("{}BENCH,WYCHEPROOF,FAIL,{},{}", xous::BOOKEND_START, num_failures, xous::BOOKEND_END);
+                    } else {
+                        log::info!("{}BENCH,WYCHEPROOF,PASS,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     }
                 }
                 _ => {
@@ -556,6 +560,11 @@ impl<'a> ShellCmdApi<'a> for Engine {
                 },
                 Some(BenchResult::DhDone) => {
                     write!(ret, "{}ms/DH_iter; Passed {} ops, failed {} ops", elapsed, passes, fails).unwrap();
+                    if fails == 0 {
+                        log::info!("{}BENCH,DH,PASS,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    } else {
+                        log::info!("{}BENCH,DH,FAIL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    }
                 },
                 _ => {
                     write!(ret, "Engine bench callback with unknown bench type").unwrap();
