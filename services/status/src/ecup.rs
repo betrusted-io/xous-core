@@ -202,7 +202,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 // the semver *could* be bogus at this point, but we'll validate the package (which contains the semver) before we use it.
                 // however, this check is much less computationally expensive than the package validation.
                 let length = u32::from_le_bytes(package[0x28..0x2c].try_into().unwrap());
-                if length == 0xffff_ffff { // nothing was staged at all
+                if length > xous::EC_FW_PKG_LEN { // nothing was staged, or it is bogus (blank FLASH is 0xFFFF_FFFF "length")
                     xous::return_scalar(msg.sender, UpdateResult::PackageInvalid.to_usize().unwrap()).unwrap();
                     continue;
                 }
