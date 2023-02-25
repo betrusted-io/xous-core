@@ -4,6 +4,8 @@ pub mod api;
 use num_traits::*;
 use xous::{send_message, CID};
 use xous_ipc::Buffer;
+// the 0.5.1 API is necessary for compatibility with curve25519-dalek crates
+use rand_core::{RngCore, CryptoRng};
 
 #[derive(Debug)]
 pub struct Trng {
@@ -117,15 +119,42 @@ impl Trng {
             .or(Err(xous::Error::InternalError))?;
         Ok(buf.to_original().unwrap())
     }
+    /// This is copied out of the 0.5 API for rand_core
+    pub fn fill_bytes_via_next(&mut self, dest: &mut [u8]) {
+        use core::mem::transmute;
+        let mut left = dest;
+        while left.len() >= 8 {
+            let (l, r) = {left}.split_at_mut(8);
+            left = r;
+            let chunk: [u8; 8] = unsafe {
+                transmute(self.next_u64().to_le())
+            };
+            l.copy_from_slice(&chunk);
+        }
+        let n = left.len();
+        if n > 4 {
+            let chunk: [u8; 8] = unsafe {
+                transmute(self.next_u64().to_le())
+            };
+            left.copy_from_slice(&chunk[..n]);
+        } else if n > 0 {
+            let chunk: [u8; 4] = unsafe {
+                transmute(self.next_u32().to_le())
+            };
+            left.copy_from_slice(&chunk[..n]);
+        }
+    }
+}
 
+impl RngCore for Trng {
     // legacy (0.5) trng apis
-    pub fn next_u32(&mut self) -> u32 {
+    fn next_u32(&mut self) -> u32 {
         self.get_u32().expect("couldn't get random u32 from server")
     }
-    pub fn next_u64(&mut self) -> u64 {
+    fn next_u64(&mut self) -> u64 {
         self.get_u64().expect("couldn't get random u64 from server")
     }
-    pub fn fill_bytes(&mut self, dest: &mut [u8]) {
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
         // smaller than 64 bytes (512 bits), just use 8x next_u64 calls to fill.
         if dest.len() < 64 {
             return self.fill_bytes_via_next(dest);
@@ -184,32 +213,12 @@ impl Trng {
             .into_remainder();
         self.fill_bytes_via_next(leftovers);
     }
-    /// This is copied out of the 0.5 API for rand_core
-    fn fill_bytes_via_next(&mut self, dest: &mut [u8]) {
-        use core::mem::transmute;
-        let mut left = dest;
-        while left.len() >= 8 {
-            let (l, r) = {left}.split_at_mut(8);
-            left = r;
-            let chunk: [u8; 8] = unsafe {
-                transmute(self.next_u64().to_le())
-            };
-            l.copy_from_slice(&chunk);
-        }
-        let n = left.len();
-        if n > 4 {
-            let chunk: [u8; 8] = unsafe {
-                transmute(self.next_u64().to_le())
-            };
-            left.copy_from_slice(&chunk[..n]);
-        } else if n > 0 {
-            let chunk: [u8; 4] = unsafe {
-                transmute(self.next_u32().to_le())
-            };
-            left.copy_from_slice(&chunk[..n]);
-        }
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        Ok(self.fill_bytes(dest))
     }
 }
+
+impl CryptoRng for Trng {}
 
 use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);

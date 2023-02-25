@@ -17,7 +17,7 @@ num-traits = {version = "0.2.14", default-features = false}
 susres = {package = "xous-api-susres", version = "0.9.28"}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 xous-ipc = "0.9.33"
-
+rand_core = "0.5.1" # the 0.5.1 API is necessary for compatibility with curve25519-dalek crates
 utralib = { version = "0.1.13", optional = true, default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
