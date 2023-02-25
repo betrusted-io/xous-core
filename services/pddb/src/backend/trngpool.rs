@@ -2,6 +2,7 @@ use core::mem::size_of;
 use aes_gcm_siv::Nonce;
 use std::convert::TryInto;
 use core::cell::RefCell;
+use rand_core::RngCore;
 
 /// Crate-shared resource for TRNGs.
 pub(crate) struct TrngPool {

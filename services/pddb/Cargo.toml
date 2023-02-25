@@ -29,6 +29,7 @@ aes-gcm-siv = {version = "0.11.1", default-features = false, features = ["alloc"
 llio = {path="../llio"}
 subtle = {version = "2.4.1", default-features = false}
 tts-frontend = {path="../tts"}
+rand_core = "0.5.1"
 
 # passwords
 sha2 = {path = "../engine-sha512"}

@@ -25,6 +25,7 @@ num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 zeroize = "1.3.0"
+rand_core = "0.5.1"
 
 aes-kw = {version = "0.2.1", features = ["alloc"]}
 
@@ -63,6 +64,7 @@ engine-25519 = {path="../engine-25519"}
 byteorder = "1.4.3" # used by keywrap
 # hardware acceleration adaptations are inserted into a fork of the main branch.
 hex = {version = "0.4.3", default-features = false, features = []}
+
 [dependencies.curve25519-dalek]
 version = "3.1.0" # note this is patched to our fork in ./Cargo.toml
 default-features = false

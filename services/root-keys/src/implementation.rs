@@ -30,6 +30,7 @@ use core::cell::RefCell;
 use aes::Aes256;
 use aes::cipher::{KeyInit, BlockDecrypt, BlockEncrypt};
 use cipher::generic_array::GenericArray;
+use rand_core::RngCore;
 
 use crate::{SignatureResult, GatewareRegion, MetadataInFlash, UpdateType};
 
