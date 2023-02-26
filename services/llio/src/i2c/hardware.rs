@@ -183,7 +183,7 @@ impl I2cStateMachine {
 
     /// Assumes we are initiating on a "clean" I2C machine (idle, no errors, no callbacks or state mapped)
     fn checked_initiate(&mut self, transaction: I2cTransaction, msg: xous::MessageEnvelope) {
-        log::debug!("I2C initated with {:x?}", transaction);
+        log::debug!("I2C initiated with {:x?}", transaction);
         // sanity-check the bounds limits
         if transaction.txlen > 258 || transaction.rxlen > 258 {
             self.report_response(I2cStatus::ResponseFormatError, None);

@@ -37,8 +37,9 @@ fn i2c_thread(i2c_sid: xous::SID) {
     log::trace!("starting i2c main loop");
     loop {
         let msg = xous::receive_message(i2c_sid).unwrap();
-        log::trace!("i2c message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option::<I2cOpcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             Some(I2cOpcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 if !i2c_mutex_acquired && !i2c.is_busy() {
                     i2c.suspend();
@@ -172,7 +173,7 @@ fn main() -> ! {
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(2)).expect("can't register I2C thread");
     #[cfg(not(target_os = "xous"))]
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(1)).expect("can't register I2C thread");
-    log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
+    log::debug!("registered I2C thread with NS -- {:?}", i2c_sid);
     let _ = thread::spawn({
         let i2c_sid = i2c_sid.clone();
         move || {
@@ -203,11 +204,12 @@ fn main() -> ! {
     let mut i2c = llio::I2c::new(&xns);
     let tt = ticktimer_server::Ticktimer::new().unwrap();
 
-    log::trace!("starting main loop");
+    log::debug!("starting main loop");
     loop {
         let msg = xous::receive_message(llio_sid).unwrap();
-        log::trace!("Message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option::<Opcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 llio.suspend();
                 #[cfg(feature="tts")]
