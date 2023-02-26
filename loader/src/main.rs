@@ -102,7 +102,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     // where in heap this memory will go.
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
     #[cfg(feature="platform-tests")]
-    platform_tests();
+    platform::platform_tests();
 
     let mut cfg = BootConfig {
         base_addr: args.base as *const usize,

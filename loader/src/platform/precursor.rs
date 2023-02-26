@@ -1,3 +1,5 @@
+use crate::*;
+
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_EXT_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_EXT_MEM;
 
@@ -23,7 +25,7 @@ pub fn platform_tests() {
             ram_ptr.add(i).write_volatile( (0xACE0_0000 + i) as u32 );
         }
     }
-
+    println!("Simple write...");
     let mut errcnt = 0;
     for i in 0..(256*1024/4) {
         unsafe {
@@ -38,48 +40,60 @@ pub fn platform_tests() {
             };
         }
     }
-    // TRNG virtual memory mapping already set up, but we pump values out just to make sure
-    // the pipeline is fresh. Simulations show this isn't necessary, but I feel paranoid;
-    // I worry a subtle bug in the reset logic could leave deterministic values in the pipeline.
-    for _k in 0..8 {
+    println!("Test random blocks...");
+    // let mut seed = 100;
+    const START_ADDR: usize = 0x0000_0000; // 3D_0000
+    const TESTLEN: usize = 0xC_0000; // 2_0000
+    for k in 0..256 {
+        println!("Loop {}", k);
         let trng_csr = CSR::new(utra::trng_kernel::HW_TRNG_KERNEL_BASE as *mut u32);
-        for i in 0x3E_0000..0x3F_0000 {
+        // fill the top half with random data
+        for i in START_ADDR + TESTLEN/2..START_ADDR + TESTLEN {
             while trng_csr.rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID) == 0 {}
             unsafe {
                 ram_ptr.add(i).write_volatile(trng_csr.rf(utra::trng_kernel::URANDOM_URANDOM));
             }
-        }
-        for i in 0x3D_0000..0x3E_0000 {
+            /*
+            seed = crate::murmur3::murmur3_32(&[0], seed);
             unsafe {
-                ram_ptr.add(i).write_volatile(ram_ptr.add(i + 0x10000).read_volatile());
+                ram_ptr.add(i).write_volatile(seed);
+            }
+            */
+        }
+        // copy one half to another
+        for i in START_ADDR..START_ADDR + TESTLEN/2 {
+            unsafe {
+                ram_ptr.add(i).write_volatile(ram_ptr.add(i + TESTLEN/2).read_volatile());
             }
         }
+        // check for copy (write) errors
         let basecnt = errcnt;
         println!("** take one **");
-        for i in 0x3D_0000..0x3E_0000 {
+        for i in START_ADDR..START_ADDR+TESTLEN/2 {
             let rd1 = unsafe{ram_ptr.add(i).read_volatile()};
-            let rd2 = unsafe{ram_ptr.add(i+0x10000).read_volatile()};
+            let rd2 = unsafe{ram_ptr.add(i+TESTLEN/2).read_volatile()};
             if rd1 != rd2 {
                 if errcnt < 16 + basecnt || ((errcnt % 256) == 0) {
                     println!("* 0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
                 }
                 errcnt += 1;
             } else if (i & 0x1FFF) == 12 {
-                println!("  0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
+                // println!("  0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
             }
         }
+        // check for again for read errors
         println!("** take two (check for read errors)**");
         let basecnt = errcnt;
-        for i in 0x3D_0000..0x3E_0000 {
+        for i in START_ADDR..START_ADDR+TESTLEN/2 {
             let rd1 = unsafe{ram_ptr.add(i).read_volatile()};
-            let rd2 = unsafe{ram_ptr.add(i+0x10000).read_volatile()};
+            let rd2 = unsafe{ram_ptr.add(i+TESTLEN/2).read_volatile()};
             if rd1 != rd2 {
                 if errcnt < 16 + basecnt || ((errcnt % 256) == 0) {
                     println!("* 0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
                 }
                 errcnt += 1;
             } else if (i & 0x1FFF) == 12 {
-                println!("  0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
+                // println!("  0x{:08x}: rd1:0x{:08x} rd2:0x{:08x}", i*4, rd1, rd2);
             }
         }
     }
@@ -90,5 +104,7 @@ pub fn platform_tests() {
         println!("0x00000: {:08x}", unsafe{ ram_ptr.add(0x0).read_volatile() });
         println!("0x0FFFC: {:08x}", unsafe{ ram_ptr.add(0xFFFC/4).read_volatile() });
         println!("0xfdff04: {:08x}", unsafe{ ram_ptr.add(0xfdff04/4).read_volatile() });
+    } else {
+        println!("No errors detected by memory test.");
     }
 }
