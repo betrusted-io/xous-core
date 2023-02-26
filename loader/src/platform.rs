@@ -1,6 +1,6 @@
-#[cfg(feature="precursor")]
+#[cfg(any(feature="precursor",feature="renode"))]
 mod precursor;
-#[cfg(feature="precursor")]
+#[cfg(any(feature="precursor",feature="renode"))]
 pub use precursor::*;
 
 #[cfg(feature="cramium")]

@@ -1,11 +1,10 @@
-use crate::*;
-
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_EXT_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_EXT_MEM;
 
 /// Note that this memory test is "destructive" -- supend/resume will fail if it is enabled
 #[cfg(feature="platform-tests")]
 pub fn platform_tests() {
+    use crate::*;
     let ram_ptr: *mut u32 = crate::platform::RAM_BASE as *mut u32;
     let sram_ptr: *mut u32 = 0x1000_0000 as *mut u32;
     use utralib::generated::*;
