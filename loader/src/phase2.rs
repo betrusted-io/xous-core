@@ -133,7 +133,7 @@ impl ProgramDescription {
         let pid_idx = (pid - 1) as usize;
         let is_kernel = pid == 1;
         let flag_defaults = FLG_R | FLG_W | FLG_VALID | if is_kernel { 0 } else { FLG_U };
-        let stack_addr = USER_STACK_TOP - 16;
+        let stack_addr = if is_kernel { KERNEL_STACK_TOP } else { USER_STACK_TOP } - 16;
         if is_kernel {
             assert!(self.text_offset as usize == KERNEL_LOAD_OFFSET);
             assert!(((self.text_offset + self.text_size) as usize) < EXCEPTION_STACK_TOP);
