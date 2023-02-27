@@ -81,6 +81,22 @@ pub fn interrupt_claim(
     }
 }
 
+pub fn interrupt_free(irq: usize, pid: PID) -> Result<(), xous_kernel::Error> {
+    // Unsafe is required since we're accessing a static mut array.
+    // However, we disable interrupts to prevent contention on this array.
+    unsafe {
+        if irq > IRQ_HANDLERS.len() {
+            Err(xous_kernel::Error::InterruptNotFound)
+        } else if !IRQ_HANDLERS[irq].map(|f| f.0 == pid).unwrap_or(false) {
+            Err(xous_kernel::Error::InterruptNotFound)
+        } else {
+            arch::irq::disable_irq(irq).unwrap();
+            IRQ_HANDLERS[irq] = None;
+            Ok(())
+        }
+    }
+}
+
 /// Iterate through the IRQ handlers and remove any handler that exists
 /// for the given PID.
 pub fn release_interrupts_for_pid(pid: PID) {
