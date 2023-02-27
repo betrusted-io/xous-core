@@ -7,11 +7,9 @@ use susres::{RegManager, RegOrField, SuspendResume};
 
 #[allow(dead_code)]
 pub struct Llio {
-    crg_csr: utralib::CSR<u32>,
     gpio_csr: utralib::CSR<u32>,
     gpio_susres: RegManager::<{utra::gpio::GPIO_NUMREGS}>,
     info_csr: utralib::CSR<u32>,
-    identifier_csr: utralib::CSR<u32>,
     handler_conn: Option<xous::CID>,
     event_csr: utralib::CSR<u32>,
     event_susres: RegManager::<{utra::btevents::BTEVENTS_NUMREGS}>,
@@ -90,13 +88,6 @@ pub fn log_init() -> *mut u32 {
 
 impl Llio {
     pub fn new(handler_conn: xous::CID, gpio_base: *mut u32) -> Llio {
-        let crg_csr = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::crg::HW_CRG_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map CRG CSR range");
         let info_csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::info::HW_INFO_BASE),
             None,
@@ -104,13 +95,6 @@ impl Llio {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map Info CSR range");
-        let identifier_csr = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::identifier_mem::HW_IDENTIFIER_MEM_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map Identifier CSR range");
         let event_csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::btevents::HW_BTEVENTS_BASE),
             None,
@@ -136,11 +120,9 @@ impl Llio {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
         let mut xl = Llio {
-            crg_csr: CSR::new(crg_csr.as_mut_ptr() as *mut u32),
             gpio_csr: CSR::new(gpio_base),
             gpio_susres: RegManager::new(gpio_base),
             info_csr: CSR::new(info_csr.as_mut_ptr() as *mut u32),
-            identifier_csr: CSR::new(identifier_csr.as_mut_ptr() as *mut u32),
             handler_conn: Some(handler_conn), // connection for messages from IRQ handler
             event_csr: CSR::new(event_csr.as_mut_ptr() as *mut u32),
             event_susres: RegManager::new(event_csr.as_mut_ptr() as *mut u32),
