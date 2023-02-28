@@ -7,7 +7,8 @@ use crate::arch::mem::MemoryMapping;
 use crate::arch::process::{Process as ArchProcess, RETURN_FROM_EXCEPTION_HANDLER};
 use crate::arch::process::{Thread, EXIT_THREAD, RETURN_FROM_ISR};
 use crate::services::SystemServices;
-use riscv::register::{scause, sepc, sstatus, stval, vexriscv::sim, vexriscv::sip};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use riscv::register::{scause, sepc, sstatus, stval, vexriscv::sip};
 use xous_kernel::{SysCall, PID, TID};
 
 extern "Rust" {
@@ -15,27 +16,63 @@ extern "Rust" {
 }
 
 // use RAM-based backing so this variable is automatically saved on suspend
-static mut SIM_BACKING: usize = 0;
+static SIM_BACKING: AtomicUsize = AtomicUsize::new(0);
+
+// Interrupts are enabled very early on, so just assume they're on by default
+static IRQ_ENABLED: AtomicBool = AtomicBool::new(true);
+
+fn sim_read() -> usize {
+    let existing: usize;
+    unsafe { core::arch::asm!("csrr {0}, 0x9c0", out(reg) existing) };
+    existing
+}
+
+fn sim_write(new: usize) {
+    unsafe { core::arch::asm!("csrw 0x9c0, {0}", in(reg) new) };
+}
+
 /// Disable external interrupts
 pub fn disable_all_irqs() {
-    unsafe { SIM_BACKING = sim::read() };
-    sim::write(0x0);
+    SIM_BACKING.store(sim_read(), Ordering::Relaxed);
+    IRQ_ENABLED.store(false, Ordering::Relaxed);
+    sim_write(0x0);
 }
 
 /// Enable external interrupts
 #[export_name = "_enable_all_irqs"]
 pub extern "C" fn enable_all_irqs() {
-    sim::write(unsafe { SIM_BACKING });
+    IRQ_ENABLED.store(true, Ordering::Relaxed);
+    sim_write(SIM_BACKING.load(Ordering::Relaxed));
 }
 
+/// Enable a given IRQ. If interrupts are currently disabled, then update the
+/// SIM backing instead so that it will be enabled when interrupts are restored.
 pub fn enable_irq(irq_no: usize) {
     // Note that the vexriscv "IRQ Mask" register is inverse-logic --
     // that is, setting a bit in the "mask" register unmasks (i.e. enables) it.
-    sim::write(sim::read() | (1 << irq_no));
+    if IRQ_ENABLED.load(Ordering::Relaxed) {
+        sim_write(sim_read() | (1 << irq_no));
+    } else {
+        SIM_BACKING
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+                Some(v | (1 << irq_no))
+            })
+            .ok();
+    }
 }
 
+/// Disable a given IRQ. If interrupts are currently disabled, then update the
+/// SIM backing instead so that it will be disabled when interrupts are restored.
 pub fn disable_irq(irq_no: usize) {
-    sim::write(sim::read() & !(1 << irq_no));
+    if IRQ_ENABLED.load(Ordering::Relaxed) {
+        sim_write(sim_read() & !(1 << irq_no));
+    } else {
+        SIM_BACKING
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+                Some(v & !(1 << irq_no))
+            })
+            .ok();
+    }
 }
 
 static mut PREVIOUS_PAIR: Option<(PID, TID)> = None;
@@ -332,7 +369,7 @@ pub extern "C" fn trap_handler(
         SystemServices::with_mut(|ss| {
             #[cfg(feature = "gdb-stub")]
             {
-                ss.suspend_process(pid)
+                ss.pause_process_for_debug(pid)
                     .expect("couldn't debug current process");
                 println!("Program suspended. You may inspect it using gdb.");
             }
@@ -348,7 +385,6 @@ pub extern "C" fn trap_handler(
         })
     } else {
         let irqs_pending = sip::read();
-        // println!("irqs: {:x}", irqs_pending);
 
         // Safe to access globals since interrupts are disabled
         // when this function runs.
