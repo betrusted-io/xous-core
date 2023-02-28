@@ -37,7 +37,7 @@ pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::E
                     // If there is no handler, mask this interrupt
                     // to prevent an IRQ storm.  This is considered
                     // an error.
-                    arch::irq::disable_irq(irq_no)?;
+                    arch::irq::disable_irq(irq_no);
                 }
             }
         }
@@ -90,7 +90,7 @@ pub fn interrupt_free(irq: usize, pid: PID) -> Result<(), xous_kernel::Error> {
         } else if !IRQ_HANDLERS[irq].map(|f| f.0 == pid).unwrap_or(false) {
             Err(xous_kernel::Error::InterruptNotFound)
         } else {
-            arch::irq::disable_irq(irq).unwrap();
+            arch::irq::disable_irq(irq);
             IRQ_HANDLERS[irq] = None;
             Ok(())
         }
@@ -104,7 +104,7 @@ pub fn release_interrupts_for_pid(pid: PID) {
         for (irq, handler) in IRQ_HANDLERS.iter_mut().enumerate() {
             if let Some(h) = handler {
                 if h.0 == pid {
-                    arch::irq::disable_irq(irq).unwrap();
+                    arch::irq::disable_irq(irq);
                     *handler = None;
                 }
             }

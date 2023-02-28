@@ -34,9 +34,8 @@ pub fn enable_irq(irq_no: usize) {
     sim::write(sim::read() | (1 << irq_no));
 }
 
-pub fn disable_irq(irq_no: usize) -> Result<(), xous_kernel::Error> {
+pub fn disable_irq(irq_no: usize) {
     sim::write(sim::read() & !(1 << irq_no));
-    Ok(())
 }
 
 static mut PREVIOUS_PAIR: Option<(PID, TID)> = None;
@@ -331,6 +330,13 @@ pub extern "C" fn trap_handler(
 
         // If it's not a failure in the kernel, terminate or debug the current process.
         SystemServices::with_mut(|ss| {
+            #[cfg(feature = "gdb-stub")]
+            {
+                ss.suspend_process(pid)
+                    .expect("couldn't debug current process");
+                println!("Program suspended. You may inspect it using gdb.");
+            }
+            #[cfg(not(feature = "gdb-stub"))]
             ss.terminate_process(pid)
                 .expect("couldn't terminate current process");
             crate::syscall::reset_switchto_caller();
