@@ -9,6 +9,7 @@ pub fn platform_tests() {
     let sram_ptr: *mut u32 = 0x1000_0000 as *mut u32;
     use utralib::generated::*;
 
+    /* // Status readout block removed to reduce critical path.
     let mut sram_csr = CSR::new(utra::sram_ext::HW_SRAM_EXT_BASE as *mut u32);
     sram_csr.wfo(utra::sram_ext::READ_CONFIG_TRIGGER, 1);
 
@@ -18,6 +19,7 @@ pub fn platform_tests() {
     }
 
     println!("status: 0x{:08x}", sram_csr.rf(utra::sram_ext::CONFIG_STATUS_MODE));
+    */
 
     for i in 0..(256*1024/4) {
         unsafe {
