@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-use crate::{DynError, TARGET_TRIPLE, app_manifest::generate_app_menus, MemorySpec};
+use crate::{DynError, app_manifest::generate_app_menus, MemorySpec};
 
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
@@ -148,7 +148,7 @@ impl Builder {
             features: Vec::new(),
             stream: BuildStream::Release,
             min_ver: crate::MIN_XOUS_VERSION.to_string(),
-            target: Some(crate::TARGET_TRIPLE.to_string()),
+            target: Some(crate::TARGET_TRIPLE_RISCV32.to_string()),
             utra_target: format!("precursor-{}", crate::PRECURSOR_SOC_VERSION).to_string(),
             run_svd2repl: false,
             locale_override: None,
@@ -217,7 +217,7 @@ impl Builder {
     }
     /// Configure for renode targets
     pub fn target_renode<'a>(&'a mut self) -> &'a mut Builder {
-        self.target = Some(crate::TARGET_TRIPLE.to_string());
+        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.stream = BuildStream::Release;
         self.run_svd2repl = true;
         self.utra_target = "renode".to_string();
@@ -229,9 +229,20 @@ impl Builder {
     /// to call it anyways just in case the defaults change. The `soc_version` should
     /// be just the gitrev of the soc version, not the entire feature name.
     pub fn target_precursor<'a>(&'a mut self, soc_version: &str) -> &'a mut Builder {
-        self.target = Some(crate::TARGET_TRIPLE.to_string());
+        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.stream = BuildStream::Release;
         self.utra_target = format!("precursor-{}", soc_version).to_string();
+        self.run_svd2repl = false;
+        self.loader = CrateSpec::Local("loader".to_string(), false);
+        self.kernel = CrateSpec::Local("xous-kernel".to_string(), false);
+        self
+    }
+
+    /// Configure for ARM targets
+    pub fn target_arm(&mut self) -> &mut Builder {
+        self.target = Some(crate::TARGET_TRIPLE_ARM.to_string());
+        self.stream = BuildStream::Debug;
+        self.utra_target = "atsama5d27".to_string();
         self.run_svd2repl = false;
         self.loader = CrateSpec::Local("loader".to_string(), false);
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), false);
@@ -492,15 +503,13 @@ impl Builder {
             // no services were specified - don't build anything
             return Ok(())
         }
-        crate::utils::ensure_compiler(&Some(TARGET_TRIPLE), false, false)?;
-        self.locale_override(); // apply the locale override
 
         // ------ configure target generation feature flags ------
         let target = if self.utra_target.contains("renode") {
             self.features.push("renode".into());
             self.loader_features.push("renode".into());
             self.kernel_features.push("renode".into());
-            Some(crate::TARGET_TRIPLE)
+            Some(crate::TARGET_TRIPLE_RISCV32)
         } else if self.utra_target.contains("hosted") {
             self.features.push("hosted".into());
             // there is no loader in hosed mode
@@ -513,10 +522,17 @@ impl Builder {
             self.kernel_features.push(format!("utralib/{}", &self.utra_target));
             self.loader_features.push("precursor".into());
             self.loader_features.push(format!("utralib/{}", &self.utra_target));
-            Some(crate::TARGET_TRIPLE)
+            Some(crate::TARGET_TRIPLE_RISCV32)
+        } else if self.utra_target.contains("atsama5d2") {
+            self.kernel_features.push("atsama5d27".into());
+            self.loader_features.push("atsama5d27".into());
+            Some(crate::TARGET_TRIPLE_ARM)
         } else {
             return Err("Target unknown: please check your UTRA target".into());
         };
+
+        crate::utils::ensure_compiler(&self.target.as_ref().map(|s| s.as_str()), false, false)?;
+        self.locale_override(); // apply the locale override
 
         // ------ build the services & apps ------
         let mut app_names = Vec::<String>::new();
@@ -653,7 +669,7 @@ impl Builder {
             }
 
             // ---------- extract SVD file path, as computed by utralib ----------
-            let svd_spec_path = format!("target/{}/{}/build/SVD_PATH", TARGET_TRIPLE, self.stream.to_str());
+            let svd_spec_path = format!("target/{}/{}/build/SVD_PATH", self.target.as_ref().expect("target"), self.stream.to_str());
             let mut svd_spec_file = OpenOptions::new()
                 .read(true)
                 .open(&svd_spec_path)?;
@@ -665,7 +681,7 @@ impl Builder {
             services_path.append(&mut self.enumerate_binary_files()?);
 
             // --------- package up and sign a binary image ----------
-            let (inie, inif) = self.split_xip(services_path);
+            let (inie, inif) = self.split_xip(services_path.clone());
             let output_bundle = self.create_image(
                 &kernel_path[0],
                 &inie,
@@ -770,7 +786,7 @@ impl Builder {
 
         let mut output_file = PathBuf::new();
         output_file.push("target");
-        output_file.push(TARGET_TRIPLE);
+        output_file.push(self.target.as_ref().expect("target"));
         output_file.push(stream);
         output_file.push("xous_presign.img");
         args.push(output_file.to_str().unwrap());
@@ -811,7 +827,7 @@ impl Builder {
         for item in [&self.services[..], &self.apps[..]].concat() {
             match item {
                 CrateSpec::Prebuilt(name, url, _xip) => {
-                    let exec_name = format!("target/{}/{}/{}", TARGET_TRIPLE, self.stream.to_str(), name);
+                    let exec_name = format!("target/{}/{}/{}", self.target.as_ref().expect("target"), self.stream.to_str(), name);
                     println!("Fetching {} executable from build server...", name);
                     let mut exec_file = OpenOptions::new()
                         .read(true)

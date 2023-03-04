@@ -41,7 +41,9 @@ const PRECURSOR_SOC_VERSION: &str = "70190e2";
 const MIN_XOUS_VERSION: &str = "v0.9.8-791";
 
 /// target triple for precursor builds
-const TARGET_TRIPLE: &str = "riscv32imac-unknown-xous-elf";
+pub(crate) const TARGET_TRIPLE_RISCV32: &str = "riscv32imac-unknown-xous-elf";
+/// target triple for ARM builds
+pub(crate) const TARGET_TRIPLE_ARM: &str = "armv7a-unknown-xous-elf";
 
 // because I have nowhere else to note this. The commit that contains the rkyv-enum derive
 // refactor to work around warnings thrown by Rust 1.64.0 is: f815ed85b58b671178fbf53b4cea34186fc406eb
@@ -159,7 +161,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("install-toolkit") | Some("install-toolchain") => {
             let arg = env::args().nth(2);
             ensure_compiler(
-                &Some(TARGET_TRIPLE),
+                &Some(TARGET_TRIPLE_RISCV32),
                 true,
                 arg.map(|x| x == "--force").unwrap_or(false),
             )?
@@ -367,6 +369,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_precursor(PRECURSOR_SOC_VERSION)
                    .add_services(&user_pkgs.into_iter().map(String::from).collect())
                    .add_feature("avalanchetest");
+        }
+
+        // ------ ARM hardware image configs ------
+        Some("arm-tiny") => {
+            builder.target_arm()
+                .add_services(&base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&get_cratespecs());
         }
 
         // ---- other single-purpose commands ----

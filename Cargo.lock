@@ -5157,6 +5157,7 @@ dependencies = [
  "atty",
  "chrono",
  "filetime",
+ "lazy_static",
  "rustc_version 0.4.0",
  "serde",
  "serde_json",
