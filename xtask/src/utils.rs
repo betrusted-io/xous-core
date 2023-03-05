@@ -399,8 +399,7 @@ pub(crate) fn whycheproof_import() -> Result<(), crate::DynError> {
 }
 
 pub(crate) fn track_language_changes(last_lang: &str) -> Result<(), crate::DynError> {
-    let last_config = format!("target/{}/LAST_LANG", TARGET_TRIPLE_RISCV32);
-    std::fs::create_dir_all(format!("target/{}/", TARGET_TRIPLE_RISCV32)).unwrap();
+    let last_config = "target/LAST_LANG";
     let mut contents = String::new();
 
     let changed = match OpenOptions::new()
