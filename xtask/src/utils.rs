@@ -10,13 +10,13 @@ use std::{
 use crate::{cargo, project_root};
 use crate::{TARGET_TRIPLE_RISCV32, TARGET_TRIPLE_ARM};
 
-const TOOLCHAIN_RELEASE_URL: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
+const TOOLCHAIN_RELEASE_URL_RISCV32: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
 const TOOLCHAIN_RELEASE_URL_ARM: &str =
     "https://api.github.com/repos/Foundation-Devices/rust/releases";
 
 lazy_static! {
     static ref TOOLCHAIN_RELEASE_URLS: HashMap<String, String> = HashMap::from([
-        (TARGET_TRIPLE_RISCV32.to_owned(), TOOLCHAIN_RELEASE_URL.to_owned()),
+        (TARGET_TRIPLE_RISCV32.to_owned(), TOOLCHAIN_RELEASE_URL_RISCV32.to_owned()),
         (
             TARGET_TRIPLE_ARM.to_owned(),
             TOOLCHAIN_RELEASE_URL_ARM.to_owned()
