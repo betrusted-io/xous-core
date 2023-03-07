@@ -40,6 +40,7 @@ const USER_AREA_END: usize = 0xff00_0000;
 // All of the kernel structures must live within Megapage 1023,
 // and therefore are limited to 4 MB.
 const EXCEPTION_STACK_TOP: usize = 0xffff_0000;
+const KERNEL_STACK_TOP: usize = 0xfff8_0000;
 const KERNEL_LOAD_OFFSET: usize = 0xffd0_0000;
 const KERNEL_STACK_PAGE_COUNT: usize = 1;
 const KERNEL_ARGUMENT_OFFSET: usize = 0xffc0_0000;
