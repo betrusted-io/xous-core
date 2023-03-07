@@ -20,6 +20,8 @@ lazy_static = "1.4.0"
 [features]
 precursor = ["utralib/precursor", "ed25519-dalek-loader/precursor", "curve25519-dalek-loader/precursor", "resume", "secboot"]
 renode = ["utralib/renode", "ed25519-dalek-loader/renode", "curve25519-dalek-loader/renode", "resume", "secboot"]
+cramium-soc = ["utralib/cramium-soc"]
+cramium-fpga = ["utralib/cramium-fpga"]
 platform-tests = []
 debug-print = []
 earlyprintk = []

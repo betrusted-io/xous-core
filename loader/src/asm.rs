@@ -8,7 +8,7 @@ use crate::platform;
 pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
     #[cfg(feature="precursor")]
     let _kernel_args = _kernel_args;
-    #[cfg(feature="cramium")]
+    #[cfg(any(feature="cramium-soc", feature="cramium-fpga"))]
     let _kernel_args = _start as *const usize as usize + platform::KERNEL_OFFSET;
     unsafe {
         asm! (

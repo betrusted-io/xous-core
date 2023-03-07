@@ -10,9 +10,8 @@ use verifier::*;
 
 use std::env;
 
-/// gitrev of the current precursor SoC version targeted by this build. This must
-/// be manually updated every time the SoC version is bumped.
-const PRECURSOR_SOC_VERSION: &str = "70190e2";
+/// specifies the hardware target variant for the SoC
+const PRECURSOR_SOC_VERSION: &str = "pvt";
 
 /*
   Some notes on kernel versions versus backups.

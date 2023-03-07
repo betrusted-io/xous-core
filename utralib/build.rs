@@ -87,43 +87,31 @@ fn main() {
 
     #[cfg(feature = "precursor")]
     allow_single_gitrev_feature!(
-        "precursor-c809403",
-        "precursor-c809403-perflib",
-        "precursor-2753c12-dvt",
-        "precursor-a0912d6",
-        "precursor-70190e2"
+        "precursor-perflib",
+        "precursor-dvt",
+        "precursor-pvt"
     );
 
     // ----- select an SVD file based on a specific revision -----
-    #[cfg(feature = "precursor-c809403")]
-    let svd_filename = "precursor/soc-c809403.svd";
-    #[cfg(feature = "precursor-c809403")]
-    let generated_filename = "src/generated/precursor_c809403.rs";
-
-    #[cfg(feature = "precursor-a0912d6")]
-    let svd_filename = "precursor/soc-a0912d6.svd";
-    #[cfg(feature = "precursor-a0912d6")]
-    let generated_filename = "src/generated/precursor_a0912d6.rs";
-
-    #[cfg(feature = "precursor-c809403-perflib")]
-    let svd_filename = "precursor/soc-perf-c809403.svd";
-    #[cfg(feature = "precursor-c809403-perflib")]
-    let generated_filename = "src/generated/precursor_perf_c809403.rs";
+    #[cfg(feature = "precursor-perflib")]
+    let svd_filename = "precursor/soc-perf.svd";
+    #[cfg(feature = "precursor-perflib")]
+    let generated_filename = "src/generated/precursor_perf.rs";
 
     #[cfg(feature = "renode")]
     let svd_filename = "renode/renode.svd";
     #[cfg(feature = "renode")]
     let generated_filename = "src/generated/renode.rs";
 
-    #[cfg(feature = "precursor-2753c12-dvt")]
-    let svd_filename = "precursor/soc-dvt-2753c12.svd";
-    #[cfg(feature = "precursor-2753c12-dvt")]
-    let generated_filename = "src/generated/precursor_dvt_2753c12.rs";
+    #[cfg(feature = "precursor-dvt")]
+    let svd_filename = "precursor/soc-dvt.svd";
+    #[cfg(feature = "precursor-dvt")]
+    let generated_filename = "src/generated/precursor_dvt.rs";
 
-    #[cfg(feature = "precursor-70190e2")]
-    let svd_filename = "precursor/soc-70190e2.svd";
-    #[cfg(feature = "precursor-70190e2")]
-    let generated_filename = "src/generated/precursor_70190e2.rs";
+    #[cfg(feature = "precursor-pvt")]
+    let svd_filename = "precursor/soc-pvt.svd";
+    #[cfg(feature = "precursor")]
+    let generated_filename = "src/generated/precursor_pvt.rs";
 
     #[cfg(feature = "atsama5d27")]
     let svd_filename = "atsama5d/ATSAMA5D27.svd";

@@ -4429,8 +4429,6 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 [[package]]
 name = "utralib"
 version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac5312bd2fc7dd676b291f1af73ec0d403e8f9dffbbe42d43da7825c7ed84936"
 dependencies = [
  "svd2utra 0.1.11 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
