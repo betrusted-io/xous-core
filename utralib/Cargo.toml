@@ -46,5 +46,8 @@ precursor = []
 hosted = []
 renode = []
 
+# ATSAMA5D27 ARMv7A SoC
+atsama5d27 = []
+
 # Specify a Precusor default so that we can pass packaging CI tests.
 default = ["precursor-70190e2", "precursor"]
