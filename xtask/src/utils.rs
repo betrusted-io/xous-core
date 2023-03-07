@@ -1,3 +1,5 @@
+use lazy_static::lazy_static;
+use std::collections::HashMap;
 use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
@@ -5,10 +7,22 @@ use std::{
     process::Command,
 };
 
-use crate::TARGET_TRIPLE;
 use crate::{cargo, project_root};
+use crate::{TARGET_TRIPLE_RISCV32, TARGET_TRIPLE_ARM};
 
-const TOOLCHAIN_RELEASE_URL: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
+const TOOLCHAIN_RELEASE_URL_RISCV32: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
+const TOOLCHAIN_RELEASE_URL_ARM: &str =
+    "https://api.github.com/repos/Foundation-Devices/rust/releases";
+
+lazy_static! {
+    static ref TOOLCHAIN_RELEASE_URLS: HashMap<String, String> = HashMap::from([
+        (TARGET_TRIPLE_RISCV32.to_owned(), TOOLCHAIN_RELEASE_URL_RISCV32.to_owned()),
+        (
+            TARGET_TRIPLE_ARM.to_owned(),
+            TOOLCHAIN_RELEASE_URL_ARM.to_owned()
+        ),
+    ]);
+}
 
 /// Since we use the same TARGET for all calls to `build()`,
 /// cache it inside an atomic boolean. If this is `true` then
@@ -86,12 +100,12 @@ pub(crate) fn ensure_compiler(
     }
 
     // If the sysroot exists, then we're good.
-    let target = target.unwrap_or(TARGET_TRIPLE);
+    let target = target.unwrap_or(TARGET_TRIPLE_RISCV32);
     if let Some(path) = get_sysroot(Some(target))? {
         let mut version_path = PathBuf::from(&path);
         version_path.push("lib");
         version_path.push("rustlib");
-        version_path.push(TARGET_TRIPLE);
+        version_path.push(target);
         if remove_existing {
             println!("Target path exists, removing it");
             std::fs::remove_dir_all(version_path)
@@ -99,13 +113,13 @@ pub(crate) fn ensure_compiler(
             println!("Also removing target directories for existing toolchain");
             let mut target_main = project_root();
             target_main.push("target");
-            target_main.push(TARGET_TRIPLE);
+            target_main.push(target);
             std::fs::remove_dir_all(target_main).ok();
 
             let mut target_loader = project_root();
             target_loader.push("loader");
             target_loader.push("target");
-            target_loader.push(TARGET_TRIPLE);
+            target_loader.push(target);
             std::fs::remove_dir_all(target_loader).ok();
         } else {
             DONE_COMPILER_CHECK.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -162,8 +176,16 @@ pub(crate) fn ensure_compiler(
         println!();
     }
 
-    fn get_toolchain_url(major: u64, minor: u64, patch: u64) -> Result<String, String> {
-        let j: serde_json::Value = ureq::get(TOOLCHAIN_RELEASE_URL)
+    fn get_toolchain_url(
+        target: &str,
+        major: u64,
+        minor: u64,
+        patch: u64,
+    ) -> Result<String, String> {
+        let url = TOOLCHAIN_RELEASE_URLS
+            .get(target)
+            .ok_or_else(|| format!("Can't find toolchain URL for target {}", target))?;
+        let j: serde_json::Value = ureq::get(&url)
             .set("Accept", "application/vnd.github.v3+json")
             .call()
             .map_err(|e| format!("{}", e))?
@@ -218,12 +240,12 @@ pub(crate) fn ensure_compiler(
         }
 
         if let Some((_k, v)) = tag_urls.into_iter().last() {
-            // println!("Found candidate entry: v{} url {}", k, v);
+            // println!("Found candidate entry: v{} url {}", _k, v);
             return Ok(v);
         }
         Err(format!("No toolchains found for Rust {}", target_prefix))
     }
-    let toolchain_url = get_toolchain_url(ver.major, ver.minor, ver.patch)?;
+    let toolchain_url = get_toolchain_url(target, ver.major, ver.minor, ver.patch)?;
 
     println!(
         "Attempting to install toolchain for {} into {}",
@@ -377,8 +399,7 @@ pub(crate) fn whycheproof_import() -> Result<(), crate::DynError> {
 }
 
 pub(crate) fn track_language_changes(last_lang: &str) -> Result<(), crate::DynError> {
-    let last_config = format!("target/{}/LAST_LANG", TARGET_TRIPLE);
-    std::fs::create_dir_all(format!("target/{}/", TARGET_TRIPLE)).unwrap();
+    let last_config = "target/LAST_LANG";
     let mut contents = String::new();
 
     let changed = match OpenOptions::new()
