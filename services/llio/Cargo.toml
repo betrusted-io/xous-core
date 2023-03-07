@@ -8,12 +8,12 @@ version = "0.1.0"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.28"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.28"}
-xous = "0.9.33"
-xous-ipc = "0.9.33"
-xous-names = {package = "xous-api-names", version = "0.9.30"}
-susres = {package = "xous-api-susres", version = "0.9.28"}
+log-server = {package = "xous-api-log", version = "0.1.29"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.29"}
+xous = "0.9.34"
+xous-ipc = "0.9.34"
+xous-names = {package = "xous-api-names", version = "0.9.31"}
+susres = {package = "xous-api-susres", version = "0.9.29"}
 
 # RTC dependencies
 bitflags = "1.2.1"
@@ -25,7 +25,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 
 xous-semver = "0.1.2"
 
-utralib = {version = "0.1.13", optional = true, default-features = false }
+utralib = {version = "0.1.14", optional = true, default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 chrono = "0.4.19"

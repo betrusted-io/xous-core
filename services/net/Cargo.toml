@@ -7,15 +7,15 @@ description = "Network middleware"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.33"
-xous-ipc = "0.9.33"
-log-server = { package = "xous-api-log", version = "0.1.28" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.28" }
-xous-names = { package = "xous-api-names", version = "0.9.30" }
+xous = "0.9.34"
+xous-ipc = "0.9.34"
+log-server = { package = "xous-api-log", version = "0.1.29" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.29" }
+xous-names = { package = "xous-api-names", version = "0.9.31" }
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
-susres = {package = "xous-api-susres", version = "0.9.28"}
+susres = {package = "xous-api-susres", version = "0.9.29"}
 #rkyv = "0.7.18"
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 llio = {path = "../llio"}
@@ -25,7 +25,7 @@ trng = {path = "../trng"}
 com_rs-ref = {path = "../../imports/com_rs-ref"}
 modals = {path = "../modals"}
 locales = {path = "../../locales"}
-utralib = { version = "0.1.13", optional = true, default-features = false }
+utralib = { version = "0.1.14", optional = true, default-features = false }
 
 # for automatic SSID management and AP list storage
 pddb = {path = "../pddb"}

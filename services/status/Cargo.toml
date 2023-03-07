@@ -10,17 +10,17 @@ version = "0.1.0"
 com = {path = "../com"}
 content-plugin-api = {path = "../content-plugin-api"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.28"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.28"}
+log-server = {package = "xous-api-log", version = "0.1.29"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.29"}
 trng = {path = "../trng"}
 llio = {path = "../llio"}
-xous = "0.9.33"
-xous-ipc = "0.9.33"
-xous-names = {package = "xous-api-names", version = "0.9.30"}
+xous = "0.9.34"
+xous-ipc = "0.9.34"
+xous-names = {package = "xous-api-names", version = "0.9.31"}
 graphics-server = {path = "../graphics-server"}
 gam = {path = "../gam"}
 locales = {path = "../../locales"}
-susres = {package = "xous-api-susres", version = "0.9.28"}
+susres = {package = "xous-api-susres", version = "0.9.29"}
 root-keys = {path = "../root-keys"}
 modals = {path = "../modals"}
 pddb = {path = "../pddb"}
@@ -43,7 +43,7 @@ digest = "0.9.0"
 xous-semver = "0.1.2"
 com_rs-ref = {path = "../../imports/com_rs-ref"}
 
-utralib = {version = "0.1.13", optional = true, default-features = false }
+utralib = {version = "0.1.14", optional = true, default-features = false }
 
 # short circuit the datetime call on hosted mode
 [target.'cfg(any(windows,unix))'.dependencies]
