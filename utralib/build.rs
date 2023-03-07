@@ -1,6 +1,8 @@
 use std::env;
 use std::fs::OpenOptions;
-use std::io::{Read, Write};
+use std::io::Write;
+#[cfg(not(feature = "hosted"))]
+use std::io::Read;
 use std::path::PathBuf;
 
 fn out_dir() -> PathBuf {
