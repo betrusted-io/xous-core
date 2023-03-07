@@ -31,6 +31,11 @@ mod precursor_70190e2;
 #[cfg(feature="precursor-70190e2")]
 pub use precursor_70190e2::*;
 
+#[cfg(feature = "atsama5d27")]
+mod atsama5d27;
+#[cfg(feature = "atsama5d27")]
+pub use atsama5d27::*;
+
 // Hosted mode includes nothing, as it relies on the abstract host
 // architecture for I/O; so this file is empty when the "hosted"
 // configuration is selected and there are no corresponding "hosted"
