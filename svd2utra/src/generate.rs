@@ -1,4 +1,3 @@
-use convert_case::{Case, Casing};
 use quick_xml::events::{attributes::Attribute, Event};
 use quick_xml::Reader;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -893,25 +892,6 @@ pub mod utra {
     for peripheral in peripherals {
         writeln!(out)?;
         writeln!(out, "    pub mod {} {{", peripheral.name.to_lowercase())?;
-        writeln!(
-            out,
-            "        // this enum is vestigal, and currently not used by anything"
-        )?;
-        writeln!(out, "        #[derive(Debug, Copy, Clone)]")?;
-        writeln!(
-            out,
-            "        pub enum {}Offset {{",
-            peripheral.name.to_case(Case::UpperCamel)
-        )?;
-        for register in &peripheral.registers {
-            writeln!(
-                out,
-                "            {} = {},",
-                register.name.to_case(Case::UpperCamel),
-                register.offset
-            )?;
-        }
-        writeln!(out, "        }}")?;
         writeln!(
             out,
             "        pub const {}_NUMREGS: usize = {};",
