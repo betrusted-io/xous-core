@@ -63,8 +63,8 @@
         "zh": "更新因错误而中止！(EC)"
     },
     "ecup.erasing": {
-        "en": "EC Autoupdate\n\nErasing",
-        "en-tts": "EC Autoupdate\n\nErasing",
+        "en": "EC Autoupdate. Do not reset!\n\nErasing",
+        "en-tts": "EC Autoupdate. Do not reset!\n\nErasing",
         "fr": "EC mise à jour automatique\n\nEffacement",
         "ja": "消去...",
         "zh": "擦除..."
@@ -75,6 +75,13 @@
         "fr": "Le firmware d’EC est corrompu ou invalide: ",
         "ja": "ECファームウェアパッケージが破損しているか無効です: ",
         "zh": "固件包已损坏或无效: "
+    },
+    "ecup.preparing": {
+        "en": "EC Updating. Do not reset or power off!",
+        "en-tts": "EC Updating. Do not reset or power off!",
+        "fr": "Mise à jour EC. Ne réinitialisez pas et ne mettez pas hors tension ! *MT*",
+        "ja": "EC firmware package is corrupted or invalid: ",
+        "zh": "EC 更新中。 不要复位或关闭电源！"
     },
     "ecup.resetting": {
         "en": "Resetting EC...",
@@ -91,8 +98,8 @@
         "zh": "已应用 USB 加载更新."
     },
     "ecup.writing": {
-        "en": "EC Autoupdate\n\nWriting",
-        "en-tts": "EC Autoupdate\n\nWriting",
+        "en": "EC Autoupdate. Do not reset!\n\nWriting",
+        "en-tts": "EC Autoupdate. Do not reset!\n\nWriting",
         "fr": "EC mise à jour automatique\n\nÉcriture",
         "ja": "書き込み...",
         "zh": "写作..."

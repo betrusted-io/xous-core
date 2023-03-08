@@ -375,12 +375,28 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
 /// copies an image stored in a `package` slice, starting from `pkg_offset` in the `package` with length `len`
 /// and writing to FLASH starting at a hardware offset of `flash_start`
 fn do_update(com: &mut com::Com, modals: &Modals, package: &[u8], pkg_offset: u32, flash_start: u32, image_len: u32, name: &str) -> bool {
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
+    // grab an uptime measurement from the EC
+    let ut = com.get_ec_uptime().unwrap();
+    // pop up a dialog box to warn users, in case they are in the process of resetting the device
+    modals.dynamic_notification(Some(
+        &format!("{}", t!("ecup.preparing", xous::LANG))
+        ), None).unwrap();
+    tt.sleep_ms(3000).ok();
+    // check the uptime again as a very basic link-up check
+    // (usually the link is either stuck at 0, 0xffff, or 0xdddd if the EC is misbehaving)
+    let ut_after = com.get_ec_uptime().unwrap();
+    if ut_after <= ut || (ut_after - ut) > 5000 {
+        log::error!("EC link is not stable, aborting update");
+        return false;
+    }
+
     if (pkg_offset + image_len) > package.len() as u32 {
         log::error!("Requested image is larger than the package length");
         return false;
     }
     // erase
-    modals.dynamic_notification(Some(
+    modals.dynamic_notification_update(Some(
         &format!("{}\n({})", t!("ecup.erasing", xous::LANG), name)
         ), None).unwrap();
     log::info!("{}, erasing from 0x{:08x}, 0x{:x} bytes", name, flash_start, image_len);
