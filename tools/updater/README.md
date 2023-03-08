@@ -10,6 +10,8 @@ See our [troubleshooting](https://github.com/betrusted-io/betrusted-wiki/wiki/Up
 
 # Maintainer Notes
 
+This note is for the maintainer of the tool. Users do not need to run these commands.
+
 The repo is structured to use `setup.py`, so the first hits for documentation that guide you through using the `toml` manifest options won't work (couldn't get them to work anyways, even though I tried with the toml method). Thus, the method to push a new release is as follows:
 
 1. Run `python3 setup.py sdist` in this directory
