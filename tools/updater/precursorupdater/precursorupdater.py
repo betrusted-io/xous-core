@@ -792,7 +792,7 @@ def main():
 
     print("\nUpdate finished!\n")
     print("{}\nVisit the QR code above to help locate the hole, or go to https://ci.betrusted.io/i/reset.jpg.".format(QR_CODE))
-    print("You *must* reboot by inserting a paperclip in the hole in the lower right hand side, then follow the on-device instructions.")
+    print("Follow the on-device instructions and allow any follow-up actions to complete. Then, reset the device by inserting a paperclip to force a re-load the SoC image.")
 
 
 def auto_int(x):
