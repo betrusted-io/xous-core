@@ -9,6 +9,8 @@ mod fonts;
 #[cfg(feature="secboot")]
 mod secboot;
 mod asm;
+#[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/consts.rs")]
+mod consts;
 mod phase1;
 mod phase2;
 mod bootconfig;
@@ -17,6 +19,7 @@ mod minielf;
 mod murmur3;
 mod platform;
 
+use consts::*;
 use asm::*;
 use phase1::{phase_1, InitialProcess};
 use phase2::{phase_2, ProgramDescription};
@@ -28,24 +31,7 @@ use core::{mem, ptr, slice};
 pub type XousPid = u8;
 pub const PAGE_SIZE: usize = 4096;
 const WORD_SIZE: usize = mem::size_of::<usize>();
-pub const BACKUP_ARGS_ADDR: usize = crate::platform::RAM_BASE + crate::platform::RAM_SIZE - 0x2000;
 pub const SIGBLOCK_SIZE: usize = 0x1000;
-
-const USER_STACK_TOP: usize = 0x8000_0000;
-const PAGE_TABLE_OFFSET: usize = 0xff40_0000;
-const PAGE_TABLE_ROOT_OFFSET: usize = 0xff80_0000;
-const CONTEXT_OFFSET: usize = 0xff80_1000;
-const USER_AREA_END: usize = 0xff00_0000;
-
-// All of the kernel structures must live within Megapage 1023,
-// and therefore are limited to 4 MB.
-const EXCEPTION_STACK_TOP: usize = 0xffff_0000;
-const KERNEL_STACK_TOP: usize = 0xfff8_0000;
-const KERNEL_LOAD_OFFSET: usize = 0xffd0_0000;
-const KERNEL_STACK_PAGE_COUNT: usize = 1;
-const KERNEL_ARGUMENT_OFFSET: usize = 0xffc0_0000;
-const GUARD_MEMORY_BYTES: usize = 2 * PAGE_SIZE;
-
 const STACK_PAGE_COUNT: usize = 8;
 
 const VDBG: bool = false; // verbose debug
