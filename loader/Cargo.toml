@@ -6,9 +6,11 @@ edition = "2018"
 description = "Initial kernel loader for Xous"
 
 [dependencies]
-ed25519-dalek-loader = { path = "ed25519-dalek-loader", default-features = false }
-curve25519-dalek-loader = { path = "curve25519-dalek-loader", default-features = false, features = ["u32e_backend"] }
+ed25519-dalek-loader = { path = "ed25519-dalek-loader", default-features = false, optional = true }
+curve25519-dalek-loader = { path = "curve25519-dalek-loader", default-features = false, features = ["u32e_backend"], optional = true }
 utralib = { version = "0.1.15", optional = true, default-features = false }
+armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", optional = true }
+atsama5d27 = { git = "ssh://git@github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
@@ -22,6 +24,7 @@ precursor = ["utralib/precursor", "ed25519-dalek-loader/precursor", "curve25519-
 renode = ["utralib/renode", "ed25519-dalek-loader/renode", "curve25519-dalek-loader/renode", "resume", "secboot"]
 cramium-soc = ["utralib/cramium-soc"]
 cramium-fpga = ["utralib/cramium-fpga"]
+atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
 platform-tests = []
 debug-print = []
 earlyprintk = []
