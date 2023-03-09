@@ -420,7 +420,7 @@ fn check_load(cfg: &mut BootConfig) {
 }
 
 // Install a panic handler when not running tests.
-#[cfg(not(test))]
+#[cfg(all(not(test), not(feature = "atsama5d27")))]
 mod panic_handler {
     use core::panic::PanicInfo;
     #[panic_handler]
