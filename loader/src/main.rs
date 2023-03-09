@@ -4,10 +4,14 @@
 #[macro_use]
 mod args;
 use args::{KernelArgument, KernelArguments};
+
+#[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/debug.rs")]
 mod debug;
 mod fonts;
 #[cfg(feature="secboot")]
 mod secboot;
+
+#[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/asm.rs")]
 mod asm;
 #[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/consts.rs")]
 mod consts;
