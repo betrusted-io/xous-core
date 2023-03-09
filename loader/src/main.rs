@@ -177,9 +177,17 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         let ip_offset = cfg.processes.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let rpt_offset =
             cfg.runtime_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
+        #[cfg(not(feature = "atsama5d27"))]
+        let tt_addr = {
+            cfg.processes[0].satp
+        };
+        #[cfg(feature = "atsama5d27")]
+        let tt_addr = {
+            cfg.processes[0].ttbr0
+        };
         println!(
             "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x})",
-            cfg.processes[0].entrypoint, cfg.processes[0].satp, cfg.processes[0].sp,
+            cfg.processes[0].entrypoint, tt_addr, cfg.processes[0].sp,
             arg_offset, ip_offset, rpt_offset,
         );
 
@@ -191,6 +199,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         // actions into "verify" actions during a clean resume (right now we just don't run them),
         // so that attempts to mess with the args during a resume can't lead to overwriting
         // critical parameters like these kernel arguments.
+        #[cfg(not(feature = "atsama5d27"))]
         unsafe {
             let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut[u32; 7];
             (*backup_args)[0] = arg_offset as u32;
@@ -210,20 +219,38 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
                 }
             }
         }
-        use utralib::generated::*;
-        let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
-        gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // patch us over to a different UART for debug (1=LOG 2=APP, 0=KERNEL(hw reset default))
 
-        start_kernel(
-            arg_offset,
-            ip_offset,
-            rpt_offset,
-            cfg.processes[0].satp,
-            cfg.processes[0].entrypoint,
-            cfg.processes[0].sp,
-            cfg.debug,
-            clean,
-        );
+        #[cfg(not(feature = "atsama5d27"))]
+        {
+            use utralib::generated::*;
+            let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
+            gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // patch us over to a different UART for debug (1=LOG 2=APP, 0=KERNEL(hw reset default))
+
+            start_kernel(
+                arg_offset,
+                ip_offset,
+                rpt_offset,
+                cfg.processes[0].satp,
+                cfg.processes[0].entrypoint,
+                cfg.processes[0].sp,
+                cfg.debug,
+                clean,
+            );
+        }
+
+        #[cfg(feature = "atsama5d27")]
+        unsafe {
+            start_kernel(
+                cfg.processes[0].sp,
+                cfg.processes[0].ttbr0,
+                cfg.processes[0].entrypoint,
+                arg_offset,
+                ip_offset,
+                rpt_offset,
+                cfg.debug,
+                clean,
+            )
+        }
     } else {
         #[cfg(feature="resume")]
         unsafe {
