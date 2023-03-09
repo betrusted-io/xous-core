@@ -5,13 +5,13 @@
 use core::mem;
 use core::num::NonZeroUsize;
 
-pub use armv7::structures::paging::{
+use armv7::structures::paging::{
     PageTable as L2PageTable, TranslationTable, TranslationTableDescriptor,
-    TranslationTableType, PageTableDescriptor, PAGE_TABLE_SIZE, PageTableType,
+    TranslationTableType, PageTableDescriptor, PageTableType,
     TranslationTableMemory, PageTableMemory,
     PAGE_TABLE_FLAGS, SMALL_PAGE_FLAGS,
 };
-pub use armv7::{PhysicalAddress, VirtualAddress};
+use armv7::{PhysicalAddress, VirtualAddress};
 use crate::consts::{
     FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, GUARD_MEMORY_BYTES, KERNEL_ARGUMENT_OFFSET,
     LOADER_CODE_ADDRESS, PAGE_TABLE_OFFSET, KERNEL_STACK_PAGE_COUNT,

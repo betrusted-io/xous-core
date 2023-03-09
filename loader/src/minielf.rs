@@ -1,12 +1,12 @@
 use core::{mem, slice};
 
 #[cfg(feature = "atsama5d27")]
-pub use armv7::{
-    PhysicalAddress, VirtualAddress,
+use armv7::{
+    VirtualAddress,
     structures::paging::{
-        InMemoryRegister, PageTable as L2PageTable, PageTableDescriptor, PageTableMemory,
-        PageTableType, Readable, TranslationTable, TranslationTableDescriptor, TranslationTableMemory,
-        TranslationTableType, Writeable, PAGE_TABLE_FLAGS, PAGE_TABLE_SIZE, SMALL_PAGE_FLAGS,
+        InMemoryRegister, PageTableDescriptor,
+        Readable, TranslationTableDescriptor, TranslationTableMemory,
+        TranslationTableType, SMALL_PAGE_FLAGS,
     }
 };
 use crate::*;

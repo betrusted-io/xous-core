@@ -3,13 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use atsama5d27::uart::{Uart as UartHw, Uart1};
-pub use armv7::structures::paging::{
-    PageTable as L2PageTable, TranslationTable, TranslationTableDescriptor,
-    TranslationTableType, PageTableDescriptor, PAGE_TABLE_SIZE, PageTableType,
+use armv7::structures::paging::{
+    PageTable as L2PageTable, TranslationTable,
+    TranslationTableType, PageTableType,
     TranslationTableMemory, PageTableMemory,
-    PAGE_TABLE_FLAGS, SMALL_PAGE_FLAGS,
 };
-pub use armv7::{PhysicalAddress, VirtualAddress};
+use armv7::PhysicalAddress;
 
 type UartType = UartHw<Uart1>;
 

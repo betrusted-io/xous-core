@@ -7,13 +7,7 @@ use crate::{
     println, BootConfig, ProgramDescription,
     XousPid, PAGE_SIZE, STACK_PAGE_COUNT, VDBG,
 };
-pub use armv7::structures::paging::{
-    PageTable as L2PageTable, TranslationTable, TranslationTableDescriptor,
-    TranslationTableType, PageTableDescriptor, PAGE_TABLE_SIZE, PageTableType,
-    TranslationTableMemory, PageTableMemory,
-    PAGE_TABLE_FLAGS, SMALL_PAGE_FLAGS,
-};
-pub use armv7::{PhysicalAddress, VirtualAddress};
+use armv7::structures::paging::TranslationTableMemory;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
