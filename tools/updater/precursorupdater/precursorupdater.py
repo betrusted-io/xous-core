@@ -734,9 +734,8 @@ def main():
 
     print("\nPhase 2: Apply the update")
     print("Halting CPU for update.")
-    vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
     pc_usb.ping_wdt()
-    pc_usb.poke(vexdbg_addr, 0x00020000)
+    pc_usb.halt()
     for work in worklist:
 
         retry_usb = False
@@ -750,9 +749,8 @@ def main():
                         print("Abort by user request!\n\nSystem may not be bootable, but you can retry an update as long as you do not power-off or hard-reset the device.")
                         exit(0)
 
-                vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
                 pc_usb.ping_wdt()
-                pc_usb.poke(vexdbg_addr, 0x00020000)
+                pc_usb.halt()
                 retry_usb = False
 
             try:
@@ -781,7 +779,7 @@ def main():
                 retry_usb = True
 
     print("Resuming CPU.")
-    pc_usb.poke(vexdbg_addr, 0x02000000)
+    pc_usb.unhalt()
 
     print("Resetting SOC...")
     try:
