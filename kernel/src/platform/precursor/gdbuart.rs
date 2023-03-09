@@ -7,11 +7,12 @@ use crate::{
     mem::MemoryManager,
     PID,
 };
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use utralib::generated::*;
 use xous_kernel::{MemoryFlags, MemoryType};
 
-static UART_USAGE_COUNT: AtomicUsize = AtomicUsize::new(0);
+static UART_CALLBACK_POINTER: AtomicUsize = AtomicUsize::new(0);
+static UART_ALLOCATED: AtomicBool = AtomicBool::new(false);
 
 /// UART virtual address.
 ///
@@ -21,16 +22,41 @@ pub const APP_UART_ADDR: usize = 0xffcc_0000;
 /// UART peripheral driver.
 pub struct GdbUart {
     uart_csr: CSR<u32>,
-    callback: fn(&mut Self),
+}
+
+fn gdbuart_isr(_irq_no: usize, _arg: *mut usize) {
+    let target = UART_CALLBACK_POINTER.load(Ordering::Relaxed);
+    // Return if uninitialized
+    if target == 0 {
+        return;
+    }
+
+    let cb = unsafe { core::mem::transmute::<_, fn(&mut GdbUart)>(target) };
+    cb(&mut GdbUart {
+        uart_csr: CSR::new(APP_UART_ADDR as *mut u32),
+    });
 }
 
 impl GdbUart {
     pub fn new(callback: fn(&mut Self)) -> Option<GdbUart> {
-        if UART_USAGE_COUNT
-            .compare_exchange(0, 1, Ordering::Relaxed, Ordering::Relaxed)
+        UART_CALLBACK_POINTER.store(callback as usize, Ordering::Relaxed);
+
+        Some(GdbUart {
+            uart_csr: CSR::new(APP_UART_ADDR as *mut u32),
+        })
+    }
+
+    pub fn enable(&mut self) {
+        self.allocate();
+        self.uart_csr.rmwf(utra::app_uart::EV_ENABLE_RX, 1);
+    }
+
+    pub fn allocate(&mut self) {
+        if UART_ALLOCATED
+            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
             .is_err()
         {
-            return None;
+            return;
         }
 
         // Map the UART peripheral.
@@ -46,38 +72,28 @@ impl GdbUart {
                 )
                 .expect("unable to map serial port")
         });
-        let mut gdb_uart = GdbUart {
-            uart_csr: CSR::new(APP_UART_ADDR as *mut u32),
-            callback,
-        };
 
         xous_kernel::claim_interrupt(
             utra::app_uart::APP_UART_IRQ,
-            GdbUart::irq,
-            (&mut gdb_uart as *mut GdbUart) as *mut usize,
+            gdbuart_isr,
+            core::ptr::null_mut(),
         )
         .expect("Couldn't claim debug interrupt");
-
-        Some(gdb_uart)
     }
 
-    pub fn enable(&mut self) {
-        self.uart_csr.rmwf(utra::app_uart::EV_ENABLE_RX, 1);
-    }
+    #[allow(dead_code)]
+    pub fn deallocate(&mut self) {
+        self.uart_csr.rmwf(utra::app_uart::EV_ENABLE_RX, 0);
 
-    pub fn irq(_irq_number: usize, arg: *mut usize) {
-        let uart = unsafe { &mut *(arg as *mut GdbUart) };
-        (uart.callback)(uart);
-    }
-}
-
-impl Drop for GdbUart {
-    fn drop(&mut self) {
-        if UART_USAGE_COUNT.fetch_sub(1, Ordering::Relaxed) != 1 {
-            panic!("UART ad a usage count of more than 1");
+        // Note: This can cause an ABA error if it's multi-threaded and `.allocate()`
+        // is called at the same time as `.deallocate()`.
+        if UART_ALLOCATED
+            .compare_exchange(true, false, Ordering::Relaxed, Ordering::Relaxed)
+            .is_err()
+        {
+            return;
         }
 
-        println!("Freeing interrupt since the count has gone to zero");
         xous_kernel::rsyscall(xous_kernel::SysCall::FreeInterrupt(
             utra::app_uart::APP_UART_IRQ,
         ))
@@ -116,13 +132,16 @@ impl SerialRead for GdbUart {
 
 impl gdbstub::conn::Connection for GdbUart {
     type Error = &'static str;
+
     fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
         self.putc(byte);
         Ok(())
     }
+
     fn flush(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
+
     fn on_session_start(&mut self) -> Result<(), Self::Error> {
         self.enable();
         Ok(())

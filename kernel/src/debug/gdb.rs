@@ -1,4 +1,5 @@
 use gdbstub::common::{Signal, Tid};
+use gdbstub::conn::Connection;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
 use gdbstub::stub::{GdbStubBuilder, GdbStubError, MultiThreadStopReason};
 use gdbstub::target;
@@ -8,35 +9,49 @@ use gdbstub::target::ext::base::single_register_access::{
 };
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::monitor_cmd::MonitorCmd;
-use gdbstub::target::TargetError;
-use gdbstub::target::{Target, TargetResult};
+use gdbstub::target::{Target, TargetError, TargetResult};
 use gdbstub_arch::riscv::reg::id::RiscvRegId;
 
 use crate::io::SerialRead;
 use crate::platform::precursor::gdbuart::GdbUart;
 
 use core::convert::TryInto;
+// use core::num::{NonZeroU16, NonZeroUsize};
 
 pub struct XousTarget {
     pid: Option<xous_kernel::PID>,
+    // breakpoints: [Option<(NonZeroUsize, NonZeroU16)>; 16],
 }
 pub struct XousDebugState<'a> {
     pub target: XousTarget,
     pub server: GdbStubStateMachine<'a, XousTarget, crate::platform::precursor::gdbuart::GdbUart>,
 }
 
-pub static mut GDB_STATE: Option<XousDebugState> = None;
-pub static mut GDB_BUFFER: [u8; 4096] = [0u8; 4096];
+static mut GDB_STATE: Option<XousDebugState> = None;
+static mut GDB_BUFFER: [u8; 4096] = [0u8; 4096];
+
+trait ProcessPid {
+    fn pid(&self) -> Option<xous_kernel::PID>;
+}
+
+impl ProcessPid for XousTarget {
+    fn pid(&self) -> Option<xous_kernel::PID> {
+        self.pid
+    }
+}
 
 fn receive_irq(uart: &mut GdbUart) {
     while let Some(c) = uart.getc() {
-        advance_gdb_or_recreate(Some(c));
+        process_character(c);
     }
 }
 
 impl XousTarget {
     pub fn new() -> XousTarget {
-        XousTarget { pid: None }
+        XousTarget {
+            pid: None,
+            // breakpoints: [None; 16],
+        }
     }
 }
 
@@ -52,6 +67,12 @@ impl Target for XousTarget {
         &mut self,
     ) -> Option<gdbstub::target::ext::breakpoints::BreakpointsOps<Self>> {
         Some(self)
+    }
+
+    /// Opt in to having GDB handle breakpoints for us. This allows for an unlimited number
+    /// of breakpoints without having us keep track of the breakpoints ourselves.
+    fn guard_rail_implicit_sw_breakpoints(&self) -> bool {
+        true
     }
 
     fn support_monitor_cmd(&mut self) -> Option<target::ext::monitor_cmd::MonitorCmdOps<'_, Self>> {
@@ -380,7 +401,7 @@ impl SingleRegisterAccess<Tid> for XousTarget {
 
 impl MultiThreadResume for XousTarget {
     fn resume(&mut self) -> Result<(), Self::Error> {
-        println!("Resuming process {:?}", self.pid);
+        // println!("Resuming process {:?}", self.pid);
         // unsafe { HALTED = false };
         // match default_resume_action {
         //     ResumeAction::Step | ResumeAction::StepWithSignal(_) => {
@@ -398,7 +419,7 @@ impl MultiThreadResume for XousTarget {
     }
 
     fn clear_resume_actions(&mut self) -> Result<(), Self::Error> {
-        println!("Clearing resume actions");
+        // println!("Clearing resume actions");
         Ok(())
     }
 
@@ -422,33 +443,30 @@ impl MultiThreadResume for XousTarget {
 }
 
 impl target::ext::breakpoints::Breakpoints for XousTarget {
-    #[inline(always)]
-    fn support_sw_breakpoint(
-        &mut self,
-    ) -> Option<target::ext::breakpoints::SwBreakpointOps<'_, Self>> {
-        Some(self)
-    }
+    // fn support_sw_breakpoint(
+    //     &mut self,
+    // ) -> Option<target::ext::breakpoints::SwBreakpointOps<'_, Self>> {
+    //     Some(self)
+    // }
 }
 
-impl target::ext::breakpoints::SwBreakpoint for XousTarget {
-    #[inline(never)]
-    fn add_sw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> {
-        println!(
-            "GDB asked us to add a software breakpoint at {:08x} of kind {:?}",
-            _addr, _kind
-        );
-        Ok(true)
-    }
+// impl target::ext::breakpoints::SwBreakpoint for XousTarget {
+//     fn add_sw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> {
+//         println!(
+//             "GDB asked us to add a software breakpoint at {:08x} of kind {:?}",
+//             _addr, _kind
+//         );
+//         Ok(true)
+//     }
 
-    #[inline(never)]
-    fn remove_sw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> {
-        println!(
-            "GDB asked us to remove a software breakpoint at {:08x} of kind {:?}",
-            _addr, _kind
-        );
-        Ok(true)
-    }
-}
+//     fn remove_sw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> {
+//         println!(
+//             "GDB asked us to remove a software breakpoint at {:08x} of kind {:?}",
+//             _addr, _kind
+//         );
+//         Ok(true)
+//     }
+// }
 
 impl MonitorCmd for XousTarget {
     fn handle_monitor_cmd(
@@ -521,128 +539,170 @@ impl MonitorCmd for XousTarget {
     }
 }
 
-fn advance_gdb_or_recreate(byte: Option<u8>) {
-    advance_gdb_state(byte);
-    if unsafe { GDB_STATE.is_none() } {
-        println!("GDB went away -- recreating it");
-        init();
+fn state_can_accept_characters<'a, T: Target + ProcessPid, C: Connection>(
+    machine: &GdbStubStateMachine<'a, T, C>,
+) -> bool {
+    match machine {
+        GdbStubStateMachine::Idle(_) | GdbStubStateMachine::Running(_) => true,
+        GdbStubStateMachine::CtrlCInterrupt(_) | GdbStubStateMachine::Disconnected(_) => false,
     }
 }
 
-fn advance_gdb_state(byte: Option<u8>) -> bool {
-    let Some(XousDebugState {
-        mut target,
-        server: gdb,
-    }) = (unsafe { GDB_STATE.take() }) else {
-        println!("No GDB!");
-        return false;
+fn ensure_can_accept_characters_inner<'a, T: Target + ProcessPid, C: Connection>(
+    machine: GdbStubStateMachine<'a, T, C>,
+    target: &mut T,
+    recurse_count: usize,
+) -> Option<GdbStubStateMachine<'a, T, C>> {
+    if recurse_count == 0 {
+        return None;
+    }
+
+    match machine {
+        GdbStubStateMachine::Idle(_) | GdbStubStateMachine::Running(_) => Some(machine),
+        GdbStubStateMachine::CtrlCInterrupt(gdb_stm_inner) => {
+            if let Some(pid) = target.pid() {
+                // println!("Starting debug on process {:?}", pid);
+                crate::services::SystemServices::with_mut(|system_services| {
+                    system_services.pause_process_for_debug(pid).unwrap()
+                });
+            } else {
+                println!("No process specified! Not debugging");
+            }
+
+            let Ok(new_server) = gdb_stm_inner.interrupt_handled(target, Some(MultiThreadStopReason::Signal(Signal::SIGINT))) else {
+                return None
+            };
+            ensure_can_accept_characters_inner(new_server, target, recurse_count - 1)
+        }
+        GdbStubStateMachine::Disconnected(gdb_stm_inner) => {
+            println!(
+                "GdbStubStateMachine::Disconnected due to {:?}",
+                gdb_stm_inner.get_reason()
+            );
+            ensure_can_accept_characters_inner(
+                gdb_stm_inner.return_to_idle(),
+                target,
+                recurse_count - 1,
+            )
+        }
+    }
+}
+
+fn ensure_can_accept_characters<'a, T: Target + ProcessPid, C: Connection>(
+    machine: GdbStubStateMachine<'a, T, C>,
+    target: &mut T,
+) -> Option<GdbStubStateMachine<'a, T, C>> {
+    ensure_can_accept_characters_inner(machine, target, 4)
+}
+
+/// Advance the GDB state.
+///
+/// Two states accept characters:
+///
+///     GdbStubStateMachine::Idle
+///     GdbStubStateMachine::Running
+///
+/// Two states exist merely to transition to other states:
+///
+///     GdbStubStateMachine::CtrlCInterrupt
+///     GdbStubStateMachine::Disconnected
+fn process_character(byte: u8) {
+    let XousDebugState { mut target, server } = unsafe {
+        GDB_STATE.take().unwrap_or_else(|| {
+            let gdb = GdbStubBuilder::new(GdbUart::new(receive_irq).unwrap())
+                .with_packet_buffer(&mut GDB_BUFFER)
+                .build()
+                .unwrap();
+            let mut target = XousTarget::new();
+            let server = gdb
+                .run_state_machine(&mut target)
+                .expect("couldn't create gdb");
+            XousDebugState { target, server }
+        })
     };
 
-    let mut new_gdb = match gdb {
-        GdbStubStateMachine::Idle(gdb_stm_inner) => match byte {
-            Some(byte) => match gdb_stm_inner.incoming_data(&mut target, byte) {
-                Ok(gdb) => gdb,
-                Err(e) => {
-                    println!("gdbstub error during idle operation: {:?}", e);
-                    return true;
-                }
-            },
-            None => {
-                println!("gdbstub was idle with no characters?!");
-                GdbStubStateMachine::Idle(gdb_stm_inner)
-            }
-        },
+    if !state_can_accept_characters(&server) {
+        println!("GDB server was not in a state to accept characters");
+        return;
+    }
+
+    let new_server = match server {
+        GdbStubStateMachine::Idle(gdb_stm_inner) => {
+            let Ok(gdb) = gdb_stm_inner.incoming_data(&mut target, byte).map_err(|e| println!("gdbstub error during idle operation: {:?}", e)) else {
+                        return;
+            };
+            gdb
+        }
 
         GdbStubStateMachine::Running(gdb_stm_inner) => {
             // If we're here we were running but have stopped now (either
             // because we hit Ctrl+c in gdb and hence got a serial interrupt
             // or we hit a breakpoint).
-            // let conn = gdb_stm_inner.borrow_conn();
-            // conn.disable_irq();
-            // let data_to_read = conn.peek().unwrap().is_some();
-            // let mut stop_reason = target.determine_stop_reason(reason);
 
-            if let Some(byte) = byte {
-                match gdb_stm_inner.incoming_data(&mut target, byte) {
-                    Ok(pumped_stm) => {
-                        if let GdbStubStateMachine::CtrlCInterrupt(_) = pumped_stm {
-                            println!(
-                                "Looks like we maybe just transitioned from running to ctrl-c?"
-                            );
-                        } else if let GdbStubStateMachine::Idle(_) = pumped_stm {
-                            println!("Looks like we maybe just transitioned from running to idle?");
-                        }
-                        pumped_stm
-                    }
-                    Err(GdbStubError::TargetError(e)) => {
-                        println!("Target raised a fatal error: {:?}", e);
-                        return false;
-                    }
-                    Err(e) => {
-                        println!("gdbstub error in DeferredStopReason.pump: {:?}", e);
-                        return false;
-                    }
+            match gdb_stm_inner.incoming_data(&mut target, byte) {
+                Ok(pumped_stm) => pumped_stm,
+                Err(GdbStubError::TargetError(e)) => {
+                    println!("Target raised a fatal error: {:?}", e);
+                    return;
                 }
-            // } else if let Some(reason) = stop_reason.take() {
-            //     match gdb_stm_inner.report_stop(&mut target, MultiThreadStopReason::DoneStep) {
-            //         Ok(gdb_stm_new) => gdb_stm_new,
-            //         Err(GdbStubError::TargetError(e)) => {
-            //             println!("Target raised a fatal error {:?}", e);
-            //             return false;
-            //         }
-            //         Err(e) => {
-            //             println!("gdbstub internal error {:?}", e);
-            //             return false;
-            //         }
-            //     }
-            // } else if target.resume_with.is_some() {
-            //     // // We don't have a `stop_reason` and we don't have something
-            //     // // to read on the line. This probably means we're done and
-            //     // // we should run again.
-            //     // conn.enable_irq();
-            //     // let r = GDB_STUB
-            //     //     .lock()
-            //     //     .replace(GdbStubStateMachine::Running(gdb_stm_inner));
-            //     // assert!(
-            //     //     r.is_none(),
-            //     //     "Put something in GDB_STUB which we shouldn't have..."
-            //     // );
-            //     // return false;
-            //     GdbStubStateMachine::Running(gdb_stm_inner)
-            } else {
-                panic!("Can't happen?");
+                Err(e) => {
+                    println!("gdbstub error in DeferredStopReason.pump: {:?}", e);
+                    return;
+                }
             }
         }
 
-        GdbStubStateMachine::CtrlCInterrupt(_gdb_stm_inner) => {
-            panic!("debug server was in an unexpected state");
-        }
-
-        GdbStubStateMachine::Disconnected(_gdb_stm_inner) => {
-            println!("GdbStubStateMachine::Disconnected byebye");
-            return false;
+        _ => {
+            println!("GDB is in an unexpected state!");
+            return;
         }
     };
 
-    if let GdbStubStateMachine::CtrlCInterrupt(gdb_stm_inner) = new_gdb {
-        println!("Just transitioned into CtrlCInterrupt");
-        match gdb_stm_inner.interrupt_handled(&mut target, Some(MultiThreadStopReason::DoneStep)) {
-            Ok(gdb) => new_gdb = gdb,
-            Err(e) => {
-                println!("gdbstub error during ctrl-c interrupt{:?}", e);
-                return false;
+    let Some(server) = ensure_can_accept_characters(new_server, &mut target) else {
+        println!("Couldn't convert GDB into a state that accepts characters");
+        return;
+    };
+
+    unsafe { GDB_STATE = Some(XousDebugState { target, server }) };
+}
+
+pub fn report_terminated(pid: xous_kernel::PID) {
+    println!("Reporting that process {:?} has terminated!", pid);
+    let Some(XousDebugState {
+        mut target,
+        server: gdb,
+    }) = (unsafe { GDB_STATE.take() }) else {
+        println!("No GDB!");
+        return;
+    };
+
+    let new_gdb = match gdb {
+        GdbStubStateMachine::Running(inner) => {
+            println!("Reporting a STOP");
+            match inner.report_stop(
+                &mut target,
+                MultiThreadStopReason::Signal(Signal::EXC_BAD_ACCESS),
+            ) {
+                Ok(new_gdb) => new_gdb,
+                Err(e) => {
+                    println!("Unable to report stop: {:?}", e);
+                    return;
+                }
             }
         }
-
-        if let Some(pid) = target.pid {
-            println!("Starting debug on process {:?}", pid);
-            crate::services::SystemServices::with_mut(|system_services| {
-                system_services.pause_process_for_debug(pid).unwrap()
-            });
-        } else {
-            println!("No process specified! Not debugging");
+        GdbStubStateMachine::CtrlCInterrupt(_inner) => {
+            println!("GDB state was in CtrlCInterrupt, which shouldn't be possible!");
+            return;
         }
-    }
+        GdbStubStateMachine::Disconnected(_inner) => {
+            println!("GDB state was in Disconnect, which shouldn't be possible!");
+            return;
+        }
+        GdbStubStateMachine::Idle(_inner) => {
+            println!("GDB state was in Idle, which shouldn't be possible!");
+            return;
+        }
+    };
 
     unsafe {
         GDB_STATE = Some(XousDebugState {
@@ -650,28 +710,21 @@ fn advance_gdb_state(byte: Option<u8>) -> bool {
             server: new_gdb,
         })
     };
-    true
 }
 
 pub fn init() {
     let uart = GdbUart::new(receive_irq).unwrap();
     let mut target = XousTarget::new();
 
-    match GdbStubBuilder::new(uart)
+    let server = GdbStubBuilder::new(uart)
         .with_packet_buffer(unsafe { &mut GDB_BUFFER })
         .build()
-    {
-        Ok(gdb) => match gdb.run_state_machine(&mut target) {
-            Ok(state) => unsafe {
-                GDB_STATE = Some(XousDebugState {
-                    target: target,
-                    server: state,
-                });
-                HALTED = true;
-            },
-            Err(e) => println!("Unable to start GDB state machine: {}", e),
-        },
-        Err(e) => println!("Unable to start GDB server: {}", e),
+        .expect("unable to build gdb server")
+        .run_state_machine(&mut target)
+        .expect("unable to start gdb state machine");
+    unsafe {
+        GDB_STATE = Some(XousDebugState { target, server });
+        HALTED = true;
     }
 }
 

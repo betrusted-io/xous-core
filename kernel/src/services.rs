@@ -2255,7 +2255,6 @@ impl SystemServices {
 
     #[cfg(feature = "gdb-stub")]
     pub fn pause_process_for_debug(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
-        println!("Pausing process {:?} for debug...", pid);
         let (process_state, parent_pid) = {
             let process = self.get_process_mut(pid)?;
             (process.state, process.ppid)
@@ -2263,12 +2262,7 @@ impl SystemServices {
 
         // Disable all interrupts that belong to this process
         crate::irq::for_each_irq(|irq_no, irq_pid, _, _| {
-            println!("Examining IRQ {}...", irq_no);
             if pid == *irq_pid {
-                println!(
-                    "Disabling IRQ {} since it's owned by process {:?}",
-                    irq_no, pid
-                );
                 crate::arch::irq::disable_irq(irq_no);
             }
         });
@@ -2313,10 +2307,6 @@ impl SystemServices {
         };
         {
             let process = self.get_process_mut(pid).unwrap();
-            println!(
-                "Process {:?} went from {:?} to {:?}",
-                pid, process.state, new_process_state
-            );
             // let old_state = process.state;
             process.state = new_process_state;
             // log_process_update(file!(), line!(), process, old_state);
@@ -2328,7 +2318,6 @@ impl SystemServices {
     #[cfg(feature = "gdb-stub")]
     pub fn resume_process_from_debug(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
-        let old_state = process.state;
         process.state = match process.state {
             ProcessState::Allocated => ProcessState::Allocated,
             ProcessState::Free => ProcessState::Free,
@@ -2342,10 +2331,6 @@ impl SystemServices {
             ProcessState::Debug(tids) => ProcessState::Ready(tids),
             ProcessState::Running(tids) => ProcessState::Running(tids),
         };
-        println!(
-            "Resuming process {:?} from debug, going from {:?} to {:?}",
-            pid, old_state, process.state
-        );
 
         // Resume all interrupts that belong to this process
         crate::irq::for_each_irq(|irq, irq_pid, _, _| {

@@ -33,6 +33,9 @@ fn sim_write(new: usize) {
 
 /// Disable external interrupts
 pub fn disable_all_irqs() {
+    if !IRQ_ENABLED.load(Ordering::Relaxed) {
+        panic!("IRQs were disabled twice!");
+    }
     SIM_BACKING.store(sim_read(), Ordering::Relaxed);
     IRQ_ENABLED.store(false, Ordering::Relaxed);
     sim_write(0x0);
@@ -51,11 +54,16 @@ pub fn enable_irq(irq_no: usize) {
     // Note that the vexriscv "IRQ Mask" register is inverse-logic --
     // that is, setting a bit in the "mask" register unmasks (i.e. enables) it.
     if IRQ_ENABLED.load(Ordering::Relaxed) {
-        sim_write(sim_read() | (1 << irq_no));
+        let existing = sim_read();
+        let new = existing | (1 << irq_no);
+        // println!("Enabling IRQ {} (active): {:08x} -> {:08x}", irq_no, existing, new);
+        sim_write(new);
     } else {
         SIM_BACKING
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
-                Some(v | (1 << irq_no))
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |existing| {
+                let new = existing | (1 << irq_no);
+                // println!("Enabling IRQ {} (masked: {:08x}): {:08x} -> {:08x}", irq_no, sim_read(), existing, new);
+                Some(new)
             })
             .ok();
     }
@@ -65,11 +73,25 @@ pub fn enable_irq(irq_no: usize) {
 /// SIM backing instead so that it will be disabled when interrupts are restored.
 pub fn disable_irq(irq_no: usize) {
     if IRQ_ENABLED.load(Ordering::Relaxed) {
-        sim_write(sim_read() & !(1 << irq_no));
+        let existing = sim_read();
+        let new = existing & !(1 << irq_no);
+        // println!(
+        //     "Disabling IRQ {} (active): {:08x} -> {:08x}",
+        //     irq_no, existing, new
+        // );
+        sim_write(new);
     } else {
         SIM_BACKING
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
-                Some(v & !(1 << irq_no))
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |existing| {
+                let new = existing & !(1 << irq_no);
+                println!(
+                    "Disabling IRQ {} (masked: {:08x}): {:08x} -> {:08x}",
+                    irq_no,
+                    sim_read(),
+                    existing,
+                    new
+                );
+                Some(new)
             })
             .ok();
     }
@@ -371,6 +393,7 @@ pub extern "C" fn trap_handler(
             {
                 ss.pause_process_for_debug(pid)
                     .expect("couldn't debug current process");
+                crate::debug::gdb::report_terminated(pid);
                 println!("Program suspended. You may inspect it using gdb.");
             }
             #[cfg(not(feature = "gdb-stub"))]
