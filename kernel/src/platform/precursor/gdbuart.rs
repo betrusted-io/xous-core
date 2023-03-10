@@ -12,6 +12,7 @@ use utralib::generated::*;
 use xous_kernel::{MemoryFlags, MemoryType};
 
 static UART_CALLBACK_POINTER: AtomicUsize = AtomicUsize::new(0);
+static UART_COUNT: AtomicUsize = AtomicUsize::new(0);
 static UART_ALLOCATED: AtomicBool = AtomicBool::new(false);
 
 /// UART virtual address.
@@ -22,6 +23,7 @@ pub const APP_UART_ADDR: usize = 0xffcc_0000;
 /// UART peripheral driver.
 pub struct GdbUart {
     uart_csr: CSR<u32>,
+    constructed: bool,
 }
 
 fn gdbuart_isr(_irq_no: usize, _arg: *mut usize) {
@@ -34,15 +36,20 @@ fn gdbuart_isr(_irq_no: usize, _arg: *mut usize) {
     let cb = unsafe { core::mem::transmute::<_, fn(&mut GdbUart)>(target) };
     cb(&mut GdbUart {
         uart_csr: CSR::new(APP_UART_ADDR as *mut u32),
+        constructed: false,
     });
 }
 
 impl GdbUart {
     pub fn new(callback: fn(&mut Self)) -> Option<GdbUart> {
         UART_CALLBACK_POINTER.store(callback as usize, Ordering::Relaxed);
+        if UART_COUNT.fetch_add(1, Ordering::Relaxed) != 0 {
+            panic!("UART has multiple consumers!");
+        }
 
         Some(GdbUart {
             uart_csr: CSR::new(APP_UART_ADDR as *mut u32),
+            constructed: true,
         })
     }
 
@@ -104,6 +111,22 @@ impl GdbUart {
                 .unmap_page((APP_UART_ADDR & !4095) as *mut usize)
                 .unwrap()
         });
+    }
+}
+
+impl Drop for GdbUart {
+    fn drop(&mut self) {
+        // Sometimes (e.g. during IRQs) we synthesize a GdbUart from nothing.
+        if !self.constructed {
+            return;
+        }
+
+        if UART_COUNT.fetch_sub(1, Ordering::Relaxed) != 1 {
+            panic!("UART had multiple consumers!");
+        }
+
+        // Disable the IRQ until we re-enable it again when the server is reconstituted
+        self.uart_csr.rmwf(utra::app_uart::EV_ENABLE_RX, 0);
     }
 }
 
