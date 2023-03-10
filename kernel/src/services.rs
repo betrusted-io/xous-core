@@ -2267,9 +2267,9 @@ impl SystemServices {
             }
         });
         let new_process_state = match process_state {
-            ProcessState::Allocated => ProcessState::Allocated,
-            ProcessState::Free => ProcessState::Free,
-            ProcessState::Setup(thread_init) => ProcessState::Setup(thread_init),
+            ProcessState::Allocated | ProcessState::Free | ProcessState::Setup(_) => {
+                return Err(xous_kernel::Error::ProcessNotFound)
+            }
             ProcessState::Ready(tids) => ProcessState::Debug(tids),
             ProcessState::Exception(tids) => ProcessState::Exception(tids),
             ProcessState::BlockedException(tids) => ProcessState::BlockedException(tids),
