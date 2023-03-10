@@ -8,6 +8,7 @@ use gdbstub::target::ext::base::single_register_access::{
     SingleRegisterAccess, SingleRegisterAccessOps,
 };
 use gdbstub::target::ext::base::BaseOps;
+use gdbstub::target::ext::extended_mode::{AttachKind, ShouldTerminate};
 use gdbstub::target::ext::monitor_cmd::MonitorCmd;
 use gdbstub::target::{Target, TargetError, TargetResult};
 use gdbstub_arch::riscv::reg::id::RiscvRegId;
@@ -44,6 +45,13 @@ fn receive_irq(uart: &mut GdbUart) {
     while let Some(c) = uart.getc() {
         process_character(c);
     }
+
+    // If the GDB server goes away for some reason, reconstitute it
+    unsafe {
+        if GDB_STATE.is_none() {
+            init();
+        }
+    }
 }
 
 impl XousTarget {
@@ -77,6 +85,78 @@ impl Target for XousTarget {
 
     fn support_monitor_cmd(&mut self) -> Option<target::ext::monitor_cmd::MonitorCmdOps<'_, Self>> {
         Some(self)
+    }
+
+    fn support_extended_mode(
+        &mut self,
+    ) -> Option<target::ext::extended_mode::ExtendedModeOps<'_, Self>> {
+        Some(self)
+    }
+}
+
+impl target::ext::extended_mode::ExtendedMode for XousTarget {
+    fn attach(&mut self, new_pid: gdbstub::common::Pid) -> TargetResult<(), Self> {
+        if let Some(previous_pid) = self.pid.take() {
+            crate::services::SystemServices::with_mut(|system_services| {
+                system_services
+                    .resume_process_from_debug(previous_pid)
+                    .unwrap()
+            });
+        }
+
+        // Disallow debugging the kernel. Sad times.
+        if new_pid.get() == 1 {
+            println!("Kernel cannot debug itself");
+            self.pid = None;
+            return Ok(());
+        }
+
+        self.pid = new_pid.try_into().map(|v| Some(v)).unwrap_or(None);
+        if let Some(pid) = self.pid {
+            crate::services::SystemServices::with_mut(|system_services| {
+                system_services
+                    .pause_process_for_debug(pid)
+                    .map_err(|e| {
+                        println!("PID {} not found", new_pid);
+                        e
+                    })
+                    .and_then(|v| {
+                        println!("Now debugging PID {}", new_pid);
+                        Ok(v)
+                    })
+                    .ok();
+            });
+        } else {
+            println!("Invalid PID specified");
+        }
+        Ok(())
+    }
+
+    fn kill(&mut self, pid: Option<gdbstub::common::Pid>) -> TargetResult<ShouldTerminate, Self> {
+        println!("GDB sent a kill request for pid {:?}", pid);
+        Ok(ShouldTerminate::No)
+    }
+
+    fn restart(&mut self) -> Result<(), Self::Error> {
+        println!("GDB sent a restart request");
+        Ok(())
+    }
+
+    fn query_if_attached(
+        &mut self,
+        _pid: gdbstub::common::Pid,
+    ) -> TargetResult<target::ext::extended_mode::AttachKind, Self> {
+        println!("Querying if attached");
+        Ok(AttachKind::Attach)
+    }
+
+    fn run(
+        &mut self,
+        _filename: Option<&[u8]>,
+        _args: target::ext::extended_mode::Args<'_, '_>,
+    ) -> TargetResult<gdbstub::common::Pid, Self> {
+        println!("Trying to run command (?!)");
+        Err(TargetError::NonFatal)
     }
 }
 
@@ -609,15 +689,8 @@ fn ensure_can_accept_characters<'a, T: Target + ProcessPid, C: Connection>(
 fn process_character(byte: u8) {
     let XousDebugState { mut target, server } = unsafe {
         GDB_STATE.take().unwrap_or_else(|| {
-            let gdb = GdbStubBuilder::new(GdbUart::new(receive_irq).unwrap())
-                .with_packet_buffer(&mut GDB_BUFFER)
-                .build()
-                .unwrap();
-            let mut target = XousTarget::new();
-            let server = gdb
-                .run_state_machine(&mut target)
-                .expect("couldn't create gdb");
-            XousDebugState { target, server }
+            init();
+            GDB_STATE.take().unwrap()
         })
     };
 
@@ -724,8 +797,5 @@ pub fn init() {
         .expect("unable to start gdb state machine");
     unsafe {
         GDB_STATE = Some(XousDebugState { target, server });
-        HALTED = true;
     }
 }
-
-static mut HALTED: bool = false;
