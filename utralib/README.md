@@ -57,3 +57,6 @@ to ensure the statically generated files are up to date:
  cargo build --no-default-features --features precursor --features precursor-pvt
  cargo build --no-default-features --features atsama5d27
 ```
+
+This may require manually publishing svd2utra first, since that is
+a dependency of this package.
