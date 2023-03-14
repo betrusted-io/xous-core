@@ -8,6 +8,7 @@ pub mod irq;
 pub mod mem;
 pub mod process;
 pub mod syscall;
+pub mod panic;
 
 pub use process::Thread;
 
