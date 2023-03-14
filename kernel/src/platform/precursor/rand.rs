@@ -25,19 +25,25 @@ impl TrngKernel {
     }
 
     pub fn init(&mut self) {
-        if false { // raw random path - left in for debugging urandom, can strip out later
+        if false {
+            // raw random path - left in for debugging urandom, can strip out later
             while self.trng_kernel_csr.rf(utra::trng_kernel::STATUS_AVAIL) == 0 {}
             // discard the first entry, as it is always 0x0000_0000
             // this is because the read register is a pipeline stage behind the FIFO
             // once the pipeline has been filled, there is no need to prime it again.
             self.trng_kernel_csr.rf(utra::trng_kernel::DATA_DATA);
-        } else {  // urandom path (recommended)
+        } else {
+            // urandom path (recommended)
             // simulations show this isn't strictly necessary, but I prefer to have it
             // just in case a subtle bug in the reset logic leaves something deterministic
             // in the connecting logic: the simulation coverage stops at the edge of the TRNG block.
             for _ in 0..4 {
                 // wait until the urandom port is initialized
-                while self.trng_kernel_csr.rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID) == 0 {}
+                while self
+                    .trng_kernel_csr
+                    .rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID)
+                    == 0
+                {}
                 // pull a dummy piece of data
                 self.trng_kernel_csr.rf(utra::trng_kernel::URANDOM_URANDOM);
             }
@@ -45,18 +51,24 @@ impl TrngKernel {
     }
 
     pub fn get_u32(&mut self) -> u32 {
-        if false { // raw random path
+        if false {
+            // raw random path
             while self.trng_kernel_csr.rf(utra::trng_kernel::STATUS_AVAIL) == 0 {}
             self.trng_kernel_csr.rf(utra::trng_kernel::DATA_DATA)
-        } else {  // urandom path (recommended)
-            while self.trng_kernel_csr.rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID) == 0 {}
+        } else {
+            // urandom path (recommended)
+            while self
+                .trng_kernel_csr
+                .rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID)
+                == 0
+            {}
             self.trng_kernel_csr.rf(utra::trng_kernel::URANDOM_URANDOM)
         }
     }
 }
 
 /// Initialize TRNG driver.
-/// 
+///
 /// Needed so that the kernel can allocate names.
 pub fn init() {
     // Map the TRNG so that we can allocate names
