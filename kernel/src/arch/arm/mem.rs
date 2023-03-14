@@ -43,6 +43,7 @@ impl Default for MemoryMapping {
 }
 
 impl MemoryMapping {
+    #[allow(dead_code)]
     pub unsafe fn from_raw(&mut self, _: usize) {
         unimplemented!("Use from_init_process instead");
     }
@@ -52,7 +53,7 @@ impl MemoryMapping {
         self.pid = init.pid();
     }
 
-    pub unsafe fn allocate(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
+    pub unsafe fn allocate(&mut self, _pid: PID) -> Result<(), xous_kernel::Error> {
         todo!();
     }
 
@@ -425,12 +426,12 @@ pub fn unmap_page_inner(
 
 /// Move a page from one address space to another.
 pub fn move_page_inner(
-    mm: &mut MemoryManager,
-    src_space: &MemoryMapping,
-    src_addr: *mut u8,
-    dest_pid: PID,
-    dest_space: &MemoryMapping,
-    dest_addr: *mut u8,
+    _mm: &mut MemoryManager,
+    _src_space: &MemoryMapping,
+    _src_addr: *mut u8,
+    _dest_pid: PID,
+    _dest_space: &MemoryMapping,
+    _dest_addr: *mut u8,
 ) -> Result<(), xous_kernel::Error> {
     todo!();
 }
@@ -733,11 +734,11 @@ pub fn address_available(virt: usize) -> bool {
 ///
 /// * **None**: The page is not valid or is shared
 /// * **Some(MemoryFlags)**: The translated sharing permissions of the given flags
-pub fn page_flags(virt: usize) -> Option<MemoryFlags> {
+pub fn page_flags(_virt: usize) -> Option<MemoryFlags> {
     todo!();
 }
 
-pub fn update_page_flags(virt: usize, flags: MemoryFlags) -> Result<(), xous_kernel::Error> {
+pub fn update_page_flags(_virt: usize, _flags: MemoryFlags) -> Result<(), xous_kernel::Error> {
     todo!();
 }
 

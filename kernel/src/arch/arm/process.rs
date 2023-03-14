@@ -425,6 +425,7 @@ impl Process {
         }
     }
 
+    #[allow(dead_code)]
     pub fn print_current_thread(&self) {
         let thread = self.current_thread();
         let tid = self.current_tid();

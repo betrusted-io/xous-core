@@ -2330,6 +2330,7 @@ impl SystemServices {
     ///     2. The process has no exception handler
     ///     3. The process is not "Running" or "Ready"
     #[cfg(baremetal)]
+    #[allow(dead_code)]
     pub fn begin_exception_handler(&mut self, pid: PID) -> Option<ExceptionHandler> {
         let process = self.get_process_mut(pid).ok()?;
         let handler = process.exception_handler?;
