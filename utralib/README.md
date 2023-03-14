@@ -44,3 +44,16 @@ feature may or may not be present in a specific revision of an FPGA SoC.
 The feature system could also be (ab)used to, for example, specify
 an STM32 family and then the specific chip configuration of that family
 with the revision.
+
+## Notes for the Maintainer
+
+Before publishing the package, build each of the possible configurations
+to ensure the statically generated files are up to date:
+
+```
+ cargo build
+ cargo build --no-default-features --features renode
+ cargo build --no-default-features --features hosted
+ cargo build --no-default-features --features precursor --features precursor-pvt
+ cargo build --no-default-features --features atsama5d27
+```
