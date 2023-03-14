@@ -244,6 +244,8 @@ impl Process {
             return Err(xous_kernel::Error::ProcessNotFound);
         }
 
+        println!("[!] Terminating process with PID {}", self.pid);
+
         // Free all associated memory pages
         unsafe {
             crate::mem::MemoryManager::with_mut(|mm| mm.release_all_memory_for_process(self.pid))
@@ -1099,7 +1101,7 @@ impl SystemServices {
             // let old_state = new.state;
             new.state = match new.state {
                 ProcessState::Setup(thread_init) => {
-                    // println!("Setting up new process...");
+                    // klog!("Setting up new process...");
                     ArchProcess::setup_process(new_pid, thread_init)
                         .expect("couldn't set up new process");
                     ArchProcess::with_inner_mut(|process_inner| process_inner.pid = new_pid);
@@ -1640,7 +1642,7 @@ impl SystemServices {
 
         arch_process.setup_thread(new_tid, thread_init)?;
 
-        // println!("KERNEL({}): Created new thread {}", pid, new_tid);
+        // klog!("KERNEL({}): Created new thread {}", pid, new_tid);
 
         // Queue the thread to run
         process.state = match process.state {
