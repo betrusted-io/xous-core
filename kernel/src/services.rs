@@ -357,9 +357,7 @@ impl SystemServices {
         let mut arg_iter = args.iter().peekable();
         loop {
             if let Some(arg) = arg_iter.peek() {
-                println!("loop");
                 if arg.name == u32::from_le_bytes(*b"IniE") || arg.name == u32::from_le_bytes(*b"IniF") {
-                    println!("found!");
                     break;
                 }
             } else {
@@ -373,19 +371,16 @@ impl SystemServices {
         // value from the bootloader.  For each process, translate it from a raw
         // KernelArguments value to a SystemServices Process value.
         for init in init_offsets.iter() {
-            let pid = (init.satp >> 22) & ((1 << 9) - 1);
-            let process = &mut self.processes[(pid - 1) as usize];
+            let pid = init.pid().get();
+            let proc_idx = pid - 1;
+            let process = &mut self.processes[proc_idx as usize];
             // println!(
-            //     "Process: SATP: {:08x}  PID: {}  Memory: {:08x}  PC: {:08x}  SP: {:08x}  Index: {}",
-            //     init.satp,
-            //     pid,
-            //     init.satp << 10,
-            //     init.entrypoint,
-            //     init.sp,
-            //     pid - 1
+            //     "Process[{}]: {:?}",
+            //     pid - 1,
+            //     init,
             // );
             unsafe {
-                process.mapping.from_raw(init.satp);
+                process.mapping.from_init_process(*init);
                 process.ppid = PID::new_unchecked(1);
                 process.pid = PID::new(pid as _).unwrap();
             };
