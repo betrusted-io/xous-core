@@ -367,11 +367,11 @@ fn return_memory(
                 })
             }
             WaitingMessage::ScalarMessage(_pid, _tid) => {
-                println!("WARNING: Tried to wait on a message that was a scalar");
+                klog!("WARNING: Tried to wait on a message that was a scalar");
                 return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist -- return memory");
+                klog!("WARNING: Tried to wait on a message that didn't exist -- return memory");
                 return Err(xous_kernel::Error::DoubleFree);
             }
         };
@@ -463,25 +463,25 @@ fn return_result(
         let (client_pid, client_tid) = match result {
             WaitingMessage::ScalarMessage(pid, tid) => (pid, tid),
             WaitingMessage::ForgetMemory(_) => {
-                println!(
+                klog!(
                     "WARNING: Tried to wait on a scalar message that was actually forgettingmemory"
                 );
                 return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
-                println!(
+                klog!(
                     "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
                 );
                 return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::MovedMemory => {
-                println!(
+                klog!(
                     "WARNING: Tried to wait on a scalar message that was actually moved memory"
                 );
                 return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING ({}:{}): Tried to wait on a message that didn't exist (irq? {}) -- return {:?}", server_pid.get(), server_tid, if in_irq { "yes"} else {"no"}, result);
+                klog!("WARNING ({}:{}): Tried to wait on a message that didn't exist (irq? {}) -- return {:?}", server_pid.get(), server_tid, if in_irq { "yes"} else {"no"}, result);
                 return Err(xous_kernel::Error::DoubleFree);
             }
         };
@@ -581,7 +581,7 @@ fn reply_and_receive_next(
                 MessageResponse { pid, tid, result }
             }
             WaitingMessage::ForgetMemory(_) => {
-                println!(
+                klog!(
                     "WARNING: Tried to wait on a scalar message that was actually forgetting memory"
                 );
                 return Err(xous_kernel::Error::DoubleFree);
@@ -605,13 +605,13 @@ fn reply_and_receive_next(
                 }
             }
             WaitingMessage::MovedMemory => {
-                println!(
+                klog!(
                     "WARNING: Tried to wait on a scalar message that was actually moved memory"
                 );
                 return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
-                println!("WARNING: Tried to wait on a message that didn't exist -- receive and return scalar");
+                klog!("WARNING: Tried to wait on a message that didn't exist -- receive and return scalar");
                 return Err(xous_kernel::Error::DoubleFree);
             }
         };
@@ -745,12 +745,12 @@ fn receive_message(pid: PID, tid: TID, sid: SID, blocking: ExecutionType) -> Sys
 }
 
 pub fn handle(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult {
-    #[cfg(feature = "debug-print")]
-    print!("KERNEL({}:{}): Syscall {:x?}", pid, tid, call);
+    klog!("KERNEL({}:{}): Syscall {:x?}, in_irq={}", pid, tid, call, in_irq);
     // let call_string = format!("{:x?}", call);
     // let start_time = std::time::Instant::now();
     #[allow(clippy::let_and_return)]
     let result = if in_irq && !call.can_call_from_interrupt() {
+        klog!("[!] Called {:?} that's cannot be called from the interrupt handler!", call);
         Err(xous_kernel::Error::InvalidSyscall)
     } else {
         handle_inner(pid, tid, in_irq, call)
@@ -758,8 +758,7 @@ pub fn handle(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult 
 
     // println!("KERNEL [{:2}:{:2}] Syscall took {:7} usec: {}", pid, tid, start_time.elapsed().as_micros(), call_string);
 
-    #[cfg(feature = "debug-print")]
-    println!(
+    klog!(
         " -> ({}:{}) {:x?}",
         crate::arch::current_pid(),
         crate::arch::process::Process::current().current_tid(),
@@ -785,7 +784,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                         .map(|x| x.get() >= arch::mem::USER_AREA_END)
                         .unwrap_or(false)
                 {
-                    println!("Exceeded user area");
+                    klog!("Exceeded user area");
                     return Err(xous_kernel::Error::BadAddress);
 
                 // Don't allow mapping non-page values

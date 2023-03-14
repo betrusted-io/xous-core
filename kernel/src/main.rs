@@ -126,13 +126,13 @@ pub extern "C" fn kmain() {
             }
             None => {
                 #[cfg(feature = "debug-print")]
-                println!("NO RUNNABLE TASKS FOUND, entering idle state");
+                klog!("NO RUNNABLE TASKS FOUND, entering idle state");
 
                 #[cfg(feature = "debug-print")]
                 SystemServices::with(|system_services| {
                     for (test_idx, process) in system_services.processes.iter().enumerate() {
                         if !process.free() {
-                            println!("PID {}: {:?}", test_idx + 1, process);
+                            klog!("PID {}: {:?}", test_idx + 1, process);
                         }
                     }
                 });

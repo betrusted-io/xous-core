@@ -491,7 +491,7 @@ impl SystemServices {
         // PID0 doesn't exist -- process IDs are offset by 1.
         let pid_idx = pid.get() as usize - 1;
         if cfg!(baremetal) && self.processes[pid_idx].mapping.get_pid() != pid {
-            println!(
+            klog!(
                 "Process doesn't match ({} vs {})",
                 self.processes[pid_idx].mapping.get_pid(),
                 pid
@@ -1049,7 +1049,7 @@ impl SystemServices {
             // Ensure the new process can be run.
             match new.state {
                 ProcessState::Free => {
-                    println!("PID {} was free", new_pid);
+                    klog!("PID {} was free", new_pid);
                     return Err(xous_kernel::Error::ProcessNotFound);
                 }
                 ProcessState::Setup(_) | ProcessState::Allocated => new_tid = INITIAL_TID,
