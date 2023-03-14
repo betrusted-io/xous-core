@@ -395,6 +395,7 @@ fn main() -> ! {
     const FLASH_TIMEOUT: u32 = 250;
 
     // initial seed of the COM trng
+    ticktimer.sleep_ms(100).unwrap(); // some time for the EC to catch up during boot
     let trng = trng::Trng::new(&xns).expect("couldn't connect to TRNG");
     com.txrx(ComState::TRNG_SEED.verb);
     for _ in 0..2 {
@@ -406,11 +407,12 @@ fn main() -> ! {
     }
 
     // determine the version of the COM that we're talking to
+    ticktimer.sleep_ms(100).unwrap(); // some time for the EC to catch up during boot
     let mut ec_git_rev = {
         com.txrx(ComState::EC_GIT_REV.verb);
-        let rev_msb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
-        let rev_lsb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
-        let _dirty = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+        let rev_msb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT * 2)) as u16;
+        let rev_lsb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT * 2)) as u16;
+        let _dirty = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT * 2)) as u8;
         ((rev_msb as u32) << 16) | (rev_lsb as u32)
     };
     let mut ec_tag = {
