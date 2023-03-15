@@ -203,6 +203,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                     cfg.get_top() as *mut u8 as u32, cfg.extra_pages, cfg.init_size, cfg.base_addr as u32);
 
                 let mut last_page_vaddr = 0;
+                let mut last_section_perfect_fit = false;
 
                 for section in inie.sections.iter() {
                     let flags = section.flags() as u8;
@@ -231,10 +232,18 @@ fn copy_processes(cfg: &mut BootConfig) {
                         let mut dst_page_vaddr = section.virt as usize;
                         let mut bytes_to_copy = section.len();
 
-                        if (last_page_vaddr & !(PAGE_SIZE - 1)) != (dst_page_vaddr & !(PAGE_SIZE - 1)) {
+                        if (last_page_vaddr & !(PAGE_SIZE - 1)) != (dst_page_vaddr & !(PAGE_SIZE - 1))
+                        || last_section_perfect_fit {
                             // this condition is always true for the first section's first iteration, because
                             // current_vpage_addr starts as NULL; thus we are guaranteed to always
                             // trigger the page allocate/zero mechanism the first time through the loop
+                            //
+                            // `last_section_perfect_fit` triggers a page allocation as well, because in this case
+                            // we had exactly enough data to fill out the previous section, so we have no more
+                            // space left in the current page. We don't automatically allocate a new page because
+                            // if it was actually the very last section we *shouldn't* allocate another page; and
+                            // we can only know if there's another section available by dropping off the end of the
+                            // loop and coming back to the surrounding for-loop iterator.
                             cfg.extra_pages += 1;
                             top = cfg.get_top() as *mut u8;
                             unsafe {
@@ -250,6 +259,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                         while bytes_to_copy > 0 {
                             let bytes_remaining_in_vpage = PAGE_SIZE - (dst_page_vaddr & (PAGE_SIZE - 1));
                             let copyable_bytes = bytes_remaining_in_vpage.min(bytes_to_copy);
+                            last_section_perfect_fit = bytes_remaining_in_vpage == bytes_to_copy;
                             if !section.no_copy() {
                                 unsafe {
                                     memcpy(
