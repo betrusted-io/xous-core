@@ -341,7 +341,7 @@ fn dump_addr(addr: usize, label: &str) {
     for &b in slice {
         print!( "{:02x}", b);
     }
-    print!("\n");
+    print!("\n\r");
 }
 #[cfg(feature="debug-print")]
 pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
