@@ -185,8 +185,10 @@ impl Llio {
             Message::new_scalar(Opcode::EventComEnable.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())
     }
-    // GPIO IRQ hooks
+    /// GPIO IRQ hook. When using this, ensure that the WFI power saving mode is turned off.
+    /// Otherwise interrupts that hit during power save mode can be missed.
     pub fn hook_gpio_event_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
+        log::info!("If relying on GPIO interrupts, WFI power saving must be turned off. Interrupts that hit while powersaving can be missed.");
         if self.gpio_sid.is_none() {
             let sid = xous::create_server().unwrap();
             self.gpio_sid = Some(sid);
