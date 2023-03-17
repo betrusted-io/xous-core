@@ -37,6 +37,9 @@ impl I2cStateMachine {
     pub fn is_busy(&self) -> bool {
         false
     }
+    pub fn in_progress(&self) -> bool {
+        false
+    }
     pub fn trace(&self) {
     }
 }
