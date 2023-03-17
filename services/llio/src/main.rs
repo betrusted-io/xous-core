@@ -23,7 +23,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use std::thread;
 
-const POLL_INTERVAL_MS: usize = 50;
+// This is slower than most timeout specifiers, but it's easier to debug
+// when the check interval isn't creating a ton of log spew.
+const POLL_INTERVAL_MS: usize = 250;
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 enum PumpOp {
     Pump,
@@ -59,11 +61,11 @@ fn i2c_thread(i2c_sid: xous::SID) {
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(PumpOp::Pump) => msg_scalar_unpack!(msg, _, _, _, _, {
                         tt.sleep_ms(POLL_INTERVAL_MS).unwrap();
-                        let target_time = target_lsb.load(Ordering::SeqCst) as u64 | (target_msb.load(Ordering::SeqCst) as u64) << 32;
-                        if tt.elapsed_ms() >= target_time {
-                            try_send_message(main_cid, Message::new_scalar(I2cOpcode::I2cTimeout.to_usize().unwrap(), 0, 0, 0, 0)).ok();
-                        }
                         if run.load(Ordering::SeqCst) {
+                            let target_time = target_lsb.load(Ordering::SeqCst) as u64 | (target_msb.load(Ordering::SeqCst) as u64) << 32;
+                            if tt.elapsed_ms() >= target_time {
+                                try_send_message(main_cid, Message::new_scalar(I2cOpcode::I2cTimeout.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                            }
                             try_send_message(cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).ok();
                         }
                     }),
@@ -168,10 +170,12 @@ fn i2c_thread(i2c_sid: xous::SID) {
                 xous::return_scalar(msg.sender, busy as _).expect("couldn't return I2cIsBusy");
             }),
             Some(I2cOpcode::I2cTimeout) => {
-                if i2c.is_busy() {
+                if i2c.in_progress() {
                     // timeout happened
+                    log::warn!("Timeout detected, re-initiating transaction");
                     i2c.re_initiate();
                     if let Some(expiry) = i2c.get_expiry() {
+                        log::debug!("Setting new expiry to {}", expiry);
                         target_msb.store((expiry >> 32) as u32, Ordering::SeqCst);
                         target_lsb.store(expiry as u32, Ordering::SeqCst);
                         // no need to pump since the timeout loop is already running

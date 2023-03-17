@@ -282,7 +282,7 @@ impl I2cStateMachine {
             self.index = 0;
             self.error = I2cIntError::NoErr;
         } else {
-            panic!("Invalid state: response requested but no request pending {:?}", status);
+            log::error!("Invalid state: response requested but no request pending {:?}. I2C bus state may be incoherent.", status);
         }
         if self.workqueue.len() > 0 {
             log::debug!("workqueue has pending items: {}", self.workqueue.len());
@@ -325,6 +325,11 @@ impl I2cStateMachine {
         } else {
             true
         }
+    }
+    /// This returns if a transaction is currently in progress. This differs from is_busy in that is_busy
+    /// will return false if the work queue is also empty, even though the interface is performing a transaction.
+    pub fn in_progress(&self) -> bool {
+        self.state != I2cState::Idle
     }
     pub(crate) fn trace(&self) {
         log::debug!("I2C trace '{:?}/{:?}'=> PENDING: {:x}, ENABLE: {:x}, CMD: {:x}, STATUS: {:x}, CONTROL: {:x}, PRESCALE: {:x}",
