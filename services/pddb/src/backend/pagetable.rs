@@ -164,7 +164,7 @@ pub(crate) struct EncryptedPage {
     /// journal_rev is encrypted and indicates the current journal revision for the block (u32 le)
     journal_rev: [u8; 4],
     /// data is encrypted and holds the good stuff
-    data: [u8; (PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<u32>())],
+    data: [u8; PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<u32>()],
     /// tag is the authentication tag. If the page decrypts & authenticates, we know it's a valid data block for us.
     p_tag: [u8; size_of::<Tag>()],
 }
