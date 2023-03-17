@@ -129,6 +129,9 @@ impl I2cStateMachine {
 
         i2c
     }
+    pub fn get_expiry(&self) -> Option<u64> {
+        self.expiry
+    }
     #[allow(dead_code)]
     pub fn set_trace(&mut self, trace: bool) {
         self.trace = trace;
@@ -141,6 +144,33 @@ impl I2cStateMachine {
     }
     pub fn resume(&mut self) {
         self.i2c_susres.resume();
+    }
+
+    pub fn re_initiate(&mut self) {
+        // execution continues after here because we simply drop the response message back in the sender's queue, and then return here to do more
+        log::warn!("I2C timeout; resetting hardware block and re-trying");
+        self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
+        self.ticktimer.sleep_ms(1).ok();
+
+        // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
+        let clkcode = (utralib::LITEX_CONFIG_CLOCK_FREQUENCY as u32) / (5 * 100_000) - 1;
+        self.i2c_csr.wfo(utra::i2c::PRESCALE_PRESCALE, clkcode & 0xFFFF);
+        // clear any interrupts pending
+        self.i2c_csr.wo(utra::i2c::EV_PENDING, self.i2c_csr.r(utra::i2c::EV_PENDING));
+        // enable the block
+        self.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
+        // cleanup state tracking
+        self.state = I2cState::Idle;
+        self.expiry = None;
+        self.transaction = None;
+        // re-initiate the I2C transaction
+        if let Some(msg) = self.callback.take() {
+            let transaction = {
+                let buffer = unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                buffer.to_original::<I2cTransaction, _>().unwrap().clone()
+            };
+            self.checked_initiate(transaction, msg);
+        }
     }
 
     pub fn initiate(&mut self, msg: xous::MessageEnvelope) {

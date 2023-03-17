@@ -65,6 +65,8 @@ pub(crate) enum I2cOpcode {
     /// grabs a mutex on the I2C block, for multiple transactions that can't be separated
     I2cMutexAcquire,
     I2cMutexRelease,
+    /// timeout check
+    I2cTimeout,
     /// SuspendResume callback
     SuspendResume,
     Quit,

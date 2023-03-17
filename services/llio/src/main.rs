@@ -16,10 +16,18 @@ use llio_hosted::*;
 use crate::RTC_PWR_MODE;
 use num_traits::*;
 use xous_ipc::Buffer;
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack, Message, try_send_message};
 use xous::messages::sender::Sender;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use std::thread;
+
+const POLL_INTERVAL_MS: usize = 50;
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+enum PumpOp {
+    Pump,
+}
 
 fn i2c_thread(i2c_sid: xous::SID) {
     let xns = xous_names::XousNames::new().unwrap();
@@ -28,8 +36,42 @@ fn i2c_thread(i2c_sid: xous::SID) {
     let mut i2c = i2c::I2cStateMachine::new(handler_conn);
 
     // register a suspend/resume listener
-    let sr_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, I2cOpcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let self_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, I2cOpcode::SuspendResume as u32, self_cid).expect("couldn't create suspend/resume object");
+
+    // timeout watcher
+    let run = Arc::new(AtomicBool::new(false));
+    let run_sid = xous::create_server().unwrap();
+    let run_cid = xous::connect(run_sid).unwrap();
+    let target_msb = Arc::new(AtomicU32::new(0));
+    let target_lsb = Arc::new(AtomicU32::new(0));
+    let _ = std::thread::spawn({
+        let run = run.clone();
+        let cid = run_cid.clone();
+        let main_cid = self_cid.clone();
+        // there is a hazard that msb/lsb is split once every 40 or so days for the precise moment of the rollover. meh?
+        let target_msb = target_msb.clone();
+        let target_lsb = target_lsb.clone();
+        move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            loop {
+                let msg = xous::receive_message(run_sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(PumpOp::Pump) => msg_scalar_unpack!(msg, _, _, _, _, {
+                        tt.sleep_ms(POLL_INTERVAL_MS).unwrap();
+                        let target_time = target_lsb.load(Ordering::SeqCst) as u64 | (target_msb.load(Ordering::SeqCst) as u64) << 32;
+                        if tt.elapsed_ms() >= target_time {
+                            try_send_message(main_cid, Message::new_scalar(I2cOpcode::I2cTimeout.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                        }
+                        if run.load(Ordering::SeqCst) {
+                            try_send_message(cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                        }
+                    }),
+                    _ => log::error!("Unrecognized message: {:?}", msg),
+                }
+            }
+        }
+    });
 
     let mut suspend_pending_token: Option<usize> = None;
     let mut blocking_callers: Vec::<Sender> = Vec::new();
@@ -51,6 +93,7 @@ fn i2c_thread(i2c_sid: xous::SID) {
                 }
             }),
             Some(I2cOpcode::IrqI2cTxrxWriteDone) => msg_scalar_unpack!(msg, _, _, _, _, {
+                run.store(false, Ordering::SeqCst);
                 if !i2c_mutex_acquired && suspend_pending_token.is_some() {
                     if let Some(token) = suspend_pending_token.take() {
                         i2c.suspend();
@@ -62,6 +105,7 @@ fn i2c_thread(i2c_sid: xous::SID) {
                 i2c.report_write_done();
             }),
             Some(I2cOpcode::IrqI2cTxrxReadDone) => msg_scalar_unpack!(msg, _, _, _, _, {
+                run.store(false, Ordering::SeqCst);
                 if !i2c_mutex_acquired && suspend_pending_token.is_some() {
                     if let Some(token) = suspend_pending_token.take() {
                         i2c.suspend();
@@ -111,11 +155,29 @@ fn i2c_thread(i2c_sid: xous::SID) {
                     log::warn!("TxRx operation was initiated without an acquired mutex. This will become a hard error in future revisions");
                 }
                 i2c.initiate(msg);
+                // update the timeout interval to whatever was specified by the transaction
+                if let Some(expiry) = i2c.get_expiry() {
+                    target_msb.store((expiry >> 32) as u32, Ordering::SeqCst);
+                    target_lsb.store(expiry as u32, Ordering::SeqCst);
+                    run.store(true, Ordering::SeqCst);
+                    try_send_message(run_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                }
             },
             Some(I2cOpcode::I2cIsBusy) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let busy = if i2c.is_busy() {1} else {0};
                 xous::return_scalar(msg.sender, busy as _).expect("couldn't return I2cIsBusy");
             }),
+            Some(I2cOpcode::I2cTimeout) => {
+                if i2c.is_busy() {
+                    // timeout happened
+                    i2c.re_initiate();
+                    if let Some(expiry) = i2c.get_expiry() {
+                        target_msb.store((expiry >> 32) as u32, Ordering::SeqCst);
+                        target_lsb.store(expiry as u32, Ordering::SeqCst);
+                        // no need to pump since the timeout loop is already running
+                    }
+                }
+            }
             Some(I2cOpcode::Quit) => {
                 log::info!("Received quit opcode, exiting!");
                 break;
