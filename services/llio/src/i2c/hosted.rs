@@ -10,6 +10,8 @@ impl I2cStateMachine {
     }
     pub fn suspend(&mut self) {}
     pub fn resume(&mut self) {}
+    pub fn re_initiate(&mut self) {}
+    pub fn get_expiry(&self) -> Option::<u64> { None }
     pub fn initiate(&mut self, mut msg: xous::MessageEnvelope) {
         let mut buffer = unsafe { xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
         let transaction = buffer.to_original::<I2cTransaction, _>().unwrap();
