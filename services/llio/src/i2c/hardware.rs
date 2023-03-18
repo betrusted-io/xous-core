@@ -149,8 +149,9 @@ impl I2cStateMachine {
     pub fn re_initiate(&mut self) {
         // execution continues after here because we simply drop the response message back in the sender's queue, and then return here to do more
         log::warn!("I2C timeout; resetting hardware block and re-trying");
+        self.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 0);
         self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
-        self.ticktimer.sleep_ms(1).ok();
+        self.ticktimer.sleep_ms(10).ok();
 
         // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
         let clkcode = (utralib::LITEX_CONFIG_CLOCK_FREQUENCY as u32) / (5 * 100_000) - 1;
@@ -159,6 +160,7 @@ impl I2cStateMachine {
         self.i2c_csr.wo(utra::i2c::EV_PENDING, self.i2c_csr.r(utra::i2c::EV_PENDING));
         // enable the block
         self.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
+        self.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 1);
         // cleanup state tracking
         self.state = I2cState::Idle;
         self.expiry = None;
@@ -171,6 +173,26 @@ impl I2cStateMachine {
             };
             self.checked_initiate(transaction, msg);
         }
+    }
+
+    pub fn driver_reset(&mut self) {
+        self.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 0);
+        self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
+        self.ticktimer.sleep_ms(10).ok();
+
+        // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
+        let clkcode = (utralib::LITEX_CONFIG_CLOCK_FREQUENCY as u32) / (5 * 100_000) - 1;
+        self.i2c_csr.wfo(utra::i2c::PRESCALE_PRESCALE, clkcode & 0xFFFF);
+        // clear any interrupts pending
+        self.i2c_csr.wo(utra::i2c::EV_PENDING, self.i2c_csr.r(utra::i2c::EV_PENDING));
+        // enable the block
+        self.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
+        // cleanup state tracking
+        self.state = I2cState::Idle;
+        self.expiry = None;
+        self.transaction = None;
+        self.index = 0;
+        self.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 1);
     }
 
     pub fn initiate(&mut self, msg: xous::MessageEnvelope) {

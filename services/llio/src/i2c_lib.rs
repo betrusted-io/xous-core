@@ -21,7 +21,12 @@ impl I2c {
             timeout_ms: 150,
         }
     }
-
+    /// Safety: caller must ensure that there are no I2C actions in flight. This resets the mutex to not acquired.
+    pub unsafe fn i2c_driver_reset(&mut self) {
+        xous::send_message(self.conn,
+            xous::Message::new_blocking_scalar(I2cOpcode::I2cDriverReset.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("error handling i2c driver reset");
+    }
     pub fn i2c_set_timeout(&mut self, timeout: u32) {
         self.timeout_ms = timeout;
     }

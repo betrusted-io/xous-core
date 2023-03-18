@@ -223,7 +223,7 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
         log::error!("RTC is in an uninitialized state!, {:?}", settings);
         return None;
     }
-    // this is a secondary check -- I have seen RTC return non-sensical time results before
+    // this is a secondary check -- I have seen RTC return nonsense time results before
     // so this is an extra check above and beyond what's in the datasheet
     if (to_binary(settings[SECS]) > 59)
     || (to_binary(settings[MINS]) > 59)
@@ -231,7 +231,7 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     || (to_binary(settings[DAYS]) > 31) || (to_binary(settings[DAYS]) == 0)
     || (to_binary(settings[MONTHS]) > 12) || (to_binary(settings[MONTHS]) == 0)
     || (to_binary(settings[YEARS]) > 99) {
-        log::error!("RTC has invalid digits!");
+        log::error!("RTC has invalid digits!: {:?}", settings);
         return None;
     }
     let mut total_secs: u64 = 0;

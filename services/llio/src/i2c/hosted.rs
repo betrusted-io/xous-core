@@ -42,4 +42,6 @@ impl I2cStateMachine {
     }
     pub fn trace(&self) {
     }
+    pub fn driver_reset(&mut self) {
+    }
 }

@@ -182,6 +182,12 @@ fn i2c_thread(i2c_sid: xous::SID) {
                     }
                 }
             }
+            Some(I2cOpcode::I2cDriverReset) => {
+                log::warn!("Resetting I2C block; any transaction in progress may be aborted.");
+                i2c.driver_reset();
+                i2c_mutex_acquired = false;
+                xous::return_scalar(msg.sender, 1).ok();
+            }
             Some(I2cOpcode::Quit) => {
                 log::info!("Received quit opcode, exiting!");
                 break;
@@ -562,28 +568,50 @@ fn main() -> ! {
                     continue
                 }
                 log::debug!("GetRtcValue regs: {:?}", settings);
-                let total_secs = match rtc_to_seconds(&settings) {
-                    Some(s) => s,
-                    None => {
-                        i2c.i2c_mutex_acquire();
-                        let secs = if settings[1] & 0x7f < 60 {
-                            settings[1] & 0x7f
-                        } else {
-                            0
-                        };
-                        // do a "hot reset" -- just clears error flags, but doesn't rewrite time
-                        let reset_values = [
-                            0x0, // clear all interrupts, return to normal operations
-                            0x0, // clear all interrupts
-                            RTC_PWR_MODE,  // reset power mode
-                            secs  // write the seconds register back without the error flag
-                        ];
-                        i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL1, &reset_values).expect("RTC access error");
-                        i2c.i2c_mutex_release();
+                let total_secs: u64;
+                let mut retries = 0;
+                loop {
+                    match rtc_to_seconds(&settings) {
+                        Some(s) => {
+                            total_secs = s;
+                            break;
+                        }
+                        None => {
+                            // ensure nobody else is using the I2C block
+                            i2c.i2c_mutex_acquire();
+                            // this will reset the mutex to not acquired, even if someone else is using it. Very dangerous!
+                            unsafe{i2c.i2c_driver_reset();}
+
+                            tt.sleep_ms(37).unwrap(); // short pause in case the upset was caused by too much activity
+                            // re-acquire the mutex, because it was released by the driver reset
+                            i2c.i2c_mutex_acquire();
+                            let secs = if settings[1] & 0x7f < 60 {
+                                settings[1] & 0x7f
+                            } else {
+                                0
+                            };
+                            // do a "hot reset" -- just clears error flags, but doesn't rewrite time
+                            let reset_values = [
+                                0x0, // clear all interrupts, return to normal operations
+                                0x0, // clear all interrupts
+                                RTC_PWR_MODE,  // reset power mode
+                                secs  // write the seconds register back without the error flag
+                            ];
+                            i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL1, &reset_values).expect("RTC access error");
+                            i2c.i2c_mutex_release();
+                        }
+                    }
+                    retries += 1;
+                    if retries > 10 {
+                        // this will likely cause an upstream failure, because a lot of logic can't proceed
+                        // without a valid resolution to the RTC setting!
+                        log::error!("rtc_to_seconds() never returned a valid value. Returning an error, that may result in a panic...");
                         xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
                         continue;
+                    } else {
+                        log::warn!("rtc_to_seconds() returned an invalid value. Retry #{}", retries);
                     }
-                };
+                }
                 xous::return_scalar2(msg.sender,
                     ((total_secs >> 32) & 0xFFFF_FFFF) as usize,
                     (total_secs & 0xFFFF_FFFF) as usize,

@@ -67,6 +67,8 @@ pub(crate) enum I2cOpcode {
     I2cMutexRelease,
     /// timeout check
     I2cTimeout,
+    /// block soft reset
+    I2cDriverReset,
     /// SuspendResume callback
     SuspendResume,
     Quit,
