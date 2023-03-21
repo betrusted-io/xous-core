@@ -1,5 +1,6 @@
-
+#[cfg(not(feature = "atsama5d27"))]
 use core::num::NonZeroUsize;
+#[cfg(not(feature = "atsama5d27"))]
 use core::mem;
 
 use crate::*;
@@ -71,6 +72,7 @@ impl Default for BootConfig {
     }
 }
 
+#[cfg(not(feature = "atsama5d27"))]
 impl BootConfig {
     /// Used by Phase 1 to keep track of where we are in terms of physical pages of memory allocated
     pub fn get_top(&self) -> *mut usize {

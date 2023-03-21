@@ -14,6 +14,20 @@ pub fn phase_2(cfg: &mut BootConfig) {
     // Go through all Init processes and the kernel, setting up their
     // page tables and mapping memory to them.
     let mut pid = 2;
+    #[cfg(feature = "atsama5d27")]
+    let mut ktext_offset = 0;
+    #[cfg(feature = "atsama5d27")]
+    let mut ktext_virt_offset = 0;
+    #[cfg(feature = "atsama5d27")]
+    let mut kdata_offset = 0;
+    #[cfg(feature = "atsama5d27")]
+    let mut kdata_virt_offset = 0;
+    #[cfg(feature = "atsama5d27")]
+    let mut ktext_size = 0;
+    #[cfg(feature = "atsama5d27")]
+    let mut kdata_size = 0;
+    #[cfg(feature = "atsama5d27")]
+    let mut kernel_exception_sp = 0;
     for tag in args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
@@ -34,47 +48,92 @@ pub fn phase_2(cfg: &mut BootConfig) {
             let xkrn = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
             let load_size_rounded = ((xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
                 + (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1));
-            xkrn.load(cfg, process_offset - load_size_rounded, 1);
+            #[cfg(not(feature = "atsama5d27"))]
+            {
+                xkrn.load(cfg, process_offset - load_size_rounded, 1);
+            }
+            #[cfg(feature = "atsama5d27")]
+            {
+                (ktext_offset, kdata_offset, kernel_exception_sp) = xkrn.load(cfg, process_offset - load_size_rounded, 1);
+                (ktext_size, kdata_size, ktext_virt_offset, kdata_virt_offset) = (
+                    (xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1),
+                    (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)),
+                    xkrn.text_offset as usize,
+                    xkrn.data_offset as usize
+                );
+            }
             process_offset -= load_size_rounded;
         }
     }
 
     println!("Done loading.");
+
     let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
+    #[cfg(feature = "atsama5d27")]
+    let krn_l1_pt_addr = cfg.processes[0].ttbr0;
+    #[cfg(not(feature = "atsama5d27"))]
     let krn_l1_pt_addr = cfg.processes[0].satp << 12;
-    assert!(krn_struct_start & (PAGE_SIZE - 1) == 0);
-    let krn_pg1023_ptr = unsafe { (krn_l1_pt_addr as *const usize).add(1023).read() };
 
-    // Map boot-generated kernel structures into the kernel
-    let satp = unsafe { &mut *(krn_l1_pt_addr as *mut PageTable) };
-    for addr in (0..cfg.init_size-GUARD_MEMORY_BYTES).step_by(PAGE_SIZE as usize) {
-        cfg.map_page(
-            satp,
-            addr + krn_struct_start,
-            addr + KERNEL_ARGUMENT_OFFSET,
-            FLG_R | FLG_W | FLG_VALID,
-        );
-        cfg.change_owner(1 as XousPid, (addr + krn_struct_start) as usize);
+    println!("krn_l1_pt_addr: {:08x}", krn_l1_pt_addr);
+
+    #[cfg(not(feature = "atsama5d27"))]
+    {
+        assert!(krn_struct_start & (PAGE_SIZE - 1) == 0);
+        let krn_pg1023_ptr = unsafe { (krn_l1_pt_addr as *const usize).add(1023).read() };
+
+        // Map boot-generated kernel structures into the kernel
+        let satp = unsafe { &mut *(krn_l1_pt_addr as *mut PageTable) };
+        for addr in (0..cfg.init_size - GUARD_MEMORY_BYTES).step_by(PAGE_SIZE as usize) {
+            cfg.map_page(
+                satp,
+                addr + krn_struct_start,
+                addr + KERNEL_ARGUMENT_OFFSET,
+                FLG_R | FLG_W | FLG_VALID,
+            );
+            cfg.change_owner(1 as XousPid, (addr + krn_struct_start) as usize);
+        }
+
+        // Copy the kernel's "MMU Page 1023" into every process.
+        // This ensures a context switch into the kernel can
+        // always be made, and that the `stvec` is always valid.
+        // Since it's a megapage, all we need to do is write
+        // the one address to get all 4MB mapped.
+        println!("Mapping MMU page 1023 to all processes");
+        for process in cfg.processes[1..].iter() {
+            let l1_pt_addr = process.satp << 12;
+            unsafe { (l1_pt_addr as *mut usize).add(1023).write(krn_pg1023_ptr) };
+        }
     }
-
-    // Copy the kernel's "MMU Page 1023" into every process.
-    // This ensures a context switch into the kernel can
-    // always be made, and that the `stvec` is always valid.
-    // Since it's a megapage, all we need to do is write
-    // the one address to get all 4MB mapped.
-    println!("Mapping MMU page 1023 to all processes");
-    for process in cfg.processes[1..].iter() {
-        let l1_pt_addr = process.satp << 12;
-        unsafe { (l1_pt_addr as *mut usize).add(1023).write(krn_pg1023_ptr) };
+    #[cfg(feature = "atsama5d27")]
+    {
+        // Map boot-generated kernel structures into the kernel
+        crate::platform::atsama5d27::boot::map_structs_to_kernel(cfg, krn_l1_pt_addr, krn_struct_start);
+        crate::platform::atsama5d27::boot::map_kernel_to_processes(
+            cfg,
+            ktext_offset,
+            ktext_size,
+            ktext_virt_offset,
+            kdata_offset,
+            kdata_size,
+            kdata_virt_offset,
+            kernel_exception_sp,
+            krn_struct_start,
+        );
     }
 
     if VVDBG {
         println!("PID1 pagetables:");
+        #[cfg(feature = "atsama5d27")]
+        debug::print_pagetable(cfg.processes[0].ttbr0);
+        #[cfg(not(feature = "atsama5d27"))]
         debug::print_pagetable(cfg.processes[0].satp);
         println!();
         println!();
         for (_pid, process) in cfg.processes[1..].iter().enumerate() {
             println!("PID{} pagetables:", _pid + 2);
+            #[cfg(feature = "atsama5d27")]
+            debug::print_pagetable(process.ttbr0);
+            #[cfg(not(feature = "atsama5d27"))]
             debug::print_pagetable(process.satp);
             println!();
             println!();
@@ -127,6 +186,7 @@ impl ProgramDescription {
     /// either on SPI flash or in RAM.  The `load_offset` argument
     /// that is passed in should be used instead of `self.load_offset`
     /// for this reason.
+    #[cfg(not(feature = "atsama5d27"))]
     pub fn load(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid) {
         assert!(pid != 0);
         println!("Mapping PID {} into offset {:08x}", pid, load_offset);

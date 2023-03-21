@@ -4,11 +4,17 @@
 #[macro_use]
 mod args;
 use args::{KernelArgument, KernelArguments};
+
+#[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/debug.rs")]
 mod debug;
 mod fonts;
 #[cfg(feature="secboot")]
 mod secboot;
+
+#[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/asm.rs")]
 mod asm;
+#[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/consts.rs")]
+mod consts;
 mod phase1;
 mod phase2;
 mod bootconfig;
@@ -17,6 +23,7 @@ mod minielf;
 mod murmur3;
 mod platform;
 
+use consts::*;
 use asm::*;
 use phase1::{phase_1, InitialProcess};
 use phase2::{phase_2, ProgramDescription};
@@ -28,24 +35,7 @@ use core::{mem, ptr, slice};
 pub type XousPid = u8;
 pub const PAGE_SIZE: usize = 4096;
 const WORD_SIZE: usize = mem::size_of::<usize>();
-pub const BACKUP_ARGS_ADDR: usize = crate::platform::RAM_BASE + crate::platform::RAM_SIZE - 0x2000;
 pub const SIGBLOCK_SIZE: usize = 0x1000;
-
-const USER_STACK_TOP: usize = 0x8000_0000;
-const PAGE_TABLE_OFFSET: usize = 0xff40_0000;
-const PAGE_TABLE_ROOT_OFFSET: usize = 0xff80_0000;
-const CONTEXT_OFFSET: usize = 0xff80_1000;
-const USER_AREA_END: usize = 0xff00_0000;
-
-// All of the kernel structures must live within Megapage 1023,
-// and therefore are limited to 4 MB.
-const EXCEPTION_STACK_TOP: usize = 0xffff_0000;
-const KERNEL_STACK_TOP: usize = 0xfff8_0000;
-const KERNEL_LOAD_OFFSET: usize = 0xffd0_0000;
-const KERNEL_STACK_PAGE_COUNT: usize = 1;
-const KERNEL_ARGUMENT_OFFSET: usize = 0xffc0_0000;
-const GUARD_MEMORY_BYTES: usize = 2 * PAGE_SIZE;
-
 const STACK_PAGE_COUNT: usize = 8;
 
 const VDBG: bool = false; // verbose debug
@@ -187,9 +177,17 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         let ip_offset = cfg.processes.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let rpt_offset =
             cfg.runtime_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
+        #[cfg(not(feature = "atsama5d27"))]
+        let tt_addr = {
+            cfg.processes[0].satp
+        };
+        #[cfg(feature = "atsama5d27")]
+        let tt_addr = {
+            cfg.processes[0].ttbr0
+        };
         println!(
             "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x})",
-            cfg.processes[0].entrypoint, cfg.processes[0].satp, cfg.processes[0].sp,
+            cfg.processes[0].entrypoint, tt_addr, cfg.processes[0].sp,
             arg_offset, ip_offset, rpt_offset,
         );
 
@@ -201,6 +199,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         // actions into "verify" actions during a clean resume (right now we just don't run them),
         // so that attempts to mess with the args during a resume can't lead to overwriting
         // critical parameters like these kernel arguments.
+        #[cfg(not(feature = "atsama5d27"))]
         unsafe {
             let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut[u32; 7];
             (*backup_args)[0] = arg_offset as u32;
@@ -220,20 +219,38 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
                 }
             }
         }
-        use utralib::generated::*;
-        let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
-        gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // patch us over to a different UART for debug (1=LOG 2=APP, 0=KERNEL(hw reset default))
 
-        start_kernel(
-            arg_offset,
-            ip_offset,
-            rpt_offset,
-            cfg.processes[0].satp,
-            cfg.processes[0].entrypoint,
-            cfg.processes[0].sp,
-            cfg.debug,
-            clean,
-        );
+        #[cfg(not(feature = "atsama5d27"))]
+        {
+            use utralib::generated::*;
+            let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
+            gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // patch us over to a different UART for debug (1=LOG 2=APP, 0=KERNEL(hw reset default))
+
+            start_kernel(
+                arg_offset,
+                ip_offset,
+                rpt_offset,
+                cfg.processes[0].satp,
+                cfg.processes[0].entrypoint,
+                cfg.processes[0].sp,
+                cfg.debug,
+                clean,
+            );
+        }
+
+        #[cfg(feature = "atsama5d27")]
+        unsafe {
+            start_kernel(
+                cfg.processes[0].sp,
+                cfg.processes[0].ttbr0,
+                cfg.processes[0].entrypoint,
+                arg_offset,
+                ip_offset,
+                rpt_offset,
+                cfg.debug,
+                clean,
+            )
+        }
     } else {
         #[cfg(feature="resume")]
         unsafe {
@@ -430,7 +447,7 @@ fn check_load(cfg: &mut BootConfig) {
 }
 
 // Install a panic handler when not running tests.
-#[cfg(not(test))]
+#[cfg(all(not(test), not(feature = "atsama5d27")))]
 mod panic_handler {
     use core::panic::PanicInfo;
     #[panic_handler]

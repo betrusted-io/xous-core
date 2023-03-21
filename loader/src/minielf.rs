@@ -1,5 +1,14 @@
 use core::{mem, slice};
 
+#[cfg(feature = "atsama5d27")]
+use armv7::{
+    VirtualAddress,
+    structures::paging::{
+        InMemoryRegister, PageTableDescriptor,
+        Readable, TranslationTableDescriptor, TranslationTableMemory,
+        TranslationTableType, SMALL_PAGE_FLAGS,
+    }
+};
 use crate::*;
 
 pub const FLG_VALID: usize = 0x1;
@@ -7,7 +16,9 @@ pub const FLG_X: usize = 0x8;
 pub const FLG_W: usize = 0x4;
 pub const FLG_R: usize = 0x2;
 pub const FLG_U: usize = 0x10;
+#[cfg(not(feature = "atsama5d27"))]
 pub const FLG_A: usize = 0x40;
+#[cfg(not(feature = "atsama5d27"))]
 pub const FLG_D: usize = 0x80;
 
 pub const MINIELF_FLG_W: u8 = 1;
@@ -97,18 +108,46 @@ impl MiniElf {
         let stack_addr = USER_STACK_TOP - 16;
 
         // Allocate a page to handle the top-level memory translation
-        let satp_address = allocator.alloc() as usize;
-        allocator.change_owner(pid as XousPid, satp_address);
+        #[cfg(not(feature = "atsama5d27"))]
+        let (tt, tt_address) = {
+            let tt_address = allocator.alloc() as usize;
+            let tt = unsafe { &mut *(tt_address as *mut PageTable) };
+
+            allocator.change_owner(pid as XousPid, tt_address);
+            allocator.map_page(tt, tt_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W | FLG_VALID);
+
+            (tt, tt_address)
+        };
+        #[cfg(feature = "atsama5d27")]
+        let (tt, tt_address) = {
+            let pid_idx = pid as usize - 1;
+
+            // Allocate a page to handle the top-level memory translation
+            let tt_address = allocator.alloc_l1_page_table(pid) as usize;
+            allocator.processes[pid_idx].ttbr0 = tt_address;
+
+            let translation_table = tt_address as *mut TranslationTableMemory;
+            // Map all four pages of the translation table to the process' virtual address space
+            for offset in 0..4 {
+                let offset = offset * PAGE_SIZE;
+                allocator.map_page(
+                    translation_table,
+                    tt_address + offset,
+                    PAGE_TABLE_ROOT_OFFSET + offset,
+                    FLG_R | FLG_W | FLG_VALID,
+                );
+            }
+
+            (translation_table, tt_address)
+        };
 
         // Turn the satp address into a pointer
-        println!("    Pagetable @ {:08x}", satp_address);
-        let satp = unsafe { &mut *(satp_address as *mut PageTable) };
-        allocator.map_page(satp, satp_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W | FLG_VALID);
+        println!("    Pagetable @ {:08x}", tt_address);
 
         // Allocate thread 1 for this process
         let thread_address = allocator.alloc() as usize;
         println!("    Thread 1 @ {:08x}", thread_address);
-        allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID);
+        allocator.map_page(tt, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID);
         allocator.change_owner(pid as XousPid, thread_address as usize);
 
         // Allocate stack pages.
@@ -118,7 +157,7 @@ impl MiniElf {
                 // For the initial stack frame, allocate a valid page
                 let sp_page = allocator.alloc() as usize;
                 allocator.map_page(
-                    satp,
+                    tt,
                     sp_page,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     FLG_U | FLG_R | FLG_W | FLG_VALID,
@@ -127,7 +166,7 @@ impl MiniElf {
             } else {
                 // Reserve every other stack page other than the 1st page.
                 allocator.map_page(
-                    satp,
+                    tt,
                     0,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     FLG_U | FLG_R | FLG_W,
@@ -173,7 +212,7 @@ impl MiniElf {
                 // this section and the previous one are all zeroed out.
                 if this_page != current_page_addr || previous_addr == current_page_addr {
                     if VDBG {println!("1       {:08x} -> {:08x}", top as usize, this_page);}
-                    allocator.map_page(satp, top as usize, this_page, flag_defaults);
+                    allocator.map_page(tt, top as usize, this_page, flag_defaults);
                     allocator.change_owner(pid as XousPid, top as usize);
                     allocated_bytes += PAGE_SIZE;
                     top -= PAGE_SIZE;
@@ -211,7 +250,7 @@ impl MiniElf {
                 // Part 2: Copy any full pages.
                 while bytes_to_copy >= PAGE_SIZE {
                     if VDBG {println!("2       {:08x} -> {:08x}", top as usize, this_page);}
-                    allocator.map_page(satp, top as usize, this_page, flag_defaults);
+                    allocator.map_page(tt, top as usize, this_page, flag_defaults);
                     allocator.change_owner(pid as XousPid, top as usize);
                     allocated_bytes += PAGE_SIZE;
                     top -= PAGE_SIZE;
@@ -223,7 +262,7 @@ impl MiniElf {
                 if bytes_to_copy > 0 {
                     let this_page = (section.virt as usize + section.len()) & !(PAGE_SIZE - 1);
                     if VDBG {println!("3       {:08x} -> {:08x}", top as usize, this_page);}
-                    allocator.map_page(satp, top as usize, this_page, flag_defaults);
+                    allocator.map_page(tt, top as usize, this_page, flag_defaults);
                     allocator.change_owner(pid as XousPid, top as usize);
                     allocated_bytes += PAGE_SIZE;
                     top -= PAGE_SIZE;
@@ -270,7 +309,7 @@ impl MiniElf {
                 // --- map FLASH pages to virtual memory ---
                 while pages_to_map > 0 {
                     let map_phys_addr = (image_phys_base + section_map_phys_offset) & !(PAGE_SIZE - 1);
-                    allocator.map_page(satp, map_phys_addr, virt_page, flag_defaults);
+                    allocator.map_page(tt, map_phys_addr, virt_page, flag_defaults);
                     last_mapped_xip = virt_page;
                     allocator.change_owner(pid as XousPid, top as usize);
 
@@ -288,7 +327,15 @@ impl MiniElf {
         let mut process = &mut allocator.processes[pid as usize - 1];
         process.entrypoint = self.entry_point as usize;
         process.sp = stack_addr;
-        process.satp = 0x8000_0000 | ((pid as usize) << 22) | (satp_address >> 12);
+        #[cfg(not(feature = "atsama5d27"))]
+        {
+            process.satp = 0x8000_0000 | ((pid as usize) << 22) | (tt_address >> 12);
+        }
+        #[cfg(feature = "atsama5d27")]
+        {
+            process.asid = pid;
+        }
+
         println!("load allocated 0x{:x} bytes", allocated_bytes);
         allocated_bytes
     }
@@ -299,11 +346,18 @@ impl MiniElf {
         println!("Checking {} PID {} starting at offset {:08x}", if xip {"xip"} else {"ram"}, pid, load_offset);
         let image_phys_base = allocator.base_addr as usize + self.load_offset as usize;
         // the process offset is always 1 less than the PID, because that's how we built the table.
-        let satp = allocator.processes[pid as usize - 1].satp;
+        #[cfg(not(feature = "atsama5d27"))]
+        let tt = {
+            allocator.processes[pid as usize - 1].satp
+        };
+        #[cfg(feature = "atsama5d27")]
+        let tt = {
+            allocator.processes[pid as usize - 1].ttbr0
+        };
 
         let mut section_offset = 0;
         for (index, section) in self.sections.iter().enumerate() {
-            if let Some(dest_offset) = pt_walk(satp, section.virt as usize) {
+            if let Some(dest_offset) = pt_walk(tt, section.virt as usize) {
                 println!("  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), 0x{:x}(PA dst) len {}/0x{:x}",
                     index,
                     section_offset + image_phys_base,
@@ -314,7 +368,7 @@ impl MiniElf {
                 // dumping routines
                 let dump_pa_src = section_offset + image_phys_base;
                 let dump_pa_dst = dest_offset;
-                let dump_pa_end_dst = pt_walk(satp, section.virt as usize + section.len() - 20);
+                let dump_pa_end_dst = pt_walk(tt, section.virt as usize + section.len() - 20);
                 dump_addr(dump_pa_src, "    Src [:20]  ");
                 dump_addr(dump_pa_dst, "    Dst [:20]  ");
                 dump_addr(dump_pa_src + section.len() - 20, "    Src [-20:] ");
@@ -343,7 +397,8 @@ fn dump_addr(addr: usize, label: &str) {
     }
     print!("\n\r");
 }
-#[cfg(feature="debug-print")]
+
+#[cfg(all(feature="debug-print", not(feature = "atsama5d27")))]
 pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
     let l1_pt = unsafe { &mut (*((root << 12) as *mut PageTable)) };
     let l1_entry = l1_pt.entries[(va & 0xFFC0_0000) >> 22];
@@ -358,4 +413,36 @@ pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
     } else {
         None
     }
+}
+
+#[cfg(all(feature="debug-print", feature = "atsama5d27"))]
+pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
+    if va & 3 != 0 {
+        return None;
+    }
+    let v = VirtualAddress::new(va as u32);
+    let vpn1 = v.translation_table_index();
+    let vpn2 = v.page_table_index();
+    assert!(vpn1 < 4096);
+    assert!(vpn2 < 256);
+
+    let existing_l1_entry = unsafe {
+        ((root as *mut u32).add(vpn1) as *mut TranslationTableDescriptor).read_volatile()
+    };
+    if existing_l1_entry.get_type() == TranslationTableType::Invalid {
+        return None
+    }
+    let l2_pt_addr = (existing_l1_entry.as_u32() & 0xfff) + vpn1 as u32 * PAGE_SIZE as u32;
+    let existing_l2_entry_addr =
+        unsafe { (l2_pt_addr as *mut u32).add(vpn2) as *mut PageTableDescriptor };
+    let current_entry: PageTableDescriptor = unsafe { existing_l2_entry_addr.read_volatile() };
+    let flags_u32 = current_entry.get_flags().expect("flags");
+    let flags: InMemoryRegister<u32, SMALL_PAGE_FLAGS::Register> = InMemoryRegister::new(flags_u32);
+    let is_valid = flags.read(SMALL_PAGE_FLAGS::VALID) != 0;
+    let phys = (current_entry.as_u32() & !0xfff) as usize;
+    if is_valid {
+        return Some(phys)
+    }
+
+    None
 }

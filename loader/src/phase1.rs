@@ -2,7 +2,11 @@ use core::{mem, slice};
 
 use crate::*;
 
+#[cfg(feature = "atsama5d27")]
+pub use crate::platform::atsama5d27::load::InitialProcess;
+
 #[repr(C)]
+#[cfg(not(feature = "atsama5d27"))]
 pub struct InitialProcess {
     /// The RISC-V SATP value, which includes the offset of the root page
     /// table plus the process ID.
