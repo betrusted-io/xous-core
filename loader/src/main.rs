@@ -178,16 +178,16 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         let rpt_offset =
             cfg.runtime_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         #[cfg(not(feature = "atsama5d27"))]
-        let tt_addr = {
+        let _tt_addr = {
             cfg.processes[0].satp
         };
         #[cfg(feature = "atsama5d27")]
-        let tt_addr = {
+        let _tt_addr = {
             cfg.processes[0].ttbr0
         };
         println!(
             "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x})",
-            cfg.processes[0].entrypoint, tt_addr, cfg.processes[0].sp,
+            cfg.processes[0].entrypoint, _tt_addr, cfg.processes[0].sp,
             arg_offset, ip_offset, rpt_offset,
         );
 
