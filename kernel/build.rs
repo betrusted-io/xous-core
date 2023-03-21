@@ -23,8 +23,8 @@ fn main() {
         println!("Target {} is NOT bare metal", target);
     }
 
-    // For RISC-V, link in the startup library.
-    if target.starts_with("riscv") {
+    // For RISC-V and ARM, link in the startup library.
+    if target.starts_with("riscv") || target.starts_with("arm") {
         fs::copy(
             format!("bin/{}.a", target),
             out_dir.join(format!("lib{}.a", name)),
@@ -36,11 +36,18 @@ fn main() {
         println!("cargo:rerun-if-changed=bin/{}.a", target);
         println!("cargo:rustc-link-arg=-Tlink.x");
 
+        let linker_file_path = if target.starts_with("arm") {
+            PathBuf::from("src/arch/arm/link.x")
+        } else {
+            PathBuf::from("link.x")
+        };
+
         // Put the linker script somewhere the linker can find it
         fs::File::create(out_dir.join("link.x"))
             .unwrap()
-            .write_all(include_bytes!("link.x"))
+            .write_all(fs::read_to_string(linker_file_path).expect("linker file read").as_bytes())
             .unwrap();
+
         println!("cargo:rustc-link-search={}", out_dir.display());
         println!("cargo:rerun-if-changed=link.x");
         println!("cargo:rustc-link-arg=-Map=kernel.map");

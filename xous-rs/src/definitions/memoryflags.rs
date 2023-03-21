@@ -7,6 +7,8 @@ pub struct MemoryFlags {
 }
 
 impl MemoryFlags {
+    const FLAGS_ALL: usize = 0b111111;
+
     /// Free this memory
     pub const FREE: Self = Self { bits: 0b0000_0000 };
 
@@ -24,12 +26,15 @@ impl MemoryFlags {
     /// Allow the CPU to execute from this page.
     pub const X: Self = Self { bits: 0b0000_1000 };
 
+    /// Marks the page as the 'device' page for on-chip peripherals.
+    pub const DEV: Self = Self { bits: 0b0001_0000 };
+
     pub fn bits(&self) -> usize {
         self.bits
     }
 
     pub fn from_bits(raw: usize) -> Option<MemoryFlags> {
-        if raw > 16 {
+        if raw > Self::FLAGS_ALL {
             None
         } else {
             Some(MemoryFlags { bits: raw })
@@ -45,7 +50,7 @@ impl MemoryFlags {
     }
 
     pub fn all() -> MemoryFlags {
-        MemoryFlags { bits: 15 }
+        MemoryFlags { bits: Self::FLAGS_ALL }
     }
 }
 

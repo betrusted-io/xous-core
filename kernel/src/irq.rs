@@ -22,7 +22,7 @@ pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::E
                     return SystemServices::with_mut(|ss| {
                         // Disable all other IRQs and redirect into userspace
                         arch::irq::disable_all_irqs();
-                        // println!("Making a callback to PID{}: {:x?} ({:08x}, {:x?})", pid, f, irq_no as usize, arg);
+                        klog!("Making a callback to PID{}: {:x?} ({:08x}, {:x?})", pid, f, irq_no as usize, arg);
                         ss.make_callback_to(
                             *pid,
                             f.get() as *mut usize,
@@ -33,6 +33,7 @@ pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::E
                         .map(|_| xous_kernel::Result::ResumeProcess)
                     });
                 } else {
+                    klog!("[!] Masked an unhandled IRQ #{:?}", irq_no);
                     // If there is no handler, mask this interrupt
                     // to prevent an IRQ storm.  This is considered
                     // an error.

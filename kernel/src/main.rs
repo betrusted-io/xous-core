@@ -5,7 +5,7 @@
 #![cfg_attr(baremetal, no_std)]
 
 #[cfg(baremetal)]
-#[macro_use]
+#[cfg_attr(not(target_arch = "arm"), macro_use)]
 extern crate bitflags;
 
 #[macro_use]
@@ -29,17 +29,6 @@ mod syscall;
 
 use services::SystemServices;
 use xous_kernel::*;
-
-#[cfg(baremetal)]
-use core::panic::PanicInfo;
-#[cfg(baremetal)]
-#[panic_handler]
-fn handle_panic(_arg: &PanicInfo) -> ! {
-    println!("PANIC in PID {}: {}", crate::arch::current_pid(), _arg);
-    loop {
-        arch::idle();
-    }
-}
 
 #[cfg(baremetal)]
 #[no_mangle]
@@ -126,13 +115,13 @@ pub extern "C" fn kmain() {
             }
             None => {
                 #[cfg(feature = "debug-print")]
-                println!("NO RUNNABLE TASKS FOUND, entering idle state");
+                klog!("NO RUNNABLE TASKS FOUND, entering idle state");
 
                 #[cfg(feature = "debug-print")]
                 SystemServices::with(|system_services| {
                     for (test_idx, process) in system_services.processes.iter().enumerate() {
                         if !process.free() {
-                            println!("PID {}: {:?}", test_idx + 1, process);
+                            klog!("PID {}: {:?}", test_idx + 1, process);
                         }
                     }
                 });

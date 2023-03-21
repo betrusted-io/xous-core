@@ -244,6 +244,8 @@ impl Process {
             return Err(xous_kernel::Error::ProcessNotFound);
         }
 
+        println!("[!] Terminating process with PID {}", self.pid);
+
         // Free all associated memory pages
         unsafe {
             crate::mem::MemoryManager::with_mut(|mm| mm.release_all_memory_for_process(self.pid))
@@ -357,9 +359,7 @@ impl SystemServices {
         let mut arg_iter = args.iter().peekable();
         loop {
             if let Some(arg) = arg_iter.peek() {
-                println!("loop");
                 if arg.name == u32::from_le_bytes(*b"IniE") || arg.name == u32::from_le_bytes(*b"IniF") {
-                    println!("found!");
                     break;
                 }
             } else {
@@ -373,19 +373,16 @@ impl SystemServices {
         // value from the bootloader.  For each process, translate it from a raw
         // KernelArguments value to a SystemServices Process value.
         for init in init_offsets.iter() {
-            let pid = (init.satp >> 22) & ((1 << 9) - 1);
-            let process = &mut self.processes[(pid - 1) as usize];
+            let pid = init.pid().get();
+            let proc_idx = pid - 1;
+            let process = &mut self.processes[proc_idx as usize];
             // println!(
-            //     "Process: SATP: {:08x}  PID: {}  Memory: {:08x}  PC: {:08x}  SP: {:08x}  Index: {}",
-            //     init.satp,
-            //     pid,
-            //     init.satp << 10,
-            //     init.entrypoint,
-            //     init.sp,
-            //     pid - 1
+            //     "Process[{}]: {:?}",
+            //     pid - 1,
+            //     init,
             // );
             unsafe {
-                process.mapping.from_raw(init.satp);
+                process.mapping.from_init_process(*init);
                 process.ppid = PID::new_unchecked(1);
                 process.pid = PID::new(pid as _).unwrap();
             };
@@ -496,7 +493,7 @@ impl SystemServices {
         // PID0 doesn't exist -- process IDs are offset by 1.
         let pid_idx = pid.get() as usize - 1;
         if cfg!(baremetal) && self.processes[pid_idx].mapping.get_pid() != pid {
-            println!(
+            klog!(
                 "Process doesn't match ({} vs {})",
                 self.processes[pid_idx].mapping.get_pid(),
                 pid
@@ -1054,7 +1051,7 @@ impl SystemServices {
             // Ensure the new process can be run.
             match new.state {
                 ProcessState::Free => {
-                    println!("PID {} was free", new_pid);
+                    klog!("PID {} was free", new_pid);
                     return Err(xous_kernel::Error::ProcessNotFound);
                 }
                 ProcessState::Setup(_) | ProcessState::Allocated => new_tid = INITIAL_TID,
@@ -1104,7 +1101,7 @@ impl SystemServices {
             // let old_state = new.state;
             new.state = match new.state {
                 ProcessState::Setup(thread_init) => {
-                    // println!("Setting up new process...");
+                    // klog!("Setting up new process...");
                     ArchProcess::setup_process(new_pid, thread_init)
                         .expect("couldn't set up new process");
                     ArchProcess::with_inner_mut(|process_inner| process_inner.pid = new_pid);
@@ -1645,7 +1642,7 @@ impl SystemServices {
 
         arch_process.setup_thread(new_tid, thread_init)?;
 
-        // println!("KERNEL({}): Created new thread {}", pid, new_tid);
+        // klog!("KERNEL({}): Created new thread {}", pid, new_tid);
 
         // Queue the thread to run
         process.state = match process.state {
@@ -2333,6 +2330,7 @@ impl SystemServices {
     ///     2. The process has no exception handler
     ///     3. The process is not "Running" or "Ready"
     #[cfg(baremetal)]
+    #[allow(dead_code)]
     pub fn begin_exception_handler(&mut self, pid: PID) -> Option<ExceptionHandler> {
         let process = self.get_process_mut(pid).ok()?;
         let handler = process.exception_handler?;

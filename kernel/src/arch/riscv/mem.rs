@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::mem::MemoryManager;
+use crate::arch::process::InitialProcess;
 use core::fmt;
 use riscv::register::satp;
 use xous_kernel::{MemoryFlags, PID};
@@ -109,8 +110,13 @@ impl MemoryMapping {
     // pub fn set(&mut self, root_addr: usize, pid: PID) {
     //     self.satp: 0x8000_0000 | (((pid as usize) << 22) & (((1 << 9) - 1) << 22)) | (root_addr >> 12)
     // }
+    #[allow(dead_code)]
     pub unsafe fn from_raw(&mut self, satp: usize) {
         self.satp = satp;
+    }
+
+    pub unsafe fn from_init_process(&mut self, init: InitialProcess) {
+        self.satp = init.satp;
     }
 
     /// Allocate a brand-new memory mapping. When this memory mapping is created,

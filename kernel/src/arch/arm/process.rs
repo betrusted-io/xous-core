@@ -1,63 +1,42 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::services::ProcessInner;
+use crate::mem::PAGE_SIZE;
+use crate::arch::mem::THREAD_CONTEXT_AREA;
+
+use xous_kernel::{ProcessInit, ProcessStartup, ThreadInit, PID, TID, arch::Arguments};
 use core::mem;
-static mut PROCESS: *mut ProcessImpl = 0xff80_1000 as *mut ProcessImpl;
+
+static mut PROCESS: *mut ProcessImpl = THREAD_CONTEXT_AREA as *mut ProcessImpl;
 pub const MAX_THREAD: TID = 31;
 pub const EXCEPTION_TID: TID = 1;
 pub const INITIAL_TID: TID = 2;
 pub const IRQ_TID: TID = 0;
 
-use crate::arch::mem::PAGE_SIZE;
-use crate::services::ProcessInner;
-use xous_kernel::{ProcessInit, ProcessStartup, ThreadInit, PID, TID};
-
-// use crate::args::KernelArguments;
 pub const DEFAULT_STACK_SIZE: usize = 128 * 1024;
 pub const MAX_PROCESS_COUNT: usize = 64;
-// pub use crate::arch::mem::DEFAULT_STACK_TOP;
 
 /// This is the address a program will jump to in order to return from an ISR.
-pub const RETURN_FROM_ISR: usize = 0xff80_2000;
+pub const RETURN_FROM_ISR: usize = 0xff80_5000;
 
 /// This is the address a thread will return to when it exits.
-pub const EXIT_THREAD: usize = 0xff80_3000;
+pub const EXIT_THREAD: usize = 0xff80_6000;
 
 /// This is the address a thread will return to when it finishes handling an exception.
-pub const RETURN_FROM_EXCEPTION_HANDLER: usize = 0xff80_4000;
+pub const RETURN_FROM_EXCEPTION_HANDLER: usize = 0xff80_7000;
 
-// Thread IDs have three possible meaning:
-// Logical Thread ID: What the user sees
-// Thread Context Index: An index into the thread slice
-// Hardware Thread ID: The index that the ISR uses
-//
-// The Hardware Thread ID is always equal to the Thread Context
-// Index, minus one. For example, the default thread ID is
-// Hardware Thread ID 1 is Thread Context Index 0.
-// The Logical Thread ID is equal to the Hardware Thread ID
-// plus one again. This is because the ISR context is Thread
-// Context Index 0.
-// Therefore, the first Logical Thread ID is 1, which maps
-// to Hardware Thread ID 2, which is Thread Context Index 1.
-//
-// +-----------------+-----------------+-----------------+
-// |    Thread ID    |  Context Index  | Hardware Thread |
-// +=================+=================+=================+
-// |   ISR Context   |        0        |        1        |
-// |        1        |        1        |        2        |
-// |        2        |        2        |        3        |
-
-// ProcessImpl occupies a multiple of pages mapped to virtual address `0xff80_1000`.
+// ProcessImpl occupies a multiple of pages mapped to virtual address `0xff80_4000` (THREAD_CONTEXT_AREA).
 // Each thread is 128 bytes (32 4-byte registers). The first "thread" does not exist,
 // and instead is any bookkeeping information related to the process.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 struct ProcessImpl {
     /// Used by the interrupt handler to calculate offsets
     scratch: usize,
 
     /// The currently-active thread for this process. This must
-    /// be the 2nd item, because the ISR directly writes this value.
+    /// be the 2nd item, because the ISR directly accesses this value.
     hardware_thread: usize,
 
     /// Global parameters used by the operating system
@@ -91,77 +70,71 @@ static mut PROCESS_TABLE: ProcessTable = ProcessTable {
     table: [false; MAX_PROCESS_COUNT],
 };
 
-#[repr(C)]
-#[cfg(baremetal)]
-#[derive(Debug, Copy, Clone)]
-/// The stage1 bootloader sets up some initial processes.  These are reported
-/// to us as (satp, entrypoint, sp) tuples, which can be turned into a structure.
-/// The first element is always the kernel.
-pub struct InitialProcess {
-    /// The RISC-V SATP value, which includes the offset of the root page
-    /// table plus the process ID.
-    pub satp: usize,
+pub fn set_current_pid(pid: PID) {
+    let pid_idx = (pid.get() - 1) as usize;
+    unsafe {
+        let mut pt = &mut PROCESS_TABLE;
 
-    /// Where execution begins
-    pub entrypoint: usize,
-
-    /// Address of the top of the stack
-    pub sp: usize,
-}
-
-impl InitialProcess {
-    pub fn pid(&self) -> PID {
-        let pid = (self.satp >> 22) & ((1 << 9) - 1);
-        unsafe { PID::new_unchecked(pid as u8) }
+        match pt.table.get(pid_idx) {
+            None | Some(false) => panic!("PID {} does not exist", pid),
+            _ => (),
+        }
+        pt.current = pid;
     }
 }
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct Process {
-    pid: PID,
+pub fn current_pid() -> PID {
+    unsafe { PROCESS_TABLE.current }
+}
+
+#[allow(dead_code)]
+pub fn current_tid() -> TID {
+    unsafe { ((*PROCESS).hardware_thread) - 1 }
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, Default)]
-/// Everything required to keep track of a single thread of execution.
-pub struct Thread {
-    /// Storage for all RISC-V registers, minus $zero
-    pub registers: [usize; 31],
-
-    /// The return address.  Note that if this thread was created because of an
-    /// `ecall` instruction, you will need to add `4` to this before returning,
-    /// to prevent that instruction from getting executed again. If this is 0,
-    /// then this thread is not valid.
-    pub sepc: usize,
+#[derive(Copy, Clone, Debug)]
+pub struct Process {
+    pid: PID,
 }
 
 impl Process {
     pub fn current() -> Process {
         let pid = unsafe { PROCESS_TABLE.current };
-        let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
-        assert_eq!((pid.get() as usize), hardware_pid);
+        // TODO: find a place where to call `set_hardware_pid()` for this to not panic
+        //let hardware_pid = unsafe { get_hardware_pid() & 0xff }; // Discards the process ID field of CONTEXTIDR
+        //assert_eq!((pid.get() as usize), hardware_pid,
+        //           "Hardware current PID doesn't match the software. hw = {} vs sw = {}", pid, hardware_pid);
         Process { pid }
     }
 
-    /// Mark this process as running on the current core
     pub fn activate(&mut self) -> Result<(), xous_kernel::Error> {
+        let pid = self.pid.get() as usize;
+        let pid_and_asid = (pid << 8) | pid; // Set both process ID and ASID
+        unsafe {
+            core::arch::asm!(
+                "mcr p15, 0, {contextidr}, c13, c0, 1",
+                contextidr = in(reg) pid_and_asid,
+            )
+        }
+
         Ok(())
     }
 
     /// Calls the provided function with the current inner process state.
     pub fn with_inner<F, R>(f: F) -> R
-    where
-        F: FnOnce(&ProcessInner) -> R,
+        where
+            F: FnOnce(&ProcessInner) -> R,
     {
         let process = unsafe { &*PROCESS };
         f(&process.inner)
     }
 
     /// Calls the provided function with the current inner process state.
+    #[allow(dead_code)]
     pub fn with_current<F, R>(f: F) -> R
-    where
-        F: FnOnce(&Process) -> R,
+        where
+            F: FnOnce(&Process) -> R,
     {
         let process = Self::current();
         f(&process)
@@ -169,16 +142,16 @@ impl Process {
 
     /// Calls the provided function with the current inner process state.
     pub fn with_current_mut<F, R>(f: F) -> R
-    where
-        F: FnOnce(&mut Process) -> R,
+        where
+            F: FnOnce(&mut Process) -> R,
     {
         let mut process = Self::current();
         f(&mut process)
     }
 
     pub fn with_inner_mut<F, R>(f: F) -> R
-    where
-        F: FnOnce(&mut ProcessInner) -> R,
+        where
+            F: FnOnce(&mut ProcessInner) -> R,
     {
         let process = unsafe { &mut *PROCESS };
         f(&mut process.inner)
@@ -202,7 +175,7 @@ impl Process {
     }
 
     pub fn thread_exists(&self, tid: TID) -> bool {
-        self.thread(tid).sepc != 0
+        self.thread(tid).resume_addr != 0
     }
 
     /// Set the current thread number.
@@ -238,15 +211,15 @@ impl Process {
         &process.threads[thread]
     }
 
-    #[cfg(feature="gdb-stub")]
+    #[cfg(feature = "gdb-stub")]
     pub fn for_each_thread_mut<F>(&self, mut op: F)
-    where
-        F: FnMut(TID, &Thread),
+        where
+            F: FnMut(TID, &Thread),
     {
         let process = unsafe { &mut *PROCESS };
         for (idx, thread) in process.threads.iter_mut().enumerate() {
             // Ignore threads that have no PC, and ignore the ISR thread
-            if thread.sepc == 0 || idx == IRQ_TID {
+            if thread.resume_addr == 0 || idx == IRQ_TID {
                 continue;
             }
             op(idx, thread);
@@ -264,7 +237,7 @@ impl Process {
                 tid -= process.threads.len()
             }
 
-            if tid != IRQ_TID && tid != EXCEPTION_TID && thread.sepc == 0 {
+            if tid != IRQ_TID && tid != EXCEPTION_TID && thread.resume_addr == 0 {
                 process.last_tid_allocated = tid as _;
                 return Some(tid as TID);
             }
@@ -273,18 +246,33 @@ impl Process {
     }
 
     pub fn set_thread_result(&mut self, thread_nr: TID, result: xous_kernel::Result) {
-        let vals = unsafe { mem::transmute::<_, [usize; 8]>(result) };
         let thread = self.thread_mut(thread_nr);
-        for (idx, reg) in vals.iter().enumerate() {
-            thread.registers[9 + idx] = *reg;
+
+        klog!("Setting TID={} result before: {:x?}", thread_nr, thread);
+
+        // Thread context's r0 should hold a pointer to the syscall arguments/result structure
+        // that's located on the thread's stack
+        if thread.r0 <= thread.sp && thread.r0 > thread.sp - DEFAULT_STACK_SIZE {
+            let args = thread.r0 as *mut Arguments;
+            let args = unsafe { &mut *args };
+
+            args.set_result(&result);
+        } else {
+            klog!("r0 ({:08x}) is not within thread stack space: [{:08x}; {:08x}]",
+                thread.r0,
+                thread.sp - DEFAULT_STACK_SIZE,
+                thread.sp
+            );
         }
+
+        klog!("Setting TID={} result before: {:x?}", thread_nr, thread);
     }
 
     pub fn retry_instruction(&mut self, tid: TID) -> Result<(), xous_kernel::Error> {
         let process = unsafe { &mut *PROCESS };
         let mut thread = &mut process.threads[tid];
-        if thread.sepc >= 4 {
-            thread.sepc -= 4;
+        if thread.resume_addr >= 4 {
+            thread.resume_addr -= 4;
         }
         Ok(())
     }
@@ -295,14 +283,18 @@ impl Process {
         let mut process = unsafe { &mut *PROCESS };
         let tid = INITIAL_TID;
 
-        assert_eq!(
-            pid,
-            crate::arch::current_pid(),
-            "hardware pid does not match setup pid"
-        );
+        if pid.get() > 1 {
+            assert_eq!(
+                pid,
+                crate::arch::current_pid(),
+                "hardware pid does not match setup pid"
+            );
+        }
+
         assert!(tid != IRQ_TID, "tried to init using the irq thread");
+        let size = mem::size_of::<ProcessImpl>();
         assert!(
-            mem::size_of::<ProcessImpl>() == PAGE_SIZE,
+            size == PAGE_SIZE,
             "Process size is {}, not PAGE_SIZE ({}) (Thread size: {}, array: {}, Inner: {})",
             mem::size_of::<ProcessImpl>(),
             PAGE_SIZE,
@@ -321,7 +313,7 @@ impl Process {
             INITIAL_TID
         );
 
-        klog!("Setting up new process {}", pid.get());
+        //klog!("Setting up new process {}", pid.get());
         unsafe {
             let pid_idx = (pid.get() as usize) - 1;
             assert!(
@@ -344,12 +336,13 @@ impl Process {
 
         let mut thread = &mut process.threads[tid];
 
-        thread.sepc = unsafe { core::mem::transmute::<_, usize>(thread_init.call) };
-        thread.registers[1] = thread_init.stack.as_ptr() as usize + thread_init.stack.len();
-        thread.registers[9] = thread_init.arg1;
-        thread.registers[10] = thread_init.arg2;
-        thread.registers[11] = thread_init.arg3;
-        thread.registers[12] = thread_init.arg4;
+        thread.resume_addr = thread_init.call;
+        thread.ret_addr = EXIT_THREAD;
+        thread.sp = thread_init.stack.as_ptr() as usize + thread_init.stack.len();
+        thread.r0 = thread_init.arg1;
+        thread.r1 = thread_init.arg2;
+        thread.r2 = thread_init.arg3;
+        thread.r3 = thread_init.arg4;
 
         klog!("thread_init: {:x?}  thread: {:x?}", thread_init, thread);
 
@@ -359,7 +352,7 @@ impl Process {
             if pid != 1 {
                 klog!(
                     "initializing PID {} thread {} with entrypoint {:08x}, stack @ {:08x}, arg {:08x}",
-                    pid, tid, thread.sepc, thread.registers[1], thread.registers[9],
+                    pid, tid, thread.resume_addr, thread.sp, thread.r0,
                 );
             }
         }
@@ -389,10 +382,12 @@ impl Process {
         setup: ThreadInit,
     ) -> Result<(), xous_kernel::Error> {
         let entrypoint = unsafe { core::mem::transmute::<_, usize>(setup.call) };
+
         // Create the new context and set it to run in the new address space.
         let pid = self.pid.get();
         let thread = self.thread_mut(new_tid);
-        // println!("Setting up thread {}, pid {}", new_tid, pid);
+
+        //klog!("Setting up thread {}, pid {}", new_tid, pid);
         let sp = setup.stack.as_ptr() as usize + setup.stack.len();
         if sp <= 16 {
             return Err(xous_kernel::Error::BadAddress);
@@ -415,41 +410,22 @@ impl Process {
     ///
     /// # Errors
     ///     xous::ThreadNotAvailable - the thread did not exist
-    pub fn destroy_thread(&mut self, tid: TID) -> Result<usize, xous_kernel::Error> {
-        let thread = self.thread_mut(tid);
-
-        // Ensure this thread is valid
-        if thread.sepc == 0 || tid == IRQ_TID {
-            return Err(xous_kernel::Error::ThreadNotAvailable);
-        }
-
-        // thread.registers[0] == x1
-        // thread.registers[1] == x2
-        // ...
-        // thread.registers[4] == x5 == t0
-        // ...
-        // thread.registers[9] == x10 == a0
-        // thread.registers[10] == x11 == a1
-        let return_value = thread.registers[9];
-
-        for val in &mut thread.registers {
-            *val = 0;
-        }
-        thread.sepc = 0;
-
-        Ok(return_value)
+    #[allow(dead_code)]
+    pub fn destroy_thread(&mut self, _tid: TID) -> Result<usize, xous_kernel::Error> {
+        todo!();
     }
 
     pub fn print_all_threads(&self) {
         let process = unsafe { &mut *PROCESS };
         for (tid_idx, &thread) in process.threads.iter().enumerate() {
-            let tid = tid_idx;
-            if thread.registers[1] != 0 {
+            let tid = tid_idx + 1;
+            if thread.sp != 0 {
                 Self::print_thread(tid, &thread);
             }
         }
     }
 
+    #[allow(dead_code)]
     pub fn print_current_thread(&self) {
         let thread = self.current_thread();
         let tid = self.current_tid();
@@ -459,99 +435,33 @@ impl Process {
     pub fn print_thread(_tid: TID, _thread: &Thread) {
         println!("Thread {}:", _tid);
         println!(
-            "PC:{:08x}   SP:{:08x}   RA:{:08x}",
-            _thread.sepc, _thread.registers[1], _thread.registers[0]
+            "\tPC: {:08x}   SP: {:08x}    TP: {:08x}    RA: {:08x}",
+            _thread.pc, _thread.sp, _thread.tp, _thread.ret_addr,
         );
         println!(
-            "GP:{:08x}   TP:{:08x}",
-            _thread.registers[2], _thread.registers[3]
+            "\tR0: {:08x}   R1: {:08x}    R2: {:08x}    R3: {:08x}",
+            _thread.r0, _thread.r1, _thread.r2, _thread.r3,
         );
         println!(
-            "T0:{:08x}   T1:{:08x}   T2:{:08x}",
-            _thread.registers[4], _thread.registers[5], _thread.registers[6]
+            "\tR4: {:08x}   R5: {:08x}    R6: {:08x}    R7: {:08x}",
+            _thread.r4, _thread.r5, _thread.r6, _thread.r7,
         );
         println!(
-            "T3:{:08x}   T4:{:08x}   T5:{:08x}   T6:{:08x}",
-            _thread.registers[27],
-            _thread.registers[28],
-            _thread.registers[29],
-            _thread.registers[30]
+            "\tR8: {:08x}   R9: {:08x}   R10: {:08x}   R11: {:08x}",
+            _thread.r8, _thread.r9, _thread.r10, _thread.fp,
         );
         println!(
-            "S0:{:08x}   S1:{:08x}   S2:{:08x}   S3:{:08x}",
-            _thread.registers[7],
-            _thread.registers[8],
-            _thread.registers[17],
-            _thread.registers[18]
-        );
-        println!(
-            "S4:{:08x}   S5:{:08x}   S6:{:08x}   S7:{:08x}",
-            _thread.registers[19],
-            _thread.registers[20],
-            _thread.registers[21],
-            _thread.registers[22]
-        );
-        println!(
-            "S8:{:08x}   S9:{:08x}  S10:{:08x}  S11:{:08x}",
-            _thread.registers[23],
-            _thread.registers[24],
-            _thread.registers[25],
-            _thread.registers[26]
-        );
-        println!(
-            "A0:{:08x}   A1:{:08x}   A2:{:08x}   A3:{:08x}",
-            _thread.registers[9],
-            _thread.registers[10],
-            _thread.registers[11],
-            _thread.registers[12]
-        );
-        println!(
-            "A4:{:08x}   A5:{:08x}   A6:{:08x}   A7:{:08x}",
-            _thread.registers[13],
-            _thread.registers[14],
-            _thread.registers[15],
-            _thread.registers[16]
+            "\tIP: {:08x}   LR: {:08x}  SPSR: {:08x}",
+            _thread.ip, _thread.lr, _thread.psr,
         );
     }
 
-    /// Create a brand-new process. The memory space must already be set up.
     pub fn create(
-        pid: PID,
-        init_data: ProcessInit,
-        services: &mut crate::SystemServices,
+        _pid: PID,
+        _init_data: ProcessInit,
+        _services: &mut crate::SystemServices,
     ) -> Result<ProcessStartup, xous_kernel::Error> {
-        let current_pid = current_pid();
-
-        services.get_process(pid)?.mapping.activate()?;
-        let server_id = services.create_server_id()?;
-        let server_id_array = server_id.to_array();
-
-        // klog!("previous process init was {:x?}", init_data);
-        let initial_thread = ThreadInit::new(
-            init_data.start.get(),
-            init_data.stack,
-            server_id_array[0] as _,
-            server_id_array[1] as _,
-            server_id_array[2] as _,
-            server_id_array[3] as _,
-        );
-
-        Self::setup_process(pid, initial_thread).unwrap();
-
-        services.create_server_with_address(pid, server_id, false)?;
-
-        // klog!("activating parent process {}", current_pid.get());
-        services.get_process(current_pid)?.mapping.activate()?;
-        // klog!("connecting to server in parent process");
-        let cid = services.connect_process_to_server(current_pid, server_id)?;
-
-        services.send_memory(
-            init_data.text.as_ptr() as *mut usize,
-            pid,
-            init_data.text_destination.get() as *mut usize,
-            init_data.text.len(),
-        )?;
-        Ok(ProcessStartup::new(pid, cid))
+        todo!();
     }
 
     pub fn destroy(pid: PID) -> Result<(), xous_kernel::Error> {
@@ -564,55 +474,90 @@ impl Process {
         Ok(())
     }
 
-    pub fn find_thread<F>(&self, op: F) -> Option<(TID, &mut Thread)>
+    pub fn find_thread<F>(&self, _op: F) -> Option<(TID, &mut Thread)>
     where
         F: Fn(TID, &Thread) -> bool,
     {
-        let process = unsafe { &mut *PROCESS };
-        for (idx, thread) in process.threads.iter_mut().enumerate() {
-            if thread.sepc == 0 {
-                continue;
-            }
-            if op(idx, thread) {
-                return Some((idx, thread));
-            }
-        }
-        None
+        todo!();
     }
 }
+
+/// Everything required to keep track of a single thread of execution.
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C)]
+pub struct Thread {
+    pub r0: usize,  // 0
+    pub r1: usize,  // 1
+    pub r2: usize,  // 2
+    pub r3: usize,  // 3
+    pub r4: usize,  // 4
+    pub r5: usize,  // 5
+    pub r6: usize,  // 6
+    pub r7: usize,  // 7
+    pub r8: usize,  // 8
+    pub r9: usize,  // 9
+    pub r10: usize, // 10
+    pub fp: usize,  // 11
+    pub ip: usize,  // 12
+    pub sp: usize,  // 13
+    pub lr: usize,  // 14
+    pub pc: usize,  // 15
+    pub psr: usize, // 16
+
+    /// A hardware "thread pointer" for TLS (see ARM ARM B3.12.46)
+    pub tp: usize,  // 17
+
+    /// A return address when thread is resumed as an ISR
+    pub ret_addr: usize, // 18
+
+    /// An address to jump when resuming or invoking a thread/process to to avoid using LR for this purpose.
+    pub resume_addr: usize, // 19
+
+    _padding: [usize; 12],
+}
+
+// A compile-time check that the thread structure doesn't overflow
+const _: () = {
+    if mem::size_of::<Thread>() != (32 * 4) {
+        panic!("Incorrect size of Thread structure. Ensure correct padding");
+    }
+};
 
 impl Thread {
     /// The current stack pointer for this thread
     pub fn stack_pointer(&self) -> usize {
-        self.registers[1]
+        self.sp
     }
 
     pub fn a0(&self) -> usize {
-        self.registers[9]
+        self.r0
     }
 
     pub fn a1(&self) -> usize {
-        self.registers[10]
+        self.r1
     }
 }
 
-pub fn set_current_pid(pid: PID) {
-    let pid_idx = (pid.get() - 1) as usize;
-    unsafe {
-        let mut pt = &mut PROCESS_TABLE;
+#[repr(C)]
+#[cfg(baremetal)]
+#[derive(Debug, Copy, Clone)]
+/// **Note**: this struct must be in sync with the loader version.
+pub struct InitialProcess {
+    /// Level-1 translation table base address of the process
+    pub ttbr0: usize,
 
-        match pt.table.get(pid_idx) {
-            None | Some(false) => panic!("PID {} does not exist", pid),
-            _ => (),
-        }
-        pt.current = pid;
+    /// Address Space ID (PID) of the process.
+    pub asid: u8,
+
+    /// Where execution begins
+    pub entrypoint: usize,
+
+    /// Address of the top of the stack
+    pub sp: usize,
+}
+
+impl InitialProcess {
+    pub fn pid(&self) -> PID {
+        PID::new(self.asid).expect("non-zero PID")
     }
-}
-
-pub fn current_pid() -> PID {
-    unsafe { PROCESS_TABLE.current }
-}
-
-pub fn current_tid() -> TID {
-    unsafe { ((*PROCESS).hardware_thread) - 1 }
 }

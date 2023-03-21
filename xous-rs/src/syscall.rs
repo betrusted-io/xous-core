@@ -2053,6 +2053,16 @@ pub fn virt_to_phys(va: usize) -> core::result::Result<usize, Error> {
     })
 }
 
+pub fn increase_heap(bytes: usize, flags: MemoryFlags) -> core::result::Result<MemoryRange, ()> {
+    let res = crate::arch::syscall(SysCall::IncreaseHeap(bytes, flags));
+    if let Ok(Result::MemoryRange(range)) = res
+    {
+        return Ok(range);
+    }
+
+    Err(())
+}
+
 /// Perform a raw syscall and return the result. This will transform
 /// `xous::Result::Error(e)` into an `Err(e)`.
 pub fn rsyscall(call: SysCall) -> SysCallResult {
