@@ -115,16 +115,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // for fast checking of AES hardware accelerator
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"].to_vec();
 
-    // packages located on crates.io. For testing non-local build configs that are less
-    // concerned about software supply chain and more focused on developer convenience.
-    let base_pkgs_remote = [
-        "xous-log@0.1.27",         // "well known" service: debug logging
-        "xous-names@0.9.36",      // "well known" service: manage inter-server connection lookup
-        "xous-susres@0.1.35",     // ticktimer registers with susres to coordinate time continuity across sleeps
-        "xous-ticktimer@0.1.31",   // "well known" service: thread scheduling
-    ].to_vec();
-    let xous_kernel_remote = "xous-kernel@0.9.37";
-
     // ---- extract position independent args ----
     let lkey = get_flag("--lkey")?;
     if lkey.len() != 0 {
@@ -210,12 +200,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_services(&get_cratespecs());
             builder.add_service("ffi-test", false);
             builder.add_loader_feature("renode-bypass");
-        }
-        Some("renode-remote") => {
-            builder.target_renode()
-                   .add_services(&base_pkgs_remote.into_iter().map(String::from).collect())
-                   .remove_feature("timestamp") // crates.io package can't have a timestamp
-                   .use_kernel(xous_kernel_remote);
         }
 
         // ------- hosted mode configs -------

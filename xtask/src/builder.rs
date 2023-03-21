@@ -299,6 +299,7 @@ impl Builder {
         self
     }
     /// remove a feature previously added by a previous call
+    #[allow(dead_code)]
     pub fn remove_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
         self.features.retain(|x| x != feature);
         self

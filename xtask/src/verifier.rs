@@ -8,19 +8,16 @@ use std::io::{BufReader, Read};
 use crate::DynError;
 
 pub fn check_project_consistency() -> Result<(), DynError> {
+    // note: implementations no longer published as crates: just APIs as of March 2023
+    // TODO: retire utralib/svd2utra from publication as well
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous@0.9.35",
-        "xous-kernel@0.9.37",
-        "xous-ipc@0.9.35",
-        "xous-api-log@0.1.30",
-        "xous-api-names@0.9.32",
-        "xous-api-susres@0.9.30",
-        "xous-api-ticktimer@0.9.30",
-        "xous-log@0.1.27",
-        "xous-names@0.9.36",
-        "xous-susres@0.1.35",
-        "xous-ticktimer@0.1.31",
+        "xous@0.9.36",
+        "xous-ipc@0.9.36",
+        "xous-api-log@0.1.31",
+        "xous-api-names@0.9.33",
+        "xous-api-susres@0.9.31",
+        "xous-api-ticktimer@0.9.31",
         // this set is only updated if the utralib changes
         "utralib@0.1.15",
         "svd2utra@0.1.13",
