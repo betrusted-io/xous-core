@@ -3,17 +3,17 @@ authors = ["bunnie <bunnie@kosagi.com>"]
 description = "Xous microkernel OS inter-process name resolution server"
 edition = "2018"
 name = "xous-names"
-version = "0.9.36"
+version = "0.9.37"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous-api-names = "0.9.32"
-log-server = {package = "xous-api-log", version = "0.1.30"}
-xous = "0.9.35"
-xous-ipc = "0.9.35"
+xous-api-names = "0.9.33"
+log-server = {package = "xous-api-log", version = "0.1.31"}
+xous = "0.9.36"
+xous-ipc = "0.9.36"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 log = "0.4.14"

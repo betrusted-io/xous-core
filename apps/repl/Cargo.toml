@@ -10,11 +10,11 @@ description = "REPL demo app"
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
-xous = "0.9.35"
-xous-ipc = "0.9.35"
-log-server = { package = "xous-api-log", version = "0.1.30" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.30" }
-xous-names = { package = "xous-api-names", version = "0.9.32" }
+xous = "0.9.36"
+xous-ipc = "0.9.36"
+log-server = { package = "xous-api-log", version = "0.1.31" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.31" }
+xous-names = { package = "xous-api-names", version = "0.9.33" }
 gam = {path = "../../services/gam" }
 graphics-server = {path = "../../services/graphics-server" }
 trng = {path = "../../services/trng"}
