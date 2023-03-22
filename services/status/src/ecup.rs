@@ -195,6 +195,12 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 const WF200_HASH_LEN: usize = 0x48; // this is actually hash + signature + keyset
 
                 let ec_reported_rev = com.get_ec_sw_tag().unwrap(); // fetch the purported rev from the EC. We take it at face value.
+                if ec_reported_rev.maj == 0 && ec_reported_rev.min == 0 && ec_reported_rev.rev == 0 {
+                    log::error!("EC rev report seems bogus: {:?}; aborting autoupdate process.", ec_reported_rev);
+                    // this will trigger a dialog box "EC update aborted due to error!"
+                    xous::return_scalar(msg.sender, UpdateResult::Abort.to_usize().unwrap()).unwrap();
+                    continue;
+                }
 
                 let mut did_something = false;
                 let package = unsafe{ core::slice::from_raw_parts(ec_package.as_ptr() as *const u8, xous::EC_FW_PKG_LEN as usize)};
