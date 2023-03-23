@@ -40,7 +40,7 @@ impl I2cStateMachine {
     pub fn in_progress(&self) -> bool {
         false
     }
-    pub fn trace(&self) {
+    pub fn trace(&self, _arg: usize) {
     }
     pub fn driver_reset(&mut self) {
     }
