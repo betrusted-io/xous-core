@@ -1,10 +1,11 @@
 use crate::api::*;
+use std::sync::{Arc, atomic::AtomicBool};
 
 pub(crate) struct I2cStateMachine {
 }
 
 impl I2cStateMachine {
-    pub fn new(_handler_conn: xous::CID) -> Self {
+    pub fn new(_handler_conn: xous::CID, _power_csr_raw: *mut u32, _wfi_state: Arc::<AtomicBool>) -> Self {
         I2cStateMachine {
         }
     }
