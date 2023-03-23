@@ -156,7 +156,7 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
             }),
             Some(I2cOpcode::I2cTxRx) => {
                 if !i2c_mutex_acquired {
-                    log::warn!("TxRx operation was initiated without an acquired mutex. This will become a hard error in future revisions");
+                    log::warn!("TxRx operation was initiated without an acquired mutex. This is only allowed as the last operation before a shutdown.");
                 }
                 i2c.initiate(msg);
                 // update the timeout interval to whatever was specified by the transaction
@@ -290,6 +290,11 @@ fn main() -> ! {
         log::debug!("{:?}", opcode);
         match opcode {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                let mut dummy = [0u8; 1];
+                // make the last transaction to I2C a "read", so that any subsequent noise reads the device, instead of writing junk to the registers
+                // the address 0xc is chosen to put it far "after" any critical registers
+                i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, 0xC, &mut dummy).expect("RTC access error");
+
                 llio.suspend();
                 #[cfg(feature="tts")]
                 llio.tts_sleep_indicate(); // this happens after the suspend call because we don't want the sleep indicator to be restored on resume
@@ -509,6 +514,7 @@ fn main() -> ! {
                 let seconds = delay as u8;
                 i2c.i2c_mutex_acquire();
                 // set clock units to 1 second, output pulse length to ~218ms
+                // and program the elapsed time (TIMERB_CLK is followed by TIMERB)
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB_CLK, &[(TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]).expect("RTC access error");
                 // program elapsed time
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB, &[seconds]).expect("RTC access error");
@@ -525,7 +531,7 @@ fn main() -> ! {
                 i2c.i2c_mutex_acquire();
                 i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, 0, &mut d).ok();
                 i2c.i2c_mutex_release();
-                log::debug!("reg after wakeup alarm: {:x?}", d);
+                log::info!("reg after wakeup alarm: {:x?}", d);
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
             Some(Opcode::ClearWakeupAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
@@ -604,17 +610,31 @@ fn main() -> ! {
                             tt.sleep_ms(37).unwrap(); // short pause in case the upset was caused by too much activity
                             // re-acquire the mutex, because it was released by the driver reset
                             i2c.i2c_mutex_acquire();
-                            let secs = if settings[1] & 0x7f < 60 {
+                            let secs = if to_binary(settings[1] & 0x7f) < 60 {
                                 settings[1] & 0x7f
                             } else {
                                 0
                             };
-                            // do a "hot reset" -- just clears error flags, but doesn't rewrite time
+                            if to_binary(settings[7]) > 99 {
+                                settings[7] = settings[7] & 0x7f;
+                            }
+                            if to_binary(settings[3]) > 23 {
+                                settings[3] = settings[3] & 0x1f;
+                            }
+                            // do a "hot reset" -- just clears error flags, but does our best to avoid rewriting time
+                            // if a lot of values are wrong, it means that the RTC had garbage written to it on the
+                            // previous shutdown. This at least gets us *working* again, but time is lost.
                             let reset_values = [
                                 0x0, // clear all interrupts, return to normal operations
                                 0x0, // clear all interrupts
                                 RTC_PWR_MODE,  // reset power mode
-                                secs  // write the seconds register back without the error flag
+                                secs,  // write the seconds register back without the error flag
+                                settings[2] & 0x7f,
+                                settings[3], // requires a fix interpreting BCD
+                                settings[4] & 0x3F,
+                                settings[5] & 0x7,
+                                settings[6] & 0x1F,
+                                settings[7], // this requires a fix interpreting BCD, which is above
                             ];
                             i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL1, &reset_values).expect("RTC access error");
                             i2c.i2c_mutex_release();
