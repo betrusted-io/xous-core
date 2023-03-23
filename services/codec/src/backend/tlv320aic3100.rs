@@ -285,7 +285,7 @@ impl Codec {
     }
     /// Convenience wrapper for I2C transactions. Multiple I2C ops that have to be execute atomically must be manually guarded with a i2c_mutex_[acquire/release]
     fn w(&mut self, adr: u8, data: &[u8]) -> bool {
-        //log::trace!("writing to 0x{:x}, {:x?}", adr, data);
+        // log::info!("writing to 0x{:x}, {:x?}", adr, data);
         match self.i2c.i2c_write(TLV320AIC3100_I2C_ADR, adr, data) {
             Ok(status) => {
                 //log::trace!("write returned with status {:?}", status);
