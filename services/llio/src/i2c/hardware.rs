@@ -155,6 +155,9 @@ impl I2cStateMachine {
     pub fn suspend(&mut self) {
         self.i2c_susres.suspend();
 
+        // disable the I2C block, so it doesn't generate spurious values
+        self.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 0);
+
         // this happens after suspend, so these disables are "lost" upon resume and replaced with the normal running values
         self.i2c_csr.wo(utra::i2c::EV_ENABLE, 0);
     }
@@ -210,6 +213,14 @@ impl I2cStateMachine {
         self.transaction = None;
         self.index = 0;
         self.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 1);
+
+        // WFI is off as part of the initial conditions
+        if self.wfi_state.load(Ordering::SeqCst) == false {
+            // nobody had requested a WFI during the I2C transaction; we're safe to turn it off
+            self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 0);
+        } else {
+            // someone else (e.g. SPINOR) may have requested WFI to be suppressed. Don't turn it off!
+        }
     }
 
     pub fn initiate(&mut self, msg: xous::MessageEnvelope) {
