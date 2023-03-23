@@ -18,11 +18,13 @@ enum I2cIntError {
     MissingTx,
     MissingRx,
     UnexpectedState,
+    UnexpectedInterrupt,
 }
 
 // ASSUME: we are only ever handling txrx done interrupts. If implementing ARB interrupts, this needs to be refactored to read the source and dispatch accordingly.
 fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
     let i2c = unsafe { &mut *(arg as *mut I2cStateMachine) };
+    let event = i2c.i2c_csr.r(utra::i2c::EV_PENDING);
 
     if let Some(conn) = i2c.handler_conn {
         match i2c.handler_i() {
@@ -41,11 +43,18 @@ fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
                 }
             },
         }
+        if event != i2c.i2c_csr.ms(utra::i2c::EV_ENABLE_TXRX_DONE, 1) {
+            i2c.error = I2cIntError::UnexpectedInterrupt;
+            xous::try_send_message(conn,
+                xous::Message::new_scalar(I2cOpcode::IrqI2cTrace.to_usize().unwrap(), event as usize, 0, 0, 0)).map(|_| ()).unwrap();
+        }
     } else {
         panic!("|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
     }
+
+    // clear all interrupts, regardless of the source
     i2c.i2c_csr
-        .wo(utra::i2c::EV_PENDING, i2c.i2c_csr.r(utra::i2c::EV_PENDING));
+        .wo(utra::i2c::EV_PENDING, 0xFFFF_FFFF);
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -178,6 +187,7 @@ impl I2cStateMachine {
     }
 
     pub fn driver_reset(&mut self) {
+        log::warn!("I2C driver reset called");
         self.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 0);
         self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
         self.ticktimer.sleep_ms(10).ok();
@@ -259,7 +269,7 @@ impl I2cStateMachine {
                 self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
             );
             log::debug!("Initiate write");
-            self.trace();
+            self.trace(0);
         } else if transaction.rxbuf.is_some() {
             // initiate bus address with read bit set
             self.state = I2cState::Read;
@@ -271,11 +281,11 @@ impl I2cStateMachine {
                 self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
             );
             log::debug!("Initiate read");
-            self.trace();
+            self.trace(0);
         } else {
             // no buffers specified, erase everything and go to idle
             log::error!("Initiation error");
-            self.trace();
+            self.trace(0);
             self.report_response(I2cStatus::ResponseFormatError, None);
             return;
         }
@@ -355,8 +365,8 @@ impl I2cStateMachine {
     pub fn in_progress(&self) -> bool {
         self.state != I2cState::Idle
     }
-    pub(crate) fn trace(&self) {
-        log::debug!("I2C trace '{:?}/{:?}'=> PENDING: {:x}, ENABLE: {:x}, CMD: {:x}, STATUS: {:x}, CONTROL: {:x}, PRESCALE: {:x}",
+    pub(crate) fn trace(&self, arg: usize) {
+        log::debug!("I2C trace '{:?}/{:?}'=> PENDING: {:x}, ENABLE: {:x}, CMD: {:x}, STATUS: {:x}, CONTROL: {:x}, PRESCALE: {:x}, arg: {:x}",
             self.state,
             self.error,
             self.i2c_csr.r(utra::i2c::EV_PENDING),
@@ -365,6 +375,7 @@ impl I2cStateMachine {
             self.i2c_csr.r(utra::i2c::STATUS),
             self.i2c_csr.r(utra::i2c::CONTROL),
             self.i2c_csr.r(utra::i2c::PRESCALE),
+            arg
         );
     }
 

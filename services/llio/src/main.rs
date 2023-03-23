@@ -149,9 +149,9 @@ fn i2c_thread(i2c_sid: xous::SID) {
                     xous::return_scalar(next, 1).ok(); // this unblocks the waiting thread, and immediately hands the quantum to that thread
                 }
             }
-            Some(I2cOpcode::IrqI2cTrace) => {
-                i2c.trace();
-            },
+            Some(I2cOpcode::IrqI2cTrace) => msg_scalar_unpack!(msg, arg, _, _, _, {
+                i2c.trace(arg);
+            }),
             Some(I2cOpcode::I2cTxRx) => {
                 if !i2c_mutex_acquired {
                     log::warn!("TxRx operation was initiated without an acquired mutex. This will become a hard error in future revisions");
