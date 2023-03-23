@@ -93,19 +93,21 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                             let mut timeouts = 0;
                             loop {
                                 log::info!("suspend/resume cycle: {} ({} timeouts)", iters, timeouts);
-                                llio.set_wakeup_alarm(5).unwrap();
-                                ticktimer.sleep_ms(1000).ok();
+                                llio.set_wakeup_alarm(6).unwrap();
+                                ticktimer.sleep_ms(2000).ok();
                                 match susres.initiate_suspend() {
                                     Err(xous::Error::Timeout) => {
                                         timeouts += 1;
                                         log::warn!("Couldn't suspend, a server was blocking suspend. ({}/{})\n", timeouts, iters);
+                                        // wait enough time for the wakeup alarm to have happened before resuming the cycle
+                                        ticktimer.sleep_ms(6000).unwrap();
                                     }
                                     Ok(_) => {},
                                     Err(e) => {
                                         log::error!("Unknown error on suspend: {:?}", e);
                                     }
                                 }
-                                ticktimer.sleep_ms(3000 + (trng.get_u32().unwrap() % 7000) as usize).unwrap();
+                                ticktimer.sleep_ms(4000 + (trng.get_u32().unwrap() % 7000) as usize).unwrap();
                                 iters += 1;
                             }
                         }
