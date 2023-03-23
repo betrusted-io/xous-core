@@ -550,6 +550,7 @@ fn main() -> ! {
                 // Note that we start the RTC at somewhere between 0-10 years, so in practice, a user can expect between 90-100 years
                 // of continuous uptime service out of the RTC.
                 let mut settings = [0u8; 8];
+                let mut aborted = false;
                 loop {
                     // retry loop is necessary because this function can get called during "congested" periods
                     i2c.i2c_mutex_acquire();
@@ -564,7 +565,8 @@ fn main() -> ! {
                             tt.sleep_ms(38).unwrap();
 
                             xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
-                            continue;
+                            aborted = true;
+                            break;
                         },
                         _ => {
                             log::error!("Couldn't read seconds from RTC!");
@@ -574,13 +576,19 @@ fn main() -> ! {
                             tt.sleep_ms(37).unwrap(); // short pause in case the upset was caused by too much activity
 
                             xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
-                            continue;
+                            aborted = true;
+                            break;
                         },
                     };
                 }
+                // this continue has to be outside the above loop to avoid a double-free error!
+                if aborted {
+                    continue;
+                }
                 log::debug!("GetRtcValue regs: {:?}", settings);
-                let total_secs: u64;
+                let mut total_secs: u64 = 0;
                 let mut retries = 0;
+                aborted = false;
                 loop {
                     match rtc_to_seconds(&settings) {
                         Some(s) => {
@@ -618,15 +626,21 @@ fn main() -> ! {
                         // without a valid resolution to the RTC setting!
                         log::error!("rtc_to_seconds() never returned a valid value. Returning an error, that may result in a panic...");
                         xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
-                        continue;
+                        aborted = true;
+                        break;
                     } else {
                         log::warn!("rtc_to_seconds() returned an invalid value. Retry #{}", retries);
                     }
                 }
-                xous::return_scalar2(msg.sender,
-                    ((total_secs >> 32) & 0xFFFF_FFFF) as usize,
-                    (total_secs & 0xFFFF_FFFF) as usize,
-                ).expect("couldn't return to caller");
+                // this continue has to be outside the above loop to avoid the double-free error!
+                if aborted || total_secs == 0 {
+                    continue;
+                } else {
+                    xous::return_scalar2(msg.sender,
+                        ((total_secs >> 32) & 0xFFFF_FFFF) as usize,
+                        (total_secs & 0xFFFF_FFFF) as usize,
+                    ).expect("couldn't return to caller");
+                }
             }),
             #[cfg(not(target_os = "xous"))]
             Some(Opcode::GetRtcValue) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
