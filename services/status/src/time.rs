@@ -142,7 +142,7 @@ impl NtpUdpSocket for UdpSocketWrapper {
 }
 #[cfg(any(feature="precursor", feature="renode"))]
 pub fn reset_rtc(i2c: &mut llio::I2c, start_time: u64, tt: &ticktimer_server::Ticktimer) {
-    log::debug!("performing rtc reset");
+    log::info!("performing rtc reset");
     i2c.i2c_mutex_acquire();
     // issue a "software reset" of the RTC
     i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL1, &[0x58]).expect("RTC access error");
@@ -153,7 +153,7 @@ pub fn reset_rtc(i2c: &mut llio::I2c, start_time: u64, tt: &ticktimer_server::Ti
         let mut d = [0u8; 1];
         i2c.i2c_mutex_acquire();
         i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, i, &mut d).ok();
-        log::debug!("reg {:x}: {:x}", i, d[0]);
+        log::info!("   reg {:x}: {:x}", i, d[0]);
         i2c.i2c_mutex_release();
     }
 
@@ -170,7 +170,7 @@ pub fn reset_rtc(i2c: &mut llio::I2c, start_time: u64, tt: &ticktimer_server::Ti
         to_bcd(((start_time >> 40) & 0xFF) as u8 % 5 + 1), // years
     ];
     i2c.i2c_mutex_acquire();
-    log::debug!("writing: {:x?}", reset_vals);
+    log::info!("writing: {:x?}", reset_vals);
     i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL1, &reset_vals).expect("RTC access error");
     i2c.i2c_mutex_release();
     tt.sleep_ms(1100).ok(); // give the RTC 1 second to resume register operations
@@ -178,7 +178,7 @@ pub fn reset_rtc(i2c: &mut llio::I2c, start_time: u64, tt: &ticktimer_server::Ti
     let mut readback = [0u8; 10];
     // this readback seems necessary to get values to "stick" in the RTC
     i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, 0, &mut readback).ok();
-    log::debug!("reset readback: {:x?}", readback);
+    log::info!("   reset readback: {:x?}", readback);
     i2c.i2c_mutex_release();
 }
 
