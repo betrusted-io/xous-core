@@ -57,6 +57,17 @@ This will build several servers and a "shell" program to control them
 all. Most notably, a `graphics-server` will appear and kernel messages
 will begin scrolling in your terminal.
 
+### Hosted Mode UI navigation
+
+| Precursor | Host |
+| --------- | ---- |
+| D-pad middle button | Home |
+| D-pad up | up arrow |
+| D-pad down | down arrow |
+| D-pad left | left arrow |
+| D-pad right | right arrow |
+
+
 ## Quickstart using an emulator
 
 Xous uses [Renode](https://renode.io/) as the preferred emulator, because
