@@ -675,6 +675,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("{:?}", state);
                     write!(ret, "{:?}", state).ok();
                 }
+                #[cfg(feature="dbg-ecupdate")]
                 "ecup" => {
                     let ecup_conn = env.xns.request_connection_blocking("__ECUP server__").unwrap();
                     xous::send_message(ecup_conn,
