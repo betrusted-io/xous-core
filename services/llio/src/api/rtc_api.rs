@@ -282,6 +282,6 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     Some(total_secs)
 }
 
-fn to_binary(bcd: u8) -> u8 {
+pub fn to_binary(bcd: u8) -> u8 {
     (bcd & 0xf) + ((bcd >> 4) * 10)
 }
