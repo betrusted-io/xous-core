@@ -541,31 +541,33 @@ fn main() -> ! {
                 // Note that we start the RTC at somewhere between 0-10 years, so in practice, a user can expect between 90-100 years
                 // of continuous uptime service out of the RTC.
                 let mut settings = [0u8; 8];
-                let mut success = false;
-                while !success {
+                loop {
                     // retry loop is necessary because this function can get called during "congested" periods
                     i2c.i2c_mutex_acquire();
                     match i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
                         Ok(llio::I2cStatus::ResponseReadOk) => {
                             i2c.i2c_mutex_release();
-                            success = true
+                            break;
                         },
                         Err(xous::Error::ServerQueueFull) => {
                             i2c.i2c_mutex_release();
-                            success = false;
                             // give it a short pause before trying again, to avoid hammering the I2C bus at busy times
                             tt.sleep_ms(38).unwrap();
+
+                            xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
+                            continue;
                         },
                         _ => {
                             log::error!("Couldn't read seconds from RTC!");
-                            i2c.i2c_mutex_release();
+                            // reset the hardware driver, in case that's the problem
+                            // this will reset the mutex to not acquired, even if someone else is using it. Very dangerous!
+                            unsafe{i2c.i2c_driver_reset();}
+                            tt.sleep_ms(37).unwrap(); // short pause in case the upset was caused by too much activity
+
                             xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
-                            break;
+                            continue;
                         },
                     };
-                }
-                if !success {
-                    continue
                 }
                 log::debug!("GetRtcValue regs: {:?}", settings);
                 let total_secs: u64;

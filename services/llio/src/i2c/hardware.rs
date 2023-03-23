@@ -109,6 +109,8 @@ impl I2cStateMachine {
             (&mut i2c) as *mut I2cStateMachine as *mut usize,
         )
         .expect("couldn't claim I2C irq");
+        i2c.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
+        i2c.ticktimer.sleep_ms(10).ok();
 
         // initialize i2c clocks
         // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
