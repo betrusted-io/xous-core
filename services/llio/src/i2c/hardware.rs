@@ -4,6 +4,7 @@ use utralib::*;
 
 use num_traits::ToPrimitive;
 use susres::{RegManager, RegOrField, SuspendResume};
+use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
 
 #[derive(Eq, PartialEq, Debug)]
 enum I2cState {
@@ -65,6 +66,7 @@ pub(crate) enum I2cHandlerReport {
 }
 pub(crate) struct I2cStateMachine {
     i2c_csr: utralib::CSR<u32>,
+    power_csr: utralib::CSR<u32>,
     i2c_susres: RegManager::<{utra::i2c::I2C_NUMREGS}>,
     handler_conn: Option<xous::CID>,
 
@@ -79,10 +81,11 @@ pub(crate) struct I2cStateMachine {
     trace: bool, // set to true for detailed tracing of I2C irq handler state behavior; note that the trace outputs are delayed and may not reflect actual status
 
     workqueue: Vec<(I2cTransaction, xous::MessageEnvelope)>,
+    wfi_state: Arc::<AtomicBool>
 }
 
 impl I2cStateMachine {
-    pub fn new(handler_conn: xous::CID) -> Self {
+    pub fn new(handler_conn: xous::CID, power_csr_raw: *mut u32, wfi_state: Arc::<AtomicBool>) -> Self {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
         let i2c_csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::i2c::HW_I2C_BASE),
@@ -94,6 +97,7 @@ impl I2cStateMachine {
 
         let mut i2c = I2cStateMachine {
             i2c_csr: CSR::new(i2c_csr.as_mut_ptr() as *mut u32),
+            power_csr: CSR::new(power_csr_raw),
             i2c_susres: RegManager::new(i2c_csr.as_mut_ptr() as *mut u32),
             handler_conn: Some(handler_conn),
 
@@ -108,6 +112,7 @@ impl I2cStateMachine {
             trace: false,
 
             workqueue: Vec::new(),
+            wfi_state,
         };
 
         // disable interrupt, just in case it's enabled from e.g. a warm boot
@@ -247,6 +252,9 @@ impl I2cStateMachine {
 
     /// Assumes we are initiating on a "clean" I2C machine (idle, no errors, no callbacks or state mapped)
     fn checked_initiate(&mut self, transaction: I2cTransaction, msg: xous::MessageEnvelope) {
+        // override WFI during I2C transactions
+        self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
+
         log::debug!("I2C initiated with {:x?}", transaction);
         // sanity-check the bounds limits
         if transaction.txlen > 258 || transaction.rxlen > 258 {
@@ -292,6 +300,13 @@ impl I2cStateMachine {
     }
 
     fn report_response(&mut self, status: I2cStatus, rx: Option<&[u8]>) {
+        if self.wfi_state.load(Ordering::SeqCst) == false {
+            // nobody had requested a WFI during the I2C transaction; we're safe to turn it off
+            self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 0);
+        } else {
+            // someone else (e.g. SPINOR) may have requested WFI to be suppressed. Don't turn it off!
+        }
+
         // the .take() will cause the msg to go out of scope, triggering Drop which unblocks the caller
         if let Some(mut msg) = self.callback.take() {
             let mut response = I2cResult {

@@ -238,7 +238,7 @@ impl Llio {
             Message::new_blocking_scalar(Opcode::PowerCrypto.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())
     }
-    // setting this to true turns off WFI capabilities, forcing power always on
+    /// setting this to true turns off WFI capabilities, forcing power always on
     pub fn wfi_override(&self, ena: bool) -> Result<(), xous::Error> {
         let arg = if ena { 1 } else { 0 };
         send_message(self.conn,

@@ -31,11 +31,11 @@ enum PumpOp {
     Pump,
 }
 
-fn i2c_thread(i2c_sid: xous::SID) {
+fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBool>) {
     let xns = xous_names::XousNames::new().unwrap();
 
     let handler_conn = xous::connect(i2c_sid).expect("couldn't make handler connection for i2c");
-    let mut i2c = i2c::I2cStateMachine::new(handler_conn);
+    let mut i2c = i2c::I2cStateMachine::new(handler_conn, power_csr_raw as *mut u32, wfi_state);
 
     // register a suspend/resume listener
     let self_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
@@ -141,7 +141,9 @@ fn i2c_thread(i2c_sid: xous::SID) {
                     }
                     None
                 };
-                xous::return_scalar(msg.sender, 1).ok(); // acknowledge the release, after the mutex is marked false
+                if !i2c_mutex_acquired {
+                    xous::return_scalar(msg.sender, 1).ok(); // acknowledge the release, after the mutex is marked false
+                }
                 // the somewhat awkward structure is because we want to guarantee the release of mutex before ack, while
                 // also guaranteeing that the ack happens before we allow the next thread to proceed
                 if let Some(next) = maybe_next {
@@ -245,22 +247,27 @@ fn main() -> ! {
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(2)).expect("can't register I2C thread");
     #[cfg(not(target_os = "xous"))]
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(1)).expect("can't register I2C thread");
-    log::debug!("registered I2C thread with NS -- {:?}", i2c_sid);
-    let _ = thread::spawn({
-        let i2c_sid = i2c_sid.clone();
-        move || {
-            i2c_thread(i2c_sid);
-        }
-    });
 
     // Create a new llio object
     let handler_conn = xous::connect(llio_sid).expect("can't create IRQ handler connection");
     let mut llio = Llio::new(handler_conn, gpio_base);
     llio.ec_power_on(); // ensure this is set correctly; if we're on, we always want the EC on.
 
+    log::debug!("registered I2C thread with NS -- {:?}", i2c_sid);
+    let wfi_state = Arc::new(AtomicBool::new(false));
+    let _ = thread::spawn({
+        let i2c_sid = i2c_sid.clone();
+        let wfi_state = wfi_state.clone();
+        let unsafe_power_csr = llio.get_power_csr_raw() as u32;
+        move || {
+            i2c_thread(i2c_sid, unsafe_power_csr, wfi_state);
+        }
+    });
+
     if cfg!(feature = "wfi_off") {
         log::warn!("WFI is overridden at boot -- automatic power savings is OFF!");
         llio.wfi_override(true);
+        wfi_state.store(true, Ordering::SeqCst);
     }
 
     // register a suspend/resume listener
@@ -360,8 +367,10 @@ fn main() -> ! {
             }),
             Some(Opcode::WfiOverride) => msg_blocking_scalar_unpack!(msg, override_, _, _, _, {
                 if override_ == 0 {
+                    wfi_state.store(false, Ordering::SeqCst);
                     llio.wfi_override(false);
                 } else {
+                    wfi_state.store(true, Ordering::SeqCst);
                     llio.wfi_override(true);
                 }
                 xous::return_scalar(msg.sender, 0).expect("couldn't confirm wfi override was updated");
