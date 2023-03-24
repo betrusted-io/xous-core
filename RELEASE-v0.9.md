@@ -363,6 +363,9 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Fix edge case in phase 1 loader (thanks to @southpawflow for reporting it and providing the test case files)
 - Implementations removed from crates.io (API crates still published) -- nobody is using the implementation crates it seems, and they are very hard to maintain.
 - (EC) WF200 firmware bumped to 3.16.0 (will trigger an EC update). EC Litex design also brought into compliance with deprecated Litex APIs.
+- Various improvements:
+  - MAC address now added to wifi preferences status screen
+  - All-0 app_id in U2F no longer prompts for a save record
 
 ## Roadmap
 - Lots of testing and bug fixes
