@@ -168,7 +168,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         log::info!("{}|VCCAUX|PASS|{}", SENTINEL, vccaux);
                     }
                     let vccbram = env.llio.adc_vccbram().unwrap() as f32 / 1365.0;
-                    if vccbram < 0.92 || vccbram > 1.05 {
+                    if vccbram < 0.92 || vccbram > 0.98 {
                         log::info!("{}|VCCBRAM|FAIL|{}", SENTINEL, vccbram);
                     } else {
                         log::info!("{}|VCCBRAM|PASS|{}", SENTINEL, vccbram);
@@ -852,7 +852,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         2 => self.freq = 987.77,
                         _ => self.freq = 659.25,
                     }
-                    if elapsed - self.oqc_start > 6000 {
+                    if elapsed - self.oqc_start > 15000 {
                         self.codec.abort().unwrap();
 
                         // put system automatically into ship mode at conclusion of test
