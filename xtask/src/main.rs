@@ -262,7 +262,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    //.add_services(&user_pkgs.into_iter().map(String::from).collect())
                    .add_feature("mass-storage"); // add this in by default to help with testing
             for service in user_pkgs {
-                if (service != "shellchat") && (service != "ime-plugin-shell" && (service != "com") && (service != "status") && (service != "net")) {
+                if (service != "shellchat") && (service != "ime-plugin-shell" && (service != "net")) {
                     builder.add_service(service, false);
                 } else {
                     builder.add_service(service, true);
