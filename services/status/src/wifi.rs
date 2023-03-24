@@ -286,7 +286,7 @@ impl WLANMan {
         // TODO: make a proper translation for this. But, I think for now, this is a fairly
         // technical screen that we can leave in English.
         let status_str = format!(
-            "Connection status: \n\n ▪ SSID: {}\n ▪ Link state: {:?}\n ▪ IP: {}\n ▪ Gateway: {}\n ▪ Subnet mask: {}\n ▪ DNS 1: {}\n ▪ DNS 2: {}\n ▪ DHCP state: {:?}",
+            "Connection status: \n\n ▪ SSID: {}\n ▪ Link state: {:?}\n ▪ IP: {}\n ▪ Gateway: {}\n ▪ Subnet mask: {}\n ▪ DNS 1: {}\n ▪ DNS 2: {}\n ▪ DHCP state: {:?}\n ▪ MAC: {:x?}",
             ssid,
             ls,
             format_ip(ip.addr),
@@ -295,6 +295,7 @@ impl WLANMan {
             format_ip(ip.dns1),
             format_ip(ip.dns2),
             ip.dhcp,
+            ip.mac
         );
 
         self.modals.show_notification(&status_str, None).unwrap();
