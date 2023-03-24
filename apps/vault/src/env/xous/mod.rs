@@ -307,81 +307,85 @@ impl XousEnv {
                             };
                             let update = buf.to_original::<Ctap1Request, _>().unwrap();
                             let app_id_str = hex::encode(update.app_id);
-                            // note the access
-                            let mut info = {
-                                // fetch the application info, if it exists
-                                log::info!("Updating U2F record {}", app_id_str);
-                                // add code to query the PDDB here to look for the k/v mapping of this app ID
-                                match pddb.get(
-                                    U2F_APP_DICT,
-                                    &app_id_str,
-                                    None, true, false,
-                                    Some(256), Some(basis_change)
-                                ) {
-                                    Ok(mut app_data) => {
-                                        let app_attr = app_data.attributes().unwrap();
-                                        if app_attr.len != 0 {
-                                            let mut descriptor = Vec::<u8>::new();
-                                            match app_data.read_to_end(&mut descriptor) {
-                                                Ok(_) => {
-                                                    deserialize_app_info(descriptor)
+                            if update.app_id != [0u8; 32] {
+                                // note the access
+                                let mut info = {
+                                    // fetch the application info, if it exists
+                                    log::info!("Updating U2F record {}", app_id_str);
+                                    // add code to query the PDDB here to look for the k/v mapping of this app ID
+                                    match pddb.get(
+                                        U2F_APP_DICT,
+                                        &app_id_str,
+                                        None, true, false,
+                                        Some(256), Some(basis_change)
+                                    ) {
+                                        Ok(mut app_data) => {
+                                            let app_attr = app_data.attributes().unwrap();
+                                            if app_attr.len != 0 {
+                                                let mut descriptor = Vec::<u8>::new();
+                                                match app_data.read_to_end(&mut descriptor) {
+                                                    Ok(_) => {
+                                                        deserialize_app_info(descriptor)
+                                                    }
+                                                    Err(e) => {log::error!("Couldn't read app info: {:?}", e); None}
                                                 }
-                                                Err(e) => {log::error!("Couldn't read app info: {:?}", e); None}
+                                            } else {
+                                                None
                                             }
-                                        } else {
+                                        }
+                                        _ => {
+                                            log::info!("couldn't find key {}", app_id_str);
                                             None
                                         }
                                     }
-                                    _ => {
-                                        log::info!("couldn't find key {}", app_id_str);
-                                        None
-                                    }
-                                }
-                            }.unwrap_or_else(
-                                || {
-                                    // otherwise, create it
-                                match modals
-                                    .alert_builder(t!("vault.u2f.give_app_name", xous::LANG))
-                                    .field(None, None)
-                                    .build()
-                                    {
-                                        Ok(name) => {
-                                            let info = AppInfo {
-                                                name: name.content()[0].content.to_string(),
-                                                notes: t!("vault.notes", xous::LANG).to_string(),
-                                                id: update.app_id,
-                                                ctime: crate::utc_now().timestamp() as u64,
-                                                atime: 0,
-                                                count: 0,
-                                            };
-                                            info
-                                        }
-                                        _ => {
-                                            log::error!("couldn't get name for app");
-                                            panic!("couldn't get name for app");
+                                }.unwrap_or_else(
+                                    || {
+                                        // otherwise, create it
+                                    match modals
+                                        .alert_builder(t!("vault.u2f.give_app_name", xous::LANG))
+                                        .field(None, None)
+                                        .build()
+                                        {
+                                            Ok(name) => {
+                                                let info = AppInfo {
+                                                    name: name.content()[0].content.to_string(),
+                                                    notes: t!("vault.notes", xous::LANG).to_string(),
+                                                    id: update.app_id,
+                                                    ctime: crate::utc_now().timestamp() as u64,
+                                                    atime: 0,
+                                                    count: 0,
+                                                };
+                                                info
+                                            }
+                                            _ => {
+                                                log::error!("couldn't get name for app");
+                                                panic!("couldn't get name for app");
+                                            }
                                         }
                                     }
-                                }
-                            );
+                                );
 
-                            info.atime = crate::utc_now().timestamp() as u64;
-                            info.count = info.count.saturating_add(1);
-                            let ser = serialize_app_info(&info);
+                                info.atime = crate::utc_now().timestamp() as u64;
+                                info.count = info.count.saturating_add(1);
+                                let ser = serialize_app_info(&info);
 
-                            // update the access time, by deleting the key and writing it back into the PDDB
-                            pddb.delete_key(U2F_APP_DICT, &app_id_str, None).ok();
-                            match pddb.get(
-                                U2F_APP_DICT,
-                                &app_id_str,
-                                None, true, true,
-                                Some(256), Some(basis_change)
-                            ) {
-                                Ok(mut app_data) => {
-                                    app_data.write(&ser).expect("couldn't update atime");
+                                // update the access time, by deleting the key and writing it back into the PDDB
+                                pddb.delete_key(U2F_APP_DICT, &app_id_str, None).ok();
+                                match pddb.get(
+                                    U2F_APP_DICT,
+                                    &app_id_str,
+                                    None, true, true,
+                                    Some(256), Some(basis_change)
+                                ) {
+                                    Ok(mut app_data) => {
+                                        app_data.write(&ser).expect("couldn't update atime");
+                                    }
+                                    _ => log::error!("Error updating app atime"),
                                 }
-                                _ => log::error!("Error updating app atime"),
+                                pddb.sync().ok();
+                            } else {
+                                log::warn!("app_id is all 0's; bypassing name association");
                             }
-                            pddb.sync().ok();
 
                             log::debug!("sycing UI state...");
                             xous::send_message(
