@@ -372,11 +372,12 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
         if s.get_type() != Ok(ShType::NoBits) {
             let section_data = s.raw_data(&elf);
             let pad_amount = if let Some(next_section) = section_iter.peek() {
-                if next_section.get_type() != Ok(ShType::NoBits) {
-                    if section_data.len() % next_section.align() as usize != 0 {
-                        next_section.align() as usize - (section_data.len() % next_section.align() as usize)
+                if section_data.len() % next_section.align() as usize != 0 {
+                    let pad_amount = next_section.align() as usize - (section_data.len() % next_section.align() as usize);
+                    if s.address() + size + pad_amount as u64 > next_section.address() {
+                        (next_section.address() - (s.address() + size)) as usize
                     } else {
-                        0
+                        pad_amount
                     }
                 } else {
                     0
