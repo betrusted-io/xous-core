@@ -357,8 +357,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // ------ ARM hardware image configs ------
         Some("arm-tiny") => {
             builder.target_arm()
-                .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                .add_services(&get_cratespecs());
+                .add_services(&vec![
+                    "xous-log".to_string(),
+                ])
+                .add_kernel_feature("v2p") // required to use LCD DMA with lcd-console
+                .add_feature("atsama5d27")
+                .add_feature("lcd-console")
+                .add_services(&get_cratespecs())
+                .stream(BuildStream::Release);
         }
 
         // ---- other single-purpose commands ----
