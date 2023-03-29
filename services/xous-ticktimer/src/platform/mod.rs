@@ -13,6 +13,12 @@ pub mod hosted;
 ))]
 pub use hosted::*;
 
+#[cfg(any(feature="atsama5d27"))]
+#[macro_use]
+pub mod atsama5d2;
+#[cfg(any(feature="atsama5d27"))]
+pub use atsama5d2::*;
+
 pub(crate) type TimeoutExpiry = i64;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
