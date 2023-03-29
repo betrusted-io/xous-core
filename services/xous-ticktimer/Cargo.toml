@@ -23,7 +23,11 @@ num-traits = {version = "0.2.14", default-features = false}
 xous-semver = "0.1.2"
 utralib = {version = "0.1.15", optional = true, default-features = false }
 
+[target.'cfg(target_arch = "arm")'.dependencies]
+atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
+
 [features]
+atsama5d27 = ["utralib/atsama5d27"]
 precursor = ["utralib/precursor", "susres/precursor"]
 hosted = ["utralib/hosted", "susres/hosted"]
 renode = ["utralib/renode", "susres/renode"]
