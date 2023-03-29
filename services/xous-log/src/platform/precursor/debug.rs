@@ -7,7 +7,7 @@ macro_rules! print
 {
 	($($args:tt)+) => ({
             use core::fmt::Write;
-			let _ = write!(crate::debug::Uart {}, $($args)+);
+			let _ = write!(crate::platform::debug::Uart {}, $($args)+);
 	});
 }
 #[macro_export]
@@ -28,7 +28,7 @@ macro_rules! println
 fn handle_irq(irq_no: usize, arg: *mut usize) {
     print!("Handling IRQ {} (arg: {:08x}): ", irq_no, arg as usize);
 
-    while let Some(c) = { crate::debug::Uart {} }.getc() {
+    while let Some(c) = { crate::platform::debug::Uart {} }.getc() {
         print!("{}", c as char);
     }
     println!();

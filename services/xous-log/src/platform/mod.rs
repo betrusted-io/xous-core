@@ -5,6 +5,9 @@ pub mod precursor;
 #[cfg(any(feature="precursor", feature="renode"))]
 pub use precursor::debug;
 
+#[cfg(any(feature="precursor", feature="renode"))]
+pub use precursor::implementation;
+
 #[cfg(not(target_os = "xous"))]
 #[macro_use]
 pub mod hosted;

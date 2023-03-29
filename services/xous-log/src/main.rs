@@ -51,7 +51,7 @@ fn handle_scalar(
         1200 => writeln!(output, "Terminating process").unwrap(),
         2000 => {
             #[cfg(any(feature="precursor", feature="renode"))]
-            crate::debug::DEFAULT.enable_rx();
+            crate::platform::debug::DEFAULT.enable_rx();
             writeln!(output, "Resuming logger").unwrap();
         }
         _ => writeln!(

@@ -12,7 +12,7 @@ pub fn init() -> Output {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
             .expect("couldn't map serial port");
-        unsafe { crate::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _ };
+        unsafe { crate::platform::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _ };
         println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
         let mut uart_csr = CSR::new(uart.as_mut_ptr() as *mut u32);
 
@@ -55,7 +55,7 @@ impl Output {
 fn handle_console_irq(_irq_no: usize, arg: *mut usize) {
     if cfg!(feature = "logging") {
         let mut inject_csr = CSR::new(arg as *mut u32);
-        let mut uart_csr = CSR::new(unsafe { crate::debug::DEFAULT_UART_ADDR as *mut u32 });
+        let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
         // println!("rxe {}", uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY));
         while uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY) == 0 {
             // I really rather think this is more readable, than the "Rusty" version below.
@@ -93,7 +93,7 @@ pub struct OutputWriter {}
 impl OutputWriter {
     pub fn putc(&self, c: u8) {
         if cfg!(feature = "logging") {
-            let mut uart_csr = CSR::new(unsafe { crate::debug::DEFAULT_UART_ADDR as *mut u32 });
+            let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
 
             // Wait until TXFULL is `0`
             while uart_csr.r(utra::uart::TXFULL) != 0 {}
