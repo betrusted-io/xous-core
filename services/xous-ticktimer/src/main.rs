@@ -98,7 +98,7 @@ fn recalculate_sleep(
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     #[cfg(feature = "timestamp")]
