@@ -3,7 +3,6 @@
 
 use xous_api_log::api;
 
-#[cfg(any(feature="precursor", feature="renode", feature = "atsama5d27"))]
 #[macro_use]
 mod platform;
 
