@@ -15,6 +15,10 @@ use sha2::Digest;
 #[cfg(feature="shellperf")]
 const FILE_ID_SERVICES_SHELLCHAT_SRC_CMDS_PDDB_CMD: u32 = 2;
 
+use std::fs::File;
+use std::path::PathBuf;
+
+
 pub struct PddbCmd {
     pddb: pddb::Pddb,
     #[cfg(feature="shellperf")]
@@ -54,9 +58,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         #[cfg(not(feature="pddbtest"))]
-        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]";
         #[cfg(feature="pddbtest")]
-        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
         if let Some(sub_cmd) = tokens.next() {
@@ -234,6 +238,50 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     })()
                 }
                 "write" => {
+                    (|| {
+                        let Some(descriptor) = tokens.next() else {
+                            write!(ret, "Missing target of form 'dict:key'").unwrap();
+                            return;
+                        };
+                        let Some((dict, keyname)) = descriptor.split_once(':') else {
+                            write!(ret, "Target must be of form 'dict:key'").unwrap();
+                            return;
+                        };
+
+                        let mut keypath = PathBuf::new();
+                        keypath.push(dict);
+
+                        if std::fs::metadata(&keypath).is_ok() || std::fs::create_dir_all(&keypath).is_ok() {
+                            keypath.push(keyname);
+
+                            let mut value = std::string::String::from(tokens.next().unwrap());
+                            for (_, token)  in tokens.enumerate() {
+                                value.push_str(" ");
+                                value.push_str(token);
+                            }
+                            match File::create(keypath) {
+                                Ok(mut file) => {
+                                    match file.write_all(&value.as_bytes()) {
+                                        Ok(_) => {
+                                            write!(ret, "Wrote data {} to {}:{}", value, dict, keyname).unwrap();
+                                        }
+                                        Err(e) => {
+                                            write!(ret, "Error writing {}:{}: {:?}", dict, keyname, e).ok();
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    write!(ret, "Error writing data to path/file").unwrap();
+                                }
+                            }
+                        } else {
+                            write!(ret, "Path non-existant and error creating path").unwrap();
+                        }
+
+                    })()
+                }
+
+                "writeover" => {
                     if let Some(descriptor) = tokens.next() {
                         if let Some((dict, keyname)) = descriptor.split_once(':') {
                             match self.pddb.get(dict, keyname, None,
