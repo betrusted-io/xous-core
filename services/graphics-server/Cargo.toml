@@ -9,18 +9,18 @@ version = "0.1.0"
 [dependencies]
 keyboard = {path = "../keyboard"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.31"}
-xous = "0.9.36"
-susres = {package = "xous-api-susres", version = "0.9.31"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.31"}
+log-server = {package = "xous-api-log", version = "0.1.32"}
+xous = "0.9.37"
+susres = {package = "xous-api-susres", version = "0.9.32"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.32"}
 
-xous-ipc = "0.9.36"
-xous-names = {package = "xous-api-names", version = "0.9.33"}
+xous-ipc = "0.9.37"
+xous-names = {package = "xous-api-names", version = "0.9.34"}
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
-utralib = {version = "0.1.15", optional = true, default-features = false }
+utralib = {version = "0.1.16", optional = true, default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 minifb = "0.23.0"

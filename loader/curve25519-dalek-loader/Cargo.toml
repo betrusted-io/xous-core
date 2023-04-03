@@ -55,7 +55,7 @@ packed_simd = { version = "0.3.4", package = "packed_simd_2", features = [
 ], optional = true }
 zeroize = { version = "1", default-features = false }
 fiat-crypto = { version = "0.1.6", optional = true }
-utralib = { version = "0.1.15", optional = true, default-features = false }
+utralib = { version = "0.1.16", optional = true, default-features = false }
 
 # Betrusted/Precursor dependency set
 log = { version = "0.4", optional = true }

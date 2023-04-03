@@ -462,7 +462,6 @@ Renode emulation:
  libstd-net              Renode test image for testing network functions. Bypasses sig checks, keys locked out.
  ffi-test                builds an image for testing C-FFI bindings and integration. [cratespecs] are services
  renode-aes-test         Renode image for AES emulation development. Extremely minimal.
- renode-remote           Renode test image that pulls its crates from crates.io
 
 Other commands:
  generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
