@@ -8,10 +8,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let svd_filename = std::env::args().nth(1).ok_or("Must specify SVD input filename")?;
     let generated_filename = std::env::args().nth(2).ok_or("Must specify destination utralib filename")?;
 
-    let src_file = std::fs::File::open(svd_filename).expect("couldn't open src file");
     let mut dest_file = std::fs::File::create(generated_filename).expect("couldn't open dest file");
 
-    generate::generate(src_file, &mut dest_file)?;
+    generate::generate(svd_filename, &mut dest_file)?;
 
     Ok(())
 }
