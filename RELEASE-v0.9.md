@@ -366,6 +366,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Various improvements:
   - MAC address now added to wifi preferences status screen
   - All-0 app_id in U2F no longer prompts for a save record
+  - PDDB shellchat writeall command via @pakl
 
 ## Roadmap
 - Lots of testing and bug fixes
