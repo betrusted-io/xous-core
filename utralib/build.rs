@@ -135,9 +135,8 @@ fn main() {
         );
 
         // Regenerate the utra file in RAM.
-        let src_file = std::fs::File::open(svd_filename).expect("couldn't open src file");
         let mut dest_vec = vec![];
-        svd2utra::generate(src_file, &mut dest_vec).unwrap();
+        svd2utra::generate(svd_file_path, &mut dest_vec).unwrap();
 
         // If the file exists, check to see if it is different from what we just generated.
         // If not, skip writing the new file.

@@ -1,6 +1,8 @@
 use quick_xml::events::{attributes::Attribute, Event};
-use quick_xml::Reader;
-use std::io::{BufRead, BufReader, Read, Write};
+use quick_xml::reader::Reader;
+use quick_xml::name::QName;
+use std::io::{BufRead, Write};
+use std::path::Path;
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -105,11 +107,12 @@ fn parse_usize(value: &[u8]) -> Result<usize, ParseError> {
 fn extract_contents<T: BufRead>(reader: &mut Reader<T>) -> Result<String, ParseError> {
     let mut buf = Vec::new();
     let contents = reader
-        .read_event(&mut buf)
+        .read_event_into(&mut buf)
         .map_err(|_| ParseError::UnexpectedTag)?;
     match contents {
         Event::Text(t) => t
-            .unescape_and_decode(reader)
+            .unescape()
+            .map(|s| s.to_string())
             .map_err(|_| ParseError::NonUTF8),
         _ => Err(ParseError::UnexpectedTag),
     }
@@ -124,12 +127,11 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
     let mut bit_width = None;
 
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let tag_name = e
-                    .unescape_and_decode(reader)
-                    .map_err(|_| ParseError::NonUTF8)?;
-                match tag_name.as_str() {
+                let tag_binding = e.name().as_ref().to_vec();
+                let tag_name = std::str::from_utf8(&tag_binding).unwrap();
+                match tag_name {
                     "name" if name.is_none() => name = Some(extract_contents(reader)?),
                     "lsb" => lsb = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     "msb" => msb = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
@@ -165,7 +167,7 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
                 }
             }
             Ok(Event::End(ref e)) => {
-                if let b"field" = e.name() {
+                if let b"field" = e.local_name().as_ref() {
                     break;
                 }
             }
@@ -197,12 +199,12 @@ fn generate_fields<T: BufRead>(
 ) -> Result<(), ParseError> {
     let mut buf = Vec::new();
     loop {
-        match reader.read_event(&mut buf) {
-            Ok(Event::Start(ref e)) => match e.name() {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => match e.local_name().as_ref() {
                 b"field" => fields.push(generate_field(reader)?),
                 _ => panic!("unexpected tag in <field>: {:?}", e),
             },
-            Ok(Event::End(ref e)) => match e.name() {
+            Ok(Event::End(ref e)) => match e.local_name().as_ref() {
                 b"fields" => {
                     // println!("End fields");
                     break;
@@ -223,12 +225,12 @@ fn generate_register<T: BufRead>(reader: &mut Reader<T>) -> Result<Register, Par
     let description = None;
     let mut fields = vec![];
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let tag_name = e
-                    .unescape_and_decode(reader)
-                    .map_err(|_| ParseError::NonUTF8)?;
-                match tag_name.as_str() {
+                let tag_binding = e.local_name().as_ref().to_vec();
+                let tag_name = std::str::from_utf8(&tag_binding)
+                        .map_err(|_| ParseError::NonUTF8)?;
+                match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
                     "addressOffset" => {
                         offset = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
@@ -238,7 +240,7 @@ fn generate_register<T: BufRead>(reader: &mut Reader<T>) -> Result<Register, Par
                 }
             }
             Ok(Event::End(ref e)) => {
-                if let b"register" = e.name() {
+                if let b"register" = e.local_name().as_ref() {
                     break;
                 }
             }
@@ -263,19 +265,19 @@ fn generate_interrupts<T: BufRead>(
     let mut name = None;
     let mut value = None;
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let tag_name = e
-                    .unescape_and_decode(reader)
+                let tag_binding = e.local_name().as_ref().to_vec();
+                let tag_name = std::str::from_utf8(&tag_binding)
                     .map_err(|_| ParseError::NonUTF8)?;
-                match tag_name.as_str() {
+                match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
                     "value" => value = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     _ => (),
                 }
             }
             Ok(Event::End(ref e)) => {
-                if let b"interrupt" = e.name() {
+                if let b"interrupt" = e.local_name().as_ref() {
                     break;
                 }
             }
@@ -298,12 +300,12 @@ fn generate_registers<T: BufRead>(
 ) -> Result<(), ParseError> {
     let mut buf = Vec::new();
     loop {
-        match reader.read_event(&mut buf) {
-            Ok(Event::Start(ref e)) => match e.name() {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => match e.local_name().as_ref() {
                 b"register" => registers.push(generate_register(reader)?),
                 _ => panic!("unexpected tag in <registers>: {:?}", e),
             },
-            Ok(Event::End(ref e)) => match e.name() {
+            Ok(Event::End(ref e)) => match e.local_name().as_ref() {
                 b"registers" => {
                     break;
                 }
@@ -338,12 +340,12 @@ fn generate_peripheral<T: BufRead>(
     let mut interrupts = vec![];
 
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let tag_name = e
-                    .unescape_and_decode(reader)
+                let tag_binding = e.local_name().as_ref().to_vec();
+                let tag_name = std::str::from_utf8(&tag_binding)
                     .map_err(|_| ParseError::NonUTF8)?;
-                match tag_name.as_str() {
+                match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
                     "baseAddress" => {
                         base = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
@@ -355,7 +357,7 @@ fn generate_peripheral<T: BufRead>(
                 }
             }
             Ok(Event::End(ref e)) => {
-                if let b"peripheral" = e.name() {
+                if let b"peripheral" = e.local_name().as_ref() {
                     break;
                 }
             }
@@ -386,11 +388,11 @@ fn generate_peripherals<T: BufRead>(reader: &mut Reader<T>) -> Result<Vec<Periph
     let mut peripherals: Vec<Peripheral> = vec![];
 
     loop {
-        match reader.read_event(&mut buf) {
-            Ok(Event::Start(ref e)) => match e.name() {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => match e.local_name().as_ref() {
                 b"peripheral" => {
                     let base_peripheral = match e.attributes().next() {
-                        Some(Ok(Attribute { key, value })) if key == b"derivedFrom" => {
+                        Some(Ok(Attribute { key, value })) if key == QName(b"derivedFrom") => {
                             let base_peripheral_name = String::from_utf8(value.to_vec())
                                 .map_err(|_| ParseError::NonUTF8)?;
 
@@ -408,7 +410,7 @@ fn generate_peripherals<T: BufRead>(reader: &mut Reader<T>) -> Result<Vec<Periph
                 }
                 _ => panic!("unexpected tag in <peripherals>: {:?}", e),
             },
-            Ok(Event::End(ref e)) => match e.name() {
+            Ok(Event::End(ref e)) => match e.local_name().as_ref() {
                 b"peripherals" => {
                     break;
                 }
@@ -428,12 +430,12 @@ fn generate_memory_region<T: BufRead>(reader: &mut Reader<T>) -> Result<MemoryRe
     let mut size = None;
 
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let tag_name = e
-                    .unescape_and_decode(reader)
+                let tag_binding = e.local_name().as_ref().to_vec();
+                let tag_name = std::str::from_utf8(&tag_binding)
                     .map_err(|_| ParseError::NonUTF8)?;
-                match tag_name.as_str() {
+                match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
                     "baseAddress" => {
                         base = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
@@ -443,7 +445,7 @@ fn generate_memory_region<T: BufRead>(reader: &mut Reader<T>) -> Result<MemoryRe
                 }
             }
             Ok(Event::End(ref e)) => {
-                if let b"memoryRegion" = e.name() {
+                if let b"memoryRegion" = e.local_name().as_ref() {
                     break;
                 }
             }
@@ -465,15 +467,15 @@ fn parse_memory_regions<T: BufRead>(
 ) -> Result<(), ParseError> {
     let mut buf = Vec::new();
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => match e.name() {
-                b"memoryRegion" => description
+                QName(b"memoryRegion") => description
                     .memory_regions
                     .push(generate_memory_region(reader)?),
                 _ => panic!("unexpected tag in <memoryRegions>: {:?}", e),
             },
             Ok(Event::End(ref e)) => match e.name() {
-                b"memoryRegions" => {
+                QName(b"memoryRegions") => {
                     break;
                 }
                 e => panic!("unhandled value: {:?}", e),
@@ -491,14 +493,14 @@ fn generate_constants<T: BufRead>(
 ) -> Result<(), ParseError> {
     let mut buf = Vec::new();
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event_into(&mut buf) {
             Ok(Event::Empty(ref e)) => match e.name() {
-                b"constant" => {
+                QName(b"constant") => {
                     let mut constant_descriptor = Constant::default();
                     for maybe_att in e.attributes() {
                         match maybe_att {
                             Ok(att) => {
-                                let att_name = String::from_utf8(att.key.to_vec())
+                                let att_name = String::from_utf8(att.key.local_name().as_ref().into())
                                     .expect("constant: error parsing attribute name");
                                 let att_value = String::from_utf8(att.value.to_vec())
                                     .expect("constant: error parsing attribute value");
@@ -525,7 +527,7 @@ fn generate_constants<T: BufRead>(
             // if there are no attributes, the attribute iterator would do nothing; and if there are no
             // child elements, the recursive descent would also do nothing.
             Ok(Event::End(ref e)) => match e.name() {
-                b"constants" => break,
+                QName(b"constants") => break,
                 e => panic!("unhandled value: {:?}", e),
             },
             Ok(Event::Text(_)) => (),
@@ -541,14 +543,14 @@ fn parse_vendor_extensions<T: BufRead>(
 ) -> Result<(), ParseError> {
     let mut buf = Vec::new();
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => match e.name() {
-                b"memoryRegions" => parse_memory_regions(reader, description)?,
-                b"constants" => generate_constants(reader, description)?,
+                QName(b"memoryRegions") => parse_memory_regions(reader, description)?,
+                QName(b"constants") => generate_constants(reader, description)?,
                 _ => panic!("unexpected tag in <vendorExtensions>: {:?}", e),
             },
             Ok(Event::End(ref e)) => match e.name() {
-                b"vendorExtensions" => {
+                QName(b"vendorExtensions") => {
                     break;
                 }
                 e => panic!("unhandled value: {:?}", e),
@@ -1026,18 +1028,17 @@ mod tests {
     Ok(())
 }
 
-pub fn parse_svd<T: Read>(src: T) -> Result<Description, ParseError> {
+pub fn parse_svd<P: AsRef<Path>>(src: P) -> Result<Description, ParseError> {
     let mut buf = Vec::new();
-    let buf_reader = BufReader::new(src);
-    let mut reader = Reader::from_reader(buf_reader);
+    let mut reader = Reader::from_file(src).expect("couldn't open SVD for reading");
     let mut description = Description::default();
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => match e.name() {
-                b"peripherals" => {
+                QName(b"peripherals") => {
                     description.peripherals = generate_peripherals(&mut reader)?;
                 }
-                b"vendorExtensions" => {
+                QName(b"vendorExtensions") => {
                     parse_vendor_extensions(&mut reader, &mut description)?;
                 }
                 _ => (),
@@ -1051,7 +1052,7 @@ pub fn parse_svd<T: Read>(src: T) -> Result<Description, ParseError> {
     Ok(description)
 }
 
-pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseError> {
+pub fn generate<T: AsRef<Path>, U: Write>(src: T, dest: &mut U) -> Result<(), ParseError> {
     let description = parse_svd(src)?;
 
     print_header(dest).or(Err(ParseError::WriteError))?;

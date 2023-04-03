@@ -2963,6 +2963,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.28.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5c1a97b1bc42b1d550bfb48d4262153fe400a12bab1511821736f7eac76d7e2"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3852,7 +3861,7 @@ name = "svd2repl"
 version = "0.1.0"
 dependencies = [
  "convert_case",
- "quick-xml",
+ "quick-xml 0.19.0",
 ]
 
 [[package]]
@@ -3860,17 +3869,7 @@ name = "svd2utra"
 version = "0.1.13"
 dependencies = [
  "convert_case",
- "quick-xml",
-]
-
-[[package]]
-name = "svd2utra"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f4c9cee7701453535677289fac10ee40ab105ca501f80b81962174c5226cdd6"
-dependencies = [
- "convert_case",
- "quick-xml",
+ "quick-xml 0.28.1",
 ]
 
 [[package]]
@@ -4048,7 +4047,7 @@ dependencies = [
  "log",
  "pem",
  "ring",
- "svd2utra 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "svd2utra",
  "xmas-elf",
  "xous-semver",
 ]
@@ -4506,10 +4505,8 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 [[package]]
 name = "utralib"
 version = "0.1.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cc32203e2f81b6b8133a644d61def05387e2385d653cb1e923a65d5eee5f864"
 dependencies = [
- "svd2utra 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "svd2utra",
 ]
 
 [[package]]
@@ -5242,7 +5239,7 @@ dependencies = [
  "rustc_version 0.4.0",
  "serde",
  "serde_json",
- "svd2utra 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "svd2utra",
  "tempfile",
  "ureq",
  "zip",

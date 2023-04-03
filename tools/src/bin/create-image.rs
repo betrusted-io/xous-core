@@ -183,7 +183,7 @@ fn main() {
     }
 
     if let Some(soc_svd) = matches.value_of("svd") {
-        let soc_svd_file = std::fs::File::open(soc_svd).unwrap();
+        let soc_svd_file = std::path::Path::new(soc_svd);
         let desc = svd2utra::parse_svd(soc_svd_file).unwrap();
         let mut map = std::collections::BTreeMap::new();
 
