@@ -173,7 +173,7 @@ mod implementation {
                 ticktimer,
                 map: default_map,
                 delay: 500,
-                rate: 20,
+                rate: 50, // ubuntu default rate is 90, windows is 30
                 shift_down: false,
                 shift_up: false,
                 alt_down: false,
@@ -954,14 +954,17 @@ fn main() -> ! {
                 if let Some(conn) = listener_conn {
                     if key != '\u{0000}' {
                         log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
-                        xous::send_message(conn,
+                        xous::try_send_message(conn,
                             xous::Message::new_scalar(listener_op.unwrap(),
                                 key as u32 as usize,
                                 '\u{0000}' as u32 as usize,
                                 '\u{0000}' as u32 as usize,
                                 '\u{0000}' as u32 as usize,
-                        )
-                        ).unwrap();
+                            )
+                        ).unwrap_or_else(|_| {
+                            log::info!("Input overflow, dropping keys!");
+                            xous::Result::Ok
+                        });
                     }
                 }
 
@@ -1008,7 +1011,7 @@ fn main() -> ! {
 
                 if observer_conn.is_some() && observer_op.is_some() {
                     log::trace!("sending observer key");
-                    xous::send_message(observer_conn.unwrap(),
+                    xous::try_send_message(observer_conn.unwrap(),
                         xous::Message::new_scalar(
                             observer_op.unwrap(),
                             0,
@@ -1016,7 +1019,7 @@ fn main() -> ! {
                             0,
                             0,
                         )
-                    ).expect("couldn't send key codes to listener");
+                    ).ok();
                 }
 
                 // interpret scancodes
@@ -1067,7 +1070,7 @@ fn main() -> ! {
                             keys[i] = kv[i];
                         }
                         log::trace!("sending keys {:?}", keys);
-                        xous::send_message(listener_conn.unwrap(),
+                        xous::try_send_message(listener_conn.unwrap(),
                             xous::Message::new_scalar(
                                 listener_op.unwrap(),
                                 keys[0] as u32 as usize,
@@ -1075,7 +1078,7 @@ fn main() -> ! {
                                 keys[2] as u32 as usize,
                                 keys[3] as u32 as usize,
                             )
-                        ).expect("couldn't send key codes to listener");
+                        ).ok();
                     }
                 }
                 // as long as we have a keydown, keep pinging the loop at a high rate. this consumes more power, but keydowns are relatively rare.
@@ -1084,9 +1087,10 @@ fn main() -> ! {
                     // fire a second call to check if we should transition to a repeating state
                     ticktimer.sleep_ms(kbd.get_repeat_check_interval() as _).unwrap();
                     kbd.poll();
-                    xous::send_message(self_cid,
+                    // this is highly likely to overflow; if it does, just discard any excess
+                    xous::try_send_message(self_cid,
                         xous::Message::new_scalar(Opcode::HandlerTrigger.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).unwrap();
+                    ).ok();
                 }
             },
             None => {log::error!("couldn't convert opcode"); break}
