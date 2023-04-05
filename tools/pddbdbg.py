@@ -47,14 +47,14 @@ def main():
     if args.renode is True:
         keyfile = "./emulation/renode-keybox.bin"
         imagefile = "./tools/pddb-images/renode.bin"
-        basis_credentials = {}
+        basis_credentials = []
         if args.basis:
             for pair in args.basis:
                 credpair = pair[0].split(':', 1)
                 if len(credpair) != 2:
                     logging.error("Basis credential pair with name {} has a formatting problem, aborting!".format(credpair[0]))
                     exit(1)
-                basis_credentials[credpair[0]] = credpair[1]
+                basis_credentials += [credpair]
 
         with open(keyfile, 'rb') as key_f:
             keyrom = key_f.read()

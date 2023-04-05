@@ -778,42 +778,45 @@ def get_key(index, keyrom, length):
 #   - basis_credentials is a list of the secret Bases
 # Returns:
 #   - A dictionary of keys, by Basis name
-def extract_keys(keyrom, pddb, boot_pw, basis_credentials={}):
+def extract_keys(keyrom, pddb, boot_pw, basis_credentials=[]):
     user_key_enc = get_key(40, keyrom, 32)
     pepper = get_key(248, keyrom, 16)
     pepper[0] = pepper[0] ^ 1 # encodes the "boot" password type into the pepper
 
-    # acquire and massage the password so that we can decrypt the encrypted user key
-    boot_pw_array = [0] * 73
-    pw_len = 0
-    for b in bytes(boot_pw.encode('utf-8')):
-        boot_pw_array[pw_len] = b
-        pw_len += 1
-    pw_len += 1 # null terminate, so even the null password is one character long
-    bcrypter = bcrypt.BCrypt()
-    # logging.debug("{}".format(boot_pw_array[:pw_len]))
-    logging.debug("user_key_enc: {}".format(list(user_key_enc)))
-    logging.debug("private_key_enc: {}".format(list(get_key(8, keyrom, 32))))
-    logging.debug("salt: {}".format(list(pepper)))
-    hashed_pw = bcrypter.crypt_raw(boot_pw_array[:pw_len], pepper, 7)
-    logging.debug("hashed_pw: {}".format(list(hashed_pw)))
-    hasher = SHA512.new(truncate="256")
-    hasher.update(hashed_pw)
-    user_pw = hasher.digest()
-
-    user_key = []
-    for (a, b) in zip(user_key_enc, user_pw):
-        user_key += [a ^ b]
-    logging.debug("user_key: {}".format(user_key))
-
-    rollback_limit = 255 - int.from_bytes(keyrom[254 * 4 : 254 * 4 + 4], 'little')
-    logging.info("rollback limit: {}".format(rollback_limit))
-    for i in range(rollback_limit):
+    if boot_pw is not None:
+        # acquire and massage the password so that we can decrypt the encrypted user key
+        boot_pw_array = [0] * 73
+        pw_len = 0
+        for b in bytes(boot_pw.encode('utf-8')):
+            boot_pw_array[pw_len] = b
+            pw_len += 1
+        pw_len += 1 # null terminate, so even the null password is one character long
+        bcrypter = bcrypt.BCrypt()
+        # logging.debug("{}".format(boot_pw_array[:pw_len]))
+        logging.debug("user_key_enc: {}".format(list(user_key_enc)))
+        logging.debug("private_key_enc: {}".format(list(get_key(8, keyrom, 32))))
+        logging.debug("salt: {}".format(list(pepper)))
+        hashed_pw = bcrypter.crypt_raw(boot_pw_array[:pw_len], pepper, 7)
+        logging.debug("hashed_pw: {}".format(list(hashed_pw)))
         hasher = SHA512.new(truncate="256")
-        hasher.update(bytes(user_key))
-        user_key = hasher.digest()
+        hasher.update(hashed_pw)
+        user_pw = hasher.digest()
 
-    logging.debug("hashed_key: {}".format(list(user_key)))
+        user_key = []
+        for (a, b) in zip(user_key_enc, user_pw):
+            user_key += [a ^ b]
+        logging.debug("user_key: {}".format(user_key))
+
+        rollback_limit = 255 - int.from_bytes(keyrom[254 * 4 : 254 * 4 + 4], 'little')
+        logging.info("rollback limit: {}".format(rollback_limit))
+        for i in range(rollback_limit):
+            hasher = SHA512.new(truncate="256")
+            hasher.update(bytes(user_key))
+            user_key = hasher.digest()
+
+        logging.debug("hashed_key: {}".format(list(user_key)))
+    else:
+        user_key = [0] * 32
 
     pddb_len = len(pddb)
     pddb_size_pages = pddb_len // PAGE_SIZE
@@ -840,7 +843,8 @@ def extract_keys(keyrom, pddb, boot_pw, basis_credentials={}):
     keys[SYSTEM_BASIS] = [key_pt, key_data]
 
     # extract the secret basis keys
-    for name, pw in basis_credentials.items():
+    for [name, pw] in basis_credentials:
+        logging.debug("extracting basis: {}:{}".format(name, pw))
         bname_copy = [0]*64
         plaintext_pw = [0]*73
         i = 0
@@ -866,7 +870,7 @@ def extract_keys(keyrom, pddb, boot_pw, basis_credentials={}):
         pt_key = hkdf.derive(hashed_pw)
         hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=pddb_salt[:32], info=b"pddb data key")
         data_key = hkdf.derive(hashed_pw)
-        keys[name] = [pt_key, data_key]
+        keys[name + ':' + pw] = [pt_key, data_key]
 
     return keys
 

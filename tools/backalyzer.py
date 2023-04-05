@@ -73,14 +73,14 @@ def main():
         raise ValueError('Invalid log level: %s' % args.loglevel)
     logging.basicConfig(level=numeric_level)
 
-    basis_credentials = {}
+    basis_credentials = []
     if args.basis:
         for pair in args.basis:
             credpair = pair[0].split(':', 1)
             if len(credpair) != 2:
                 logging.error("Basis credential pair with name {} has a formatting problem, aborting!".format(credpair[0]))
                 exit(1)
-            basis_credentials[credpair[0]] = credpair[1]
+            basis_credentials += [credpair]
 
     # insert your mnemonic here. This is the "zero-key" mnemonic.
     mnemonic = args.backup_key
@@ -303,11 +303,16 @@ def main():
 
             keyrom = pt_data[i:i+1024]
             keys = extract_keys(keyrom, backup[4096:], args.pin, basis_credentials=basis_credentials)
+            pddb = backup[4096:]
 
-        pddb = backup[4096:]
+        else:
+            dna_int = 0
+            keyrom = [0] * 1024
+            keys = extract_keys(keyrom, backup, args.pin, basis_credentials=basis_credentials)
+            pddb = backup
+
         pddb_len = len(pddb)
         pddb_size_pages = pddb_len // PAGE_SIZE
-
         # data_aad = SYSTEM_BASIS + PDDB_VERSION + dna
 
         # now that we have the credentials, extract the baseline image
@@ -349,7 +354,11 @@ def main():
                 pp_start = v2p_table[VPAGE_SIZE]
                 pp_data = data[pp_start:pp_start + PAGE_SIZE]
                 try:
-                    pt_data = keycommit_decrypt(key[1], basis_aad(name, dna=dna_int), pp_data)
+                    if ':' in name:
+                        basis_name = name.split(':')[0]
+                    else:
+                        basis_name = name
+                    pt_data = keycommit_decrypt(key[1], basis_aad(basis_name, dna=dna_int), pp_data)
                     basis_data.extend(bytearray(pt_data))
                     logging.debug("decrypted vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
                     basis = Basis(basis_data)
@@ -359,7 +368,7 @@ def main():
                     dicts_found = 0
                     dict_index = 0
                     while dict_index < MAX_DICTS and dicts_found < basis.num_dicts:
-                        bdict = BasisDicts(dict_index, v2p_table, data, key[1], name, dna=dna_int)
+                        bdict = BasisDicts(dict_index, v2p_table, data, key[1], basis_name, dna=dna_int)
                         if bdict.valid:
                             basis_dicts[bdict.name] = bdict
                             dicts_found += 1
