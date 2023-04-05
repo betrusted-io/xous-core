@@ -12,11 +12,7 @@ use armv7::structures::paging::{
     PAGE_TABLE_FLAGS, SMALL_PAGE_FLAGS,
 };
 use armv7::{PhysicalAddress, VirtualAddress};
-use crate::consts::{
-    FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, GUARD_MEMORY_BYTES, KERNEL_ARGUMENT_OFFSET,
-    LOADER_CODE_ADDRESS, PAGE_TABLE_OFFSET, KERNEL_STACK_PAGE_COUNT,
-    EXCEPTION_STACK_TOP,
-};
+use crate::consts::{FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, GUARD_MEMORY_BYTES, KERNEL_ARGUMENT_OFFSET, LOADER_CODE_ADDRESS, PAGE_TABLE_OFFSET, KERNEL_STACK_PAGE_COUNT, EXCEPTION_STACK_TOP, IRQ_STACK_TOP};
 use crate::{
     bzero, println, BootConfig, XousPid, PAGE_SIZE, WORD_SIZE,
 };
@@ -394,6 +390,7 @@ pub fn map_kernel_to_processes(
     kdata_size: usize,
     kdata_virt_offset: usize,
     kernel_exception_sp: usize,
+    kernel_irq_sp: usize,
     krn_struct_start: usize,
 ) {
     let processes = unsafe { core::mem::transmute::<_, &[InitialProcess]>( &*cfg.processes) };
@@ -443,6 +440,17 @@ pub fn map_kernel_to_processes(
                 FLG_VALID | FLG_R | FLG_W,
             );
         }
+
+        println!("Mapping irq stack page to the process PID{}", process.asid);
+        let virt = IRQ_STACK_TOP;
+        let phys = kernel_irq_sp;
+        println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
+        cfg.map_page(
+            translation_table,
+            phys,
+            virt,
+            FLG_VALID | FLG_R | FLG_W,
+        );
 
         // TODO: For now, make the UART visible for all the processes.
         //       Later on we may reuse the mapping made by the kernel.

@@ -17,6 +17,7 @@ pub struct Uart {
 }
 
 impl Uart {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             inner: UartType::new(),
@@ -89,7 +90,7 @@ fn print_l2_pagetable(vpn1: usize, phys_addr: PhysicalAddress) {
 
     let mut no_valid_items = true;
     for (i, pt_desc) in l2_pt.iter().enumerate() {
-        let virt_addr = (vpn1 << 20) | (i << 12);
+        let _virt_addr = (vpn1 << 20) | (i << 12);
 
         if let PageTableType::Invalid = pt_desc.get_type() {
             continue;
@@ -97,16 +98,16 @@ fn print_l2_pagetable(vpn1: usize, phys_addr: PhysicalAddress) {
 
         no_valid_items = false;
 
-        let phys_addr = pt_desc.get_addr().expect("addr");
+        let _phys_addr = pt_desc.get_addr().expect("addr");
 
         match pt_desc.get_type() {
             PageTableType::LargePage => println!(
                 "        - {:02x} (64K) Large Page {:08x} -> {:08x}",
-                i, virt_addr, phys_addr
+                i, _virt_addr, _phys_addr
             ),
             PageTableType::SmallPage => println!(
                 "        - {:02x} (4K)  Small Page {:08x} -> {:08x}",
-                i, virt_addr, phys_addr
+                i, _virt_addr, _phys_addr
             ),
             _ => (),
         }
@@ -132,25 +133,25 @@ pub fn print_pagetable(root: usize) {
 
         match tt_desc.get_type() {
             TranslationTableType::Page => {
-                let virt_addr = i << 20;
+                let _virt_addr = i << 20;
                 println!(
                     "    - {:03x} (1MB) {:08x} L2 page table @ {:08x}",
-                    i, virt_addr, phys_addr
+                    i, _virt_addr, phys_addr
                 );
                 print_l2_pagetable(i, phys_addr);
             }
             TranslationTableType::Section => {
-                let virt_addr = i * 1024; // 1 MB
+                let _virt_addr = i * 1024; // 1 MB
                 println!(
                     "    - {:03x} (1MB)  section {:08x} -> {:08x}",
-                    i, virt_addr, phys_addr
+                    i, _virt_addr, phys_addr
                 );
             }
             TranslationTableType::Supersection => {
-                let virt_addr = i * (1024 * 16); // 16 MB
+                let _virt_addr = i * (1024 * 16); // 16 MB
                 println!(
                     "    - {:03x} (16MB) supersection {:08x} -> {:08x}",
-                    i, virt_addr, phys_addr
+                    i, _virt_addr, phys_addr
                 );
             }
 

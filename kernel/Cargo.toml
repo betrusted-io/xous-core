@@ -26,11 +26,12 @@ xous-kernel = { package = "xous", version = "0.9.37", features = [
 riscv = { version = "0.5.6", package = "xous-riscv" } # source is in "../imports/riscv-0.5.6"
 
 [target.'cfg(target_arch = "arm")'.dependencies]
-armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update" }
+armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", features = ["critical-section"] }
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
 xous-kernel = { package = "xous", version = "0.9.37", features = [
     "v2p",
 ] }
+critical-section = "1.1.1"
 
 [features]
 atsama5d27 = ["utralib/atsama5d27"]

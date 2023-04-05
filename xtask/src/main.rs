@@ -359,6 +359,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_arm()
                 .add_services(&vec![
                     "xous-log".to_string(),
+                    "xous-ticktimer".to_string(),
+                    "xous-names".to_string(),
+                    "ticktimer-test-client".to_string(),
                 ])
                 .add_kernel_feature("v2p") // required to use LCD DMA with lcd-console
                 .add_feature("atsama5d27")

@@ -14,6 +14,7 @@ use crate::SystemServices;
 
 extern "Rust" {
     fn _xous_syscall_return_result(context: &Thread) -> !;
+    fn irq_handler_return() -> !;
 }
 
 static mut PREVIOUS_PAIR: Option<(PID, TID)> = None;
@@ -240,16 +241,7 @@ pub extern "C" fn abort_handler() {
 
             // Resume the new thread within the same process.
             ArchProcess::with_current_mut(|p| {
-                // Adjust the program counter by the amount returned by the exception handler
-                /* FIXME let pc_adjust = a0 as isize;
-                if pc_adjust < 0 {
-                    p.current_thread_mut().sepc -= pc_adjust.abs() as usize;
-                } else {
-                    p.current_thread_mut().sepc += pc_adjust.abs() as usize;
-                }*/
-
                 clear_fault();
-
                 crate::arch::syscall::resume(pid.get() == 1, p.current_thread())
             });
         }
@@ -272,7 +264,7 @@ pub extern "C" fn abort_handler() {
             });
         }
 
-        RETURN_FROM_ISR if dfar == 0 => {
+        RETURN_FROM_ISR => {
             // If we hit this address, then an ISR has just returned.  Since
             // we're in an interrupt context, it is safe to access this
             // global variable.
@@ -294,12 +286,9 @@ pub extern "C" fn abort_handler() {
 
             clear_fault();
 
-            ArchProcess::with_current_mut(|process| {
-                let mut curr_thread = process.current_thread_mut();
-                curr_thread.resume_addr -= 4;
-                curr_thread.ret_addr = 0;
-                crate::arch::syscall::resume(current_pid().get() == 1, curr_thread)
-            });
+            unsafe {
+                irq_handler_return();
+            }
         }
 
         _ => {
@@ -360,15 +349,18 @@ pub extern "C" fn _irq_handler_rust() {
     });
     klog!("Pending irqs mask: {:032b}", irqs_pending);
 
-    // Safe to access globals since interrupts are disabled
-    unsafe {
-        if PREVIOUS_PAIR.is_none() {
-            let tid = crate::arch::process::current_tid();
-            set_isr_return_pair(pid, tid);
+    critical_section::with(|_| {
+        // Safe to access globals since interrupts are disabled (critical section)
+        unsafe {
+            if PREVIOUS_PAIR.is_none() {
+                let tid = crate::arch::process::current_tid();
+                set_isr_return_pair(pid, tid);
+            }
         }
-    }
+    });
+
     crate::irq::handle(irqs_pending).expect("Couldn't handle IRQ");
     ArchProcess::with_current_mut(|process| {
-        crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
+        crate::arch::syscall::resume_no_irqs(current_pid().get() == 1, process.current_thread())
     })
 }

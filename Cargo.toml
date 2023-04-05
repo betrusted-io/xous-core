@@ -44,6 +44,7 @@ members = [
   "services/com",
   "services/keyboard",
   "services/kernel-test",
+  "services/ticktimer-test-client",
   "services/trng",
   "services/gam",
   "services/status",
