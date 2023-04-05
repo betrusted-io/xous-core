@@ -125,8 +125,9 @@ checksum = "47253b98986dafc7a3e1cf3259194f1f47ac61abb57a57f46ec09e48d004ecda"
 [[package]]
 name = "armv7"
 version = "0.2.1"
-source = "git+https://github.com/Foundation-Devices/armv7.git?branch=update#d81db3c1bbdbb8a99ef41f19ff8fcab2912d831b"
+source = "git+https://github.com/Foundation-Devices/armv7.git?branch=update#119503459774b53a8ea4896a0b7878e0fc046a56"
 dependencies = [
+ "critical-section 1.1.1",
  "tock-registers",
 ]
 
@@ -142,7 +143,7 @@ version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e14bf7b4f565e5e717d7a7a65b2a05c0b8c96e4db636d6f780f03b15108cdd1b"
 dependencies = [
- "critical-section",
+ "critical-section 0.2.7",
 ]
 
 [[package]]
@@ -767,6 +768,12 @@ dependencies = [
  "cortex-m",
  "riscv",
 ]
+
+[[package]]
+name = "critical-section"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6548a0ad5d2549e111e1f6a11a6c2e2d00ce6a3dafe22948d67c2b443f775e52"
 
 [[package]]
 name = "crossbeam"
@@ -3995,6 +4002,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ticktimer-test-client"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "xous 0.9.37 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+]
+
+[[package]]
 name = "time"
 version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5134,6 +5150,7 @@ dependencies = [
  "armv7",
  "atsama5d27",
  "bitflags",
+ "critical-section 1.1.1",
  "crossbeam-channel",
  "hex 0.4.3",
  "lazy_static",
