@@ -333,7 +333,7 @@ impl MiniElf {
         process.sp = stack_addr;
         #[cfg(not(feature = "atsama5d27"))]
         {
-            process.satp = 0x8000_0000 | ((pid as usize) << 22) | (tt_address >> 12);
+            process.satp = 0x8000_0000 | ((pid as usize) << 22) | (_tt_address >> 12);
         }
         #[cfg(feature = "atsama5d27")]
         {
