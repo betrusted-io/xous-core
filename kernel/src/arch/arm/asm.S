@@ -22,6 +22,10 @@
 #define I_BIT            0x80
 #define F_BIT            0x40
 
+#define EXCEPTION_STACK_TOP 0xffff0000
+#define IRQ_STACK_TOP 0xfffd0000
+#define THREAD_CONTEXT_AREA 0xff804000
+
 .section .text.reset_vector, "ax"
 
 .global reset
@@ -36,8 +40,8 @@ _exception_vectors_kernel:
   b   trap_handler          /* Prefetch Abort */
   b   trap_handler          /* Data Abort */
 .word  0 /* Empty */
-  b   trap_handler          /* IRQ : read the AIC */
-  b   trap_handler          /* FIQ */
+  b   irq_handler           /* IRQ : read the AIC */
+  b   fiq_handler           /* FIQ */
 
 undef_vector:
   bkpt /* Issue debugger breakpoint */
@@ -51,6 +55,21 @@ _branch_main:
     ldr r4, =_exception_vectors_kernel
     mcr p15, 0, r4, c12, c0, 0
 
+    /* Clear all faults if any */
+    mov ip, #0
+    mcr p15, 0, ip, c6, c0, 0
+    mcr p15, 0, ip, c6, c0, 2
+    mcr p15, 0, ip, c5, c0, 0
+    mcr p15, 0, ip, c5, c0, 1
+
+    /* Configure IRQ/FIQ stack pointers */
+    msr cpsr_c, #ARM_MODE_IRQ
+    ldr sp, =(IRQ_STACK_TOP)
+    msr cpsr_c, #ARM_MODE_FIQ
+    ldr sp, =(IRQ_STACK_TOP)
+
+    msr cpsr_c, #ARM_MODE_SVC
+
     /* Note that registers r0-r3 still contain the kernel arguments */
     bl init
     bl kmain
@@ -60,18 +79,18 @@ _branch_main:
     Syscall/IRQ/Abort trap handler.
 
     Saves all process context into a structure that is
-    mapped to each thread at 0xff804000 (THREAD_CONTEXT_AREA).
+    mapped to each thread at THREAD_CONTEXT_AREA.
     Return happens elsewhere.
 */
 trap_handler:
-    ldr ip, =(0xff804000)
+    ldr ip, =(THREAD_CONTEXT_AREA)
 
     # If this is a syscall, then r0 contains a pointer to the syscall arguments structure
     # Due to it being clobbered by this routine's code, we have save it into the scratch area for future use
     str r0, [ip]     /* Preserve r0 in the scratch field */
     ldr r0, [ip, #4] /* Load current context number */
     lsl r0, #7       /* Multiply by 32 */
-    add ip, ip, r0   /* ip = 0xff804000 + (context_number * 32) */
+    add ip, ip, r0   /* ip = THREAD_CONTEXT_AREA + (context_number * 32) */
 
     # If the trap has originated in the user/system mode, then we need to store
     # the user/system mode registers that are currently banked out
@@ -82,7 +101,7 @@ trap_handler:
     cmp r0, #ARM_MODE_USR /* Compare with 'User' mode */
     beq _store_banked     /* Save banked out user registers if coming from User mode */
 
-    ldr r0, =(0xff804000) /* Restore r0 from the scratch field */
+    ldr r0, =(THREAD_CONTEXT_AREA) /* Restore r0 from the scratch field */
     ldr r0, [r0]
 
     stm ip, {r0 - r15}    /* Save all the registers */
@@ -95,7 +114,7 @@ _store_banked:
     str r0, [ip]
     sub ip, ip, #(17 * 4)
 
-    ldr r0, =(0xff804000) /* Restore r0 from the scratch field */
+    ldr r0, =(THREAD_CONTEXT_AREA) /* Restore r0 from the scratch field */
     ldr r0, [r0]
 
     stm ip, {r0 - r7}     /* Save the common registers */
@@ -108,8 +127,8 @@ _skip_store_banked:
     str lr, [ip]
     sub ip, #(4 * 19)
 
-    # Set a default exception/irq stack pointer (EXCEPTION_STACK_TOP)
-    ldr sp, =(0xffff0000)
+    # Set a default stack pointer
+    ldr sp, =(EXCEPTION_STACK_TOP)
 
     # Choose where to go next depending on the current mode: SVC (syscall), abort or IRQ
     mrs ip, cpsr                /* Access the current mode register */
@@ -118,10 +137,6 @@ _skip_store_banked:
     bleq _swi_handler_rust      /* Jump to SVC handler */
     cmp ip, #ARM_MODE_ABT       /* Compare with 'Abort' mode */
     bleq _abort_handler_rust    /* Jump to abort handler */
-    cmp ip, #ARM_MODE_IRQ       /* Compare with 'IRQ' mode */
-    bleq irq_handler            /* Jump to IRQ handler */
-    cmp ip, #ARM_MODE_FIQ       /* Compare with 'FIQ' mode */
-    bleq fiq_handler            /* Jump to FIQ handler */
 
     # Any other unhandled exception goes here
     bkpt
@@ -129,14 +144,49 @@ _skip_store_banked:
 
 irq_handler:
 fiq_handler:
-  # Disable further IRQs
-  mrs ip, cpsr
-  orr ip, ip, #I_BIT | F_BIT  /* Disable interrupts */
-  msr cpsr, ip
+    /* Save interrupt context on stack to allow nesting */
+    sub    lr, lr, #4
+    stmfd  sp!, {lr}
+    stmfd  sp, {r0 - r12, sp, lr}^
+    sub    sp, sp, #(4 * 15)
+    mrs    lr, spsr
+    stmfd  sp!, {lr}
+    mrc    p15, 0, lr, c13, c0, 2  /* Read hardware thread pointer register */
+    stmfd  sp!, {lr}
+    mrc    p15, 0, lr, c2, c0, 0   /* Read TTBR0 */
+    stmfd  sp!, {lr}
+    mrc    p15, 0, lr, c13, c0, 1  /* Read CONTEXTIDR */
+    stmfd  sp!, {lr}
+    mrc    p15, 0, lr, c13, c0, 3  /* Read thread resume address scratch register */
+    stmfd  sp!, {lr}
 
-  bl _irq_handler_rust
-  bkpt
-  b .
+    /* Handle IRQs in supervisor mode (IRQs disabled) */
+    msr     cpsr_c, #(ARM_MODE_SVC | I_BIT | F_BIT)
+    # Set a default stack pointer
+    ldr sp, =(EXCEPTION_STACK_TOP)
+
+    b _irq_handler_rust
+
+.global irq_handler_return
+irq_handler_return:
+    /* As we're returning from ABORT mode, go back to IRQ mode (but with interrupts disabled) */
+    msr    cpsr_c, #(ARM_MODE_IRQ | I_BIT | F_BIT)
+
+    /* Restore interrupt context and branch back to calling code */
+    ldmia  sp!, {lr}
+    mcr    p15, 0, lr, c13, c0, 3  /* Set thread resume address scratch register */
+    ldmia  sp!, {lr}
+    mcr    p15, 0, lr, c13, c0, 1  /* Set CONTEXTIDR */
+    ldmia  sp!, {lr}
+    mcr    p15, 0, lr, c2, c0, 0   /* Set TTBR0 */
+    bl     flush_mmu
+    ldmia  sp!, {lr}
+    mcr    p15, 0, lr, c13, c0, 2  /* Set hardware thread pointer register */
+    ldmia  sp!, {lr}
+    msr    spsr_cxsf, lr
+    ldmia  sp, {r0 - r12, sp, lr}^
+    add    sp, sp, #(4 * 15)
+    ldmia  sp!, {pc}^
 
 /*
    A thread resume routine.
@@ -149,11 +199,11 @@ _resume_trampoline:
     ldm ip, {sp, lr}^
 
     # Switch privilege modes.
-    # Interrupts have to be disabled if we're in the IRQ mode because the code we're resuming to
-    # will have to service the interrupt source first before allowing more interrupts
+    # Keep interrupts disabled if we're going to switch to the user mode IRQ handler (r2 != 0) to prevent
+    # endless interrupt firing loop
     mrs ip, cpsr                /* Access the current state register */
     and ip, ip, #0x1f           /* Extract the mode field */
-    cmp ip, #ARM_MODE_IRQ
+    cmp r2, #0                  /* r2 contains a "keep IRQs enabled" flag */
     mrs ip, spsr
     bic ip, ip, #I_BIT | F_BIT  /* Allow interrupts. They'll stay enabled unless we're in IRQ mode */
     blne skip_disabling_interrupts
