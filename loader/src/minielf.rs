@@ -1,14 +1,18 @@
 use core::{mem, slice};
 
 #[cfg(feature = "atsama5d27")]
+use armv7::structures::paging::TranslationTableMemory;
+
+#[cfg(all(feature = "atsama5d27", feature = "debug-print"))]
 use armv7::{
     VirtualAddress,
     structures::paging::{
         InMemoryRegister, PageTableDescriptor,
-        Readable, TranslationTableDescriptor, TranslationTableMemory,
-        TranslationTableType, SMALL_PAGE_FLAGS,
+        Readable, TranslationTableDescriptor, TranslationTableType,
+        SMALL_PAGE_FLAGS,
     }
 };
+
 use crate::*;
 
 pub const FLG_VALID: usize = 0x1;
@@ -109,7 +113,7 @@ impl MiniElf {
 
         // Allocate a page to handle the top-level memory translation
         #[cfg(not(feature = "atsama5d27"))]
-        let (tt, tt_address) = {
+        let (tt, _tt_address) = {
             let tt_address = allocator.alloc() as usize;
             let tt = unsafe { &mut *(tt_address as *mut PageTable) };
 
@@ -119,7 +123,7 @@ impl MiniElf {
             (tt, tt_address)
         };
         #[cfg(feature = "atsama5d27")]
-        let (tt, tt_address) = {
+        let (tt, _tt_address) = {
             let pid_idx = pid as usize - 1;
 
             // Allocate a page to handle the top-level memory translation
@@ -142,7 +146,7 @@ impl MiniElf {
         };
 
         // Turn the satp address into a pointer
-        println!("    Pagetable @ {:08x}", tt_address);
+        println!("    Pagetable @ {:08x}", _tt_address);
 
         // Allocate thread 1 for this process
         let thread_address = allocator.alloc() as usize;

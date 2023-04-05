@@ -28,6 +28,8 @@ pub fn phase_2(cfg: &mut BootConfig) {
     let mut kdata_size = 0;
     #[cfg(feature = "atsama5d27")]
     let mut kernel_exception_sp = 0;
+    #[cfg(feature = "atsama5d27")]
+    let mut kernel_irq_sp = 0;
     for tag in args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
@@ -54,7 +56,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
             }
             #[cfg(feature = "atsama5d27")]
             {
-                (ktext_offset, kdata_offset, kernel_exception_sp) = xkrn.load(cfg, process_offset - load_size_rounded, 1);
+                (ktext_offset, kdata_offset, kernel_exception_sp, kernel_irq_sp) = xkrn.load(cfg, process_offset - load_size_rounded, 1);
                 (ktext_size, kdata_size, ktext_virt_offset, kdata_virt_offset) = (
                     (xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1),
                     (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)),
@@ -117,6 +119,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
             kdata_size,
             kdata_virt_offset,
             kernel_exception_sp,
+            kernel_irq_sp,
             krn_struct_start,
         );
     }

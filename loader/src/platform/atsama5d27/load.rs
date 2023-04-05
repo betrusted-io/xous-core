@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2023 Foundation Devices, Inc <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::consts::{CONTEXT_OFFSET, EXCEPTION_STACK_TOP, FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, KERNEL_LOAD_OFFSET, PAGE_TABLE_ROOT_OFFSET, USER_AREA_END, USER_STACK_TOP, KERNEL_STACK_PAGE_COUNT, KERNEL_STACK_TOP};
+use crate::consts::{CONTEXT_OFFSET, EXCEPTION_STACK_TOP, FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, KERNEL_LOAD_OFFSET, PAGE_TABLE_ROOT_OFFSET, USER_AREA_END, USER_STACK_TOP, KERNEL_STACK_PAGE_COUNT, KERNEL_STACK_TOP, IRQ_STACK_PAGE_COUNT, IRQ_STACK_TOP};
 use crate::{
     println, BootConfig, ProgramDescription,
     XousPid, PAGE_SIZE, STACK_PAGE_COUNT, VDBG,
@@ -33,7 +33,7 @@ impl ProgramDescription {
     /// that is passed in should be used instead of `self.load_offset`
     /// for this reason.
     pub fn load(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid)
-        -> (usize, usize, usize) {
+                -> (usize, usize, usize, usize) {
         assert_ne!(pid, 0, "PID must not be 0");
 
         println!("Mapping PID {} into offset {:08x}", pid, load_offset);
@@ -151,6 +151,27 @@ impl ProgramDescription {
             }
         }
 
+        // Allocate IRQ stack pages
+        let mut irq_sp = 0;
+        for i in 0..IRQ_STACK_PAGE_COUNT {
+            // If it's the kernel, also allocate an exception page
+            if is_kernel {
+                let sp_page = allocator.alloc() as usize;
+                // Remember only the first (top) exception stack page
+                if irq_sp == 0 {
+                    irq_sp = sp_page;
+                }
+                println!("Allocated IRQ stack page: {:08x}", sp_page);
+                allocator.map_page(
+                    translation_table,
+                    sp_page,
+                    (IRQ_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
+                    flag_defaults,
+                );
+                allocator.change_owner(pid as XousPid, sp_page);
+            }
+        }
+
         assert_eq!((self.text_offset as usize & (PAGE_SIZE - 1)), 0);
         assert_eq!((self.data_offset as usize & (PAGE_SIZE - 1)), 0);
         if allocator.no_copy {
@@ -207,6 +228,6 @@ impl ProgramDescription {
         allocator.processes[pid_idx].sp = stack_addr;
         allocator.processes[pid_idx].asid = pid;
 
-        (text_phys_offset, data_phys_offset, exception_sp)
+        (text_phys_offset, data_phys_offset, exception_sp, irq_sp)
     }
 }
