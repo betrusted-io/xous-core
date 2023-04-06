@@ -37,11 +37,15 @@ static mut GDB_BUFFER: [u8; 4096] = [0u8; 4096];
 
 trait ProcessPid {
     fn pid(&self) -> Option<xous_kernel::PID>;
+    fn take_pid(&mut self) -> Option<xous_kernel::PID>;
 }
 
 impl ProcessPid for XousTarget {
     fn pid(&self) -> Option<xous_kernel::PID> {
         self.pid
+    }
+    fn take_pid(&mut self) -> Option<xous_kernel::PID> {
+        self.pid.take()
     }
 }
 
@@ -94,8 +98,6 @@ fn ensure_can_accept_characters_inner<'a, T: Target + ProcessPid, C: Connection>
                         println!("Unable to pause process {:?} for debug: {:?}", pid, e);
                     }
                 });
-            } else {
-                println!("No process specified! Not debugging");
             }
 
             let Ok(new_server) = gdb_stm_inner.interrupt_handled(target, Some(MultiThreadStopReason::Signal(Signal::SIGINT))) else {
@@ -104,10 +106,12 @@ fn ensure_can_accept_characters_inner<'a, T: Target + ProcessPid, C: Connection>
             ensure_can_accept_characters_inner(new_server, target, recurse_count - 1)
         }
         GdbStubStateMachine::Disconnected(gdb_stm_inner) => {
-            println!(
-                "GdbStubStateMachine::Disconnected due to {:?}",
-                gdb_stm_inner.get_reason()
-            );
+            if let Some(pid) = target.take_pid() {
+                crate::services::SystemServices::with_mut(|system_services| {
+                    system_services.resume_process_from_debug(pid).unwrap()
+                });
+            }
+
             ensure_can_accept_characters_inner(
                 gdb_stm_inner.return_to_idle(),
                 target,
