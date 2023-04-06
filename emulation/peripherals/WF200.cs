@@ -806,7 +806,7 @@ namespace Antmicro.Renode.Peripherals.Network.Betrusted
             }
         }
 
-        private uint GetWriteRegister(uint val, uint order)
+        private uint GetWriteRegister(uint val, ulong order)
         {
             if (order == 0)
             {
@@ -1214,4 +1214,3 @@ namespace Antmicro.Renode.Peripherals.Network.Betrusted
     }
 
 }
-

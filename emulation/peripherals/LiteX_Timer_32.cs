@@ -113,8 +113,8 @@ namespace Antmicro.Renode.Peripherals.Timers.Betrusted
         private IFlagRegisterField irqPending;
 
         private uint latchedValue;
-        private uint loadValue;
-        private uint reloadValue;
+        private ulong loadValue;
+        private ulong reloadValue;
 
         private readonly LimitTimer innerTimer;
 
