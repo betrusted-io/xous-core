@@ -1,3 +1,4 @@
+use gdbstub::arch::SingleStepGdbBehavior;
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::breakpoints::BreakpointsOps;
 use gdbstub::target::ext::extended_mode::ExtendedModeOps;
@@ -23,6 +24,10 @@ impl Target for XousTarget {
     /// doesn't work with XIP programs.
     fn guard_rail_implicit_sw_breakpoints(&self) -> bool {
         true
+    }
+
+    fn guard_rail_single_step_gdb_behavior(&self) -> SingleStepGdbBehavior {
+        SingleStepGdbBehavior::Required
     }
 
     fn support_monitor_cmd(&mut self) -> Option<MonitorCmdOps<'_, Self>> {

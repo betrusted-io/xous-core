@@ -274,7 +274,8 @@ pub fn report_terminated(_pid: xous_kernel::PID) {
 }
 
 pub fn init() {
-    let uart = GdbUart::new(receive_irq).unwrap();
+    let mut uart = GdbUart::new(receive_irq).unwrap();
+    uart.enable();
     let mut target = XousTarget::new();
 
     let server = GdbStubBuilder::new(uart)
