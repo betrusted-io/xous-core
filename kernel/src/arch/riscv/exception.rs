@@ -65,10 +65,10 @@ pub enum RiscvException {
     StoreAccessFault(usize /* epc */, usize /* target address */),
 
     /// 0 8
-    CallFromUMode(usize /* epc */),
+    CallFromUMode(usize /* epc */, usize /* ??? */),
 
     /// 0 9
-    CallFromSMode(usize /* epc */),
+    CallFromSMode(usize /* epc */, usize /* ??? */),
 
     // [reserved]
     /// 0 11
@@ -148,8 +148,8 @@ impl fmt::Display for RiscvException {
             StoreAccessFault(epc, tval) => {
                 write!(f, "Store access fault to 0x{:08x} at 0x{:08x}", tval, epc)
             }
-            CallFromUMode(epc) => write!(f, "Call from User mode at 0x{:08x}", epc),
-            CallFromSMode(epc) => write!(f, "Call from Supervisor mode at 0x{:08x}", epc),
+            CallFromUMode(epc, tval) => write!(f, "Call from User mode at 0x{:08x} (???: 0x{:08x})", epc, tval),
+            CallFromSMode(epc, tval) => write!(f, "Call from Supervisor mode at 0x{:08x} (???: 0x{:08x})", epc, tval),
             // --reserved--
             CallFromMMode(epc) => write!(f, "Call from Machine mode at 0x{:08x}", epc),
             InstructionPageFault(epc, tval) => write!(
@@ -203,8 +203,8 @@ impl RiscvException {
             5 => LoadAccessFault(epc, tval),
             6 => StoreAddressMisaligned(epc, tval),
             7 => StoreAccessFault(epc, tval),
-            8 => CallFromUMode(epc),
-            9 => CallFromSMode(epc),
+            8 => CallFromUMode(epc, tval),
+            9 => CallFromSMode(epc, tval),
             // --reserved--
             11 => CallFromMMode(epc),
             12 => InstructionPageFault(epc, tval),
