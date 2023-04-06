@@ -25,7 +25,7 @@ impl SingleRegisterAccess<Tid> for XousTarget {
                 return Ok(buf.len());
             }
             RiscvRegId::Gpr(x) => x as usize - 1,
-            RiscvRegId::Pc => 32,
+            RiscvRegId::Pc => 31,
             _ => {
                 return Err(TargetError::Fatal("register out of range"));
             }
@@ -43,7 +43,7 @@ impl SingleRegisterAccess<Tid> for XousTarget {
                 .unwrap();
             let process = crate::arch::process::Process::current();
             let thread = process.thread(tid.get());
-            let reg = if reg_id == 32 {
+            let reg = if reg_id == 31 {
                 &thread.sepc
             } else {
                 match thread.registers.get(reg_id) {
@@ -84,7 +84,7 @@ impl SingleRegisterAccess<Tid> for XousTarget {
                 return Ok(());
             }
             RiscvRegId::Gpr(x) => x as usize - 1,
-            RiscvRegId::Pc => 32,
+            RiscvRegId::Pc => 31,
             _ => {
                 return Err(TargetError::Fatal("register out of range"));
             }
@@ -103,7 +103,7 @@ impl SingleRegisterAccess<Tid> for XousTarget {
                 .unwrap();
             let mut process = crate::arch::process::Process::current();
             let thread = process.thread_mut(tid.get());
-            let reg = if reg_id == 32 {
+            let reg = if reg_id == 31 {
                 &mut thread.sepc
             } else {
                 match thread.registers.get_mut(reg_id) {

@@ -1,4 +1,4 @@
-use gdbstub::common::Signal;
+use gdbstub::common::{Signal, Tid};
 use gdbstub::conn::Connection;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
 use gdbstub::stub::{GdbStubBuilder, GdbStubError, MultiThreadStopReason};
@@ -8,19 +8,23 @@ use crate::io::SerialRead;
 use crate::platform::precursor::gdbuart::GdbUart;
 
 mod breakpoints;
+mod current_active_pid;
 mod extended_mode;
 mod monitor;
 mod multi_thread_base;
 mod multi_thread_resume;
+mod multi_thread_single_step;
 mod single_register_access;
 mod target;
+
+#[cfg(target_arch = "riscv32")]
+#[path = "gdb/riscv.rs"]
+mod cpu;
 
 pub struct XousTarget {
     pid: Option<xous_kernel::PID>,
 
-    /// When doing a `stepi` we patch the instruction with an illegal instruction
-    /// and store the previous value here.
-    patched_instruction: usize,
+    inner: cpu::XousTargetInner,
 }
 
 pub struct XousDebugState<'a> {
@@ -58,7 +62,7 @@ impl XousTarget {
     pub fn new() -> XousTarget {
         XousTarget {
             pid: None,
-            patched_instruction: 0,
+            inner: cpu::XousTargetInner::default(),
         }
     }
 }
@@ -85,9 +89,10 @@ fn ensure_can_accept_characters_inner<'a, T: Target + ProcessPid, C: Connection>
         GdbStubStateMachine::Idle(_) | GdbStubStateMachine::Running(_) => Some(machine),
         GdbStubStateMachine::CtrlCInterrupt(gdb_stm_inner) => {
             if let Some(pid) = target.pid() {
-                // println!("Starting debug on process {:?}", pid);
                 crate::services::SystemServices::with_mut(|system_services| {
-                    system_services.pause_process_for_debug(pid).unwrap()
+                    if let Err(e) = system_services.pause_process_for_debug(pid) {
+                        println!("Unable to pause process {:?} for debug: {:?}", pid, e);
+                    }
                 });
             } else {
                 println!("No process specified! Not debugging");
@@ -175,6 +180,11 @@ fn process_character(byte: u8) {
         }
     };
 
+    // If the user just hit Ctrl-C, then remove the pending interrupt that may or may not exist.
+    if let GdbStubStateMachine::CtrlCInterrupt(_) = &new_server {
+        target.unpatch_stepi(Tid::new(1).unwrap()).ok();
+    }
+
     let Some(server) = ensure_can_accept_characters(new_server, &mut target) else {
         println!("Couldn't convert GDB into a state that accepts characters");
         return;
@@ -183,8 +193,42 @@ fn process_character(byte: u8) {
     unsafe { GDB_STATE = Some(XousDebugState { target, server }) };
 }
 
-pub fn report_terminated(pid: xous_kernel::PID) {
-    println!("Reporting that process {:?} has terminated!", pid);
+pub fn report_stop(_pid: xous_kernel::PID, tid: xous_kernel::TID, _pc: usize) {
+    let Some(XousDebugState {
+        mut target,
+        server: gdb,
+    }) = (unsafe { GDB_STATE.take() }) else {
+        println!("No GDB!");
+        return;
+    };
+
+    target.unpatch_stepi(Tid::new(tid).unwrap()).ok();
+
+    let GdbStubStateMachine::Running(inner) = gdb else {
+        println!("GDB state machine was in an invalid state");
+        return;
+    };
+
+    let Ok(new_gdb) = inner.report_stop(
+        &mut target,
+        MultiThreadStopReason::SignalWithThread {
+            signal: Signal::EXC_BREAKPOINT,
+            tid: Tid::new(tid).unwrap(),
+        }
+    ) else {
+            println!("Unable to report stop");
+            return;
+    };
+
+    unsafe {
+        GDB_STATE = Some(XousDebugState {
+            target,
+            server: new_gdb,
+        })
+    };
+}
+
+pub fn report_terminated(_pid: xous_kernel::PID) {
     let Some(XousDebugState {
         mut target,
         server: gdb,

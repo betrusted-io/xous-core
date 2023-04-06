@@ -90,7 +90,7 @@ impl MultiThreadBase for XousTarget {
         data: &mut [u8],
         _tid: Tid, // same address space for each core
     ) -> TargetResult<(), Self> {
-        let mut current_addr = start_addr;
+        let current_addr = start_addr as usize;
         let Some(pid) = self.pid else {
             for entry in data.iter_mut() { *entry = 0 };
             return Ok(());
@@ -107,10 +107,11 @@ impl MultiThreadBase for XousTarget {
                 .unwrap()
                 .activate()
                 .unwrap();
-            data.iter_mut().for_each(|b| {
-                *b = crate::arch::mem::peek_memory(current_addr as *mut u8).unwrap_or(0xff);
-                current_addr += 1;
-            });
+            for (offset, b) in data.iter_mut().enumerate() {
+                *b = crate::arch::mem::peek_memory((current_addr + offset) as *mut u8)
+                    .unwrap_or(0xff);
+                // println!("<< Peek {:02x} @ {:08x}", *b, current_addr);
+            }
 
             // Restore the previous PID
             system_services
@@ -126,10 +127,11 @@ impl MultiThreadBase for XousTarget {
         &mut self,
         start_addr: u32,
         data: &[u8],
-        _tid: Tid, // same address space for each core
+        _tid: Tid, // all threads share the same process memory space
     ) -> TargetResult<(), Self> {
         let mut current_addr = start_addr;
         let Some(pid) = self.pid else {
+            println!("Couldn't poke memory: no current process!");
             return Ok(());
         };
         crate::services::SystemServices::with(|system_services| {
@@ -145,9 +147,9 @@ impl MultiThreadBase for XousTarget {
                 .unwrap();
             data.iter().for_each(|b| {
                 if let Err(_e) = crate::arch::mem::poke_memory(current_addr as *mut u8, *b) {
-                    panic!("couldn't poke memory: {:?}", _e);
-                    // gprintln!("Error writing to {:08x}: {:?}", current_addr, e);
+                    // panic!("couldn't poke memory: {:?}", _e);
                 }
+                // println!("Poked {:02x} @ {:08x}", *b, current_addr);
                 current_addr += 1;
             });
 
@@ -161,13 +163,12 @@ impl MultiThreadBase for XousTarget {
         Ok(())
     }
 
+    #[inline(always)]
     fn list_active_threads(
         &mut self,
         register_thread: &mut dyn FnMut(Tid),
     ) -> Result<(), Self::Error> {
         let Some(pid) = self.pid else {
-            // Register a fake thread
-            register_thread(Tid::new(1).unwrap());
             return Ok(());
         };
         crate::services::SystemServices::with(|system_services| {

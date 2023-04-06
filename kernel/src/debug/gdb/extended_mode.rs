@@ -1,13 +1,15 @@
+use gdbstub::common::{Pid, Tid};
 use gdbstub::target;
-use gdbstub::target::ext::extended_mode::{AttachKind, ShouldTerminate};
+use gdbstub::target::ext::extended_mode::{AttachKind, ExtendedMode, ShouldTerminate};
 use gdbstub::target::{TargetError, TargetResult};
 
 use super::XousTarget;
 use core::convert::TryInto;
 
-impl target::ext::extended_mode::ExtendedMode for XousTarget {
-    fn attach(&mut self, new_pid: gdbstub::common::Pid) -> TargetResult<(), Self> {
+impl ExtendedMode for XousTarget {
+    fn attach(&mut self, new_pid: Pid) -> TargetResult<(), Self> {
         if let Some(previous_pid) = self.pid.take() {
+            self.unpatch_stepi(Tid::new(1).unwrap()).ok();
             crate::services::SystemServices::with_mut(|system_services| {
                 system_services
                     .resume_process_from_debug(previous_pid)
@@ -19,7 +21,7 @@ impl target::ext::extended_mode::ExtendedMode for XousTarget {
         if new_pid.get() == 1 {
             println!("Kernel cannot debug itself");
             self.pid = None;
-            return Ok(());
+            return Err(TargetError::NonFatal);
         }
 
         self.pid = new_pid.try_into().map(|v| Some(v)).unwrap_or(None);
@@ -43,7 +45,7 @@ impl target::ext::extended_mode::ExtendedMode for XousTarget {
         Ok(())
     }
 
-    fn kill(&mut self, pid: Option<gdbstub::common::Pid>) -> TargetResult<ShouldTerminate, Self> {
+    fn kill(&mut self, pid: Option<Pid>) -> TargetResult<ShouldTerminate, Self> {
         println!("GDB sent a kill request for pid {:?}", pid);
         Ok(ShouldTerminate::No)
     }
@@ -53,11 +55,7 @@ impl target::ext::extended_mode::ExtendedMode for XousTarget {
         Ok(())
     }
 
-    fn query_if_attached(
-        &mut self,
-        _pid: gdbstub::common::Pid,
-    ) -> TargetResult<target::ext::extended_mode::AttachKind, Self> {
-        println!("Querying if attached");
+    fn query_if_attached(&mut self, _pid: Pid) -> TargetResult<AttachKind, Self> {
         Ok(AttachKind::Attach)
     }
 
@@ -65,8 +63,15 @@ impl target::ext::extended_mode::ExtendedMode for XousTarget {
         &mut self,
         _filename: Option<&[u8]>,
         _args: target::ext::extended_mode::Args<'_, '_>,
-    ) -> TargetResult<gdbstub::common::Pid, Self> {
+    ) -> TargetResult<Pid, Self> {
         println!("Trying to run command (?!)");
         Err(TargetError::NonFatal)
+    }
+
+    #[inline(always)]
+    fn support_current_active_pid(
+        &mut self,
+    ) -> Option<target::ext::extended_mode::CurrentActivePidOps<'_, Self>> {
+        Some(self)
     }
 }

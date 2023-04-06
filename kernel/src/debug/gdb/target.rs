@@ -19,7 +19,8 @@ impl Target for XousTarget {
     }
 
     /// Opt in to having GDB handle breakpoints for us. This allows for an unlimited number
-    /// of breakpoints without having us keep track of the breakpoints ourselves.
+    /// of breakpoints without having us keep track of the breakpoints ourselves, but
+    /// doesn't work with XIP programs.
     fn guard_rail_implicit_sw_breakpoints(&self) -> bool {
         true
     }
