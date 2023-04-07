@@ -876,6 +876,10 @@ fn wrapped_main() -> ! {
                                     &mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"), pw.as_str().expect("password was not valid utf-8"),
                                     mgmt.policy.unwrap_or(BasisRetentionPolicy::Persist)
                                 ) {
+                                    if basis_cache.basis_contains(&basis.name) {
+                                        basis_cache.basis_unmount(&mut pddb_os, &basis.name).expect("couldn't unmount previously mounted basis of same name");
+                                        modals.show_notification(t!("pddb.unmount_previous", xous::LANG), None).expect("notification failed");
+                                    }
                                     basis_cache.basis_add(basis);
                                     finished = true;
                                     log::info!("{}PDDB.UNLOCKOK,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);

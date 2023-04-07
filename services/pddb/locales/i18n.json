@@ -13,13 +13,6 @@
         "ja": "パスワードを認証失敗でした。\n\nもう一度実行しください。",
         "zh": "密码错误。"
     },
-    "pddb.waitmount": {
-        "en": "Mounting PDDB, please wait...",
-        "en-tts": "Mounting PDDB, please wait...",
-        "fr": "Montage de PDDB, veuillez patienter...*MT*",
-        "ja": "PDDB をマウントしています。お待ちください...",
-        "zh": "正在挂载 PDDB，请稍候..."
-    },
     "pddb.basisname": {
         "en": "Basis Name:",
         "en-tts": "Enter name of Basis",
@@ -299,6 +292,20 @@
         "fr": "Commettre root\n(6/6)",
         "ja": "コミットルート\n(6/6)",
         "zh": "提交根(6/6)"
+    },
+    "pddb.unmount_previous": {
+        "en": "Warning: newly opened basis has the same name as a previously open basis. The previously opened basis has been closed.",
+        "en-tts": "Warning: newly opened basis has the same name as a previously open basis. The previously opened basis has been closed.",
+        "fr": "Attention : la base nouvellement ouverte porte le même nom qu'une base précédemment ouverte. La base précédemment ouverte a été fermée.*MT*",
+        "ja": "警告: 新しく開かれた基底は、以前に開いた基底と同じ名前です。 以前に開設されたベーシスは閉鎖されました。",
+        "zh": "警告：新打开的基础与以前打开的基础具有相同的名称。 之前打开的基础已经关闭。"
+    },
+    "pddb.waitmount": {
+        "en": "Mounting PDDB, please wait...",
+        "en-tts": "Mounting PDDB, please wait...",
+        "fr": "Montage de PDDB, veuillez patienter...*MT*",
+        "ja": "PDDB をマウントしています。お待ちください...",
+        "zh": "正在挂载 PDDB，请稍候..."
     },
     "pddb.yes": {
         "en": "Yes",

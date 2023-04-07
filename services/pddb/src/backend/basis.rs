@@ -1001,6 +1001,15 @@ impl BasisCache {
         }
     }
 
+    pub(crate) fn basis_contains(&self, by_name: &str) -> bool {
+        for bcache in &self.cache {
+            if bcache.name == by_name {
+                return true
+            }
+        }
+        false
+    }
+
     /// note: you can "delete" a basis simply by forgetting its password, but this is more thorough.
     /// there might also need to be a variant to make which is a "change my password" function, but that is actually
     /// surprisingly hard.
