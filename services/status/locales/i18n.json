@@ -220,8 +220,8 @@
         "en": "Force gateware update",
         "en-tts": "Force gateware update",
         "fr": "Forcer la mise à jour du gateware",
-        "ja": "ゲートウェアアップデートをインストールする",
-        "zh": "安装比特流更新"
+        "ja": "ゲートウェアの強制更新",
+        "zh": "强制FPGA更新"
     },
     "mainmenu.preferences": {
         "en": "Preferences",
