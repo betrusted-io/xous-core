@@ -29,13 +29,13 @@ keyboard = {path = "../keyboard"}
 usb-device-xous = {path="../usb-device-xous"}
 codec = {path="../codec"}
 userprefs = {path = "../../libs/userprefs"}
+dns = {path="../dns"}
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 chrono = {version = "0.4.19", default-features = false, features = ["std"]}
-sntpc = {version = "0.3.1"} #, features = ["log"]
 crossbeam = "0.8.2"
 
 sha2 = {path="../engine-sha512"}

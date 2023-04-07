@@ -91,12 +91,6 @@ pub(crate) enum PrivTimeOp {
     SusRes = 1,
 }
 
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
-pub(crate) enum TimeUxOp {
-    SetTime,
-    SetTimeZone,
-    Quit,
-}
 #[derive(Copy, Clone, Default)]
 struct StdTimestampGen {
     duration: std::time::Duration,
@@ -556,11 +550,12 @@ fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntErro
     }
 }
 
-pub fn start_time_ux(sid: xous::SID) {
+pub (crate) fn start_time_ux() {
     thread::spawn({
         move || {
             // some RTC UX structures
             let xns = xous_names::XousNames::new().unwrap();
+            let sid = xns.register_name(crate::TIME_UX_NAME, Some(1)).unwrap();
             let modals = modals::Modals::new(&xns).unwrap();
             let timeserver_cid = xous::connect(xous::SID::from_bytes(crate::time::TIME_SERVER_PUBLIC).unwrap()).unwrap();
             let pddb_poller = pddb::PddbMountPoller::new();
@@ -571,7 +566,7 @@ pub fn start_time_ux(sid: xous::SID) {
             loop {
                 let msg = xous::receive_message(sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
-                    Some(TimeUxOp::SetTime) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
+                    Some(crate::TimeUxOp::SetTime) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                         if !pddb_poller.is_mounted_nonblocking() {
                             modals.show_notification(t!("stats.please_mount", xous::LANG), None).expect("couldn't show notification");
                             continue;
@@ -706,7 +701,7 @@ pub fn start_time_ux(sid: xous::SID) {
                             )
                         ).expect("couldn't set time");
                     }),
-                    Some(TimeUxOp::SetTimeZone) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
+                    Some(crate::TimeUxOp::SetTimeZone) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                         if !pddb_poller.is_mounted_nonblocking() {
                             modals.show_notification(t!("stats.please_mount", xous::LANG), None).expect("couldn't show notification");
                             continue;
@@ -730,7 +725,7 @@ pub fn start_time_ux(sid: xous::SID) {
                             )
                         ).expect("couldn't set timezone");
                     }),
-                    Some(TimeUxOp::Quit) => {
+                    Some(crate::TimeUxOp::Quit) => {
                         xous::return_scalar(msg.sender, 0).unwrap();
                         break;
                     }

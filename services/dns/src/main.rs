@@ -2,6 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
+mod time; // why is this here? because it's the only place it'll fit. :-/
 use api::*;
 
 use net::NetIpAddr;
@@ -483,6 +484,14 @@ fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
+
+    // Time is stuck in the DNS crate because the status crate is out of resources, and the DNS
+    // crate is fairly under-utilized and ideal for sticking a service like time in it.
+    //
+    // this kicks off the thread that services the `libstd` calls for time-related things.
+    // we want this started really early, because it sanity checks the RTC and a bunch of other stuff.
+    time::start_time_server();
+    time::start_time_ux();
 
     let xns = xous_names::XousNames::new().unwrap();
     let dns_sid = xns

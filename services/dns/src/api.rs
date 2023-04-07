@@ -80,3 +80,15 @@ pub struct DnsResponse {
     pub addr: Option<NetIpAddr>,
     pub code: DnsResponseCode,
 }
+
+// Time API items. Time is in the DNS crate because it has the resources
+// to accommodate the time server, while the more logically grouped status
+// crate does not.
+pub const TIME_UX_NAME: &'static str = "_time UX server_";
+/// Time API exports
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub enum TimeUxOp {
+    SetTime = 0,
+    SetTimeZone = 1,
+    Quit = 2,
+}

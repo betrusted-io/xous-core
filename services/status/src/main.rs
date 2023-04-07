@@ -7,7 +7,6 @@ use mainmenu::*;
 mod appmenu;
 use appmenu::*;
 mod app_autogen;
-mod time;
 mod ecup;
 mod wifi;
 mod preferences;
@@ -151,10 +150,6 @@ fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
-
-    // this kicks off the thread that services the `libstd` calls for time-related things.
-    // we want this started really early, because it sanity checks the RTC and a bunch of other stuff.
-    time::start_time_server();
 
     // ------------------ acquire the status canvas GID
     let xns = xous_names::XousNames::new().unwrap();
@@ -1385,7 +1380,6 @@ fn wrapped_main() -> ! {
                 thread::spawn({
                     let ecup_conn = ecup_conn.clone();
                     move || {
-                        let xns = xous_names::XousNames::new().unwrap();
                         // send with an argument of '1', which forces the update
                         match send_message(ecup_conn,
                             Message::new_blocking_scalar(ecup::UpdateOp::UpdateAuto.to_usize().unwrap(), 1, 0, 0, 0)
@@ -1393,6 +1387,7 @@ fn wrapped_main() -> ! {
                             xous::Result::Scalar1(r) => {
                                 match FromPrimitive::from_usize(r) {
                                     Some(ecup::UpdateResult::AutoDone) => {
+                                        let xns = xous_names::XousNames::new().unwrap();
                                         let llio = llio::Llio::new(&xns);
                                         let netmgr = net::NetManager::new();
                                         // restore interrupts and connection manager
@@ -1404,6 +1399,7 @@ fn wrapped_main() -> ! {
                                         panic!("Force update responded with nothing to do. This is a bug, please report it in xous-core issues, and note the results of `ver ec`, `ver xous`, `ver soc`, `ver wf200`.");
                                     },
                                     Some(ecup::UpdateResult::Abort) => {
+                                        let xns = xous_names::XousNames::new().unwrap();
                                         let modals = modals::Modals::new(&xns).unwrap();
                                         modals.show_notification(t!("ecup.abort", xous::LANG), None).unwrap();
                                     }

@@ -259,7 +259,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                             do_fw = true;
                         }
                         log::info!("Auto-version check results: do_gw: {:?}, do_fw: {:?}", do_gw, do_fw);
-                        if do_gw {
+                        if do_gw || force {
                             log::info!("updating GW");
                             netmgr.connection_manager_stop().ok();
                             llio.com_event_enable(false).ok();
@@ -272,7 +272,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                             }
                             susres.set_suspendable(true).unwrap(); // resume suspend/resume operations
                         }
-                        if do_fw {
+                        if do_fw || force {
                             log::info!("updating FW");
                             netmgr.connection_manager_stop().unwrap();
                             llio.com_event_enable(false).ok();
