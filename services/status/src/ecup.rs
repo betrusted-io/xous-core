@@ -182,7 +182,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                     xous::return_scalar(msg.sender, 1).unwrap();
                 }
             }),
-            Some(UpdateOp::UpdateAuto) => { // blocking scalar
+            Some(UpdateOp::UpdateAuto) => msg_blocking_scalar_unpack!(msg, force_arg, _, _, _, {
                 const GW_HASH_OFFSET: usize = 0x58;
                 const FW_HASH_OFFSET: usize = 0x38;
                 const HASH_LEN: usize = 32;
@@ -194,8 +194,11 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 };
                 const WF200_HASH_LEN: usize = 0x48; // this is actually hash + signature + keyset
 
+                let force = force_arg != 0;
+                log::debug!("force update argument: {:?}", force);
+
                 let ec_reported_rev = com.get_ec_sw_tag().unwrap(); // fetch the purported rev from the EC. We take it at face value.
-                if ec_reported_rev.maj == 0 && ec_reported_rev.min == 0 && ec_reported_rev.rev == 0 {
+                if ec_reported_rev.maj == 0 && ec_reported_rev.min == 0 && ec_reported_rev.rev == 0 && !force {
                     log::error!("EC rev report seems bogus: {:?}; aborting autoupdate process.", ec_reported_rev);
                     // this will trigger a dialog box "EC update aborted due to error!"
                     xous::return_scalar(msg.sender, UpdateResult::Abort.to_usize().unwrap()).unwrap();
@@ -209,12 +212,17 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 // however, this check is much less computationally expensive than the package validation.
                 let length = u32::from_le_bytes(package[0x28..0x2c].try_into().unwrap());
                 if length > xous::EC_FW_PKG_LEN { // nothing was staged, or it is bogus (blank FLASH is 0xFFFF_FFFF "length")
+                    // only show the warning if the update was forced; otherwise we shouldn't show the warning because it'll pop up every time on a new unit
+                    if force {
+                        modals.show_notification(
+                            &format!("{} gateware", t!("ecup.invalid", xous::LANG)), None).unwrap();
+                    }
                     xous::return_scalar(msg.sender, UpdateResult::PackageInvalid.to_usize().unwrap()).unwrap();
                     continue;
                 }
                 let semver_bytes = &package[0x1000 + length as usize - SEMVER_OFFSET..0x1000 + length as usize - SEMVER_OFFSET + SEMVER_LEN];
                 let pkg_ver = SemVer::from(&semver_bytes[..16].try_into().unwrap());
-                if pkg_ver > ec_reported_rev {
+                if (pkg_ver > ec_reported_rev) || force {
                     if validate_package(package,PackageType::Ec) {
                         // check to see if we need to do an update
                         // read the length of the package
@@ -292,7 +300,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 let mut run_wf200_update = false;
                 // check to see if we need to do an update. For the WF200, we can only say if the hash is *different*, we don't know if it's newer
                 // we assume if it's different, we meant to update it.
-                if ec_reported_rev >= MIN_EC_VER_WITH_HASHES {
+                if (ec_reported_rev >= MIN_EC_VER_WITH_HASHES) && !force {
                     let mut ver_wf200_raw = [0u8; 256];
                     match com.flash_verify(
                         EC_FLASH_BASE +
@@ -321,7 +329,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                     // ancient version of EC, must run all the updates if any update was run before on the GW
                     run_wf200_update = did_something;
                 }
-                if run_wf200_update {
+                if run_wf200_update || force {
                     if validate_package(package,PackageType::Wf200) {
                         log::info!("updating Wf200");
                         did_something = true;
@@ -363,7 +371,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 } else {
                     xous::return_scalar(msg.sender, UpdateResult::NothingToDo.to_usize().unwrap()).unwrap();
                 }
-            },
+            }),
             Some(UpdateOp::Quit) => {
                 log::info!("quitting updater thread");
                 xous::return_scalar(msg.sender, 1).unwrap();

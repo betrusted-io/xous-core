@@ -174,6 +174,13 @@
         "ja": "メニューを閉じる",
         "zh": "关闭功能表"
     },
+    "mainmenu.force_ecup": {
+        "en": "Force EC update",
+        "en-tts": "Force EC update",
+        "fr": "Forcer la mise à jour EC*MT*",
+        "ja": "EC の更新を強制する",
+        "zh": "强制 EC 更新"
+    },
     "mainmenu.init_keys": {
         "en": "Setup passwords...",
         "en-tts": "Setup passwords...",
@@ -210,9 +217,9 @@
         "zh": "准备备份..."
     },
     "mainmenu.provision_gateware": {
-        "en": "Install gateware update",
-        "en-tts": "Install gateware update",
-        "fr": "Installer la mise à jour du gateware",
+        "en": "Force gateware update",
+        "en-tts": "Force gateware update",
+        "fr": "Forcer la mise à jour du gateware",
         "ja": "ゲートウェアアップデートをインストールする",
         "zh": "安装比特流更新"
     },

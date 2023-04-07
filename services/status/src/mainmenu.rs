@@ -8,7 +8,12 @@ use num_traits::*;
 use crate::StatusOpcode;
 
 #[allow(unused_variables)] // quiets a warning about unused com that is emitted in tts config. Would be nice to make this more targeted...
-pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, menu_management_sid: xous::SID, status_conn: xous::CID, com: &com::Com) -> MenuMatic {
+pub fn create_main_menu(
+    keys: Arc<Mutex<RootKeys>>,
+    menu_management_sid: xous::SID,
+    status_conn: xous::CID,
+    com: &com::Com,
+) -> MenuMatic {
     let key_conn = keys.lock().unwrap().conn();
 
     let mut menuitems = Vec::<MenuItem>::new();
@@ -80,6 +85,14 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, menu_management_sid: xous::S
             action_conn: Some(key_conn),
             // note this is using the update opcode -- makes a copy while installing keys
             action_opcode: keys.lock().unwrap().get_update_gateware_op(),
+            action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        });
+
+        menuitems.push(MenuItem {
+            name: String::from_str(t!("mainmenu.force_ecup", xous::LANG)),
+            action_conn: Some(status_conn),
+            action_opcode: StatusOpcode::ForceEcUpdate.to_u32().unwrap(),
             action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
             close_on_select: true,
         });
