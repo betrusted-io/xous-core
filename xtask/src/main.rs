@@ -142,7 +142,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !language_set { // the default language is english
         track_language_changes("en")?;
     }
-    let gdb_stub = env::args().filter(|x| x == "--gdb-stub").count() == 0;
+    let gdb_stub = env::args().filter(|x| x == "--gdb-stub").count() != 0;
     if gdb_stub {
         builder.add_kernel_feature("gdb-stub");
     }
