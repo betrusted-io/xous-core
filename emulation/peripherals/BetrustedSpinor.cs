@@ -148,7 +148,7 @@ namespace Antmicro.Renode.Peripherals.SPI.Betrusted
             }
         }
 
-        private void HandleTxFifoWrite(uint value)
+        private void HandleTxFifoWrite(ulong value)
         {
             txQueue.Enqueue((byte)(value));
             txQueue.Enqueue((byte)(value >> 8));

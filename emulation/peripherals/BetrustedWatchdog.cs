@@ -77,9 +77,9 @@ namespace Antmicro.Renode.Peripherals.Timers.Betrusted
         }
 
         // Convert "approximately 65MHz" ticks to milliseconds
-        private uint XilinxClockToMs(uint xilinx_clocks)
+        private uint XilinxClockToMs(ulong xilinx_clocks)
         {
-            uint adjusted = (uint)((((ulong)xilinx_clocks) * 100) / 65000000);
+            uint adjusted = (uint)((xilinx_clocks * 100) / 65000000);
             this.Log(LogLevel.Debug, "Watchdog timer set for {0}. Will expire after {1} msec", xilinx_clocks, adjusted * 10);
             return adjusted;
         }

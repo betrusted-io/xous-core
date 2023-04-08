@@ -1279,6 +1279,8 @@ impl SysCall {
         matches!(
             self,
             SysCall::TryConnect(_)
+                | SysCall::FreeInterrupt(_)
+                | SysCall::ClaimInterrupt(_, _, _)
                 | SysCall::TryReceiveMessage(_)
                 | SysCall::ReturnToParent(_, _)
                 | SysCall::ReturnScalar5(_, _, _, _, _, _)

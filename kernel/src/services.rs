@@ -86,8 +86,14 @@ pub enum ProcessState {
 
     /// The process is currently being debugged. When it is resumed,
     /// this will turn into `Ready(usize)`
-    #[allow(dead_code)]
+    #[cfg(feature = "gdb-stub")]
     Debug(usize),
+
+    /// The process is currently being debugged, but an interrupt happened
+    /// anyway. When the interrupt finishes, this will turn into `Debug(usize)`.
+    /// This generally should not happen, but is here in case NMIs are ever a thing.
+    #[cfg(feature = "gdb-stub")]
+    DebugIrq(usize),
 
     /// This process is processing an exception. When it is resumed, it will
     /// turn into `Ready(usize)`.
@@ -107,7 +113,10 @@ impl core::fmt::Debug for ProcessState {
             Setup(ti) => write!(fmt, "Setup({:?})", ti),
             Ready(rt) => write!(fmt, "Ready({:b})", rt),
             Running(rt) => write!(fmt, "Running({:b})", rt),
+            #[cfg(feature = "gdb-stub")]
             Debug(rt) => write!(fmt, "Debug({:b})", rt),
+            #[cfg(feature = "gdb-stub")]
+            DebugIrq(rt) => write!(fmt, "DebugIrq({:b})", rt),
             Exception(rt) => write!(fmt, "Exception({:b})", rt),
             BlockedException(rt) => write!(fmt, "BlockedException({:b})", rt),
             Sleeping => write!(fmt, "Sleeping"),
@@ -343,7 +352,9 @@ impl SystemServices {
         let init_offsets = {
             let mut init_count = 1;
             for arg in args.iter() {
-                if arg.name == u32::from_le_bytes(*b"IniE") || arg.name == u32::from_le_bytes(*b"IniF") {
+                if arg.name == u32::from_le_bytes(*b"IniE")
+                    || arg.name == u32::from_le_bytes(*b"IniF")
+                {
                     init_count += 1;
                 }
             }
@@ -557,6 +568,8 @@ impl SystemServices {
             current.state = match current.state {
                 ProcessState::Running(0) => ProcessState::Sleeping,
                 ProcessState::Running(x) => ProcessState::Ready(x),
+                #[cfg(feature = "gdb-stub")]
+                ProcessState::DebugIrq(x) => ProcessState::Debug(x),
                 y => panic!("current process was {:?}, not 'Running(_)'", y),
             };
             // log_process_update(file!(), line!(), current, old_state);
@@ -568,12 +581,14 @@ impl SystemServices {
         // is in a very bad state.
         {
             let mut process = self.get_process_mut(pid)?;
+            #[cfg(feature = "gdb-stub")]
             let ppid = process.ppid;
             // Ensure the new context is available to be run
             let available_threads = match process.state {
                 ProcessState::Ready(x) if x & 1 << tid != 0 => x & !(1 << tid),
                 // If we're currently debugging the process, return to its parent.
                 // This can happen when the process handles a debug interrupt.
+                #[cfg(feature = "gdb-stub")]
                 ProcessState::Debug(_) => {
                     crate::syscall::reset_switchto_caller();
                     return self.switch_to_thread(ppid, None);
@@ -654,18 +669,29 @@ impl SystemServices {
         {
             let mut process = self.get_process_mut(pid)?;
             let available_threads = match process.state {
-                ProcessState::Ready(x)
-                | ProcessState::Running(x)
-                | ProcessState::Debug(x)
-                | ProcessState::Exception(x) => x,
+                ProcessState::Ready(x) | ProcessState::Running(x) | ProcessState::Exception(x) => x,
+                #[cfg(feature = "gdb-stub")]
+                ProcessState::Debug(x) | ProcessState::DebugIrq(x) => x,
                 ProcessState::Sleeping | ProcessState::BlockedException(_) => 0,
                 ProcessState::Free => panic!("process was not allocated"),
                 ProcessState::Setup(_) | ProcessState::Allocated => {
                     panic!("process hasn't been set up yet")
                 }
             };
+            #[cfg(feature = "gdb-stub")]
+            if let ProcessState::Debug(_) = process.state {
+                println!("Making a callback for IRQ {} to process {:?} which is currently in a debug state!", irq_no, pid);
+                process.state = ProcessState::DebugIrq(available_threads);
+            } else {
+                process.state = ProcessState::Running(available_threads);
+            }
+
             // let old_state = process.state;
-            process.state = ProcessState::Running(available_threads);
+            #[cfg(not(feature = "gdb-stub"))]
+            {
+                process.state = ProcessState::Running(available_threads);
+            }
+
             // log_process_update(file!(), line!(), process, old_state);
             process.previous_thread = process.current_thread;
             process.current_thread = arch::process::IRQ_TID;
@@ -734,7 +760,12 @@ impl SystemServices {
             }
             ProcessState::Ready(x) if x & (1 << tid) == 0 => ProcessState::Ready(x | (1 << tid)),
             ProcessState::Sleeping => ProcessState::Ready(1 << tid),
+            #[cfg(feature = "gdb-stub")]
             ProcessState::Debug(x) if x & (1 << tid) == 0 => ProcessState::Debug(x | (1 << tid)),
+            #[cfg(feature = "gdb-stub")]
+            ProcessState::DebugIrq(x) if x & (1 << tid) == 0 => {
+                ProcessState::DebugIrq(x | (1 << tid))
+            }
             ProcessState::Exception(ready_threads)
             | ProcessState::BlockedException(ready_threads) => {
                 ProcessState::Exception(ready_threads)
@@ -845,7 +876,10 @@ impl SystemServices {
             ProcessState::BlockedException(_) => {
                 panic!("tried to switch to an exception handler that was blocked")
             }
-            ProcessState::Debug(_) => return Err(xous_kernel::Error::DebugInProgress),
+            #[cfg(feature = "gdb-stub")]
+            ProcessState::Debug(_) | ProcessState::DebugIrq(_) => {
+                return Err(xous_kernel::Error::DebugInProgress)
+            }
             ProcessState::Exception(x) => {
                 process.activate()?;
                 let mut p = ArchProcess::current();
@@ -1083,9 +1117,11 @@ impl SystemServices {
                 ProcessState::Running(_) => {
                     panic!("process was running even though the pid was different")
                 }
-                ProcessState::Sleeping
-                | ProcessState::Debug(_)
-                | ProcessState::BlockedException(_) => {
+                #[cfg(feature = "gdb-stub")]
+                ProcessState::Debug(_) | ProcessState::DebugIrq(_) => {
+                    return Err(xous_kernel::Error::ProcessNotFound)
+                }
+                ProcessState::Sleeping | ProcessState::BlockedException(_) => {
                     // println!("PID {} was sleeping or being debugged", new_pid);
                     return Err(xous_kernel::Error::ProcessNotFound);
                 }
@@ -1121,7 +1157,10 @@ impl SystemServices {
                 ProcessState::BlockedException(_) => {
                     panic!("process was blocked handling an exception")
                 }
-                ProcessState::Debug(_) => panic!("process was being debugged"),
+                #[cfg(feature = "gdb-stub")]
+                ProcessState::Debug(_) | ProcessState::DebugIrq(_) => {
+                    panic!("process was being debugged")
+                }
             };
             // log_process_update(file!(), line!(), new, old_state);
             new.activate()?;
@@ -2215,20 +2254,28 @@ impl SystemServices {
     }
 
     #[cfg(feature = "gdb-stub")]
-    pub fn suspend_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
+    pub fn pause_process_for_debug(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let (process_state, parent_pid) = {
             let process = self.get_process_mut(pid)?;
             (process.state, process.ppid)
         };
+
+        // Disable all interrupts that belong to this process
+        crate::irq::for_each_irq(|irq_no, irq_pid, _, _| {
+            if pid == *irq_pid {
+                crate::arch::irq::disable_irq(irq_no);
+            }
+        });
         let new_process_state = match process_state {
-            ProcessState::Allocated => ProcessState::Allocated,
-            ProcessState::Free => ProcessState::Free,
-            ProcessState::Setup(thread_init) => ProcessState::Setup(thread_init),
+            ProcessState::Allocated | ProcessState::Free | ProcessState::Setup(_) => {
+                return Err(xous_kernel::Error::ProcessNotFound)
+            }
             ProcessState::Ready(tids) => ProcessState::Debug(tids),
             ProcessState::Exception(tids) => ProcessState::Exception(tids),
             ProcessState::BlockedException(tids) => ProcessState::BlockedException(tids),
             ProcessState::Sleeping => ProcessState::Debug(0),
             ProcessState::Debug(tids) => ProcessState::Debug(tids),
+            ProcessState::DebugIrq(tids) => ProcessState::DebugIrq(tids),
             ProcessState::Running(tids) => {
                 // Switch to the parent process when we return.
                 let current_tid = arch::process::current_tid();
@@ -2269,9 +2316,8 @@ impl SystemServices {
     }
 
     #[cfg(feature = "gdb-stub")]
-    pub fn continue_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
+    pub fn resume_process_from_debug(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
-        // let old_state = process.state;
         process.state = match process.state {
             ProcessState::Allocated => ProcessState::Allocated,
             ProcessState::Free => ProcessState::Free,
@@ -2280,11 +2326,18 @@ impl SystemServices {
             ProcessState::Sleeping => ProcessState::Sleeping,
             ProcessState::Exception(x) => ProcessState::Exception(x),
             ProcessState::BlockedException(tids) => ProcessState::BlockedException(tids),
+            ProcessState::DebugIrq(tids) => ProcessState::Ready(tids),
             ProcessState::Debug(0) => ProcessState::Sleeping,
             ProcessState::Debug(tids) => ProcessState::Ready(tids),
             ProcessState::Running(tids) => ProcessState::Running(tids),
         };
-        // log_process_update(file!(), line!(), process, old_state);
+
+        // Resume all interrupts that belong to this process
+        crate::irq::for_each_irq(|irq, irq_pid, _, _| {
+            if pid == *irq_pid {
+                crate::arch::irq::enable_irq(irq);
+            }
+        });
         Ok(())
     }
 

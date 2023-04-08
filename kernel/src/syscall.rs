@@ -3,7 +3,7 @@
 
 use crate::arch;
 use crate::arch::process::Process as ArchProcess;
-use crate::irq::interrupt_claim;
+use crate::irq::{interrupt_claim, interrupt_free};
 use crate::mem::{MemoryManager, PAGE_SIZE};
 use crate::server::{SenderID, WaitingMessage};
 use crate::services::SystemServices;
@@ -953,6 +953,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::ClaimInterrupt(no, callback, arg) => {
             interrupt_claim(no, pid as definitions::PID, callback, arg)
                 .map(|_| xous_kernel::Result::Ok)
+        }
+        SysCall::FreeInterrupt(no) => {
+            interrupt_free(no, pid as definitions::PID).map(|_| xous_kernel::Result::Ok)
         }
         SysCall::Yield => do_yield(pid, tid),
         SysCall::ReturnToParent(_pid, _cpuid) => {

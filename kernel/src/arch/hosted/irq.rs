@@ -7,7 +7,7 @@ pub fn enable_irq(_irq_no: usize) {
     unimplemented!()
 }
 
-pub fn disable_irq(_irq_no: usize) -> Result<(), xous_kernel::Error> {
+pub fn disable_irq(_irq_no: usize) {
     unimplemented!()
 }
 

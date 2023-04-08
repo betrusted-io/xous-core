@@ -24,6 +24,8 @@ xous-kernel = { package = "xous", version = "0.9.37", features = [
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = { version = "0.5.6", package = "xous-riscv" } # source is in "../imports/riscv-0.5.6"
+gdbstub = { version = "0.6.5", optional = true, default-features = false }
+gdbstub_arch = { version = "0.2.4", optional = true, default-features = false }
 
 [target.'cfg(target_arch = "arm")'.dependencies]
 armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", features = ["critical-section"] }
@@ -40,7 +42,7 @@ hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 
 debug-print = []
-gdb-stub = []
+gdb-stub = ["gdbstub", "gdbstub_arch"]
 print-panics = []
 report-memory = ["stats_alloc"]
 wrap-print = []

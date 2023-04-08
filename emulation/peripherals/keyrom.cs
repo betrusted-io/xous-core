@@ -326,7 +326,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous.Betrusted
             this.lockAddress = 0;
         }
 
-        private uint address;
+        private ulong address;
         private UInt32[] data;
         private bool[] locked;
         private uint lockAddress;
