@@ -9,13 +9,13 @@ version = "0.1.0"
 [dependencies]
 com_rs-ref = {path = "../../imports/com_rs-ref"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.33"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.33"}
-susres = {package = "xous-api-susres", version = "0.9.33"}
+log-server = {package = "xous-api-log", version = "0.1.34"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.34"}
+susres = {package = "xous-api-susres", version = "0.9.34"}
 typenum = "1.12"
-xous = "0.9.38"
-xous-ipc = "0.9.38"
-xous-names = {package = "xous-api-names", version = "0.9.35"}
+xous = "0.9.39"
+xous-ipc = "0.9.39"
+xous-names = {package = "xous-api-names", version = "0.9.36"}
 trng = {path = "../trng"}
 llio = {path = "../llio"}
 
@@ -25,7 +25,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 
 xous-semver = "0.1.2"
 
-utralib = {version = "0.1.16", optional = true, default-features = false }
+utralib = {version = "0.1.17", optional = true, default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 

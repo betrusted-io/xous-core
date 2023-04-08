@@ -7,7 +7,7 @@ version = "0.1.0"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.38"
+xous = "0.9.39"
 
 [features]
 default = []
