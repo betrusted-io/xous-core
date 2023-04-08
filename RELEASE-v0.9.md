@@ -367,7 +367,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - MAC address now added to wifi preferences status screen
   - All-0 app_id in U2F no longer prompts for a save record
   - PDDB shellchat writeall command via @pakl
-
+- Add Force Update option for the EC. This required migrating the time server runtime into the DNS process space, due to exhaustion of connection IDs in the status process space.
 ## Roadmap
 - Lots of testing and bug fixes
 - Fixing performance issues in `pddb`
