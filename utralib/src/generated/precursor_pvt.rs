@@ -265,8 +265,6 @@ where
 // Physical base addresses of memory regions
 pub const HW_ROM_MEM:     usize = 0x80000000;
 pub const HW_ROM_MEM_LEN: usize = 65536;
-pub const HW_VEXRISCV_DEBUG_MEM:     usize = 0xefff0000;
-pub const HW_VEXRISCV_DEBUG_MEM_LEN: usize = 256;
 pub const HW_SRAM_EXT_MEM:     usize = 0x40000000;
 pub const HW_SRAM_EXT_MEM_LEN: usize = 16777216;
 pub const HW_MEMLCD_MEM:     usize = 0xb0000000;
@@ -290,6 +288,7 @@ pub const HW_TIMER0_BASE :   usize = 0xf0001000;
 pub const HW_GPIO_BASE :   usize = 0xf0003000;
 pub const HW_UART_BASE :   usize = 0xf0005000;
 pub const HW_CONSOLE_BASE :   usize = 0xf0007000;
+pub const HW_APP_UART_BASE :   usize = 0xf0009000;
 pub const HW_INFO_BASE :   usize = 0xf000a000;
 pub const HW_MEMLCD_BASE :   usize = 0xf000c000;
 pub const HW_COM_BASE :   usize = 0xf000d000;
@@ -320,7 +319,7 @@ pub const HW_WFI_BASE :   usize = 0xf0025000;
 pub mod utra {
 
     pub mod reboot {
-        pub const REBOOT_NUMREGS: usize = 3;
+        pub const REBOOT_NUMREGS: usize = 4;
 
         pub const SOC_RESET: crate::Register = crate::Register::new(0, 0xff);
         pub const SOC_RESET_SOC_RESET: crate::Field = crate::Field::new(8, 0, SOC_RESET);
@@ -330,6 +329,9 @@ pub mod utra {
 
         pub const CPU_RESET: crate::Register = crate::Register::new(2, 0x1);
         pub const CPU_RESET_CPU_RESET: crate::Field = crate::Field::new(1, 0, CPU_RESET);
+
+        pub const CPU_HOLD_RESET: crate::Register = crate::Register::new(3, 0x1);
+        pub const CPU_HOLD_RESET_CPU_HOLD_RESET: crate::Field = crate::Field::new(1, 0, CPU_HOLD_RESET);
 
         pub const HW_REBOOT_BASE: usize = 0xf0000000;
     }
@@ -419,7 +421,7 @@ pub mod utra {
     }
 
     pub mod uart {
-        pub const UART_NUMREGS: usize = 6;
+        pub const UART_NUMREGS: usize = 8;
 
         pub const RXTX: crate::Register = crate::Register::new(0, 0xff);
         pub const RXTX_RXTX: crate::Field = crate::Field::new(8, 0, RXTX);
@@ -441,13 +443,19 @@ pub mod utra {
         pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0x3);
         pub const EV_ENABLE_TX: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_RX: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
+
+        pub const TXEMPTY: crate::Register = crate::Register::new(6, 0x1);
+        pub const TXEMPTY_TXEMPTY: crate::Field = crate::Field::new(1, 0, TXEMPTY);
+
+        pub const RXFULL: crate::Register = crate::Register::new(7, 0x1);
+        pub const RXFULL_RXFULL: crate::Field = crate::Field::new(1, 0, RXFULL);
 
         pub const UART_IRQ: usize = 2;
         pub const HW_UART_BASE: usize = 0xf0005000;
     }
 
     pub mod console {
-        pub const CONSOLE_NUMREGS: usize = 6;
+        pub const CONSOLE_NUMREGS: usize = 8;
 
         pub const RXTX: crate::Register = crate::Register::new(0, 0xff);
         pub const RXTX_RXTX: crate::Field = crate::Field::new(8, 0, RXTX);
@@ -470,8 +478,48 @@ pub mod utra {
         pub const EV_ENABLE_TX: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_RX: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
 
+        pub const TXEMPTY: crate::Register = crate::Register::new(6, 0x1);
+        pub const TXEMPTY_TXEMPTY: crate::Field = crate::Field::new(1, 0, TXEMPTY);
+
+        pub const RXFULL: crate::Register = crate::Register::new(7, 0x1);
+        pub const RXFULL_RXFULL: crate::Field = crate::Field::new(1, 0, RXFULL);
+
         pub const CONSOLE_IRQ: usize = 3;
         pub const HW_CONSOLE_BASE: usize = 0xf0007000;
+    }
+
+    pub mod app_uart {
+        pub const APP_UART_NUMREGS: usize = 8;
+
+        pub const RXTX: crate::Register = crate::Register::new(0, 0xff);
+        pub const RXTX_RXTX: crate::Field = crate::Field::new(8, 0, RXTX);
+
+        pub const TXFULL: crate::Register = crate::Register::new(1, 0x1);
+        pub const TXFULL_TXFULL: crate::Field = crate::Field::new(1, 0, TXFULL);
+
+        pub const RXEMPTY: crate::Register = crate::Register::new(2, 0x1);
+        pub const RXEMPTY_RXEMPTY: crate::Field = crate::Field::new(1, 0, RXEMPTY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0x3);
+        pub const EV_STATUS_TX: crate::Field = crate::Field::new(1, 0, EV_STATUS);
+        pub const EV_STATUS_RX: crate::Field = crate::Field::new(1, 1, EV_STATUS);
+
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0x3);
+        pub const EV_PENDING_TX: crate::Field = crate::Field::new(1, 0, EV_PENDING);
+        pub const EV_PENDING_RX: crate::Field = crate::Field::new(1, 1, EV_PENDING);
+
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0x3);
+        pub const EV_ENABLE_TX: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
+        pub const EV_ENABLE_RX: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
+
+        pub const TXEMPTY: crate::Register = crate::Register::new(6, 0x1);
+        pub const TXEMPTY_TXEMPTY: crate::Field = crate::Field::new(1, 0, TXEMPTY);
+
+        pub const RXFULL: crate::Register = crate::Register::new(7, 0x1);
+        pub const RXFULL_RXFULL: crate::Field = crate::Field::new(1, 0, RXFULL);
+
+        pub const APP_UART_IRQ: usize = 4;
+        pub const HW_APP_UART_BASE: usize = 0xf0009000;
     }
 
     pub mod info {
@@ -1610,6 +1658,7 @@ pub const LITEX_CONFIG_BUS_STANDARD: &str = "WISHBONE";
 pub const LITEX_CONFIG_BUS_DATA_WIDTH: usize = 32;
 pub const LITEX_CONFIG_BUS_ADDRESS_WIDTH: usize = 32;
 pub const LITEX_CONFIG_BUS_BURSTING: usize = 0;
+pub const LITEX_APP_UART_INTERRUPT: usize = 4;
 pub const LITEX_AUDIO_INTERRUPT: usize = 14;
 pub const LITEX_BTEVENTS_INTERRUPT: usize = 7;
 pub const LITEX_COM_INTERRUPT: usize = 5;
@@ -1663,6 +1712,14 @@ mod tests {
         let mut baz = reboot_csr.zf(utra::reboot::CPU_RESET_CPU_RESET, bar);
         baz |= reboot_csr.ms(utra::reboot::CPU_RESET_CPU_RESET, 1);
         reboot_csr.wfo(utra::reboot::CPU_RESET_CPU_RESET, baz);
+
+        let foo = reboot_csr.r(utra::reboot::CPU_HOLD_RESET);
+        reboot_csr.wo(utra::reboot::CPU_HOLD_RESET, foo);
+        let bar = reboot_csr.rf(utra::reboot::CPU_HOLD_RESET_CPU_HOLD_RESET);
+        reboot_csr.rmwf(utra::reboot::CPU_HOLD_RESET_CPU_HOLD_RESET, bar);
+        let mut baz = reboot_csr.zf(utra::reboot::CPU_HOLD_RESET_CPU_HOLD_RESET, bar);
+        baz |= reboot_csr.ms(utra::reboot::CPU_HOLD_RESET_CPU_HOLD_RESET, 1);
+        reboot_csr.wfo(utra::reboot::CPU_HOLD_RESET_CPU_HOLD_RESET, baz);
   }
 
     #[test]
@@ -1985,6 +2042,22 @@ mod tests {
         let mut baz = uart_csr.zf(utra::uart::EV_ENABLE_RX, bar);
         baz |= uart_csr.ms(utra::uart::EV_ENABLE_RX, 1);
         uart_csr.wfo(utra::uart::EV_ENABLE_RX, baz);
+
+        let foo = uart_csr.r(utra::uart::TXEMPTY);
+        uart_csr.wo(utra::uart::TXEMPTY, foo);
+        let bar = uart_csr.rf(utra::uart::TXEMPTY_TXEMPTY);
+        uart_csr.rmwf(utra::uart::TXEMPTY_TXEMPTY, bar);
+        let mut baz = uart_csr.zf(utra::uart::TXEMPTY_TXEMPTY, bar);
+        baz |= uart_csr.ms(utra::uart::TXEMPTY_TXEMPTY, 1);
+        uart_csr.wfo(utra::uart::TXEMPTY_TXEMPTY, baz);
+
+        let foo = uart_csr.r(utra::uart::RXFULL);
+        uart_csr.wo(utra::uart::RXFULL, foo);
+        let bar = uart_csr.rf(utra::uart::RXFULL_RXFULL);
+        uart_csr.rmwf(utra::uart::RXFULL_RXFULL, bar);
+        let mut baz = uart_csr.zf(utra::uart::RXFULL_RXFULL, bar);
+        baz |= uart_csr.ms(utra::uart::RXFULL_RXFULL, 1);
+        uart_csr.wfo(utra::uart::RXFULL_RXFULL, baz);
   }
 
     #[test]
@@ -2055,6 +2128,108 @@ mod tests {
         let mut baz = console_csr.zf(utra::console::EV_ENABLE_RX, bar);
         baz |= console_csr.ms(utra::console::EV_ENABLE_RX, 1);
         console_csr.wfo(utra::console::EV_ENABLE_RX, baz);
+
+        let foo = console_csr.r(utra::console::TXEMPTY);
+        console_csr.wo(utra::console::TXEMPTY, foo);
+        let bar = console_csr.rf(utra::console::TXEMPTY_TXEMPTY);
+        console_csr.rmwf(utra::console::TXEMPTY_TXEMPTY, bar);
+        let mut baz = console_csr.zf(utra::console::TXEMPTY_TXEMPTY, bar);
+        baz |= console_csr.ms(utra::console::TXEMPTY_TXEMPTY, 1);
+        console_csr.wfo(utra::console::TXEMPTY_TXEMPTY, baz);
+
+        let foo = console_csr.r(utra::console::RXFULL);
+        console_csr.wo(utra::console::RXFULL, foo);
+        let bar = console_csr.rf(utra::console::RXFULL_RXFULL);
+        console_csr.rmwf(utra::console::RXFULL_RXFULL, bar);
+        let mut baz = console_csr.zf(utra::console::RXFULL_RXFULL, bar);
+        baz |= console_csr.ms(utra::console::RXFULL_RXFULL, 1);
+        console_csr.wfo(utra::console::RXFULL_RXFULL, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_app_uart_csr() {
+        use super::*;
+        let mut app_uart_csr = CSR::new(HW_APP_UART_BASE as *mut u32);
+
+        let foo = app_uart_csr.r(utra::app_uart::RXTX);
+        app_uart_csr.wo(utra::app_uart::RXTX, foo);
+        let bar = app_uart_csr.rf(utra::app_uart::RXTX_RXTX);
+        app_uart_csr.rmwf(utra::app_uart::RXTX_RXTX, bar);
+        let mut baz = app_uart_csr.zf(utra::app_uart::RXTX_RXTX, bar);
+        baz |= app_uart_csr.ms(utra::app_uart::RXTX_RXTX, 1);
+        app_uart_csr.wfo(utra::app_uart::RXTX_RXTX, baz);
+
+        let foo = app_uart_csr.r(utra::app_uart::TXFULL);
+        app_uart_csr.wo(utra::app_uart::TXFULL, foo);
+        let bar = app_uart_csr.rf(utra::app_uart::TXFULL_TXFULL);
+        app_uart_csr.rmwf(utra::app_uart::TXFULL_TXFULL, bar);
+        let mut baz = app_uart_csr.zf(utra::app_uart::TXFULL_TXFULL, bar);
+        baz |= app_uart_csr.ms(utra::app_uart::TXFULL_TXFULL, 1);
+        app_uart_csr.wfo(utra::app_uart::TXFULL_TXFULL, baz);
+
+        let foo = app_uart_csr.r(utra::app_uart::RXEMPTY);
+        app_uart_csr.wo(utra::app_uart::RXEMPTY, foo);
+        let bar = app_uart_csr.rf(utra::app_uart::RXEMPTY_RXEMPTY);
+        app_uart_csr.rmwf(utra::app_uart::RXEMPTY_RXEMPTY, bar);
+        let mut baz = app_uart_csr.zf(utra::app_uart::RXEMPTY_RXEMPTY, bar);
+        baz |= app_uart_csr.ms(utra::app_uart::RXEMPTY_RXEMPTY, 1);
+        app_uart_csr.wfo(utra::app_uart::RXEMPTY_RXEMPTY, baz);
+
+        let foo = app_uart_csr.r(utra::app_uart::EV_STATUS);
+        app_uart_csr.wo(utra::app_uart::EV_STATUS, foo);
+        let bar = app_uart_csr.rf(utra::app_uart::EV_STATUS_TX);
+        app_uart_csr.rmwf(utra::app_uart::EV_STATUS_TX, bar);
+        let mut baz = app_uart_csr.zf(utra::app_uart::EV_STATUS_TX, bar);
+        baz |= app_uart_csr.ms(utra::app_uart::EV_STATUS_TX, 1);
+        app_uart_csr.wfo(utra::app_uart::EV_STATUS_TX, baz);
+        let bar = app_uart_csr.rf(utra::app_uart::EV_STATUS_RX);
+        app_uart_csr.rmwf(utra::app_uart::EV_STATUS_RX, bar);
+        let mut baz = app_uart_csr.zf(utra::app_uart::EV_STATUS_RX, bar);
+        baz |= app_uart_csr.ms(utra::app_uart::EV_STATUS_RX, 1);
+        app_uart_csr.wfo(utra::app_uart::EV_STATUS_RX, baz);
+
+        let foo = app_uart_csr.r(utra::app_uart::EV_PENDING);
+        app_uart_csr.wo(utra::app_uart::EV_PENDING, foo);
+        let bar = app_uart_csr.rf(utra::app_uart::EV_PENDING_TX);
+        app_uart_csr.rmwf(utra::app_uart::EV_PENDING_TX, bar);
+        let mut baz = app_uart_csr.zf(utra::app_uart::EV_PENDING_TX, bar);
+        baz |= app_uart_csr.ms(utra::app_uart::EV_PENDING_TX, 1);
+        app_uart_csr.wfo(utra::app_uart::EV_PENDING_TX, baz);
+        let bar = app_uart_csr.rf(utra::app_uart::EV_PENDING_RX);
+        app_uart_csr.rmwf(utra::app_uart::EV_PENDING_RX, bar);
+        let mut baz = app_uart_csr.zf(utra::app_uart::EV_PENDING_RX, bar);
+        baz |= app_uart_csr.ms(utra::app_uart::EV_PENDING_RX, 1);
+        app_uart_csr.wfo(utra::app_uart::EV_PENDING_RX, baz);
+
+        let foo = app_uart_csr.r(utra::app_uart::EV_ENABLE);
+        app_uart_csr.wo(utra::app_uart::EV_ENABLE, foo);
+        let bar = app_uart_csr.rf(utra::app_uart::EV_ENABLE_TX);
+        app_uart_csr.rmwf(utra::app_uart::EV_ENABLE_TX, bar);
+        let mut baz = app_uart_csr.zf(utra::app_uart::EV_ENABLE_TX, bar);
+        baz |= app_uart_csr.ms(utra::app_uart::EV_ENABLE_TX, 1);
+        app_uart_csr.wfo(utra::app_uart::EV_ENABLE_TX, baz);
+        let bar = app_uart_csr.rf(utra::app_uart::EV_ENABLE_RX);
+        app_uart_csr.rmwf(utra::app_uart::EV_ENABLE_RX, bar);
+        let mut baz = app_uart_csr.zf(utra::app_uart::EV_ENABLE_RX, bar);
+        baz |= app_uart_csr.ms(utra::app_uart::EV_ENABLE_RX, 1);
+        app_uart_csr.wfo(utra::app_uart::EV_ENABLE_RX, baz);
+
+        let foo = app_uart_csr.r(utra::app_uart::TXEMPTY);
+        app_uart_csr.wo(utra::app_uart::TXEMPTY, foo);
+        let bar = app_uart_csr.rf(utra::app_uart::TXEMPTY_TXEMPTY);
+        app_uart_csr.rmwf(utra::app_uart::TXEMPTY_TXEMPTY, bar);
+        let mut baz = app_uart_csr.zf(utra::app_uart::TXEMPTY_TXEMPTY, bar);
+        baz |= app_uart_csr.ms(utra::app_uart::TXEMPTY_TXEMPTY, 1);
+        app_uart_csr.wfo(utra::app_uart::TXEMPTY_TXEMPTY, baz);
+
+        let foo = app_uart_csr.r(utra::app_uart::RXFULL);
+        app_uart_csr.wo(utra::app_uart::RXFULL, foo);
+        let bar = app_uart_csr.rf(utra::app_uart::RXFULL_RXFULL);
+        app_uart_csr.rmwf(utra::app_uart::RXFULL_RXFULL, bar);
+        let mut baz = app_uart_csr.zf(utra::app_uart::RXFULL_RXFULL, bar);
+        baz |= app_uart_csr.ms(utra::app_uart::RXFULL_RXFULL, 1);
+        app_uart_csr.wfo(utra::app_uart::RXFULL_RXFULL, baz);
   }
 
     #[test]

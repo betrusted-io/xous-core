@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2023-03-08 02:38:13]]></description>
+    <description><![CDATA[Litex SoC 2023-04-09 00:16:17]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -65,10 +65,27 @@ affect CRG or peripherals]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>CPU_HOLD_RESET</name>
+                    <description><![CDATA[This bit is wired directly to the CPU's reset line. Thus, when set, the CPU
+stays in reset until it is cleared. This is intended to be used by external bus
+masters via USB to hold the CPU in reset.]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>cpu_hold_reset</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0xc</size>
+                <size>0x10</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -647,10 +664,40 @@ register to disable individual events.]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>TXEMPTY</name>
+                    <description><![CDATA[TX FIFO Empty.]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>txempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXFULL</name>
+                    <description><![CDATA[RX FIFO Full.]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rxfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x18</size>
+                <size>0x20</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -779,15 +826,207 @@ register to disable individual events.]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>TXEMPTY</name>
+                    <description><![CDATA[TX FIFO Empty.]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>txempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXFULL</name>
+                    <description><![CDATA[RX FIFO Full.]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rxfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x18</size>
+                <size>0x20</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
                 <name>console</name>
                 <value>3</value>
+            </interrupt>
+        </peripheral>
+        <peripheral>
+            <name>APP_UART</name>
+            <baseAddress>0xF0009000</baseAddress>
+            <groupName>APP_UART</groupName>
+            <registers>
+                <register>
+                    <name>RXTX</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rxtx</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXFULL</name>
+                    <description><![CDATA[TX FIFO Full.]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>txfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXEMPTY</name>
+                    <description><![CDATA[RX FIFO Empty.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rxempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the rx event trigger.  Writes to
+this register have no effect.]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``tx`` event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``rx`` event]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <description><![CDATA[When a  rx event occurs, the corresponding bit will be set in this register.  To
+clear the Event, set the corresponding bit in this register.]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `tx` event occurred. This Event is triggered on a **falling** edge.]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[`1` if a `rx` event occurred. This Event is triggered on a **falling** edge.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding rx events.  Write a ``0`` to this
+register to disable individual events.]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``tx`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``rx`` Event]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXEMPTY</name>
+                    <description><![CDATA[TX FIFO Empty.]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>txempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXFULL</name>
+                    <description><![CDATA[RX FIFO Full.]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rxfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x20</size>
+                <usage>registers</usage>
+            </addressBlock>
+            <interrupt>
+                <name>app_uart</name>
+                <value>4</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -876,10 +1115,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``470dbcb0``, so this value is 1192082608, which should be enough to check out
+``cd7910cd``, so this value is 3447263437, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x470dbcb0</resetValue>
+                    <resetValue>0xcd7910cd</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -896,7 +1135,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x10</resetValue>
+                    <resetValue>0x30</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3057,7 +3296,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x1847493</resetValue>
+                    <resetValue>0x75f03a6e</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3072,7 +3311,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x7408b19b</resetValue>
+                    <resetValue>0x4e182fd1</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3945,8 +4184,8 @@ avalanche generator]]></description>
                             <msb>6</msb>
                             <bitRange>[6:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Sets the `C` (cutoff) parameter in the NIST repetition count test for the
-ringosc generator]]></description>
+                            <description><![CDATA[Sets the `C` (cutoff) parameter in the NIST repetition count test for the ring
+osc generator]]></description>
                         </field>
                         <field>
                             <name>adaptive_cutoff</name>
@@ -3954,7 +4193,7 @@ ringosc generator]]></description>
                             <bitRange>[16:7]</bitRange>
                             <lsb>7</lsb>
                             <description><![CDATA[Sets the `C` (cutoff) parameter in the NIST adaptive proportion test for the
-ringosg generator]]></description>
+ring osc generator]]></description>
                         </field>
                     </fields>
                 </register>
@@ -6529,11 +6768,6 @@ of the PLL]]></description>
                 <size>0x00010000</size>
             </memoryRegion>
             <memoryRegion>
-                <name>VEXRISCV_DEBUG</name>
-                <baseAddress>0xEFFF0000</baseAddress>
-                <size>0x00000100</size>
-            </memoryRegion>
-            <memoryRegion>
                 <name>SRAM_EXT</name>
                 <baseAddress>0x40000000</baseAddress>
                 <size>0x01000000</size>
@@ -6590,6 +6824,7 @@ of the PLL]]></description>
             <constant name="CONFIG_BUS_DATA_WIDTH" value="32" />
             <constant name="CONFIG_BUS_ADDRESS_WIDTH" value="32" />
             <constant name="CONFIG_BUS_BURSTING" value="0" />
+            <constant name="APP_UART_INTERRUPT" value="4" />
             <constant name="AUDIO_INTERRUPT" value="14" />
             <constant name="BTEVENTS_INTERRUPT" value="7" />
             <constant name="COM_INTERRUPT" value="5" />
