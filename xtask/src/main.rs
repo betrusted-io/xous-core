@@ -142,6 +142,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !language_set { // the default language is english
         track_language_changes("en")?;
     }
+    let gdb_stub = env::args().filter(|x| x == "--gdb-stub").count() == 0;
+    if gdb_stub {
+        builder.add_kernel_feature("gdb-stub");
+    }
 
     // ---- now process the verb plus position dependent arguments ----
     let mut args = env::args();
@@ -416,6 +420,7 @@ fn print_help() {
     [--service [cratespec]]
     [--no-timestamp]
     [--no-verify]
+    [--gdb-stub]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
@@ -432,6 +437,7 @@ be merged in with explicit app/service treatment with the following flags:
 [--lkey] and [--kkey]    Paths to alternate private key files for loader and kernel key signing (defaults to developer key)
 [--no-timestamp]         Do not include a timestamp in the build. By default, `ticktimer` is rebuilt on every run to encode a timestamp.
 [--no-verify]            Do not verify that local sources match crates.io downloaded sources
+[--gdb-stub]             Build the kernel with GDB support
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.
