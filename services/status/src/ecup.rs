@@ -197,12 +197,29 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 let force = force_arg != 0;
                 log::debug!("force update argument: {:?}", force);
 
-                let ec_reported_rev = com.get_ec_sw_tag().unwrap(); // fetch the purported rev from the EC. We take it at face value.
-                if ec_reported_rev.maj == 0 && ec_reported_rev.min == 0 && ec_reported_rev.rev == 0 && !force {
-                    log::error!("EC rev report seems bogus: {:?}; aborting autoupdate process.", ec_reported_rev);
-                    // this will trigger a dialog box "EC update aborted due to error!"
-                    xous::return_scalar(msg.sender, UpdateResult::Abort.to_usize().unwrap()).unwrap();
-                    continue;
+                let mut ec_reported_rev = com.get_ec_sw_tag().unwrap(); // fetch the purported rev from the EC. We take it at face value.
+                if !is_ec_rev_sane(&ec_reported_rev) && !force {
+                    const RETRY_TOTAL_DURATION_MS: usize = 5000; // it can easily take 2-3 seconds for the EC to boot and respond to version requests
+                    const RETRY_INTERVAL_MS: usize = 500;
+                    let mut retries = 0;
+                    loop {
+                        ec_reported_rev = com.get_ec_sw_tag().unwrap(); // fetch the purported rev from the EC. We take it at face value.
+                        if is_ec_rev_sane(&ec_reported_rev) {
+                            break;
+                        }
+                        ticktimer.sleep_ms(RETRY_INTERVAL_MS).unwrap();
+                        retries += RETRY_INTERVAL_MS;
+                        if retries > RETRY_TOTAL_DURATION_MS {
+                            break;
+                        }
+                    }
+                    if retries > RETRY_TOTAL_DURATION_MS {
+                        // this is typically a result of the EC itself being bricked...nothing we can do about it at this point.
+                        log::error!("EC rev report seems bogus: {:?}; aborting autoupdate process.", ec_reported_rev);
+                        // this will trigger a dialog box "EC update aborted due to error!"
+                        xous::return_scalar(msg.sender, UpdateResult::Abort.to_usize().unwrap()).unwrap();
+                        continue;
+                    }
                 }
 
                 let mut did_something = false;
@@ -546,3 +563,19 @@ fn validate_package(pkg: &[u8], pkg_type: PackageType) -> bool {
     true
 }
 
+/// returns `false` if the EC rev does not appear sane
+fn is_ec_rev_sane(ec_reported_rev: &SemVer) -> bool {
+    if ec_reported_rev.maj == 0 && ec_reported_rev.min == 0 && ec_reported_rev.rev == 0 {
+        false
+    } else {
+        if ec_reported_rev.maj > 64 {
+            // the purpose of this is to check reports that are 0xdddd, 0xeeee, 0xffff....which are link error
+            // codes. We're unlikely to ever get to 64 major releases of this code, so if we see a major release
+            // number bigger than 64, we flag it. otoh, if we get to the point of the 65th major release...hopefully
+            // this code won't still be around anymore.
+            false
+        } else {
+            true
+        }
+    }
+}
