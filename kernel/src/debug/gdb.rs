@@ -49,15 +49,78 @@ impl ProcessPid for XousTarget {
     }
 }
 
-fn receive_irq(uart: &mut GdbUart) {
-    while let Some(c) = uart.getc() {
-        process_character(c);
+struct MicroRingBuf<const N: usize> {
+    buffer: [u8; N],
+    head: usize,
+    tail: usize,
+}
+
+impl<const N: usize> Default for MicroRingBuf<N> {
+    fn default() -> Self {
+        MicroRingBuf {
+            buffer: [0u8; N],
+            head: 0,
+            tail: 0,
+        }
+    }
+}
+
+impl<const N: usize> MicroRingBuf<N> {
+    // pub fn capacity(&self) -> usize {
+    //     self.buffer.len()
+    // }
+    // pub fn len(&self) -> usize {
+    //     self.head.wrapping_sub(self.tail) % N
+    // }
+
+    pub fn is_full(&self) -> bool {
+        (self.tail.wrapping_sub(1) % N) == self.head
     }
 
-    // If the GDB server goes away for some reason, reconstitute it
-    unsafe {
-        if GDB_STATE.is_none() {
-            init();
+    pub fn try_push(&mut self, val: u8) -> Result<(), ()> {
+        if self.is_full() {
+            return Err(());
+        }
+        self.buffer[self.head] = val;
+        self.head = (self.head + 1) % N;
+        Ok(())
+    }
+
+    pub fn try_pop(&mut self) -> Option<u8> {
+        if self.tail == self.head {
+            return None;
+        }
+        let val = self.buffer[self.tail];
+        self.tail = (self.tail + 1) % N;
+        Some(val)
+    }
+}
+
+fn receive_irq(uart: &mut GdbUart) {
+    let mut buffer = MicroRingBuf::<32>::default();
+    loop {
+        // Try to fill up the ring buffer with as many characters
+        // as can fit. This is to compensate for the fact that we do
+        // all of this processing in an interrupt context, and the
+        // hardware UART buffer is only a few characters deep.
+        while !buffer.is_full() {
+            if let Some(c) = uart.getc() {
+                buffer.try_push(c).ok();
+            } else {
+                break;
+            }
+        }
+
+        // If there is a character in the buffer, process it. Otherwise,
+        // we're done.
+        let Some(c) = buffer.try_pop() else { break };
+        process_character(c);
+
+        // If the GDB server goes away for some reason, reconstitute it
+        unsafe {
+            if GDB_STATE.is_none() {
+                init();
+            }
         }
     }
 }

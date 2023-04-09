@@ -142,14 +142,13 @@ impl SerialRead for GdbUart {
     fn getc(&mut self) -> Option<u8> {
         // If EV_PENDING_RX is 1, return the pending character.
         // Otherwise, return None.
-        match self.uart_csr.rf(utra::app_uart::EV_PENDING_RX) {
-            0 => None,
-            _ => {
-                let ret = Some(self.uart_csr.r(utra::app_uart::RXTX) as u8);
-                self.uart_csr.wfo(utra::app_uart::EV_PENDING_RX, 1);
-                ret
-            }
+        if self.uart_csr.r(utra::app_uart::RXEMPTY) != 0 {
+            return None;
         }
+
+        let ret = self.uart_csr.r(utra::app_uart::RXTX) as u8;
+        self.uart_csr.wfo(utra::app_uart::EV_PENDING_RX, 1);
+        Some(ret)
     }
 }
 
