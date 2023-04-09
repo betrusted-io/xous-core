@@ -11,7 +11,7 @@ rust-version = "1.59"
 atty = "0.2.14"
 filetime = "0.2.14"
 rustc_version = "0.4.0"
-zip = "0.5.13"
+zip = "0.6.4"
 chrono = "0.4"
 serde_json = "1.0.41"
 serde = { version = "1.0.130", features = ["derive"] }

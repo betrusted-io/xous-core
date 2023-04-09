@@ -26,6 +26,18 @@ dependencies = [
 
 [[package]]
 name = "aes"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e8b47f52ea9bae42228d07ec09eb676433d7c4ed1ebdf0f1d1c29ed446f1ab8"
+dependencies = [
+ "cfg-if",
+ "cipher 0.3.0",
+ "cpufeatures",
+ "opaque-debug",
+]
+
+[[package]]
+name = "aes"
 version = "0.8.1"
 dependencies = [
  "cipher 0.4.3",
@@ -42,7 +54,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae0784134ba9375416d469ec31e7c5f9fa94405049cf08c5ce5b4698be673e0d"
 dependencies = [
  "aead",
- "aes",
+ "aes 0.8.1",
  "cipher 0.4.3",
  "ctr",
  "polyval",
@@ -56,7 +68,7 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69fa2b352dcefb5f7f3a5fb840e02665d311d878955380515e4fd50095dd3d8c"
 dependencies = [
- "aes",
+ "aes 0.8.1",
 ]
 
 [[package]]
@@ -464,6 +476,9 @@ name = "cc"
 version = "1.0.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fff2a6927b3bb87f9595d67196a70493f627687a71d87a0d692242c33f58c11"
+dependencies = [
+ "jobserver",
+]
 
 [[package]]
 name = "cfg-if"
@@ -486,7 +501,7 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits",
- "time",
+ "time 0.1.44",
  "winapi",
 ]
 
@@ -660,6 +675,12 @@ name = "const-oid"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4c78c047431fee22c1a7bb92e00ad095a02a983affe4d8a72e2a2c62c1b94f3"
+
+[[package]]
+name = "constant_time_eq"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
 name = "content-plugin-api"
@@ -913,7 +934,7 @@ dependencies = [
 name = "ctap-crypto"
 version = "0.1.0"
 dependencies = [
- "aes",
+ "aes 0.8.1",
  "arrayref",
  "byteorder",
  "cbc",
@@ -928,7 +949,7 @@ dependencies = [
  "rfc6979 0.2.0",
  "serde",
  "serde_json",
- "sha2",
+ "sha2 0.9.8",
  "subtle",
  "trng",
  "untrusted",
@@ -1172,7 +1193,7 @@ dependencies = [
  "curve25519-dalek",
  "ed25519",
  "rand 0.7.3",
- "sha2",
+ "sha2 0.9.8",
  "zeroize",
 ]
 
@@ -1604,7 +1625,7 @@ dependencies = [
  "num-traits",
  "qrcode",
  "rkyv",
- "sha2",
+ "sha2 0.9.8",
  "trng",
  "tts-frontend",
  "utralib",
@@ -2056,6 +2077,15 @@ name = "itoa"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112c678d4050afce233f4f2852bb2eb519230b3cf12f33585275537d7e41578d"
+
+[[package]]
+name = "jobserver"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "936cfd212a0155903bcbc060e316fb6cc7cbf2e1907329391ebadc1fe0ce77c2"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "js-sys"
@@ -2603,7 +2633,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "sec1",
- "sha2",
+ "sha2 0.9.8",
 ]
 
 [[package]]
@@ -2686,6 +2716,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "password-hash"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7676374caaee8a325c9e7a2ae557f216c5563a171d6997b0ef8a65af35147700"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.3",
+ "subtle",
+]
+
+[[package]]
 name = "passwords"
 version = "3.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2701,10 +2742,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f746c4065a8fa3fe23974dd82f15431cc8d40779821001404d10d2e79ca7d79"
 
 [[package]]
+name = "pbkdf2"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83a0692ec44e4cf1ef28ca317f14f8f07da2d95ec3fa01f86e4467b725e60917"
+dependencies = [
+ "digest 0.10.3",
+ "hmac 0.12.1",
+ "password-hash",
+ "sha2 0.10.5",
+]
+
+[[package]]
 name = "pddb"
 version = "0.1.0"
 dependencies = [
- "aes",
+ "aes 0.8.1",
  "aes-gcm-siv",
  "bitfield",
  "bitflags",
@@ -2726,7 +2779,7 @@ dependencies = [
  "rand_core 0.5.1",
  "rkyv",
  "root-keys",
- "sha2",
+ "sha2 0.9.8",
  "spinor",
  "subtle",
  "trng",
@@ -3337,7 +3390,7 @@ dependencies = [
 name = "root-keys"
 version = "0.1.0"
 dependencies = [
- "aes",
+ "aes 0.8.1",
  "aes-gcm-siv",
  "aes-kw",
  "blowfish 0.8.0",
@@ -3361,7 +3414,7 @@ dependencies = [
  "num-traits",
  "rand_core 0.5.1",
  "rkyv",
- "sha2",
+ "sha2 0.9.8",
  "spinor",
  "subtle",
  "trng",
@@ -3631,6 +3684,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha1"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "006769ba83e921b3085caa8334186b00cf92b4cb1a6cf4632fbccc8eff5c7549"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "digest 0.10.3",
+]
+
+[[package]]
 name = "sha2"
 version = "0.9.8"
 dependencies = [
@@ -3649,6 +3713,17 @@ dependencies = [
  "xous-api-susres",
  "xous-api-ticktimer",
  "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "sha2"
+version = "0.10.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf9db03534dff993187064c4e0c05a5708d2a9728ace9a8959b77bedf415dac5"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "digest 0.10.3",
 ]
 
 [[package]]
@@ -3674,7 +3749,7 @@ dependencies = [
 name = "shellchat"
 version = "0.1.0"
 dependencies = [
- "aes",
+ "aes 0.8.1",
  "base64 0.20.0",
  "chrono",
  "cipher 0.3.0",
@@ -3713,7 +3788,7 @@ dependencies = [
  "rkyv",
  "root-keys",
  "rustls",
- "sha2",
+ "sha2 0.9.8",
  "spinor",
  "threadpool",
  "tracing",
@@ -3870,7 +3945,7 @@ dependencies = [
  "pddb",
  "rkyv",
  "root-keys",
- "sha2",
+ "sha2 0.9.8",
  "trng",
  "usb-device-xous",
  "userprefs",
@@ -4059,6 +4134,22 @@ dependencies = [
  "wasi 0.10.0+wasi-snapshot-preview1",
  "winapi",
 ]
+
+[[package]]
+name = "time"
+version = "0.3.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd0cbfecb4d19b5ea75bb31ad904eb5b9fa13f21079c3b92017ebdf4999a5890"
+dependencies = [
+ "serde",
+ "time-core",
+]
+
+[[package]]
+name = "time-core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e153e1f1acaef8acc537e68b44906d2db6436e2b35ac2c6b42640fff91f00fd"
 
 [[package]]
 name = "tinytemplate"
@@ -4619,7 +4710,7 @@ dependencies = [
  "random-pick",
  "rkyv",
  "sha-1 0.9.8",
- "sha2",
+ "sha2 0.9.8",
  "sntpc",
  "subtle",
  "trng",
@@ -5344,14 +5435,50 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "0.5.13"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93ab48844d61251bb3835145c521d88aa4031d7139e8485990f60ca911fa0815"
+checksum = "0445d0fbc924bb93539b4316c11afb121ea39296f99a3c4c9edad09e3658cdef"
 dependencies = [
+ "aes 0.7.5",
  "byteorder",
  "bzip2",
+ "constant_time_eq",
  "crc32fast",
+ "crossbeam-utils",
  "flate2",
- "thiserror",
- "time",
+ "hmac 0.12.1",
+ "pbkdf2",
+ "sha1",
+ "time 0.3.20",
+ "zstd",
+]
+
+[[package]]
+name = "zstd"
+version = "0.11.2+zstd.1.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20cc960326ece64f010d2d2107537f26dc589a6573a316bd5b1dba685fa5fde4"
+dependencies = [
+ "zstd-safe",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "5.0.2+zstd.1.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d2a5585e04f9eea4b2a3d1eca508c4dee9592a89ef6f450c11719da0726f4db"
+dependencies = [
+ "libc",
+ "zstd-sys",
+]
+
+[[package]]
+name = "zstd-sys"
+version = "2.0.8+zstd.1.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5556e6ee25d32df2586c098bbfa278803692a20d0ab9565e049480d52707ec8c"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
 ]
