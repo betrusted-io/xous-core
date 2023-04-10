@@ -3,6 +3,8 @@
 
 #[cfg(feature = "gdb-stub")]
 pub mod gdbuart;
+#[cfg(all(feature = "print-panics"))]
+pub mod lcdpanic;
 pub mod rand;
 #[cfg(any(feature = "debug-print", feature = "print-panics"))]
 pub mod uart;
