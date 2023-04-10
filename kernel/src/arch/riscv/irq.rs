@@ -156,6 +156,7 @@ fn generate_exception_args(ex: &RiscvException) -> Option<[usize; 3]> {
 /// the Interrupt or Exception enum and passed to handle_interrupt or
 /// handle_exception.
 #[export_name = "_start_trap_rust"]
+#[allow(unreachable_code)] // panic handler will terminate execution
 pub extern "C" fn trap_handler(
     a0: usize,
     a1: usize,
@@ -355,7 +356,10 @@ pub extern "C" fn trap_handler(
         }
 
         _ => {
+            #[cfg(not(any(feature = "precursor", feature = "renode")))]
             println!("!!! Unrecognized exception: {:?}", ex);
+            #[cfg(any(feature = "precursor", feature = "renode"))]
+            panic!("!!! Unrecognized exception: {:?}", ex);
         }
     }
 
@@ -393,9 +397,21 @@ pub extern "C" fn trap_handler(
     let is_kernel_failure = sstatus::read().spp() == sstatus::SPP::Supervisor;
     // The exception was not handled. We should terminate the program here.
     // For now, let's halt the whole system instead so that it becomes
-    // immediately obvious that we screwed up. On harware this will trigger
+    // immediately obvious that we screwed up. On hardware this will trigger
     // a watchdog reset.
+    #[cfg(not(any(feature = "precursor", feature = "renode")))]
     println!(
+        "{}: CPU Exception on PID {}: {}",
+        if is_kernel_failure {
+            "!!! KERNEL FAILURE !!!"
+        } else {
+            "PROGRAM HALT"
+        },
+        pid,
+        ex
+    );
+    #[cfg(any(feature = "precursor", feature = "renode"))]
+    panic!(
         "{}: CPU Exception on PID {}: {}",
         if is_kernel_failure {
             "!!! KERNEL FAILURE !!!"
