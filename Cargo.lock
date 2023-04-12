@@ -43,7 +43,7 @@ dependencies = [
  "cipher 0.4.3",
  "hex-literal",
  "log",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
 ]
 
@@ -77,7 +77,7 @@ version = "0.1.0"
 dependencies = [
  "hex-literal",
  "log",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
 ]
 
@@ -213,11 +213,11 @@ dependencies = [
  "num-derive",
  "num-traits",
  "trng",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -604,12 +604,12 @@ dependencies = [
  "rkyv",
  "trng",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -625,12 +625,12 @@ dependencies = [
  "trng",
  "typenum",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
@@ -689,7 +689,7 @@ dependencies = [
  "graphics-server",
  "log",
  "rkyv",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
 ]
 
@@ -1142,12 +1142,12 @@ dependencies = [
  "trng",
  "userprefs",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1294,12 +1294,12 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1411,7 +1411,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -1629,12 +1629,12 @@ dependencies = [
  "trng",
  "tts-frontend",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1695,9 +1695,9 @@ dependencies = [
  "wasi 0.11.0+wasi-snapshot-preview1",
  "wasm-bindgen",
  "wasm-bindgen-test",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1729,12 +1729,12 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1819,10 +1819,10 @@ dependencies = [
  "num-derive",
  "num-traits",
  "tts-frontend",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1956,11 +1956,11 @@ dependencies = [
  "rkyv",
  "tts-frontend",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1972,9 +1972,9 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1987,11 +1987,11 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2006,11 +2006,11 @@ dependencies = [
  "rkyv",
  "tts-frontend",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2105,12 +2105,12 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2125,7 +2125,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-ticktimer",
 ]
@@ -2141,12 +2141,12 @@ dependencies = [
  "rkyv",
  "spinor",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2191,7 +2191,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -2209,12 +2209,12 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
@@ -2372,11 +2372,11 @@ dependencies = [
  "trng",
  "tts-frontend",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2403,11 +2403,11 @@ dependencies = [
  "status",
  "trng",
  "ureq",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2443,12 +2443,12 @@ dependencies = [
  "smoltcp",
  "trng",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
@@ -2785,12 +2785,12 @@ dependencies = [
  "trng",
  "tts-frontend",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "zeroize",
  "zeroize_derive",
 ]
@@ -2818,7 +2818,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3295,11 +3295,11 @@ dependencies = [
  "num-derive",
  "num-traits",
  "trng",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3337,9 +3337,9 @@ dependencies = [
  "spin 0.5.2",
  "untrusted",
  "winapi",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3421,12 +3421,12 @@ dependencies = [
  "tts-frontend",
  "usb-device-xous",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
  "zeroize",
 ]
@@ -3707,12 +3707,12 @@ dependencies = [
  "rkyv",
  "trng",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3802,12 +3802,12 @@ dependencies = [
  "utralib",
  "webpki-roots",
  "x25519-dalek",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3858,7 +3858,7 @@ dependencies = [
 name = "spawn"
 version = "0.1.0"
 dependencies = [
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3890,12 +3890,12 @@ dependencies = [
  "rkyv",
  "trng",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3950,12 +3950,12 @@ dependencies = [
  "usb-device-xous",
  "userprefs",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
@@ -4059,7 +4059,7 @@ dependencies = [
 name = "test-spawn"
 version = "0.1.0"
 dependencies = [
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4120,7 +4120,7 @@ name = "ticktimer-test-client"
 version = "0.1.0"
 dependencies = [
  "log",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
 ]
 
@@ -4286,10 +4286,10 @@ dependencies = [
  "num-derive",
  "num-traits",
  "usb-device-xous",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4304,12 +4304,12 @@ dependencies = [
  "rand_core 0.5.1",
  "rkyv",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4322,11 +4322,11 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-tts-backend",
 ]
 
@@ -4486,12 +4486,12 @@ dependencies = [
  "usbd_scsi 0.1.1",
  "utralib",
  "vcell",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
@@ -4511,7 +4511,7 @@ dependencies = [
  "usbd-human-interface-device 0.1.1",
  "utralib",
  "vcell",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -4563,7 +4563,7 @@ dependencies = [
  "typenum",
  "usb-device",
  "usbd_mass_storage 0.1.0",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-ticktimer",
 ]
 
@@ -4637,7 +4637,7 @@ dependencies = [
  "usb-device",
  "usbd_bulk_only_transport 0.1.0",
  "usbd_mass_storage 0.1.0",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-ticktimer",
 ]
 
@@ -4718,12 +4718,12 @@ dependencies = [
  "usb-device-xous",
  "usbd-human-interface-device 0.2.1",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5174,7 +5174,7 @@ checksum = "d2d7d3948613f75c98fd9328cfdcc45acc4d360655289d0a7d4ec931392200a3"
 
 [[package]]
 name = "xous"
-version = "0.9.39"
+version = "0.9.40"
 dependencies = [
  "compiler_builtins",
  "lazy_static",
@@ -5183,94 +5183,94 @@ dependencies = [
 
 [[package]]
 name = "xous"
-version = "0.9.39"
+version = "0.9.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84db7ba629d7ba29bc49ec966fb7fe039e50e6053b696d849d15fb0618b67edf"
+checksum = "d4d4e0f82f894d5960b10adc3b0a39fe96033c767174b80258481b278b972d67"
 dependencies = [
  "lazy_static",
 ]
 
 [[package]]
 name = "xous-api-log"
-version = "0.1.34"
+version = "0.1.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8109107c3ed5f3a762f7694239f1a999ba5a66ac20fea6ba221dbd6149858b72"
+checksum = "37e5fc7b10d5fe52535fae54c223b5684ecef172fce2a136fe9e59d370ce06d1"
 dependencies = [
  "log",
  "num-derive",
  "num-traits",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "xous-api-names"
-version = "0.9.36"
+version = "0.9.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "501da5862e857d6043778e30701f5615ac5570d7c431abcc13f9149cf12d264a"
+checksum = "8c4775bac0894064e2d8028c7b7c470f62b4fb266950ff7f73eca69f5fc0a055"
 dependencies = [
  "log",
  "num-derive",
  "num-traits",
  "rkyv",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "xous-api-susres"
-version = "0.9.34"
+version = "0.9.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46a20837a69acf83ab5d57ae6e8b1195df1f39050bd5a6fd901948bba772d453"
+checksum = "90ffb0b3fe55eb591fc6e5c0decb1f497b03f497322da356b01367ab613c719e"
 dependencies = [
  "log",
  "num-derive",
  "num-traits",
  "rkyv",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "xous-api-ticktimer"
-version = "0.9.34"
+version = "0.9.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0f7946eebe509b3f13e353b3c162e7a98eccbfad8d929edebf3dd62482cd865"
+checksum = "bc56e99340b3ccc0b01b960e55d51054336f71bcb5bce2fb793aac31f95ca57b"
 dependencies = [
  "log",
  "num-derive",
  "num-traits",
  "rkyv",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
 [[package]]
 name = "xous-ipc"
-version = "0.9.39"
+version = "0.9.40"
 dependencies = [
  "bitflags",
  "rkyv",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "xous-ipc"
-version = "0.9.39"
+version = "0.9.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3419f56dd6791edc9cfc064a1eb4050cfb52caa247fb6202b27adcd5f4c6bf5b"
+checksum = "88f8b7bdc55e0bd76bf3044b131052f45c0ca58a429d13871bda8891b95cc120"
 dependencies = [
  "bitflags",
  "rkyv",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5290,7 +5290,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "stats_alloc",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-riscv",
 ]
 
@@ -5303,9 +5303,9 @@ dependencies = [
  "num-derive",
  "num-traits",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5317,10 +5317,10 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5348,11 +5348,11 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5365,12 +5365,12 @@ dependencies = [
  "num-traits",
  "rkyv",
  "utralib",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
 ]
 
@@ -5384,9 +5384,9 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "xous 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
- "xous-ipc 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
