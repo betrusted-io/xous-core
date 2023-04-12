@@ -369,6 +369,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - PDDB shellchat writeall command via @pakl
 - Add Force Update option for the EC. This required migrating the time server runtime into the DNS process space, due to exhaustion of connection IDs in the status process space.
 - @xobs has added the feature `--gdb-stub` to the build. When selected, the kernel is built with GDB support over serial port. This works well in Renode. To try it in hardware, one must first run `console app` inside `shellchat` to activate the GDB UART (otherwise the sole serial port is connected to the console log).
+- @xobs added graphical panic output to the kernel. This is different from a guru meditation in that it only happens when the kernel itself panics.
+- Pulled in `ebreak` fix for VexRiscv CPU
 
 ## Roadmap
 - Lots of testing and bug fixes
