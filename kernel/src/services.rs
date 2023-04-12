@@ -693,7 +693,9 @@ impl SystemServices {
             }
 
             // log_process_update(file!(), line!(), process, old_state);
-            process.previous_thread = process.current_thread;
+            if process.current_thread != arch::process::IRQ_TID {
+                process.previous_thread = process.current_thread;
+            }
             process.current_thread = arch::process::IRQ_TID;
             process.mapping.activate()?;
             process.activate()?;
