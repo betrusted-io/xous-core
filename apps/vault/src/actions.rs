@@ -773,6 +773,86 @@ impl<'a> ActionManager<'a> {
                 pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
                 pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
                 pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
+
+                // if the password is empty, prompt to generate a new password
+                if pw.password.len() == 0 {
+                    let pg = PasswordGenerator {
+                        length: 20,
+                        numbers: true,
+                        lowercase_letters: true,
+                        uppercase_letters: true,
+                        symbols: true,
+                        spaces: false,
+                        exclude_similar_characters: true,
+                        strict: true,
+                    };
+                    let mut password = pg.generate_one().unwrap();
+                    let mut approved = false;
+                    while !approved {
+                        let maybe_password = match self.modals
+                            .alert_builder(t!("vault.newitem.password", xous::LANG))
+                            .field(Some(password), Some(password_validator))
+                            .build()
+                        {
+                            Ok(text) => {
+                                text.content()[0].content.as_str().unwrap().to_string()
+                            },
+                            _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
+                        };
+                        #[cfg(feature="ux-swap-delay")]
+                        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                        password = if maybe_password.len() == 0 {
+                            let length = match self.modals
+                                .alert_builder(t!("vault.newitem.configure_length", xous::LANG))
+                                .field(Some("20".to_string()), Some(length_validator))
+                                .build()
+                            {
+                                Ok(entry) => entry.content()[0].content.as_str().unwrap().parse::<u32>().unwrap(),
+                                _ => {log::error!("Length entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
+                            };
+                            #[cfg(feature="ux-swap-delay")]
+                            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                            let mut upper = false;
+                            let mut number = false;
+                            let mut symbol = false;
+                            self.modals
+                                .add_list(vec![
+                                    t!("vault.newitem.uppercase", xous::LANG),
+                                    t!("vault.newitem.numbers", xous::LANG),
+                                    t!("vault.newitem.symbols", xous::LANG),
+                                ]).expect("couldn't create configuration modal");
+                            match self.modals.get_checkbox(t!("vault.newitem.configure_generator", xous::LANG)) {
+                                Ok(options) => {
+                                    for opt in options {
+                                        if opt == t!("vault.newitem.uppercase", xous::LANG) {upper = true;}
+                                        if opt == t!("vault.newitem.numbers", xous::LANG) {number = true;}
+                                        if opt == t!("vault.newitem.symbols", xous::LANG) {symbol = true;}
+                                    }
+                                }
+                                _ => {log::error!("Modal selection error"); self.action_active.store(false, Ordering::SeqCst); return}
+                            }
+                            #[cfg(feature="ux-swap-delay")]
+                            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                            let pg2 = PasswordGenerator {
+                                length: length as usize,
+                                numbers: number,
+                                lowercase_letters: true,
+                                uppercase_letters: upper,
+                                symbols: symbol,
+                                spaces: false,
+                                exclude_similar_characters: true,
+                                strict: true,
+                            };
+                            approved = false;
+                            pg2.generate_one().unwrap()
+                        } else {
+                            approved = true;
+                            maybe_password
+                        };
+                    }
+                    pw.password = password;
+                }
+
                 // note the edit access, this counts as an access since the password was revealed
                 pw.count += 1;
                 pw.atime = utc_now().timestamp() as u64;
