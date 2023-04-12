@@ -11,13 +11,13 @@ resolver = "2"
 [dependencies]
 bitflags = "1.2.1"
 stats_alloc = { version = "0.1.8", optional = true }
-xous-kernel = { package = "xous", version = "0.9.39", features = [
+xous-kernel = { package = "xous", version = "0.9.40", features = [
     "forget-memory-messages",
 ] }
 utralib = { version = "0.1.17", optional = true, default_features = false }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
-xous-kernel = { package = "xous", version = "0.9.39", features = [
+xous-kernel = { package = "xous", version = "0.9.40", features = [
     "forget-memory-messages",
     "processes-as-threads",
 ] }
@@ -30,7 +30,7 @@ gdbstub_arch = { version = "0.2.4", optional = true, default-features = false }
 [target.'cfg(target_arch = "arm")'.dependencies]
 armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", features = ["critical-section"] }
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
-xous-kernel = { package = "xous", version = "0.9.39", features = [
+xous-kernel = { package = "xous", version = "0.9.40", features = [
     "v2p",
 ] }
 critical-section = "1.1.1"
