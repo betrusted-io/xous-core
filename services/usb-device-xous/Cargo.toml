@@ -34,6 +34,9 @@ num_enum = { version = "0.5", default-features = false } # used by the usbd-huma
 usbd_scsi = { path = "../../libs/mass-storage/usbd_scsi", optional = true }
 usbd_mass_storage = { path = "../../libs/mass-storage/usbd_mass_storage", optional = true }
 
+# Serial support
+usbd-serial = "0.1.1"
+
 ghostfat = "0.5.0"
 
 [dependencies.usb-device]
@@ -51,5 +54,6 @@ hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 minimal = ["mass-storage"]
 mass-storage = ["usbd_scsi", "usbd_mass_storage"]
+serial = []
 mjolnir = [] # the big hammer for debugging Spinal USB issues. A raw memory dump of config and descriptor space. Use with care.
-default = []
+default = ["serial"]

@@ -83,6 +83,8 @@ pub enum UsbDeviceType {
     Fido = 2,
     #[cfg(feature="mass-storage")]
     MassStorage = 3,
+    #[cfg(feature="serial")]
+    Serial = 4,
 }
 use std::convert::TryFrom;
 impl TryFrom<usize> for UsbDeviceType {
@@ -95,6 +97,8 @@ impl TryFrom<usize> for UsbDeviceType {
             2 => Ok(UsbDeviceType::Fido),
             #[cfg(feature="mass-storage")]
             3 => Ok(UsbDeviceType::MassStorage),
+            #[cfg(feature="serial")]
+            4 => Ok(UsbDeviceType::Serial),
             _ => Err("Invalid UsbDeviceType specifier"),
         }
     }

@@ -131,6 +131,10 @@ impl UsbHid {
                     0 => Ok(UsbDeviceType::Debug),
                     1 => Ok(UsbDeviceType::FidoKbd),
                     2 => Ok(UsbDeviceType::Fido),
+                    #[cfg(feature="mass-storage")]
+                    3 => Ok(UsbDeviceType::MassStorage),
+                    #[cfg(feature="serial")]
+                    4 => Ok(UsbDeviceType::Serial),
                     _ => Err(xous::Error::InternalError)
                 }
             }

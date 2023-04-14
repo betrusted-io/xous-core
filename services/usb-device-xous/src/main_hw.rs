@@ -27,6 +27,9 @@ use keyboard::KeyMap;
 use xous_ipc::Buffer;
 use std::collections::VecDeque;
 
+#[cfg(feature="serial")]
+use usbd_serial::SerialPort;
+
 pub struct EmbeddedClock {
     start: std::time::Instant,
 }
@@ -55,6 +58,8 @@ enum Views {
     FidoOnly = 1,
     #[cfg(feature="mass-storage")]
     MassStorage = 2,
+    #[cfg(feature="serial")]
+    Serial = 3,
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -174,6 +179,8 @@ pub(crate) fn main_hw() -> ! {
     // do the same thing for mass storage
     #[cfg(feature="mass-storage")]
     let ums_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    #[cfg(feature="serial")]
+    let serial_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
 
     // track which view is visible on the device core
     #[cfg(not(feature="minimal"))]
@@ -246,6 +253,23 @@ pub(crate) fn main_hw() -> ! {
         .self_powered(false)
         .max_power(500)
         .build();
+
+    // Serial
+    #[cfg(feature="serial")]
+    const SERIAL_BUF_LEN: usize = 1024;
+    #[cfg(feature="serial")]
+    let serial_alloc = UsbBusAllocator::new(serial_dev);
+    #[cfg(feature="serial")]
+    // this will create a default port with 128 bytes of backing store
+    let mut serial_port = SerialPort::new(&serial_alloc);
+    #[cfg(feature="serial")]
+    let mut serial_device = UsbDeviceBuilder::new(&serial_alloc, UsbVidPid(0x1209, 0x3613))
+    .manufacturer("Kosagi")
+    .product("Precursor")
+    .serial_number(&serial_number)
+    .self_powered(false)
+    .max_power(500)
+    .build();
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -356,7 +380,7 @@ pub(crate) fn main_hw() -> ! {
             #[cfg(feature="mass-storage")]
             Some(Opcode::SetBlockDevice) => msg_blocking_scalar_unpack!(msg, read_id, write_id, max_lba_id, _, {
                 xous::send_message(
-                    abdcid, 
+                    abdcid,
                     xous::Message::new_blocking_scalar(
                         apps_block_device::BlockDeviceMgmtOp::SetOps.to_usize().unwrap(), read_id, write_id, max_lba_id, 0,
                     )
@@ -406,6 +430,13 @@ pub(crate) fn main_hw() -> ! {
                             Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
                             _ => ()
                         };
+                    }
+                    #[cfg(feature="serial")]
+                    Views::Serial => {
+                        match serial_device.force_reset() {
+                            Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                            _ => ()
+                        }
                     }
                 }
                 // resume2 brings us to our last application state
@@ -489,7 +520,9 @@ pub(crate) fn main_hw() -> ! {
                         Views::FidoWithKbd => composite.interface::<RawFidoInterface<'_, _>, _>(),
                         Views::FidoOnly => fido_class.interface::<RawFidoInterface<'_, _>, _>(),
                         #[cfg(feature="mass-storage")]
-                        Views::MassStorage => panic!("expected u2f tx when in mass storage mode!"),
+                        Views::MassStorage => panic!("did not expect u2f tx when in mass storage mode!"),
+                        #[cfg(feature="serial")]
+                        Views::Serial => panic!("did not expect u2f tx while in serial mode!"),
                     };
                     u2f.write_report(&u2f_msg).ok();
                     log::debug!("sent U2F packet {:x?}", u2f_ipc.data);
@@ -529,7 +562,23 @@ pub(crate) fn main_hw() -> ! {
                             log::debug!("ums device had something to do!")
                         }
                         None
-                    }
+                    },
+                    #[cfg(feature="serial")]
+                    Views::Serial => {
+                        if serial_device.poll(&mut [&mut serial_port]) {
+                            let mut data = [0u8; SERIAL_BUF_LEN];
+                            match serial_port.read(&mut data) {
+                                Ok(len) => {
+                                    log::info!("Serial got data: {:x?}", &data[..len]);
+                                }
+                                Err(e) => {
+                                    log::info!("Serial read error: {:?}", e);
+                                }
+                            }
+                            // TODO: add a listener here and report read data to the listener
+                        }
+                        None
+                    },
                 };
                 if let Some(u2f) = maybe_u2f {
                     match u2f.read_report() {
@@ -559,6 +608,8 @@ pub(crate) fn main_hw() -> ! {
                     Views::FidoOnly => fido_dev.state() == UsbDeviceState::Suspend,
                     #[cfg(feature="mass-storage")]
                     Views::MassStorage => ums_device.state() == UsbDeviceState::Suspend,
+                    #[cfg(feature="serial")]
+                    Views::Serial => serial_device.state() == UsbDeviceState::Suspend,
                 };
                 if is_suspend {
                     log::info!("suspend detected");
@@ -626,6 +677,21 @@ pub(crate) fn main_hw() -> ! {
                             Views::MassStorage => usbmgmt.connect_device_core(true),
                             _ => {
                                 view = Views::MassStorage;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            }
+                        }
+                    }
+                    #[cfg(feature="serial")]
+                    UsbDeviceType::Serial => {
+                        log::info!("Connecting device serial");
+                        match view {
+                            Views::Serial => usbmgmt.connect_device_core(true),
+                            _ => {
+                                view = Views::Serial;
                                 usbmgmt.ll_reset(true);
                                 tt.sleep_ms(1000).ok();
                                 usbmgmt.ll_connect_device_core(true);
@@ -705,6 +771,23 @@ pub(crate) fn main_hw() -> ! {
                             }
                         }
                     }
+                    #[cfg(feature="serial")]
+                    UsbDeviceType::Serial => {
+                        log::info!("Ensuring serial device");
+                        if !usbmgmt.is_device_connected() {
+                            view = Views::Serial;
+                            usbmgmt.connect_device_core(true);
+                        } else {
+                            if view != Views::Serial {
+                                view = Views::Serial;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            }
+                        }
+                    }
                 }
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
@@ -715,6 +798,8 @@ pub(crate) fn main_hw() -> ! {
                         Views::FidoOnly => xous::return_scalar(msg.sender, UsbDeviceType::Fido as usize).unwrap(),
                         #[cfg(feature="mass-storage")]
                         Views::MassStorage => xous::return_scalar(msg.sender, UsbDeviceType::MassStorage as usize).unwrap(),
+                        #[cfg(feature="serial")]
+                        Views::Serial => xous::return_scalar(msg.sender, UsbDeviceType::Serial as usize).unwrap(),
                     }
                 } else {
                     xous::return_scalar(msg.sender, UsbDeviceType::Debug as usize).unwrap();
@@ -770,6 +855,8 @@ pub(crate) fn main_hw() -> ! {
                     Views::FidoOnly => xous::return_scalar(msg.sender, fido_dev.state() as usize).unwrap(),
                     #[cfg(feature="mass-storage")]
                     Views::MassStorage => xous::return_scalar(msg.sender, ums_device.state() as usize).unwrap(),
+                    #[cfg(feature="serial")]
+                    Views::Serial => xous::return_scalar(msg.sender, serial_device.state() as usize).unwrap(),
                 }
             }),
             Some(Opcode::SendKeyCode) => msg_blocking_scalar_unpack!(msg, code0, code1, code2, autoup, {
@@ -832,9 +919,34 @@ pub(crate) fn main_hw() -> ! {
                             sent += 1;
                         }
                     }
+                    Views::Serial => {
+                        // this is implemented as a "blocking write": the routine will block until the data has all been written.
+                        let send_data = usb_send.s.as_bytes();
+                        let to_send = usb_send.s.len();
+                        log::debug!("serial RTS: {:?}", serial_port.rts());
+                        log::debug!("serial DTR: {:?}", serial_port.dtr());
+                        while sent < to_send {
+                            match serial_port.write(&send_data[sent..to_send]) {
+                                Ok(written) => {
+                                    sent += written;
+                                }
+                                Err(_) => {
+                                    log::warn!("Serial send is blocking. Delaying and trying again.");
+                                    tt.sleep_ms(100).ok();
+                                }
+                            }
+                            match serial_port.flush() {
+                                Ok(_) => {},
+                                Err(_) => {
+                                    log::warn!("Serial port reported WouldBlock on flush");
+                                    tt.sleep_ms(100).ok();
+                                }
+                            }
+                        }
+                    }
                     _ => {} // do nothing; will report that 0 characters were sent
                 }
-                usb_send.sent = Some(sent);
+                usb_send.sent = Some(sent as _);
                 buffer.replace(usb_send).unwrap();
             }
             Some(Opcode::GetLedState) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {

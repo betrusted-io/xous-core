@@ -128,4 +128,5 @@ tls = ["rustls", "webpki-roots", "ring", "tungstenite", "url"]
 shellperf = ["ring", "perflib", "xous/v2p", "random-pick"] # this also needs the project-wide "perfcounter" feature to be selected. shellchat is the exclusive manager of the performance counter, do not use with e.g. "vaultperf" feature
 extra-tests = []
 mass-storage = []
-default = [] # "debugprint"
+serial = []
+default = ["serial"] # "debugprint"

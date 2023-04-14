@@ -45,9 +45,15 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     self.usb_dev.debug_usb(Some(false)).unwrap();
                     write!(ret, "USB connected to Debug core, secrets readable!").unwrap();
                 }
+                #[cfg(feature="serial")]
+                "serial" => {
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Serial).unwrap();
+                    write!(ret, "USB connected to serial core").unwrap();
+                }
                 "send" => {
                     match self.usb_dev.get_current_core() {
-                        Ok(UsbDeviceType::FidoKbd) => {
+                        Ok(UsbDeviceType::FidoKbd)
+                        | Ok(UsbDeviceType::Serial) => {
                             let mut val = String::new();
                             join_tokens(&mut val, &mut tokens);
                             match self.usb_dev.send_str(&val) {
