@@ -10,17 +10,17 @@ version = "0.1.0"
 com = {path = "../com"}
 content-plugin-api = {path = "../content-plugin-api"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.25"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.25"}
+log-server = {package = "xous-api-log", version = "0.1.35"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.35"}
 trng = {path = "../trng"}
 llio = {path = "../llio"}
-xous = "0.9.30"
-xous-ipc = "0.9.30"
-xous-names = {package = "xous-api-names", version = "0.9.27"}
+xous = "0.9.40"
+xous-ipc = "0.9.40"
+xous-names = {package = "xous-api-names", version = "0.9.37"}
 graphics-server = {path = "../graphics-server"}
 gam = {path = "../gam"}
 locales = {path = "../../locales"}
-susres = {package = "xous-api-susres", version = "0.9.25"}
+susres = {package = "xous-api-susres", version = "0.9.35"}
 root-keys = {path = "../root-keys"}
 modals = {path = "../modals"}
 pddb = {path = "../pddb"}
@@ -29,13 +29,13 @@ keyboard = {path = "../keyboard"}
 usb-device-xous = {path="../usb-device-xous"}
 codec = {path="../codec"}
 userprefs = {path = "../../libs/userprefs"}
+dns = {path="../dns"}
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 chrono = {version = "0.4.19", default-features = false, features = ["std"]}
-sntpc = {version = "0.3.1"} #, features = ["log"]
 crossbeam = "0.8.2"
 
 sha2 = {path="../engine-sha512"}
@@ -43,7 +43,7 @@ digest = "0.9.0"
 xous-semver = "0.1.2"
 com_rs-ref = {path = "../../imports/com_rs-ref"}
 
-utralib = {version = "0.1.13", optional = true, default-features = false }
+utralib = {version = "0.1.17", optional = true, default-features = false }
 
 # short circuit the datetime call on hosted mode
 [target.'cfg(any(windows,unix))'.dependencies]
@@ -62,4 +62,5 @@ ditherpunk = []
 test-rekey = []
 efuse = []
 no-codec = []
+minimal-testing = []
 default = []

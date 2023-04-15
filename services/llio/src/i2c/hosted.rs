@@ -1,15 +1,18 @@
 use crate::api::*;
+use std::sync::{Arc, atomic::AtomicBool};
 
 pub(crate) struct I2cStateMachine {
 }
 
 impl I2cStateMachine {
-    pub fn new(_handler_conn: xous::CID) -> Self {
+    pub fn new(_handler_conn: xous::CID, _power_csr_raw: *mut u32, _wfi_state: Arc::<AtomicBool>) -> Self {
         I2cStateMachine {
         }
     }
     pub fn suspend(&mut self) {}
     pub fn resume(&mut self) {}
+    pub fn re_initiate(&mut self) {}
+    pub fn get_expiry(&self) -> Option::<u64> { None }
     pub fn initiate(&mut self, mut msg: xous::MessageEnvelope) {
         let mut buffer = unsafe { xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
         let transaction = buffer.to_original::<I2cTransaction, _>().unwrap();
@@ -35,6 +38,11 @@ impl I2cStateMachine {
     pub fn is_busy(&self) -> bool {
         false
     }
-    pub fn trace(&self) {
+    pub fn in_progress(&self) -> bool {
+        false
+    }
+    pub fn trace(&self, _arg: usize) {
+    }
+    pub fn driver_reset(&mut self) {
     }
 }

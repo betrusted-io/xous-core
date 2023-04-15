@@ -1,0 +1,21 @@
+[package]
+name = "transientdisk"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log = "0.4.14"
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
+xous = "0.9.40"
+xous-ipc = "0.9.40"
+log-server = { package = "xous-api-log", version = "0.1.35" }
+xous-names = { package = "xous-api-names", version = "0.9.37" }
+gam = {path = "../../services/gam" }
+graphics-server = {path = "../../services/graphics-server" }
+usb-device-xous = {path="../../services/usb-device-xous"}
+
+[features]
+mass-storage = ["usb-device-xous/mass-storage"]

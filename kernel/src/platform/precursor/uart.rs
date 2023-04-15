@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    io::{SerialWrite, SerialRead},
-    mem::MemoryManager,
     debug::shell::process_characters,
+    io::{SerialRead, SerialWrite},
+    mem::MemoryManager,
     PID,
 };
 use utralib::generated::*;
@@ -17,7 +17,7 @@ use xous_kernel::{MemoryFlags, MemoryType};
 pub const UART_ADDR: usize = 0xffcf_0000;
 
 /// UART instance.
-/// 
+///
 /// Initialized by [`init`].
 pub static mut UART: Option<Uart> = None;
 
@@ -98,6 +98,7 @@ pub fn init() {
             utra::uart::UART_IRQ,
             Uart::irq,
             (UART.as_mut().unwrap() as *mut Uart) as *mut usize,
-        ).expect("Couldn't claim debug interrupt");
+        )
+        .expect("Couldn't claim debug interrupt");
     }
 }

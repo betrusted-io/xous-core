@@ -15,6 +15,10 @@ use sha2::Digest;
 #[cfg(feature="shellperf")]
 const FILE_ID_SERVICES_SHELLCHAT_SRC_CMDS_PDDB_CMD: u32 = 2;
 
+use std::fs::File;
+use std::path::PathBuf;
+
+
 pub struct PddbCmd {
     pddb: pddb::Pddb,
     #[cfg(feature="shellperf")]
@@ -54,9 +58,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         #[cfg(not(feature="pddbtest"))]
-        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]";
         #[cfg(feature="pddbtest")]
-        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [write] [writeover] [query] [copy] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
         if let Some(sub_cmd) = tokens.next() {
@@ -157,6 +161,56 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         write!(ret, "Missing query of form 'dict:key'").unwrap();
                     }
                 }
+                "edit" => {
+                    ( || {
+                        let Some(descriptor) = tokens.next() else {
+                            write!(ret, "Missing query of form 'dict:key'").unwrap();
+                            return;
+                        };
+                        let Some((dict, keyname)) = descriptor.split_once(':') else {
+                            write!(ret, "Query is of form 'dict:key'").unwrap();
+                            return;
+                        };
+                        match self.pddb.get(dict, keyname, None,
+                            false, false, None, None::<fn()>) {
+                            Ok(mut key) => {
+                                let mut readbuf = [0u8; 512]; // up to the first 512 chars of the key
+                                match key.read(&mut readbuf) {
+                                    Ok(len) => {
+                                        match std::string::String::from_utf8(readbuf[..len].to_vec()) {
+                                            Ok(s) => {
+                                                let mut editcmd = "pddb write ".to_string();
+                                                editcmd.push_str(&descriptor);
+                                                editcmd.push_str(" ");
+                                                editcmd.push_str(&s);
+
+                                                match _env.gam.type_chars(&editcmd) {
+                                                    Ok(_) => {
+                                                        write!(ret, "Edit the value and press enter:").unwrap()
+                                                    }
+                                                    _ => {
+                                                        write!(ret, "Couldn't type out write command.").unwrap()
+                                                    }
+                                                }
+
+                                            }
+                                            _ => {
+                                                for &b in readbuf[..len].iter() {
+                                                    match write!(ret, "Not editing non-string: {:02x} ", b) {
+                                                        Ok(_) => (),
+                                                        Err(_) => break, // we can overflow our return buffer returning hex chars
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => write!(ret, "Error encountered reading {}:{}", dict, keyname).unwrap()
+                                }
+                            }
+                            _ => write!(ret, "{}:{} not found or other error", dict, keyname).unwrap()
+                        }
+                    })()
+                }
                 "copy" => {
                     (|| {
                         let Some(srcdescriptor) = tokens.next() else {
@@ -184,6 +238,50 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     })()
                 }
                 "write" => {
+                    (|| {
+                        let Some(descriptor) = tokens.next() else {
+                            write!(ret, "Missing target of form 'dict:key'").unwrap();
+                            return;
+                        };
+                        let Some((dict, keyname)) = descriptor.split_once(':') else {
+                            write!(ret, "Target must be of form 'dict:key'").unwrap();
+                            return;
+                        };
+
+                        let mut keypath = PathBuf::new();
+                        keypath.push(dict);
+
+                        if std::fs::metadata(&keypath).is_ok() || std::fs::create_dir_all(&keypath).is_ok() {
+                            keypath.push(keyname);
+
+                            let mut value = std::string::String::from(tokens.next().unwrap());
+                            for (_, token)  in tokens.enumerate() {
+                                value.push_str(" ");
+                                value.push_str(token);
+                            }
+                            match File::create(keypath) {
+                                Ok(mut file) => {
+                                    match file.write_all(&value.as_bytes()) {
+                                        Ok(_) => {
+                                            write!(ret, "Wrote data {} to {}:{}", value, dict, keyname).unwrap();
+                                        }
+                                        Err(e) => {
+                                            write!(ret, "Error writing {}:{}: {:?}", dict, keyname, e).ok();
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    write!(ret, "Error writing data to path/file").unwrap();
+                                }
+                            }
+                        } else {
+                            write!(ret, "Path non-existant and error creating path").unwrap();
+                        }
+
+                    })()
+                }
+
+                "writeover" => {
                     if let Some(descriptor) = tokens.next() {
                         if let Some((dict, keyname)) = descriptor.split_once(':') {
                             match self.pddb.get(dict, keyname, None,
@@ -341,6 +439,205 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                             write!(ret, "Test failed with {:?}", e).ok();
                             log::info!("Test failed with {:?}", e);
                         }
+                    }
+                }
+                "consistency" => {
+                    if let Some(dict) = tokens.next() {
+                        match self.pddb.list_keys(dict, None) {
+                            Ok(_list) => {
+                                unsafe{
+                                    let (keys, found_keys) = self.pddb.was_listed_dict_consistent();
+                                    write!(ret, "reported keys: {}, found keys: {}", keys, found_keys).ok();
+                                    log::info!("reported keys: {}, found keys: {}", keys, found_keys);
+                                };
+                            }
+                            Err(_) => write!(ret, "{} does not exist or other error", dict).ok().unwrap_or(()),
+                        }
+                    } else {
+                        write!(ret, "Missing dictionary name").unwrap();
+                    }
+                }
+                // Warning: this is experimental, it's advised you don't call this unless you know what you're doing.
+                "cleanup" => {
+                    write!(ret, "Cleanup result code: {:?}\n", self.pddb.sync_cleanup()).ok();
+                }
+                #[cfg(feature="pddbtest")]
+                "deltest" => {
+                    const JUNK_MIN: usize = 512;
+                    const JUNK_VAR: usize = 1500;
+                    const TOTAL_KEYS: usize = 40;
+                    self.pddb.delete_dict("deltest", None).ok();
+                    for outer_iter in 0..512 {
+                        log::info!("***************************fill junk iter {}*************************", outer_iter);
+                        if outer_iter == 246 {
+                            // self.pddb.dbg_set_debug().unwrap(); // used to dump debug when we find an error
+                        }
+                        let mut junk_keys = Vec::<std::string::String>::new();
+                        let mut junk_checksum = std::collections::HashMap::<std::string::String, usize>::new();
+                        for index in 0..TOTAL_KEYS { // this should allocate a few key small pools
+                            let mut junk = Vec::<u8>::new();
+                            let total_junk = JUNK_MIN + _env.trng.get_u32().unwrap() as usize % JUNK_VAR;
+                            let mut checksum = 0;
+                            for i in 0..total_junk {
+                                junk.push((i as usize + index) as u8);
+                                checksum += ((i as usize + index) as u8) as usize;
+                            }
+                            let junkname = format!("junk{}", index);
+                            match self.pddb.get(
+                                "deltest",
+                                &junkname,
+                                None, true, true,
+                                None,
+                                None::<fn()>
+                            ) {
+                                Ok(mut junk_key) => {
+                                    match junk_key.write_all(&junk) {
+                                        Ok(_) => {
+                                            log::debug!("wrote {} of len {}", junkname, total_junk);
+                                        }
+                                        Err(e) => {
+                                            log::error!("couldn't write {}: {:?}", junkname, e);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!("couldn't allocate junk key {}: {:?}", junkname, e);
+                                }
+                            }
+                            log::debug!("name: {}, checksum: {}", junkname, checksum);
+                            junk_checksum.insert(junkname.to_string(), checksum);
+                            junk_keys.push(junkname);
+
+                            #[cfg(not(target_os = "xous"))]
+                            if _env.trng.get_u32().unwrap() as usize % 1024 == 13 {
+                                log::info!("pruning 1");
+                                self.pddb.dbg_prune().ok();
+                            }
+                            if _env.trng.get_u32().unwrap() as usize % 8192 == 27 {
+                                log::info!("flushing fscb 1");
+                                self.pddb.flush_space_update();
+                            }
+                        }
+                        // single delete and re-create
+                        // _env.ticktimer.sleep_ms(1000).ok();
+                        log::info!("***************************recreate junk iter {}*************************", outer_iter);
+                        log::info!("key list: {:?}", self.pddb.list_keys("deltest", None).unwrap());
+                        for test_index in (0..TOTAL_KEYS).rev() { // test both rev and non-rev variants to catch more corner cases
+                            log::debug!("recreating test index {}", test_index);
+                            let junkname = format!("junk{}", test_index);
+                            self.pddb.delete_key("deltest", &junkname, None).ok();
+                            let mut junk = Vec::<u8>::new();
+                            let total_junk = JUNK_MIN + _env.trng.get_u32().unwrap() as usize % JUNK_VAR;
+                            let mut checksum = 0;
+                            for i in 0..total_junk {
+                                junk.push((i as usize + test_index) as u8);
+                                checksum += ((i as usize + test_index) as u8) as usize;
+                            }
+                            match self.pddb.get(
+                                "deltest",
+                                &junkname,
+                                None, true, true,
+                                None,
+                                None::<fn()>
+                            ) {
+                                Ok(mut junk_key) => {
+                                    match junk_key.write_all(&junk) {
+                                        Ok(_) => {
+                                            log::debug!("wrote {} of len {}", junkname, total_junk);
+                                        }
+                                        Err(e) => {
+                                            log::error!("couldn't write {}: {:?}", junkname, e);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!("couldn't allocate junk key {}: {:?}", junkname, e);
+                                }
+                            }
+                            log::debug!("name: {}, checksum: {}", junkname, checksum);
+                            junk_checksum.insert(junkname.to_string(), checksum);
+                            junk_keys[test_index] = junkname;
+
+                            #[cfg(not(target_os = "xous"))]
+                            if _env.trng.get_u32().unwrap() as usize % 1024 == 13 {
+                                log::info!("pruning 1");
+                                self.pddb.dbg_prune().ok();
+                            }
+                            if _env.trng.get_u32().unwrap() as usize % 8192 == 27 {
+                                log::info!("flushing fscb 1");
+                                self.pddb.flush_space_update();
+                            }
+                        }
+                        log::info!("***************************delete junk iter {}*************************", outer_iter);
+                        let mut prev_del = "uninit".to_string();
+                        while junk_keys.len() > 0 {
+                            let to_remove = _env.trng.get_u32().unwrap() as usize % junk_keys.len();
+                            match self.pddb.delete_key("deltest", &junk_keys[to_remove], None) {
+                                Ok(_) => log::debug!("remove {} OK", junk_keys[to_remove]),
+                                Err(e) => log::error!("remove {} error: {:?}", junk_keys[to_remove], e),
+                            }
+                            // self.pddb.sync().ok();
+                            let check = self.pddb.list_keys("deltest", None).unwrap();
+                            assert!(check.len() == (junk_keys.len() - 1));
+                            for (key_index, key) in check.iter().enumerate() {
+                                if key == &junk_keys[to_remove] {
+                                    panic!("Removed key was not removed");
+                                }
+                                assert!(junk_keys.contains(key), "Unexpected key returned in key list");
+                                let mut junk = Vec::<u8>::new();
+                                match self.pddb.get(
+                                    "deltest",
+                                    &key,
+                                    None, false, false, None, None::<fn()>
+                                ) {
+                                    Ok(mut junk_key) => {
+                                        let readback_len = junk_key.read_to_end(&mut junk).unwrap();
+                                        let mut checksum = 0;
+                                        for &d in junk.iter() {
+                                            checksum += d as usize;
+                                        }
+                                        if checksum != *junk_checksum.get(key).unwrap() {
+                                            log::info!("readback {}", readback_len);
+                                            log::info!("previously deleted: {} / just deleted: {}", prev_del, junk_keys[to_remove]);
+                                            log::info!("array start: {:?}", junk);
+                                            log::info!("array end: {:?}", &junk[readback_len - 128..readback_len]);
+                                            log::error!("Key data did not match name: {}, checksum: {}, expected: {}",
+                                                key,
+                                                checksum,
+                                                *junk_checksum.get(key).unwrap()
+                                            );
+                                            let mut check: u8 = key_index as u8;
+                                            let mut deviations = 0;
+                                            for (index, &j) in junk.iter().enumerate() {
+                                                if j != check {
+                                                    log::error!("deviation at {} {} <- {}", index, j, check);
+                                                    deviations += 1;
+                                                    if deviations > 32 {
+                                                        break;
+                                                    }
+                                                }
+                                                check += 1;
+                                            }
+                                            self.pddb.dbg_dump("deltest").unwrap();
+                                            panic!("data mismatch!");
+                                        }
+                                    }
+                                    Err(e) => log::error!("error reading back key that should exist: {:?}", e),
+                                }
+                            }
+                            prev_del = junk_keys.remove(to_remove);
+                            #[cfg(not(target_os = "xous"))]
+                            if _env.trng.get_u32().unwrap() as usize % 1024 == 13 {
+                                log::info!("pruning 2");
+                                self.pddb.dbg_prune().ok();
+                            }
+                            if _env.trng.get_u32().unwrap() as usize % 8192 == 27 {
+                                log::info!("flushing fscb 2");
+                                self.pddb.flush_space_update();
+                            }
+                        }
+                        assert!(self.pddb.list_keys("deltest", None).unwrap().len() == 0, "Not all keys were deleted!");
+                        // self.pddb.sync().ok();
                     }
                 }
                 #[cfg(feature="test-rekey")]
@@ -953,9 +1250,11 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         }
                     }
                 }
-                #[cfg(not(target_os = "xous"))]
                 "prune" => {
+                    #[cfg(not(target_os = "xous"))]
                     self.pddb.dbg_prune().ok();
+                    #[cfg(target_os = "xous")]
+                    self.pddb.manual_prune();
                     write!(ret, "Prune finished").ok();
                 }
                 #[cfg(not(target_os = "xous"))]

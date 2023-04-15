@@ -17,6 +17,8 @@ bitflags! {
         const WRITE = 1;
         const NOCOPY = 2;
         const EXECUTE = 4;
+        const EH_FRAME = 8;
+        const EH_HEADER = 0x10;
     }
 }
 
@@ -75,6 +77,9 @@ pub struct MiniElf {
 
     /// Actual section data
     pub program: Vec<u8>,
+
+    /// Alignment offset for page mapping
+    pub alignment_offset: usize,
 }
 
 #[derive(Debug)]
@@ -291,6 +296,7 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
     let elf = ElfFile::new(&b).map_err(|x| ElfReadError::ParseElfError(x))?;
     let entry_point = elf.header.pt2.entry_point() as u32;
     let mut program_data = Cursor::new(Vec::new());
+    let mut alignment_offset = 0;
 
     let mut sections = vec![];
 
@@ -306,13 +312,17 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
 
     // This keeps a running offset of where data is getting copied.
     let mut program_offset = 0;
-    for s in elf.section_iter() {
+    let mut section_iter = elf.section_iter().peekable();
+    while let Some(s) = section_iter.next() {
         let mut flags = MiniElfFlags::NONE;
         let name = s.get_name(&elf).unwrap_or("<<error>>");
 
         if s.address() == 0 {
             debug!("(Skipping section {} -- invalid address)", name);
             continue;
+        }
+        if alignment_offset == 0 {
+            alignment_offset = s.address() & 0xFFF;
         }
 
         debug!("Section {}:", name);
@@ -325,7 +335,7 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
         debug!("    offset:           {:08x}", s.offset());
         debug!("    size:             {:?}", s.size());
         debug!("    link:             {:?}", s.link());
-        let size = s.size();
+        let mut size = s.size();
 
         let no_copy = s.get_type() == Ok(ShType::NoBits);
 
@@ -342,6 +352,11 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
         if s.flags() & SHF_WRITE != 0 {
             flags |= MiniElfFlags::WRITE;
         }
+        if name == ".eh_frame_hdr" {
+            flags |= MiniElfFlags::EH_HEADER
+        } else if name == ".eh_frame" {
+            flags |= MiniElfFlags::EH_FRAME;
+        }
 
         debug!("Adding {} to the file", name);
         debug!(
@@ -356,6 +371,21 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
         // If this section gets copied, add it to the program stream.
         if s.get_type() != Ok(ShType::NoBits) {
             let section_data = s.raw_data(&elf);
+            let pad_amount = if let Some(next_section) = section_iter.peek() {
+                if section_data.len() % next_section.align() as usize != 0 {
+                    let pad_amount = next_section.align() as usize - (section_data.len() % next_section.align() as usize);
+                    if s.address() + size + pad_amount as u64 > next_section.address() {
+                        (next_section.address() - (s.address() + size)) as usize
+                    } else {
+                        pad_amount
+                    }
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+
             debug!(
                 "Section start: {:02x} {:02x} {:02x} {:02x} going into offset 0x{:08x}",
                 section_data[0], section_data[1], section_data[2], section_data[3], program_offset
@@ -367,6 +397,18 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
                 .write(section_data)
                 .map_err(ElfReadError::WriteSectionError)?;
             program_offset += section_data.len() as u64;
+
+            if pad_amount != 0 {
+                let pad = vec![0u8; pad_amount];
+                program_data.write(&pad)
+                    .map_err(ElfReadError::WriteSectionError)?;
+                program_offset += pad_amount as u64;
+                size += pad_amount as u64;
+            }
+        } else {
+            // we leave the nocopy sections mis-aligned.
+            // They don't exist in the file, they are just zero'd on spec.
+            // This works so long as the nocopy sections are at the end of the MiniElf.
         }
         sections.push(MiniElfSection {
             virt: s.address() as u32,
@@ -384,5 +426,6 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
         entry_point,
         sections,
         program: program_data.into_inner(),
+        alignment_offset: alignment_offset as usize,
     })
 }

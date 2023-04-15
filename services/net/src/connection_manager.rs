@@ -257,7 +257,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             }
                         },
                         ComIntSources::WlanSsidScanUpdate => {
-                            log::info!("{:?}", source);
+                            log::debug!("{:?}", source);
                             // aggressively pre-fetch results so we can connect as soon as we see an SSID
                             match com.ssid_fetch_as_list() {
                                 Ok(slist) => {
@@ -269,7 +269,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             }
                         },
                         ComIntSources::WlanSsidScanFinished => {
-                            log::info!("{:?}", source);
+                            log::debug!("{:?}", source);
                             match com.ssid_fetch_as_list() {
                                 Ok(slist) => {
                                     for (rssi, ssid) in slist.iter() {
@@ -314,7 +314,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
             Some(ConnectionManagerOpcode::Poll) => msg_scalar_unpack!(msg, _, _, _, _, {
                 let interval = current_interval.load(Ordering::SeqCst) as u32;
                 if activity_interval.fetch_add(interval, Ordering::SeqCst) > interval {
-                    log::info!("wlan activity interval timeout");
+                    log::debug!("wlan activity interval timeout");
                     intervals_without_activity += 1;
                     if rev_ok {
                         mounted = true;

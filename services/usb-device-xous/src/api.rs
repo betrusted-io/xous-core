@@ -27,9 +27,18 @@ pub(crate) enum Opcode {
     U2fTx,
     /// Blocks the caller, waiting for a U2F message
     U2fRxDeferred,
+    /// A bump from the timeout process to check if U2fRx has timed out
+    U2fRxTimeout,
 
     /// Query if the HID driver was able to start
     IsSocCompatible,
+
+    #[cfg(feature="mass-storage")]
+    SetBlockDevice,
+    #[cfg(feature="mass-storage")]
+    SetBlockDeviceSID,
+    #[cfg(feature="mass-storage")]
+    ResetBlockDevice,
 
     /// Handle the USB interrupt
     UsbIrqHandler,
@@ -51,6 +60,8 @@ pub struct U2fMsgIpc {
     pub data: [u8; 64],
     /// Encodes the state of the message
     pub code: U2fCode,
+    /// Specifies an optional timeout
+    pub timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
@@ -59,6 +70,7 @@ pub enum U2fCode {
     TxAck,
     RxWait,
     RxAck,
+    RxTimeout,
     Hangup,
     Denied,
 }

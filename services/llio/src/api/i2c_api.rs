@@ -45,10 +45,11 @@ pub struct I2cTransaction {
     pub rxbuf: Option<[u8; I2C_MAX_LEN]>,
     pub rxlen: u32,
     pub timeout_ms: u32,
+    pub use_repeated_start: bool,
 }
 impl I2cTransaction {
     pub fn new() -> Self {
-        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 500 }
+        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 500, use_repeated_start: true }
     }
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -61,6 +62,13 @@ pub(crate) enum I2cOpcode {
     IrqI2cTrace,
     /// checks if the I2C engine is currently busy, for polling implementations
     I2cIsBusy,
+    /// grabs a mutex on the I2C block, for multiple transactions that can't be separated
+    I2cMutexAcquire,
+    I2cMutexRelease,
+    /// timeout check
+    I2cTimeout,
+    /// block soft reset
+    I2cDriverReset,
     /// SuspendResume callback
     SuspendResume,
     Quit,

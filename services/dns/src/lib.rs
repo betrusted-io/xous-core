@@ -1,6 +1,6 @@
 pub mod api;
 #[allow(unused_imports)]
-use api::*;
+pub use api::*;
 
 #[cfg(any(feature="precursor", feature="renode"))]
 mod hw;

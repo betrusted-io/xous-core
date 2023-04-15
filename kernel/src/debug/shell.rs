@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
-// SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2023 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use core::fmt;
 use crate::{
     args::KernelArguments,
-    io::{SerialWrite, SerialRead},
+    io::{SerialRead, SerialWrite},
 };
+use core::fmt;
 
 /// Instance of the shell output.
 pub static mut OUTPUT: Option<Output> = None;
@@ -53,12 +53,10 @@ impl fmt::Write for Output {
 }
 
 /// Initialize the kernel shell.
-/// 
+///
 /// This should be called in platform initialization code.
 pub fn init(serial: &'static mut dyn SerialWrite) {
-    unsafe {
-        OUTPUT = Some(Output::new(serial))
-    }
+    unsafe { OUTPUT = Some(Output::new(serial)) }
 
     // Print the processed kernel arguments
     let args = KernelArguments::get();
@@ -66,14 +64,19 @@ pub fn init(serial: &'static mut dyn SerialWrite) {
     for arg in args.iter() {
         println!("    {}", arg);
     }
+
+    println!("=== Kernel Debug Shell Available ====");
+    print_help();
+    println!("=====================================");
 }
 
 /// Process possible characters received through a serial interface.
-/// 
+///
 /// This should be called when a serial interface has new data, for example,
 /// on an interrupt.
 pub fn process_characters<R: SerialRead>(serial: &mut R) {
     while let Some(b) = serial.getc() {
+        println!("> {}", b as char);
         handle_character(b);
     }
 }
@@ -136,7 +139,7 @@ fn handle_character(b: u8) {
                             }
                         });
                         println!(
-                            "{:?} conns:{}/32 {}",
+                            "{:x?} conns:{}/32 {}",
                             process,
                             connection_count,
                             system_services.process_name(process.pid).unwrap_or("")
@@ -157,7 +160,7 @@ fn handle_character(b: u8) {
                 for process in &system_services.processes {
                     if !process.free() {
                         println!(
-                            "{:?} {}:",
+                            "{:x?} {}:",
                             process,
                             system_services.process_name(process.pid).unwrap_or("")
                         );
@@ -214,17 +217,20 @@ fn handle_character(b: u8) {
                 }
             });
         }
-        b'h' => {
-            println!("Xous Kernel Debug");
-            println!("key | command");
-            println!("--- + -----------------------");
-            println!(" i  | print irq handlers");
-            println!(" m  | print MMU page tables of all processes");
-            println!(" p  | print all processes");
-            println!(" P  | print all processes and threads");
-            println!(" r  | report RAM usage of all processes");
-            println!(" s  | print all allocated servers");
-        }
+        b'h' => print_help(),
         _ => {}
     }
+}
+
+fn print_help() {
+    println!("Xous Kernel Debug");
+    println!("key | command");
+    println!("--- + -----------------------");
+    println!(" h  | print this message");
+    println!(" i  | print irq handlers");
+    println!(" m  | print MMU page tables of all processes");
+    println!(" p  | print all processes");
+    println!(" P  | print all processes and threads");
+    println!(" r  | report RAM usage of all processes");
+    println!(" s  | print all allocated servers");
 }

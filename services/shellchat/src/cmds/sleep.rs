@@ -87,21 +87,27 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                             let llio = llio::Llio::new(&xns);
                             let susres = susres::Susres::new_without_hook(&xns).unwrap();
                             let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+                            let trng = trng::Trng::new(&xns).unwrap();
                             ticktimer.sleep_ms(1500).unwrap();
                             let mut iters = 0;
+                            let mut timeouts = 0;
                             loop {
-                                log::info!("suspend/resume cycle: {}", iters);
-                                llio.set_wakeup_alarm(4).unwrap();
+                                log::info!("suspend/resume cycle: {} ({} timeouts)", iters, timeouts);
+                                llio.set_wakeup_alarm(6).unwrap();
+                                ticktimer.sleep_ms(2000).ok();
                                 match susres.initiate_suspend() {
                                     Err(xous::Error::Timeout) => {
-                                        log::warn!("Couldn't suspend, a server was blocking suspend.\n");
+                                        timeouts += 1;
+                                        log::warn!("Couldn't suspend, a server was blocking suspend. ({}/{})\n", timeouts, iters);
+                                        // wait enough time for the wakeup alarm to have happened before resuming the cycle
+                                        ticktimer.sleep_ms(6000).unwrap();
                                     }
                                     Ok(_) => {},
                                     Err(e) => {
                                         log::error!("Unknown error on suspend: {:?}", e);
                                     }
                                 }
-                                ticktimer.sleep_ms(8000).unwrap();
+                                ticktimer.sleep_ms(4000 + (trng.get_u32().unwrap() % 7000) as usize).unwrap();
                                 iters += 1;
                             }
                         }

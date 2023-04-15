@@ -8,22 +8,19 @@ use std::io::{BufReader, Read};
 use crate::DynError;
 
 pub fn check_project_consistency() -> Result<(), DynError> {
+    // note: implementations no longer published as crates: just APIs as of March 2023
+    // TODO: retire utralib/svd2utra from publication as well
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous@0.9.30",
-        "xous-kernel@0.9.26",
-        "xous-ipc@0.9.30",
-        "xous-api-log@0.1.25",
-        "xous-api-names@0.9.27",
-        "xous-api-susres@0.9.25",
-        "xous-api-ticktimer@0.9.25",
-        "xous-log@0.1.22",
-        "xous-names@0.9.31",
-        "xous-susres@0.1.27",
-        "xous-ticktimer@0.1.26",
+        "xous@0.9.40",
+        "xous-ipc@0.9.40",
+        "xous-api-log@0.1.35",
+        "xous-api-names@0.9.37",
+        "xous-api-susres@0.9.35",
+        "xous-api-ticktimer@0.9.35",
         // this set is only updated if the utralib changes
-        "utralib@0.1.13",
-        "svd2utra@0.1.11",
+        "utralib@0.1.17",
+        "svd2utra@0.1.15",
     ];
     for pkg in check_pkgs {
         verify(pkg.into())?;
@@ -32,7 +29,7 @@ pub fn check_project_consistency() -> Result<(), DynError> {
 }
 
 pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
-    if let CrateSpec::CratesIo(name, version) = spec {
+    if let CrateSpec::CratesIo(name, version, _xip) = spec {
         let mut cache_path = Path::new(&env::var("CARGO_HOME").unwrap()).to_path_buf();
         cache_path.push("registry");
         cache_path.push("src");

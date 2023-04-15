@@ -24,6 +24,44 @@ impl UsbHid {
             conn
         }
     }
+    #[cfg(feature="mass-storage")]
+    pub fn set_block_device(&self, read_id: usize, write_id: usize, max_lba_id: usize) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(
+                Opcode::SetBlockDevice.to_usize().unwrap(),
+                read_id,
+                write_id,
+                max_lba_id,
+                0,
+            )
+        ).unwrap();
+    }
+    #[cfg(feature="mass-storage")]
+    pub fn set_block_device_sid(&self, app_sid: xous::SID) {
+        let sid = app_sid.to_u32();
+        send_message(self.conn,
+            Message::new_blocking_scalar(
+                Opcode::SetBlockDeviceSID.to_usize().unwrap(),
+                sid.0 as usize,
+                sid.1 as usize,
+                sid.2 as usize,
+                sid.3 as usize,
+            )
+        ).unwrap();
+    }
+    #[cfg(feature="mass-storage")]
+    pub fn reset_block_device(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(
+                Opcode::ResetBlockDevice.to_usize().unwrap(),
+                0,
+                0,
+                0,
+                0,
+            )
+        ).unwrap();
+    }
+
     /// used to query if the HID core was able to start. Mainly to handle edge cases between updates.
     pub fn is_soc_compatible(&self) -> bool {
         match send_message(
@@ -235,7 +273,8 @@ impl UsbHid {
     pub fn u2f_wait_incoming(&self) -> Result<RawFidoMsg, xous::Error> {
         let req = U2fMsgIpc {
             data: [0; 64],
-            code: U2fCode::RxWait
+            code: U2fCode::RxWait,
+            timeout_ms: None,
         };
         let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::U2fRxDeferred.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
@@ -249,13 +288,42 @@ impl UsbHid {
             U2fCode::Hangup => {
                 Err(xous::Error::ProcessTerminated)
             },
+            U2fCode::RxTimeout => {
+                Err(xous::Error::Timeout)
+            },
+            _ => Err(xous::Error::InternalError)
+        }
+    }
+    /// Note: this variant is not tested.
+    pub fn u2f_wait_incoming_timeout(&self, timeout_ms: u64) -> Result<RawFidoMsg, xous::Error> {
+        let req = U2fMsgIpc {
+            data: [0; 64],
+            code: U2fCode::RxWait,
+            timeout_ms: Some(timeout_ms),
+        };
+        let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::U2fRxDeferred.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let ack = buf.to_original::<U2fMsgIpc, _>().unwrap();
+        match ack.code {
+            U2fCode::RxAck => {
+                let mut u2fmsg = RawFidoMsg::default();
+                u2fmsg.packet.copy_from_slice(&ack.data);
+                Ok(u2fmsg)
+            },
+            U2fCode::Hangup => {
+                Err(xous::Error::ProcessTerminated)
+            },
+            U2fCode::RxTimeout => {
+                Err(xous::Error::Timeout)
+            },
             _ => Err(xous::Error::InternalError)
         }
     }
     pub fn u2f_send(&self, msg: RawFidoMsg) -> Result<(), xous::Error> {
         let mut req = U2fMsgIpc {
             data: [0; 64],
-            code: U2fCode::Tx
+            code: U2fCode::Tx,
+            timeout_ms: None,
         };
         req.data.copy_from_slice(&msg.packet);
         let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError))?;

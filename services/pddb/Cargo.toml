@@ -8,12 +8,12 @@ description = "Plausibly Deniable Database"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 bitflags = {version = "1"}
-xous = "0.9.30"
-xous-ipc = "0.9.30"
-log-server = { package = "xous-api-log", version = "0.1.25" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.25" }
-xous-names = { package = "xous-api-names", version = "0.9.27" }
-susres = {package = "xous-api-susres", version = "0.9.25"}
+xous = "0.9.40"
+xous-ipc = "0.9.40"
+log-server = { package = "xous-api-log", version = "0.1.35" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.35" }
+xous-names = { package = "xous-api-names", version = "0.9.37" }
+susres = {package = "xous-api-susres", version = "0.9.35"}
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
@@ -29,6 +29,7 @@ aes-gcm-siv = {version = "0.11.1", default-features = false, features = ["alloc"
 llio = {path="../llio"}
 subtle = {version = "2.4.1", default-features = false}
 tts-frontend = {path="../tts"}
+rand_core = "0.5.1"
 
 # passwords
 sha2 = {path = "../engine-sha512"}
@@ -45,7 +46,7 @@ gam = {path="../gam"}
 locales = {path = "../../locales"}
 modals = {path="../modals"}
 
-utralib = { version = "0.1.13", optional = true, default-features = false }
+utralib = { version = "0.1.17", optional = true, default-features = false }
 
 # performance profiling
 perflib = {path="../../tools/perflib", optional = true}

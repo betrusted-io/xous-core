@@ -7,22 +7,22 @@ description = "SPINOR ROM operations server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.30"
-log-server = { package = "xous-api-log", version = "0.1.25" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.25" }
-xous-names = { package = "xous-api-names", version = "0.9.27" }
+xous = "0.9.40"
+log-server = { package = "xous-api-log", version = "0.1.35" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.35" }
+xous-names = { package = "xous-api-names", version = "0.9.37" }
 log = "0.4.14"
-susres = {package = "xous-api-susres", version = "0.9.25"}
+susres = {package = "xous-api-susres", version = "0.9.35"}
 trng = { path = "../trng" }
 com = { path = "../com" }
 llio = { path = "../llio" }
 
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
-xous-ipc = "0.9.30"
+xous-ipc = "0.9.40"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 
-utralib = { version = "0.1.13", optional = true, default-features = false }
+utralib = { version = "0.1.17", optional = true, default-features = false }
 
 [dev-dependencies]
 lazy_static = "1.4.0"

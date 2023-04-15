@@ -347,9 +347,11 @@ impl<'a> ShellCmdApi<'a> for Aes {
             let modestr = if hw_mode != 0 { &"hw" } else { &"sw" };
             if pass != 0 {
                 write!(ret, "[{}] passed: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits).unwrap();
+                log::info!("{}BENCH,AES,PASS,{}us/block,{}", xous::BOOKEND_START, elapsed * 1000.0, xous::BOOKEND_END);
             } else {
                 // pass was 0, we failed
                 write!(ret, "[{}] FAILED: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits).unwrap();
+                log::info!("{}BENCH,AES,FAIL,{}us/block,{}", xous::BOOKEND_START, elapsed * 1000.0, xous::BOOKEND_END);
             }
         });
         Ok(Some(ret))

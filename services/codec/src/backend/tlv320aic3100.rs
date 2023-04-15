@@ -246,6 +246,7 @@ impl Codec {
     }
 
     pub fn set_speaker_gain_db(&mut self, gain_db: f32) {
+        self.i2c.i2c_mutex_acquire();
         self.speaker_gain = gain_db;
         if gain_db <= -79.0 {
             // mute
@@ -259,11 +260,13 @@ impl Codec {
                 0b1_000_0000 | code,
                 ]);
         }
+        self.i2c.i2c_mutex_release();
     }
 
     pub fn set_headphone_gain_db(&mut self, gain_db_left: f32, gain_db_right: f32) {
         self.headphone_left_gain = gain_db_left;
         self.headphone_right_gain = gain_db_right;
+        self.i2c.i2c_mutex_acquire();
         if gain_db_left <= -79.0 && gain_db_right <= -79.0 {
             // mute
             self.w(0, &[1]); // select page 1
@@ -278,10 +281,11 @@ impl Codec {
                 0b1_000_0000 | code_right, // HPR
                 ]);
         }
+        self.i2c.i2c_mutex_release();
     }
-
+    /// Convenience wrapper for I2C transactions. Multiple I2C ops that have to be execute atomically must be manually guarded with a i2c_mutex_[acquire/release]
     fn w(&mut self, adr: u8, data: &[u8]) -> bool {
-        //log::trace!("writing to 0x{:x}, {:x?}", adr, data);
+        // log::info!("writing to 0x{:x}, {:x?}", adr, data);
         match self.i2c.i2c_write(TLV320AIC3100_I2C_ADR, adr, data) {
             Ok(status) => {
                 //log::trace!("write returned with status {:?}", status);
@@ -294,6 +298,7 @@ impl Codec {
             _ => {log::error!("try_send_i2c unhandled error"); false}
         }
     }
+    /// Convenience wrapper for I2C transactions. Multiple I2C ops that have to be execute atomically must be manually guarded with a i2c_mutex_[acquire/release]
     fn r(&mut self, adr: u8, data: &mut[u8]) -> bool {
         match self.i2c.i2c_read(TLV320AIC3100_I2C_ADR, adr, data) {
             Ok(status) => {
@@ -308,32 +313,40 @@ impl Codec {
     }
 
     pub fn get_headset_code(&mut self) -> u8 {
+        self.i2c.i2c_mutex_acquire();
         self.w(0, &[0]);
         let mut code: [u8; 1] = [0; 1];
         if !self.r(67, &mut code) {
             log::warn!("headset code read unsuccessful");
         };
+        self.i2c.i2c_mutex_release();
         code[0]
     }
 
     pub fn get_dacflag_code(&mut self) -> u8 {
+        self.i2c.i2c_mutex_acquire();
         self.w(0, &[0]);
         let mut code: [u8; 1] = [0; 1];
         self.r(37, &mut code);
+        self.i2c.i2c_mutex_release();
         code[0]
     }
 
     pub fn get_hp_status(&mut self) -> u8 {
+        self.i2c.i2c_mutex_acquire();
         self.w(0, &[1]);
         let mut code: [u8; 1] = [0; 1];
         self.r(31, &mut code);
+        self.i2c.i2c_mutex_release();
         code[0]
     }
 
     pub fn get_i2s_config(&mut self) -> [u8; 4] {
+        self.i2c.i2c_mutex_acquire();
         self.w(0, &[0]);
         let mut code: [u8; 4] = [0; 4];
         self.r(27, &mut code);
+        self.i2c.i2c_mutex_release();
         code
     }
 
@@ -352,6 +365,7 @@ impl Codec {
     /// 8_000 * 128 * 12 = 12_288_000 Hz
     ///
     fn audio_clocks(&mut self) {
+        self.i2c.i2c_mutex_acquire();
         self.w(0, &[0]);  // select page 0
         self.w(1, &[1]);  // software reset
         self.ticktimer.sleep_ms(2).unwrap(); // reset happens in 1 ms; +1 ms due to timing jitter uncertainty
@@ -384,6 +398,7 @@ impl Codec {
             0x80 | 2,   // MADC = 2
             128, // AOSR = 128
         ]);
+        self.i2c.i2c_mutex_release();
     }
 
     /// audio_ports() sets up the digital port bitwidths, modes, and syncs
@@ -391,6 +406,7 @@ impl Codec {
     /// From the hardware i2s block as implemented on betrusted-soc:
     /// 16 bits per sample, 32 bit word width, stero, master mode, left-justified, MSB first
     fn audio_ports(&mut self) {
+        self.i2c.i2c_mutex_acquire();
         self.w(0, &[0]); // select page 0
 
         // 32 bits/word * 2 channels * 8000 samples/s = 512_000 = BCLK
@@ -413,9 +429,11 @@ impl Codec {
 
         // use auto volume control -- DO WE WANT THIS???
         //self.w(116, &[0b1_1_01_0_001] );
+        self.i2c.i2c_mutex_release();
     }
 
     pub fn audio_loopback(&mut self, do_loop:bool) {
+        self.i2c.i2c_mutex_acquire();
         self.w(0, &[1]); // select page 1
 
         // DAC routing -- route DAC to mixer channel, don't loopback MIC
@@ -424,10 +442,12 @@ impl Codec {
         } else {
             self.w(35, &[0b01_0_1_01_1_0]);
         }
+        self.i2c.i2c_mutex_release();
     }
 
     /// set up the audio mixer to sane defaults
     fn audio_mixer(&mut self) {
+        self.i2c.i2c_mutex_acquire();
         ////////// SETUP DAC -- this is on page 0
         self.w(0, &[0]); // select page 0
         // DAC setup - both channels on, soft-stepping enabled, left-to-left, right-to-right
@@ -503,7 +523,7 @@ impl Codec {
             0x01, // noise debounce time = code*4 / fs
             0x01, // signal debounce time = code*4 / fs
             ]);
-
+        self.i2c.i2c_mutex_release();
     }
 
     /// set up the betrusted-side signals

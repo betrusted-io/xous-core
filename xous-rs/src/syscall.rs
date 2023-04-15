@@ -439,15 +439,15 @@ pub enum SysCall {
     ///
     /// ## Arguments
     ///
-    ///     * **Index**: The item to adjust. Currently the following limits
-    ///                  are supported:
-    ///                         1: Maximum heap size
-    ///                         2: Current heap size
-    ///     * **Current Limit**: Pass the current limit value here. The current
-    ///                 limit must match in order for the new limit to take
-    ///                 effect. This is used to avoid a race condition if two
-    ///                 threads try to set the same limit.
-    ///     * **Proposed Limit**: The new value that you would like to use.
+    /// * **Index**: The item to adjust. Currently the following limits
+    ///              are supported:
+    ///                     1: Maximum heap size
+    ///                     2: Current heap size
+    /// * **Current Limit**: Pass the current limit value here. The current
+    ///             limit must match in order for the new limit to take
+    ///             effect. This is used to avoid a race condition if two
+    ///             threads try to set the same limit.
+    /// * **Proposed Limit**: The new value that you would like to use.
     ///
     /// ## Returns
     ///
@@ -455,7 +455,7 @@ pub enum SysCall {
     ///
     /// ## Errors
     ///
-    ///     * **InvalidLimit**: The specified index was not valid
+    /// * **InvalidLimit**: The specified index was not valid
     AdjustProcessLimit(
         usize, /* process limit index */
         usize, /* expected current limit */
@@ -488,9 +488,9 @@ pub enum SysCall {
     ///
     /// ## Arguments
     ///
-    ///     * **MessageSender**: This is the `sender` from the message envelope.
-    ///                         It is a unique ID that identifies this message,
-    ///                         as well as the server it came from.
+    /// * **MessageSender**: This is the `sender` from the message envelope.
+    ///                      It is a unique ID that identifies this message,
+    ///                      as well as the server it came from.
     ///
     /// The remaining arguments depend on whether the message was a `BlockingScalar`
     /// message or a `MemoryMessage`. Note that this function should NOT be called
@@ -1279,6 +1279,8 @@ impl SysCall {
         matches!(
             self,
             SysCall::TryConnect(_)
+                | SysCall::FreeInterrupt(_)
+                | SysCall::ClaimInterrupt(_, _, _)
                 | SysCall::TryReceiveMessage(_)
                 | SysCall::ReturnToParent(_, _)
                 | SysCall::ReturnScalar5(_, _, _, _, _, _)
@@ -2051,6 +2053,16 @@ pub fn virt_to_phys(va: usize) -> core::result::Result<usize, Error> {
             Err(Error::BadAddress)
         }
     })
+}
+
+pub fn increase_heap(bytes: usize, flags: MemoryFlags) -> core::result::Result<MemoryRange, ()> {
+    let res = crate::arch::syscall(SysCall::IncreaseHeap(bytes, flags));
+    if let Ok(Result::MemoryRange(range)) = res
+    {
+        return Ok(range);
+    }
+
+    Err(())
 }
 
 /// Perform a raw syscall and return the result. This will transform

@@ -312,7 +312,7 @@ impl MemoryManager {
         kind: xous_kernel::MemoryType,
     ) -> Result<*mut u8, xous_kernel::Error> {
         // If we were supplied a perfectly good address, return that.
-        if virt_ptr as usize != 0 {
+        if !virt_ptr.is_null() {
             return Ok(virt_ptr);
         }
 
@@ -335,7 +335,7 @@ impl MemoryManager {
                 ),
                 xous_kernel::MemoryType::Messages => (
                     process_inner.mem_message_base,
-                    process_inner.mem_message_base + 0x1000_0000,
+                    process_inner.mem_message_base + 0x40_0000, // Limit to one superpage
                     process_inner.mem_message_last,
                 ),
             };
@@ -733,6 +733,19 @@ impl MemoryManager {
                 if addr >= (region.mem_start as usize)
                     && addr < (region.mem_start + region.mem_size) as usize
                 {
+                    // -------------------------------
+                    // FIXME: workaround to allow to share the same UART peripheral
+                    //        between the kernel and xous-log processes
+                    #[cfg(feature = "atsama5d27")]
+                    {
+                        let uart_base = crate::platform::atsama5d2::uart::HW_UART_BASE as usize;
+                        if pid.get() != 1 && (addr == uart_base || addr == uart_base + 0x1000 || addr == uart_base + 0x2000 || addr == uart_base + 0x3000) {
+                            klog!("[!] UART sharing workaround used for {:08x} address", addr);
+                            return Ok(())
+                        }
+                    }
+                    // -------------------------------
+
                     offset += (addr - (region.mem_start as usize)) / PAGE_SIZE;
                     return action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action);
                 }

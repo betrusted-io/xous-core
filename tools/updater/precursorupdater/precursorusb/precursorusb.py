@@ -20,6 +20,22 @@ class PrecursorUsb:
         self.regions = {}
         self.gitrev = ''
 
+    def halt(self):
+        if 'vexriscv_debug' in self.regions:
+            self.poke(int(self.regions['vexriscv_debug'][0], 0), 0x00020000)
+        elif 'reboot_cpu_hold_reset' in self.registers:
+            self.poke(self.register('reboot_cpu_hold_reset'), 1)
+        else:
+            print("Can't find reset CSR. Try updating to the latest version of this program")
+
+    def unhalt(self):
+        if 'vexriscv_debug' in self.regions:
+            self.poke(int(self.regions['vexriscv_debug'][0], 0), 0x02000000)
+        elif 'reboot_cpu_hold_reset' in self.registers:
+            self.poke(self.register('reboot_cpu_hold_reset'), 0)
+        else:
+            print("Can't find reset CSR. Try updating to the latest version of this program")
+
     def register(self, name):
         return int(self.registers[name], 0)
 

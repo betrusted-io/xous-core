@@ -1,6 +1,6 @@
 [package]
 name = "utralib"
-version = "0.1.13"
+version = "0.1.17"
 authors = ["Sean Cross <sean@xobs.io>", "bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -12,7 +12,7 @@ homepage = "https://betrusted.io/xous-book/"
 [dependencies]
 
 [build-dependencies]
-svd2utra = "0.1.11"
+svd2utra = "0.1.15"
 
 # UTRA pre-generated version tracker
 [features]
@@ -30,11 +30,9 @@ std = []
 # hardware is immutable.
 #
 # Maintainer note: add checks in build.rs to ensure only one is selected.
-precursor-c809403 = []
-precursor-a0912d6 = []
-precursor-c809403-perflib = []
-precursor-2753c12-dvt = []
-precursor-70190e2 = [] # based on 2020.08 litex, v0.9.11 tag
+precursor-perflib = []
+precursor-dvt = []
+precursor-pvt = [] # based on 2020.08 litex, v0.9.11 tag
 
 # The SVD gitrev as specified above is only invoked to track fine-grained
 # changes between target revisions. Below is the overall target switch,
@@ -46,5 +44,12 @@ precursor = []
 hosted = []
 renode = []
 
+# ATSAMA5D27 ARMv7A SoC
+atsama5d27 = []
+
+# Cramium SoC & FPGA model
+cramium-soc = []
+cramium-fpga = []
+
 # Specify a Precusor default so that we can pass packaging CI tests.
-default = ["precursor-70190e2", "precursor"]
+default = ["precursor-pvt", "precursor"]

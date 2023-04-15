@@ -44,6 +44,7 @@ members = [
   "services/com",
   "services/keyboard",
   "services/kernel-test",
+  "services/ticktimer-test-client",
   "services/trng",
   "services/gam",
   "services/status",
@@ -77,6 +78,7 @@ members = [
   "apps/repl",
   "apps/vault",
   "apps/vault/tools/vaultbackup-rs",
+  "apps/transientdisk",
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
@@ -104,12 +106,14 @@ exclude = [
   "api/xous-api-names",
   "api/xous-api-susres",
   "api/xous-api-ticktimer",
+  # The "packing" crate is forked and is a separate workspace
+  "libs/mass-storage/packing",
 ]
 
 [profile.release]
 codegen-units = 1 # 1 better optimizations
 debug = false
-strip = true
+strip = false
 lto = "fat"
 incremental = true
 #panic = "abort" # Remove panic output, which can reduce file size
@@ -121,8 +125,6 @@ path = "services/engine-sha512"
 
 [patch.crates-io.aes]
 path = "services/aes"
-[patch.crates-io.xous-names]
-path = "services/xous-names"
 
 [patch.crates-io.curve25519-dalek]
 git="https://github.com/betrusted-io/curve25519-dalek.git"
@@ -177,5 +179,3 @@ rev="4296c2e7904898766cf7d8d589759a129794783b" # use the commitref because we're
 # path = "./svd2utra"
 # [patch.crates-io.xous-api-susres]
 # path = "./api/xous-api-susres"
-# [patch.crates-io.xous-susres]
-# path = "./services/xous-susres"

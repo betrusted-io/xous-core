@@ -90,4 +90,7 @@ impl Llio {
     #[allow(dead_code)]
     pub fn tts_sleep_indicate(&mut self) {
     }
+    pub fn get_power_csr_raw(&self) -> u32 {
+        0
+    }
 }

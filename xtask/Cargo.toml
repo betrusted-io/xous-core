@@ -11,11 +11,12 @@ rust-version = "1.59"
 atty = "0.2.14"
 filetime = "0.2.14"
 rustc_version = "0.4.0"
-zip = "0.5.13"
+zip = "0.6.4"
 chrono = "0.4"
 serde_json = "1.0.41"
 serde = { version = "1.0.130", features = ["derive"] }
 tempfile = "3.3.0"
 ureq = { version = "2.5.0", features = ["json"] }
-svd2utra = "0.1.11"
+svd2utra = "0.1.15"
+lazy_static = "1.4.0"
 # toml_edit = "0.14.4" # would be used to verify Cargo.toml files, but it's too hard to do this right now.

@@ -17,8 +17,8 @@ ring = "0.16.20"
 env_logger = "0.7.1"
 log = "0.4.14"
 pem = "0.8.3"
-svd2utra = "0.1.11"
-xmas-elf = "0.7.0"
+svd2utra = "0.1.15"
+xmas-elf = "0.9.0"
 xous-semver = "0.1.2"
 
 [[bin]]

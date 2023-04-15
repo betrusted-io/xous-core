@@ -1,0 +1,15 @@
+[package]
+authors = ["Sean Cross <sean@xobs.io>"]
+description = "Program to test the log server"
+edition = "2021"
+name = "ticktimer-test-client"
+version = "0.1.0"
+
+# Dependency versions enforced by Cargo.lock.
+[dependencies]
+xous = "0.9.40"
+log = "0.4.14"
+log-server = {package = "xous-api-log", version = "0.1.35"}
+
+[features]
+default = []

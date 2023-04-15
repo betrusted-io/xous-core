@@ -13,7 +13,6 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::thread;
 use std::sync::mpsc;
-use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issues/94182
 #[cfg(feature="ditherpunk")]
 use std::str::FromStr;
 #[cfg(feature="ditherpunk")]
@@ -27,7 +26,7 @@ use perflib::*;
 pub struct NetCmd {
     callback_id: Option<u32>,
     callback_conn: u32,
-    dns: Dns,
+    dns: dns::Dns,
     #[cfg(any(feature="precursor", feature="renode"))]
     ping: Option<net::Ping>,
     #[cfg(feature="tls")]

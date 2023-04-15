@@ -155,3 +155,6 @@ pub(crate) struct ScalarHook {
     pub id: u32,  // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
     pub cid: xous::CID,   // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
 }
+
+// default RTC power mode setting
+pub const RTC_PWR_MODE: u8 = (Control3::BATT_STD_BL_EN).bits();

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
-// SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2023 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
 /// Prints to the debug output directly.
@@ -36,13 +36,13 @@ macro_rules! println {
 #[macro_export]
 macro_rules! klog {
 	() => ({
-		print!(" [{}:{}]", file!(), line!())
+		println!(" [{}:{}]", file!(), line!())
 	});
 	($fmt:expr) => ({
-        print!(concat!(" [{}:{} ", $fmt, "]"), file!(), line!())
+        println!(concat!(" [{}:{} ", $fmt, "]"), file!(), line!())
 	});
 	($fmt:expr, $($args:tt)+) => ({
-		print!(concat!(" [{}:{} ", $fmt, "]"), file!(), line!(), $($args)+)
+		println!(concat!(" [{}:{} ", $fmt, "]"), file!(), line!(), $($args)+)
 	});
 }
 

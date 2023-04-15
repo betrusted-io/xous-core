@@ -389,7 +389,7 @@ impl DevicePrefs {
         xous::send_message(
             self.time_ux_cid,
             xous::Message::new_scalar(
-                crate::time::TimeUxOp::SetTime.to_usize().unwrap(),
+                dns::TimeUxOp::SetTime.to_usize().unwrap(),
                 0,
                 0,
                 0,
@@ -407,7 +407,7 @@ impl DevicePrefs {
         xous::send_message(
             self.time_ux_cid,
             xous::Message::new_scalar(
-                crate::time::TimeUxOp::SetTimeZone.to_usize().unwrap(),
+                dns::TimeUxOp::SetTimeZone.to_usize().unwrap(),
                 0,
                 0,
                 0,
@@ -600,9 +600,7 @@ fn run_menu_thread(sid: xous::SID, status_cid: xous::CID) {
     let menumatic_sid = xous::create_server().unwrap();
 
     // --------------------------- spawn a time UX manager thread
-    let time_sid = xous::create_server().unwrap();
-    let time_cid = xous::connect(time_sid).unwrap();
-    crate::time::start_time_ux(time_sid);
+    let time_cid = xns.request_connection_blocking(dns::api::TIME_UX_NAME).unwrap();
     #[cfg(not(feature="no-codec"))]
     let codec = codec::Codec::new(&xns).unwrap();
 

@@ -63,8 +63,8 @@
         "zh": "更新因错误而中止！(EC)"
     },
     "ecup.erasing": {
-        "en": "EC Autoupdate\n\nErasing",
-        "en-tts": "EC Autoupdate\n\nErasing",
+        "en": "EC Autoupdate. Do not reset!\n\nErasing",
+        "en-tts": "EC Autoupdate. Do not reset!\n\nErasing",
         "fr": "EC mise à jour automatique\n\nEffacement",
         "ja": "消去...",
         "zh": "擦除..."
@@ -75,6 +75,13 @@
         "fr": "Le firmware d’EC est corrompu ou invalide: ",
         "ja": "ECファームウェアパッケージが破損しているか無効です: ",
         "zh": "固件包已损坏或无效: "
+    },
+    "ecup.preparing": {
+        "en": "EC Updating. Do not reset or power off!",
+        "en-tts": "EC Updating. Do not reset or power off!",
+        "fr": "Mise à jour EC. Ne réinitialisez pas et ne mettez pas hors tension ! *MT*",
+        "ja": "EC firmware package is corrupted or invalid: ",
+        "zh": "EC 更新中。 不要复位或关闭电源！"
     },
     "ecup.resetting": {
         "en": "Resetting EC...",
@@ -91,8 +98,8 @@
         "zh": "已应用 USB 加载更新."
     },
     "ecup.writing": {
-        "en": "EC Autoupdate\n\nWriting",
-        "en-tts": "EC Autoupdate\n\nWriting",
+        "en": "EC Autoupdate. Do not reset!\n\nWriting",
+        "en-tts": "EC Autoupdate. Do not reset!\n\nWriting",
         "fr": "EC mise à jour automatique\n\nÉcriture",
         "ja": "書き込み...",
         "zh": "写作..."
@@ -167,6 +174,13 @@
         "ja": "メニューを閉じる",
         "zh": "关闭功能表"
     },
+    "mainmenu.force_ecup": {
+        "en": "Force EC update",
+        "en-tts": "Force EC update",
+        "fr": "Forcer la mise à jour EC*MT*",
+        "ja": "EC の更新を強制する",
+        "zh": "强制 EC 更新"
+    },
     "mainmenu.init_keys": {
         "en": "Setup passwords...",
         "en-tts": "Setup passwords...",
@@ -182,11 +196,11 @@
         "zh": "键盘布局..."
     },
     "mainmenu.lockdevice": {
-        "en": "Lock device",
-        "en-tts": "Lock device",
-        "fr": "Verrouiller l'appareil",
-        "ja": "ロック装置",
-        "zh": "锁定装置"
+        "en": "Lock device (reboot)",
+        "en-tts": "Lock device (reboot)",
+        "fr": "Verrouiller l'appareil (redémarrer)",
+        "ja": "ロック装置 (リブート)",
+        "zh": "锁定装置 (重启)"
     },
     "mainmenu.pddb": {
         "en": "PDDB submenu...",
@@ -203,11 +217,11 @@
         "zh": "准备备份..."
     },
     "mainmenu.provision_gateware": {
-        "en": "Install gateware update",
-        "en-tts": "Install gateware update",
-        "fr": "Installer la mise à jour du gateware",
-        "ja": "ゲートウェアアップデートをインストールする",
-        "zh": "安装比特流更新"
+        "en": "Force gateware update",
+        "en-tts": "Force gateware update",
+        "fr": "Forcer la mise à jour du gateware",
+        "ja": "ゲートウェアの強制更新",
+        "zh": "强制FPGA更新"
     },
     "mainmenu.preferences": {
         "en": "Preferences",

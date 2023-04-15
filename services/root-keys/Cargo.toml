@@ -7,24 +7,25 @@ description = "Xous root keys server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.30"
-log-server = { package = "xous-api-log", version = "0.1.25" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.25" }
-xous-names = { package = "xous-api-names", version = "0.9.27" }
+xous = "0.9.40"
+log-server = { package = "xous-api-log", version = "0.1.35" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.35" }
+xous-names = { package = "xous-api-names", version = "0.9.37" }
 log = "0.4.14"
-susres = {package = "xous-api-susres", version = "0.9.25"}
+susres = {package = "xous-api-susres", version = "0.9.35"}
 trng = {path= "../trng"}
 spinor = {path="../spinor"}
 llio = {path="../llio"}
 com = {path="../com"}
 xous-semver = "0.1.2"
-utralib = { version = "0.1.13", optional = true, default-features = false }
+utralib = { version = "0.1.17", optional = true, default-features = false }
 
-xous-ipc = "0.9.30"
+xous-ipc = "0.9.40"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 zeroize = "1.3.0"
+rand_core = "0.5.1"
 
 aes-kw = {version = "0.2.1", features = ["alloc"]}
 
@@ -63,6 +64,7 @@ engine-25519 = {path="../engine-25519"}
 byteorder = "1.4.3" # used by keywrap
 # hardware acceleration adaptations are inserted into a fork of the main branch.
 hex = {version = "0.4.3", default-features = false, features = []}
+
 [dependencies.curve25519-dalek]
 version = "3.1.0" # note this is patched to our fork in ./Cargo.toml
 default-features = false

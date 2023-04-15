@@ -528,6 +528,15 @@ fn wrapped_main() -> ! {
         }
     });
 
+    // our menu handler
+    let my_cid = xous::connect(pddb_sid).unwrap();
+    let _ = thread::spawn({
+        let my_cid = my_cid.clone();
+        move || {
+            pddb_menu(my_cid);
+        }
+    });
+
     // run the CI tests if the option has been selected
     #[cfg(all(
         not(target_os = "xous"),
@@ -539,14 +548,6 @@ fn wrapped_main() -> ! {
         hw_testcase(&mut pddb_os);
     }
 
-    // our menu handler
-    let my_cid = xous::connect(pddb_sid).unwrap();
-    let _ = thread::spawn({
-        let my_cid = my_cid.clone();
-        move || {
-            pddb_menu(my_cid);
-        }
-    });
     // a thread to trigger period scrubbing of the PDDB
     let scrub_run = Arc::new(AtomicBool::new(false));
     let _ = thread::spawn({
@@ -600,8 +601,8 @@ fn wrapped_main() -> ! {
     let mut latest_heap: usize = 0;
     let mut latest_cache: usize = 0;
     const HEAP_LARGER_LIMIT: usize = 2048 * 1024;
-    const HEAP_GC_THRESH: usize = 1500 * 1024; // the largel limit is at 2048kiB, so try cleaning up at 1500k
-    const HEAP_GC_TARGET: usize = 1300 * 1024; // how much to try cleaning out in any one go.
+    const HEAP_GC_THRESH: usize = 1800 * 1024; // the larger limit is at 2048kiB, set this smaller
+    const HEAP_GC_TARGET: usize = 1500 * 1024; // how much to try cleaning out in any one go.
     let new_limit = HEAP_LARGER_LIMIT;
     let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
         xous::Limits::HeapMaximum as usize,
@@ -746,11 +747,11 @@ fn wrapped_main() -> ! {
                 }
                 latest_heap = current_heap;
                 latest_cache = current_cache;
-                if (latest_heap > initial_heap
-                && (latest_heap - initial_heap) > HEAP_GC_THRESH)
+                if ((latest_heap > initial_heap)
+                && ((latest_heap - initial_heap) > HEAP_GC_THRESH))
                 // this line is mostly so this triggers occasionally in hosted mode where heap usage is faked;
                 // in practice heap threshold will always hit before cache threshold
-                || current_cache > HEAP_GC_THRESH {
+                || (current_cache > HEAP_GC_THRESH) {
                     log::info!("PDDB trim threshold reached: {} heap, {} cache", latest_heap, basis_cache.cache_size());
                     let pruned = basis_cache.cache_prune(&mut pddb_os, HEAP_GC_TARGET);
                     latest_heap = heap_usage();
@@ -875,6 +876,10 @@ fn wrapped_main() -> ! {
                                     &mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"), pw.as_str().expect("password was not valid utf-8"),
                                     mgmt.policy.unwrap_or(BasisRetentionPolicy::Persist)
                                 ) {
+                                    if basis_cache.basis_contains(&basis.name) {
+                                        basis_cache.basis_unmount(&mut pddb_os, &basis.name).expect("couldn't unmount previously mounted basis of same name");
+                                        modals.show_notification(t!("pddb.unmount_previous", xous::LANG), None).expect("notification failed");
+                                    }
                                     basis_cache.basis_add(basis);
                                     finished = true;
                                     log::info!("{}PDDB.UNLOCKOK,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
@@ -1147,6 +1152,48 @@ fn wrapped_main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
+            Opcode::DictBulkDelete => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbDeleteList, _>().unwrap();
+                let mut key_list = Vec::<String>::new();
+                // the [u8] data is structured as a packed list of u8-len + u8 data slice. The max length of
+                // a PDDB key name is guaranteed to be shorter than a u8. If the length field is 0, then this
+                // particular response has no more data in it to read.
+                let mut index = 0;
+                while req.data[index] != 0 && index < MAX_PDDB_DELETE_LEN {
+                    let strlen = req.data[index] as usize;
+                    index += 1;
+                    if strlen + index >= MAX_PDDB_DELETE_LEN {
+                        log::error!("Logic error in key list, index would be out of bounds. Aborting");
+                        req.retcode = PddbRetcode::InternalError;
+                        break;
+                    }
+                    let key = String::from(std::str::from_utf8(&req.data[index..index+strlen]).unwrap_or("UTF8 error"));
+                    key_list.push(key);
+                    index += strlen;
+                }
+                if req.retcode == PddbRetcode::InternalError {
+                    buffer.replace(req).ok();
+                    continue;
+                }
+                log::info!("Deleting key list: {:?}", key_list);
+                let start = tt.elapsed_ms();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                match basis_cache.key_list_remove(&mut pddb_os, dict, key_list, bname) {
+                    Ok(_) => req.retcode = PddbRetcode::Ok,
+                    Err(e) => match e.kind() {
+                        std::io::ErrorKind::NotFound => req.retcode = PddbRetcode::AccessDenied,
+                        _ => req.retcode = PddbRetcode::InternalError,
+                    }
+                }
+                log::info!("Bulk delete finished in {}ms", tt.elapsed_ms() - start);
+                buffer.replace(req).ok();
+            }
             Opcode::DeleteKeyStd => {
                 if let Some(mem) = msg.body.memory_message_mut() {
                     mem.offset = None;
@@ -1263,8 +1310,10 @@ fn wrapped_main() -> ! {
                 #[cfg(feature="perfcounter")]
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 0, std::line!());
                 key_list = match basis_cache.key_list(&mut pddb_os, dict, bname) {
-                    Ok(list) => {
+                    Ok((list, key_count, found_key_count)) => {
                         log::debug!("count: {}", list.len());
+                        req.key_count = key_count;
+                        req.found_key_count = found_key_count;
                         req.code = PddbRequestCode::NoErr;
                         Some(list)
                     }
@@ -1406,8 +1455,8 @@ fn wrapped_main() -> ! {
                 let token = pbuf.token;
                 if let Some(rec) = token_dict.get(&token) {
                     for basis in basis_cache.access_list().iter() {
-                        let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
-                        log::debug!("read (spec: {:?}){:?} {} len {} pos {}", rec.basis, temp, rec.key, pbuf.len, pbuf.position);
+                        // let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
+                        // log::debug!("read (spec: {:?}){:?} {} len {} pos {}", rec.basis, temp, rec.key, pbuf.len, pbuf.position);
                         #[cfg(feature="perfcounter")]
                         pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 4, std::line!());
                         match basis_cache.key_read(&mut pddb_os,
@@ -1485,7 +1534,7 @@ fn wrapped_main() -> ! {
                             None
                         }
                     ) {
-                        Ok(list) => list.into_iter().rev().collect(), // reverse order so Vec can just pop and get "first" item
+                        Ok((list, _, _)) => list.into_iter().rev().collect(), // reverse order so Vec can just pop and get "first" item
                         Err(e) => {
                             match e.kind() {
                                 std::io::ErrorKind::NotFound => {
@@ -1585,7 +1634,7 @@ fn wrapped_main() -> ! {
                                                 age: attr.age,
                                                 index: attr.index,
                                                 basis: attr.basis,
-                                                data: Some(d)
+                                                data: if d.len() > 0 { Some(d) } else { None }
                                             };
                                             state.read_total += attr.len; // commit the read length early
                                             let (prebuf, sbuf) = buf.split_at_mut(size_of::<u32>()*2);
@@ -1730,7 +1779,7 @@ fn wrapped_main() -> ! {
                 // we don't need a "replace" operation because all ops happen in-place
 
                 // for now, do an expensive sync operation after every write to ensure data integrity
-                basis_cache.sync(&mut pddb_os, None).expect("couldn't sync basis");
+                basis_cache.sync(&mut pddb_os, None, false).expect("couldn't sync basis");
             }
 
             Opcode::WriteKeyStd => {
@@ -1743,8 +1792,8 @@ fn wrapped_main() -> ! {
                 }
             }
 
-            Opcode::WriteKeyFlush => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                match basis_cache.sync(&mut pddb_os, None) {
+            Opcode::WriteKeyFlush => msg_blocking_scalar_unpack!(msg, cleanup, _, _, _, {
+                match basis_cache.sync(&mut pddb_os, None, if cleanup == 1 { true } else { false }) {
                     Ok(_) => xous::return_scalar(msg.sender, PddbRetcode::Ok.to_usize().unwrap()).unwrap(),
                     Err(e) => match e.kind() {
                         std::io::ErrorKind::OutOfMemory => xous::return_scalar(msg.sender, PddbRetcode::DiskFull.to_usize().unwrap()).unwrap(),
@@ -1793,6 +1842,13 @@ fn wrapped_main() -> ! {
                 pddb_os.reset_dont_ask_init();
                 xous::return_scalar(msg.sender, 1).ok();
             }
+            Opcode::Prune => {
+                log::info!("PDDB prune manual request: {} heap, {} cache", latest_heap, basis_cache.cache_size());
+                let pruned = basis_cache.cache_prune(&mut pddb_os, HEAP_GC_TARGET);
+                latest_heap = heap_usage();
+                log::info!("{} pruned, now: {} heap, {} cache", pruned, latest_heap, basis_cache.cache_size());
+                xous::return_scalar(msg.sender, 1).ok();
+            }
             #[cfg(not(target_os = "xous"))]
             Opcode::DangerousDebug => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -1820,10 +1876,11 @@ fn wrapped_main() -> ! {
                     },
                     DebugRequest::Prune => {
                         log::info!("initiating prune");
-                        log::set_max_level(log::LevelFilter::Debug);
                         basis_cache.cache_prune(&mut pddb_os, 262144);
-                        log::set_max_level(log::LevelFilter::Info);
                         log::info!("prune finished");
+                    }
+                    DebugRequest::SetDebug => {
+                        log::set_max_level(log::LevelFilter::Debug);
                     }
                 }
             }
@@ -1855,7 +1912,7 @@ fn wrapped_main() -> ! {
                     xous::return_scalar(msg.sender, 1).unwrap(); // nothing to do, nothing mounted. success!
                     continue;
                 }
-                basis_cache.sync(&mut pddb_os, None).expect("can't sync for unmount");
+                basis_cache.sync(&mut pddb_os, None, false).expect("can't sync for unmount");
                 // unmount all the open basis first
                 let mut mounted_bases = basis_cache.basis_list();
                 mounted_bases.retain(|x| x != PDDB_DEFAULT_SYSTEM_BASIS);

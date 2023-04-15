@@ -365,6 +365,22 @@ class PrecursorUsb:
     def register(self, name):
         return int(self.registers[name], 0)
 
+    def halt(self):
+        if 'vexriscv_debug' in self.regions:
+            self.poke(int(self.regions['vexriscv_debug'][0], 0), 0x00020000)
+        elif 'reboot_cpu_hold_reset' in self.registers:
+            self.poke(self.register('reboot_cpu_hold_reset'), 1)
+        else:
+            print("Can't find reset CSR. Try updating to the latest version of this program")
+
+    def unhalt(self):
+        if 'vexriscv_debug' in self.regions:
+            self.poke(int(self.regions['vexriscv_debug'][0], 0), 0x02000000)
+        elif 'reboot_cpu_hold_reset' in self.registers:
+            self.poke(self.register('reboot_cpu_hold_reset'), 0)
+        else:
+            print("Can't find reset CSR. Try updating to the latest version of this program")
+
     def peek(self, addr, display=False):
         _dummy_s = '\x00'.encode('utf-8')
         data = array.array('B', _dummy_s * 4)
@@ -1066,7 +1082,6 @@ def main():
         print("SoC is from an unknown rev '{}', use --force to continue anyways with v0.9 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
 
-    vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
     pc_usb.ping_wdt()
 
     if args.dump:
@@ -1083,14 +1098,14 @@ def main():
             exit(0)
         with open(args.dump_file, 'wb') as f:
             for page in table:
-                pc_usb.poke(vexdbg_addr, 0x00020000)
+                pc_usb.halt()
                 data = pc_usb.burst_read(page, 4096)
-                pc_usb.poke(vexdbg_addr, 0x02000000)
+                pc_usb.unhalt()
                 f.write(data)
         exit(0)
 
     print("Halting CPU.")
-    pc_usb.poke(vexdbg_addr, 0x00020000)
+    pc_usb.halt()
 
     if args.erase_pddb:
         print("Erasing PDDB region")
@@ -1127,7 +1142,7 @@ def main():
             pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
 
             print("Resuming CPU.")
-            pc_usb.poke(vexdbg_addr, 0x02000000)
+            pc_usb.unhalt()
 
             print("Resetting SOC...")
             try:
@@ -1154,7 +1169,7 @@ def main():
             pc_usb.flash_program(locs['LOC_STAGING'][0], image, verify=verify)
 
         print("Resuming CPU.")
-        pc_usb.poke(vexdbg_addr, 0x02000000)
+        pc_usb.unhalt()
 
         print("Resetting SOC...")
         try:
@@ -1262,7 +1277,7 @@ def main():
 
 
     print("Resuming CPU.")
-    pc_usb.poke(vexdbg_addr, 0x02000000)
+    pc_usb.unhalt()
 
     print("Resetting SOC...")
     try:

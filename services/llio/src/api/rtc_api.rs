@@ -80,6 +80,7 @@ bitflags! {
         const BATT_DIR_BL_EN  = 0b0010_0000;
         const BATT_DIS_BL_EN  = 0b0100_0000;
         const BATT_STD_BL_DIS = 0b1000_0000;
+        const BATT_DIR_BL_DIS = 0b1010_0000;
         const BATT_DI_BL_DIS  = 0b1110_0000;
     }
 }
@@ -217,12 +218,12 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     // note 5 is skipped - this is weekdays, and is unused
     const MONTHS: usize = 6;
     const YEARS: usize = 7;
-    if ((settings[CTL3] & 0xE0) != (Control3::BATT_STD_BL_EN).bits()) // power switchover setting should be initialized
+    if ((settings[CTL3] & 0xE0) != crate::RTC_PWR_MODE) // power switchover setting should be initialized
     || (settings[SECS] & 0x80 != 0) { // clock integrity should be guaranteed
         log::error!("RTC is in an uninitialized state!, {:?}", settings);
         return None;
     }
-    // this is a secondary check -- I have seen RTC return non-sensical time results before
+    // this is a secondary check -- I have seen RTC return nonsense time results before
     // so this is an extra check above and beyond what's in the datasheet
     if (to_binary(settings[SECS]) > 59)
     || (to_binary(settings[MINS]) > 59)
@@ -230,7 +231,7 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     || (to_binary(settings[DAYS]) > 31) || (to_binary(settings[DAYS]) == 0)
     || (to_binary(settings[MONTHS]) > 12) || (to_binary(settings[MONTHS]) == 0)
     || (to_binary(settings[YEARS]) > 99) {
-        log::error!("RTC has invalid digits!");
+        log::error!("RTC has invalid digits!: {:?}", settings);
         return None;
     }
     let mut total_secs: u64 = 0;
@@ -281,6 +282,6 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     Some(total_secs)
 }
 
-fn to_binary(bcd: u8) -> u8 {
+pub fn to_binary(bcd: u8) -> u8 {
     (bcd & 0xf) + ((bcd >> 4) * 10)
 }

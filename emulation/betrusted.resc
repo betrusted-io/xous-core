@@ -28,6 +28,7 @@ i @peripherals/engine.cs
 i @peripherals/Jtag.cs
 i @peripherals/keyboard.cs
 i @peripherals/keyrom.cs
+i @peripherals/LiteX_Timer_32.cs
 i @peripherals/LM3509.cs
 i @peripherals/LSM6DS3.cs
 i @peripherals/memlcd.cs

@@ -4,34 +4,45 @@ description = "Core kernel for Xous, including task switching and memory managem
 license = "MIT OR Apache-2.0"
 edition = "2018"
 name = "xous-kernel"
-version = "0.9.26"
+version = "0.9.38"
 resolver = "2"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 bitflags = "1.2.1"
 stats_alloc = { version = "0.1.8", optional = true }
-xous-kernel = { package = "xous", version = "0.9.30", features = [
+xous-kernel = { package = "xous", version = "0.9.40", features = [
     "forget-memory-messages",
 ] }
-utralib = { version = "0.1.13", optional = true, default_features = false }
+utralib = { version = "0.1.17", optional = true, default_features = false }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
-xous-kernel = { package = "xous", version = "0.9.30", features = [
+xous-kernel = { package = "xous", version = "0.9.40", features = [
     "forget-memory-messages",
     "processes-as-threads",
 ] }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = { version = "0.5.6", package = "xous-riscv" } # source is in "../imports/riscv-0.5.6"
+gdbstub = { version = "0.6.5", optional = true, default-features = false }
+gdbstub_arch = { version = "0.2.4", optional = true, default-features = false }
+
+[target.'cfg(target_arch = "arm")'.dependencies]
+armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", features = ["critical-section"] }
+atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
+xous-kernel = { package = "xous", version = "0.9.40", features = [
+    "v2p",
+] }
+critical-section = "1.1.1"
 
 [features]
+atsama5d27 = ["utralib/atsama5d27"]
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 
 debug-print = []
-gdb-stub = []
+gdb-stub = ["gdbstub", "gdbstub_arch"]
 print-panics = []
 report-memory = ["stats_alloc"]
 wrap-print = []

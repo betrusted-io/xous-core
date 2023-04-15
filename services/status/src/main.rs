@@ -7,7 +7,6 @@ use mainmenu::*;
 mod appmenu;
 use appmenu::*;
 mod app_autogen;
-mod time;
 mod ecup;
 mod wifi;
 mod preferences;
@@ -91,6 +90,9 @@ pub(crate) enum StatusOpcode {
     /// for returning wifi stats
     WifiStats,
 
+    /// Forces EC update
+    ForceEcUpdate,
+
     /// Raise the preferences menu
     Preferences,
     Quit,
@@ -148,10 +150,6 @@ fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
-
-    // this kicks off the thread that services the `libstd` calls for time-related things.
-    // we want this started really early, because it sanity checks the RTC and a bunch of other stuff.
-    time::start_time_server();
 
     // ------------------ acquire the status canvas GID
     let xns = xous_names::XousNames::new().unwrap();
@@ -399,6 +397,7 @@ fn wrapped_main() -> ! {
         }
         _ => log::error!("Invalid return type from UpdateAuto"),
     }
+    /* // leave this running, so we can force updates...costs some extra RAM but seems we need it as a matter of customer service
     #[cfg(not(feature="dbg-ecupdate"))]
     { // if we're not debugging, quit the updater thread -- might as well free up the memory and connections if the thread is not callable
     // this frees up 28-40k runtime RAM + 1 connection in the status thread.
@@ -406,7 +405,7 @@ fn wrapped_main() -> ! {
             Message::new_blocking_scalar(ecup::UpdateOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)
         ).expect("couldn't quit updater thread");
         unsafe{xous::disconnect(ecup_conn).ok()};
-    }
+    } */
 
     // check for backups after EC updates, but before we check for gateware updates
     let mut backup_time: Option<DateTime::<Utc>> = None;
@@ -1374,6 +1373,45 @@ fn wrapped_main() -> ! {
                 } else {
                     keys.lock().unwrap().do_create_backup_ux_flow(metadata, None);
                 }
+            }
+            Some(StatusOpcode::ForceEcUpdate) => {
+                // wrap in thread so the status loop doesn't crash due to event back-pressure during the potentially
+                // very long running EC update process (which blocks the event handler while it runs)...
+                thread::spawn({
+                    let ecup_conn = ecup_conn.clone();
+                    move || {
+                        // send with an argument of '1', which forces the update
+                        match send_message(ecup_conn,
+                            Message::new_blocking_scalar(ecup::UpdateOp::UpdateAuto.to_usize().unwrap(), 1, 0, 0, 0)
+                        ).expect("couldn't send auto update command") {
+                            xous::Result::Scalar1(r) => {
+                                match FromPrimitive::from_usize(r) {
+                                    Some(ecup::UpdateResult::AutoDone) => {
+                                        let xns = xous_names::XousNames::new().unwrap();
+                                        let llio = llio::Llio::new(&xns);
+                                        let netmgr = net::NetManager::new();
+                                        // restore interrupts and connection manager
+                                        llio.com_event_enable(true).ok();
+                                        netmgr.reset();
+                                    }
+                                    Some(ecup::UpdateResult::NothingToDo) => {
+                                        log::error!("Got 'NothingToDo' on force argument. This is a hard error.");
+                                        panic!("Force update responded with nothing to do. This is a bug, please report it in xous-core issues, and note the results of `ver ec`, `ver xous`, `ver soc`, `ver wf200`.");
+                                    },
+                                    Some(ecup::UpdateResult::Abort) => {
+                                        let xns = xous_names::XousNames::new().unwrap();
+                                        let modals = modals::Modals::new(&xns).unwrap();
+                                        modals.show_notification(t!("ecup.abort", xous::LANG), None).unwrap();
+                                    }
+                                    // note: invalid package triggers a pop-up in the update procedure, so we don't need to pop one up here.
+                                    Some(ecup::UpdateResult::PackageInvalid) => log::error!("EC firmware package did not validate"),
+                                    None => log::error!("invalid return code from EC update check"),
+                                }
+                            }
+                            _ => log::error!("Invalid return type from UpdateAuto"),
+                        }
+                    }
+                });
             }
             Some(StatusOpcode::Quit) => {
                 xous::return_scalar(msg.sender, 1).ok();

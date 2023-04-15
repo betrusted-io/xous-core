@@ -13,31 +13,79 @@ use llio_hw::*;
 mod llio_hosted;
 #[cfg(not(target_os = "xous"))]
 use llio_hosted::*;
-
+use crate::RTC_PWR_MODE;
 use num_traits::*;
 use xous_ipc::Buffer;
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack, Message, try_send_message};
+use xous::messages::sender::Sender;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use std::thread;
 
-fn i2c_thread(i2c_sid: xous::SID) {
+// This is slower than most timeout specifiers, but it's easier to debug
+// when the check interval isn't creating a ton of log spew.
+const POLL_INTERVAL_MS: usize = 250;
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+enum PumpOp {
+    Pump,
+}
+
+fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBool>) {
     let xns = xous_names::XousNames::new().unwrap();
 
     let handler_conn = xous::connect(i2c_sid).expect("couldn't make handler connection for i2c");
-    let mut i2c = i2c::I2cStateMachine::new(handler_conn);
+    let mut i2c = i2c::I2cStateMachine::new(handler_conn, power_csr_raw as *mut u32, wfi_state);
 
     // register a suspend/resume listener
-    let sr_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, I2cOpcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let self_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, I2cOpcode::SuspendResume as u32, self_cid).expect("couldn't create suspend/resume object");
+
+    // timeout watcher
+    let run = Arc::new(AtomicBool::new(false));
+    let run_sid = xous::create_server().unwrap();
+    let run_cid = xous::connect(run_sid).unwrap();
+    let target_msb = Arc::new(AtomicU32::new(0));
+    let target_lsb = Arc::new(AtomicU32::new(0));
+    let _ = std::thread::spawn({
+        let run = run.clone();
+        let cid = run_cid.clone();
+        let main_cid = self_cid.clone();
+        // there is a hazard that msb/lsb is split once every 40 or so days for the precise moment of the rollover. meh?
+        let target_msb = target_msb.clone();
+        let target_lsb = target_lsb.clone();
+        move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            loop {
+                let msg = xous::receive_message(run_sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(PumpOp::Pump) => msg_scalar_unpack!(msg, _, _, _, _, {
+                        tt.sleep_ms(POLL_INTERVAL_MS).unwrap();
+                        if run.load(Ordering::SeqCst) {
+                            let target_time = target_lsb.load(Ordering::SeqCst) as u64 | (target_msb.load(Ordering::SeqCst) as u64) << 32;
+                            if tt.elapsed_ms() >= target_time {
+                                try_send_message(main_cid, Message::new_scalar(I2cOpcode::I2cTimeout.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                            }
+                            try_send_message(cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                        }
+                    }),
+                    _ => log::error!("Unrecognized message: {:?}", msg),
+                }
+            }
+        }
+    });
 
     let mut suspend_pending_token: Option<usize> = None;
+    let mut blocking_callers: Vec::<Sender> = Vec::new();
+    let mut i2c_mutex_acquired = false;
     log::trace!("starting i2c main loop");
     loop {
         let msg = xous::receive_message(i2c_sid).unwrap();
-        log::trace!("i2c message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option::<I2cOpcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             Some(I2cOpcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                if !i2c.is_busy() {
+                if !i2c_mutex_acquired && !i2c.is_busy() {
                     i2c.suspend();
                     susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                     i2c.resume();
@@ -47,33 +95,101 @@ fn i2c_thread(i2c_sid: xous::SID) {
                 }
             }),
             Some(I2cOpcode::IrqI2cTxrxWriteDone) => msg_scalar_unpack!(msg, _, _, _, _, {
-                if let Some(token) = suspend_pending_token.take() {
-                    i2c.suspend();
-                    susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                    i2c.resume();
+                run.store(false, Ordering::SeqCst);
+                if !i2c_mutex_acquired && suspend_pending_token.is_some() {
+                    if let Some(token) = suspend_pending_token.take() {
+                        i2c.suspend();
+                        susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                        i2c.resume();
+                    }
                 }
                 // I2C state machine handler irq result
                 i2c.report_write_done();
             }),
             Some(I2cOpcode::IrqI2cTxrxReadDone) => msg_scalar_unpack!(msg, _, _, _, _, {
-                if let Some(token) = suspend_pending_token.take() {
-                    i2c.suspend();
-                    susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                    i2c.resume();
+                run.store(false, Ordering::SeqCst);
+                if !i2c_mutex_acquired && suspend_pending_token.is_some() {
+                    if let Some(token) = suspend_pending_token.take() {
+                        i2c.suspend();
+                        susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                        i2c.resume();
+                    }
                 }
                 // I2C state machine handler irq result
                 i2c.report_read_done();
             }),
-            Some(I2cOpcode::IrqI2cTrace) => {
-                i2c.trace();
+            Some(I2cOpcode::I2cMutexAcquire) => {
+                if !i2c_mutex_acquired {
+                    i2c_mutex_acquired = true;
+                    xous::return_scalar(msg.sender, 1).ok();
+                } else {
+                    blocking_callers.push(msg.sender);
+                }
             },
+            Some(I2cOpcode::I2cMutexRelease) => {
+                assert!(i2c_mutex_acquired == true, "i2c mutex was released when none was acquired");
+                let maybe_next = if !blocking_callers.is_empty() {
+                    let next_in_line = blocking_callers.remove(0);
+                    Some(next_in_line)
+                } else {
+                    i2c_mutex_acquired = false;
+                    // check to see if a suspend was pending
+                    if let Some(token) = suspend_pending_token.take() {
+                        i2c.suspend();
+                        susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                        i2c.resume();
+                    }
+                    None
+                };
+                if !i2c_mutex_acquired {
+                    xous::return_scalar(msg.sender, 1).ok(); // acknowledge the release, after the mutex is marked false
+                }
+                // the somewhat awkward structure is because we want to guarantee the release of mutex before ack, while
+                // also guaranteeing that the ack happens before we allow the next thread to proceed
+                if let Some(next) = maybe_next {
+                    assert!(i2c_mutex_acquired == true, "logic bug in passing mutex acquisition to next thread");
+                    xous::return_scalar(next, 1).ok(); // this unblocks the waiting thread, and immediately hands the quantum to that thread
+                }
+            }
+            Some(I2cOpcode::IrqI2cTrace) => msg_scalar_unpack!(msg, arg, _, _, _, {
+                i2c.trace(arg);
+            }),
             Some(I2cOpcode::I2cTxRx) => {
+                if !i2c_mutex_acquired {
+                    log::warn!("TxRx operation was initiated without an acquired mutex. This is only allowed as the last operation before a shutdown.");
+                }
                 i2c.initiate(msg);
+                // update the timeout interval to whatever was specified by the transaction
+                if let Some(expiry) = i2c.get_expiry() {
+                    target_msb.store((expiry >> 32) as u32, Ordering::SeqCst);
+                    target_lsb.store(expiry as u32, Ordering::SeqCst);
+                    run.store(true, Ordering::SeqCst);
+                    try_send_message(run_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                }
             },
             Some(I2cOpcode::I2cIsBusy) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let busy = if i2c.is_busy() {1} else {0};
                 xous::return_scalar(msg.sender, busy as _).expect("couldn't return I2cIsBusy");
             }),
+            Some(I2cOpcode::I2cTimeout) => {
+                if i2c.in_progress() {
+                    // timeout happened
+                    log::warn!("Timeout detected, re-initiating transaction");
+                    i2c.re_initiate();
+                    if let Some(expiry) = i2c.get_expiry() {
+                        log::debug!("Setting new expiry to {}", expiry);
+                        target_msb.store((expiry >> 32) as u32, Ordering::SeqCst);
+                        target_lsb.store(expiry as u32, Ordering::SeqCst);
+                        // no need to pump since the timeout loop is already running
+                    }
+                }
+            }
+            Some(I2cOpcode::I2cDriverReset) => {
+                log::warn!("Resetting I2C block; any transaction in progress may be aborted.");
+                i2c.driver_reset();
+                i2c_mutex_acquired = false;
+                xous::return_scalar(msg.sender, 1).ok();
+            }
             Some(I2cOpcode::Quit) => {
                 log::info!("Received quit opcode, exiting!");
                 break;
@@ -131,22 +247,27 @@ fn main() -> ! {
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(2)).expect("can't register I2C thread");
     #[cfg(not(target_os = "xous"))]
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(1)).expect("can't register I2C thread");
-    log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
-    let _ = thread::spawn({
-        let i2c_sid = i2c_sid.clone();
-        move || {
-            i2c_thread(i2c_sid);
-        }
-    });
 
     // Create a new llio object
     let handler_conn = xous::connect(llio_sid).expect("can't create IRQ handler connection");
     let mut llio = Llio::new(handler_conn, gpio_base);
     llio.ec_power_on(); // ensure this is set correctly; if we're on, we always want the EC on.
 
+    log::debug!("registered I2C thread with NS -- {:?}", i2c_sid);
+    let wfi_state = Arc::new(AtomicBool::new(false));
+    let _ = thread::spawn({
+        let i2c_sid = i2c_sid.clone();
+        let wfi_state = wfi_state.clone();
+        let unsafe_power_csr = llio.get_power_csr_raw() as u32;
+        move || {
+            i2c_thread(i2c_sid, unsafe_power_csr, wfi_state);
+        }
+    });
+
     if cfg!(feature = "wfi_off") {
         log::warn!("WFI is overridden at boot -- automatic power savings is OFF!");
         llio.wfi_override(true);
+        wfi_state.store(true, Ordering::SeqCst);
     }
 
     // register a suspend/resume listener
@@ -162,12 +283,18 @@ fn main() -> ! {
     let mut i2c = llio::I2c::new(&xns);
     let tt = ticktimer_server::Ticktimer::new().unwrap();
 
-    log::trace!("starting main loop");
+    log::debug!("starting main loop");
     loop {
         let msg = xous::receive_message(llio_sid).unwrap();
-        log::trace!("Message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option::<Opcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                let mut dummy = [0u8; 1];
+                // make the last transaction to I2C a "read", so that any subsequent noise reads the device, instead of writing junk to the registers
+                // the address 0xc is chosen to put it far "after" any critical registers
+                i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, 0xC, &mut dummy).expect("RTC access error");
+
                 llio.suspend();
                 #[cfg(feature="tts")]
                 llio.tts_sleep_indicate(); // this happens after the suspend call because we don't want the sleep indicator to be restored on resume
@@ -245,8 +372,10 @@ fn main() -> ! {
             }),
             Some(Opcode::WfiOverride) => msg_blocking_scalar_unpack!(msg, override_, _, _, _, {
                 if override_ == 0 {
+                    wfi_state.store(false, Ordering::SeqCst);
                     llio.wfi_override(false);
                 } else {
+                    wfi_state.store(true, Ordering::SeqCst);
                     llio.wfi_override(true);
                 }
                 xous::return_scalar(msg.sender, 0).expect("couldn't confirm wfi override was updated");
@@ -383,9 +512,9 @@ fn main() -> ! {
                     continue;
                 }
                 let seconds = delay as u8;
-                // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[(Control3::BATT_STD_BL_EN).bits()]).expect("RTC access error");
+                i2c.i2c_mutex_acquire();
                 // set clock units to 1 second, output pulse length to ~218ms
+                // and program the elapsed time (TIMERB_CLK is followed by TIMERB)
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB_CLK, &[(TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]).expect("RTC access error");
                 // program elapsed time
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB, &[seconds]).expect("RTC access error");
@@ -395,17 +524,25 @@ fn main() -> ! {
                 // turn on the timer proper -- the system will wakeup in 5..4..3....
                 let config = (Config::CLKOUT_DISABLE | Config::TIMER_B_ENABLE).bits();
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
+                i2c.i2c_mutex_release();
+
+                // this readback, even though it just goes to debug, seems necessary to get the values to "stick" in the RTC.
+                let mut d = [0u8; 0x14];
+                i2c.i2c_mutex_acquire();
+                i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, 0, &mut d).ok();
+                i2c.i2c_mutex_release();
+                log::info!("reg after wakeup alarm: {:x?}", d);
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
             Some(Opcode::ClearWakeupAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[(Control3::BATT_STD_BL_EN).bits()]).expect("RTC access error");
+                i2c.i2c_mutex_acquire();
                 let config = Config::CLKOUT_DISABLE.bits();
                 // turn off RTC wakeup timer, in case previously set
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
                 // clear my interrupts and flags
                 let control2 = 0;
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL2, &[control2]).expect("RTC access error");
+                i2c.i2c_mutex_release();
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
             #[cfg(any(feature="precursor", feature="renode"))]
@@ -419,38 +556,111 @@ fn main() -> ! {
                 // Note that we start the RTC at somewhere between 0-10 years, so in practice, a user can expect between 90-100 years
                 // of continuous uptime service out of the RTC.
                 let mut settings = [0u8; 8];
-                let mut success = false;
-                while !success {
+                let mut aborted = false;
+                loop {
                     // retry loop is necessary because this function can get called during "congested" periods
-                    match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
-                        Ok(llio::I2cStatus::ResponseReadOk) => success = true,
+                    i2c.i2c_mutex_acquire();
+                    match i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
+                        Ok(llio::I2cStatus::ResponseReadOk) => {
+                            i2c.i2c_mutex_release();
+                            break;
+                        },
                         Err(xous::Error::ServerQueueFull) => {
-                            success = false;
+                            i2c.i2c_mutex_release();
                             // give it a short pause before trying again, to avoid hammering the I2C bus at busy times
                             tt.sleep_ms(38).unwrap();
+
+                            xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
+                            aborted = true;
+                            break;
                         },
                         _ => {
                             log::error!("Couldn't read seconds from RTC!");
+                            // reset the hardware driver, in case that's the problem
+                            // this will reset the mutex to not acquired, even if someone else is using it. Very dangerous!
+                            unsafe{i2c.i2c_driver_reset();}
+                            tt.sleep_ms(37).unwrap(); // short pause in case the upset was caused by too much activity
+
                             xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
+                            aborted = true;
                             break;
                         },
                     };
                 }
-                if !success {
-                    continue
+                // this continue has to be outside the above loop to avoid a double-free error!
+                if aborted {
+                    continue;
                 }
                 log::debug!("GetRtcValue regs: {:?}", settings);
-                let total_secs = match rtc_to_seconds(&settings) {
-                    Some(s) => s,
-                    None => {
-                        xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
-                        continue;
+                let mut total_secs: u64 = 0;
+                let mut retries = 0;
+                aborted = false;
+                loop {
+                    match rtc_to_seconds(&settings) {
+                        Some(s) => {
+                            total_secs = s;
+                            break;
+                        }
+                        None => {
+                            // ensure nobody else is using the I2C block
+                            i2c.i2c_mutex_acquire();
+                            // this will reset the mutex to not acquired, even if someone else is using it. Very dangerous!
+                            unsafe{i2c.i2c_driver_reset();}
+
+                            tt.sleep_ms(37).unwrap(); // short pause in case the upset was caused by too much activity
+                            // re-acquire the mutex, because it was released by the driver reset
+                            i2c.i2c_mutex_acquire();
+                            let secs = if to_binary(settings[1] & 0x7f) < 60 {
+                                settings[1] & 0x7f
+                            } else {
+                                0
+                            };
+                            if to_binary(settings[7]) > 99 {
+                                settings[7] = settings[7] & 0x7f;
+                            }
+                            if to_binary(settings[3]) > 23 {
+                                settings[3] = settings[3] & 0x1f;
+                            }
+                            // do a "hot reset" -- just clears error flags, but does our best to avoid rewriting time
+                            // if a lot of values are wrong, it means that the RTC had garbage written to it on the
+                            // previous shutdown. This at least gets us *working* again, but time is lost.
+                            let reset_values = [
+                                0x0, // clear all interrupts, return to normal operations
+                                0x0, // clear all interrupts
+                                RTC_PWR_MODE,  // reset power mode
+                                secs,  // write the seconds register back without the error flag
+                                settings[2] & 0x7f,
+                                settings[3], // requires a fix interpreting BCD
+                                settings[4] & 0x3F,
+                                settings[5] & 0x7,
+                                settings[6] & 0x1F,
+                                settings[7], // this requires a fix interpreting BCD, which is above
+                            ];
+                            i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL1, &reset_values).expect("RTC access error");
+                            i2c.i2c_mutex_release();
+                        }
                     }
-                };
-                xous::return_scalar2(msg.sender,
-                    ((total_secs >> 32) & 0xFFFF_FFFF) as usize,
-                    (total_secs & 0xFFFF_FFFF) as usize,
-                ).expect("couldn't return to caller");
+                    retries += 1;
+                    if retries > 10 {
+                        // this will likely cause an upstream failure, because a lot of logic can't proceed
+                        // without a valid resolution to the RTC setting!
+                        log::error!("rtc_to_seconds() never returned a valid value. Returning an error, that may result in a panic...");
+                        xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
+                        aborted = true;
+                        break;
+                    } else {
+                        log::warn!("rtc_to_seconds() returned an invalid value. Retry #{}", retries);
+                    }
+                }
+                // this continue has to be outside the above loop to avoid the double-free error!
+                if aborted || total_secs == 0 {
+                    continue;
+                } else {
+                    xous::return_scalar2(msg.sender,
+                        ((total_secs >> 32) & 0xFFFF_FFFF) as usize,
+                        (total_secs & 0xFFFF_FFFF) as usize,
+                    ).expect("couldn't return to caller");
+                }
             }),
             #[cfg(not(target_os = "xous"))]
             Some(Opcode::GetRtcValue) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
@@ -609,7 +819,7 @@ mod tests {
 
                     let diff = rtc_test.signed_duration_since(rtc_base);
                     let settings = [
-                        (Control3::BATT_STD_BL_EN).bits(),
+                        RTC_PWR_MODE,
                         to_bcd(s as u8),
                         to_bcd(m as u8),
                         to_bcd(h as u8),

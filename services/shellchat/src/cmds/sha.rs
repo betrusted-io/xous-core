@@ -258,12 +258,15 @@ impl<'a> ShellCmdApi<'a> for Sha {
             let modestr = if hw_mode != 0 { &"hw" } else { &"sw" };
             if first_time != 0 {
                 write!(ret, "[{}] first pass: {}ms/hash", modestr, elapsed).unwrap();
+                log::info!("{}BENCH,SHA,FIRST,{}ms/hash,{}", xous::BOOKEND_START, elapsed, xous::BOOKEND_END);
             } else {
                 if pass != 0 {
                     write!(ret, "[{}] match to previous pass: {}ms/hash", modestr, elapsed).unwrap();
+                    log::info!("{}BENCH,SHA,PASS,{}ms/hash,{}", xous::BOOKEND_START, elapsed, xous::BOOKEND_END);
                 } else {
                     // pass was 0, we failed
                     write!(ret, "[{}] FAILED match to previous pass: {}ms/hash", modestr, elapsed).unwrap();
+                    log::info!("{}BENCH,SHA,FAIL,{}ms/hash,{}", xous::BOOKEND_START, elapsed, xous::BOOKEND_END);
                 }
             }
         });

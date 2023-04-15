@@ -312,6 +312,65 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - More optimizations to `vault` passwords path. Records are re-used instead of re-allocated if they don't change. This should speedup switching to `vault` passwords by about 2x after the very first time the records are loaded (the first time will take longer because the records have to be built up).
 - Extend watchdog reset time to ~30s from 7s, to enable easier guru meditation reporting.
 - Add USB mass-storage drivers (thanks @gsora for all the help there!). Currently able to emulate a blank USB drive in RAM; more to come soon.
+- Performance fixes to xous scalar and memory messages. A subtle bug was uncovered and fixed in the way scalar messages were being returned, and memory messages now initialize memory using an unrolled loop that takes better advantage of the 32-bit architecture and cache line size. A corresponding `std` fix to an unnecessary `yield_slice()` inside `dl_malloc` improves `vault` PDDB large-key readout performance by 30%.
+- Find and fix some edge cases in key deletion.
+  - Keys that were supposed to be deleted were being re-fetched from RAM cache, which leads to them re-appearing in the UX and when one attempts to re-delete the key it triggers a double-free error.
+  - Small pool key packing was incorrectly using an old key offset when repacking keys, leading to data corruption/loss after deletion events
+- `mtxcli` has a message filter and async message updates! (thanks @tmarble)
+- OpenSK FIDO code upgraded to handle FIDO2.1, which means among other things Precursor now supports residential SSH keys (e.g. you can use it with ssh to log in, sign commits, etc.). Upgrading to the latest version will trigger a migration to the new database format. If there is a bug or compatibility issue, don't fear: the previous database is not affected, and you can downgrade to the previous version and continue using your original keys.
+- `transientdisk` PoC demo app by @gsora: a RAM-based 1.44MiB USB disk that one can use to transfer sensitive materials (such as private keys) between computers. The disk is de-allocated by just backgrounding the app, and you can sleep well at night knowing RAM is completely erased on a reboot.
+- Lots of kernel upgrades & fixes by @xobs:
+  - emulation: the ticktimer is now correctly able to handle delays of more than 49 days
+  - emulation: timer0 is now correctly modeled, and the system timer works correctly
+  - kernel: thread selection is now massively improved, and should be faster
+  - kernel: thread selection now correctly selects and parks threads
+  - kernel: the main loop is now simpler, though there is more room for improvement
+  - kernel: execution now immediately transfers to spawned threads
+  - kernel: fixed a bug where a thread immediately exited and the parent joined it
+  - kernel: when returning a message twice, the error DoubleFree is now returned instead of ProcessNotFound
+  - kernel: all `scalar` return calls are now unified
+  - kernel: servers get to use their full scheduled quantum
+  - libxous: syscalls now use asm! rather than external object files
+  - ticktimer: the condvar implementation has been completely overhauled
+  - ticktimer: implemented FreeMutex and FreeCondition api calls
+  - ticktimer: only respond to RecalculateSleep when sent internally
+  - ticktimer: use new .pop_first() function on BTreeHeap
+  - ticktimer: fix a potential panic in the interrupt handler
+- Fixed some edge cases in the I2C driver, and improved sleep/resume stability.
+
+## New in 0.9.13
+- Loader refactor & optimization:
+  - Better portability to different RAM sizes
+  - Assembly stubs eliminated and absorbed into Rust files
+  - Code modularized and re-organized
+  - Phase 1 cleaned up and optimized
+- VexRiscv core patch to D$ virtual memory flush bug
+  - Hopefully resolves issue #321
+- SoC yield bugs fixed
+  - Work-around Vivado tool issue where >10% of compilations were failing on some units
+  - Strip out unused logic to decongest the design
+  - Requires an update to usb_update.py, precursorupdater to work with the new SoC as the CPU debug port is replaced with a simple reset-halt mechanism for preventing bus traffic during USB updates
+  - Metastability harden I2C & TRNG
+  - Handle I2C timeouts. The I2C block is sensitive to hardware-specific thresholds, and on some devices it can fail to come up cleanly on boot. This code recovers from that more gracefully.
+  - Move I/O blocks into always-on domain to avoid clock stoppage during fire and forget I/O operation
+- I2C fixes:
+  - Ensure that the RTC does not interpret line noise during shutdown as garbage by having the very last command issued be a read to the RTC.
+  - Shut down I2C block after this read happens by disabling it
+  - Harden the RTC handler such that if junk corrupts the RTC it doesn't loop forever being confused about the junk data.
+- More multi-platform support work
+  - Preliminary Cramium SoC and FPGA targets incorporated
+  - atsama5d27 target support via PRs from Foundation Devices (thank you!!). Xous is now booting on the ATSAMA5D27-SOM1-EK1 dev board!
+- Fix edge case in phase 1 loader (thanks to @southpawflow for reporting it and providing the test case files)
+- Implementations removed from crates.io (API crates still published) -- nobody is using the implementation crates it seems, and they are very hard to maintain.
+- (EC) WF200 firmware bumped to 3.16.0 (will trigger an EC update). EC Litex design also brought into compliance with deprecated Litex APIs.
+- Various improvements:
+  - MAC address now added to wifi preferences status screen
+  - All-0 app_id in U2F no longer prompts for a save record
+  - PDDB shellchat writeall command via @pakl
+- Add Force Update option for the EC. This required migrating the time server runtime into the DNS process space, due to exhaustion of connection IDs in the status process space.
+- @xobs has added the feature `--gdb-stub` to the build. When selected, the kernel is built with GDB support over serial port. This works well in Renode. To try it in hardware, one must first run `console app` inside `shellchat` to activate the GDB UART (otherwise the sole serial port is connected to the console log).
+- @xobs added graphical panic output to the kernel. This is different from a guru meditation in that it only happens when the kernel itself panics.
+- Pulled in `ebreak` fix for VexRiscv CPU
 
 ## Roadmap
 - Lots of testing and bug fixes

@@ -7,6 +7,7 @@ use aes_gcm_siv::{
 };
 use subtle::ConstantTimeEq;
 use crate::{BackupHeader, BackupOp};
+use rand_core::RngCore;
 
 const BACKUP_AAD: &'static str = "PDDB backup v0.1.0";
 

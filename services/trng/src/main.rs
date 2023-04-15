@@ -794,7 +794,9 @@ fn main() -> ! {
     let mut error_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     loop {
         let mut msg = xous::receive_message(trng_sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let op: Option<api::Opcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", op);
+        match op {
             Some(api::Opcode::GetTrng) => xous::msg_blocking_scalar_unpack!(msg, count, _, _, _, {
                 let val: [u32; 2] = trng.get_trng(count);
                 xous::return_scalar2(msg.sender, val[0] as _, val[1] as _)

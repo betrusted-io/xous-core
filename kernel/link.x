@@ -25,6 +25,8 @@ SECTIONS
     KEEP(*(.trap.rust));
 
     *(.text .text.*);
+
+    KEEP(*(.endcap));
   } > REGION_TEXT
 
   .rodata : ALIGN(4)

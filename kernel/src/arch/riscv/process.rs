@@ -93,6 +93,7 @@ static mut PROCESS_TABLE: ProcessTable = ProcessTable {
 
 #[repr(C)]
 #[cfg(baremetal)]
+#[derive(Debug, Copy, Clone)]
 /// The stage1 bootloader sets up some initial processes.  These are reported
 /// to us as (satp, entrypoint, sp) tuples, which can be turned into a structure.
 /// The first element is always the kernel.
@@ -106,6 +107,13 @@ pub struct InitialProcess {
 
     /// Address of the top of the stack
     pub sp: usize,
+}
+
+impl InitialProcess {
+    pub fn pid(&self) -> PID {
+        let pid = (self.satp >> 22) & ((1 << 9) - 1);
+        unsafe { PID::new_unchecked(pid as u8) }
+    }
 }
 
 #[repr(C)]
@@ -230,7 +238,7 @@ impl Process {
         &process.threads[thread]
     }
 
-    #[cfg(feature="gdb-stub")]
+    #[cfg(feature = "gdb-stub")]
     pub fn for_each_thread_mut<F>(&self, mut op: F)
     where
         F: FnMut(TID, &Thread),
@@ -435,7 +443,7 @@ impl Process {
     pub fn print_all_threads(&self) {
         let process = unsafe { &mut *PROCESS };
         for (tid_idx, &thread) in process.threads.iter().enumerate() {
-            let tid = tid_idx + 1;
+            let tid = tid_idx;
             if thread.registers[1] != 0 {
                 Self::print_thread(tid, &thread);
             }
@@ -450,60 +458,7 @@ impl Process {
 
     pub fn print_thread(_tid: TID, _thread: &Thread) {
         println!("Thread {}:", _tid);
-        println!(
-            "PC:{:08x}   SP:{:08x}   RA:{:08x}",
-            _thread.sepc, _thread.registers[1], _thread.registers[0]
-        );
-        println!(
-            "GP:{:08x}   TP:{:08x}",
-            _thread.registers[2], _thread.registers[3]
-        );
-        println!(
-            "T0:{:08x}   T1:{:08x}   T2:{:08x}",
-            _thread.registers[4], _thread.registers[5], _thread.registers[6]
-        );
-        println!(
-            "T3:{:08x}   T4:{:08x}   T5:{:08x}   T6:{:08x}",
-            _thread.registers[27],
-            _thread.registers[28],
-            _thread.registers[29],
-            _thread.registers[30]
-        );
-        println!(
-            "S0:{:08x}   S1:{:08x}   S2:{:08x}   S3:{:08x}",
-            _thread.registers[7],
-            _thread.registers[8],
-            _thread.registers[17],
-            _thread.registers[18]
-        );
-        println!(
-            "S4:{:08x}   S5:{:08x}   S6:{:08x}   S7:{:08x}",
-            _thread.registers[19],
-            _thread.registers[20],
-            _thread.registers[21],
-            _thread.registers[22]
-        );
-        println!(
-            "S8:{:08x}   S9:{:08x}  S10:{:08x}  S11:{:08x}",
-            _thread.registers[23],
-            _thread.registers[24],
-            _thread.registers[25],
-            _thread.registers[26]
-        );
-        println!(
-            "A0:{:08x}   A1:{:08x}   A2:{:08x}   A3:{:08x}",
-            _thread.registers[9],
-            _thread.registers[10],
-            _thread.registers[11],
-            _thread.registers[12]
-        );
-        println!(
-            "A4:{:08x}   A5:{:08x}   A6:{:08x}   A7:{:08x}",
-            _thread.registers[13],
-            _thread.registers[14],
-            _thread.registers[15],
-            _thread.registers[16]
-        );
+        print!("{}", _thread);
     }
 
     /// Create a brand-new process. The memory space must already be set up.
@@ -585,6 +540,57 @@ impl Thread {
 
     pub fn a1(&self) -> usize {
         self.registers[10]
+    }
+}
+
+impl core::fmt::Display for Thread {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(
+            f,
+            "PC:{:08x}   SP:{:08x}   RA:{:08x}",
+            self.sepc, self.registers[1], self.registers[0]
+        )?;
+        writeln!(
+            f,
+            "GP:{:08x}   TP:{:08x}",
+            self.registers[2], self.registers[3]
+        )?;
+        writeln!(
+            f,
+            "T0:{:08x}   T1:{:08x}   T2:{:08x}",
+            self.registers[4], self.registers[5], self.registers[6]
+        )?;
+        writeln!(
+            f,
+            "T3:{:08x}   T4:{:08x}   T5:{:08x}   T6:{:08x}",
+            self.registers[27], self.registers[28], self.registers[29], self.registers[30]
+        )?;
+        writeln!(
+            f,
+            "S0:{:08x}   S1:{:08x}   S2:{:08x}   S3:{:08x}",
+            self.registers[7], self.registers[8], self.registers[17], self.registers[18]
+        )?;
+        writeln!(
+            f,
+            "S4:{:08x}   S5:{:08x}   S6:{:08x}   S7:{:08x}",
+            self.registers[19], self.registers[20], self.registers[21], self.registers[22]
+        )?;
+        writeln!(
+            f,
+            "S8:{:08x}   S9:{:08x}  S10:{:08x}  S11:{:08x}",
+            self.registers[23], self.registers[24], self.registers[25], self.registers[26]
+        )?;
+        writeln!(
+            f,
+            "A0:{:08x}   A1:{:08x}   A2:{:08x}   A3:{:08x}",
+            self.registers[9], self.registers[10], self.registers[11], self.registers[12]
+        )?;
+        writeln!(
+            f,
+            "A4:{:08x}   A5:{:08x}   A6:{:08x}   A7:{:08x}",
+            self.registers[13], self.registers[14], self.registers[15], self.registers[16]
+        )?;
+        Ok(())
     }
 }
 

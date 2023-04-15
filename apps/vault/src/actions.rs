@@ -11,22 +11,24 @@ use std::io::{Write, Read};
 use passwords::PasswordGenerator;
 use std::cell::RefCell;
 
-use crate::{ux::{ListItem, deserialize_app_info}, ctap::FIDO_CRED_DICT, storage::{self, PasswordRecord, StorageContent}, ItemLists};
-use crate::{VaultMode, SelectedEntry};
-use crate::utc_now;
-
-use crate::fido::U2F_APP_DICT;
+use vault::{
+    deserialize_app_info, serialize_app_info, basis_change,
+    VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, VAULT_ALLOC_HINT, utc_now,
+    atime_to_str
+};
+use crate::ux::framework::ListItem;
+use crate::{ItemLists, VaultMode, SelectedEntry};
+use crate::storage::{self, PasswordRecord, StorageContent};
 use crate::totp::TotpAlgorithm;
+use persistent_store::store::OPENSK2_DICT;
+
+use vault::env::xous::U2F_APP_DICT;
 
 #[cfg(feature="vaultperf")]
 use perflib::*;
 #[cfg(feature="vaultperf")]
 const FILE_ID_APPS_VAULT_SRC_ACTIONS: u32 = 1;
 
-pub(crate) const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
-pub(crate) const VAULT_TOTP_DICT: &'static str = "vault.totp";
-/// bytes to reserve for a key entry. Making this slightly larger saves on some churn as stuff gets updated
-pub(crate) const VAULT_ALLOC_HINT: usize = 256;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 const VAULT_TOTP_REC_VERSION: u32 = 1;
 /// time allowed between dialog box swaps for background operations to redraw
@@ -34,7 +36,7 @@ const VAULT_TOTP_REC_VERSION: u32 = 1;
 const SWAP_DELAY_MS: usize = 300;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub(crate) enum ActionOp {
+pub enum ActionOp {
     /// Menu items
     MenuAddnew,
     MenuEditStage2,
@@ -44,6 +46,7 @@ pub(crate) enum ActionOp {
     MenuManageBasis,
     /// Internal ops
     UpdateMode,
+    UpdateOneItem,
     Quit,
     #[cfg(feature="vault-testing")]
     /// Testing
@@ -55,10 +58,11 @@ pub(crate) fn start_actions_thread(
     sid: SID, mode: Arc::<Mutex::<VaultMode>>,
     item_lists: Arc::<Mutex::<ItemLists>>,
     action_active: Arc::<AtomicBool>,
+    opensk_mutex: Arc::<Mutex::<i32>>,
 ) {
     let _ = thread::spawn({
         move || {
-            let mut manager = ActionManager::new(main_conn, mode, item_lists, action_active);
+            let mut manager = ActionManager::new(main_conn, mode, item_lists, action_active, opensk_mutex);
             loop {
                 let msg = xous::receive_message(sid).unwrap();
                 let opcode: Option<ActionOp> = FromPrimitive::from_usize(msg.body.id());
@@ -68,6 +72,8 @@ pub(crate) fn start_actions_thread(
                         manager.activate();
                         manager.menu_addnew();
                         // this is necessary so the next redraw shows the newly added entry
+                        // no cache clear is called for because new entries will always add to the list;
+                        // there is no risk of "stale" entries persisting
                         manager.retrieve_db();
                         manager.deactivate();
                     },
@@ -90,12 +96,14 @@ pub(crate) fn start_actions_thread(
                     Some(ActionOp::MenuUnlockBasis) => {
                         manager.activate();
                         manager.unlock_basis();
+                        manager.item_lists.lock().unwrap().pw.clear(); // clear the cached item list for passwords (totp/fido are not cached and don't need clearing)
                         manager.retrieve_db();
                         manager.deactivate();
                     },
                     Some(ActionOp::MenuManageBasis) => {
                         manager.activate();
                         manager.manage_basis();
+                        manager.item_lists.lock().unwrap().pw.clear(); // clear the cached item list for passwords
                         manager.retrieve_db();
                         manager.deactivate();
                     }
@@ -104,6 +112,13 @@ pub(crate) fn start_actions_thread(
                         manager.activate();
                         manager.deactivate();
                     },
+                    Some(ActionOp::UpdateOneItem) => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
+                        manager.activate();
+                        manager.update_db_entry(entry);
+                        manager.deactivate();
+                    }
                     Some(ActionOp::UpdateMode) => msg_blocking_scalar_unpack!(msg, _, _, _, _,{
                         manager.retrieve_db();
                         xous::return_scalar(msg.sender, 1).unwrap();
@@ -138,6 +153,7 @@ struct ActionManager<'a> {
     pddb: RefCell::<pddb::Pddb>,
     tt: ticktimer_server::Ticktimer,
     action_active: Arc::<AtomicBool>,
+    opensk_mutex: Arc::<Mutex::<i32>>,
     mode_cache: VaultMode,
     main_conn: xous::CID,
     #[cfg(feature="vaultperf")]
@@ -154,7 +170,8 @@ impl<'a> ActionManager<'a> {
         main_conn: xous::CID,
         mode: Arc::<Mutex::<VaultMode>>,
         item_lists: Arc::<Mutex::<ItemLists>>,
-        action_active: Arc::<AtomicBool>
+        action_active: Arc::<AtomicBool>,
+        opensk_mutex: Arc::<Mutex::<i32>>,
     ) -> ActionManager<'a> {
         let xns = xous_names::XousNames::new().unwrap();
         let storage_manager = storage::Manager::new(&xns);
@@ -185,6 +202,7 @@ impl<'a> ActionManager<'a> {
             pddb: RefCell::new(pddb::Pddb::new()),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             action_active,
+            opensk_mutex,
             main_conn,
             #[cfg(feature="vaultperf")]
             perfbuf,
@@ -484,14 +502,24 @@ impl<'a> ActionManager<'a> {
 
             if choice.is_none() {
                 // we're dealing with FIDO stuff, use the custom code path
-                match self.pddb.borrow().get(U2F_APP_DICT, entry.key_name.as_str().unwrap_or("UTF8-error"),
-                    None, false, false, None, None::<fn()>
+                let dictionary = match usize::from_str_radix(entry.key_name.as_str().unwrap_or("UTF8-error"), 10) {
+                    Ok(fido_key) => {
+                        if vault::ctap::storage::key::CREDENTIALS.contains(&fido_key) {
+                            persistent_store::store::OPENSK2_DICT // heuristic: all fido2 keys are simple integers
+                        } else {
+                            U2F_APP_DICT
+                        }
+                    }
+                    Err(_) => U2F_APP_DICT, // u2f keys are long hex strings
+                };
+                match self.pddb.borrow().get(dictionary, entry.key_name.as_str().unwrap_or("UTF8-error"),
+                None, false, false, None, None::<fn()>
                 ) {
                     Ok(candidate) => {
                         let attr = candidate.attributes().expect("couldn't get key attributes");
                         match self.pddb.borrow()
                         .delete_key(
-                            U2F_APP_DICT,
+                            dictionary,
                             entry.key_name.as_str().unwrap_or("UTF8-error"),
                             Some(&attr.basis)
                         ) {
@@ -501,18 +529,84 @@ impl<'a> ActionManager<'a> {
                             Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
                     }
-                     Err(e) => {
+                    Err(e) => {
                         self.report_err(t!("vault.error.not_found", xous::LANG), Some(e));
                     }
                 }
             } else {
                 // we're deleting either a password, or a totp
-                match self.storage.borrow_mut().delete(choice.unwrap(), entry.key_name.as_str().unwrap_or("UTF-8 error")) {
+                let choice = choice.unwrap();
+                let guid = entry.key_name.as_str().unwrap_or("UTF8-error");
+                if entry.mode == VaultMode::Password {
+                    // self.modals.show_notification(&format!("deleting key {}", guid), None).ok();
+                    // if it's a password, we have to pull the full record, and then reconstitute the item_lists index key so we can remove it from the UX cache
+                    let storage = self.storage.borrow_mut();
+                    let pw: storage::PasswordRecord =  match storage.get_record(&choice, guid) {
+                        Ok(record) => record,
+                        Err(error) => {
+                            self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
+                            return;
+                        }
+                    };
+                    let mut desc = String::with_capacity(256);
+                    make_pw_name(&pw.description, &pw.username, &mut desc);
+                    let key = ListItem::key_from_parts(&desc, guid);
+                    self.item_lists.lock().unwrap().pw.remove(&key);
+                    /*
+                    if self.item_lists.lock().unwrap().pw.remove(&key).is_some() {
+                        self.modals.show_notification(&format!("deleted UX {}", &key), None).ok();
+                    } else {
+                        self.modals.show_notification(&format!("could not delete UX {}", &key), None).ok();
+                    }; */
+                }
+                match self.storage.borrow_mut().delete(choice, guid) {
                     Ok(_) => self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok().unwrap(),
                     Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                 }
             }
+            self.pddb.borrow().sync().ok();
         }
+    }
+
+    /// Update UX cached data for just one entry
+    pub(crate) fn update_db_entry(&mut self, entry: SelectedEntry) {
+        match entry.mode {
+            VaultMode::Password => {
+                let choice = storage::ContentKind::Password;
+                let guid = entry.key_name.as_str().unwrap_or("UTF8-error");
+                let storage = self.storage.borrow_mut();
+                let pw: storage::PasswordRecord =  match storage.get_record(&choice, guid) {
+                    Ok(record) => record,
+                    Err(error) => {
+                        self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
+                        return;
+                    }
+                };
+                // create the list item from the updated entry
+                let mut desc = String::with_capacity(256);
+                make_pw_name(&pw.description, &pw.username, &mut desc);
+                let mut extra = String::with_capacity(256);
+                let human_time = atime_to_str(pw.atime);
+                extra.push_str(&human_time);
+                extra.push_str("; ");
+                extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
+                extra.push_str(&pw.count.to_string());
+                let li = ListItem {
+                    name: desc.to_string(), // these allocs will be slow, but we do it only once on boot
+                    extra: extra.to_string(),
+                    dirty: true,
+                    guid: guid.to_string(),
+                    atime: pw.atime,
+                    count: pw.count,
+                };
+                log::debug!("updating {} to list item {}", li.extra, li.key());
+                let il = &mut self.item_lists.lock().unwrap().pw;
+                assert!(il.insert(li.key(), li).is_some(), "Somehow, the autotyped record isn't in the UX list for updating!");
+            },
+            _ => {
+                // no cached data, no action
+            }
+        };
     }
 
     pub(crate) fn menu_edit(&mut self, entry: SelectedEntry) {
@@ -528,7 +622,7 @@ impl<'a> ActionManager<'a> {
             // storage format that's a bit funkier to edit.
             let maybe_update = match self.pddb.borrow().get(
                 dict, entry.key_name.as_str().unwrap(), None,
-                false, false, None, Some(crate::basis_change)
+                false, false, None, Some(basis_change)
             ) {
                 Ok(mut record) => {
                     // resolve the basis of the key, so that we are editing it "in place"
@@ -536,7 +630,7 @@ impl<'a> ActionManager<'a> {
                     let mut data = Vec::<u8>::new();
                     let maybe_update = match record.read_to_end(&mut data) {
                         Ok(_len) => {
-                            if let Some(mut ai) = crate::fido::deserialize_app_info(data) {
+                            if let Some(mut ai) = deserialize_app_info(data) {
                                 let edit_data = if ai.notes != t!("vault.notes", xous::LANG) {
                                     self.modals
                                     .alert_builder(t!("vault.edit_dialog", xous::LANG))
@@ -576,10 +670,10 @@ impl<'a> ActionManager<'a> {
                 match self.pddb.borrow().get(
                     dict, entry.key_name.as_str().unwrap(), Some(&basis),
                     false, true, Some(VAULT_ALLOC_HINT),
-                    Some(crate::basis_change)
+                    Some(basis_change)
                 ) {
                     Ok(mut record) => {
-                        let ser = crate::fido::serialize_app_info(&update);
+                        let ser = serialize_app_info(&update);
                         record.write(&ser).unwrap_or_else(|e| {
                             self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); 0});
                     }
@@ -651,7 +745,12 @@ impl<'a> ActionManager<'a> {
                         return;
                     }
                 };
+                // remove the entry from the old UX list
+                let mut desc = String::new();
+                make_pw_name(&pw.description, &pw.username, &mut desc);
+                self.item_lists.lock().unwrap().pw.remove(&ListItem::key_from_parts(&desc, key_name));
 
+                // display previous data for edit
                 let edit_data = if pw.notes != t!("vault.notes", xous::LANG) {
                     self.modals
                     .alert_builder(t!("vault.edit_dialog", xous::LANG))
@@ -674,6 +773,86 @@ impl<'a> ActionManager<'a> {
                 pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
                 pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
                 pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
+
+                // if the password is empty, prompt to generate a new password
+                if pw.password.len() == 0 {
+                    let pg = PasswordGenerator {
+                        length: 20,
+                        numbers: true,
+                        lowercase_letters: true,
+                        uppercase_letters: true,
+                        symbols: true,
+                        spaces: false,
+                        exclude_similar_characters: true,
+                        strict: true,
+                    };
+                    let mut password = pg.generate_one().unwrap();
+                    let mut approved = false;
+                    while !approved {
+                        let maybe_password = match self.modals
+                            .alert_builder(t!("vault.newitem.password", xous::LANG))
+                            .field(Some(password), Some(password_validator))
+                            .build()
+                        {
+                            Ok(text) => {
+                                text.content()[0].content.as_str().unwrap().to_string()
+                            },
+                            _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
+                        };
+                        #[cfg(feature="ux-swap-delay")]
+                        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                        password = if maybe_password.len() == 0 {
+                            let length = match self.modals
+                                .alert_builder(t!("vault.newitem.configure_length", xous::LANG))
+                                .field(Some("20".to_string()), Some(length_validator))
+                                .build()
+                            {
+                                Ok(entry) => entry.content()[0].content.as_str().unwrap().parse::<u32>().unwrap(),
+                                _ => {log::error!("Length entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
+                            };
+                            #[cfg(feature="ux-swap-delay")]
+                            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                            let mut upper = false;
+                            let mut number = false;
+                            let mut symbol = false;
+                            self.modals
+                                .add_list(vec![
+                                    t!("vault.newitem.uppercase", xous::LANG),
+                                    t!("vault.newitem.numbers", xous::LANG),
+                                    t!("vault.newitem.symbols", xous::LANG),
+                                ]).expect("couldn't create configuration modal");
+                            match self.modals.get_checkbox(t!("vault.newitem.configure_generator", xous::LANG)) {
+                                Ok(options) => {
+                                    for opt in options {
+                                        if opt == t!("vault.newitem.uppercase", xous::LANG) {upper = true;}
+                                        if opt == t!("vault.newitem.numbers", xous::LANG) {number = true;}
+                                        if opt == t!("vault.newitem.symbols", xous::LANG) {symbol = true;}
+                                    }
+                                }
+                                _ => {log::error!("Modal selection error"); self.action_active.store(false, Ordering::SeqCst); return}
+                            }
+                            #[cfg(feature="ux-swap-delay")]
+                            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                            let pg2 = PasswordGenerator {
+                                length: length as usize,
+                                numbers: number,
+                                lowercase_letters: true,
+                                uppercase_letters: upper,
+                                symbols: symbol,
+                                spaces: false,
+                                exclude_similar_characters: true,
+                                strict: true,
+                            };
+                            approved = false;
+                            pg2.generate_one().unwrap()
+                        } else {
+                            approved = true;
+                            maybe_password
+                        };
+                    }
+                    pw.password = password;
+                }
+
                 // note the edit access, this counts as an access since the password was revealed
                 pw.count += 1;
                 pw.atime = utc_now().timestamp() as u64;
@@ -756,15 +935,12 @@ impl<'a> ActionManager<'a> {
                                 if pw_rec.from_vec(data).is_ok() {
                                     // reset the re-usable structures
                                     lookup_key.clear();
-                                    desc.clear();
                                     extra.clear();
                                     #[cfg(feature="vaultperf")]
                                     self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
 
                                     // build the description string
-                                    desc.push_str(&pw_rec.description);
-                                    desc.push_str("/");
-                                    desc.push_str(&pw_rec.username);
+                                    make_pw_name(&pw_rec.description, &pw_rec.username, &mut desc);
 
                                     // build the storage key in the list array
                                     lookup_key.push_str(&desc);
@@ -780,7 +956,8 @@ impl<'a> ActionManager<'a> {
                                         self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
                                         if prev_entry.atime != pw_rec.atime || prev_entry.count != pw_rec.count {
                                             // this is expensive, so don't run it unless we have to
-                                            let human_time = crate::ux::atime_to_str(pw_rec.atime);
+                                            let human_time = atime_to_str(pw_rec.atime);
+                                            // note this code is duplicated in update_db_entry()
                                             extra.push_str(&human_time);
                                             extra.push_str("; ");
                                             extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
@@ -806,7 +983,7 @@ impl<'a> ActionManager<'a> {
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 4, std::line!());
 
-                                        let human_time = crate::ux::atime_to_str(pw_rec.atime);
+                                        let human_time = atime_to_str(pw_rec.atime);
 
                                         extra.push_str(&human_time);
                                         extra.push_str("; ");
@@ -831,6 +1008,19 @@ impl<'a> ActionManager<'a> {
                                     log::warn!("Couldn't interpret password record: {}", key.name);
                                 }
                             } else {
+                                /* // this code helps to trace down which key had OOM'd, if it turns out to be an issue
+                                let mut oom_key = String::new();
+                                make_pw_name(&pw_rec.description, &pw_rec.username, &mut oom_key);
+                                let li = ListItem {
+                                    name: oom_key.to_string(),
+                                    extra: "Maybe OOM record".to_string(),
+                                    dirty: true,
+                                    guid: key.name,
+                                    atime: 0,
+                                    count: 0,
+                                };
+                                il.insert(li.key(), li); // this push is very slow, but we only have to do it once on boot
+                                */
                                 oom_keys += 1;
                             }
                             #[cfg(feature="vaultperf")]
@@ -870,11 +1060,11 @@ impl<'a> ActionManager<'a> {
                             if let Some(data) = key.data {
                                 if let Some(ai) = deserialize_app_info(data) {
                                     let extra = format!("{}; {}{}",
-                                        crate::ux::atime_to_str(ai.atime),
+                                        atime_to_str(ai.atime),
                                         t!("vault.u2f.appinfo.authcount", xous::LANG),
                                         ai.count,
                                     );
-                                    let desc = format!("{}", ai.name);
+                                    let desc = format!("{} (U2F)", ai.name);
                                     let li = ListItem {
                                         name: desc,
                                         extra,
@@ -912,58 +1102,68 @@ impl<'a> ActionManager<'a> {
                     },
                 }
 
-                log::debug!("listing in {}", FIDO_CRED_DICT);
-                match self.pddb.borrow().read_dict(FIDO_CRED_DICT, None, Some(256 * 1024)) {
-                    Ok(keys) => {
-                        let mut oom_keys = 0;
-                        for key in keys {
-                            if let Some(data) = key.data {
-                                match crate::ctap::storage::deserialize_credential(&data) {
-                                    Some(result) => {
-                                        let name = if let Some(display_name) = result.user_display_name {
-                                            display_name
-                                        } else {
-                                            String::from_utf8(result.user_handle).unwrap_or("".to_string())
-                                        };
-                                        let desc = format!("{} / {}", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
-                                        let extra = format!("FIDO2 {}", name);
-                                        let li = ListItem {
-                                            name: desc,
-                                            extra,
-                                            dirty: true,
-                                            guid: key.name,
-                                            count: 0,
-                                            atime: 0,
-                                        };
-                                        il.insert(li.key(), li);
+                {   // this brace creates a block that defines the lifetime of `mutex`; it is released on drop as it goes out of scope
+                    // access to OPENSK2_DICT has to be mutex-guarded, otherwise we get errors as the
+                    // OpenSK thread mutates the dictionary while we query it
+                    let mutex = self.opensk_mutex.lock().unwrap();
+                    log::debug!("listing in {}", OPENSK2_DICT);
+                    match self.pddb.borrow().read_dict(OPENSK2_DICT, None, Some(256 * 1024)) {
+                        Ok(keys) => {
+                            let mut oom_keys = 0;
+                            for key in keys {
+                                let key_number = key.name.parse::<usize>().unwrap_or(0);
+                                if vault::ctap::storage::key::CREDENTIALS.contains(&key_number) {
+                                    if let Some(data) = key.data {
+                                        match vault::ctap::storage::deserialize_credential(&data) {
+                                            Some(result) => {
+                                                let name = if let Some(display_name) = result.user_display_name {
+                                                    display_name
+                                                } else {
+                                                    String::from_utf8(result.user_handle).unwrap_or("".to_string())
+                                                };
+                                                let desc = format!("{} / {} (FIDO2)", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
+                                                let extra = format!("{}", name);
+                                                let li = ListItem {
+                                                    name: desc,
+                                                    extra,
+                                                    dirty: true,
+                                                    guid: key.name,
+                                                    count: 0,
+                                                    atime: 0,
+                                                };
+                                                il.insert(li.key(), li);
+                                            }
+                                            None => {
+                                                // Probably more indicative of a mismatch in OpenSK key range mapping, rather than a hard error.
+                                                let err = format!("{}:{}:{}: ({}){:x?}...",
+                                                    key.basis, OPENSK2_DICT, key.name, key.len, &data[..16]
+                                                );
+                                                log::info!("Couldn't deserialize FIDO2 key {}", err);
+                                            },
+                                        }
+                                    } else {
+                                        oom_keys += 1;
                                     }
-                                    None => {
-                                        let err = format!("{}:{}:{}: ({}){:x?}...",
-                                            key.basis, FIDO_CRED_DICT, key.name, key.len, &data[..16]
-                                        );
-                                        self.report_err("Couldn't deserialize FIDO2:", Some(err))
-                                    },
                                 }
-                            } else {
-                                oom_keys += 1;
+                            }
+                            if oom_keys != 0 {
+                                log::warn!("Ran out of cache space handling FIDO2 tokens. {} tokens are not loaded.", oom_keys);
+                                self.report_err(&format!("Ran out of cache space handling FIDO2 entries. {} tokens not loaded", oom_keys), None::<crate::storage::Error>);
                             }
                         }
-                        if oom_keys != 0 {
-                            log::warn!("Ran out of cache space handling FIDO2 tokens. {} tokens are not loaded.", oom_keys);
-                            self.report_err(&format!("Ran out of cache space handling FIDO2 entries. {} tokens not loaded", oom_keys), None::<crate::storage::Error>);
-                        }
+                        Err(e) => {
+                            match e.kind() {
+                                ErrorKind::NotFound => {
+                                    // this is fine, it just means no entries have been entered yet
+                                },
+                                _ => {
+                                    log::error!("Error opening FIDO2 dictionary");
+                                    self.report_err("Error opening FIDO2 dictionary", Some(e))
+                                }
+                            }
+                        },
                     }
-                    Err(e) => {
-                        match e.kind() {
-                            ErrorKind::NotFound => {
-                                // this is fine, it just means no entries have been entered yet
-                            },
-                            _ => {
-                                log::error!("Error opening FIDO2 dictionary");
-                                self.report_err("Error opening FIDO2 dictionary", Some(e))
-                            }
-                        }
-                    },
+                    drop(mutex);
                 }
             }
             VaultMode::Totp => {
@@ -1158,8 +1358,6 @@ impl<'a> ActionManager<'a> {
 
     #[cfg(feature="vault-testing")]
     pub(crate) fn populate_tests(&mut self) {
-        use crate::ux::serialize_app_info;
-
         self.modals.dynamic_notification(Some("Creating test entries..."), None).ok();
         let words = [
             "bunnie", "foo", "turtle.net", "Fox.ng", "Bear", "dog food", "Cat.com", "FUzzy", "1off", "www_test_site_com/long_name/stupid/foo.htm",
@@ -1211,7 +1409,7 @@ impl<'a> ActionManager<'a> {
             }
         }
         // --- U2F + FIDO ---
-        let fido = self.pddb.borrow().list_keys(FIDO_CRED_DICT, None).unwrap_or(Vec::new());
+        let fido = self.pddb.borrow().list_keys(OPENSK2_DICT, None).unwrap_or(Vec::new());
         let u2f = self.pddb.borrow().list_keys(U2F_APP_DICT, None).unwrap_or(Vec::new());
         let total = fido.len() + u2f.len();
         if total < TARGET_ENTRIES {
@@ -1223,7 +1421,7 @@ impl<'a> ActionManager<'a> {
                 let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
                 let mut id = [0u8; 32];
                 self.trng.borrow_mut().fill_bytes(&mut id);
-                let record = crate::AppInfo {
+                let record = AppInfo {
                     name,
                     id,
                     notes,
@@ -1237,7 +1435,7 @@ impl<'a> ActionManager<'a> {
                     U2F_APP_DICT,
                     &app_id_str,
                     None, true, true,
-                    Some(256), Some(crate::basis_change)
+                    Some(256), Some(basis_change)
                 ) {
                     Ok(mut app_data) => {
                         match app_data.write(&ser) {
@@ -1254,16 +1452,17 @@ impl<'a> ActionManager<'a> {
             let xns = xous_names::XousNames::new().unwrap();
             let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
             for index in 0..extra_fido {
-                use crate::ctap::data_formats::*;
-                let c_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
-                let cred_id = format!("{} {} {}", c_id[0], c_id[1], index);
+                use vault::ctap::data_formats::*;
+                use ctap_crypto::rng256::Rng256;
+                let _c_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
+                let cred_id = format!("{}", index + 1800); // 1800 is extracted from ctap/storage/keys.rs; 1700 is the start of the credential region, this sticks it...somewhere "above" that
                 let r_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
                 let rp_id = format!("{} {}", r_id[0], r_id[1]);
                 let handle = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
                 let new_credential = PublicKeyCredentialSource {
                     key_type: PublicKeyCredentialType::PublicKey,
-                    credential_id: cred_id.as_bytes().to_vec(),
-                    private_key: ctap_crypto::ecdsa::SecKey::gensk(&mut rng),
+                    credential_id: rng.gen_uniform_u8x32().to_vec(),
+                    private_key: vault::ctap::crypto_wrapper::PrivateKey::Ecdsa(rng.gen_uniform_u8x32()),
                     rp_id,
                     user_handle: handle.as_bytes().to_vec(),
                     user_display_name: None,
@@ -1271,16 +1470,18 @@ impl<'a> ActionManager<'a> {
                     creation_order: 0,
                     user_name: None,
                     user_icon: None,
+                    cred_blob: None,
+                    large_blob_key: None,
                 };
                 let shortid = &cred_id;
                 match self.pddb.borrow().get(
-                    FIDO_CRED_DICT,
+                    OPENSK2_DICT,
                     shortid,
                     None, true, true,
-                    Some(crate::ctap::storage::CRED_INITAL_SIZE), Some(crate::basis_change)
+                    Some(128), Some(basis_change)
                 ) {
                     Ok(mut cred) => {
-                        let value = crate::ctap::storage::serialize_credential(new_credential).unwrap();
+                        let value = vault::ctap::storage::serialize_credential(new_credential).unwrap();
                         match cred.write(&value) {
                             Ok(len) => {
                                 log::debug!("fido2 wrote {} bytes", len);
@@ -1451,4 +1652,11 @@ pub(crate) fn heap_usage() -> usize {
             0
          },
     }
+}
+
+fn make_pw_name(description: &str, username: &str, dest: &mut String) {
+    dest.clear();
+    dest.push_str(description);
+    dest.push_str("/");
+    dest.push_str(username);
 }

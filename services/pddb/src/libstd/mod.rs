@@ -7,6 +7,16 @@ use crate::FileHandle;
 
 use senres::{Senres, SenresMut};
 
+#[repr(u8)]
+enum FileType {
+    Basis = 0,
+    Dict = 1,
+    Key = 2,
+    DictKey = 3,
+    None = 4,
+    // Unknown = 5, // Currently unused
+}
+
 fn get_fd(
     fds: &mut Vec<Option<crate::FileHandle>>,
     fd: usize,
@@ -74,7 +84,7 @@ pub(crate) fn stat_path(
             for s in &basis_list {
                 if s == basis {
                     // Kind
-                    writer.append(0u8);
+                    writer.append(FileType::Basis as u8);
                     // Length
                     writer.append(0u64);
                     return Ok(());
@@ -83,7 +93,7 @@ pub(crate) fn stat_path(
 
             // Otherwise, indicate it's nothing
             log::error!("remainder is empty on {} and basis doesn't exist", path);
-            writer.append(4u8);
+            writer.append(FileType::None as u8);
             return Ok(());
         }
     }
@@ -92,7 +102,7 @@ pub(crate) fn stat_path(
 
     // The root is a dict
     if stripped_path == "" {
-        writer.append(1u8); // Dict
+        writer.append(FileType::Dict as u8); // Dict
         return Ok(());
     }
 
@@ -104,7 +114,7 @@ pub(crate) fn stat_path(
     // Find all keys that are in this dict. Ignore errors, since sometimes
     // the dict doesn't exist, which is fine.
     if let Some((dict_path, key_path)) = stripped_path.rsplit_once(std::path::MAIN_SEPARATOR) {
-        if let Some(key_list) = basis_cache
+        if let Some((key_list, _, _)) = basis_cache
             .key_list(pddb_os, dict_path, basis.as_deref())
             .map_err(|e| {
                 // log::error!("unable to get key list: {:?}", e);
@@ -120,15 +130,12 @@ pub(crate) fn stat_path(
 
     // Add the count of entries
     let val = match (is_dict, is_key) {
-        (true, false) => 1u8,
-        (false, true) => 2u8,
-        (true, true) => 3u8,
-        (false, false) => 4u8,
+        (true, false) => FileType::Dict,
+        (false, true) => FileType::Key,
+        (true, true) => FileType::DictKey,
+        (false, false) => FileType::None,
     };
-    if val == 4 {
-        log::error!("path {} couldn't be found", path);
-    }
-    writer.append(val);
+    writer.append(val as u8);
     // Placeholder for file length
     writer.append(0u64);
 
@@ -189,7 +196,7 @@ pub(crate) fn list_path(
     let dict_list = basis_cache.dict_list(pddb_os, basis.as_deref());
     // Find all keys that are in this dict. Ignore errors, since sometimes
     // the dict doesn't exist, which is fine.
-    let key_list = basis_cache
+    let (key_list, _, _) = basis_cache
         .key_list(pddb_os, dict, basis.as_deref())
         .map_err(|e| {
             // log::error!("unable to get key list: {:?}", e);
@@ -802,7 +809,7 @@ pub(crate) fn list_key(
         .writer(*b"LiKR")
         .ok_or(crate::PddbRetcode::InternalError)?;
 
-    let key_list = basis_cache
+    let (key_list, _, _) = basis_cache
         .key_list(pddb_os, &key, bname.as_deref())
         .or_else(|e| {
             log::error!(
@@ -841,7 +848,7 @@ pub(crate) fn delete_dict(
             .or(Err(crate::PddbRetcode::InternalError))?;
     let dict = dict.ok_or(crate::PddbRetcode::InternalError)?;
 
-    if let Some(key_list) = basis_cache
+    if let Some((key_list, _, _)) = basis_cache
         .key_list(pddb_os, &dict, bname.as_deref())
         .map_err(|e| {
             // log::error!("unable to get key list: {:?}", e);

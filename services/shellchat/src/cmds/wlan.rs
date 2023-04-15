@@ -153,7 +153,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     let _ = match env.com.wlan_status() {
                         Ok(msg) => {
                             log::info!("{}WLAN.STATUS,{:?},{}", xous::BOOKEND_START, std::net::IpAddr::from(msg.ipv4.addr), xous::BOOKEND_END);
-                            write!(ret, "{:?}", msg)
+                            write!(ret, "{:?}\n{:x?}", msg, msg)
                         },
                         Err(e) => write!(ret, "Error: {:?}", e),
                     };

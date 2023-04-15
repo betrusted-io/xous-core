@@ -156,7 +156,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     env.llio.wfi_override(true).unwrap();
 
                     let vccint = env.llio.adc_vccint().unwrap() as f32 / 1365.0;
-                    if vccint < 0.92 || vccint > 0.98 {
+                    if vccint < 0.92 || vccint > 1.05 {
                         log::info!("{}|VCCINT|FAIL|{}", SENTINEL, vccint);
                     } else {
                         log::info!("{}|VCCINT|PASS|{}", SENTINEL, vccint);
@@ -328,7 +328,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                 }
                 "kill" => {
                     log::info!("{}|KILL|", SENTINEL);
-                    env.ticktimer.sleep_ms(500).unwrap();
+                    env.llio.wfi_override(true).unwrap();
+                    env.com.set_backlight(0, 0).unwrap();
+                    env.ticktimer.sleep_ms(800).unwrap();
                     env.llio.self_destruct(0x2718_2818).unwrap();
                     env.llio.self_destruct(0x3141_5926).unwrap();
                     env.ticktimer.sleep_ms(100).unwrap();
@@ -466,6 +468,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("initiating suspend");
                     env.ticktimer.sleep_ms(250).unwrap(); // give a moment for all the command queues to clear
                     susres.initiate_suspend().unwrap();
+                    log::info!("resumed");
                     env.ticktimer.sleep_ms(1000).unwrap(); // pause for the suspend/resume cycle
 
                     let timeout = 60_000;
@@ -629,6 +632,21 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "Ship mode request denied").unwrap();
                     }
                 }
+                #[cfg(feature="extra-tests")]
+                "timeblock" => {
+                    let time_cid = xous::connect(xous::SID::from_bytes(b"timeserverpublic").unwrap()).unwrap();
+                    let result = xous::send_message(time_cid,
+                        xous::Message::new_blocking_scalar(3, 0, 0, 0, 0)
+                    ).unwrap();
+                    match result {
+                        xous::Result::Scalar2(msb, lsb) => {
+                            log::info!("GetTimeUtc: {}, {}", msb, lsb);
+                        }
+                        _ => {
+                            log::info!("GetTimeUtc returned an unexpected result");
+                        }
+                    }
+                }
                 #[cfg(feature="ditherpunk")]
                 "modals" => {
                     modals::tests::spawn_test();
@@ -657,6 +675,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("{:?}", state);
                     write!(ret, "{:?}", state).ok();
                 }
+                #[cfg(feature="dbg-ecupdate")]
                 "ecup" => {
                     let ecup_conn = env.xns.request_connection_blocking("__ECUP server__").unwrap();
                     xous::send_message(ecup_conn,
@@ -833,7 +852,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         2 => self.freq = 987.77,
                         _ => self.freq = 659.25,
                     }
-                    if elapsed - self.oqc_start > 6000 {
+                    if elapsed - self.oqc_start > 15000 {
                         self.codec.abort().unwrap();
 
                         // put system automatically into ship mode at conclusion of test

@@ -22,7 +22,7 @@ pub enum Opcode {
     /// disconnect, given a server name and a cryptographically unique, one-time use token
     Disconnect = 4,
 
-    /// indicates if all inherentely trusted slots have been occupied. Should not run untrusted code until this is the case.
+    /// indicates if all inherently trusted slots have been occupied. Should not run untrusted code until this is the case.
     TrustedInitDone = 5,
 
     /// Connect to a Server, blocking if the Server does not exist. When the Server is started,

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::mem::MemoryManager;
+use crate::arch::process::InitialProcess;
 use core::fmt;
 use riscv::register::satp;
 use xous_kernel::{MemoryFlags, PID};
@@ -30,13 +31,12 @@ extern "C" {
     fn flush_mmu();
 }
 
-pub unsafe fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8 {
-    let mut i = 0;
-    while i < n {
-        *s.add(i) = c as u8;
-        i += 1;
-    }
-    s
+unsafe fn zeropage(s: *mut u32) {
+    let page = core::slice::from_raw_parts_mut(
+        s,
+        PAGE_SIZE / core::mem::size_of::<u32>()
+    );
+    page.fill(0);
 }
 
 bitflags! {
@@ -110,8 +110,13 @@ impl MemoryMapping {
     // pub fn set(&mut self, root_addr: usize, pid: PID) {
     //     self.satp: 0x8000_0000 | (((pid as usize) << 22) & (((1 << 9) - 1) << 22)) | (root_addr >> 12)
     // }
+    #[allow(dead_code)]
     pub unsafe fn from_raw(&mut self, satp: usize) {
         self.satp = satp;
+    }
+
+    pub unsafe fn from_init_process(&mut self, init: InitialProcess) {
+        self.satp = init.satp;
     }
 
     /// Allocate a brand-new memory mapping. When this memory mapping is created,
@@ -351,7 +356,8 @@ impl MemoryMapping {
 
             // Zero-out the new page
             let page_addr = l0pt_virt as *mut usize;
-            unsafe { memset(page_addr as *mut u8, 0, PAGE_SIZE) };
+            unsafe { zeropage(page_addr as *mut u32)
+            };
         }
 
         let l0_pt = &mut unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
@@ -620,7 +626,7 @@ pub fn map_page_inner(
         )?;
 
         // Zero-out the new page
-        unsafe { memset(l0_pt as *mut u8, 0, PAGE_SIZE) };
+        unsafe { zeropage(l0_pt as *mut u32) };
     }
 
     // Ensure the entry hasn't already been mapped.
@@ -922,7 +928,7 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
         flush_mmu();
 
         // Zero-out the page
-        memset(virt as *mut u8, 0, PAGE_SIZE);
+        zeropage(virt as *mut u32);
 
         // Move the page into userspace
         *entry = (ppn1 << 20)

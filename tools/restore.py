@@ -33,6 +33,22 @@ class PrecursorUsb:
     def register(self, name):
         return int(self.registers[name], 0)
 
+    def halt(self):
+        if 'vexriscv_debug' in self.regions:
+            self.poke(int(self.regions['vexriscv_debug'][0], 0), 0x00020000)
+        elif 'reboot_cpu_hold_reset' in self.registers:
+            self.poke(self.register('reboot_cpu_hold_reset'), 1)
+        else:
+            print("Can't find reset CSR. Try updating to the latest version of this program")
+
+    def unhalt(self):
+        if 'vexriscv_debug' in self.regions:
+            self.poke(int(self.regions['vexriscv_debug'][0], 0), 0x02000000)
+        elif 'reboot_cpu_hold_reset' in self.registers:
+            self.poke(self.register('reboot_cpu_hold_reset'), 0)
+        else:
+            print("Can't find reset CSR. Try updating to the latest version of this program")
+
     def peek(self, addr, display=False):
         _dummy_s = '\x00'.encode('utf-8')
         data = array.array('B', _dummy_s * 4)
@@ -641,6 +657,7 @@ def main():
             # now try to download all the artifacts and check their versions
             # this list should visit kernels in order from newest to oldest.
             URL_LIST = [
+                'https://ci.betrusted.io/releases/v0.9.12/',
                 'https://ci.betrusted.io/releases/v0.9.11/',
                 'https://ci.betrusted.io/releases/v0.9.10/',
                 'https://ci.betrusted.io/releases/v0.9.9/',
@@ -692,10 +709,9 @@ def main():
                 print("Abort by user request.")
                 exit(0)
 
-            vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
             pc_usb.ping_wdt()
             print("Halting CPU.")
-            pc_usb.poke(vexdbg_addr, 0x00020000)
+            pc_usb.halt()
 
             worklist = [
                 ['erase', "Disabling boot by erasing loader...", locs['LOC_LOADER'][0], 1024 * 256],
@@ -729,7 +745,7 @@ def main():
             print("Restore finished copying objects.\nYou will need to reboot by inserting a paperclip in the hole in the lower right hand side,\nand follow on-screen instructions")
 
             print("Resuming CPU.")
-            pc_usb.poke(vexdbg_addr, 0x02000000)
+            pc_usb.unhalt()
 
             print("Resetting SOC...")
             try:

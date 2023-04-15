@@ -9,6 +9,19 @@ use core::fmt::Write;
 use num_traits::ToPrimitive;
 use xous_ipc::{Buffer, String};
 
+/// A page-aligned stack allocation for connection requests
+#[repr(C, align(4096))]
+struct ConnectRequest {
+    name: [u8; 64],
+    len: u32,
+    _padding: [u8; 4096 - 4 - 64],
+}
+impl Default for ConnectRequest {
+    fn default() -> Self {
+        ConnectRequest { name: [0u8; 64], len: 0, _padding: [0u8; 4096 - 4 - 64] }
+    }
+}
+
 #[doc = include_str!("../README.md")]
 #[derive(Debug)]
 pub struct XousNames {
@@ -90,7 +103,7 @@ impl XousNames {
         name: &str,
     ) -> Result<(xous::CID, Option<[u32; 4]>), xous::Error> {
         let mut lookup_name = xous_ipc::String::<64>::new();
-        write!(lookup_name, "{}", name).expect("name problably too long");
+        write!(lookup_name, "{}", name).expect("name probably too long");
         let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;
 
         buf.lend_mut(self.conn, api::Opcode::Lookup.to_u32().unwrap())
@@ -127,7 +140,7 @@ impl XousNames {
     /// `request_connection_blocking()` for a call that will automatically retry.
     pub fn request_connection(&self, name: &str) -> Result<xous::CID, xous::Error> {
         let mut lookup_name = xous_ipc::String::<64>::new();
-        write!(lookup_name, "{}", name).expect("name problably too long");
+        write!(lookup_name, "{}", name).expect("name probably too long");
 
         let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;
 
@@ -145,17 +158,40 @@ impl XousNames {
     /// entire connection, so the return value is the process-local CID (connection ID);
     /// the 128-bit server ID is never revealed.
     ///
-    /// This call avoids synchronization issues on startup as servers register asynhcronously
-    /// by retrying the connection call until the server appears.
+    /// This call uses the API already in place in `libstd`, hence the different style of
+    /// argument passing, and tons of `unsafe` code.
     pub fn request_connection_blocking(&self, name: &str) -> Result<xous::CID, xous::Error> {
-        loop {
-            match self.request_connection(name) {
-                Ok(val) => return Ok(val),
-                Err(xous::Error::AccessDenied) => return Err(xous::Error::AccessDenied),
-                _ => (),
-            }
-            log::info!("connection to {} could not be established, retrying", name);
-            xous::yield_slice();
+        let mut cr: ConnectRequest = Default::default();
+        let name_bytes = name.as_bytes();
+
+        // Set the string length to the length of the passed-in String,
+        // or the maximum possible length. Which ever is smaller.
+        cr.len = cr.name.len().min(name_bytes.len()) as u32;
+
+        // Copy the string into our backing store.
+        for (&src_byte, dest_byte) in name_bytes.iter().zip(&mut cr.name) {
+            *dest_byte = src_byte;
+        }
+        log::debug!("connection requested {}", name);
+        let msg = xous::MemoryMessage {
+            id: api::Opcode::BlockingConnect.to_usize().unwrap(),
+            buf: unsafe{ // safety: `cr` is #[repr(C, align(4096))], and should be exactly on page in size
+                xous::MemoryRange::new(&mut cr as *mut _ as *mut u8 as usize, core::mem::size_of::<ConnectRequest>())?
+            },
+            offset: None,
+            valid: xous::MemorySize::new(cr.len as usize),
+        };
+        xous::send_message(self.conn, xous::Message::MutableBorrow(msg))?;
+
+        let response_ptr = &cr as *const ConnectRequest as *const u32;
+        let result = unsafe { response_ptr.read() }; // safety: because that's how it was packed on the server, a naked u32
+
+        if result == 0 {
+            let cid = unsafe { response_ptr.add(1).read() }.into(); // safety: because that's how it was packed on the server
+            log::debug!("connected to {}:{}", name, cid);
+            Ok(cid)
+        } else {
+            Err(xous::Error::InternalError)
         }
     }
 

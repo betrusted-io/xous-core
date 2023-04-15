@@ -95,12 +95,6 @@ fn handle_connection(
     chn: Sender<ThreadMessage>,
     should_exit: std::sync::Arc<core::sync::atomic::AtomicBool>,
 ) {
-    // enum ServerMessage {
-    //     Exit,
-    //     ServerPacket(Box<SysCall>),
-    //     ServerPacketWithData([usize; 9], Vec<u8>),
-    // }
-
     fn conn_thread(mut conn: TcpStream, sender: Sender<ThreadMessage>, pid: PID) {
         loop {
             let mut raw_data = [0u8; 9 * std::mem::size_of::<usize>()];
@@ -184,8 +178,6 @@ fn handle_connection(
         }
     }
 
-    // let (sender, receiver) = unbounded();
-    // let conn_sender = sender.clone();
     let conn_sender = chn.clone();
     let conn_thread = std::thread::Builder::new()
         .name(format!("PID {}: client connection thread", pid))
@@ -267,7 +259,6 @@ fn listen_thread(
         let NewPidMessage::NewPid(new_pid) = new_pid_channel
             .recv()
             .expect("couldn't receive message from main thread");
-        // println!("KERNEL({}): New client connected from {}", new_pid, _addr);
         let conn_copy = conn.try_clone().expect("couldn't duplicate connection");
         let should_exit = should_exit.clone();
         let jh = std::thread::Builder::new()
@@ -504,6 +495,17 @@ pub fn idle() -> bool {
                             .ok();
                     });
                     // println!("KERNEL: Done sending");
+                }
+
+                {
+                    let current_process = crate::arch::process::Process::current();
+                    if current_process.thread_exists(thread_id) {
+                        SystemServices::with_mut(|ss| {
+                            ss.switch_to_thread(pid, Some(thread_id))
+                        })
+                        .unwrap();
+                        crate::arch::process::Process::current().set_tid(thread_id).unwrap();
+                    }
                 }
 
                 // Handle the syscall within the Xous kernel

@@ -7,7 +7,7 @@ with open('README.md') as f:
 
 setup(
     name="precursorupdater",
-    version="0.1.1",
+    version="0.1.3",
     author="bunnie",
     description="Precursor USB Updater",
     long_description=long_description,

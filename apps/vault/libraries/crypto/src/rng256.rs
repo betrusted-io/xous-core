@@ -48,7 +48,7 @@ impl XousRng256 {
 impl Rng256 for XousRng256 {
     fn gen_uniform_u8x32(&mut self) -> [u8; 32] {
         let mut buf: [u8; 32] = [Default::default(); 32];
-        self.trng.fill_bytes(&mut buf);
+        self.trng.fill_bytes_via_next(&mut buf);
         buf
     }
 }

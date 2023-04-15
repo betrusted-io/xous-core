@@ -734,9 +734,8 @@ def main():
 
     print("\nPhase 2: Apply the update")
     print("Halting CPU for update.")
-    vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
     pc_usb.ping_wdt()
-    pc_usb.poke(vexdbg_addr, 0x00020000)
+    pc_usb.halt()
     for work in worklist:
 
         retry_usb = False
@@ -750,9 +749,8 @@ def main():
                         print("Abort by user request!\n\nSystem may not be bootable, but you can retry an update as long as you do not power-off or hard-reset the device.")
                         exit(0)
 
-                vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
                 pc_usb.ping_wdt()
-                pc_usb.poke(vexdbg_addr, 0x00020000)
+                pc_usb.halt()
                 retry_usb = False
 
             try:
@@ -781,7 +779,7 @@ def main():
                 retry_usb = True
 
     print("Resuming CPU.")
-    pc_usb.poke(vexdbg_addr, 0x02000000)
+    pc_usb.unhalt()
 
     print("Resetting SOC...")
     try:
@@ -792,7 +790,7 @@ def main():
 
     print("\nUpdate finished!\n")
     print("{}\nVisit the QR code above to help locate the hole, or go to https://ci.betrusted.io/i/reset.jpg.".format(QR_CODE))
-    print("You *must* reboot by inserting a paperclip in the hole in the lower right hand side, then follow the on-device instructions.")
+    print("Follow the on-device instructions and allow any follow-up actions to complete. Then, reset the device by inserting a paperclip to force a re-load the SoC image.")
 
 
 def auto_int(x):
