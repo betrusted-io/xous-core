@@ -43,6 +43,10 @@ pub(crate) enum Opcode {
     SerialFlush = 514,
     /// Hook eager serial sender. This is mean for e.g. using Precursor as an infinite source of random data.
     SerialHookEagerSender = 515,
+    /// Hook serial to the console input
+    SerialHookConsole = 516,
+    /// Clear any hooks
+    SerialClearHooks = 517,
 
     #[cfg(feature="mass-storage")]
     SetBlockDevice = 1024,

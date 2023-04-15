@@ -78,6 +78,8 @@ enum SerialListenMode {
     // hooked listener. If this mode is set and there is no listener, it will buffer data "indefinitely"
     // (e.g. until local heap is exhausted and the system panics)
     BinaryListener,
+    // this will take any serial input and pass it on as if one was typing at the console
+    ConsoleListener,
 }
 
 pub(crate) fn main_hw() -> ! {
@@ -590,6 +592,25 @@ pub(crate) fn main_hw() -> ! {
                                         }
                                     }
                                 }
+                                SerialListenMode::ConsoleListener => {
+                                    match serial_port.read(&mut data) {
+                                        Ok(len) => {
+                                            match std::str::from_utf8(&data[..len]) {
+                                                Ok(s) => {
+                                                    for c in s.chars() {
+                                                        native_kbd.inject_key(c);
+                                                    }
+                                                },
+                                                Err(_) => {
+                                                    log::info!("Non UTF-8 received on console: {:x?}", &data[..len]);
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::info!("Serial read error: {:?}", e);
+                                        }
+                                    }
+                                }
                                 SerialListenMode::AsciiListener(maybe_delimiter) => {
                                     let readlen = serial_port.read(&mut data).unwrap_or(0);
                                     if readlen == 0 {
@@ -1072,6 +1093,15 @@ pub(crate) fn main_hw() -> ! {
                 serial_listen_mode = SerialListenMode::BinaryListener;
                 serial_listener = Some(msg);
             },
+            Some(Opcode::SerialHookConsole) => msg_scalar_unpack!(msg, _, _, _, _, {
+                serial_listen_mode = SerialListenMode::ConsoleListener;
+                // unhook any previous pending listener
+                serial_listener.take();
+            }),
+            Some(Opcode::SerialClearHooks) => {
+                serial_listen_mode = SerialListenMode::NoListener;
+                serial_listener.take();
+            }
             Some(Opcode::SerialFlush) => msg_scalar_unpack!(msg, _, _, _, _, {
                 // this will hardware flush any pending items in usb_serial driver
                 serial_port.flush().ok();

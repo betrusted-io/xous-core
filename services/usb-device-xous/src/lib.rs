@@ -376,7 +376,24 @@ impl UsbHid {
             )
         ).map(|_| ())
     }
-
+    /// Inject serial input over USB to the debug console. Dangerous!
+    /// This will also override/discard any existing hooked listeners.
+    pub fn serial_console_input_injection(&self) {
+        send_message(
+            self.conn,
+            Message::new_scalar(
+                Opcode::SerialHookConsole.to_usize().unwrap(), 0, 0, 0, 0
+            )
+        ).unwrap();
+    }
+    pub fn serial_clear_input_hooks(&self) {
+        send_message(
+            self.conn,
+            Message::new_scalar(
+                Opcode::SerialClearHooks.to_usize().unwrap(), 0, 0, 0, 0
+            )
+        ).unwrap();
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
