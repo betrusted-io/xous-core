@@ -112,6 +112,16 @@ impl Keyboard {
                c as u32 as usize, 0, 0, 0
         )).unwrap();
     }
+
+    /// This is used to shove keys into the keyboard module as if you were typing on the
+    /// physical keyboard.
+    #[cfg(feature="inject-api")]
+    pub fn inject_key(&self, c: char) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::InjectKey.to_usize().unwrap(),
+               c as u32 as usize, 0, 0, 0
+        )).unwrap();
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
