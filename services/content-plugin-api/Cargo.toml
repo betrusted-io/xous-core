@@ -10,6 +10,6 @@ description = "Content Canvas Plugin Common APIs"
 xous = "0.9.40"
 rkyv = { version = "0.4.3", default_features = false }
 graphics-server = { path="../graphics-server"} # this is used by the IMEF portion of the API
-xous-names = {package = "xous-api-names", version = "0.9.37"} # used by the IMEF for registering listeners
+xous-names = {package = "xous-api-names", version = "0.9.38"} # used by the IMEF for registering listeners
 log = "0.4.14"
 
