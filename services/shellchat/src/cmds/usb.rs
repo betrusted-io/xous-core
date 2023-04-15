@@ -1,6 +1,7 @@
 use crate::{ShellCmdApi, CommonEnv};
 use usb_device_xous::{UsbHid, UsbDeviceState, UsbDeviceType};
 use std::fmt::Write;
+use num_traits::*;
 
 #[derive(Debug)]
 pub struct Usb {
@@ -22,7 +23,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
         #[cfg(not(feature="mass-storage"))]
         let helpstring = "usb [hid] [fido] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";
         #[cfg(feature="mass-storage")]
-        let helpstring = "usb [hid] [fido] [ms] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";
+        let helpstring = "usb [hid] [fido] [ms] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest] [console] [noconsole]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -45,10 +46,45 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     self.usb_dev.debug_usb(Some(false)).unwrap();
                     write!(ret, "USB connected to Debug core, secrets readable!").unwrap();
                 }
-                #[cfg(feature="serial")]
                 "serial" => {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Serial).unwrap();
                     write!(ret, "USB connected to serial core").unwrap();
+                }
+                "console" => {
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Serial).unwrap();
+                    let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                    match xous::send_message(log_conn,
+                        xous::Message::new_blocking_scalar(log_server::api::Opcode::TryHookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
+                    ) {
+                        Ok(xous::Result::Scalar1(result)) => {
+                            if result == 1 {
+                                write!(ret, "USB console connected.").ok();
+                            } else {
+                                write!(ret, "Error trying to connect USB console.").ok();
+                            }
+                        }
+                        _ => {
+                            write!(ret, "Could not connect USB console").ok();
+                        }
+                    }
+                }
+                "noconsole" => {
+                    let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                    match xous::send_message(log_conn,
+                        xous::Message::new_blocking_scalar(log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
+                    ) {
+                        Ok(xous::Result::Scalar1(result)) => {
+                            if result == 1 {
+                                // it will report success even if we are already disconnected.
+                                write!(ret, "USB console disconnected.").ok();
+                            } else {
+                                write!(ret, "Error trying to disconnect USB console.").ok();
+                            }
+                        }
+                        _ => {
+                            write!(ret, "Could not disconnect USB console").ok();
+                        }
+                    }
                 }
                 "send" => {
                     match self.usb_dev.get_current_core() {
