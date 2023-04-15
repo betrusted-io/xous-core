@@ -133,7 +133,6 @@ impl UsbHid {
                     2 => Ok(UsbDeviceType::Fido),
                     #[cfg(feature="mass-storage")]
                     3 => Ok(UsbDeviceType::MassStorage),
-                    #[cfg(feature="serial")]
                     4 => Ok(UsbDeviceType::Serial),
                     _ => Err(xous::Error::InternalError)
                 }
@@ -243,6 +242,8 @@ impl UsbHid {
             _ => Err(xous::Error::UseBeforeInit),
         }
     }
+    /// This will attempt to send a string using an API based on the currently connected device
+    /// If it's a Keyboard, it will "type" it; if it's a UART, it will just blast it out the Tx.
     pub fn send_str(&self, s: &str) -> Result<usize, xous::Error> {
         let serializer = UsbString {
             s: xous_ipc::String::<4000>::from_str(s),
@@ -339,6 +340,43 @@ impl UsbHid {
             _ => Err(xous::Error::InternalError),
         }
     }
+    /// Blocks until an ASCII string terminated by `delimiter` is received on serial; if `None`, it
+    /// will return as soon as a character (or series of characters) have been received (thus the return
+    /// `String` will be piecemeal)
+    pub fn serial_wait_ascii(&self, delimiter: Option<char>) -> String {
+        let req = UsbSerialAscii {
+            s: xous_ipc::String::new(),
+            delimiter
+        };
+        let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError)).expect("Internal error");
+        buf.lend_mut(self.conn, Opcode::SerialHookAscii.to_u32().unwrap()).or(Err(xous::Error::InternalError)).expect("Internal error");
+        let resp = buf.to_original::<UsbSerialAscii, _>().unwrap();
+        resp.s.to_str().to_string()
+    }
+    /// Blocks until enough binary data has been received to fill the buffer
+    /// Another thread can be used to call serial_flush() if we don't want to
+    /// block forever and we're receiving small amounts of binary data.
+    pub fn serial_wait_binary(&self) -> Vec::<u8> {
+        let req = UsbSerialBinary {
+            d: [0u8; SERIAL_BINARY_BUFLEN],
+            len: 0,
+        };
+        let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError)).expect("Internal error");
+        buf.lend_mut(self.conn, Opcode::SerialHookBinary.to_u32().unwrap()).or(Err(xous::Error::InternalError)).expect("Internal error");
+        let resp = buf.to_original::<UsbSerialBinary, _>().unwrap();
+        resp.d[..resp.len].to_vec()
+    }
+    /// Non-blocking call that issues a serial flush command to the USB stack
+    pub fn serial_flush(&self) -> Result<(), xous::Error> {
+        send_message(
+            self.conn,
+            Message::new_scalar(
+                Opcode::SerialFlush.to_usize().unwrap(),
+                0, 0, 0, 0
+            )
+        ).map(|_| ())
+    }
+
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

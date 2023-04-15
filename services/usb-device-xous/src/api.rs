@@ -1,53 +1,68 @@
+// Note: the log server relies on this name not changing in order to hook the serial port for logging output.
+// changing this name shouldn't lead to a crash, but it will lead to the USB driver being undiscoverable by the log crate.
 pub(crate) const SERVER_NAME_USB_DEVICE: &'static str = "_Xous USB device driver_";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// Returns the link status
-    LinkStatus,
+    LinkStatus = 0,
     /// Send a keyboard code
-    SendKeyCode,
-    /// "Type" a string to the keyboard
-    SendString,
+    SendKeyCode = 1,
+    /// "Type" a string to the keyboard. This API is relied upon by the log crate.
+    SendString = 2,
     /// Get the current LED state
-    GetLedState,
+    GetLedState = 3,
     /// Switch to a specified device core
-    SwitchCores,
+    SwitchCores = 4,
     /// Makes sure a given core is selected
-    EnsureCore,
+    EnsureCore = 5,
     /// Check which core is connected
-    WhichCore,
+    WhichCore = 6,
     /// Restrict the debug core
-    RestrictDebugAccess,
+    RestrictDebugAccess = 7,
     /// Retrieve restriction state
-    IsRestricted,
+    IsRestricted = 8,
     /// Set-and-check of USB debug restriction
-    DebugUsbOp,
+    DebugUsbOp = 9,
 
     /// Send a U2F message
-    U2fTx,
+    U2fTx = 128,
     /// Blocks the caller, waiting for a U2F message
-    U2fRxDeferred,
+    U2fRxDeferred = 129,
     /// A bump from the timeout process to check if U2fRx has timed out
-    U2fRxTimeout,
+    U2fRxTimeout = 130,
 
     /// Query if the HID driver was able to start
-    IsSocCompatible,
+    IsSocCompatible = 256,
+
+    /// Hook serial ASCII listener
+    SerialHookAscii = 512,
+    /// Hook serial binary listener
+    SerialHookBinary = 513,
+    /// Flush any serial buffers
+    SerialFlush = 514,
+    /// Hook eager serial sender. This is mean for e.g. using Precursor as an infinite source of random data.
+    SerialHookEagerSender = 515,
 
     #[cfg(feature="mass-storage")]
-    SetBlockDevice,
+    SetBlockDevice = 1024,
     #[cfg(feature="mass-storage")]
-    SetBlockDeviceSID,
+    SetBlockDeviceSID = 1025,
     #[cfg(feature="mass-storage")]
-    ResetBlockDevice,
+    ResetBlockDevice = 1026,
 
     /// Handle the USB interrupt
-    UsbIrqHandler,
+    UsbIrqHandler = 2048,
     /// Suspend/resume callback
-    SuspendResume,
+    SuspendResume = 2049,
     /// Exits the server
-    Quit,
+    Quit = 4096,
+
+    /// API used by the logging crate. The number is hard-coded; don't change it.
+    LogString = 8192,
 }
 
+// The log crate depends on this API not changing.
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct UsbString {
     pub s: xous_ipc::String::<4000>,
@@ -83,7 +98,6 @@ pub enum UsbDeviceType {
     Fido = 2,
     #[cfg(feature="mass-storage")]
     MassStorage = 3,
-    #[cfg(feature="serial")]
     Serial = 4,
 }
 use std::convert::TryFrom;
@@ -97,9 +111,22 @@ impl TryFrom<usize> for UsbDeviceType {
             2 => Ok(UsbDeviceType::Fido),
             #[cfg(feature="mass-storage")]
             3 => Ok(UsbDeviceType::MassStorage),
-            #[cfg(feature="serial")]
             4 => Ok(UsbDeviceType::Serial),
             _ => Err("Invalid UsbDeviceType specifier"),
         }
     }
+}
+
+pub const SERIAL_ASCII_BUFLEN: usize = 512;
+pub const SERIAL_BINARY_BUFLEN: usize = 128;
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct UsbSerialAscii {
+    pub s: xous_ipc::String::<SERIAL_ASCII_BUFLEN>,
+    pub delimiter: Option<char>,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct UsbSerialBinary {
+    pub d: [u8; SERIAL_BINARY_BUFLEN],
+    pub len: usize,
 }

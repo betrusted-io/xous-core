@@ -54,6 +54,5 @@ hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 minimal = ["mass-storage"]
 mass-storage = ["usbd_scsi", "usbd_mass_storage"]
-serial = []
 mjolnir = [] # the big hammer for debugging Spinal USB issues. A raw memory dump of config and descriptor space. Use with care.
-default = ["serial"]
+default = []

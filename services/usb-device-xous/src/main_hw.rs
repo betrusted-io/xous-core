@@ -27,7 +27,6 @@ use keyboard::KeyMap;
 use xous_ipc::Buffer;
 use std::collections::VecDeque;
 
-#[cfg(feature="serial")]
 use usbd_serial::SerialPort;
 
 pub struct EmbeddedClock {
@@ -58,7 +57,6 @@ enum Views {
     FidoOnly = 1,
     #[cfg(feature="mass-storage")]
     MassStorage = 2,
-    #[cfg(feature="serial")]
     Serial = 3,
 }
 
@@ -67,6 +65,19 @@ enum TimeoutOp {
     Pump,
     InvalidCall,
     Quit,
+}
+
+enum SerialListenMode {
+    // this just causes data incoming to be printed to the debug log; it is the default
+    NoListener,
+    // this assumes there will be a CR/LF character to delimit lines (the `char` arg), and
+    // will buffer data until two conditions are met: 1) a listener is hooked and 2) a CR/LF is received.
+    // This will "infinitely" buffer incoming characters if no listener is hooked.
+    AsciiListener(Option<char>),
+    // this will simply buffer the data until the `usize` argument is met and passes it back to
+    // hooked listener. If this mode is set and there is no listener, it will buffer data "indefinitely"
+    // (e.g. until local heap is exhausted and the system panics)
+    BinaryListener,
 }
 
 pub(crate) fn main_hw() -> ! {
@@ -179,7 +190,6 @@ pub(crate) fn main_hw() -> ! {
     // do the same thing for mass storage
     #[cfg(feature="mass-storage")]
     let ums_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
-    #[cfg(feature="serial")]
     let serial_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
 
     // track which view is visible on the device core
@@ -255,14 +265,10 @@ pub(crate) fn main_hw() -> ! {
         .build();
 
     // Serial
-    #[cfg(feature="serial")]
     const SERIAL_BUF_LEN: usize = 1024;
-    #[cfg(feature="serial")]
     let serial_alloc = UsbBusAllocator::new(serial_dev);
-    #[cfg(feature="serial")]
     // this will create a default port with 128 bytes of backing store
     let mut serial_port = SerialPort::new(&serial_alloc);
-    #[cfg(feature="serial")]
     let mut serial_device = UsbDeviceBuilder::new(&serial_alloc, UsbVidPid(0x1209, 0x3613))
     .manufacturer("Kosagi")
     .product("Precursor")
@@ -270,6 +276,10 @@ pub(crate) fn main_hw() -> ! {
     .self_powered(false)
     .max_power(500)
     .build();
+    let mut serial_listener: Option<xous::MessageEnvelope> = None;
+    let mut serial_listen_mode: SerialListenMode = SerialListenMode::NoListener;
+    let mut serial_buf = Vec::<u8>::new();
+    let mut serial_rx_trigger = false; // when true, the condition was met to pass data to the listener (but the listener was not yet installed)
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -431,7 +441,6 @@ pub(crate) fn main_hw() -> ! {
                             _ => ()
                         };
                     }
-                    #[cfg(feature="serial")]
                     Views::Serial => {
                         match serial_device.force_reset() {
                             Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
@@ -521,7 +530,6 @@ pub(crate) fn main_hw() -> ! {
                         Views::FidoOnly => fido_class.interface::<RawFidoInterface<'_, _>, _>(),
                         #[cfg(feature="mass-storage")]
                         Views::MassStorage => panic!("did not expect u2f tx when in mass storage mode!"),
-                        #[cfg(feature="serial")]
                         Views::Serial => panic!("did not expect u2f tx while in serial mode!"),
                     };
                     u2f.write_report(&u2f_msg).ok();
@@ -563,19 +571,87 @@ pub(crate) fn main_hw() -> ! {
                         }
                         None
                     },
-                    #[cfg(feature="serial")]
                     Views::Serial => {
                         if serial_device.poll(&mut [&mut serial_port]) {
                             let mut data = [0u8; SERIAL_BUF_LEN];
-                            match serial_port.read(&mut data) {
-                                Ok(len) => {
-                                    log::info!("Serial got data: {:x?}", &data[..len]);
+                            match serial_listen_mode {
+                                SerialListenMode::NoListener => {
+                                    match serial_port.read(&mut data) {
+                                        Ok(len) => {
+                                            match std::str::from_utf8(&data[..len]) {
+                                                Ok(s) => log::info!("USB serial ascii: {}", s),
+                                                Err(_) => {
+                                                    log::info!("USB serial binary: {:x?}", &data[..len]);
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::info!("Serial read error: {:?}", e);
+                                        }
+                                    }
                                 }
-                                Err(e) => {
-                                    log::info!("Serial read error: {:?}", e);
+                                SerialListenMode::AsciiListener(maybe_delimiter) => {
+                                    let readlen = serial_port.read(&mut data).unwrap_or(0);
+                                    if readlen == 0 {
+                                        continue;
+                                    }
+                                    if let Some(delimiter) = maybe_delimiter {
+                                        if !delimiter.is_ascii() {
+                                            log::warn!("Chosen ASCII delimiter {} is not ASCII. Serial receive will not function properly.", delimiter);
+                                        }
+                                        if !serial_rx_trigger { // once true, sticks as true
+                                            serial_rx_trigger = data[..readlen].iter().find(|&&c| c == (delimiter as u8)).is_some();
+                                        }
+                                    } else {
+                                        serial_rx_trigger = true;
+                                    }
+                                    // append the incoming data to the main buffer
+                                    for &d in &data[..readlen] {
+                                        serial_buf.push(d);
+                                    }
+                                    // now see if we should pass it back to the listener (if it is hooked)
+                                    if serial_rx_trigger && serial_listener.is_some() {
+                                        let mut rx_msg = serial_listener.take().unwrap();
+                                        let mut response = unsafe {
+                                            Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                        };
+                                        let mut buf = response.to_original::<UsbSerialAscii, _>().unwrap();
+                                        use std::fmt::Write; // is this really the best way to do it? probably not.
+                                        write!(buf.s, "{}", std::string::String::from_utf8_lossy(&serial_buf)).ok();
+
+                                        response.replace(buf).unwrap();
+                                        // the rx_msg will drop and respond to the listener
+                                        serial_rx_trigger = false;
+                                    }
+                                }
+                                SerialListenMode::BinaryListener => {
+                                    let readlen = serial_port.read(&mut data).unwrap_or(0);
+                                    if readlen == 0 {
+                                        continue;
+                                    }
+                                    // append the incoming data to the main buffer
+                                    for &d in &data[..readlen] {
+                                        serial_buf.push(d);
+                                    }
+                                    if serial_buf.len() >= SERIAL_BINARY_BUFLEN {
+                                        match serial_listener.take() {
+                                            Some(mut rx_msg) => {
+                                                let mut response = unsafe {
+                                                    Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                                };
+                                                let mut buf = response.to_original::<UsbSerialBinary, _>().unwrap();
+                                                buf.d.copy_from_slice(serial_buf.drain(..SERIAL_BINARY_BUFLEN).as_slice());
+                                                buf.len = SERIAL_BINARY_BUFLEN;
+                                                response.replace(buf).unwrap();
+                                                // the rx_msg will drop and respond to the listener
+                                            }
+                                            None => {
+                                                // do nothing, keep queuing data...
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            // TODO: add a listener here and report read data to the listener
                         }
                         None
                     },
@@ -608,7 +684,6 @@ pub(crate) fn main_hw() -> ! {
                     Views::FidoOnly => fido_dev.state() == UsbDeviceState::Suspend,
                     #[cfg(feature="mass-storage")]
                     Views::MassStorage => ums_device.state() == UsbDeviceState::Suspend,
-                    #[cfg(feature="serial")]
                     Views::Serial => serial_device.state() == UsbDeviceState::Suspend,
                 };
                 if is_suspend {
@@ -685,7 +760,6 @@ pub(crate) fn main_hw() -> ! {
                             }
                         }
                     }
-                    #[cfg(feature="serial")]
                     UsbDeviceType::Serial => {
                         log::info!("Connecting device serial");
                         match view {
@@ -771,7 +845,6 @@ pub(crate) fn main_hw() -> ! {
                             }
                         }
                     }
-                    #[cfg(feature="serial")]
                     UsbDeviceType::Serial => {
                         log::info!("Ensuring serial device");
                         if !usbmgmt.is_device_connected() {
@@ -798,7 +871,6 @@ pub(crate) fn main_hw() -> ! {
                         Views::FidoOnly => xous::return_scalar(msg.sender, UsbDeviceType::Fido as usize).unwrap(),
                         #[cfg(feature="mass-storage")]
                         Views::MassStorage => xous::return_scalar(msg.sender, UsbDeviceType::MassStorage as usize).unwrap(),
-                        #[cfg(feature="serial")]
                         Views::Serial => xous::return_scalar(msg.sender, UsbDeviceType::Serial as usize).unwrap(),
                     }
                 } else {
@@ -855,7 +927,6 @@ pub(crate) fn main_hw() -> ! {
                     Views::FidoOnly => xous::return_scalar(msg.sender, fido_dev.state() as usize).unwrap(),
                     #[cfg(feature="mass-storage")]
                     Views::MassStorage => xous::return_scalar(msg.sender, ums_device.state() as usize).unwrap(),
-                    #[cfg(feature="serial")]
                     Views::Serial => xous::return_scalar(msg.sender, serial_device.state() as usize).unwrap(),
                 }
             }),
@@ -893,6 +964,38 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
             }),
+            Some(Opcode::LogString) => {
+                // the logger API is "best effort" only. Because retries and response codes can cause problems
+                // in the logger API, if anything goes wrong, we prefer to discard characters rather than get
+                // the whole subsystem stuck in some awful recursive error handling hell.
+                match view {
+                    Views::Serial => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
+                        // this is implemented as a "blocking write": the routine will block until the data has all been written.
+                        let send_data = usb_send.s.as_bytes();
+                        let to_send = usb_send.s.len();
+                        let mut sent = 0;
+                        while sent < to_send {
+                            match serial_port.write(&send_data[sent..to_send]) {
+                                Ok(written) => {
+                                    sent += written;
+                                }
+                                Err(_) => {
+                                    // just drop characters
+                                }
+                            }
+                            match serial_port.flush() {
+                                Ok(_) => {},
+                                Err(_) => {
+                                    // just drop characters
+                                }
+                            }
+                        }
+                    }
+                    _ => {} // do nothing; don't fail, don't report any error.
+                }
+            }
             Some(Opcode::SendString) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
@@ -953,6 +1056,74 @@ pub(crate) fn main_hw() -> ! {
                 let mut code = [0u8; 1];
                 led_state.pack_to_slice(&mut code).unwrap();
                 xous::return_scalar(msg.sender, code[0] as usize).unwrap();
+            }),
+            Some(Opcode::SerialHookAscii) => {
+                let maybe_delimiter = {
+                    let buffer = unsafe {
+                        Buffer::from_memory_message(msg.body.memory_message().unwrap())
+                    };
+                    let data = buffer.to_original::<UsbSerialAscii, _>().unwrap();
+                    data.delimiter
+                };
+                serial_listen_mode = SerialListenMode::AsciiListener(maybe_delimiter);
+                serial_listener = Some(msg);
+            },
+            Some(Opcode::SerialHookBinary) => {
+                serial_listen_mode = SerialListenMode::BinaryListener;
+                serial_listener = Some(msg);
+            },
+            Some(Opcode::SerialFlush) => msg_scalar_unpack!(msg, _, _, _, _, {
+                // this will hardware flush any pending items in usb_serial driver
+                serial_port.flush().ok();
+                // this tries to return any data that's pending within the main loop's buffers
+                match serial_listen_mode {
+                    SerialListenMode::BinaryListener => {
+                        match serial_listener.take() {
+                            Some(mut rx_msg) => {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                };
+                                let mut buf = response.to_original::<UsbSerialBinary, _>().unwrap();
+                                let chars_avail = serial_buf.len().min(SERIAL_BINARY_BUFLEN);
+                                buf.len = chars_avail;
+                                buf.d.copy_from_slice(serial_buf.drain(..chars_avail).as_slice());
+                                response.replace(buf).unwrap();
+                                // the rx_msg will drop and respond to the listener
+                            }
+                            None => {
+                                // do nothing, keep queuing data...
+                            }
+                        }
+                    }
+                    SerialListenMode::AsciiListener(_) => {
+                        match serial_listener.take() {
+                            Some(mut rx_msg) => {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                };
+                                let mut buf = response.to_original::<UsbSerialAscii, _>().unwrap();
+                                use std::fmt::Write; // is this really the best way to do it? probably not.
+                                write!(buf.s, "{}", std::string::String::from_utf8_lossy(&serial_buf)).ok();
+
+                                response.replace(buf).unwrap();
+                                // the rx_msg will drop and respond to the listener
+                                serial_rx_trigger = false;
+                            }
+                            None => {} // do nothing
+                        }
+                    }
+                    _ => {}
+                }
+            }),
+            Some(Opcode::SerialHookEagerSender) => msg_scalar_unpack!(msg, interval, trng_mode, _, _, {
+                // TODO
+                // I think the strategy here is when this is called, we start a thread that polls at some
+                // interval in milliseconds (taken as an argument) to see if the Tx buffer is empty and
+                // if rts() is true; and if so, jams more binary data into the pipe.
+                //
+                // It also takes a trng_mode argument which is used to select either CPRNG whitened output
+                // (which is the default mode), or direct raw data from the RO or the Avalanche generator;
+                // this is used to help characterize the raw entropy sources.
             }),
             Some(Opcode::Quit) => {
                 log::warn!("Quit received, goodbye world!");
