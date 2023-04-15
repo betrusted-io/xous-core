@@ -59,6 +59,8 @@ impl<'a> ShellCmdApi<'a> for Usb {
                         Ok(xous::Result::Scalar1(result)) => {
                             if result == 1 {
                                 write!(ret, "USB console connected.").ok();
+                                // this will enable input injection mode
+                                self.usb_dev.serial_console_input_injection();
                             } else {
                                 write!(ret, "Error trying to connect USB console.").ok();
                             }
@@ -85,6 +87,8 @@ impl<'a> ShellCmdApi<'a> for Usb {
                             write!(ret, "Could not disconnect USB console").ok();
                         }
                     }
+                    // this will disable any hooks (including the console input hook)
+                    self.usb_dev.serial_clear_input_hooks();
                 }
                 "send" => {
                     match self.usb_dev.get_current_core() {
