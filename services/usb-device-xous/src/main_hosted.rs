@@ -278,9 +278,7 @@ pub(crate) fn main_hosted() -> ! {
                 log::warn!("Quit received, goodbye world!");
                 break;
             },
-            None => {
-                log::error!("couldn't convert opcode: {:?}", msg);
-            }
+            _  => log::warn!("Opcode not supported: {:?}", msg),
         }
     }
     // clean up our program

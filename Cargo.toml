@@ -179,3 +179,5 @@ rev="4296c2e7904898766cf7d8d589759a129794783b" # use the commitref because we're
 # path = "./svd2utra"
 # [patch.crates-io.xous-api-susres]
 # path = "./api/xous-api-susres"
+# [patch.crates-io.xous-api-log]
+# path = "./api/xous-api-log"

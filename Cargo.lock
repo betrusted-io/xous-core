@@ -4480,8 +4480,10 @@ dependencies = [
  "rand 0.7.3",
  "rand_chacha 0.3.1",
  "rkyv",
+ "trng",
  "usb-device",
  "usbd-human-interface-device 0.2.1",
+ "usbd-serial",
  "usbd_mass_storage 0.1.0",
  "usbd_scsi 0.1.1",
  "utralib",
@@ -4549,6 +4551,17 @@ dependencies = [
  "log",
  "num_enum",
  "packed_struct",
+ "usb-device",
+]
+
+[[package]]
+name = "usbd-serial"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db75519b86287f12dcf0d171c7cf4ecc839149fe9f3b720ac4cfce52959e1dfe"
+dependencies = [
+ "embedded-hal",
+ "nb 0.1.3",
  "usb-device",
 ]
 
@@ -5192,9 +5205,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-log"
-version = "0.1.35"
+version = "0.1.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37e5fc7b10d5fe52535fae54c223b5684ecef172fce2a136fe9e59d370ce06d1"
+checksum = "b82ebf0502939b72c0fb63403d6c12b4847ee1a720069bf73ce35980edeecdbb"
 dependencies = [
  "log",
  "num-derive",
@@ -5205,9 +5218,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-names"
-version = "0.9.37"
+version = "0.9.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c4775bac0894064e2d8028c7b7c470f62b4fb266950ff7f73eca69f5fc0a055"
+checksum = "84bceedef22f50d5c809c60bbd16dfa4cfc8d4f463c001b3c50b1e613a820d47"
 dependencies = [
  "log",
  "num-derive",
@@ -5220,9 +5233,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-susres"
-version = "0.9.35"
+version = "0.9.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90ffb0b3fe55eb591fc6e5c0decb1f497b03f497322da356b01367ab613c719e"
+checksum = "20805762535b886706a727ee57fdb8355dc9d5770619b926ae697c6f1754e9b9"
 dependencies = [
  "log",
  "num-derive",
@@ -5237,9 +5250,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-ticktimer"
-version = "0.9.35"
+version = "0.9.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc56e99340b3ccc0b01b960e55d51054336f71bcb5bce2fb793aac31f95ca57b"
+checksum = "25c60d1d4962904198a693e5b4ad3b560e3a04ef13b7a88a2a27ec2925f4f9ec"
 dependencies = [
  "log",
  "num-derive",
@@ -5302,6 +5315,7 @@ dependencies = [
  "log",
  "num-derive",
  "num-traits",
+ "rkyv",
  "utralib",
  "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",

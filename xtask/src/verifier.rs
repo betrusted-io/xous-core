@@ -14,10 +14,10 @@ pub fn check_project_consistency() -> Result<(), DynError> {
         // this set updates with kernel API changes
         "xous@0.9.40",
         "xous-ipc@0.9.40",
-        "xous-api-log@0.1.35",
-        "xous-api-names@0.9.37",
-        "xous-api-susres@0.9.35",
-        "xous-api-ticktimer@0.9.35",
+        "xous-api-log@0.1.36",
+        "xous-api-names@0.9.38",
+        "xous-api-susres@0.9.36",
+        "xous-api-ticktimer@0.9.36",
         // this set is only updated if the utralib changes
         "utralib@0.1.17",
         "svd2utra@0.1.15",

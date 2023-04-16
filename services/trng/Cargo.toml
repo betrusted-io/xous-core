@@ -8,13 +8,13 @@ description = "TRNG server"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 xous = "0.9.40"
-log-server = { package = "xous-api-log", version = "0.1.35" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.35" }
-xous-names = { package = "xous-api-names", version = "0.9.37" }
+log-server = { package = "xous-api-log", version = "0.1.36" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.36" }
+xous-names = { package = "xous-api-names", version = "0.9.38" }
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
-susres = {package = "xous-api-susres", version = "0.9.35"}
+susres = {package = "xous-api-susres", version = "0.9.36"}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 xous-ipc = "0.9.40"
 rand_core = "0.5.1" # the 0.5.1 API is necessary for compatibility with curve25519-dalek crates
@@ -29,8 +29,4 @@ precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 debugprint = []
-# note: these test routines are now deprecated, because the "Messible" has been removed from the SoC
-avalanchetest = []
-ringosctest = []
-urandomtest = []
 default = [] # "debugprint"

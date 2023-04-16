@@ -22,7 +22,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
         #[cfg(not(feature="mass-storage"))]
         let helpstring = "usb [hid] [fido] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";
         #[cfg(feature="mass-storage")]
-        let helpstring = "usb [hid] [fido] [ms] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";
+        let helpstring = "usb [hid] [fido] [ms] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest] [console] [noconsole]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -45,9 +45,46 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     self.usb_dev.debug_usb(Some(false)).unwrap();
                     write!(ret, "USB connected to Debug core, secrets readable!").unwrap();
                 }
+                "serial" => {
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Serial).unwrap();
+                    write!(ret, "USB connected to serial core").unwrap();
+                }
+                "console" => {
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Serial).unwrap();
+                    // this will enable input injection mode
+                    self.usb_dev.serial_console_input_injection();
+                    write!(ret, "USB console connected.").ok();
+                }
+                "noconsole" => {
+                    // this will disable any hooks (including the console input hook)
+                    self.usb_dev.serial_clear_input_hooks();
+                    write!(ret, "USB console disconnected.").ok();
+                }
+                "trng" => {
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Serial).unwrap();
+                    let mode = if let Some(sub_cmd) = tokens.next() {
+                        match sub_cmd {
+                            "ro" => trng::api::TrngTestMode::Ro,
+                            "av" => trng::api::TrngTestMode::Av,
+                            "both" => trng::api::TrngTestMode::Both,
+                            "cprng" => trng::api::TrngTestMode::Cprng,
+                            _ => trng::api::TrngTestMode::Cprng, // this is the "normal" mode of operation
+                        }
+                    } else {
+                        // "normal" mode of operation: Ro + Av fed into CPRNG and then used
+                        trng::api::TrngTestMode::Cprng
+                    };
+                    self.usb_dev.serial_set_trng_mode(mode);
+                    write!(ret, "USB TRNG serial sending requested").ok();
+                }
+                "notrng" => {
+                    self.usb_dev.serial_clear_input_hooks();
+                    write!(ret, "USB TRNG serial sending should be stopped.").ok();
+                }
                 "send" => {
                     match self.usb_dev.get_current_core() {
-                        Ok(UsbDeviceType::FidoKbd) => {
+                        Ok(UsbDeviceType::FidoKbd)
+                        | Ok(UsbDeviceType::Serial) => {
                             let mut val = String::new();
                             join_tokens(&mut val, &mut tokens);
                             match self.usb_dev.send_str(&val) {
