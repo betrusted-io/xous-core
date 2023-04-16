@@ -1,7 +1,6 @@
 use crate::{ShellCmdApi, CommonEnv};
 use usb_device_xous::{UsbHid, UsbDeviceState, UsbDeviceType};
 use std::fmt::Write;
-use num_traits::*;
 
 #[derive(Debug)]
 pub struct Usb {
@@ -52,43 +51,35 @@ impl<'a> ShellCmdApi<'a> for Usb {
                 }
                 "console" => {
                     self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Serial).unwrap();
-                    let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
-                    match xous::send_message(log_conn,
-                        xous::Message::new_blocking_scalar(log_server::api::Opcode::TryHookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
-                    ) {
-                        Ok(xous::Result::Scalar1(result)) => {
-                            if result == 1 {
-                                write!(ret, "USB console connected.").ok();
-                                // this will enable input injection mode
-                                self.usb_dev.serial_console_input_injection();
-                            } else {
-                                write!(ret, "Error trying to connect USB console.").ok();
-                            }
-                        }
-                        _ => {
-                            write!(ret, "Could not connect USB console").ok();
-                        }
-                    }
+                    // this will enable input injection mode
+                    self.usb_dev.serial_console_input_injection();
+                    write!(ret, "USB console connected.").ok();
                 }
                 "noconsole" => {
-                    let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
-                    match xous::send_message(log_conn,
-                        xous::Message::new_blocking_scalar(log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
-                    ) {
-                        Ok(xous::Result::Scalar1(result)) => {
-                            if result == 1 {
-                                // it will report success even if we are already disconnected.
-                                write!(ret, "USB console disconnected.").ok();
-                            } else {
-                                write!(ret, "Error trying to disconnect USB console.").ok();
-                            }
-                        }
-                        _ => {
-                            write!(ret, "Could not disconnect USB console").ok();
-                        }
-                    }
                     // this will disable any hooks (including the console input hook)
                     self.usb_dev.serial_clear_input_hooks();
+                    write!(ret, "USB console disconnected.").ok();
+                }
+                "trng" => {
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Serial).unwrap();
+                    let mode = if let Some(sub_cmd) = tokens.next() {
+                        match sub_cmd {
+                            "ro" => trng::api::TrngTestMode::Ro,
+                            "av" => trng::api::TrngTestMode::Av,
+                            "both" => trng::api::TrngTestMode::Both,
+                            "cprng" => trng::api::TrngTestMode::Cprng,
+                            _ => trng::api::TrngTestMode::Cprng, // this is the "normal" mode of operation
+                        }
+                    } else {
+                        // "normal" mode of operation: Ro + Av fed into CPRNG and then used
+                        trng::api::TrngTestMode::Cprng
+                    };
+                    self.usb_dev.serial_set_trng_mode(mode);
+                    write!(ret, "USB TRNG serial sending requested").ok();
+                }
+                "notrng" => {
+                    self.usb_dev.serial_clear_input_hooks();
+                    write!(ret, "USB TRNG serial sending should be stopped.").ok();
                 }
                 "send" => {
                     match self.usb_dev.get_current_core() {
