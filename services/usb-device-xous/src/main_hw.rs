@@ -1386,7 +1386,7 @@ pub(crate) fn main_hw() -> ! {
                     let prev_interval = serial_trng_interval.fetch_add(TRNG_BACKOFF_MS, Ordering::SeqCst);
                     // cap the backoff rate
                     if prev_interval > TRNG_BACKOFF_MAX_MS {
-                        log::info!("Max backoff delay encountered");
+                        log::debug!("Max backoff delay encountered");
                         serial_trng_interval.store(TRNG_BACKOFF_MAX_MS, Ordering::SeqCst);
                     }
                 } else {
