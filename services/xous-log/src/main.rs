@@ -281,6 +281,7 @@ fn reader_thread(arg: usize) {
                     },
                     #[cfg(feature="usb")]
                     5 /* api::Opcode::UnhookUsbMirror */ => {
+                        // Note: this routine should be coded so that it is never harmful if unhook is called in an already unhooked state.
                         usb_serial.take();
                         xous::return_scalar(envelope.sender, 1).ok();
                     },
