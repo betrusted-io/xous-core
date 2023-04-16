@@ -4480,6 +4480,7 @@ dependencies = [
  "rand 0.7.3",
  "rand_chacha 0.3.1",
  "rkyv",
+ "trng",
  "usb-device",
  "usbd-human-interface-device 0.2.1",
  "usbd-serial",
