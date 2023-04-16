@@ -41,12 +41,14 @@ pub(crate) enum Opcode {
     SerialHookBinary = 513,
     /// Flush any serial buffers
     SerialFlush = 514,
-    /// Hook eager serial sender. This is mean for e.g. using Precursor as an infinite source of random data.
-    SerialHookEagerSender = 515,
+    /// Hook eager serial sender for TRNG output. This will not succeed if hooked for console mode already.
+    SerialHookTrngSender = 515,
     /// Hook serial to the console input
     SerialHookConsole = 516,
     /// Clear any hooks
     SerialClearHooks = 517,
+    /// TRNG send poll
+    SerialTrngPoll = 518,
 
     #[cfg(feature="mass-storage")]
     SetBlockDevice = 1024,

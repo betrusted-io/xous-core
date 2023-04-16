@@ -2,6 +2,7 @@
 
 pub mod api;
 pub use api::*;
+use trng::api::TrngTestMode;
 use xous::{CID, send_message, Message};
 use num_traits::*;
 pub use usb_device::device::UsbDeviceState;
@@ -391,6 +392,15 @@ impl UsbHid {
             self.conn,
             Message::new_scalar(
                 Opcode::SerialClearHooks.to_usize().unwrap(), 0, 0, 0, 0
+            )
+        ).unwrap();
+    }
+    /// Tries to set the serial port in TRNG mode. Will silently fail if already in console mode.
+    pub fn serial_set_trng_mode(&self, mode: TrngTestMode) {
+        send_message(
+            self.conn,
+            Message::new_scalar(
+                Opcode::SerialHookTrngSender.to_usize().unwrap(), mode.to_usize().unwrap(), 0, 0, 0
             )
         ).unwrap();
     }

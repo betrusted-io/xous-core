@@ -67,6 +67,14 @@ enum TimeoutOp {
     Quit,
 }
 
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+enum TrngOp {
+    Pump,
+    InvalidCall,
+    Quit,
+}
+
+#[derive(Debug)]
 enum SerialListenMode {
     // this just causes data incoming to be printed to the debug log; it is the default
     NoListener,
@@ -267,7 +275,7 @@ pub(crate) fn main_hw() -> ! {
         .build();
 
     // Serial
-    const SERIAL_BUF_LEN: usize = 1024;
+    const SERIAL_BUF_LEN: usize = 1024; // length of the internal character buffer. This is not the *hardware* buffer; this is a buffer we maintain in the driver to improve performance
     let serial_alloc = UsbBusAllocator::new(serial_dev);
     // this will create a default port with 128 bytes of backing store
     let mut serial_port = SerialPort::new(&serial_alloc);
@@ -282,6 +290,15 @@ pub(crate) fn main_hw() -> ! {
     let mut serial_listen_mode: SerialListenMode = SerialListenMode::NoListener;
     let mut serial_buf = Vec::<u8>::new();
     let mut serial_rx_trigger = false; // when true, the condition was met to pass data to the listener (but the listener was not yet installed)
+    let trng = trng::Trng::new(&xns).unwrap();
+    let mut serial_trng_buf = Vec::<u8>::new();
+    let serial_trng_interval = Arc::new(AtomicU32::new(0));
+    let mut serial_trng_cid: Option::<xous::CID> = None;
+    const TRNG_PKT_SIZE: usize = 64; // size of a TRNG packet being sent. This is inferred from the spec.
+    const TRNG_INITIAL_DELAY_MS: u32 = 200; // the very first poll takes longer, because we have to fill the TRNG back-end
+    const TRNG_REFILL_DELAY_MS: u32 = 1; // we re-poll very fast once we see the host taking data
+    const TRNG_BACKOFF_MS: u32 = 1;
+    const TRNG_BACKOFF_MAX_MS: u32 = 1000; // cap on how far we backoff the polling rate
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -581,14 +598,14 @@ pub(crate) fn main_hw() -> ! {
                                     match serial_port.read(&mut data) {
                                         Ok(len) => {
                                             match std::str::from_utf8(&data[..len]) {
-                                                Ok(s) => log::info!("USB serial ascii: {}", s),
+                                                Ok(s) => log::debug!("No listener ascii: {}", s),
                                                 Err(_) => {
-                                                    log::info!("USB serial binary: {:x?}", &data[..len]);
+                                                    log::debug!("No listener binary: {:x?}", &data[..len]);
                                                 }
                                             }
                                         }
                                         Err(e) => {
-                                            log::info!("Serial read error: {:?}", e);
+                                            log::debug!("No listener: {:?}", e);
                                         }
                                     }
                                 }
@@ -729,6 +746,25 @@ pub(crate) fn main_hw() -> ! {
             },
             // always triggers a reset when called
             Some(Opcode::SwitchCores) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {
+                // ensure unhook the logger if it's connected to serial
+                let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                // it is never harmful to double-unhook this
+                xous::send_message(log_conn,
+                    xous::Message::new_blocking_scalar(log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
+                // reset any serial listeners that may have been set
+                serial_listen_mode = SerialListenMode::NoListener;
+                serial_listener.take();
+                // shut down the TRNG sender if it's set
+                if let Some(trng_cid) = serial_trng_cid.take() {
+                    serial_trng_interval.store(0, Ordering::SeqCst);
+                    xous::send_message(trng_cid,
+                        xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(),
+                            0, 0, 0, 0)
+                    ).ok();
+                    trng.set_test_mode(trng::api::TrngTestMode::None);
+                }
+
                 let devtype: UsbDeviceType = core.try_into().unwrap();
                 match devtype {
                     UsbDeviceType::Debug => {
@@ -801,6 +837,27 @@ pub(crate) fn main_hw() -> ! {
             // does not trigger a reset if we're already on the core
             Some(Opcode::EnsureCore) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {
                 let devtype: UsbDeviceType = core.try_into().unwrap();
+                // if we are switching away from serial, unhook any possible listeners, and the logger
+                if view == Views::Serial && devtype != UsbDeviceType::Serial {
+                    let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                    // it is never harmful to double-unhook this
+                    xous::send_message(log_conn,
+                        xous::Message::new_blocking_scalar(log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).ok();
+                    // reset any serial listeners that may have been set
+                    serial_listen_mode = SerialListenMode::NoListener;
+                    serial_listener.take();
+                    // shut down the TRNG sender if it's set
+                    if let Some(trng_cid) = serial_trng_cid.take() {
+                        serial_trng_interval.store(0, Ordering::SeqCst);
+                        xous::send_message(trng_cid,
+                            xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(),
+                                0, 0, 0, 0)
+                        ).ok();
+                        trng.set_test_mode(trng::api::TrngTestMode::None);
+                    }
+                }
+
                 match devtype {
                     UsbDeviceType::Debug => {
                         if usbmgmt.is_device_connected() {
@@ -1047,8 +1104,8 @@ pub(crate) fn main_hw() -> ! {
                         // this is implemented as a "blocking write": the routine will block until the data has all been written.
                         let send_data = usb_send.s.as_bytes();
                         let to_send = usb_send.s.len();
-                        log::debug!("serial RTS: {:?}", serial_port.rts());
-                        log::debug!("serial DTR: {:?}", serial_port.dtr());
+                        // log::debug!("serial RTS: {:?}", serial_port.rts());
+                        // log::debug!("serial DTR: {:?}", serial_port.dtr());
                         while sent < to_send {
                             match serial_port.write(&send_data[sent..to_send]) {
                                 Ok(written) => {
@@ -1094,13 +1151,42 @@ pub(crate) fn main_hw() -> ! {
                 serial_listener = Some(msg);
             },
             Some(Opcode::SerialHookConsole) => msg_scalar_unpack!(msg, _, _, _, _, {
-                serial_listen_mode = SerialListenMode::ConsoleListener;
-                // unhook any previous pending listener
-                serial_listener.take();
+                let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                match xous::send_message(log_conn,
+                    xous::Message::new_blocking_scalar(log_server::api::Opcode::TryHookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
+                ) {
+                    Ok(xous::Result::Scalar1(result)) => {
+                        if result == 1 {
+                            serial_listen_mode = SerialListenMode::ConsoleListener;
+                            // unhook any previous pending listener
+                            serial_listener.take();
+                        } else {
+                            log::error!("Error trying to connect USB console.");
+                        }
+                    }
+                    _ => {
+                        log::error!("Could not connect USB console");
+                    }
+                }
             }),
             Some(Opcode::SerialClearHooks) => {
+                let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                // it is never harmful to double-unhook this
+                xous::send_message(log_conn,
+                    xous::Message::new_blocking_scalar(log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
+
                 serial_listen_mode = SerialListenMode::NoListener;
                 serial_listener.take();
+                // shut down the TRNG sender if it's set
+                if let Some(trng_cid) = serial_trng_cid.take() {
+                    serial_trng_interval.store(0, Ordering::SeqCst);
+                    xous::send_message(trng_cid,
+                        xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(),
+                            0, 0, 0, 0)
+                    ).ok();
+                    trng.set_test_mode(trng::api::TrngTestMode::None);
+                }
             }
             Some(Opcode::SerialFlush) => msg_scalar_unpack!(msg, _, _, _, _, {
                 // this will hardware flush any pending items in usb_serial driver
@@ -1145,16 +1231,168 @@ pub(crate) fn main_hw() -> ! {
                     _ => {}
                 }
             }),
-            Some(Opcode::SerialHookEagerSender) => msg_scalar_unpack!(msg, interval, trng_mode, _, _, {
-                // TODO
-                // I think the strategy here is when this is called, we start a thread that polls at some
-                // interval in milliseconds (taken as an argument) to see if the Tx buffer is empty and
-                // if rts() is true; and if so, jams more binary data into the pipe.
+            Some(Opcode::SerialHookTrngSender) => msg_scalar_unpack!(msg, trng_mode_code, _, _, _, {
+                if view != Views::Serial {
+                    log::error!("USB is not in serial mode. Ignoring request to hook TRNG sender");
+                    continue;
+                }
+                match serial_listen_mode {
+                    SerialListenMode::ConsoleListener => {
+                        log::error!("Serial is already hooked as a console. Refusing to turn on TRNG source mode");
+                        continue;
+                    }
+                    SerialListenMode::NoListener => {},
+                    _ => {
+                        log::warn!("Serial already has a listener {:?} attached, hooking TRNG at your risk!", serial_listen_mode);
+                    }
+                }
+
+                let trng_mode: trng::api::TrngTestMode = num_traits::FromPrimitive::from_usize(trng_mode_code)
+                    .unwrap_or(trng::api::TrngTestMode::None);
+                if trng_mode == trng::api::TrngTestMode::None {
+                    // ignore the call in case of a bad parameter
+                    continue;
+                } else {
+                    trng.set_test_mode(trng_mode);
+                }
+                log::info!("TRNG set to mode {:?}", trng_mode);
+
+                // The strategy here is when this is called, we start a thread that polls at some
+                // interval in milliseconds to see if the Tx buffer is empty and
+                // if rts() is true; and if so, jams more binary data into the pipe. If rts() is not true
+                // or the buffer is not available to write, the interval backs off.
                 //
                 // It also takes a trng_mode argument which is used to select either CPRNG whitened output
                 // (which is the default mode), or direct raw data from the RO or the Avalanche generator;
                 // this is used to help characterize the raw entropy sources.
+                if serial_trng_cid.is_none() {
+                    let trng_sid = xous::create_server().unwrap();
+                    let trng_cid = xous::connect(trng_sid).unwrap();
+                    std::thread::spawn({
+                        let serial_trng_interval = serial_trng_interval.clone();
+                        let main_conn = cid.clone();
+                        let trng_cid = trng_cid.clone();
+                        move || {
+                            let tt = ticktimer_server::Ticktimer::new().unwrap();
+                            let mut msg_opt = None;
+                            let mut return_type = 0;
+                            serial_trng_interval.store(TRNG_INITIAL_DELAY_MS, Ordering::SeqCst);
+                            log::info!("TRNG polling loop started");
+                            let mut debug_count = 0;
+                            loop {
+                                xous::reply_and_receive_next_legacy(trng_sid, &mut msg_opt, &mut return_type)
+                                .unwrap();
+                                let msg = msg_opt.as_mut().unwrap();
+                                match num_traits::FromPrimitive::from_usize(msg.body.id())
+                                .unwrap_or(TrngOp::InvalidCall)
+                                {
+                                    TrngOp::Pump => {
+                                        let next_interval = serial_trng_interval.load(Ordering::SeqCst);
+                                        if debug_count < 20 && next_interval < 100 {
+                                            log::debug!("TRNG serial poller, delay = {}", next_interval);
+                                            debug_count += 1;
+                                        }
+                                        if next_interval > 0 {
+                                            xous::try_send_message(main_conn,
+                                                xous::Message::new_scalar(Opcode::SerialTrngPoll.to_usize().unwrap(),
+                                                    0, 0, 0, 0)
+                                            ).ok();
+                                            tt.sleep_ms(next_interval as _).ok();
+                                            xous::try_send_message(trng_cid,
+                                                xous::Message::new_scalar(TrngOp::Pump.to_usize().unwrap(),
+                                                    0, 0, 0, 0)
+                                            ).ok();
+                                            // reset debug_count so when the next trigger comes we can see the output
+                                            if next_interval > 100  {
+                                                debug_count = 0;
+                                            }
+                                        } else {
+                                            debug_count = 0;
+                                        }
+                                    }
+                                    TrngOp::Quit => {
+                                        if let Some(scalar) = msg.body.scalar_message_mut() {
+                                            scalar.id = 0;
+                                            scalar.arg1 = 1;
+                                            log::info!("Quit called to Trng helper thread");
+                                            // I think there might be a bug in the kernel where quitting/disconnecting
+                                            // a reply_and_receive_next_legacy() loop is broken?
+                                            // This results in an inexplicable kernel hang...
+                                            // for now we can work around this by keeping the thread around once the server is started.
+                                            // break;
+                                        }
+                                    }
+                                    TrngOp::InvalidCall => {
+                                        log::error!("Unknown opcode received in TRNG source handler: {:?}", msg.body.id());
+                                    }
+                                }
+                            }
+                            /*
+                            unsafe{xous::disconnect(trng_cid).ok()};
+                            xous::destroy_server(trng_sid).ok();
+                            log::info!("TRNG polling loop exited");
+                            */
+                        }
+                    });
+                    serial_trng_cid = Some(trng_cid);
+                }
+                // kick off the polling thread
+                if let Some(trng_cid) = serial_trng_cid.as_ref() {
+                    xous::try_send_message(*trng_cid,
+                        xous::Message::new_scalar(TrngOp::Pump.to_usize().unwrap(),
+                            0, 0, 0, 0)
+                    ).ok();
+                }
             }),
+            Some(Opcode::SerialTrngPoll) => {
+                if serial_trng_cid.is_none() {
+                    // stale request from previously configured TRNG system
+                    continue;
+                }
+                let mut sent = false;
+                if serial_port.rts() {
+                    if serial_trng_buf.len() < TRNG_PKT_SIZE {
+                        match trng.get_test_data() {
+                            Ok(data) => {
+                                serial_trng_buf.extend_from_slice(&data);
+                            }
+                            Err(e) => {
+                                log::warn!("TRNG returned error while polling to refill: {:?}", e);
+                                continue;
+                            }
+                        }
+                    }
+                    // at this point, we should have data we can copy to the buffer. Pull it from the end of the buffer
+                    // so the Vec can efficiently de-allocate data.
+                    match serial_port.flush() {
+                        Ok(_) => {
+                            let available = serial_trng_buf.len();
+                            match serial_port.write(&serial_trng_buf[available - TRNG_PKT_SIZE..available]) {
+                                Ok(_) => {
+                                    serial_trng_buf.drain(available - TRNG_PKT_SIZE..available);
+                                    sent = true;
+                                }
+                                Err(_) => {
+                                    // do nothing, the host port is too full and can't take any more data
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // do nothing, we're still sending older data
+                        }
+                    }
+                }
+                if !sent {
+                    let prev_interval = serial_trng_interval.fetch_add(TRNG_BACKOFF_MS, Ordering::SeqCst);
+                    // cap the backoff rate
+                    if prev_interval > TRNG_BACKOFF_MAX_MS {
+                        log::info!("Max backoff delay encountered");
+                        serial_trng_interval.store(TRNG_BACKOFF_MAX_MS, Ordering::SeqCst);
+                    }
+                } else {
+                    serial_trng_interval.store(TRNG_REFILL_DELAY_MS, Ordering::SeqCst);
+                }
+            }
             Some(Opcode::Quit) => {
                 log::warn!("Quit received, goodbye world!");
                 break;
