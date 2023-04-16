@@ -29,8 +29,4 @@ precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 debugprint = []
-# note: these test routines are now deprecated, because the "Messible" has been removed from the SoC
-avalanchetest = []
-ringosctest = []
-urandomtest = []
 default = [] # "debugprint"

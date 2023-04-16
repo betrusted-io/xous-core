@@ -10,6 +10,9 @@ use xous_ipc::Buffer;
 
 use log::info;
 
+// when we are testing, allocate a fairly large chunk of data, because the overhead of switching and conditioning
+// the TRNG into the test mode is fairly high
+const TEST_CACHE_LEN: usize = 128 * 1024;
 #[derive(Copy, Clone, Debug)]
 struct ScalarCallback {
     server_to_cb_cid: CID,
@@ -19,7 +22,8 @@ struct ScalarCallback {
 
 #[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
-    use crate::api::{ExcursionTest, HealthTests, MiniRunsTest, NistTests, TrngBuf, TrngErrors};
+    use crate::api::{ExcursionTest, HealthTests, MiniRunsTest, NistTests, TrngBuf, TrngErrors, TrngTestMode, TRNG_TEST_BUF_LEN, TrngTestBuf};
+    use crate::TEST_CACHE_LEN;
     use num_traits::*;
     use susres::{RegManager, RegOrField, SuspendResume};
     use utralib::generated::*;
@@ -30,6 +34,7 @@ mod implementation {
         conn: xous::CID,
         errors: TrngErrors,
         err_stat: HealthTests,
+        last_test_mode: TrngTestMode,
     }
 
     fn trng_handler(_irq_no: usize, arg: *mut usize) {
@@ -129,55 +134,18 @@ mod implementation {
                     pending_mask: 0,
                 },
                 err_stat: HealthTests::default(),
+                last_test_mode: TrngTestMode::None,
             };
 
-            ///// configure power settings and which generator to use
-            if !(cfg!(feature = "avalanchetest") || cfg!(feature = "ringosctest")) {
-                trng.csr.wo(
-                    utra::trng_server::CONTROL,
-                    trng.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
-                        | trng.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1),
-                );
-                log::trace!(
-                    "TRNG configured for normal operation (av+ro): 0x{:08x}",
-                    trng.csr.r(utra::trng_server::CONTROL)
-                );
-            } else if cfg!(feature = "avalanchetest") && !cfg!(feature = "ringosctest") {
-                // avalanche test only
-                trng.csr.wo(
-                    utra::trng_server::CONTROL,
-                    trng.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
-                    | trng.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1) // question: do we want power save on or off for testing?? let's leave it on for now, it will make the test run slower but maybe more accurate to our usual use case
-                    | trng.csr.ms(utra::trng_server::CONTROL_RO_DIS, 1), // disable the RO to characterize only the AV
-                );
-                log::info!(
-                    "TRNG configured for avalanche testing: 0x{:08x}",
-                    trng.csr.r(utra::trng_server::CONTROL)
-                );
-            } else if !cfg!(feature = "avalanchetest") && cfg!(feature = "ringosctest") {
-                // ring osc test only
-                trng.csr.wo(
-                    utra::trng_server::CONTROL,
-                    trng.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
-                        | trng.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1)
-                        | trng.csr.ms(utra::trng_server::CONTROL_AV_DIS, 1), // disable the AV generator to characterize the RO
-                );
-                log::info!(
-                    "TRNG configured for ring oscillator testing: 0x{:08x}",
-                    trng.csr.r(utra::trng_server::CONTROL)
-                );
-            } else {
-                // both on
-                trng.csr.wo(
-                    utra::trng_server::CONTROL,
-                    trng.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
-                        | trng.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1),
-                );
-                log::info!(
-                    "TRNG configured for both avalanche and ring oscillator testing: 0x{:08x}",
-                    trng.csr.r(utra::trng_server::CONTROL)
-                );
-            }
+            trng.csr.wo(
+                utra::trng_server::CONTROL,
+                trng.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
+                    | trng.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1),
+            );
+            log::trace!(
+                "TRNG configured for normal operation (av+ro): 0x{:08x}",
+                trng.csr.r(utra::trng_server::CONTROL)
+            );
 
             trng.susres_manager
                 .push(RegOrField::Reg(utra::trng_server::CONTROL), None);
@@ -265,15 +233,6 @@ mod implementation {
             );
 
             trng
-        }
-        // for the test procedure
-        #[cfg(any(
-            feature = "avalanchetest",
-            feature = "ringosctest",
-            feature = "urandomtest"
-        ))]
-        pub fn get_trng_csr(&self) -> *mut u32 {
-            self.csr.base
         }
 
         pub fn get_errors(&self) -> TrngErrors {
@@ -461,6 +420,110 @@ mod implementation {
             // pump the engine to discard the initial 0's in the execution pipeline
             self.get_trng(2);
         }
+
+        fn flush_trng_fifo(&mut self) {
+            // The hardware FIFO Is 1024 entries deep x 32 bits wide. This is a hard-coded parameter derived from the trng_managed.py source code (line 1014)
+            for _ in 0..1024 {
+                while self.csr.rf(utra::trng_server::STATUS_AVAIL) == 0 {
+                    xous::yield_slice();
+                }
+                let _ = self.csr.rf(utra::trng_server::DATA_DATA);
+            }
+        }
+        /// This routine will "always" return a full buffer; if it is not full, that should be considered an error condition.
+        pub fn get_trng_testmode(&mut self, test_data: &mut Vec::<u8>, test_mode: TrngTestMode) -> TrngTestBuf {
+            let mut retbuf = TrngTestBuf {
+                data: [0u8; TRNG_TEST_BUF_LEN],
+                len: 0
+            };
+            // bail if the test mode isn't set
+            if test_mode == TrngTestMode::None {
+                return retbuf;
+            }
+            if self.last_test_mode != test_mode {
+                // the test_data buffer is forfeit; clear it
+                test_data.clear();
+                self.last_test_mode = test_mode;
+            }
+            if test_data.len() >= TRNG_TEST_BUF_LEN {
+                retbuf.data.copy_from_slice(test_data.drain(..TRNG_TEST_BUF_LEN).as_slice());
+                retbuf.len = TRNG_TEST_BUF_LEN as u16;
+                retbuf
+            } else {
+                match test_mode {
+                    TrngTestMode::Av => {
+                        // avalanche test only
+                        self.csr.wo(
+                            utra::trng_server::CONTROL,
+                            self.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
+                            | self.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1)
+                            | self.csr.ms(utra::trng_server::CONTROL_RO_DIS, 1), // disable the RO to characterize only the AV
+                        );
+                        self.flush_trng_fifo();
+                    }
+                    TrngTestMode::Ro => {
+                        // ring osc test only
+                        self.csr.wo(
+                            utra::trng_server::CONTROL,
+                            self.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
+                                | self.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1)
+                                | self.csr.ms(utra::trng_server::CONTROL_AV_DIS, 1), // disable the AV generator to characterize the RO
+                        );
+                        self.flush_trng_fifo();
+                    }
+                    TrngTestMode::Both | TrngTestMode::Cprng => {
+                        assert!(self.csr.rf(utra::trng_server::CONTROL_RO_DIS) == 0, "TRNG test mode inconsistency (RO reads as disabled; expected it to be enabled)");
+                        assert!(self.csr.rf(utra::trng_server::CONTROL_AV_DIS) == 0, "TRNG test mode inconsistency (AV reads as disabled; expected it to be enabled)");
+                    }
+                    TrngTestMode::None => {
+                        panic!("TRNG test buffer request with no test mode set.");
+                    }
+                }
+
+                // now refill the test_data buffer
+                while test_data.len() < TEST_CACHE_LEN {
+                    match test_mode {
+                        TrngTestMode::Av | TrngTestMode::Ro | TrngTestMode::Both => {
+                            while self.csr.rf(utra::trng_server::STATUS_AVAIL) == 0 {
+                                xous::yield_slice();
+                            }
+                            let word = self.csr.rf(utra::trng_server::DATA_DATA);
+                            test_data.extend_from_slice(&word.to_le_bytes());
+                        }
+                        TrngTestMode::Cprng => {
+                            while self.csr.rf(utra::trng_server::URANDOM_VALID_URANDOM_VALID) == 0 {
+                                xous::yield_slice();
+                            }
+                            let word = self.csr.rf(utra::trng_server::URANDOM_URANDOM);
+                            test_data.extend_from_slice(&word.to_le_bytes());
+                        }
+                        TrngTestMode::None => {
+                            unreachable!();
+                        }
+                    }
+                }
+
+                // restore the normal operation mode
+                match test_mode {
+                    TrngTestMode::Av | TrngTestMode::Ro => {
+                        // reinstate "normal" operation (both on)
+                        self.csr.wo(
+                            utra::trng_server::CONTROL,
+                            self.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
+                                | self.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1),
+                        );
+                        self.flush_trng_fifo();
+                    }
+                    // the raw TRNG data already matches the expected system mode; nothing to do
+                    _ => {},
+                }
+
+                // copy the test data into a return structure
+                retbuf.data.copy_from_slice(test_data.drain(..TRNG_TEST_BUF_LEN).as_slice());
+                retbuf.len = TRNG_TEST_BUF_LEN as u16;
+                retbuf
+            }
+        }
     }
 }
 
@@ -470,7 +533,7 @@ mod implementation {
     use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::SeedableRng;
     use rand_chacha::rand_core::RngCore;
-    use crate::api::{HealthTests, TrngBuf, TrngErrors};
+    use crate::api::{HealthTests, TrngBuf, TrngErrors, TRNG_TEST_BUF_LEN, TrngTestBuf, TrngTestMode};
 
     pub struct Trng {
         rng: ChaCha8Rng,
@@ -546,206 +609,12 @@ mod implementation {
         pub fn get_err_stats(&self) -> HealthTests {
             HealthTests::default()
         }
-    }
-}
-
-#[cfg(any(
-    feature = "avalanchetest",
-    feature = "ringosctest",
-    feature = "urandomtest"
-))]
-pub const TRNG_BUFF_LEN: usize = 512 * 1024;
-#[cfg(any(
-    feature = "avalanchetest",
-    feature = "ringosctest",
-    feature = "urandomtest"
-))]
-pub enum WhichMessible {
-    One,
-    Two,
-}
-#[cfg(any(
-    feature = "avalanchetest",
-    feature = "ringosctest",
-    feature = "urandomtest"
-))]
-struct Tester {
-    server_csr: utralib::CSR<u32>,
-    messible_csr: utralib::CSR<u32>,
-    messible2_csr: utralib::CSR<u32>,
-    buffer_a: xous::MemoryRange,
-    buffer_b: xous::MemoryRange,
-    ticktimer: ticktimer_server::Ticktimer,
-}
-#[cfg(any(
-    feature = "avalanchetest",
-    feature = "ringosctest",
-    feature = "urandomtest"
-))]
-impl Tester {
-    pub fn new(server_csr: *mut u32) -> Tester {
-        use utralib::generated::*;
-        let buff_a = xous::syscall::map_memory(
-            xous::MemoryAddress::new(0x4080_0000), // fix this at a known physical address
-            None,
-            crate::TRNG_BUFF_LEN,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map TRNG comms buffer A");
-
-        let buff_b = xous::syscall::map_memory(
-            xous::MemoryAddress::new(0x4088_0000), // fix this at a known physical address
-            None,
-            crate::TRNG_BUFF_LEN,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map TRNG comms buffer B");
-
-        let messible = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::messible::HW_MESSIBLE_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map messible");
-
-        let messible2 = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::messible2::HW_MESSIBLE2_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map messible");
-
-        Tester {
-            server_csr: CSR::new(server_csr),
-            buffer_a: buff_a,
-            buffer_b: buff_b,
-            messible_csr: CSR::new(messible.as_mut_ptr() as *mut u32),
-            messible2_csr: CSR::new(messible2.as_mut_ptr() as *mut u32),
-            ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
-        }
-    }
-
-    pub fn messible_send(&mut self, which: WhichMessible, value: u8) {
-        use utralib::generated::*;
-        match which {
-            WhichMessible::One => self.messible_csr.wfo(utra::messible::IN_IN, value as u32),
-            WhichMessible::Two => self.messible2_csr.wfo(utra::messible2::IN_IN, value as u32),
-        }
-    }
-    #[allow(dead_code)]
-    pub fn messible_get(&mut self, which: WhichMessible) -> u8 {
-        use utralib::generated::*;
-        match which {
-            WhichMessible::One => self.messible_csr.rf(utra::messible::OUT_OUT) as u8,
-            WhichMessible::Two => self.messible2_csr.rf(utra::messible2::OUT_OUT) as u8,
-        }
-    }
-    pub fn messible_wait_get(&mut self, which: WhichMessible) -> u8 {
-        use utralib::generated::*;
-        match which {
-            WhichMessible::One => {
-                while self.messible_csr.rf(utra::messible::STATUS_HAVE) == 0 {
-                    //xous::yield_slice();
-                    self.ticktimer.sleep_ms(10).unwrap();
-                }
-                self.messible_csr.rf(utra::messible::OUT_OUT) as u8
-            }
-            WhichMessible::Two => {
-                while self.messible2_csr.rf(utra::messible2::STATUS_HAVE) == 0 {
-                    //xous::yield_slice();
-                    self.ticktimer.sleep_ms(10).unwrap();
-                }
-                self.messible2_csr.rf(utra::messible2::OUT_OUT) as u8
+        pub fn get_trng_testmode(&mut self, _test_data: &mut Vec::<u8>, _test_mode: TrngTestMode) -> TrngTestBuf {
+            TrngTestBuf {
+                data: [0u8; TRNG_TEST_BUF_LEN],
+                len: 0
             }
         }
-    }
-
-    pub fn get_buff_a(&self) -> *mut u32 {
-        self.buffer_a.as_mut_ptr() as *mut u32
-    }
-    pub fn get_buff_b(&self) -> *mut u32 {
-        self.buffer_b.as_mut_ptr() as *mut u32
-    }
-
-    pub fn get_data_eager(&self) -> u32 {
-        use utralib::generated::*;
-        if cfg!(feature = "avalanchetest") || cfg!(feature = "ringosctest") {
-            while self.server_csr.rf(utra::trng_server::STATUS_AVAIL) == 0 {
-                xous::yield_slice();
-            }
-            self.server_csr.rf(utra::trng_server::DATA_DATA)
-        } else {
-            while self
-                .server_csr
-                .rf(utra::trng_server::URANDOM_VALID_URANDOM_VALID)
-                == 0
-            {}
-            self.server_csr.rf(utra::trng_server::URANDOM_URANDOM)
-        }
-    }
-    #[allow(dead_code)]
-    pub fn wait_full(&self) {
-        use utralib::generated::*;
-        while self.server_csr.rf(utra::trng_server::STATUS_FULL) == 0 {
-            xous::yield_slice();
-        }
-    }
-}
-#[cfg(any(
-    feature = "avalanchetest",
-    feature = "ringosctest",
-    feature = "urandomtest"
-))]
-fn tester_thread(csr: usize) {
-    let mut trng = Tester::new(csr as *mut u32);
-
-    // just create buffers out of pointers. Definitely. Unsafe.
-    let buff_a = trng.get_buff_a() as *mut u32;
-    let buff_b = trng.get_buff_b() as *mut u32;
-
-    for i in 0..TRNG_BUFF_LEN / 4 {
-        // buff_a[i] = trng.get_data_eager();
-        unsafe { buff_a.add(i).write_volatile(trng.get_data_eager()) };
-    }
-    for i in 0..TRNG_BUFF_LEN / 4 {
-        // buff_b[i] = trng.get_data_eager();
-        unsafe { buff_b.add(i).write_volatile(trng.get_data_eager()) };
-    }
-    log::info!("TRNG_TESTER: starting service");
-    // confirm that the config flags work as embedded in get_data_eager
-    if cfg!(feature = "avalanchetest") || cfg!(feature = "ringosctest") {
-        log::info!("TRNG_TESTER: using raw data sources");
-        if cfg!(feature = "avalanchetest") {
-            log::info!("TRNG_TESTER: avalanche enabled");
-        }
-        if cfg!(feature = "ringosctest") {
-            log::info!("TRNG_TESTER: ring oscillator enabled");
-        }
-    } else {
-        log::info!("TRNG_TESTER: using urandom data sources");
-    }
-    let mut phase = 1;
-    trng.messible_send(WhichMessible::One, phase); // indicate buffer A is ready to go
-
-    loop {
-        trng.messible_wait_get(WhichMessible::Two);
-        if phase % 2 == 0 {
-            log::info!("TRNG_TESTER: filling A");
-            for i in 0..TRNG_BUFF_LEN / 4 {
-                //buff_a[i] = trng.get_data_eager();
-                unsafe { buff_a.add(i).write_volatile(trng.get_data_eager()) };
-            }
-        } else {
-            log::info!("TRNG_TESTER: filling B");
-            for i in 0..TRNG_BUFF_LEN / 4 {
-                //buff_b[i] = trng.get_data_eager();
-                unsafe { buff_b.add(i).write_volatile(trng.get_data_eager()) };
-            }
-        }
-        phase += 1;
-        trng.messible_send(WhichMessible::One, phase);
     }
 }
 
@@ -792,6 +661,11 @@ fn main() -> ! {
         .expect("couldn't create suspend/resume object");
 
     let mut error_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
+
+    // storage for testing data. We heap-allocate it, so that it's not a burden when we aren't testing the TRNG
+    let mut test_data = Vec::<u8>::new();
+    let mut test_mode = TrngTestMode::None;
+
     loop {
         let mut msg = xous::receive_message(trng_sid).unwrap();
         let op: Option<api::Opcode> = FromPrimitive::from_usize(msg.body.id());
@@ -841,6 +715,36 @@ fn main() -> ! {
                 };
                 let len = buffer.as_flat::<TrngBuf, _>().unwrap().len;
                 buffer.replace(trng.get_buf(len)).unwrap();
+            }
+            Some(api::Opcode::TestSetMode) => xous::msg_blocking_scalar_unpack!(msg, mode_code, _, _, _, {
+                if let Some(mode) = FromPrimitive::from_usize(mode_code) {
+                    test_mode = mode;
+                    match mode {
+                        TrngTestMode::None => {
+                            // de-allocate the test memory
+                            test_data.clear();
+                            test_data.shrink_to(0);
+                        }
+                        _ => {
+                            // pre-allocate the expected test memory, to avoid thrashing the heap
+                            if test_data.capacity() < TEST_CACHE_LEN {
+                                test_data.reserve(TEST_CACHE_LEN - test_data.len());
+                            }
+                        }
+                    }
+                } else {
+                    test_mode = TrngTestMode::None;
+                    // de-allocate the test memory
+                    test_data.clear();
+                    test_data.shrink_to(0);
+                }
+                xous::return_scalar(msg.sender, 1).ok();
+            }),
+            Some(api::Opcode::TestGetData) => {
+                let mut buffer = unsafe {
+                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                };
+                buffer.replace(trng.get_trng_testmode(&mut test_data, test_mode)).unwrap();
             }
             Some(api::Opcode::Quit) => break,
             None => {
