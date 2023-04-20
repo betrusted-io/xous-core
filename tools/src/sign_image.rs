@@ -1,4 +1,4 @@
-use std::io::{Error, ErrorKind, Read, Write};
+use std::io::{Read, Write};
 use std::path::Path;
 
 use ring::signature::Ed25519KeyPair;
