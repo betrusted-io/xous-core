@@ -113,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
     ].concat();
     // for fast checking of AES hardware accelerator
-    let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"].to_vec();
+    let aestest_pkgs = ["xous-ticktimer", "xous-log", "aes-test"].to_vec();
 
     // ---- extract position independent args ----
     let lkey = get_flag("--lkey")?;
