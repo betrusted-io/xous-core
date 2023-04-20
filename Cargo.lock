@@ -71,6 +71,7 @@ dependencies = [
 name = "aes-test"
 version = "0.1.0"
 dependencies = [
+ "aes 0.8.1",
  "hex-literal",
  "log",
  "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -1,12 +1,13 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod aes;
-
 #[cfg(feature = "low_level_tests")]
 mod low_level_tests;
 
 use hex_literal::hex;
+
+use aes::{Aes128, Block};
+use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 
 struct AesEcbTest<'a> {
     key: &'a [u8],
@@ -24,13 +25,12 @@ impl<'a> AesEcbTest<'a> {
     }
 
     pub fn test(&self) -> Result<(), &'static str> {
-        let mut output = [0u8; 16];
-        let mut aes_key = Default::default();
+        let mut output = Block::default();
+        let aes = Aes128::new_from_slice(&self.key).unwrap();
 
         log::info!("Setting key");
-        aes::set_encrypt_key(&self.key, &mut aes_key).unwrap();
         log::info!("Running encryption");
-        aes::vexriscv_aes_encrypt(&self.plaintext, &mut output, &aes_key);
+        aes.encrypt_block(&mut output);
         log::info!("Key:       {:x?}", self.key);
         log::info!("Plaintext: {:x?}", self.plaintext);
         log::info!("Reference: {:x?}", self.ciphertext);
@@ -38,19 +38,18 @@ impl<'a> AesEcbTest<'a> {
         if self.ciphertext.len() != output.len() {
             Err("encrypt error: ciphertext and output lengths do not match")?;
         }
-        if self.ciphertext != output {
+        if self.ciphertext != output.as_slice() {
             Err("encrypt error: ciphertext and output values do not match")?;
         }
 
-        aes::set_decrypt_key(&self.key, &mut aes_key).unwrap();
         log::info!("Running decryption");
-        aes::vexriscv_aes_decrypt(&self.ciphertext, &mut output, &aes_key);
+        aes.decrypt_block(&mut output);
         log::info!("Plaintext: {:x?}", self.plaintext);
         log::info!("Result:    {:x?}", output);
         if self.plaintext.len() != output.len() {
             Err("decrypt error: plaintext and output lengths do not match")?;
         }
-        if self.plaintext != output {
+        if self.plaintext != output.as_slice() {
             Err("decrypt error: plaintext and output values do not match")?;
         }
 
