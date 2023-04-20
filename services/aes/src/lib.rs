@@ -1,4 +1,4 @@
-#![cfg_attr(target_os = "none", no_std)]
+#![no_std]
 
 /*
   Soft AES implementations vendored in from https://github.com/RustCrypto/block-ciphers.git
