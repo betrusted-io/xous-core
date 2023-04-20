@@ -41,9 +41,6 @@ name = "aes"
 version = "0.8.1"
 dependencies = [
  "cipher 0.4.3",
- "log",
- "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-api-log",
 ]
 
 [[package]]
