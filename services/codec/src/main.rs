@@ -31,7 +31,7 @@ fn main() -> ! {
     log::trace!("registered with NS -- {:?}", codec_sid);
 
     let codec_conn = xous::connect(codec_sid).expect("couldn't make connection for the codec implementation");
-    let mut codec = Codec::new(codec_conn, &xns);
+    let mut codec = Box::new(Codec::new(codec_conn, &xns));
 
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     log::trace!("ready to accept requests");
