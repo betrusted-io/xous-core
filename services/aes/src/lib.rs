@@ -11,10 +11,6 @@
   eliminates another foreign build.rs script that runs on the local build machine.
 */
 
-
-#[cfg(feature = "hazmat")]
-pub mod hazmat;
-
 mod soft;
 pub use soft::{Aes128Soft, Aes192, Aes256Soft};
 
