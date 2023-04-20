@@ -8,15 +8,15 @@ mod low_level_tests;
 
 use hex_literal::hex;
 
-struct AesEcbTest<'a, 'b, 'c> {
+struct AesEcbTest<'a> {
     key: &'a [u8],
-    plaintext: &'b [u8],
-    ciphertext: &'c [u8],
+    plaintext: &'a [u8],
+    ciphertext: &'a [u8],
 }
 
-impl<'a, 'b, 'c> AesEcbTest<'a, 'b, 'c> {
-    pub fn new(key: &'a [u8], plaintext: &'b [u8], ciphertext: &'c [u8]) -> Self {
-        AesEcbTest {
+impl<'a> AesEcbTest<'a> {
+    pub fn new(key: &'a [u8], plaintext: &'a [u8], ciphertext: &'a [u8]) -> Self {
+        Self {
             key,
             plaintext,
             ciphertext,
