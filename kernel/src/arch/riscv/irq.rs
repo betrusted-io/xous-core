@@ -411,7 +411,7 @@ pub extern "C" fn trap_handler(
         ex
     );
     #[cfg(any(feature = "precursor", feature = "renode"))]
-    panic!(
+    println!(
         "{}: CPU Exception on PID {}: {}",
         if is_kernel_failure {
             "!!! KERNEL FAILURE !!!"
