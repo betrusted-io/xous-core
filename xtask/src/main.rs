@@ -70,9 +70,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &base_pkgs[..],
         &[
             "graphics-server",  // raw (unprotected) frame buffer primitives
-            "keyboard",   // required by graphics-server
-            "spinor",     // required by keyboard - to save key mapping
-            "llio",       // required by spinor
+            "early_settings",   // required by keyboard
+            "keyboard",         // required by graphics-server
+            "spinor",           // required by keyboard - to save key mapping
+            "llio",             // required by spinor
         ]
     ].concat();
     // packages in the user image - most of the services at this layer have cross-dependencies

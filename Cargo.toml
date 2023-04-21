@@ -29,6 +29,7 @@ default-members = [
   "services/dns",
   "services/modals",
   "services/usb-device-xous",
+  "services/early_settings",
   "libs/userprefs"
 ]
 members = [
@@ -72,6 +73,7 @@ members = [
   "services/net",
   "services/dns",
   "services/modals",
+  "services/early_settings",
   "apps/ball",
   "apps/hello",
   "apps/mtxcli",
