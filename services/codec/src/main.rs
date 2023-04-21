@@ -20,7 +20,17 @@ struct ScalarCallback {
     cb_to_client_id: u32,
 }
 
-fn main() -> ! {
+fn main () -> ! {
+    let stack_size = 256 * 1024;
+    std::thread::Builder::new()
+        .stack_size(stack_size)
+        .spawn(wrapped_main)
+        .unwrap()
+        .join()
+        .unwrap()
+}
+
+fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());

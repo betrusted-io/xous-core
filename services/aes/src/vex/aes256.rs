@@ -26,7 +26,7 @@ fn set_encrypt_key_inner_256(user_key: &[u8], swap_final: bool) -> VexKeys256 {
             ^ (TE2[(temp >> 16) & 0xff] & 0xff000000)
             ^ (TE3[(temp >> 8) & 0xff] & 0x00ff0000)
             ^ (TE0[(temp) & 0xff] & 0x0000ff00)
-            ^ (TE1[(temp >> 24)] & 0x000000ff)
+            ^ (TE1[temp >> 24] & 0x000000ff)
             ^ rcon;
         rk[9 + rk_offset] = rk[1 + rk_offset] ^ rk[8 + rk_offset];
         rk[10 + rk_offset] = rk[2 + rk_offset] ^ rk[9 + rk_offset];
@@ -39,7 +39,7 @@ fn set_encrypt_key_inner_256(user_key: &[u8], swap_final: bool) -> VexKeys256 {
 
         let temp = rk[11 + rk_offset] as usize;
         rk[12 + rk_offset] = rk[4 + rk_offset]
-            ^ (TE2[(temp >> 24)] & 0xff000000)
+            ^ (TE2[temp >> 24] & 0xff000000)
             ^ (TE3[(temp >> 16) & 0xff] & 0x00ff0000)
             ^ (TE0[(temp >> 8) & 0xff] & 0x0000ff00)
             ^ (TE1[(temp) & 0xff] & 0x000000ff);
@@ -90,19 +90,19 @@ pub fn aes256_dec_key_schedule(user_key: &[u8]) -> VexKeys256 {
     /* apply the inverse MixColumn transform to all round keys but the first and the last: */
     let mut rk_offset = 4;
     for _ in 1..rounds {
-        rk[0 + rk_offset] = TD0[TE1[(rk[0 + rk_offset] as usize >> 24)] as usize & 0xff]
+        rk[0 + rk_offset] = TD0[TE1[rk[0 + rk_offset] as usize >> 24] as usize & 0xff]
             ^ TD1[TE1[(rk[0 + rk_offset] as usize >> 16) & 0xff] as usize & 0xff]
             ^ TD2[TE1[(rk[0 + rk_offset] as usize >> 8) & 0xff] as usize & 0xff]
             ^ TD3[TE1[(rk[0 + rk_offset] as usize) & 0xff] as usize & 0xff];
-        rk[1 + rk_offset] = TD0[TE1[(rk[1 + rk_offset] as usize >> 24)] as usize & 0xff]
+        rk[1 + rk_offset] = TD0[TE1[rk[1 + rk_offset] as usize >> 24] as usize & 0xff]
             ^ TD1[TE1[(rk[1 + rk_offset] as usize >> 16) & 0xff] as usize & 0xff]
             ^ TD2[TE1[(rk[1 + rk_offset] as usize >> 8) & 0xff] as usize & 0xff]
             ^ TD3[TE1[(rk[1 + rk_offset] as usize) & 0xff] as usize & 0xff];
-        rk[2 + rk_offset] = TD0[TE1[(rk[2 + rk_offset] as usize >> 24)] as usize & 0xff]
+        rk[2 + rk_offset] = TD0[TE1[rk[2 + rk_offset] as usize >> 24] as usize & 0xff]
             ^ TD1[TE1[(rk[2 + rk_offset] as usize >> 16) & 0xff] as usize & 0xff]
             ^ TD2[TE1[(rk[2 + rk_offset] as usize >> 8) & 0xff] as usize & 0xff]
             ^ TD3[TE1[(rk[2 + rk_offset] as usize) & 0xff] as usize & 0xff];
-        rk[3 + rk_offset] = TD0[TE1[(rk[3 + rk_offset] as usize >> 24)] as usize & 0xff]
+        rk[3 + rk_offset] = TD0[TE1[rk[3 + rk_offset] as usize >> 24] as usize & 0xff]
             ^ TD1[TE1[(rk[3 + rk_offset] as usize >> 16) & 0xff] as usize & 0xff]
             ^ TD2[TE1[(rk[3 + rk_offset] as usize >> 8) & 0xff] as usize & 0xff]
             ^ TD3[TE1[(rk[3 + rk_offset] as usize) & 0xff] as usize & 0xff];

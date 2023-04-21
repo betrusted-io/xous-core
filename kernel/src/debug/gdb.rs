@@ -295,7 +295,7 @@ pub fn report_stop(_pid: xous_kernel::PID, tid: xous_kernel::TID, _pc: usize) {
     };
 }
 
-pub fn report_terminated(_pid: xous_kernel::PID) {
+pub fn report_terminated(pid: xous_kernel::PID) {
     let Some(XousDebugState {
         mut target,
         server: gdb,
@@ -306,7 +306,6 @@ pub fn report_terminated(_pid: xous_kernel::PID) {
 
     let new_gdb = match gdb {
         GdbStubStateMachine::Running(inner) => {
-            println!("Reporting a STOP");
             match inner.report_stop(
                 &mut target,
                 MultiThreadStopReason::Signal(Signal::EXC_BAD_ACCESS),
@@ -326,9 +325,9 @@ pub fn report_terminated(_pid: xous_kernel::PID) {
             println!("GDB state was in Disconnect, which shouldn't be possible!");
             return;
         }
-        GdbStubStateMachine::Idle(_inner) => {
-            println!("GDB state was in Idle, which shouldn't be possible!");
-            return;
+        GdbStubStateMachine::Idle(inner) => {
+            println!("Please connect a debugger to debug process {}", pid);
+            GdbStubStateMachine::Idle(inner)
         }
     };
 
