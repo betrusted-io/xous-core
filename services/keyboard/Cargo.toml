@@ -22,6 +22,7 @@ num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 utralib = {version = "0.1.17", optional = true, default-features = false }
+early_settings ={ path = "../early_settings"}
 
 [features]
 precursor = ["utralib/precursor"]
