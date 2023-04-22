@@ -89,7 +89,8 @@ members = [
   "tools/perflib",
   "kernel",
   "loader",
-  "libs/userprefs"
+  "libs/userprefs",
+  "services/app-loader"
 ]
 resolver = "2"
 

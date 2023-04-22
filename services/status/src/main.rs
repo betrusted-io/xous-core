@@ -22,6 +22,8 @@ use locales::t;
 use gam::{GamObjectList, GamObjectType};
 use chrono::prelude::*;
 use crossbeam::channel::{at, select, unbounded, Receiver, Sender};
+#[cfg(feature = "app_loader")]
+use app_loader::AppLoader;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -62,6 +64,9 @@ pub(crate) enum StatusOpcode {
     SwitchToShellchat,
     /// Switch to an app
     SwitchToApp,
+    /// Switch to an app loaded by apploader
+    #[cfg(feature="app_loader")]
+    SwitchToLoadedApp,
 
     /// Prepare for a backup
     PrepareBackup,
@@ -327,7 +332,7 @@ fn wrapped_main() -> ! {
     let main_menu_sid = xous::create_server().unwrap();
     let status_cid = xous::connect(status_sid).unwrap();
     let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com);
-    create_app_menu(xous::connect(status_sid).unwrap());
+    let app_menu_manager = create_app_menu(xous::connect(status_sid).unwrap());
     let kbd = Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap()));
 
     // ---------------------------- Background processes that claim contexts
@@ -798,6 +803,12 @@ fn wrapped_main() -> ! {
     // storage for wifi bars
     let mut wifi_bars: [PixelColor; 5] = [PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light];
 
+    // the app loader
+    #[cfg(feature = "app_loader")]
+    let mut app_loader = AppLoader::new(&xns, status_cid, StatusOpcode::SwitchToLoadedApp.to_u32().unwrap(), app_menu_manager.unwrap()).expect("Couldn't load app loader");
+    #[cfg(feature = "app_loader")]
+    app_loader.load_app(xous_ipc::String::from_str("hello")).expect("Couldn't load hello");
+
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
@@ -1130,6 +1141,20 @@ fn wrapped_main() -> ! {
                 ticktimer.sleep_ms(100).ok();
                 let app_name = app_autogen::app_index_to_name(index).expect("app index not found");
                 app_autogen::app_dispatch(&gam, security_tv.token.unwrap(), index).expect("cannot switch to app");
+                sec_notes.lock().unwrap().remove(&"current_app".to_string());
+                sec_notes.lock().unwrap().insert("current_app".to_string(), format!("Running: {}", app_name).to_string());
+                secnotes_force_redraw = true;
+                send_message(
+                    cb_cid,
+                    Message::new_scalar(StatusOpcode::Pump.to_usize().unwrap(), 0, 0, 0, 0),
+                ).expect("couldn't trigger status update");
+            }),
+	    #[cfg(feature = "app_loader")]
+	    Some(StatusOpcode::SwitchToLoadedApp) => msg_scalar_unpack!(msg, index, _, _, _, {
+                ticktimer.sleep_ms(100).ok();
+		let app_name = app_loader.app_index_to_name(index).expect("app index not found");
+		log::info!("Loading app `{}' (index {})", app_name, index);
+                app_loader.app_dispatch(security_tv.token.unwrap(), index).expect("cannot switch to app");
                 sec_notes.lock().unwrap().remove(&"current_app".to_string());
                 sec_notes.lock().unwrap().insert("current_app".to_string(), format!("Running: {}", app_name).to_string());
                 secnotes_force_redraw = true;
