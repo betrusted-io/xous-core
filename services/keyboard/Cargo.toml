@@ -34,4 +34,4 @@ debuginject = [] # used only if you want direct key injection via serial or USB.
 rawserial = []
 braille = []
 inject-api = [] # used by the serial feature in usb
-default = ["debuginject", "inject-api"] # "debugprint"
+default = ["debuginject"] # "debugprint"
