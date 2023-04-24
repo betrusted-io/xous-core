@@ -1,6 +1,8 @@
 # `early_settings`
 
-This crate provides a service and API to access some settings stored in the first 4096 bytes of FLASH.
+This crate provides a service and API to access settings stored in the first 4096 bytes of FLASH.
+
+Settings stored there do not contain any personal identifiable information.
 
 Settings currently stored here:
  - keymap

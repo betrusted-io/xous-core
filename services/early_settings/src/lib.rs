@@ -6,9 +6,16 @@ pub const SERVER_NAME_ES: &str = "_EARLY_SETTINGS";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum Opcode {
+    /// Sets the keymap in early settings.
     SetKeymap,
+
+    /// Retrieves keymap from early settings.
     GetKeymap,
+
+    /// Retrieves the status of the early sleep flag.
     EarlySleep,
+
+    /// Sets early sleep flag in early settings.
     SetEarlySleep,
 }
 
@@ -26,6 +33,8 @@ impl EarlySettings {
         Ok(EarlySettings { conn })
     }
 
+    /// set_keymap sets map as keymap in the early settings FLASH section.
+    /// No validation on map is done, use with caution.
     pub fn set_keymap(&self, map: usize) -> Result<(), xous::Error> {
         send_message(
             self.conn,
@@ -40,6 +49,8 @@ impl EarlySettings {
         .map(|_| ())
     }
 
+    /// get_keymap gets the keymap from the early settings FLASH section.
+    /// No validation is done on the return value, use with caution.
     pub fn get_keymap(&self) -> Result<usize, xous::Error> {
         match send_message(
             self.conn,
@@ -50,6 +61,7 @@ impl EarlySettings {
         }
     }
 
+    /// set_early_sleep sets value in the early settings FLASH section.
     pub fn set_early_sleep(&self, value: bool) -> Result<(), xous::Error> {
         send_message(
             self.conn,
@@ -64,6 +76,7 @@ impl EarlySettings {
         .map(|_| ())
     }
 
+    /// early_sleep retrieves the early sleep flag from the early settings FLASH section.
     pub fn early_sleep(&self) -> Result<bool, xous::Error> {
         match send_message(
             self.conn,
@@ -73,7 +86,7 @@ impl EarlySettings {
                 0 => Ok(false),
                 1 => Ok(true),
                 _ => Ok(false), // instead of doing `value != 0` we're explicitly matching against specific values, because
-                            // reading off FLASH can yield a true value otherwise, even if it wasn't set before
+                                // reading off FLASH can yield a true value otherwise, even if it wasn't set before
             },
             _ => Err(xous::Error::InternalError),
         }

@@ -1,7 +1,35 @@
+use std::ops::Range;
+
 use early_settings::{Opcode, SERVER_NAME_ES};
 use num_traits::FromPrimitive;
 use spinor::Spinor;
 use xous::{msg_blocking_scalar_unpack, MemoryRange};
+
+/*
+!!!! EARLY SETTINGS ALLOCATED SLOTS !!!!
+
+If you'll ever need a data slot in the early settings FLASH section,
+please document it here for reference and use the Slot struct!
+
+Thanks!
+
+Keymap: offset 0, size 4
+Early sleep: offset 4, size 4
+*/
+
+const KEYMAP: Slot = Slot { offset: 0, size: 4 };
+const EARLY_SLEEP: Slot = Slot { offset: 4, size: 4 };
+
+struct Slot {
+    offset: u32,
+    size: u32,
+}
+
+impl Slot {
+    fn range(&self) -> Range<usize> {
+        (self.offset as usize)..((self.offset + self.size) as usize)
+    }
+}
 
 struct State {
     settings_page: MemoryRange,
@@ -31,13 +59,13 @@ fn main() -> ! {
         .expect("can't register server");
 
     loop {
-        let msg = xous::receive_message(sid).unwrap(); // this blocks until we get a message
+        let msg = xous::receive_message(sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::GetKeymap) => {
                 let settings: &[u8] = state.settings_page.as_slice();
 
-                let code = u32::from_le_bytes(settings[..4].try_into().unwrap());
+                let code = u32::from_le_bytes(settings[KEYMAP.range()].try_into().unwrap());
 
                 xous::return_scalar(msg.sender, code as usize).unwrap();
             }
@@ -47,7 +75,7 @@ fn main() -> ! {
 
                 state
                     .spinor
-                    .patch(settings, xous::EARLY_SETTINGS, &code, 0)
+                    .patch(settings, xous::EARLY_SETTINGS, &code, KEYMAP.offset)
                     .expect("couldn't patch our keyboard code");
 
                 log::info!("writing early keymap: {}", map);
@@ -60,7 +88,7 @@ fn main() -> ! {
 
                 state
                     .spinor
-                    .patch(settings, xous::EARLY_SETTINGS, &code, 4)
+                    .patch(settings, xous::EARLY_SETTINGS, &code, EARLY_SLEEP.offset)
                     .expect("couldn't patch early reboot flag");
 
                 log::info!("writing must sleep on reboot: {}", value);
@@ -70,7 +98,7 @@ fn main() -> ! {
             Some(Opcode::EarlySleep) => {
                 let settings: &[u8] = state.settings_page.as_slice();
 
-                let value = u32::from_le_bytes(settings[4..8].try_into().unwrap());
+                let value = u32::from_le_bytes(settings[EARLY_SLEEP.range()].try_into().unwrap());
 
                 log::info!("value read for early sleep: {}", value);
 
