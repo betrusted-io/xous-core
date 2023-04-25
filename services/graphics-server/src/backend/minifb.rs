@@ -3,6 +3,7 @@
 use crate::api::Point;
 use minifb::{Key, Window, WindowOptions};
 use crate::api::{LINES, WIDTH};
+use std::sync::{Arc, Mutex};
 
 const HEIGHT: i16 = LINES;
 
@@ -18,11 +19,16 @@ const DARK_COLOUR: u32 = 0xB5B5AD;
 const LIGHT_COLOUR: u32 = 0x1B1B19;
 
 pub struct XousDisplay {
-    native_buffer: Vec<u32>, //[u32; WIDTH * HEIGHT],
+    native_buffer: Arc<Mutex<Vec<u32>>>, //[u32; WIDTH * HEIGHT],
     emulated_buffer: [u32; FB_SIZE],
     srfb: [u32; FB_SIZE],
-    window: Window,
     devboot: bool,
+}
+
+/// Encapsulates the data passed to the thread handling minifb screen updates
+/// and input events.
+struct MinifbThread {
+    native_buffer: Arc<Mutex<Vec<u32>>>,
 }
 
 struct XousKeyboardHandler {
@@ -33,43 +39,20 @@ struct XousKeyboardHandler {
 
 impl XousDisplay {
     pub fn new() -> XousDisplay {
-        let mut window = Window::new(
-            "Precursor",
-            WIDTH as usize,
-            HEIGHT as usize,
-            WindowOptions {
-                scale_mode: minifb::ScaleMode::AspectRatioStretch,
-                resize: true,
-                ..WindowOptions::default()
-            },
-        )
-        .unwrap_or_else(|e| {
-            panic!("{}", e);
-        });
-
-        // // Limit the maximum refresh rate
-        // window.limit_update_rate(Some(std::time::Duration::from_micros(
-        //     1000 * 1000 / MAX_FPS,
-        // )));
-
         let native_buffer = vec![DARK_COLOUR; WIDTH as usize * HEIGHT as usize];
-        window
-            .update_with_buffer(&native_buffer, WIDTH as usize, HEIGHT as usize)
-            .unwrap();
+        let native_buffer = Arc::new(Mutex::new(native_buffer));
 
-        let xns = xous_names::XousNames::new().unwrap();
-        let kbd =
-            keyboard::Keyboard::new(&xns).expect("GFX|hosted can't connect to KBD for emulation");
-        let keyboard_handler = Box::new(XousKeyboardHandler {
-            kbd: kbd,
-            left_shift: false,
-            right_shift: false,
-        });
-        window.set_input_callback(keyboard_handler);
+        // Spawn a GUI thread
+        let thread_params = MinifbThread {
+            native_buffer: Arc::clone(&native_buffer),
+        };
+        std::thread::Builder::new()
+            .name("minifb".into())
+            .spawn(move || thread_params.run())
+            .unwrap();
 
         XousDisplay {
             native_buffer,
-            window,
             emulated_buffer: [0u32; FB_SIZE],
             srfb: [0u32; FB_SIZE],
             devboot: true,
@@ -88,7 +71,8 @@ impl XousDisplay {
         self.srfb.copy_from_slice(&self.emulated_buffer);
     }
     pub fn pop(&mut self) {
-        self.emulated_buffer[FB_WIDTH_WORDS*32..].copy_from_slice(&self.srfb[FB_WIDTH_WORDS*32..]);
+        self.emulated_buffer[FB_WIDTH_WORDS * 32..]
+            .copy_from_slice(&self.srfb[FB_WIDTH_WORDS * 32..]);
         self.redraw();
         self.update();
     }
@@ -101,6 +85,7 @@ impl XousDisplay {
         for (dest, src) in self.emulated_buffer.iter_mut().zip(bmp.iter()) {
             *dest = *src;
         }
+        self.emulated_to_native();
     }
     pub fn as_slice(&self) -> &[u32] {
         &self.emulated_buffer
@@ -112,24 +97,16 @@ impl XousDisplay {
 
     pub fn redraw(&mut self) {
         self.emulated_to_native();
-        self.window
-            .update_with_buffer(&self.native_buffer, WIDTH as usize, HEIGHT as usize)
-            .unwrap();
     }
 
-    pub fn update(&mut self) {
-        self.emulated_to_native();
-        self.window.update();
-        if !self.window.is_open() || self.window.is_key_down(Key::Escape) {
-            std::process::exit(0);
-        }
-    }
+    // TODO: `update` is no longer needed for emulation; remove it
+    pub fn update(&mut self) {}
 
     fn emulated_to_native(&mut self) {
         const DEVBOOT_LINE: usize = 7;
+        let mut native_buffer = self.native_buffer.lock().unwrap();
         let mut row = 0;
-        for (dest_row, src_row) in self
-            .native_buffer
+        for (dest_row, src_row) in native_buffer
             .chunks_mut(WIDTH as _)
             .zip(self.emulated_buffer.chunks(WIDTH_WORDS as _))
         {
@@ -148,6 +125,58 @@ impl XousDisplay {
                 }
             }
             row += 1;
+        }
+    }
+}
+
+impl MinifbThread {
+    pub fn run(self) -> ! {
+        let mut window = Window::new(
+            "Precursor",
+            WIDTH as usize,
+            HEIGHT as usize,
+            WindowOptions {
+                scale_mode: minifb::ScaleMode::AspectRatioStretch,
+                resize: true,
+                ..WindowOptions::default()
+            },
+        )
+        .unwrap_or_else(|e| {
+            log::error!("{e:?}");
+            std::process::abort();
+        });
+
+        // Limit the maximum update rate
+        window.limit_update_rate(Some(std::time::Duration::from_micros(
+            1000 * 1000 / MAX_FPS,
+        )));
+
+        let xns = xous_names::XousNames::new().unwrap();
+        let kbd =
+            keyboard::Keyboard::new(&xns).expect("GFX|hosted can't connect to KBD for emulation");
+        let keyboard_handler = Box::new(XousKeyboardHandler {
+            kbd,
+            left_shift: false,
+            right_shift: false,
+        });
+        window.set_input_callback(keyboard_handler);
+
+        let mut native_buffer = Vec::new();
+
+        loop {
+            // Copy the contents of `native_buffer`. Release the lock
+            // immediately so as not to starve the server thread.
+            native_buffer.clear();
+            native_buffer.extend_from_slice(&self.native_buffer.lock().unwrap());
+
+            // Render the contents of the minifb window and handle input events.
+            // This may block to regulate the update rate.
+            window
+                .update_with_buffer(&native_buffer, WIDTH as usize, HEIGHT as usize)
+                .unwrap();
+            if !window.is_open() || window.is_key_down(Key::Escape) {
+                std::process::exit(0);
+            }
         }
     }
 }
