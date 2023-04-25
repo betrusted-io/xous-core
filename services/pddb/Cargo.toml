@@ -52,7 +52,7 @@ utralib = { version = "0.1.17", optional = true, default-features = false }
 perflib = {path="../../tools/perflib", optional = true}
 
 [target.'cfg(any(windows,unix))'.dependencies]
-rand = "0.7.3"
+rand = "0.8.5"
 rand_chacha = "0.3.1"
 
 hex = { version = "0.4.3", default-features = false, features = ["alloc"], optional = true }
