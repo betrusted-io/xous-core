@@ -3883,7 +3883,7 @@ dependencies = [
  "log",
  "num-derive",
  "num-traits",
- "rand 0.7.3",
+ "rand 0.8.5",
  "rkyv",
  "trng",
  "utralib",
