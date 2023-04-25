@@ -74,7 +74,6 @@ impl XousDisplay {
         self.emulated_buffer[FB_WIDTH_WORDS * 32..]
             .copy_from_slice(&self.srfb[FB_WIDTH_WORDS * 32..]);
         self.redraw();
-        self.update();
     }
 
     pub fn screen_size(&self) -> Point {
@@ -98,9 +97,6 @@ impl XousDisplay {
     pub fn redraw(&mut self) {
         self.emulated_to_native();
     }
-
-    // TODO: `update` is no longer needed for emulation; remove it
-    pub fn update(&mut self) {}
 
     fn emulated_to_native(&mut self) {
         const DEVBOOT_LINE: usize = 7;
