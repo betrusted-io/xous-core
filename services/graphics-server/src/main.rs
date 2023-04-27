@@ -97,7 +97,7 @@ fn main () -> ! {
     // loop from a thread other than TID 1. Let the backend claim this thread
     // if this may be the case.
     backend::claim_main_thread(move |main_thread_token| {
-        #[cfg(any(not(feature = "ditherpunk"), target_os = "macos"))]
+        #[cfg(not(feature = "ditherpunk"))]
         wrapped_main(main_thread_token);
 
         #[cfg(feature="ditherpunk")]
