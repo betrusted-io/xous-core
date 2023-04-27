@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use atsama5d27::tc::Tc;
 #[cfg(feature = "debug-print")]
 use log::{info, trace};
@@ -5,13 +6,16 @@ use log::error;
 use utralib::*;
 use xous::arch::irq::IrqNumber;
 
-use crate::platform::TimerRequest;
+use crate::platform::{TimeoutExpiry, TimerRequest};
 
 const MASTER_CLOCK_SPEED: u32 = 164000000 / 2;
 const TICKS_PER_MS: u32 = MASTER_CLOCK_SPEED / 128 / 1000;
 
 pub struct XousTickTimer {
     timer: Tc,
+    /// Since SAMA5D2's timer is 32-bit, we're using a counter as a reference
+    /// and only run the timer for the duration of the next delay
+    running_counter: u64,
     current_response: Option<TimerRequest>,
     last_response: Option<TimerRequest>,
     connection: xous::CID,
@@ -66,6 +70,7 @@ impl XousTickTimer {
 
         let mut xtt = XousTickTimer {
             timer,
+            running_counter: 0,
             current_response: None,
             last_response: None,
             connection,
@@ -107,7 +112,8 @@ impl XousTickTimer {
     }
 
     pub fn stop_interrupt(&mut self) -> Option<TimerRequest> {
-        // Disable the timer
+        // Disable the timer and interrupt
+        self.timer.stop();
         self.timer.set_interrupt(false);
 
         // Now that the interrupt is disabled, we can see if the interrupt handler has a current response.
@@ -129,7 +135,8 @@ impl XousTickTimer {
     }
 
     pub fn schedule_response(&mut self, request: TimerRequest) {
-        let irq_target = request.msec;
+        let irq_target = request.msec.saturating_sub(self.running_counter as i64);
+
         if irq_target > u32::MAX as i64 {
             error!(
                 "Invalid sleep target: {} can't be more than {} ms",
@@ -141,9 +148,10 @@ impl XousTickTimer {
 
         #[cfg(feature = "debug-print")]
         trace!(
-            "setting a response at {} ms (current time: {} ms)",
+            "setting a response at {} ms (current time: {} ms, counter: {})",
             irq_target,
-            self.elapsed_ms()
+            self.elapsed_ms(),
+            self.running_counter
         );
 
         self.timer.set_period(irq_target as u32 * TICKS_PER_MS);
@@ -171,5 +179,88 @@ impl XousTickTimer {
     #[allow(dead_code)]
     pub fn reset_wdt(&mut self) {
         // TODO: reset watchdog timer
+    }
+
+    /// Disable the sleep interrupt and remove the currently-pending sleep item.
+    /// If the sleep item has fired, then there will be no existing sleep item
+    /// remaining.
+    pub fn stop_sleep(
+        &mut self,
+        sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
+    ) {
+        // If there's a sleep request ongoing now, grab it.
+        if let Some(current) = self.stop_interrupt() {
+            #[cfg(feature = "debug-print")]
+            info!("Existing request was {:?}", current);
+            sleep_heap.insert(current.msec, current);
+        } else {
+            #[cfg(feature = "debug-print")]
+            info!("There was no existing sleep() request");
+        }
+    }
+
+    pub fn start_sleep(
+        &mut self,
+        sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
+    ) {
+        // If there are items in the sleep heap, take the next item that will expire.
+        if let Some((_msec, next_response)) = sleep_heap.pop_first() {
+            #[cfg(feature = "debug-print")]
+            info!(
+                "scheduling a response at {} to {} (heap: {:?})",
+                next_response.msec, next_response.sender, sleep_heap
+            );
+
+            self.schedule_response(next_response);
+        } else {
+            #[cfg(feature = "debug-print")]
+            info!(
+                "not scheduling a response since the sleep heap is empty ({:?})",
+                sleep_heap
+            );
+        }
+    }
+
+    /// Recalculate the sleep timer, optionally adding a new Request to the list of available
+    /// sleep events. This involves stopping the timer, recalculating the newest item, then
+    /// restarting the timer.
+    ///
+    /// Note that interrupts are always enabled, which is why we must stop the timer prior to
+    /// reordering the list.
+    pub fn recalculate_sleep(
+        &mut self,
+        sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
+        new: Option<TimerRequest>,
+    ) {
+        let elapsed = self.elapsed_ms();
+        self.stop_sleep(sleep_heap);
+        log::trace!("Elapsed: {}", elapsed);
+        self.clear_last_response();
+
+        log::trace!("Increasing running counter {} by {}: {}", self.running_counter, elapsed, self.running_counter + elapsed as u64);
+        self.running_counter += elapsed as u64;
+
+        // If we have a new sleep request, add it to the heap.
+        if let Some(mut request) = new {
+            #[cfg(feature = "debug-print")]
+            info!("New sleep request was: {:?}", request);
+
+            // Ensure that each timeout only exists once inside the tree
+            request.msec += self.running_counter as i64;
+            while sleep_heap.contains_key(&request.msec) {
+                request.msec += 1;
+            }
+
+            #[cfg(feature = "debug-print")]
+            info!("Modified, the request was: {:?}", request);
+            sleep_heap.insert(request.msec, request);
+        } else {
+            #[cfg(feature = "debug-print")]
+            info!("No new sleep request");
+        }
+
+        log::trace!("Sleep heap: {:?}", sleep_heap);
+
+        self.start_sleep(sleep_heap);
     }
 }
