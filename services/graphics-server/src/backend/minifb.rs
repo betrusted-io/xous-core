@@ -34,7 +34,7 @@ pub fn claim_main_thread(f: impl FnOnce(MainThreadToken) -> Never + Send + 'stat
     // (TID 1) and will abort a program on violation (see issue #373), hence we
     // need to claim the main thread for use by the backend.
     let (send, recv) = mpsc::sync_channel(0);
-    
+
     // Call the closure on a fake main thread
     let fake_main_thread = std::thread::Builder::new()
         .name("wrapped_main".into())
