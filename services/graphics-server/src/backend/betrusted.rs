@@ -17,7 +17,8 @@ pub enum Never {}
 #[inline]
 pub fn claim_main_thread(f: impl FnOnce(MainThreadToken) -> Never + Send + 'static) -> ! {
     // Just call the closure - this backend will work on any thread
-    f(MainThreadToken(()))
+    #[allow(unreachable_code)] // false positive
+    match f(MainThreadToken(())) {}
 }
 
 pub struct XousDisplay {
