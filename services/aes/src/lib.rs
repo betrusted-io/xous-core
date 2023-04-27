@@ -1,4 +1,4 @@
-#![cfg_attr(target_os = "none", no_std)]
+#![no_std]
 
 /*
   Soft AES implementations vendored in from https://github.com/RustCrypto/block-ciphers.git
@@ -10,10 +10,6 @@
   managed within Xous and not pulled in as a dependency that can be changed/poisoned on the fly. It also
   eliminates another foreign build.rs script that runs on the local build machine.
 */
-
-
-#[cfg(feature = "hazmat")]
-pub mod hazmat;
 
 mod soft;
 pub use soft::{Aes128Soft, Aes192, Aes256Soft};
@@ -30,16 +26,28 @@ pub type Block = GenericArray<u8, U16>;
 pub type Block8 = GenericArray<Block, U8>;
 
 // vex patches
+#[cfg(target_arch = "riscv32")]
 mod vex;
 // Note that we can't use 'feature' flags (for precursor, renode, hosted) because the AES
 // library is patched into functions that are oblivious to these features.
 // so this library has to fall back on the legacy method of determining which build target
 // is being specified.
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(all(
+    target_arch = "riscv32",
+    any(target_os = "none", target_os = "xous"),
+))]
 pub use vex::{Aes128, Aes256};
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(all(
+    not(target_arch = "riscv32"),
+    not(target_os = "none"),
+    not(target_os = "xous"),
+))]
 pub use soft::Aes128Soft as Aes128;
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(all(
+    not(target_arch = "riscv32"),
+    not(target_os = "none"),
+    not(target_os = "xous"),
+))]
 pub use soft::Aes256Soft as Aes256;
 
 /// Size of an AES block (128-bits; 16-bytes)
