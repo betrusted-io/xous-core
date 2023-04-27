@@ -10,6 +10,16 @@ pub const FB_LINES: usize = LINES as usize;
 pub const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
 const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
 
+pub struct MainThreadToken(());
+
+pub enum Never {}
+
+#[inline]
+pub fn claim_main_thread(f: impl FnOnce(MainThreadToken) -> Never + Send + 'static) -> ! {
+    // Just call the closure - this backend will work on any thread
+    f(MainThreadToken(()))
+}
+
 pub struct XousDisplay {
     fb: MemoryRange,
     hwfb: MemoryRange,
@@ -19,7 +29,7 @@ pub struct XousDisplay {
 }
 
 impl XousDisplay {
-    pub fn new() -> XousDisplay {
+    pub fn new(_main_thread_token: MainThreadToken) -> XousDisplay {
         let fb = xous::syscall::map_memory(
             None,
             None,
