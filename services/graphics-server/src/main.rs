@@ -392,7 +392,6 @@ fn wrapped_main() -> ! {
                 }
                 Some(Opcode::Flush) => {
                     log::trace!("***gfx flush*** redraw##");
-                    display.update();
                     display.redraw();
                 }
                 Some(Opcode::Clear) => {
@@ -455,12 +454,10 @@ fn wrapped_main() -> ! {
                 }),
                 Some(Opcode::DrawSleepScreen) => msg_scalar_unpack!(msg, _, _, _, _, {
                     display.blit_screen(&logo::LOGO_MAP);
-                    display.update();
                     display.redraw();
                 }),
                 Some(Opcode::DrawBootLogo) => msg_scalar_unpack!(msg, _, _, _, _, {
                     display.blit_screen(&poweron::LOGO_MAP);
-                    display.update();
                     display.redraw();
                 }),
                 Some(Opcode::Devboot) => msg_scalar_unpack!(msg, ena, _, _, _, {
@@ -543,7 +540,6 @@ fn wrapped_main() -> ! {
                             testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                         }
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
@@ -553,7 +549,6 @@ fn wrapped_main() -> ! {
                         }
                         // dirty bits already set
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
@@ -564,7 +559,6 @@ fn wrapped_main() -> ! {
                             }
                         }
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
@@ -574,7 +568,6 @@ fn wrapped_main() -> ! {
                             }
                         }
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
@@ -590,7 +583,6 @@ fn wrapped_main() -> ! {
                             testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                         }
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
@@ -605,7 +597,6 @@ fn wrapped_main() -> ! {
                             testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                         }
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 

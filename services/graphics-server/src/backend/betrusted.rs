@@ -212,9 +212,6 @@ impl XousDisplay {
         log::trace!("redraw {}/{}", busy_count, dirty_count);
     }
 
-    // note: this API is used by emulation, don't remove calls to it
-    pub fn update(&mut self) {}
-
     pub fn native_buffer(&mut self) -> &mut [u32; FB_SIZE] {
         unsafe { &mut *(self.fb.as_mut_ptr() as *mut [u32; FB_SIZE]) }
     }
