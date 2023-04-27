@@ -3,7 +3,7 @@
 use crate::api::Point;
 use minifb::{Key, Window, WindowOptions};
 use crate::api::{LINES, WIDTH};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 
 const HEIGHT: i16 = LINES;
 
@@ -17,6 +17,48 @@ pub const FB_SIZE: usize = WIDTH_WORDS * HEIGHT as usize; // 44 bytes by 536 lin
 const MAX_FPS: u64 = 60;
 const DARK_COLOUR: u32 = 0xB5B5AD;
 const LIGHT_COLOUR: u32 = 0x1B1B19;
+
+/// The channel for the backend to communicate back to the main thread that it
+/// has claimed.
+pub struct MainThreadToken(mpsc::SyncSender<MinifbThread>);
+
+/// A substitute for the native never type (`!`), which is still unstable on
+/// `Fn` bounds.
+pub enum Never {}
+
+/// Claim the calling thread (which must be a main thread) for use by the
+/// backend and call the specified closure on a new thread.
+pub fn claim_main_thread(f: impl FnOnce(MainThreadToken) -> Never + Send + 'static) -> ! {
+    // Some operating systems and GUI frameworks, in particular Cocoa, don't
+    // allow creating an event loop from a thread other than the main thread
+    // (TID 1) and will abort a program on violation (see issue #373), hence we
+    // need to claim the main thread for use by the backend.
+    let (send, recv) = mpsc::sync_channel(0);
+    
+    // Call the closure on a fake main thread
+    let fake_main_thread = std::thread::Builder::new()
+        .name("wrapped_main".into())
+        .spawn(move || f(MainThreadToken(send)))
+        .unwrap();
+
+    // Process up to one request (that's the maximum because
+    // `MainThreadToken: !Clone`)
+    match recv.recv() {
+        Ok(thread_params) => {
+            // Run a GUI event loop. Abort if the fake main thread panics
+            thread_params.run_while(|| !fake_main_thread.is_finished());
+        }
+        Err(mpsc::RecvError) => {}
+    }
+
+    // Join on the fake main thread
+    match fake_main_thread.join() {
+        Ok(x) => match x {},
+        // The default panic handler should have already outputted the panic
+        // message, so we can just call `abort` here
+        Err(_) => std::process::abort(),
+    }
+}
 
 pub struct XousDisplay {
     native_buffer: Arc<Mutex<Vec<u32>>>, //[u32; WIDTH * HEIGHT],
@@ -38,18 +80,15 @@ struct XousKeyboardHandler {
 }
 
 impl XousDisplay {
-    pub fn new() -> XousDisplay {
+    pub fn new(main_thread_token: MainThreadToken) -> XousDisplay {
         let native_buffer = vec![DARK_COLOUR; WIDTH as usize * HEIGHT as usize];
         let native_buffer = Arc::new(Mutex::new(native_buffer));
 
-        // Spawn a GUI thread
+        // Start a GUI event loop on the main thread
         let thread_params = MinifbThread {
             native_buffer: Arc::clone(&native_buffer),
         };
-        std::thread::Builder::new()
-            .name("minifb".into())
-            .spawn(move || thread_params.run())
-            .unwrap();
+        main_thread_token.0.send(thread_params).unwrap();
 
         XousDisplay {
             native_buffer,
@@ -126,7 +165,7 @@ impl XousDisplay {
 }
 
 impl MinifbThread {
-    pub fn run(self) -> ! {
+    pub fn run_while(self, mut predicate: impl FnMut() -> bool) {
         let mut window = Window::new(
             "Precursor",
             WIDTH as usize,
@@ -159,7 +198,7 @@ impl MinifbThread {
 
         let mut native_buffer = Vec::new();
 
-        loop {
+        while predicate() {
             // Copy the contents of `native_buffer`. Release the lock
             // immediately so as not to starve the server thread.
             native_buffer.clear();

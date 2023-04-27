@@ -93,25 +93,30 @@ fn map_fonts() -> MemoryRange {
     fontregion
 }
 fn main () -> ! {
-    #[cfg(any(not(feature = "ditherpunk"), target_os = "macos"))]
-    wrapped_main();
+    // Some operating systems and GUI frameworks don't allow creating an event
+    // loop from a thread other than TID 1. Let the backend claim this thread
+    // if this may be the case.
+    backend::claim_main_thread(move |main_thread_token| {
+        #[cfg(any(not(feature = "ditherpunk"), target_os = "macos"))]
+        wrapped_main(main_thread_token);
 
-    #[cfg(feature="ditherpunk")]
-    let stack_size = 1024 * 1024;
-    #[cfg(feature="ditherpunk")]
-    std::thread::Builder::new()
-        .stack_size(stack_size)
-        .spawn(wrapped_main)
-        .unwrap()
-        .join()
-        .unwrap()
+        #[cfg(feature="ditherpunk")]
+        let stack_size = 1024 * 1024;
+        #[cfg(feature="ditherpunk")]
+        std::thread::Builder::new()
+            .stack_size(stack_size)
+            .spawn(move || wrapped_main(main_thread_token))
+            .unwrap()
+            .join()
+            .unwrap()
+    })
 }
-fn wrapped_main() -> ! {
+fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
-    let mut display = XousDisplay::new();
+    let mut display = XousDisplay::new(main_thread_token);
     draw_boot_logo(&mut display); // bring this up as soon as possible
     let fontregion = map_fonts();
 
