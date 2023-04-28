@@ -5,6 +5,7 @@ use gam::Gam;
 mod api;
 use api::{Opcode, Return, LoadAppRequest, App, AppRequest};
 use xous_ipc::Buffer;
+use num_traits::FromPrimitive;
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
@@ -26,43 +27,41 @@ fn main() -> ! {
 		let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
 		let load_app_req = buffer.to_original::<LoadAppRequest, _>().unwrap();
 		// a dummy server for testing purposes
-		let name = SERVER_NAME_HELLO;
+		let name = "_Hello World_"; // note: this MUST match up with the gam name
 
-		std::thread::spawn(move || {
-		    log::info!("Hello world PID is {}", xous::process::id());
-
-		    let hello_xns = xous_names::XousNames::new().unwrap();
-
-		    // Register the server with xous
-		    let sid = hello_xns
-			.register_name(SERVER_NAME_HELLO, None)
-			.expect("can't register server");
-
-		    let mut hello = Hello::new(&hello_xns, sid);
-
-		    loop {
-			let msg = xous::receive_message(sid).unwrap();
-			log::debug!("Got message: {:?}", msg);
-
-			match FromPrimitive::from_usize(msg.body.id()) {
-			    Some(HelloOp::Redraw) => {
-				log::debug!("Got redraw");
-				hello.redraw();
-			    }
-			    Some(HelloOp::Quit) => {
-				log::info!("Quitting application");
-				break;
-			    }
-			    _ => {
-				log::error!("Got unknown message");
-			    }
-			}
+		// load the app from the binary file
+		let bin = include_bytes!("hello");
+		let elf = xmas_elf::ElfFile::new(bin.as_slice()).expect("Couldn't load elf!");
+		let entry_point = elf.header.pt2.entry_point();
+		let code_ph = elf
+		    .program_iter()
+		    .find(|ph| (ph.virtual_addr()..ph.virtual_addr() + ph.mem_size()).contains(&entry_point))
+		    .expect("Couldn't find segment with entry point!");
+		if let xmas_elf::program::SegmentData::Undefined(code) = code_ph.get_data(&elf).expect("Couldn't load section!") {
+		    let remainder = if code.len() & 0xFFF == 0 {
+			0
+		    } else {
+			0x1000 - (code.len() & 0xFFF)
+		    };
+		    let mut target_memory = xous::map_memory(
+			None,
+			Some(core::num::NonZeroUsize::new((code_ph.virtual_addr() & !0xFFF) as usize).unwrap()),
+			code.len() + remainder,
+			xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::X
+		    ).expect("Couldn't allocate new memory");
+		    for (src, dest) in code.iter().zip(target_memory.as_slice_mut::<u8>()) {
+			*dest = *src;
 		    }
-
-		    log::info!("Quitting");
-		    xous::terminate_process(0)
-		});
-
+		    
+		    let entry_offset = entry_point - code_ph.virtual_addr();
+		    let entry_point = unsafe { code.as_ptr().add(entry_offset as usize) };
+		    
+		    let run_app: fn() -> ! = unsafe { core::mem::transmute(entry_point) };
+		    std::thread::spawn(move || {
+			run_app();
+		    });
+		}
+		
 		apps.push(xous_ipc::String::from_str(name));
 		log::info!("Added app `{}'!", load_app_req.name);
 	    },
@@ -89,121 +88,5 @@ fn main() -> ! {
 		}
 	    },
 	}
-    }
-}
-
-// the Hello World app for testing purposes
-use core::fmt::Write;
-use graphics_server::api::GlyphStyle;
-use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
-use num_traits::*;
-use locales::t;
-#[cfg(feature = "tts")]
-use tts_frontend::*;
-
-/// Basic 'Hello World!' application that draws a simple
-/// TextView to the screen.
-
-pub(crate) const SERVER_NAME_HELLO: &str = "_Hello World_";
-
-/// Top level application events.
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub(crate) enum HelloOp {
-    /// Redraw the screen
-    Redraw = 0,
-
-    /// Quit the application
-    Quit,
-}
-
-struct Hello {
-    content: Gid,
-    gam: gam::Gam,
-    _gam_token: [u32; 4],
-    screensize: Point,
-    #[cfg(feature = "tts")]
-    tts: TtsFrontend,
-}
-
-impl Hello {
-    fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self {
-        let gam = gam::Gam::new(&xns).expect("Can't connect to GAM");
-        let gam_token = gam
-            .register_ux(gam::UxRegistration {
-                app_name: xous_ipc::String::<128>::from_str(SERVER_NAME_HELLO),
-                ux_type: gam::UxType::Chat,
-                predictor: None,
-                listener: sid.to_array(),
-                redraw_id: HelloOp::Redraw.to_u32().unwrap(),
-                gotinput_id: None,
-                audioframe_id: None,
-                rawkeys_id: None,
-                focuschange_id: None,
-            })
-            .expect("Could not register GAM UX")
-            .unwrap();
-
-        let content = gam
-            .request_content_canvas(gam_token)
-            .expect("Could not get content canvas");
-        let screensize = gam
-            .get_canvas_bounds(content)
-            .expect("Could not get canvas dimensions");
-        Self {
-            gam,
-            _gam_token: gam_token,
-            content,
-            screensize,
-            #[cfg(feature = "tts")]
-            tts: TtsFrontend::new(xns).unwrap(),
-        }
-    }
-
-    /// Clear the entire screen.
-    fn clear_area(&self) {
-        self.gam
-            .draw_rectangle(
-                self.content,
-                Rectangle::new_with_style(
-                    Point::new(0, 0),
-                    self.screensize,
-                    DrawStyle {
-                        fill_color: Some(PixelColor::Light),
-                        stroke_color: None,
-                        stroke_width: 0,
-                    },
-                ),
-            )
-            .expect("can't clear content area");
-    }
-
-    /// Redraw the text view onto the screen.
-    fn redraw(&mut self) {
-        self.clear_area();
-
-        let mut text_view = TextView::new(
-            self.content,
-            TextBounds::GrowableFromBr(
-                Point::new(
-                    self.screensize.x - (self.screensize.x / 2),
-                    self.screensize.y - (self.screensize.y / 2),
-                ),
-                (self.screensize.x / 5 * 4) as u16,
-            ),
-        );
-
-        text_view.border_width = 1;
-        text_view.draw_border = true;
-        text_view.clear_area = true;
-        text_view.rounded_border = Some(3);
-        text_view.style = GlyphStyle::Regular;
-        write!(text_view.text, "{}", t!("helloworld.hello", xous::LANG)).expect("Could not write to text view");
-        #[cfg(feature="tts")]
-        self.tts.tts_simple(t!("helloworld.hello", xous::LANG)).unwrap();
-
-        self.gam
-            .post_textview(&mut text_view)
-            .expect("Could not render text view");
-        self.gam.redraw().expect("Could not redraw screen");
     }
 }
