@@ -45,7 +45,7 @@ fn main() -> ! {
 		    };
 		    let mut target_memory = xous::map_memory(
 			None,
-			Some(core::num::NonZeroUsize::new((code_ph.virtual_addr() & !0xFFF) as usize).unwrap()),
+			None,
 			code.len() + remainder,
 			xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::X
 		    ).expect("Couldn't allocate new memory");
@@ -54,7 +54,7 @@ fn main() -> ! {
 		    }
 		    
 		    let entry_offset = entry_point - code_ph.virtual_addr();
-		    let entry_point = unsafe { code.as_ptr().add(entry_offset as usize) };
+		    let entry_point = unsafe { target_memory.as_ptr().add(entry_offset as usize) };
 		    
 		    let run_app: fn() -> ! = unsafe { core::mem::transmute(entry_point) };
 		    std::thread::spawn(move || {
