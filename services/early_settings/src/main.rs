@@ -31,9 +31,32 @@ impl Slot {
     }
 }
 
+// TODO(gsora): implement this so that it's a no-op on hosted mode
 struct State {
     settings_page: MemoryRange,
     spinor: Spinor,
+}
+
+impl State {
+    fn set(&self, data: &[u8], slot: &Slot) {
+        let settings: &[u8] = self.settings_page.as_slice();
+
+        let new_data_u32 = u32::from_le_bytes(data.try_into().unwrap());
+
+        if new_data_u32 == self.get(slot) {
+            return;
+        }
+
+        self.spinor
+            .patch(settings, xous::EARLY_SETTINGS, &data, slot.offset)
+            .expect("couldn't patch slot data");
+    }
+
+    fn get(&self, slot: &Slot) -> u32 {
+        let settings: &[u8] = self.settings_page.as_slice();
+
+        u32::from_le_bytes(settings[slot.range()].try_into().unwrap())
+    }
 }
 
 fn main() -> ! {
@@ -63,46 +86,20 @@ fn main() -> ! {
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::GetKeymap) => {
-                let settings: &[u8] = state.settings_page.as_slice();
-
-                let code = u32::from_le_bytes(settings[KEYMAP.range()].try_into().unwrap());
-
-                xous::return_scalar(msg.sender, code as usize).unwrap();
+                xous::return_scalar(msg.sender, state.get(&KEYMAP) as usize).unwrap();
             }
             Some(Opcode::SetKeymap) => msg_blocking_scalar_unpack!(msg, map, _, _, _, {
                 let code = (map as u32).to_le_bytes();
-                let settings: &[u8] = state.settings_page.as_slice();
-
-                state
-                    .spinor
-                    .patch(settings, xous::EARLY_SETTINGS, &code, KEYMAP.offset)
-                    .expect("couldn't patch our keyboard code");
-
-                log::info!("writing early keymap: {}", map);
-
+                state.set(&code, &KEYMAP);
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
             Some(Opcode::SetEarlySleep) => msg_blocking_scalar_unpack!(msg, value, _, _, _, {
                 let code = (value as u32).to_le_bytes();
-                let settings: &[u8] = state.settings_page.as_slice();
-
-                state
-                    .spinor
-                    .patch(settings, xous::EARLY_SETTINGS, &code, EARLY_SLEEP.offset)
-                    .expect("couldn't patch early reboot flag");
-
-                log::info!("writing must sleep on reboot: {}", value);
-
+                state.set(&code, &EARLY_SLEEP);
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
             Some(Opcode::EarlySleep) => {
-                let settings: &[u8] = state.settings_page.as_slice();
-
-                let value = u32::from_le_bytes(settings[EARLY_SLEEP.range()].try_into().unwrap());
-
-                log::info!("value read for early sleep: {}", value);
-
-                xous::return_scalar(msg.sender, value as usize).unwrap();
+                xous::return_scalar(msg.sender, state.get(&EARLY_SLEEP) as usize).unwrap();
             }
             _ => log::warn!("unrecognized opcode"),
         }

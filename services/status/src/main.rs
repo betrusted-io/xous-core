@@ -629,11 +629,11 @@ fn wrapped_main() -> ! {
 
     // get the last status
     let must_sleep = early_settings.early_sleep().unwrap();
-    
-    // reset it for good measure
-    early_settings.set_early_sleep(false).unwrap();
 
     if must_sleep {
+        // reset it for good measure
+        early_settings.set_early_sleep(false).unwrap();
+
         while ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
             modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
         }
@@ -647,7 +647,7 @@ fn wrapped_main() -> ! {
             Err(_e) => {
                 panic!("Unhandled error on suspend request");
             }
-        } 
+        }
     }
 
     // spawn a thread to auto-mount the PDDB
@@ -1130,7 +1130,7 @@ fn wrapped_main() -> ! {
                     early_settings.set_early_sleep(true).unwrap();
 
                     log::info!("forcing sleep on reboot");
-                
+
                     pddb.pddb_halt();
                     susres.reboot(true).expect("couldn't issue reboot command");
                 }
