@@ -31,15 +31,19 @@ impl Slot {
     }
 }
 
-// TODO(gsora): implement this so that it's a no-op on hosted mode
 struct State {
-    settings_page: MemoryRange,
+    settings_page: Option<MemoryRange>,
     spinor: Spinor,
 }
 
 impl State {
     fn set(&self, data: &[u8], slot: &Slot) {
-        let settings: &[u8] = self.settings_page.as_slice();
+        let settings = match self.settings_page {
+            Some(page) => page,
+            None => return,
+        };
+
+        let settings: &[u8] = settings.as_slice();
 
         let new_data_u32 = u32::from_le_bytes(data.try_into().unwrap());
 
@@ -53,7 +57,12 @@ impl State {
     }
 
     fn get(&self, slot: &Slot) -> u32 {
-        let settings: &[u8] = self.settings_page.as_slice();
+        let settings = match self.settings_page {
+            Some(page) => page,
+            None => return 0,
+        };
+
+        let settings: &[u8] = settings.as_slice();
 
         u32::from_le_bytes(settings[slot.range()].try_into().unwrap())
     }
@@ -67,13 +76,7 @@ fn main() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
 
     let state = State {
-        settings_page: xous::syscall::map_memory(
-            xous::MemoryAddress::new((xous::EARLY_SETTINGS + xous::FLASH_PHYS_BASE) as usize),
-            None,
-            4096,
-            xous::MemoryFlags::R,
-        )
-        .unwrap(),
+        settings_page: page_provider(),
         spinor: spinor::Spinor::new(&xns).unwrap(),
     };
 
@@ -104,4 +107,20 @@ fn main() -> ! {
             _ => log::warn!("unrecognized opcode"),
         }
     }
+}
+
+fn page_provider() -> Option<xous::MemoryRange> {
+    #[cfg(not(target_os = "xous"))]
+    return None;
+
+    #[cfg(target_os = "xous")]
+    return Some(
+        xous::syscall::map_memory(
+            xous::MemoryAddress::new((xous::EARLY_SETTINGS + xous::FLASH_PHYS_BASE) as usize),
+            None,
+            4096,
+            xous::MemoryFlags::R,
+        )
+        .unwrap(),
+    );
 }
