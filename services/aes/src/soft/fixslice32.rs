@@ -16,7 +16,7 @@
 #![allow(clippy::unreadable_literal)]
 
 use crate::Block;
-use std::convert::TryInto;
+use core::convert::TryInto;
 use cipher::{consts::U2, generic_array::GenericArray};
 
 /// AES block batch size for this implementation

@@ -10,7 +10,7 @@ use cipher::{
 };
 pub(crate) type BatchBlocks = GenericArray<Block, U1>;
 
-use core::fmt;
+use core::{arch::global_asm, convert::TryInto, fmt};
 
 mod aes128;
 use aes128::*;
@@ -310,6 +310,88 @@ pub(crate) const RCON: [u32; 10] = [
     0x36000000, /* for 128-bit blocks, Rijndael never uses more than 10 rcon values */
 ];
 
+global_asm!(
+    ".global vex_aes_enc_id_0",
+    "vex_aes_enc_id_0:",
+    "    .word 0x00b5050b", // vex_aes_enc_id a0, a1, a0, #0
+    "    ret",
+
+    ".global vex_aes_enc_id_1",
+    "vex_aes_enc_id_1:",
+    "    .word 0x10b5050b", // vex_aes_enc_id a0, a1, a0, #1
+    "    ret",
+
+    ".global vex_aes_enc_id_2",
+    "vex_aes_enc_id_2:",
+    "    .word 0x20b5050b", // vex_aes_enc_id a0, a1, a0, #2
+    "    ret",
+
+    ".global vex_aes_enc_id_3",
+    "vex_aes_enc_id_3:",
+    "    .word 0x30b5050b", // vex_aes_enc_id a0, a1, a0, #3
+    "    ret",
+
+    ".global vex_aes_enc_id_last_0",
+    "vex_aes_enc_id_last_0:",
+    "    .word 0x04b5050b", // vex_aes_enc_id_last a0, a1, a0, #0
+    "    ret",
+
+    ".global vex_aes_enc_id_last_1",
+    "vex_aes_enc_id_last_1:",
+    "    .word 0x14b5050b", // vex_aes_enc_id_last a0, a1, a0, #1
+    "    ret",
+
+    ".global vex_aes_enc_id_last_2",
+    "vex_aes_enc_id_last_2:",
+    "    .word 0x24b5050b", // vex_aes_enc_id_last a0, a1, a0, #2
+    "    ret",
+
+    ".global vex_aes_enc_id_last_3",
+    "vex_aes_enc_id_last_3:",
+    "    .word 0x34b5050b", // vex_aes_enc_id_last a0, a1, a0, #3
+    "    ret",
+
+    ".global vex_aes_dec_id_0",
+    "vex_aes_dec_id_0:",
+    "    .word 0x02b5050b", // vex_aes_dec_id a0, a1, a0, #0
+    "    ret",
+
+    ".global vex_aes_dec_id_1",
+    "vex_aes_dec_id_1:",
+    "    .word 0x12b5050b", // vex_aes_dec_id a0, a1, a0, #1
+    "    ret",
+
+    ".global vex_aes_dec_id_2",
+    "vex_aes_dec_id_2:",
+    "    .word 0x22b5050b", // vex_aes_dec_id a0, a1, a0, #2
+    "    ret",
+
+    ".global vex_aes_dec_id_3",
+    "vex_aes_dec_id_3:",
+    "    .word 0x32b5050b", // vex_aes_dec_id a0, a1, a0, #3
+    "    ret",
+
+    ".global vex_aes_dec_id_last_0",
+    "vex_aes_dec_id_last_0:",
+    "    .word 0x06b5050b", // vex_aes_dec_id_last a0, a1, a0, #0
+    "    ret",
+
+    ".global vex_aes_dec_id_last_1",
+    "vex_aes_dec_id_last_1:",
+    "    .word 0x16b5050b", // vex_aes_dec_id_last a0, a1, a0, #1
+    "    ret",
+
+    ".global vex_aes_dec_id_last_2",
+    "vex_aes_dec_id_last_2:",
+    "    .word 0x26b5050b", // vex_aes_dec_id_last a0, a1, a0, #2
+    "    ret",
+
+    ".global vex_aes_dec_id_last_3",
+    "vex_aes_dec_id_last_3:",
+    "    .word 0x36b5050b", // vex_aes_dec_id_last a0, a1, a0, #3
+    "    ret",
+);
+
 pub(crate) fn aes_enc_round(arg1: u32, arg2: u32, id: AesByte) -> u32 {
     extern "C" {
         fn vex_aes_enc_id_0(arg1: u32, arg2: u32) -> u32;
@@ -369,8 +451,6 @@ pub(crate) fn aes_dec_round_last(arg1: u32, arg2: u32, id: AesByte) -> u32 {
         AesByte::Byte3 => unsafe { vex_aes_dec_id_last_3(arg1, arg2) },
     }
 }
-
-use core::convert::TryInto;
 
 pub(crate) fn get_u32_be(input: &[u8], offset: usize) -> u32 {
     u32::from_be_bytes(input[offset..offset + 4].try_into().unwrap())

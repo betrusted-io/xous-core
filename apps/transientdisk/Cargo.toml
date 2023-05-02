@@ -9,10 +9,10 @@ edition = "2021"
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
-xous = "0.9.40"
-xous-ipc = "0.9.40"
-log-server = { package = "xous-api-log", version = "0.1.36" }
-xous-names = { package = "xous-api-names", version = "0.9.38" }
+xous = "0.9.41"
+xous-ipc = "0.9.41"
+log-server = { package = "xous-api-log", version = "0.1.37" }
+xous-names = { package = "xous-api-names", version = "0.9.39" }
 gam = {path = "../../services/gam" }
 graphics-server = {path = "../../services/graphics-server" }
 usb-device-xous = {path="../../services/usb-device-xous"}

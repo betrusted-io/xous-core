@@ -53,6 +53,7 @@ mod oqc_test;
 #[cfg(feature="nettest")]
 mod nettests;
 
+#[cfg(target_os = "xous")] // only draw "please wait" when not in hosted mode
 use locales::t;
 #[cfg(feature="tts")]
 use tts_frontend::*;
@@ -289,11 +290,12 @@ impl Repl{
             }
         )).expect("can't clear content area");
     }
-    fn redraw(&mut self, init_done: bool) -> Result<(), xous::Error> {
+    fn redraw(&mut self, _init_done: bool) -> Result<(), xous::Error> {
         log::trace!("going into redraw");
         self.clear_area();
 
-        if !init_done {
+        #[cfg(target_os = "xous")] // only draw "please wait" if we're not in hosted mode
+        if !_init_done {
             let mut init_tv = TextView::new(
                 self.content,
                 TextBounds::CenteredTop(

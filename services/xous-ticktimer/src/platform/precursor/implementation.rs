@@ -1,5 +1,10 @@
 const TICKS_PER_MS: u64 = 1;
+
+use std::collections::BTreeMap;
+
 use crate::TimerRequest;
+use crate::TimeoutExpiry;
+
 use susres::{RegManager, RegOrField, SuspendResume};
 use utralib::generated::*;
 
@@ -227,5 +232,83 @@ impl XousTickTimer {
                 self.csr.r(utra::ticktimer::TIME0),
                 self.csr.r(utra::ticktimer::MSLEEP_TARGET0)
             );
+    }
+
+
+    /// Disable the sleep interrupt and remove the currently-pending sleep item.
+    /// If the sleep item has fired, then there will be no existing sleep item
+    /// remaining.
+    pub fn stop_sleep(
+        &mut self,
+        sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
+    ) {
+        // If there's a sleep request ongoing now, grab it.
+        if let Some(current) = self.stop_interrupt() {
+            #[cfg(feature = "debug-print")]
+            log::info!("Existing request was {:?}", current);
+            sleep_heap.insert(current.msec, current);
+        } else {
+            #[cfg(feature = "debug-print")]
+            log::info!("There was no existing sleep() request");
+        }
+    }
+
+    pub fn start_sleep(
+        &mut self,
+        sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
+    ) {
+        // If there are items in the sleep heap, take the next item that will expire.
+        if let Some((_msec, next_response)) = sleep_heap.pop_first() {
+            #[cfg(feature = "debug-print")]
+            log::info!(
+                "scheduling a response at {} to {} (heap: {:?})",
+                next_response.msec, next_response.sender, sleep_heap
+            );
+
+            self.schedule_response(next_response);
+        } else {
+            #[cfg(feature = "debug-print")]
+            log::info!(
+                "not scheduling a response since the sleep heap is empty ({:?})",
+                sleep_heap
+            );
+        }
+    }
+
+    /// Recalculate the sleep timer, optionally adding a new Request to the list of available
+    /// sleep events. This involves stopping the timer, recalculating the newest item, then
+    /// restarting the timer.
+    ///
+    /// Note that interrupts are always enabled, which is why we must stop the timer prior to
+    /// reordering the list.
+    pub fn recalculate_sleep(
+        &mut self,
+        sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
+        new: Option<TimerRequest>,
+    ) {
+        self.stop_sleep(sleep_heap);
+        log::trace!("Elapsed: {}", self.elapsed_ms());
+        self.clear_last_response();
+
+        // If we have a new sleep request, add it to the heap.
+        if let Some(mut request) = new {
+            #[cfg(feature = "debug-print")]
+            log::info!("New sleep request was: {:?}", request);
+
+            // Ensure that each timeout only exists once inside the tree
+            request.msec += self.elapsed_ms() as i64;
+            while sleep_heap.contains_key(&request.msec) {
+                request.msec += 1;
+            }
+
+            #[cfg(feature = "debug-print")]
+            log::info!("Modified, the request was: {:?}", request);
+            sleep_heap.insert(request.msec, request);
+        } else {
+            #[cfg(feature = "debug-print")]
+            log::info!("No new sleep request");
+        }
+
+        self.start_sleep(sleep_heap);
     }
 }

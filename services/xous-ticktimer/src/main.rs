@@ -17,85 +17,6 @@ use platform::*;
 #[cfg(not(target_arch = "arm"))]
 use susres::SuspendOrder;
 
-/// Disable the sleep interrupt and remove the currently-pending sleep item.
-/// If the sleep item has fired, then there will be no existing sleep item
-/// remaining.
-fn stop_sleep(
-    ticktimer: &mut XousTickTimer,
-    sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
-) {
-    // If there's a sleep request ongoing now, grab it.
-    if let Some(current) = ticktimer.stop_interrupt() {
-        #[cfg(feature = "debug-print")]
-        info!("Existing request was {:?}", current);
-        sleep_heap.insert(current.msec, current);
-    } else {
-        #[cfg(feature = "debug-print")]
-        info!("There was no existing sleep() request");
-    }
-}
-
-fn start_sleep(
-    ticktimer: &mut XousTickTimer,
-    sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
-) {
-    // If there are items in the sleep heap, take the next item that will expire.
-    if let Some((_msec, next_response)) = sleep_heap.pop_first() {
-        #[cfg(feature = "debug-print")]
-        info!(
-            "scheduling a response at {} to {} (heap: {:?})",
-            next_response.msec, next_response.sender, sleep_heap
-        );
-        ticktimer.schedule_response(next_response);
-    } else {
-        #[cfg(feature = "debug-print")]
-        info!(
-            "not scheduling a response since the sleep heap is empty ({:?})",
-            sleep_heap
-        );
-    }
-}
-
-/// Recalculate the sleep timer, optionally adding a new Request to the list of available
-/// sleep events. This involves stopping the timer, recalculating the newest item, then
-/// restarting the timer.
-///
-/// Note that interrupts are always enabled, which is why we must stop the timer prior to
-/// reordering the list.
-fn recalculate_sleep(
-    ticktimer: &mut XousTickTimer,
-    sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
-    new: Option<TimerRequest>,
-) {
-    stop_sleep(ticktimer, sleep_heap);
-
-    ticktimer.clear_last_response();
-
-    // If we have a new sleep request, add it to the heap.
-    if let Some(mut request) = new {
-        #[cfg(feature = "debug-print")]
-        info!("New sleep request was: {:?}", request);
-
-        // Ensure that each timeout only exists once inside the tree
-        #[cfg(not(feature = "atsama5d27"))]
-        {
-            request.msec += ticktimer.elapsed_ms() as i64;
-        }
-        while sleep_heap.contains_key(&request.msec) {
-            request.msec += 1;
-        }
-
-        #[cfg(feature = "debug-print")]
-        info!("Modified, the request was: {:?}", request);
-        sleep_heap.insert(request.msec, request);
-    } else {
-        #[cfg(feature = "debug-print")]
-        info!("No new sleep request");
-    }
-
-    start_sleep(ticktimer, sleep_heap);
-}
-
 fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -228,12 +149,11 @@ fn main() -> ! {
                     core::mem::forget(msg_opt.take());
 
                     // let timeout_queue = timeout_heap.entry(msg.sender.pid()).or_default();
-                    recalculate_sleep(
-                        &mut ticktimer,
+                    ticktimer.recalculate_sleep(
                         &mut sleep_heap,
                         Some(TimerRequest {
                             msec: ms,
-                            sender: sender,
+                            sender,
                             kind: RequestKind::Sleep,
                             data: 0,
                         }),
@@ -245,7 +165,7 @@ fn main() -> ! {
                 if msg.sender.pid().map(|p| p.get()).unwrap_or_default() as u32
                     != xous::process::id()
                 {
-                    recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
+                    ticktimer.recalculate_sleep(&mut sleep_heap, None);
                     continue;
                 }
 
@@ -295,7 +215,7 @@ fn main() -> ! {
                     // );
                     // log::trace!("new entries for PID {:?}/condvar {:08x}: {:?}", sender_pid, condvar, notify_hash.get(&sender_pid).unwrap().get(&condvar));
                 }
-                recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
+                ticktimer.recalculate_sleep(&mut sleep_heap, None);
             }
 
             api::Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, _token, _, _, _, {
@@ -450,8 +370,7 @@ fn main() -> ! {
 
                 // If there's a `timeout` argument, schedule a response.
                 if timeout != 0 {
-                    recalculate_sleep(
-                        &mut ticktimer,
+                    ticktimer.recalculate_sleep(
                         &mut sleep_heap,
                         Some(TimerRequest {
                             msec: timeout as i64,
@@ -516,7 +435,7 @@ fn main() -> ! {
                     log::error!("requested to wake no entries!");
                 }
 
-                stop_sleep(&mut ticktimer, &mut sleep_heap);
+                ticktimer.stop_sleep(&mut sleep_heap);
                 for entry in awaiting.drain(..available_count) {
                     // Remove each entry in the timeout set
                     sleep_heap.retain(|_, v| v.sender != entry);
@@ -564,7 +483,7 @@ fn main() -> ! {
 
                 // Resume sleeping, which re-enables interrupts and queues the
                 // next timer event to fire.
-                start_sleep(&mut ticktimer, &mut sleep_heap);
+                ticktimer.start_sleep(&mut sleep_heap);
             }
 
             api::Opcode::FreeCondition => {
@@ -598,7 +517,7 @@ fn main() -> ! {
                 }
 
                 // Free all entries in the sleep heap that are waiting for this condition
-                stop_sleep(&mut ticktimer, &mut sleep_heap);
+                ticktimer.stop_sleep(&mut sleep_heap);
                 for entry in awaiting.drain(..) {
                     // Remove each entry in the timeout set
                     sleep_heap.retain(|_, v| v.sender != entry);
@@ -632,7 +551,7 @@ fn main() -> ! {
                 }
 
                 // Resume sleeping
-                start_sleep(&mut ticktimer, &mut sleep_heap);
+                ticktimer.start_sleep(&mut sleep_heap);
             }
 
             api::Opcode::InvalidCall => {

@@ -154,6 +154,10 @@ software 154.05us/block enc+dec aes256 (500 iters, 8192 len)
 with L2 cache on (64k) and 0.8.2 fixedslice implementation:
 hardware 95.8us/block enc+dec aes256 (500 iters, 8192 len)
 software 131.66us/block enc+dec aes256 (500 iters, 8192 len)
+
+with L2 cache on (64k) and 0.9.13 release candidate:
+hardware 85.52us/block enc+dec aes256 (500 iters, 8192 len)
+software 140.84us/block enc+dec aes256 (500 iters, 8192 len)
 */
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);

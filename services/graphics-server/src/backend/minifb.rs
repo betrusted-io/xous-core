@@ -3,6 +3,7 @@
 use crate::api::Point;
 use minifb::{Key, Window, WindowOptions};
 use crate::api::{LINES, WIDTH};
+use std::sync::{Arc, Mutex, mpsc};
 
 const HEIGHT: i16 = LINES;
 
@@ -17,12 +18,59 @@ const MAX_FPS: u64 = 60;
 const DARK_COLOUR: u32 = 0xB5B5AD;
 const LIGHT_COLOUR: u32 = 0x1B1B19;
 
+/// The channel for the backend to communicate back to the main thread that it
+/// has claimed.
+pub struct MainThreadToken(mpsc::SyncSender<MinifbThread>);
+
+/// A substitute for the native never type (`!`), which is still unstable on
+/// `Fn` bounds.
+pub enum Never {}
+
+/// Claim the calling thread (which must be a main thread) for use by the
+/// backend and call the specified closure on a new thread.
+pub fn claim_main_thread(f: impl FnOnce(MainThreadToken) -> Never + Send + 'static) -> ! {
+    // Some operating systems and GUI frameworks, in particular Cocoa, don't
+    // allow creating an event loop from a thread other than the main thread
+    // (TID 1) and will abort a program on violation (see issue #373), hence we
+    // need to claim the main thread for use by the backend.
+    let (send, recv) = mpsc::sync_channel(0);
+
+    // Call the closure on a fake main thread
+    let fake_main_thread = std::thread::Builder::new()
+        .name("wrapped_main".into())
+        .spawn(move || f(MainThreadToken(send)))
+        .unwrap();
+
+    // Process up to one request (that's the maximum because
+    // `MainThreadToken: !Clone`)
+    match recv.recv() {
+        Ok(thread_params) => {
+            // Run a GUI event loop. Abort if the fake main thread panics
+            thread_params.run_while(|| !fake_main_thread.is_finished());
+        }
+        Err(mpsc::RecvError) => {}
+    }
+
+    // Join on the fake main thread
+    match fake_main_thread.join() {
+        Ok(x) => match x {},
+        // The default panic handler should have already outputted the panic
+        // message, so we can just call `abort` here
+        Err(_) => std::process::abort(),
+    }
+}
+
 pub struct XousDisplay {
-    native_buffer: Vec<u32>, //[u32; WIDTH * HEIGHT],
+    native_buffer: Arc<Mutex<Vec<u32>>>, //[u32; WIDTH * HEIGHT],
     emulated_buffer: [u32; FB_SIZE],
     srfb: [u32; FB_SIZE],
-    window: Window,
     devboot: bool,
+}
+
+/// Encapsulates the data passed to the thread handling minifb screen updates
+/// and input events.
+struct MinifbThread {
+    native_buffer: Arc<Mutex<Vec<u32>>>,
 }
 
 struct XousKeyboardHandler {
@@ -32,44 +80,18 @@ struct XousKeyboardHandler {
 }
 
 impl XousDisplay {
-    pub fn new() -> XousDisplay {
-        let mut window = Window::new(
-            "Precursor",
-            WIDTH as usize,
-            HEIGHT as usize,
-            WindowOptions {
-                scale_mode: minifb::ScaleMode::AspectRatioStretch,
-                resize: true,
-                ..WindowOptions::default()
-            },
-        )
-        .unwrap_or_else(|e| {
-            panic!("{}", e);
-        });
-
-        // // Limit the maximum refresh rate
-        // window.limit_update_rate(Some(std::time::Duration::from_micros(
-        //     1000 * 1000 / MAX_FPS,
-        // )));
-
+    pub fn new(main_thread_token: MainThreadToken) -> XousDisplay {
         let native_buffer = vec![DARK_COLOUR; WIDTH as usize * HEIGHT as usize];
-        window
-            .update_with_buffer(&native_buffer, WIDTH as usize, HEIGHT as usize)
-            .unwrap();
+        let native_buffer = Arc::new(Mutex::new(native_buffer));
 
-        let xns = xous_names::XousNames::new().unwrap();
-        let kbd =
-            keyboard::Keyboard::new(&xns).expect("GFX|hosted can't connect to KBD for emulation");
-        let keyboard_handler = Box::new(XousKeyboardHandler {
-            kbd: kbd,
-            left_shift: false,
-            right_shift: false,
-        });
-        window.set_input_callback(keyboard_handler);
+        // Start a GUI event loop on the main thread
+        let thread_params = MinifbThread {
+            native_buffer: Arc::clone(&native_buffer),
+        };
+        main_thread_token.0.send(thread_params).unwrap();
 
         XousDisplay {
             native_buffer,
-            window,
             emulated_buffer: [0u32; FB_SIZE],
             srfb: [0u32; FB_SIZE],
             devboot: true,
@@ -88,9 +110,9 @@ impl XousDisplay {
         self.srfb.copy_from_slice(&self.emulated_buffer);
     }
     pub fn pop(&mut self) {
-        self.emulated_buffer[FB_WIDTH_WORDS*32..].copy_from_slice(&self.srfb[FB_WIDTH_WORDS*32..]);
+        self.emulated_buffer[FB_WIDTH_WORDS * 32..]
+            .copy_from_slice(&self.srfb[FB_WIDTH_WORDS * 32..]);
         self.redraw();
-        self.update();
     }
 
     pub fn screen_size(&self) -> Point {
@@ -101,6 +123,7 @@ impl XousDisplay {
         for (dest, src) in self.emulated_buffer.iter_mut().zip(bmp.iter()) {
             *dest = *src;
         }
+        self.emulated_to_native();
     }
     pub fn as_slice(&self) -> &[u32] {
         &self.emulated_buffer
@@ -112,24 +135,13 @@ impl XousDisplay {
 
     pub fn redraw(&mut self) {
         self.emulated_to_native();
-        self.window
-            .update_with_buffer(&self.native_buffer, WIDTH as usize, HEIGHT as usize)
-            .unwrap();
-    }
-
-    pub fn update(&mut self) {
-        self.emulated_to_native();
-        self.window.update();
-        if !self.window.is_open() || self.window.is_key_down(Key::Escape) {
-            std::process::exit(0);
-        }
     }
 
     fn emulated_to_native(&mut self) {
         const DEVBOOT_LINE: usize = 7;
+        let mut native_buffer = self.native_buffer.lock().unwrap();
         let mut row = 0;
-        for (dest_row, src_row) in self
-            .native_buffer
+        for (dest_row, src_row) in native_buffer
             .chunks_mut(WIDTH as _)
             .zip(self.emulated_buffer.chunks(WIDTH_WORDS as _))
         {
@@ -148,6 +160,58 @@ impl XousDisplay {
                 }
             }
             row += 1;
+        }
+    }
+}
+
+impl MinifbThread {
+    pub fn run_while(self, mut predicate: impl FnMut() -> bool) {
+        let mut window = Window::new(
+            "Precursor",
+            WIDTH as usize,
+            HEIGHT as usize,
+            WindowOptions {
+                scale_mode: minifb::ScaleMode::AspectRatioStretch,
+                resize: true,
+                ..WindowOptions::default()
+            },
+        )
+        .unwrap_or_else(|e| {
+            log::error!("{e:?}");
+            std::process::abort();
+        });
+
+        // Limit the maximum update rate
+        window.limit_update_rate(Some(std::time::Duration::from_micros(
+            1000 * 1000 / MAX_FPS,
+        )));
+
+        let xns = xous_names::XousNames::new().unwrap();
+        let kbd =
+            keyboard::Keyboard::new(&xns).expect("GFX|hosted can't connect to KBD for emulation");
+        let keyboard_handler = Box::new(XousKeyboardHandler {
+            kbd,
+            left_shift: false,
+            right_shift: false,
+        });
+        window.set_input_callback(keyboard_handler);
+
+        let mut native_buffer = Vec::new();
+
+        while predicate() {
+            // Copy the contents of `native_buffer`. Release the lock
+            // immediately so as not to starve the server thread.
+            native_buffer.clear();
+            native_buffer.extend_from_slice(&self.native_buffer.lock().unwrap());
+
+            // Render the contents of the minifb window and handle input events.
+            // This may block to regulate the update rate.
+            window
+                .update_with_buffer(&native_buffer, WIDTH as usize, HEIGHT as usize)
+                .unwrap();
+            if !window.is_open() || window.is_key_down(Key::Escape) {
+                std::process::exit(0);
+            }
         }
     }
 }

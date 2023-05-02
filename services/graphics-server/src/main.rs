@@ -93,25 +93,30 @@ fn map_fonts() -> MemoryRange {
     fontregion
 }
 fn main () -> ! {
-    #[cfg(any(not(feature = "ditherpunk"), target_os = "macos"))]
-    wrapped_main();
+    // Some operating systems and GUI frameworks don't allow creating an event
+    // loop from a thread other than TID 1. Let the backend claim this thread
+    // if this may be the case.
+    backend::claim_main_thread(move |main_thread_token| {
+        #[cfg(not(feature = "ditherpunk"))]
+        wrapped_main(main_thread_token);
 
-    #[cfg(feature="ditherpunk")]
-    let stack_size = 1024 * 1024;
-    #[cfg(feature="ditherpunk")]
-    std::thread::Builder::new()
-        .stack_size(stack_size)
-        .spawn(wrapped_main)
-        .unwrap()
-        .join()
-        .unwrap()
+        #[cfg(feature="ditherpunk")]
+        let stack_size = 1024 * 1024;
+        #[cfg(feature="ditherpunk")]
+        std::thread::Builder::new()
+            .stack_size(stack_size)
+            .spawn(move || wrapped_main(main_thread_token))
+            .unwrap()
+            .join()
+            .unwrap()
+    })
 }
-fn wrapped_main() -> ! {
+fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
-    let mut display = XousDisplay::new();
+    let mut display = XousDisplay::new(main_thread_token);
     draw_boot_logo(&mut display); // bring this up as soon as possible
     let fontregion = map_fonts();
 
@@ -392,7 +397,6 @@ fn wrapped_main() -> ! {
                 }
                 Some(Opcode::Flush) => {
                     log::trace!("***gfx flush*** redraw##");
-                    display.update();
                     display.redraw();
                 }
                 Some(Opcode::Clear) => {
@@ -455,12 +459,10 @@ fn wrapped_main() -> ! {
                 }),
                 Some(Opcode::DrawSleepScreen) => msg_scalar_unpack!(msg, _, _, _, _, {
                     display.blit_screen(&logo::LOGO_MAP);
-                    display.update();
                     display.redraw();
                 }),
                 Some(Opcode::DrawBootLogo) => msg_scalar_unpack!(msg, _, _, _, _, {
                     display.blit_screen(&poweron::LOGO_MAP);
-                    display.update();
                     display.redraw();
                 }),
                 Some(Opcode::Devboot) => msg_scalar_unpack!(msg, ena, _, _, _, {
@@ -543,7 +545,6 @@ fn wrapped_main() -> ! {
                             testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                         }
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
@@ -553,7 +554,6 @@ fn wrapped_main() -> ! {
                         }
                         // dirty bits already set
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
@@ -564,7 +564,6 @@ fn wrapped_main() -> ! {
                             }
                         }
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
@@ -574,7 +573,6 @@ fn wrapped_main() -> ! {
                             }
                         }
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
@@ -590,7 +588,6 @@ fn wrapped_main() -> ! {
                             testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                         }
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
@@ -605,7 +602,6 @@ fn wrapped_main() -> ! {
                             testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                         }
                         display.blit_screen(testpat);
-                        display.update();
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
 
