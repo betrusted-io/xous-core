@@ -2,7 +2,7 @@ use crate::api::*;
 use std::sync::Arc;
 use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use com::{WlanStatus, WlanStatusIpc, SsidRecord};
-use com_rs_ref::{ConnectResult, LinkState};
+use com_rs::{ConnectResult, LinkState};
 use net::MIN_EC_REV;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, try_send_message, Message};
 use xous_ipc::Buffer;
@@ -292,7 +292,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                     let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
                                     buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
                                 }
-                                if wifi_stats_cache.ipv4.dhcp == com_rs_ref::DhcpState::Bound {
+                                if wifi_stats_cache.ipv4.dhcp == com_rs::DhcpState::Bound {
                                     wifi_state = WifiState::Connected;
                                 } else {
                                     wifi_state = WifiState::WaitDhcp;
@@ -322,14 +322,14 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                         // heuristic to catch sync problems in the state machine: the cache won't get updated if the EC reset itself otherwise
                         if intervals_without_activity > 3 { // we'd expect at least an ARP or something...
                             wifi_stats_cache = com.wlan_status().unwrap();
-                            if wifi_stats_cache.link_state != com_rs_ref::LinkState::Connected {
-                                if wifi_stats_cache.link_state == com_rs_ref::LinkState::WFXError {
+                            if wifi_stats_cache.link_state != com_rs::LinkState::Connected {
+                                if wifi_stats_cache.link_state == com_rs::LinkState::WFXError {
                                     log::info!("WFX chipset error detected, resetting WF200");
                                     com.wifi_reset().expect("couldn't reset the wf200 chip");
                                 }
                                 log::info!("Link state mismatch: moving state to disconnected ({:?})", wifi_stats_cache.link_state);
                                 netmgr.reset();
-                            } else if wifi_stats_cache.ipv4.dhcp != com_rs_ref::DhcpState::Bound {
+                            } else if wifi_stats_cache.ipv4.dhcp != com_rs::DhcpState::Bound {
                                 log::info!("DHCP state mismatch: moving state to disconnected ({:?})", wifi_stats_cache.ipv4.dhcp);
                                 netmgr.reset();
                             }
@@ -498,7 +498,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 // this will force the UI to transition from 'WiFi Off' -> 'Not connected'
                 wifi_stats_cache = WlanStatus {
                     ssid: None,
-                    link_state: com_rs_ref::LinkState::Disconnected,
+                    link_state: com_rs::LinkState::Disconnected,
                     ipv4: com::Ipv4Conf::default(),
                 };
                 log::debug!("stats update: {:?}", wifi_stats_cache);
@@ -523,7 +523,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 // this will force the UI to transition from 'WiFi Off' -> 'Not connected'
                 wifi_stats_cache = WlanStatus {
                     ssid: None,
-                    link_state: com_rs_ref::LinkState::Disconnected,
+                    link_state: com_rs::LinkState::Disconnected,
                     ipv4: com::Ipv4Conf::default(),
                 };
                 log::debug!("stats update: {:?}", wifi_stats_cache);
@@ -551,7 +551,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 com.wlan_set_off().expect("couldn't turn off wifi");
                 wifi_stats_cache = WlanStatus {
                     ssid: None,
-                    link_state: com_rs_ref::LinkState::ResetHold,
+                    link_state: com_rs::LinkState::ResetHold,
                     ipv4: com::Ipv4Conf::default(),
                 };
                 log::debug!("stats update: {:?}", wifi_stats_cache);

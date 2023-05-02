@@ -8,7 +8,6 @@ use num_traits::{ToPrimitive, FromPrimitive};
 
 use log::{error, info, trace};
 
-use com_rs_ref as com_rs;
 use com_rs::*;
 use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, StringSer, Ipv4Conf};
 
@@ -40,7 +39,6 @@ mod implementation {
     use crate::api::BattStats;
     use crate::return_battstats;
     use crate::WorkRequest;
-    use com_rs_ref as com_rs;
     use com_rs::*;
     use log::error;
     use utralib::generated::*;
@@ -253,7 +251,6 @@ mod implementation {
     use crate::api::BattStats;
     use crate::return_battstats;
     use crate::WorkRequest;
-    use com_rs_ref as com_rs;
     use com_rs::*;
     use log::error;
 

@@ -898,7 +898,7 @@ fn wrapped_main() -> ! {
                                 ssid.name.as_str().unwrap_or("UTF-8 Error"),
                             ).unwrap();
                         } else {
-                            if wifi_status.link_state == com_rs_ref::LinkState::ResetHold {
+                            if wifi_status.link_state == com_rs::LinkState::ResetHold {
                                 write!(
                                     &mut battstats_tv,
                                     "{}",

@@ -186,7 +186,7 @@ pub(crate) fn ntp_updater(time_conn: xous::CID) {
                     // check if we have a network connection. if not, repeat the loop, after a short delay
                     match netmgr.get_ipv4_config() {
                         Some(conf) => {
-                            if conf.dhcp != com_rs_ref::DhcpState::Bound {
+                            if conf.dhcp != com_rs::DhcpState::Bound {
                                 log::debug!("no DHCP");
                                 tt.sleep_ms(1000 * 31).unwrap();
                                 continue;

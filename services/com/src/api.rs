@@ -5,7 +5,7 @@ pub(crate) use rkyv_enum::*;
 // It's just a convenient abuse of already-defined constants. However, it's intended that
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
 pub(crate) const SERVER_NAME_COM: &str = "_COM manager_";
-pub use com_rs_ref::serdes::Ipv4Conf;
+pub use com_rs::serdes::Ipv4Conf;
 #[allow(dead_code)]
 pub const WF200_PASS_MAX_LEN: usize = 64;
 #[allow(dead_code)]
@@ -82,7 +82,7 @@ impl Default for SsidReturn {
 pub struct WlanStatusIpc {
     pub ssid: Option<SsidRecord>,
     pub link_state: u16, // this is slung around as a u16 to avoid pulling rkyv into the EC dependency tree
-    pub ipv4: [u16; com_rs_ref::ComState::WLAN_GET_IPV4_CONF.r_words as usize],
+    pub ipv4: [u16; com_rs::ComState::WLAN_GET_IPV4_CONF.r_words as usize],
 }
 impl WlanStatusIpc {
     #[allow(dead_code)]
@@ -98,15 +98,15 @@ impl Default for WlanStatusIpc {
     fn default() -> Self {
         WlanStatusIpc {
             ssid: None,
-            link_state: com_rs_ref::LinkState::Unknown as u16,
-            ipv4: [0u16; com_rs_ref::ComState::WLAN_GET_IPV4_CONF.r_words as usize],
+            link_state: com_rs::LinkState::Unknown as u16,
+            ipv4: [0u16; com_rs::ComState::WLAN_GET_IPV4_CONF.r_words as usize],
         }
     }
 }
 #[derive(Debug, Copy, Clone)]
 pub struct WlanStatus {
     pub ssid: Option<SsidRecord>,
-    pub link_state: com_rs_ref::LinkState, // converted back into LinkState once it's across the IPC boundary
+    pub link_state: com_rs::LinkState, // converted back into LinkState once it's across the IPC boundary
     pub ipv4: Ipv4Conf,
 }
 impl WlanStatus {
@@ -114,8 +114,8 @@ impl WlanStatus {
     pub fn from_ipc(status: WlanStatusIpc) -> Self {
         WlanStatus {
             ssid: status.ssid,
-            link_state: com_rs_ref::LinkState::decode_u16(status.link_state),
-            ipv4: com_rs_ref::serdes::Ipv4Conf::decode_u16(&status.ipv4),
+            link_state: com_rs::LinkState::decode_u16(status.link_state),
+            ipv4: com_rs::serdes::Ipv4Conf::decode_u16(&status.ipv4),
         }
     }
 }
@@ -311,17 +311,17 @@ pub enum ComIntSources {
 impl From<u16> for ComIntSources {
     fn from(n: u16) -> ComIntSources {
         match n {
-            com_rs_ref::INT_WLAN_RX_READY => ComIntSources::WlanRxReady,
-            com_rs_ref::INT_WLAN_IPCONF_UPDATE => ComIntSources::WlanIpConfigUpdate,
-            com_rs_ref::INT_WLAN_SSID_UPDATE => ComIntSources::WlanSsidScanUpdate,
-            com_rs_ref::INT_WLAN_SSID_FINISHED => ComIntSources::WlanSsidScanFinished,
-            com_rs_ref::INT_BATTERY_CRITICAL => ComIntSources::BatteryCritical,
-            com_rs_ref::INT_WLAN_TX_ERROR => ComIntSources::WlanTxErr,
-            com_rs_ref::INT_WLAN_RX_ERROR => ComIntSources::WlanRxErr,
-            com_rs_ref::INT_WLAN_DISCONNECT => ComIntSources::Disconnect,
-            com_rs_ref::INT_WLAN_CONNECT_EVENT => ComIntSources::Connect,
-            com_rs_ref::INT_WLAN_WFX_ERR => ComIntSources::WfxErr,
-            com_rs_ref::INT_INVALID => ComIntSources::IntErr,
+            com_rs::INT_WLAN_RX_READY => ComIntSources::WlanRxReady,
+            com_rs::INT_WLAN_IPCONF_UPDATE => ComIntSources::WlanIpConfigUpdate,
+            com_rs::INT_WLAN_SSID_UPDATE => ComIntSources::WlanSsidScanUpdate,
+            com_rs::INT_WLAN_SSID_FINISHED => ComIntSources::WlanSsidScanFinished,
+            com_rs::INT_BATTERY_CRITICAL => ComIntSources::BatteryCritical,
+            com_rs::INT_WLAN_TX_ERROR => ComIntSources::WlanTxErr,
+            com_rs::INT_WLAN_RX_ERROR => ComIntSources::WlanRxErr,
+            com_rs::INT_WLAN_DISCONNECT => ComIntSources::Disconnect,
+            com_rs::INT_WLAN_CONNECT_EVENT => ComIntSources::Connect,
+            com_rs::INT_WLAN_WFX_ERR => ComIntSources::WfxErr,
+            com_rs::INT_INVALID => ComIntSources::IntErr,
             _ => ComIntSources::Invalid,
         }
     }
@@ -329,17 +329,17 @@ impl From<u16> for ComIntSources {
 impl From<ComIntSources> for u16 {
     fn from(cis: ComIntSources) -> u16 {
         match cis {
-            ComIntSources::BatteryCritical => com_rs_ref::INT_BATTERY_CRITICAL,
-            ComIntSources::WlanIpConfigUpdate => com_rs_ref::INT_WLAN_IPCONF_UPDATE,
-            ComIntSources::WlanSsidScanUpdate => com_rs_ref::INT_WLAN_SSID_UPDATE,
-            ComIntSources::WlanSsidScanFinished => com_rs_ref::INT_WLAN_SSID_FINISHED,
-            ComIntSources::WlanRxReady => com_rs_ref::INT_WLAN_RX_READY,
-            ComIntSources::WlanTxErr => com_rs_ref::INT_WLAN_TX_ERROR,
-            ComIntSources::WlanRxErr => com_rs_ref::INT_WLAN_RX_ERROR,
-            ComIntSources::Connect => com_rs_ref::INT_WLAN_CONNECT_EVENT,
-            ComIntSources::Disconnect => com_rs_ref::INT_WLAN_DISCONNECT,
-            ComIntSources::WfxErr => com_rs_ref::INT_WLAN_WFX_ERR,
-            ComIntSources::IntErr => com_rs_ref::INT_INVALID,
+            ComIntSources::BatteryCritical => com_rs::INT_BATTERY_CRITICAL,
+            ComIntSources::WlanIpConfigUpdate => com_rs::INT_WLAN_IPCONF_UPDATE,
+            ComIntSources::WlanSsidScanUpdate => com_rs::INT_WLAN_SSID_UPDATE,
+            ComIntSources::WlanSsidScanFinished => com_rs::INT_WLAN_SSID_FINISHED,
+            ComIntSources::WlanRxReady => com_rs::INT_WLAN_RX_READY,
+            ComIntSources::WlanTxErr => com_rs::INT_WLAN_TX_ERROR,
+            ComIntSources::WlanRxErr => com_rs::INT_WLAN_RX_ERROR,
+            ComIntSources::Connect => com_rs::INT_WLAN_CONNECT_EVENT,
+            ComIntSources::Disconnect => com_rs::INT_WLAN_DISCONNECT,
+            ComIntSources::WfxErr => com_rs::INT_WLAN_WFX_ERR,
+            ComIntSources::IntErr => com_rs::INT_INVALID,
             ComIntSources::Invalid => 0,
         }
     }
