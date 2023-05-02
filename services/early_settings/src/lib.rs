@@ -19,6 +19,7 @@ pub enum Opcode {
     SetEarlySleep,
 }
 
+#[doc = include_str!("../README.md")]
 #[derive(Debug)]
 pub struct EarlySettings {
     conn: xous::CID,
@@ -33,7 +34,7 @@ impl EarlySettings {
         Ok(EarlySettings { conn })
     }
 
-    /// set_keymap sets map as keymap in the early settings FLASH section.
+    /// Sets map as keymap in the early settings FLASH section.
     /// No validation on map is done, use with caution.
     pub fn set_keymap(&self, map: usize) -> Result<(), xous::Error> {
         send_message(
@@ -49,7 +50,7 @@ impl EarlySettings {
         .map(|_| ())
     }
 
-    /// get_keymap gets the keymap from the early settings FLASH section.
+    /// Gets the keymap from the early settings FLASH section.
     /// No validation is done on the return value, use with caution.
     pub fn get_keymap(&self) -> Result<usize, xous::Error> {
         match send_message(
@@ -61,7 +62,7 @@ impl EarlySettings {
         }
     }
 
-    /// set_early_sleep sets value in the early settings FLASH section.
+    /// Sets value in the early settings FLASH section.
     pub fn set_early_sleep(&self, value: bool) -> Result<(), xous::Error> {
         send_message(
             self.conn,
@@ -76,7 +77,7 @@ impl EarlySettings {
         .map(|_| ())
     }
 
-    /// early_sleep retrieves the early sleep flag from the early settings FLASH section.
+    /// Retrieves the early sleep flag from the early settings FLASH section.
     pub fn early_sleep(&self) -> Result<bool, xous::Error> {
         match send_message(
             self.conn,
