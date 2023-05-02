@@ -1164,12 +1164,12 @@ dependencies = [
  "rkyv",
  "spinor",
  "utralib",
- "xous 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous 0.9.41 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.9.40 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-ipc 0.9.41 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
