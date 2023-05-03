@@ -7,9 +7,8 @@ mod tests {
     use std::fs::{DirBuilder, File};
     #[test]
     fn basic_generate() {
-        let src = File::open("examples/soc.svd").unwrap();
         DirBuilder::new().recursive(true).create("target").unwrap();
         let mut dest = File::create("target/example.rs").unwrap();
-        generate(src, &mut dest).unwrap();
+        generate("examples/soc.svd", &mut dest).unwrap();
     }
 }
