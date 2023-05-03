@@ -153,6 +153,7 @@ fn wrapped_main() -> ! {
 
     // ------------------ acquire the status canvas GID
     let xns = xous_names::XousNames::new().unwrap();
+    let early_settings = early_settings::EarlySettings::new(&xns).unwrap();
     // 1 connection exactly -- from the GAM to set our canvas GID
     let status_gam_getter = xns
         .register_name(SERVER_NAME_STATUS_GID, Some(1))
@@ -625,6 +626,29 @@ fn wrapped_main() -> ! {
     }
     #[cfg(any(feature="precursor", feature="renode"))]
     llio.clear_wakeup_alarm().unwrap(); // this is here to clear any wake-up alarms that were set by a prior coldboot command
+
+    // get the last status
+    let must_sleep = early_settings.early_sleep().unwrap();
+
+    if must_sleep {
+        // reset it for good measure
+        early_settings.set_early_sleep(false).unwrap();
+
+        while ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
+            modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
+        }
+
+        match susres.initiate_suspend() {
+            Ok(_) => {},
+            Err(xous::Error::Timeout) => {
+                // TODO: maybe this branch needs a different log message/flow?
+                modals.show_notification(t!("suspend.fail", xous::LANG), None).unwrap();
+            }
+            Err(_e) => {
+                panic!("Unhandled error on suspend request");
+            }
+        }
+    }
 
     // spawn a thread to auto-mount the PDDB
     let _ = thread::spawn({
@@ -1103,6 +1127,10 @@ fn wrapped_main() -> ! {
                 if !pddb.try_unmount() { // sync the pddb prior to lock
                     modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
                 } else {
+                    early_settings.set_early_sleep(true).unwrap();
+
+                    log::info!("forcing sleep on reboot");
+
                     pddb.pddb_halt();
                     susres.reboot(true).expect("couldn't issue reboot command");
                 }

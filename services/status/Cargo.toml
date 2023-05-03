@@ -30,6 +30,8 @@ usb-device-xous = {path="../usb-device-xous"}
 codec = {path="../codec"}
 userprefs = {path = "../../libs/userprefs"}
 dns = {path="../dns"}
+early_settings ={ path = "../early_settings"}
+
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}

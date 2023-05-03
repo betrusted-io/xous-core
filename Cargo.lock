@@ -1147,6 +1147,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
+name = "early_settings"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "num-derive",
+ "num-traits",
+ "once_cell",
+ "rkyv",
+ "spinor",
+ "utralib",
+ "xous 0.9.41 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-susres",
+ "xous-api-ticktimer",
+ "xous-ipc 0.9.41 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "ecdsa"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2124,6 +2143,7 @@ dependencies = [
 name = "keyboard"
 version = "0.1.0"
 dependencies = [
+ "early_settings",
  "llio",
  "log",
  "num-derive",
@@ -2577,9 +2597,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.12.0"
+version = "1.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7709cef83f0c1f58f666e746a08b21e0085f7440fa6a29cc194d68aac97a4225"
+checksum = "b7e5500299e16ebb147ae15a00a942af264cf3688f47923b8fc2cd5858f23ad3"
 
 [[package]]
 name = "oorandom"
@@ -3922,6 +3942,7 @@ dependencies = [
  "crossbeam",
  "digest 0.9.0",
  "dns",
+ "early_settings",
  "gam",
  "graphics-server",
  "keyboard",
