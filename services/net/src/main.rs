@@ -283,7 +283,7 @@ fn main() -> ! {
         Err(e) => {
             log::error!("Something is wrong with the EC, got {:?} when requesting a MAC address. Trying our best to bodge through it.", e);
             Ipv4Conf {
-                dhcp: com_rs_ref::DhcpState::Invalid,
+                dhcp: com_rs::DhcpState::Invalid,
                 mac: [2, 2, 4, 5, 6, 2],
                 addr: [169, 254, 0, 2], // link local address
                 gtwy: [169, 254, 0, 1], // something bogus

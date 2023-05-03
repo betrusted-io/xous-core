@@ -54,7 +54,7 @@ base32 = "0.4.0"
 sha2 = {path="../../services/engine-sha512"}
 sntpc = {version = "0.3.1"}
 net = {path="../../services/net"}
-com_rs-ref = {path = "../../imports/com_rs-ref"}
+com_rs = { git = "https://github.com/betrusted-io/com_rs", revision = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
 # performance profiling
 perflib = {path="../../tools/perflib", optional = true}

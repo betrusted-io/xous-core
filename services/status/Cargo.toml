@@ -41,7 +41,7 @@ crossbeam = "0.8.2"
 sha2 = {path="../engine-sha512"}
 digest = "0.9.0"
 xous-semver = "0.1.2"
-com_rs-ref = {path = "../../imports/com_rs-ref"}
+com_rs = { git = "https://github.com/betrusted-io/com_rs", revision = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
 utralib = {version = "0.1.17", optional = true, default-features = false }
 

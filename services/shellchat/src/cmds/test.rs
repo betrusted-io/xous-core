@@ -519,8 +519,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                         log::info!("polling WLAN status");
                         if let Ok(status) = env.com.wlan_status() {
                             log::info!("got status: {:?}", status);
-                            net_up = status.link_state == com_rs_ref::LinkState::Connected;
-                            dhcp_ok = status.ipv4.dhcp == com_rs_ref::DhcpState::Bound;
+                            net_up = status.link_state == com_rs::LinkState::Connected;
+                            dhcp_ok = status.ipv4.dhcp == com_rs::DhcpState::Bound;
                             ssid_ok = if let Some(ssid) = status.ssid {
                                 log::info!("got ssid: {}", ssid.name.as_str().unwrap_or("invalid"));
                                 ssid.name.as_str().unwrap_or("invalid") == "precursortest"
