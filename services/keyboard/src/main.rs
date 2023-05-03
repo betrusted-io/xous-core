@@ -25,7 +25,6 @@ mod implementation {
     use num_traits::ToPrimitive;
     use susres::{RegManager, RegOrField, SuspendResume};
     use std::collections::HashSet;
-    use std::convert::TryInto;
 
     /// note: the code is structured to use at most 16 rows or 16 cols
     const KBD_ROWS: usize = 9;
@@ -69,10 +68,8 @@ mod implementation {
         susres: RegManager::<{utra::keyboard::KEYBOARD_NUMREGS}>,
         /// a field used for debugging various keyboard issues, especially with the interrupt handler
         pub debug: usize,
-        /// a slice that contains the location of the early-boot keyboard settings
-        settings: xous::MemoryRange,
-        /// a handle to the spinor block so we can update our settings
-        spinor: spinor::Spinor,
+        /// access to settings stored in the first few sectors of FLASH
+        early_settings: early_settings::EarlySettings,
     }
 
     fn handle_kbd(_irq_no: usize, arg: *mut usize) {
@@ -139,17 +136,13 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map Keyboard CSR range");
-            let setting_page = xous::syscall::map_memory(
-                xous::MemoryAddress::new((xous::EARLY_SETTINGS + xous::FLASH_PHYS_BASE) as usize),
-                None,
-                4096,
-                xous::MemoryFlags::R,
-            )
-            .expect("couldn't map Keyboard pre-boot setting");
 
             let ticktimer = ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer");
             let timestamp = ticktimer.elapsed_ms();
-            let settings: &[u8] = setting_page.as_slice();
+
+            let xns = xous_names::XousNames::new().unwrap();
+
+            let ea = early_settings::EarlySettings::new(&xns).unwrap();
 
             let default_map = if cfg!(feature = "braille") {
                 KeyMap::Braille
@@ -160,10 +153,10 @@ mod implementation {
                 // unencrypted and plaintext bit of memory that anyone can read or mess with. The only reason the keyboard
                 // layout is kept here is because you want your keyboard to be in the right language before typing in the
                 // password to unlock the PDDB, which is *actually* where all the user settings should be located.
-                let code = u32::from_le_bytes(settings[..4].try_into().unwrap());
-                KeyMap::from(code as usize)
+                let kb_raw = ea.get_keymap().expect("cannot fetch keymap from early settings");
+                let map = KeyMap::from(kb_raw);
+                map
             };
-            let xns = xous_names::XousNames::new().unwrap();
 
             let mut kbd = Keyboard {
                 conn: xous::connect(sid).unwrap(),
@@ -187,8 +180,7 @@ mod implementation {
                 chord_captured: false,
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
                 debug: 0,
-                settings: setting_page,
-                spinor: spinor::Spinor::new(&xns).unwrap(),
+                early_settings: ea,
             };
 
             xous::claim_interrupt(
@@ -239,19 +231,12 @@ mod implementation {
         }
 
         pub(crate) fn set_map(&mut self, map: KeyMap) {
-            let code_usize: usize = map.into();
-            let code = (code_usize as u32).to_le_bytes();
-            let settings: &[u8] = self.settings.as_slice();
-            self.spinor.patch(settings, xous::EARLY_SETTINGS,
-                &code, 0
-            ).expect("couldn't patch our keyboard code");
+            self.early_settings.set_keymap(map.into()).expect("cannot set early keymap");
             self.map = map;
         }
         pub(crate) fn get_map(&mut self) -> KeyMap {
-            // refresh the map from the setting in the FLASH
-            let settings: &[u8] = self.settings.as_slice();
-            let code = u32::from_le_bytes(settings[..4].try_into().unwrap());
-            self.map = KeyMap::from(code as usize);
+            let kb_raw = self.early_settings.get_keymap().expect("cannot fetch early keymap");
+            self.map = KeyMap::from(kb_raw);
             self.map
         }
         pub(crate) fn set_repeat(&mut self, rate: u32, delay: u32) {
