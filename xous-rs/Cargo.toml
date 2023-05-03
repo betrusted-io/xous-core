@@ -1,6 +1,6 @@
 [package]
 name = "xous"
-version = "0.9.41"
+version = "0.9.42"
 authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"

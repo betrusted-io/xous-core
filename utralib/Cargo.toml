@@ -1,6 +1,6 @@
 [package]
 name = "utralib"
-version = "0.1.17"
+version = "0.1.18"
 authors = ["Sean Cross <sean@xobs.io>", "bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -12,7 +12,7 @@ homepage = "https://betrusted.io/xous-book/"
 [dependencies]
 
 [build-dependencies]
-svd2utra = "0.1.15"
+svd2utra = "0.1.16"
 
 # UTRA pre-generated version tracker
 [features]
