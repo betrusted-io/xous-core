@@ -55,7 +55,7 @@ chrono = {version = "0.4.19", default-features = false, features = ["std"]}
 base64 = "0.20.0"
 cos_table = {path="../../libs/cos_table"}
 # used to parse net connectivity results
-com_rs = { git = "https://github.com/betrusted-io/com_rs", revision = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
+com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
 # for net testing
 threadpool = "1.8.1"

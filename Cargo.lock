@@ -613,7 +613,7 @@ dependencies = [
 name = "com"
 version = "0.1.0"
 dependencies = [
- "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs)",
+ "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?rev=891bdd3ca8e41f81510d112483e178aea3e3a921)",
  "llio",
  "log",
  "num-derive",
@@ -639,7 +639,7 @@ source = "git+https://github.com/betrusted-io/com_rs?branch=main#891bdd3ca8e41f8
 [[package]]
 name = "com_rs"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/com_rs#891bdd3ca8e41f81510d112483e178aea3e3a921"
+source = "git+https://github.com/betrusted-io/com_rs?rev=891bdd3ca8e41f81510d112483e178aea3e3a921#891bdd3ca8e41f81510d112483e178aea3e3a921"
 
 [[package]]
 name = "compiler_builtins"
@@ -2375,7 +2375,7 @@ version = "0.7.0"
 dependencies = [
  "codec",
  "com",
- "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs)",
+ "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?rev=891bdd3ca8e41f81510d112483e178aea3e3a921)",
  "content-plugin-api",
  "gam",
  "graphics-server",
@@ -2421,7 +2421,7 @@ version = "0.1.0"
 dependencies = [
  "byteorder",
  "com",
- "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs)",
+ "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?rev=891bdd3ca8e41f81510d112483e178aea3e3a921)",
  "llio",
  "locales",
  "log",
@@ -3745,7 +3745,7 @@ dependencies = [
  "cipher 0.3.0",
  "codec",
  "com",
- "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs)",
+ "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?rev=891bdd3ca8e41f81510d112483e178aea3e3a921)",
  "content-plugin-api",
  "cos_table",
  "curve25519-dalek",
@@ -3917,7 +3917,7 @@ dependencies = [
  "chrono",
  "codec",
  "com",
- "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs)",
+ "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?rev=891bdd3ca8e41f81510d112483e178aea3e3a921)",
  "content-plugin-api",
  "crossbeam",
  "digest 0.9.0",
@@ -4686,7 +4686,7 @@ dependencies = [
  "byteorder",
  "cbor",
  "chrono",
- "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs)",
+ "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?rev=891bdd3ca8e41f81510d112483e178aea3e3a921)",
  "content-plugin-api",
  "crypto-mac",
  "ctap-crypto",
