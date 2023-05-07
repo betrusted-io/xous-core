@@ -375,6 +375,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Add USB serial support
   - console logs can now be viewed via USB serial with the shellchat command `usb console` (`usb noconsole` to turn off). You will need a terminal client that is capable of CRLF translations.
   - TRNG can be set to emit raw binary data over USB serial with `usb trng` (`usb notrng` to turn off). This should be compatible with existing methods to extract randomness from USB dongles such as the OneRNG (looking for an existing HW RNG dongle user to test and confirm compatibility with their existing system!).
+- "Lock device" now sleeps after reboot (thanks to patches by @gsora)
+- Hosted mode now runs more smoothly, with less lag (thanks @yvt for the patch!)
 
 ## Roadmap
 - Lots of testing and bug fixes
