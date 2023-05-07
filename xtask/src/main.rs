@@ -446,7 +446,8 @@ be merged in with explicit app/service treatment with the following flags:
 
 [verb] options:
 Hardware images:
- app-image               Precursor user image. [cratespecs] are apps
+ app-image-xip           Precursor user image with XIP (frees more RAM for apps). [cratespecs] are apps
+ app-image               Precursor user image (all services in RAM). [cratespecs] are apps
  perf-image              Precursor user image, with performance profiling. [cratespecs] are apps
  tts                     builds an image with text to speech support via externally linked C executable. [cratespecs] are apps
  usbdev                  minimal, insecure build for new USB core bring-up. [cratespecs] are services
