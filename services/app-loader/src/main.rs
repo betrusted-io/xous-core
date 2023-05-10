@@ -29,38 +29,69 @@ fn main() -> ! {
 		// a dummy server for testing purposes
 		let name = "_Hello World_"; // note: this MUST match up with the gam name
 
+		// create the spawn process
+		let stub = include_bytes!("spawn-stub");
+		let args = xous::ProcessArgs::new(stub, xous::MemoryAddress::new(0x2050_1000).unwrap(), xous::MemoryAddress::new(0x2050_1000).unwrap());
+		let spawn = xous::create_process(args).expect("Couldn't create process!");
+		log::info!("Spawn PID: {}, Spawn CID: {}", spawn.pid, spawn.cid);
+
+		// perform a ping to make sure that spawn is running
+		let result = xous::send_message(
+		    spawn.cid,
+		    xous::Message::new_blocking_scalar(4, 1, 2, 3, 4),
+		)
+		    .unwrap();
+		log::info!("Result of ping: {:?}", result);
+		
 		// load the app from the binary file
 		let bin = include_bytes!("hello");
-		let elf = xmas_elf::ElfFile::new(bin.as_slice()).expect("Couldn't load elf!");
-		let entry_point = elf.header.pt2.entry_point();
-		let code_ph = elf
-		    .program_iter()
-		    .find(|ph| (ph.virtual_addr()..ph.virtual_addr() + ph.mem_size()).contains(&entry_point))
-		    .expect("Couldn't find segment with entry point!");
-		if let xmas_elf::program::SegmentData::Undefined(code) = code_ph.get_data(&elf).expect("Couldn't load section!") {
-		    let remainder = if code.len() & 0xFFF == 0 {
-			0
-		    } else {
-			0x1000 - (code.len() & 0xFFF)
-		    };
-		    let mut target_memory = xous::map_memory(
-			None,
-			None,
-			code.len() + remainder,
-			xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::X
-		    ).expect("Couldn't allocate new memory");
-		    for (src, dest) in code.iter().zip(target_memory.as_slice_mut::<u8>()) {
-			*dest = *src;
+		// make sure that this is a 32 bit elf file
+		assert!(bin[0] == 0x7F);
+		assert!(bin[1] == 0x45);
+		assert!(bin[2] == 0x4c);
+		assert!(bin[3] == 0x46);
+		assert!(bin[4] == 0x01);
+
+		let to_usize = |start, size| {
+		    if size == 1 {
+			return bin[start] as usize;
 		    }
-		    
-		    let entry_offset = entry_point - code_ph.virtual_addr();
-		    let entry_point = unsafe { target_memory.as_ptr().add(entry_offset as usize) };
-		    
-		    let run_app: fn() -> ! = unsafe { core::mem::transmute(entry_point) };
-		    std::thread::spawn(move || {
-			run_app();
-		    });
+		    if size == 2 {
+			// assumes little endianness
+			return u16::from_le_bytes(bin[start..start+size].try_into().unwrap()) as usize;
+		    }
+		    if size == 4 {
+			return u32::from_le_bytes(bin[start..start+size].try_into().unwrap()) as usize;
+		    }
+		    panic!("Tried to get usize of invalid size!");
+		};
+		
+		let entry_point = to_usize(0x18, 4); 
+		let ph_start = to_usize(0x1c, 4);
+		let ph_size = to_usize(0x2A, 2);
+		let ph_count = to_usize(0x2C, 2);
+
+		// add the segments we should load
+		for i in 0..ph_count {
+		    let start = ph_start + i * ph_size;
+		    // only load PT_LOAD segments
+		    if  to_usize(start, 4) == 0x00000001 {
+			let offset = to_usize(start+0x04, 4);
+			let vaddr = to_usize(start+0x08, 4);
+			let mem_size = to_usize(start+0x14, 4);
+
+			log::info!("Loading offset {} to virtual address {} with memory size {}", offset, vaddr, mem_size);
+			
+			let buf = unsafe { xous::MemoryRange::new(bin[offset..offset+mem_size].as_ptr() as usize, core::mem::size_of::<u8>()).expect("Couldn't create a buffer from the segment") };
+			xous::send_message(spawn.cid, xous::Message::new_lend(1, buf, xous::MemoryAddress::new(vaddr), None)).expect("Couldn't send a message to spawn");
+		    }
 		}
+
+		// tell spawn to switch to the new program
+		xous::send_message(spawn.cid, xous::Message::new_scalar(255, entry_point, 0, 0, 0)).expect("Couldn't send a message to spawn");
+
+		// let run_app: fn() -> ! = unsafe { core::mem::transmute(entry_point) };
+		// xous::create_thread_0(run_app).expect("Couldn't run app!");
 		
 		apps.push(xous_ipc::String::from_str(name));
 		log::info!("Added app `{}'!", load_app_req.name);

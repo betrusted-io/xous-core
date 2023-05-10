@@ -21,8 +21,6 @@ num-traits = {version = "0.2.14", default-features = false}
 
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 
-xmas-elf = "0.9.0"
-
 [features]
 default = ["app_loader"]
 app_loader = []
