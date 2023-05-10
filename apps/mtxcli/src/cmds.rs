@@ -640,7 +640,7 @@ impl CmdEnv {
         let prev_wifi_connected = self.common_env.wifi_connected;
         self.common_env.wifi_connected = false;
         if let Some(conf) = self.common_env.netmgr.get_ipv4_config() {
-            if conf.dhcp == com_rs_ref::DhcpState::Bound {
+            if conf.dhcp == com_rs::DhcpState::Bound {
                 self.common_env.wifi_connected = true;
             }
         }

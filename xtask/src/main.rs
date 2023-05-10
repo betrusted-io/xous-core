@@ -70,9 +70,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &base_pkgs[..],
         &[
             "graphics-server",  // raw (unprotected) frame buffer primitives
-            "keyboard",   // required by graphics-server
-            "spinor",     // required by keyboard - to save key mapping
-            "llio",       // required by spinor
+            "early_settings",   // required by keyboard
+            "keyboard",         // required by graphics-server
+            "spinor",           // required by keyboard - to save key mapping
+            "llio",             // required by spinor
         ]
     ].concat();
     // packages in the user image - most of the services at this layer have cross-dependencies
@@ -113,7 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
     ].concat();
     // for fast checking of AES hardware accelerator
-    let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"].to_vec();
+    let aestest_pkgs = ["xous-ticktimer", "xous-log", "aes-test"].to_vec();
 
     // ---- extract position independent args ----
     let lkey = get_flag("--lkey")?;
@@ -445,7 +446,8 @@ be merged in with explicit app/service treatment with the following flags:
 
 [verb] options:
 Hardware images:
- app-image               Precursor user image. [cratespecs] are apps
+ app-image-xip           Precursor user image with XIP (frees more RAM for apps). [cratespecs] are apps
+ app-image               Precursor user image (all services in RAM). [cratespecs] are apps
  perf-image              Precursor user image, with performance profiling. [cratespecs] are apps
  tts                     builds an image with text to speech support via externally linked C executable. [cratespecs] are apps
  usbdev                  minimal, insecure build for new USB core bring-up. [cratespecs] are services

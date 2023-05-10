@@ -371,6 +371,12 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - @xobs has added the feature `--gdb-stub` to the build. When selected, the kernel is built with GDB support over serial port. This works well in Renode. To try it in hardware, one must first run `console app` inside `shellchat` to activate the GDB UART (otherwise the sole serial port is connected to the console log).
 - @xobs added graphical panic output to the kernel. This is different from a guru meditation in that it only happens when the kernel itself panics.
 - Pulled in `ebreak` fix for VexRiscv CPU
+- In `vault`, deleting a password and saving the record with the blank password triggers a password generation dialog box (useful for re-doing passwords)
+- Add USB serial support
+  - console logs can now be viewed via USB serial with the shellchat command `usb console` (`usb noconsole` to turn off). You will need a terminal client that is capable of CRLF translations.
+  - TRNG can be set to emit raw binary data over USB serial with `usb trng` (`usb notrng` to turn off). This should be compatible with existing methods to extract randomness from USB dongles such as the OneRNG (looking for an existing HW RNG dongle user to test and confirm compatibility with their existing system!).
+- "Lock device" now sleeps after reboot (thanks to patches by @gsora)
+- Hosted mode now runs more smoothly, with less lag (thanks @yvt for the patch!)
 
 ## Roadmap
 - Lots of testing and bug fixes

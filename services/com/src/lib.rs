@@ -6,13 +6,13 @@ pub mod api;
 
 pub use api::*;
 use api::{Callback, ComIntSources, NET_MTU, Opcode};
-use com_rs_ref::{DhcpState, LinkState};
+use com_rs::{DhcpState, LinkState};
 use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
 use xous_ipc::{String, Buffer};
 use num_traits::{ToPrimitive, FromPrimitive};
 use std::collections::VecDeque;
 use std::cell::RefCell;
-pub use com_rs_ref::serdes::Ipv4Conf;
+pub use com_rs::serdes::Ipv4Conf;
 use xous_semver::SemVer;
 
 /// mapping of the callback function to the library user
@@ -623,7 +623,7 @@ impl Com {
     }
     pub fn wlan_is_reset_hold(&self) -> Result<bool, xous::Error> {
         let status = self.wlan_status()?;
-        if status.link_state == com_rs_ref::LinkState::ResetHold {
+        if status.link_state == LinkState::ResetHold {
             Ok(true)
         } else {
             Ok(false)

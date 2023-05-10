@@ -10,7 +10,6 @@ default-members = [
   "services/trng",
   "services/gam",
   "services/status",
-  "imports/com_rs-ref",
   "services/ime-plugin-api",
   "services/ime-frontend",
   "services/ime-plugin-shell",
@@ -29,6 +28,7 @@ default-members = [
   "services/dns",
   "services/modals",
   "services/usb-device-xous",
+  "services/early_settings",
   "libs/userprefs"
 ]
 members = [
@@ -55,7 +55,6 @@ members = [
   "svd2repl",
   "svd2utra",
   "xtask",
-  "imports/com_rs-ref",
   "imports/getrandom",
   "services/ime-plugin-api",
   "services/content-plugin-api",
@@ -72,6 +71,7 @@ members = [
   "services/net",
   "services/dns",
   "services/modals",
+  "services/early_settings",
   "apps/ball",
   "apps/hello",
   "apps/mtxcli",
@@ -180,3 +180,5 @@ rev="4296c2e7904898766cf7d8d589759a129794783b" # use the commitref because we're
 # path = "./svd2utra"
 # [patch.crates-io.xous-api-susres]
 # path = "./api/xous-api-susres"
+# [patch.crates-io.xous-api-log]
+# path = "./api/xous-api-log"

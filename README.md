@@ -113,7 +113,7 @@ is coded into the filename by convention.
 Generally, one can create an image for hardware using the following command:
 
 ```sh
-cargo xtask app-image
+cargo xtask app-image-xip
 ```
 
 And it will pull from the default soc.svd configuration.

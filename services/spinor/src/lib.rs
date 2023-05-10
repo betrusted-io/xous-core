@@ -26,7 +26,7 @@ pub struct Spinor {
 }
 impl Spinor {
     #[cfg(test)]
-    pub fn new() -> Self {
+    pub fn new(_: &xous_names::XousNames) -> Self {
         Spinor { conn: 0, token: [0, 0, 0, 0] }
     }
 

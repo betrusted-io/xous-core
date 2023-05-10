@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
+use api::{TrngTestMode, TRNG_TEST_BUF_LEN};
 use num_traits::*;
 use xous::{send_message, CID};
 use xous_ipc::Buffer;
@@ -142,6 +143,41 @@ impl Trng {
                 transmute(self.next_u32().to_le())
             };
             left.copy_from_slice(&chunk[..n]);
+        }
+    }
+    /// Sets the test mode according to the argument. Blocks until mode is set.
+    pub fn set_test_mode(&self, test_mode: TrngTestMode) {
+        send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                api::Opcode::TestSetMode.to_usize().unwrap(),
+                test_mode.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        )
+        .expect("TRNG|LIB: can't set test mode");
+    }
+    /// Gets test data from the TRNG. If hte test mode was not previously set, this will
+    /// eventually cause a panic. We don't add extra overhead code to make this safer
+    /// because as a test mode the caller expected to know what they are doing (and adding
+    /// more safety code increases overhead for the 99.9999999% of the time when we aren't
+    /// using this test code).
+    pub fn get_test_data(&self) -> Result<[u8; TRNG_TEST_BUF_LEN], xous::Error> {
+        let tb = api::TrngTestBuf {
+            data: [0; TRNG_TEST_BUF_LEN],
+            len: 0,
+        };
+        let mut buf = Buffer::into_buf(tb).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, api::Opcode::TestGetData.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        let rtb: api::TrngTestBuf = buf.to_original().unwrap();
+        if rtb.len as usize != TRNG_TEST_BUF_LEN {
+            // we somehow couldn't get enough test data from the TRNG.
+            Err(xous::Error::OutOfMemory)
+        } else {
+            Ok(rtb.data)
         }
     }
 }

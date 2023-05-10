@@ -76,6 +76,13 @@ pub(crate) enum Opcode {
     ErrorStats = 6,
 
     Quit = 7,
+
+    /// Set test mode to `RngTestMode`. System will best-effort provide "normal" TRNG data
+    /// but the TRNG will block while the generators are switched into test modes during buffer refills
+    TestSetMode = 8,
+
+    /// Get test data. Fails (returns no data) if test mode was not previously set.
+    TestGetData = 9,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -89,4 +96,28 @@ pub(crate) struct ScalarHook {
     pub sid: (u32, u32, u32, u32),
     pub id: u32, // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
     pub cid: xous::CID, // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
+}
+
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq, Copy, Clone)]
+pub enum TrngTestMode {
+    // No test mode configured.
+    None,
+    // Avalanche data only
+    Av,
+    // Ring oscillator data only
+    Ro,
+    // Combined RO + AV data without any CPRNG conditioning
+    Both,
+    // Output of the CPRNG that is constantly re-seeded by RO + AV data. This is the "normal" mode of operation.
+    // The CPRNG serves as a "belt and suspenders" safety measure over raw RO + AV data, so that small drop-outs
+    // in the TRNG don't lead to disastrous consequences. Of course this also masks large failures, but there are
+    // online tests that should help to pick that up.
+    Cprng,
+}
+
+pub const TRNG_TEST_BUF_LEN: usize = 2048;
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct TrngTestBuf {
+    pub data: [u8; TRNG_TEST_BUF_LEN],
+    pub len: u16,
 }

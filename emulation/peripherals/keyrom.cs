@@ -27,7 +27,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous.Betrusted
         private void DefineRegisters()
         {
             Registers.ADDRESS.Define(this)
-                .WithValueField(0, 8, writeCallback: (_, value) => { this.address = value; }, valueProviderCallback: _ => { return this.address; })
+                .WithValueField(0, 8, writeCallback: (_, value) => { this.address = value; }, valueProviderCallback: _ => { return (uint) this.address; })
             ;
 
             Registers.DATA.Define(this)

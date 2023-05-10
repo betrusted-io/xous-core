@@ -27,6 +27,8 @@ use keyboard::KeyMap;
 use xous_ipc::Buffer;
 use std::collections::VecDeque;
 
+use usbd_serial::SerialPort;
+
 pub struct EmbeddedClock {
     start: std::time::Instant,
 }
@@ -55,6 +57,7 @@ enum Views {
     FidoOnly = 1,
     #[cfg(feature="mass-storage")]
     MassStorage = 2,
+    Serial = 3,
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -62,6 +65,29 @@ enum TimeoutOp {
     Pump,
     InvalidCall,
     Quit,
+}
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+enum TrngOp {
+    Pump,
+    InvalidCall,
+    Quit,
+}
+
+#[derive(Debug)]
+enum SerialListenMode {
+    // this just causes data incoming to be printed to the debug log; it is the default
+    NoListener,
+    // this assumes there will be a CR/LF character to delimit lines (the `char` arg), and
+    // will buffer data until two conditions are met: 1) a listener is hooked and 2) a CR/LF is received.
+    // This will "infinitely" buffer incoming characters if no listener is hooked.
+    AsciiListener(Option<char>),
+    // this will simply buffer the data until the `usize` argument is met and passes it back to
+    // hooked listener. If this mode is set and there is no listener, it will buffer data "indefinitely"
+    // (e.g. until local heap is exhausted and the system panics)
+    BinaryListener,
+    // this will take any serial input and pass it on as if one was typing at the console
+    ConsoleListener,
 }
 
 pub(crate) fn main_hw() -> ! {
@@ -174,6 +200,7 @@ pub(crate) fn main_hw() -> ! {
     // do the same thing for mass storage
     #[cfg(feature="mass-storage")]
     let ums_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    let serial_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
 
     // track which view is visible on the device core
     #[cfg(not(feature="minimal"))]
@@ -246,6 +273,32 @@ pub(crate) fn main_hw() -> ! {
         .self_powered(false)
         .max_power(500)
         .build();
+
+    // Serial
+    const SERIAL_BUF_LEN: usize = 1024; // length of the internal character buffer. This is not the *hardware* buffer; this is a buffer we maintain in the driver to improve performance
+    let serial_alloc = UsbBusAllocator::new(serial_dev);
+    // this will create a default port with 128 bytes of backing store
+    let mut serial_port = SerialPort::new(&serial_alloc);
+    let mut serial_device = UsbDeviceBuilder::new(&serial_alloc, UsbVidPid(0x1209, 0x3613))
+    .manufacturer("Kosagi")
+    .product("Precursor")
+    .serial_number(&serial_number)
+    .self_powered(false)
+    .max_power(500)
+    .build();
+    let mut serial_listener: Option<xous::MessageEnvelope> = None;
+    let mut serial_listen_mode: SerialListenMode = SerialListenMode::NoListener;
+    let mut serial_buf = Vec::<u8>::new();
+    let mut serial_rx_trigger = false; // when true, the condition was met to pass data to the listener (but the listener was not yet installed)
+    let trng = trng::Trng::new(&xns).unwrap();
+    let mut serial_trng_buf = Vec::<u8>::new();
+    let serial_trng_interval = Arc::new(AtomicU32::new(0));
+    let mut serial_trng_cid: Option::<xous::CID> = None;
+    const TRNG_PKT_SIZE: usize = 64; // size of a TRNG packet being sent. This is inferred from the spec.
+    const TRNG_INITIAL_DELAY_MS: u32 = 200; // the very first poll takes longer, because we have to fill the TRNG back-end
+    const TRNG_REFILL_DELAY_MS: u32 = 1; // we re-poll very fast once we see the host taking data
+    const TRNG_BACKOFF_MS: u32 = 1;
+    const TRNG_BACKOFF_MAX_MS: u32 = 1000; // cap on how far we backoff the polling rate
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -356,7 +409,7 @@ pub(crate) fn main_hw() -> ! {
             #[cfg(feature="mass-storage")]
             Some(Opcode::SetBlockDevice) => msg_blocking_scalar_unpack!(msg, read_id, write_id, max_lba_id, _, {
                 xous::send_message(
-                    abdcid, 
+                    abdcid,
                     xous::Message::new_blocking_scalar(
                         apps_block_device::BlockDeviceMgmtOp::SetOps.to_usize().unwrap(), read_id, write_id, max_lba_id, 0,
                     )
@@ -406,6 +459,12 @@ pub(crate) fn main_hw() -> ! {
                             Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
                             _ => ()
                         };
+                    }
+                    Views::Serial => {
+                        match serial_device.force_reset() {
+                            Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                            _ => ()
+                        }
                     }
                 }
                 // resume2 brings us to our last application state
@@ -489,7 +548,8 @@ pub(crate) fn main_hw() -> ! {
                         Views::FidoWithKbd => composite.interface::<RawFidoInterface<'_, _>, _>(),
                         Views::FidoOnly => fido_class.interface::<RawFidoInterface<'_, _>, _>(),
                         #[cfg(feature="mass-storage")]
-                        Views::MassStorage => panic!("expected u2f tx when in mass storage mode!"),
+                        Views::MassStorage => panic!("did not expect u2f tx when in mass storage mode!"),
+                        Views::Serial => panic!("did not expect u2f tx while in serial mode!"),
                     };
                     u2f.write_report(&u2f_msg).ok();
                     log::debug!("sent U2F packet {:x?}", u2f_ipc.data);
@@ -529,7 +589,110 @@ pub(crate) fn main_hw() -> ! {
                             log::debug!("ums device had something to do!")
                         }
                         None
-                    }
+                    },
+                    Views::Serial => {
+                        if serial_device.poll(&mut [&mut serial_port]) {
+                            let mut data = [0u8; SERIAL_BUF_LEN];
+                            match serial_listen_mode {
+                                SerialListenMode::NoListener => {
+                                    match serial_port.read(&mut data) {
+                                        Ok(len) => {
+                                            match std::str::from_utf8(&data[..len]) {
+                                                Ok(s) => log::debug!("No listener ascii: {}", s),
+                                                Err(_) => {
+                                                    log::debug!("No listener binary: {:x?}", &data[..len]);
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::debug!("No listener: {:?}", e);
+                                        }
+                                    }
+                                }
+                                SerialListenMode::ConsoleListener => {
+                                    match serial_port.read(&mut data) {
+                                        Ok(len) => {
+                                            match std::str::from_utf8(&data[..len]) {
+                                                Ok(s) => {
+                                                    for c in s.chars() {
+                                                        native_kbd.inject_key(c);
+                                                    }
+                                                },
+                                                Err(_) => {
+                                                    log::info!("Non UTF-8 received on console: {:x?}", &data[..len]);
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::info!("Serial read error: {:?}", e);
+                                        }
+                                    }
+                                }
+                                SerialListenMode::AsciiListener(maybe_delimiter) => {
+                                    let readlen = serial_port.read(&mut data).unwrap_or(0);
+                                    if readlen == 0 {
+                                        continue;
+                                    }
+                                    if let Some(delimiter) = maybe_delimiter {
+                                        if !delimiter.is_ascii() {
+                                            log::warn!("Chosen ASCII delimiter {} is not ASCII. Serial receive will not function properly.", delimiter);
+                                        }
+                                        if !serial_rx_trigger { // once true, sticks as true
+                                            serial_rx_trigger = data[..readlen].iter().find(|&&c| c == (delimiter as u8)).is_some();
+                                        }
+                                    } else {
+                                        serial_rx_trigger = true;
+                                    }
+                                    // append the incoming data to the main buffer
+                                    for &d in &data[..readlen] {
+                                        serial_buf.push(d);
+                                    }
+                                    // now see if we should pass it back to the listener (if it is hooked)
+                                    if serial_rx_trigger && serial_listener.is_some() {
+                                        let mut rx_msg = serial_listener.take().unwrap();
+                                        let mut response = unsafe {
+                                            Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                        };
+                                        let mut buf = response.to_original::<UsbSerialAscii, _>().unwrap();
+                                        use std::fmt::Write; // is this really the best way to do it? probably not.
+                                        write!(buf.s, "{}", std::string::String::from_utf8_lossy(&serial_buf)).ok();
+
+                                        response.replace(buf).unwrap();
+                                        // the rx_msg will drop and respond to the listener
+                                        serial_rx_trigger = false;
+                                    }
+                                }
+                                SerialListenMode::BinaryListener => {
+                                    let readlen = serial_port.read(&mut data).unwrap_or(0);
+                                    if readlen == 0 {
+                                        continue;
+                                    }
+                                    // append the incoming data to the main buffer
+                                    for &d in &data[..readlen] {
+                                        serial_buf.push(d);
+                                    }
+                                    if serial_buf.len() >= SERIAL_BINARY_BUFLEN {
+                                        match serial_listener.take() {
+                                            Some(mut rx_msg) => {
+                                                let mut response = unsafe {
+                                                    Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                                };
+                                                let mut buf = response.to_original::<UsbSerialBinary, _>().unwrap();
+                                                buf.d.copy_from_slice(serial_buf.drain(..SERIAL_BINARY_BUFLEN).as_slice());
+                                                buf.len = SERIAL_BINARY_BUFLEN;
+                                                response.replace(buf).unwrap();
+                                                // the rx_msg will drop and respond to the listener
+                                            }
+                                            None => {
+                                                // do nothing, keep queuing data...
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    },
                 };
                 if let Some(u2f) = maybe_u2f {
                     match u2f.read_report() {
@@ -559,6 +722,7 @@ pub(crate) fn main_hw() -> ! {
                     Views::FidoOnly => fido_dev.state() == UsbDeviceState::Suspend,
                     #[cfg(feature="mass-storage")]
                     Views::MassStorage => ums_device.state() == UsbDeviceState::Suspend,
+                    Views::Serial => serial_device.state() == UsbDeviceState::Suspend,
                 };
                 if is_suspend {
                     log::info!("suspend detected");
@@ -582,6 +746,25 @@ pub(crate) fn main_hw() -> ! {
             },
             // always triggers a reset when called
             Some(Opcode::SwitchCores) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {
+                // ensure unhook the logger if it's connected to serial
+                let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                // it is never harmful to double-unhook this
+                xous::send_message(log_conn,
+                    xous::Message::new_blocking_scalar(log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
+                // reset any serial listeners that may have been set
+                serial_listen_mode = SerialListenMode::NoListener;
+                serial_listener.take();
+                // shut down the TRNG sender if it's set
+                if let Some(trng_cid) = serial_trng_cid.take() {
+                    serial_trng_interval.store(0, Ordering::SeqCst);
+                    xous::send_message(trng_cid,
+                        xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(),
+                            0, 0, 0, 0)
+                    ).ok();
+                    trng.set_test_mode(trng::api::TrngTestMode::None);
+                }
+
                 let devtype: UsbDeviceType = core.try_into().unwrap();
                 match devtype {
                     UsbDeviceType::Debug => {
@@ -634,12 +817,47 @@ pub(crate) fn main_hw() -> ! {
                             }
                         }
                     }
+                    UsbDeviceType::Serial => {
+                        log::info!("Connecting device serial");
+                        match view {
+                            Views::Serial => usbmgmt.connect_device_core(true),
+                            _ => {
+                                view = Views::Serial;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            }
+                        }
+                    }
                 }
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
             // does not trigger a reset if we're already on the core
             Some(Opcode::EnsureCore) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {
                 let devtype: UsbDeviceType = core.try_into().unwrap();
+                // if we are switching away from serial, unhook any possible listeners, and the logger
+                if view == Views::Serial && devtype != UsbDeviceType::Serial {
+                    let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                    // it is never harmful to double-unhook this
+                    xous::send_message(log_conn,
+                        xous::Message::new_blocking_scalar(log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).ok();
+                    // reset any serial listeners that may have been set
+                    serial_listen_mode = SerialListenMode::NoListener;
+                    serial_listener.take();
+                    // shut down the TRNG sender if it's set
+                    if let Some(trng_cid) = serial_trng_cid.take() {
+                        serial_trng_interval.store(0, Ordering::SeqCst);
+                        xous::send_message(trng_cid,
+                            xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(),
+                                0, 0, 0, 0)
+                        ).ok();
+                        trng.set_test_mode(trng::api::TrngTestMode::None);
+                    }
+                }
+
                 match devtype {
                     UsbDeviceType::Debug => {
                         if usbmgmt.is_device_connected() {
@@ -705,6 +923,22 @@ pub(crate) fn main_hw() -> ! {
                             }
                         }
                     }
+                    UsbDeviceType::Serial => {
+                        log::info!("Ensuring serial device");
+                        if !usbmgmt.is_device_connected() {
+                            view = Views::Serial;
+                            usbmgmt.connect_device_core(true);
+                        } else {
+                            if view != Views::Serial {
+                                view = Views::Serial;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            }
+                        }
+                    }
                 }
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
@@ -715,6 +949,7 @@ pub(crate) fn main_hw() -> ! {
                         Views::FidoOnly => xous::return_scalar(msg.sender, UsbDeviceType::Fido as usize).unwrap(),
                         #[cfg(feature="mass-storage")]
                         Views::MassStorage => xous::return_scalar(msg.sender, UsbDeviceType::MassStorage as usize).unwrap(),
+                        Views::Serial => xous::return_scalar(msg.sender, UsbDeviceType::Serial as usize).unwrap(),
                     }
                 } else {
                     xous::return_scalar(msg.sender, UsbDeviceType::Debug as usize).unwrap();
@@ -770,6 +1005,7 @@ pub(crate) fn main_hw() -> ! {
                     Views::FidoOnly => xous::return_scalar(msg.sender, fido_dev.state() as usize).unwrap(),
                     #[cfg(feature="mass-storage")]
                     Views::MassStorage => xous::return_scalar(msg.sender, ums_device.state() as usize).unwrap(),
+                    Views::Serial => xous::return_scalar(msg.sender, serial_device.state() as usize).unwrap(),
                 }
             }),
             Some(Opcode::SendKeyCode) => msg_blocking_scalar_unpack!(msg, code0, code1, code2, autoup, {
@@ -806,6 +1042,38 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
             }),
+            Some(Opcode::LogString) => {
+                // the logger API is "best effort" only. Because retries and response codes can cause problems
+                // in the logger API, if anything goes wrong, we prefer to discard characters rather than get
+                // the whole subsystem stuck in some awful recursive error handling hell.
+                match view {
+                    Views::Serial => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
+                        // this is implemented as a "blocking write": the routine will block until the data has all been written.
+                        let send_data = usb_send.s.as_bytes();
+                        let to_send = usb_send.s.len();
+                        let mut sent = 0;
+                        while sent < to_send {
+                            match serial_port.write(&send_data[sent..to_send]) {
+                                Ok(written) => {
+                                    sent += written;
+                                }
+                                Err(_) => {
+                                    // just drop characters
+                                }
+                            }
+                            match serial_port.flush() {
+                                Ok(_) => {},
+                                Err(_) => {
+                                    // just drop characters
+                                }
+                            }
+                        }
+                    }
+                    _ => {} // do nothing; don't fail, don't report any error.
+                }
+            }
             Some(Opcode::SendString) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
@@ -832,9 +1100,34 @@ pub(crate) fn main_hw() -> ! {
                             sent += 1;
                         }
                     }
+                    Views::Serial => {
+                        // this is implemented as a "blocking write": the routine will block until the data has all been written.
+                        let send_data = usb_send.s.as_bytes();
+                        let to_send = usb_send.s.len();
+                        // log::debug!("serial RTS: {:?}", serial_port.rts());
+                        // log::debug!("serial DTR: {:?}", serial_port.dtr());
+                        while sent < to_send {
+                            match serial_port.write(&send_data[sent..to_send]) {
+                                Ok(written) => {
+                                    sent += written;
+                                }
+                                Err(_) => {
+                                    log::warn!("Serial send is blocking. Delaying and trying again.");
+                                    tt.sleep_ms(100).ok();
+                                }
+                            }
+                            match serial_port.flush() {
+                                Ok(_) => {},
+                                Err(_) => {
+                                    log::warn!("Serial port reported WouldBlock on flush");
+                                    tt.sleep_ms(100).ok();
+                                }
+                            }
+                        }
+                    }
                     _ => {} // do nothing; will report that 0 characters were sent
                 }
-                usb_send.sent = Some(sent);
+                usb_send.sent = Some(sent as _);
                 buffer.replace(usb_send).unwrap();
             }
             Some(Opcode::GetLedState) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
@@ -842,6 +1135,264 @@ pub(crate) fn main_hw() -> ! {
                 led_state.pack_to_slice(&mut code).unwrap();
                 xous::return_scalar(msg.sender, code[0] as usize).unwrap();
             }),
+            Some(Opcode::SerialHookAscii) => {
+                let maybe_delimiter = {
+                    let buffer = unsafe {
+                        Buffer::from_memory_message(msg.body.memory_message().unwrap())
+                    };
+                    let data = buffer.to_original::<UsbSerialAscii, _>().unwrap();
+                    data.delimiter
+                };
+                serial_listen_mode = SerialListenMode::AsciiListener(maybe_delimiter);
+                serial_listener = Some(msg);
+            },
+            Some(Opcode::SerialHookBinary) => {
+                serial_listen_mode = SerialListenMode::BinaryListener;
+                serial_listener = Some(msg);
+            },
+            Some(Opcode::SerialHookConsole) => msg_scalar_unpack!(msg, _, _, _, _, {
+                let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                match xous::send_message(log_conn,
+                    xous::Message::new_blocking_scalar(log_server::api::Opcode::TryHookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
+                ) {
+                    Ok(xous::Result::Scalar1(result)) => {
+                        if result == 1 {
+                            serial_listen_mode = SerialListenMode::ConsoleListener;
+                            // unhook any previous pending listener
+                            serial_listener.take();
+                        } else {
+                            log::error!("Error trying to connect USB console.");
+                        }
+                    }
+                    _ => {
+                        log::error!("Could not connect USB console");
+                    }
+                }
+            }),
+            Some(Opcode::SerialClearHooks) => {
+                let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                // it is never harmful to double-unhook this
+                xous::send_message(log_conn,
+                    xous::Message::new_blocking_scalar(log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
+
+                serial_listen_mode = SerialListenMode::NoListener;
+                serial_listener.take();
+                // shut down the TRNG sender if it's set
+                if let Some(trng_cid) = serial_trng_cid.take() {
+                    serial_trng_interval.store(0, Ordering::SeqCst);
+                    xous::send_message(trng_cid,
+                        xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(),
+                            0, 0, 0, 0)
+                    ).ok();
+                    trng.set_test_mode(trng::api::TrngTestMode::None);
+                }
+            }
+            Some(Opcode::SerialFlush) => msg_scalar_unpack!(msg, _, _, _, _, {
+                // this will hardware flush any pending items in usb_serial driver
+                serial_port.flush().ok();
+                // this tries to return any data that's pending within the main loop's buffers
+                match serial_listen_mode {
+                    SerialListenMode::BinaryListener => {
+                        match serial_listener.take() {
+                            Some(mut rx_msg) => {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                };
+                                let mut buf = response.to_original::<UsbSerialBinary, _>().unwrap();
+                                let chars_avail = serial_buf.len().min(SERIAL_BINARY_BUFLEN);
+                                buf.len = chars_avail;
+                                buf.d.copy_from_slice(serial_buf.drain(..chars_avail).as_slice());
+                                response.replace(buf).unwrap();
+                                // the rx_msg will drop and respond to the listener
+                            }
+                            None => {
+                                // do nothing, keep queuing data...
+                            }
+                        }
+                    }
+                    SerialListenMode::AsciiListener(_) => {
+                        match serial_listener.take() {
+                            Some(mut rx_msg) => {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                };
+                                let mut buf = response.to_original::<UsbSerialAscii, _>().unwrap();
+                                use std::fmt::Write; // is this really the best way to do it? probably not.
+                                write!(buf.s, "{}", std::string::String::from_utf8_lossy(&serial_buf)).ok();
+
+                                response.replace(buf).unwrap();
+                                // the rx_msg will drop and respond to the listener
+                                serial_rx_trigger = false;
+                            }
+                            None => {} // do nothing
+                        }
+                    }
+                    _ => {}
+                }
+            }),
+            Some(Opcode::SerialHookTrngSender) => msg_scalar_unpack!(msg, trng_mode_code, _, _, _, {
+                if view != Views::Serial {
+                    log::error!("USB is not in serial mode. Ignoring request to hook TRNG sender");
+                    continue;
+                }
+                match serial_listen_mode {
+                    SerialListenMode::ConsoleListener => {
+                        log::error!("Serial is already hooked as a console. Refusing to turn on TRNG source mode");
+                        continue;
+                    }
+                    SerialListenMode::NoListener => {},
+                    _ => {
+                        log::warn!("Serial already has a listener {:?} attached, hooking TRNG at your risk!", serial_listen_mode);
+                    }
+                }
+
+                let trng_mode: trng::api::TrngTestMode = num_traits::FromPrimitive::from_usize(trng_mode_code)
+                    .unwrap_or(trng::api::TrngTestMode::None);
+                if trng_mode == trng::api::TrngTestMode::None {
+                    // ignore the call in case of a bad parameter
+                    continue;
+                } else {
+                    trng.set_test_mode(trng_mode);
+                }
+                log::info!("TRNG set to mode {:?}", trng_mode);
+
+                // The strategy here is when this is called, we start a thread that polls at some
+                // interval in milliseconds to see if the Tx buffer is empty and
+                // if rts() is true; and if so, jams more binary data into the pipe. If rts() is not true
+                // or the buffer is not available to write, the interval backs off.
+                //
+                // It also takes a trng_mode argument which is used to select either CPRNG whitened output
+                // (which is the default mode), or direct raw data from the RO or the Avalanche generator;
+                // this is used to help characterize the raw entropy sources.
+                if serial_trng_cid.is_none() {
+                    let trng_sid = xous::create_server().unwrap();
+                    let trng_cid = xous::connect(trng_sid).unwrap();
+                    std::thread::spawn({
+                        let serial_trng_interval = serial_trng_interval.clone();
+                        let main_conn = cid.clone();
+                        let trng_cid = trng_cid.clone();
+                        move || {
+                            let tt = ticktimer_server::Ticktimer::new().unwrap();
+                            let mut msg_opt = None;
+                            let mut return_type = 0;
+                            serial_trng_interval.store(TRNG_INITIAL_DELAY_MS, Ordering::SeqCst);
+                            log::info!("TRNG polling loop started");
+                            let mut debug_count = 0;
+                            loop {
+                                xous::reply_and_receive_next_legacy(trng_sid, &mut msg_opt, &mut return_type)
+                                .unwrap();
+                                let msg = msg_opt.as_mut().unwrap();
+                                match num_traits::FromPrimitive::from_usize(msg.body.id())
+                                .unwrap_or(TrngOp::InvalidCall)
+                                {
+                                    TrngOp::Pump => {
+                                        let next_interval = serial_trng_interval.load(Ordering::SeqCst);
+                                        if debug_count < 20 && next_interval < 100 {
+                                            log::debug!("TRNG serial poller, delay = {}", next_interval);
+                                            debug_count += 1;
+                                        }
+                                        if next_interval > 0 {
+                                            xous::try_send_message(main_conn,
+                                                xous::Message::new_scalar(Opcode::SerialTrngPoll.to_usize().unwrap(),
+                                                    0, 0, 0, 0)
+                                            ).ok();
+                                            tt.sleep_ms(next_interval as _).ok();
+                                            xous::try_send_message(trng_cid,
+                                                xous::Message::new_scalar(TrngOp::Pump.to_usize().unwrap(),
+                                                    0, 0, 0, 0)
+                                            ).ok();
+                                            // reset debug_count so when the next trigger comes we can see the output
+                                            if next_interval > 100  {
+                                                debug_count = 0;
+                                            }
+                                        } else {
+                                            debug_count = 0;
+                                        }
+                                    }
+                                    TrngOp::Quit => {
+                                        if let Some(scalar) = msg.body.scalar_message_mut() {
+                                            scalar.id = 0;
+                                            scalar.arg1 = 1;
+                                            log::info!("Quit called to Trng helper thread");
+                                            // I think there might be a bug in the kernel where quitting/disconnecting
+                                            // a reply_and_receive_next_legacy() loop is broken?
+                                            // This results in an inexplicable kernel hang...
+                                            // for now we can work around this by keeping the thread around once the server is started.
+                                            // break;
+                                        }
+                                    }
+                                    TrngOp::InvalidCall => {
+                                        log::error!("Unknown opcode received in TRNG source handler: {:?}", msg.body.id());
+                                    }
+                                }
+                            }
+                            /*
+                            unsafe{xous::disconnect(trng_cid).ok()};
+                            xous::destroy_server(trng_sid).ok();
+                            log::info!("TRNG polling loop exited");
+                            */
+                        }
+                    });
+                    serial_trng_cid = Some(trng_cid);
+                }
+                // kick off the polling thread
+                if let Some(trng_cid) = serial_trng_cid.as_ref() {
+                    xous::try_send_message(*trng_cid,
+                        xous::Message::new_scalar(TrngOp::Pump.to_usize().unwrap(),
+                            0, 0, 0, 0)
+                    ).ok();
+                }
+            }),
+            Some(Opcode::SerialTrngPoll) => {
+                if serial_trng_cid.is_none() {
+                    // stale request from previously configured TRNG system
+                    continue;
+                }
+                let mut sent = false;
+                if serial_port.rts() {
+                    if serial_trng_buf.len() < TRNG_PKT_SIZE {
+                        match trng.get_test_data() {
+                            Ok(data) => {
+                                serial_trng_buf.extend_from_slice(&data);
+                            }
+                            Err(e) => {
+                                log::warn!("TRNG returned error while polling to refill: {:?}", e);
+                                continue;
+                            }
+                        }
+                    }
+                    // at this point, we should have data we can copy to the buffer. Pull it from the end of the buffer
+                    // so the Vec can efficiently de-allocate data.
+                    match serial_port.flush() {
+                        Ok(_) => {
+                            let available = serial_trng_buf.len();
+                            match serial_port.write(&serial_trng_buf[available - TRNG_PKT_SIZE..available]) {
+                                Ok(_) => {
+                                    serial_trng_buf.drain(available - TRNG_PKT_SIZE..available);
+                                    sent = true;
+                                }
+                                Err(_) => {
+                                    // do nothing, the host port is too full and can't take any more data
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // do nothing, we're still sending older data
+                        }
+                    }
+                }
+                if !sent {
+                    let prev_interval = serial_trng_interval.fetch_add(TRNG_BACKOFF_MS, Ordering::SeqCst);
+                    // cap the backoff rate
+                    if prev_interval > TRNG_BACKOFF_MAX_MS {
+                        log::debug!("Max backoff delay encountered");
+                        serial_trng_interval.store(TRNG_BACKOFF_MAX_MS, Ordering::SeqCst);
+                    }
+                } else {
+                    serial_trng_interval.store(TRNG_REFILL_DELAY_MS, Ordering::SeqCst);
+                }
+            }
             Some(Opcode::Quit) => {
                 log::warn!("Quit received, goodbye world!");
                 break;

@@ -30,6 +30,10 @@ pub enum Opcode {
     /// A `xous::StringBuffer` containing this program's name
     ProgramName = 3,
 
+    /// Try to log console output to a USB serial port. Best-effort only; failures will not crash, will not be noted
+    TryHookUsbMirror = 4,
+    UnhookUsbMirror = 5,
+
     /// A panic occurred, and a panic log is forthcoming
     PanicStarted = 1000,
 

@@ -7,11 +7,11 @@ description = "Text to speech integration server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.40"
-xous-ipc = "0.9.40"
-log-server = { package = "xous-api-log", version = "0.1.35" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.35" }
-xous-names = { package = "xous-api-names", version = "0.9.37" }
+xous = "0.9.42"
+xous-ipc = "0.9.42"
+log-server = { package = "xous-api-log", version = "0.1.38" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.38" }
+xous-names = { package = "xous-api-names", version = "0.9.40" }
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
@@ -20,7 +20,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 xous-tts-backend = "0.1.4"
 codec = {path = "../codec"}
 
-utralib = { version = "0.1.17", optional = true, default-features = false }
+utralib = { version = "0.1.18", optional = true, default-features = false }
 
 [features]
 precursor = ["utralib/precursor"]

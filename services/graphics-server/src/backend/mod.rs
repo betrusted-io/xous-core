@@ -1,6 +1,6 @@
-#[cfg(any(windows, unix))]
+#[cfg(all(not(target_os="xous")))]
 mod minifb;
-#[cfg(any(windows, unix))]
+#[cfg(all(not(target_os="xous")))]
 pub use crate::backend::minifb::*;
 
 #[cfg(any(feature="precursor", feature="renode"))]

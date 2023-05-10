@@ -16,13 +16,13 @@ ime-plugin-shell = {path = "../ime-plugin-shell"}
 ime-plugin-tts = {path = "../ime-plugin-tts"}
 llio = {path = "../llio"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.35"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.35"}
-xous = "0.9.40"
-xous-ipc = "0.9.40"
-xous-names = {package = "xous-api-names", version = "0.9.37"}
+log-server = {package = "xous-api-log", version = "0.1.38"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.38"}
+xous = "0.9.42"
+xous-ipc = "0.9.42"
+xous-names = {package = "xous-api-names", version = "0.9.40"}
 keyboard = {path = "../keyboard"}
-susres = {package = "xous-api-susres", version = "0.9.35"}
+susres = {package = "xous-api-susres", version = "0.9.38"}
 codec = {path = "../codec"}
 #engine-sha512 = {path="../engine-sha512"}
 sha2 = {path="../engine-sha512"}
@@ -38,7 +38,7 @@ dns = {path="../dns"}
 pddb = {path="../pddb"}
 modals = {path="../modals"}
 usb-device-xous = {path="../usb-device-xous"}
-utralib = {version = "0.1.17", optional = true, default-features = false }
+utralib = {version = "0.1.18", optional = true, default-features = false }
 
 tts-frontend = {path="../tts"}
 locales = {path = "../../locales"}
@@ -55,7 +55,7 @@ chrono = {version = "0.4.19", default-features = false, features = ["std"]}
 base64 = "0.20.0"
 cos_table = {path="../../libs/cos_table"}
 # used to parse net connectivity results
-com_rs-ref = {path = "../../imports/com_rs-ref"}
+com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
 # for net testing
 threadpool = "1.8.1"
