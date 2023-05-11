@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::mem::MemoryManager;
 use crate::arch::process::InitialProcess;
+use crate::mem::MemoryManager;
 use core::fmt;
-use riscv::register::satp;
+use riscv::register::{satp, sstatus};
 use xous_kernel::{MemoryFlags, PID};
 
 // pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;
@@ -32,10 +32,7 @@ extern "C" {
 }
 
 unsafe fn zeropage(s: *mut u32) {
-    let page = core::slice::from_raw_parts_mut(
-        s,
-        PAGE_SIZE / core::mem::size_of::<u32>()
-    );
+    let page = core::slice::from_raw_parts_mut(s, PAGE_SIZE / core::mem::size_of::<u32>());
     page.fill(0);
 }
 
@@ -356,8 +353,7 @@ impl MemoryMapping {
 
             // Zero-out the new page
             let page_addr = l0pt_virt as *mut usize;
-            unsafe { zeropage(page_addr as *mut u32)
-            };
+            unsafe { zeropage(page_addr as *mut u32) };
         }
 
         let l0_pt = &mut unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
@@ -457,7 +453,7 @@ pub fn hand_page_to_user(virt: *mut u8) -> Result<(), xous_kernel::Error> {
     Ok(())
 }
 
-#[cfg(feature="gdb-stub")]
+#[cfg(feature = "gdb-stub")]
 pub fn peek_memory<T>(addr: *mut T) -> Result<T, xous_kernel::Error> {
     let virt = addr as usize;
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
@@ -483,26 +479,27 @@ pub fn peek_memory<T>(addr: *mut T) -> Result<T, xous_kernel::Error> {
         return Err(xous_kernel::Error::BadAddress);
     }
 
-    // Ensure the entry hasn't already been mapped.
-    if l0_pt.entries[vpn0] & 1 == 0 {
+    // Ensure the entry has already been mapped, and that we're allowed
+    // to read it.
+    if l0_pt.entries[vpn0] & (MMUFlags::R | MMUFlags::VALID).bits()
+        != (MMUFlags::R | MMUFlags::VALID).bits()
+    {
         return Err(xous_kernel::Error::BadAddress);
     }
 
-    // Strip the USER flag to the entry so we can read it
-    l0_pt.entries[vpn0] &= !MMUFlags::USER.bits();
-    unsafe { flush_mmu() };
+    // Enable supervisor access to user mode
+    unsafe { sstatus::set_sum() };
 
     // Perform the read
     let val = unsafe { addr.read_volatile() };
 
-    // Add the USER flag back to the entry
-    l0_pt.entries[vpn0] |= MMUFlags::USER.bits();
-    unsafe { flush_mmu() };
+    // Remove supervisor access to user mode
+    unsafe { sstatus::clear_sum() };
 
     Ok(val)
 }
 
-#[cfg(feature="gdb-stub")]
+#[cfg(feature = "gdb-stub")]
 pub fn poke_memory<T>(addr: *mut T, val: T) -> Result<(), xous_kernel::Error> {
     let virt = addr as usize;
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
@@ -528,30 +525,35 @@ pub fn poke_memory<T>(addr: *mut T, val: T) -> Result<(), xous_kernel::Error> {
         return Err(xous_kernel::Error::BadAddress);
     }
 
-    // Ensure the entry hasn't already been mapped.
-    if l0_pt.entries[vpn0] & 1 == 0 {
+    // Ensure the entry has been mapped.
+    if l0_pt.entries[vpn0] & MMUFlags::VALID.bits() == 0 {
         return Err(xous_kernel::Error::BadAddress);
     }
 
     // Ensure we're allowed to read it.
     let was_writable = l0_pt.entries[vpn0] & MMUFlags::W.bits() != 0;
 
-    // Strip the USER flag to the entry so we can read it
-    l0_pt.entries[vpn0] &= !MMUFlags::USER.bits();
-    l0_pt.entries[vpn0] |= MMUFlags::W.bits();
-    unsafe { flush_mmu() };
+    // Add the WRITE bit, which allows us to patch things like
+    // program code.
+    if !was_writable {
+        l0_pt.entries[vpn0] |= MMUFlags::W.bits();
+        unsafe { flush_mmu() };
+    }
+
+    // Enable supervisor access to user mode
+    unsafe { sstatus::set_sum() };
 
     // Perform the write
     unsafe { addr.write_volatile(val) };
 
-    // Add the USER flag back to the entry
-    l0_pt.entries[vpn0] |= MMUFlags::USER.bits();
+    // Remove supervisor access to user mode
+    unsafe { sstatus::clear_sum() };
 
-    // Strip the "writable" bit if it wasn't set before
+    // Remove the WRITE bit if it wasn't previously set
     if !was_writable {
         l0_pt.entries[vpn0] &= !MMUFlags::W.bits();
+        unsafe { flush_mmu() };
     }
-    unsafe { flush_mmu() };
 
     Ok(())
 }
@@ -889,7 +891,7 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
 
 pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Error> {
     // Disallow mapping memory outside of user land
-    if ! MemoryMapping::current().is_kernel() && address >= USER_AREA_END {
+    if !MemoryMapping::current().is_kernel() && address >= USER_AREA_END {
         return Err(xous_kernel::Error::OutOfMemory);
     }
     let virt = address & !0xfff;
