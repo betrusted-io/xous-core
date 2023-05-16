@@ -378,6 +378,10 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - "Lock device" now sleeps after reboot (thanks to patches by @gsora)
 - Hosted mode now runs more smoothly, with less lag (thanks @yvt for the patch!)
 
+## New in 0.9.14
+- `gdb-stub` on hardware is now quite reliable, thanks to some performance improvements by @xobs. Just remember that single stepping does not work on XIP images (and by default now, apps are compiled as `xip`)
+- "Notes" fields in `vault` app that start with the keyword 'bip39' will trigger a BIP39 password entry box (if the password field is blank), or BIP39 rendering of the hex data.
+
 ## Roadmap
 - Lots of testing and bug fixes
 - Fixing performance issues in `pddb`
