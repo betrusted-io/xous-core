@@ -48,6 +48,27 @@
         "ja": "アンマウントするベースを選択します:",
         "zh": "选择要卸载的基础:"
     },
+    "vault.bip39.input": {
+        "en": "Enter your BIP39 password:",
+        "en-tts": "Enter your BIP39 password:",
+        "fr": "Saisissez votre mot de passe BIP39: *MT*",
+        "ja": "BIP39 パスワードを入力してください:",
+        "zh": "输入您的 BIP39 密码："
+    },
+    "vault.bip39.output": {
+        "en": "Password as BIP39:",
+        "en-tts": "Password as BIP39:",
+        "fr": "Mot de passe en tant que BIP39: *MT*",
+        "ja": "BIP39としてのパスワード:",
+        "zh": "密码为 BIP39:"
+    },
+    "vault.bip39.output_error": {
+        "en": "Password field is not encodable as BIP39.",
+        "en-tts": "Password field is not encodable as BIP39.",
+        "fr": "Le champ Mot de passe n'est pas encodable en tant que BIP39. *MT*",
+        "ja": "パスワードフィールドはBIP39としてエンコードできません。",
+        "zh": "密码字段不可编码为 BIP39。"
+    },
     "vault.completed": {
         "en": "Operation completed.",
         "en-tts": "Operation completed.",

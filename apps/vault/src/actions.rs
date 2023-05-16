@@ -774,8 +774,35 @@ impl<'a> ActionManager<'a> {
                 pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
                 pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
 
-                // if the password is empty, prompt to generate a new password
-                if pw.password.len() == 0 {
+                // if the notes field starts with the word "bip39" (case insensitive), use BIP39 to display/edit the password field
+                if pw.notes.to_ascii_lowercase().starts_with("bip39") {
+                    if pw.password.len() == 0 {
+                        match self.modals.input_bip39(Some(t!("vault.bip39.input", xous::LANG))) {
+                            Ok(data) => {
+                                pw.password = hex::encode(data);
+                            }
+                            _ => pw.password = "".to_string(), // leave it blank if invalid or aborted
+                        }
+                    } else {
+                        match hex::decode(&pw.password) {
+                            Ok(data) => {
+                                match self.modals.show_bip39(
+                                    Some(t!("vault.bip39.output", xous::LANG)),
+                                    &data
+                                ) {
+                                    Ok(_) => {},
+                                    Err(_) => {
+                                        self.modals.show_notification(t!("vault.bip39.output_error", xous::LANG), None).unwrap();
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                self.modals.show_notification(t!("vault.bip39.output_error", xous::LANG), None).unwrap();
+                            }
+                        }
+                    }
+                } else if pw.password.len() == 0 && !pw.notes.to_ascii_lowercase().starts_with("bip39") {
+                    // if the password is empty, prompt to generate a new password
                     let pg = PasswordGenerator {
                         length: 20,
                         numbers: true,
