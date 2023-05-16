@@ -364,11 +364,11 @@
         "zh": "数字"
     },
     "vault.newitem.password": {
-        "en": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator.\n",
-        "en-tts": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator.\n",
-        "fr": "Appuyez sur Entrée pour accepter la suggestion, ou commencez à taper pour créer le votre.\n\nLaissez vide pour personnaliser le générateur.\n",
-        "ja": "Enterキーを押して提案を受け入れるか、入力を開始して独自の提案を作成します。\n\n空白のままにしてジェネレータをカスタマイズします。\n",
-        "zh": "按 Enter 接受建议，或开始输入以创建您自己的建议。\n\n留空以自定义生成器。\n"
+        "en": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator, or type 'bip39'.\n",
+        "en-tts": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator, or type 'bip39'.\n",
+        "fr": "Appuyez sur Entrée pour accepter la suggestion, ou commencez à taper pour créer le votre.\n\nLaissez vide pour personnaliser le générateur, ou tapez 'bip39'.\n",
+        "ja": "Enterキーを押して提案を受け入れるか、入力を開始して独自の提案を作成します。\n\n空白のままにしてジェネレータをカスタマイズします, または「bip39」と入力します\n",
+        "zh": "按 Enter 接受建议，或开始输入以创建您自己的建议。\n\n留空以自定义生成器, 或输入“bip39”。\n"
     },
     "vault.newitem.symbols": {
         "en": "Symbols",

@@ -380,7 +380,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 
 ## New in 0.9.14
 - `gdb-stub` on hardware is now quite reliable, thanks to some performance improvements by @xobs. Just remember that single stepping does not work on XIP images (and by default now, apps are compiled as `xip`)
-- "Notes" fields in `vault` app that start with the keyword 'bip39' will trigger a BIP39 password entry box (if the password field is blank), or BIP39 rendering of the hex data.
+- "Notes" fields in `vault` app that start with the keyword 'bip39' will trigger a BIP39 password entry box (if the password field is blank), or BIP39 rendering of the hex data. Password generation prompt also uses the password 'bip39' to trigger the BIP39 generation sequence. It does mean that you can't use just 'bip39' as a regular password but...
 
 ## Roadmap
 - Lots of testing and bug fixes

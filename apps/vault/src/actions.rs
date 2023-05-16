@@ -260,6 +260,7 @@ impl<'a> ActionManager<'a> {
                 #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let mut approved = false;
+                let mut bip39 = false;
                 // Security note about PasswordGenerator. This is a 3rd party crate. It relies on `rand`'s implementation
                 // of ThreadRng to generate passwords. As of the version committed to the lockfile, I have evidenced the
                 // ThreadRng to request 8 bytes of entropy from our TRNG to seed its state. If the docs are to be trusted,
@@ -363,6 +364,13 @@ impl<'a> ActionManager<'a> {
                         };
                         approved = false;
                         pg2.generate_one().unwrap()
+                    } else if maybe_password == "bip39" {
+                        bip39 = true;
+                        approved = true;
+                        match self.modals.input_bip39(Some(t!("vault.bip39.input", xous::LANG))) {
+                            Ok(data) => hex::encode(data),
+                            _ => "".to_string(),
+                        }
                     } else {
                         approved = true;
                         maybe_password
@@ -373,7 +381,7 @@ impl<'a> ActionManager<'a> {
                     description,
                     username,
                     password,
-                    notes: t!("vault.notes", xous::LANG).to_string(),
+                    notes: if bip39 { "bip39".to_string() } else {t!("vault.notes", xous::LANG).to_string()},
                     ctime: 0,
                     atime: 0,
                     count: 0,
