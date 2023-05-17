@@ -69,7 +69,7 @@ impl Slider {
     }
 }
 impl ActionApi for Slider {
-    fn height(&self, glyph_height: i16, margin: i16) -> i16 {
+    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
         /*
         margin
             min            max    <- glyph height

@@ -51,7 +51,7 @@ pub enum ActionType {
 
 #[enum_dispatch]
 pub trait ActionApi {
-    fn height(&self, glyph_height: i16, margin: i16) -> i16 {glyph_height + margin * 2}
+    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {glyph_height + margin * 2}
     fn redraw(&self, _at_height: i16, _modal: &Modal) { unimplemented!() }
     fn close(&mut self) {}
     fn is_password(&self) -> bool { false }
@@ -93,6 +93,7 @@ pub struct TextEntryPayload {
     pub content: String::<256>,
     pub placeholder: Option<String::<256>>,
     pub placeholder_persist: bool,
+    pub insertion_point: Option<usize>,
 }
 
 impl TextEntryPayload {
@@ -102,11 +103,12 @@ impl TextEntryPayload {
             content: Default::default(),
             placeholder: Default::default(),
             placeholder_persist: false,
+            insertion_point: None,
         }
     }
 
     pub fn new_with_fields(content: String::<256>, placeholder: Option<String::<256>>) -> Self {
-        TextEntryPayload { dirty: false, content: content, placeholder: placeholder, placeholder_persist: false }
+        TextEntryPayload { dirty: false, content: content, placeholder: placeholder, placeholder_persist: false, insertion_point: None }
     }
     /// Ensures that 0's are written to the storage of this struct, and not optimized out; important for password fields.
     pub fn volatile_clear(&mut self) {
@@ -190,6 +192,14 @@ pub struct Modal<'a> {
     pub top_text: Option<TextView>,
     pub bot_text: Option<TextView>,
     pub action: ActionType,
+    /// This is a slightly unsafe option, in that it only works if you have a simple TextEntry
+    /// box. It enables Line-by-line text reflow selection. If false, then each entry gets only one line.
+    /// If set to true, operations may slow down proportionally with the size of the text as we have to
+    /// recompute text reflow every time the object is touched. The algorithm will greedily consume
+    /// space in the canvas until the entire canvas is filled with the TextEntry box. This means that
+    /// if you have a compound modal (multiple elements in it), the extra elements will be flowed off
+    /// the bottom.
+    pub growable: bool,
 
     //pub index: usize, // currently selected item
     pub canvas: Gid,
@@ -197,6 +207,7 @@ pub struct Modal<'a> {
     pub margin: i16,
     pub line_height: i16,
     pub canvas_width: i16,
+    pub maximal_height: i16,
     pub inverted: bool,
     pub style: GlyphStyle,
     pub helper_data: Option<Buffer<'a>>,
@@ -256,7 +267,7 @@ fn recompute_canvas(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<
 
     // compute height of action item
     log::trace!("step 1 total_height: {}", total_height);
-    total_height += modal.action.height(modal.line_height, modal.margin);
+    total_height += modal.action.height(modal.line_height, modal.margin, &modal);
     total_height += modal.margin;
 
     // compute height of bot_text, if any
@@ -357,6 +368,7 @@ impl<'a> Modal<'a> {
             margin,
             line_height,
             canvas_width: canvas_bounds.x, // memoize this, it shouldn't change
+            maximal_height: 402, // arbitrary number set for aesthetic reasons; limits growth of modals that request reflowable/growable text boxes
             inverted,
             style,
             helper_data: None,
@@ -365,6 +377,7 @@ impl<'a> Modal<'a> {
             bot_dirty: true,
             top_memoized_height: None,
             bot_memoized_height: None,
+            growable: false,
         };
         recompute_canvas(&mut modal, top_text, bot_text, style);
         modal
@@ -452,7 +465,7 @@ impl<'a> Modal<'a> {
             self.top_dirty = false;
         }
 
-        let action_height = self.action.height(self.line_height, self.margin);
+        let action_height = self.action.height(self.line_height, self.margin, &self);
         if !do_redraw {
             // the action area wasn't blanked, so blank it as prep for the action redraw
             self.gam.draw_rectangle(self.canvas,
@@ -495,6 +508,13 @@ impl<'a> Modal<'a> {
             }
         }
         self.redraw();
+    }
+
+    /// This empowers an action within a modal to potentially consume all the available height in a canvas
+    /// The current implementation works if you have a "simple" TextEntry box, but it will fail if you have
+    /// stuff below it because the algorithm can't "see" the reserved space at the moment for extra items below.
+    pub fn set_growable(&mut self, state: bool) {
+        self.growable = state;
     }
 
     /// this function will modify UX elements if any of the arguments are Some()

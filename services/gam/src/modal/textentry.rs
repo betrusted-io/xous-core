@@ -7,6 +7,7 @@ use num_traits::*;
 
 use core::fmt::Write;
 use core::cell::Cell;
+use std::cell::RefCell;
 
 // TODO: figure out this, do we really have to limit ourselves to 10?
 const MAX_FIELDS: i16 = 10;
@@ -56,6 +57,10 @@ pub struct TextEntry {
     /// instead of having it re-appear every time the text area is cleared
     keys_hit: [bool; MAX_FIELDS as usize],
     // gam: crate::Gam, // no GAM field because this needs to be a clone-capable structure. We create a GAM handle when we need it.
+    /// Stores the allowed height of a given text line, based on the contents and the space available
+    /// in the box. The height of a given line may be limited to make sure there is enough space for
+    /// later lines to be rendered.
+    action_payloads_allowed_heights: RefCell::<Vec<i16>>,
 }
 
 impl Default for TextEntry {
@@ -71,6 +76,7 @@ impl Default for TextEntry {
             max_field_amount: 0,
             field_height: Cell::new(0),
             keys_hit: [false; MAX_FIELDS as usize],
+            action_payloads_allowed_heights: RefCell::new(Vec::new()),
         }
     }
 }
@@ -111,12 +117,20 @@ impl TextEntry {
                     element.placeholder = None;
                     element.placeholder_persist = false;
                 }
+                element.insertion_point = None;
             }
         }
 
         self.action_payloads = payload;
         self.max_field_amount = fields;
         self.keys_hit = [false; MAX_FIELDS as usize];
+    }
+    fn get_bullet_margin(&self) -> i16 {
+        if self.action_payloads.len() > 1 {
+            17 // this is the margin for drawing the selection bullet
+        } else {
+            0 // no selection bullet
+        }
     }
 }
 
@@ -128,7 +142,7 @@ impl ActionApi for TextEntry {
     }
     /// The total canvas height is computed with this API call
     /// The canvas height is not dynamically adjustable for modals.
-    fn height(&self, glyph_height: i16, margin: i16) -> i16 {
+    fn height(&self, glyph_height: i16, margin: i16, modal: &Modal) -> i16 {
         /*
             -------------------
             | ****            |    <-- glyph_height + 2*margin
@@ -147,8 +161,100 @@ impl ActionApi for TextEntry {
         self.field_height.set(glyph_height + 2*margin); // stash a copy for later
 
         // compute the overall_height of the entry fields
-        let mut overall_height =
-            self.field_height.get() * self.action_payloads.len() as i16;
+        let mut overall_height = if modal.growable {
+            let mut editing = false;
+            for &hit in self.keys_hit.iter() {
+                if hit {
+                    editing = true;
+                }
+            }
+            if editing {
+                // don't recompute heights if text fields are being edited
+                let mut sum = 0;
+                for &prev_heights in self.action_payloads_allowed_heights.borrow().iter() {
+                    sum += prev_heights;
+                }
+                sum
+            } else {
+                self.action_payloads_allowed_heights.borrow_mut().clear();
+                let growable_limit = modal.maximal_height;
+                // minimum size required to display exactly one line for every field.
+                // decrement this by a field_height.get() for every line of content computed.
+                let mut minimum_size_remaining = self.field_height.get() * self.action_payloads.len() as i16;
+                if growable_limit < minimum_size_remaining + self.field_height.get() {
+                    // if the user is dumb and specified a growable limit that allows no space for growth,
+                    // "snap" the user spec to something big enough to actually show one line of each bit of text,
+                    // and skip the computation because we know there is nothing to gain from doing it.
+                    for _ in 0..self.action_payloads.len() {
+                        self.action_payloads_allowed_heights.borrow_mut().push(self.field_height.get());
+                    }
+                    minimum_size_remaining
+                } else {
+                    let bullet_margin = self.get_bullet_margin();
+                    let left_text_margin = modal.margin + bullet_margin; // space for the bullet point on the left, if it's there
+                    let mut current_height = 0;
+
+                    for payload in self.action_payloads.iter() {
+                        let mut tv = TextView::new(
+                            modal.canvas,
+                            TextBounds::GrowableFromBl(
+                                Point::new(left_text_margin, current_height),
+                                (modal.canvas_width - (modal.margin + bullet_margin) - left_text_margin) as u16
+                            )
+                        );
+                        tv.ellipsis = false;
+                        tv.invert = self.is_password;
+                        tv.style = if self.is_password {
+                            GlyphStyle::Monospace
+                        } else {
+                            modal.style
+                        };
+                        tv.margin = Point::new(0, 0);
+                        tv.draw_border = false;
+                        tv.text.clear();
+                        let content = {
+                            if payload.placeholder.is_some() && payload.content.len().is_zero() {
+                                let placeholder_content = payload.placeholder.unwrap();
+                                placeholder_content.to_string()
+                            } else {
+                                payload.content.to_string()
+                            }
+                        };
+                        write!(tv.text, "{}", &content).unwrap();
+                        // select to just compute bounds, not render the text
+                        modal.gam.bounds_compute_textview(&mut tv).expect("couldn't flow textview");
+                        if let Some(computed_bounds) = tv.bounds_computed {
+                            log::debug!("computed height: {} for {}", computed_bounds.height(), content);
+                            // see if we can "afford" to grow the text to accommodate the total height
+                            let required_extra_height =
+                                (computed_bounds.height() as i16 // height of text as flowed, with no margins
+                                + 2*margin  // margin between boxes
+                                + minimum_size_remaining)
+                                .saturating_sub(self.field_height.get()); // subtract one line from the size remaining to account for the fact that we allocated one line for this field already
+                            let provisioned_height = if required_extra_height + current_height > growable_limit {
+                                // it doesn't fit, reduce height so it does fit
+                                // this algorithm will greedily allocate height to the first fields, but will always leave
+                                // at least one line for the remaining yet-to-be-flowed text fields
+                                growable_limit - current_height
+                                // we could, I suppose, at this point just stop rendering the future fields and
+                                // populate the allowable heights based on one line each for the remainder...
+                            } else {
+                                // it can fit, move on to the next field
+                                computed_bounds.height() as i16 + 2*margin
+                            };
+                            self.action_payloads_allowed_heights.borrow_mut().push(provisioned_height);
+                            current_height += provisioned_height; // reset the current height to after the computed height
+                            minimum_size_remaining -= self.field_height.get(); // decrement one line from the minimum remaining
+                        } else {
+                            log::warn!("{} did not have a computed height!", content);
+                        }
+                    }
+                    current_height
+                }
+            }
+        } else {
+            self.field_height.get() * self.action_payloads.len() as i16
+        };
 
         // if we're a password, we add an extra glyph_height to the bottom for the text visibility items
         if self.is_password {
@@ -168,13 +274,10 @@ impl ActionApi for TextEntry {
         let mut current_height = at_height;
         let payloads = self.action_payloads.clone();
 
-        let bullet_margin = if payloads.len() > 1 {
-            17 // this is the margin for drawing the selection bullet
-        } else {
-            0 // no selection bullet
-        };
+        let bullet_margin = self.get_bullet_margin();
 
         for (index, payload) in payloads.iter().enumerate() {
+            log::debug!("{}: {}", index, current_height);
             if index as i16 == self.selected_field && payloads.len() > 1 {
                 // draw the dot
                 let mut tv = TextView::new(
@@ -195,12 +298,24 @@ impl ActionApi for TextEntry {
             let left_text_margin = modal.margin + bullet_margin; // space for the bullet point on the left, if it's there
 
             // draw the currently entered text
-            let mut tv = TextView::new(
-                modal.canvas,
-                TextBounds::BoundingBox(Rectangle::new(
-                    Point::new(left_text_margin, current_height),
-                    Point::new(modal.canvas_width - (modal.margin + bullet_margin), current_height + modal.line_height))
-            ));
+            let mut tv = if modal.growable {
+                assert!(self.action_payloads_allowed_heights.borrow().len() == payloads.len());
+                // growable limit was set, we know what the height of every field should be already, in theory!
+                TextView::new(
+                    modal.canvas,
+                    TextBounds::GrowableFromBl(
+                        Point::new(left_text_margin, current_height + self.action_payloads_allowed_heights.borrow()[index] - modal.margin - 4),
+                        (modal.canvas_width - (modal.margin + bullet_margin)) as u16
+                    )
+                )
+            } else {
+                TextView::new(
+                    modal.canvas,
+                    TextBounds::BoundingBox(Rectangle::new(
+                        Point::new(left_text_margin, current_height),
+                        Point::new(modal.canvas_width - (modal.margin + bullet_margin), current_height + modal.line_height))
+                ))
+            };
             tv.ellipsis = true;
             tv.invert = self.is_password;
             tv.style = if self.is_password {
@@ -215,7 +330,11 @@ impl ActionApi for TextEntry {
             };
             tv.margin = Point::new(0, 0);
             tv.draw_border = false;
-            tv.insertion = Some(payload.content.len() as i32);
+            tv.insertion = if let Some(index) = payload.insertion_point {
+                Some(index as i32)
+            } else {
+                Some(payload.content.len() as i32)
+            };
             tv.text.clear(); // make sure this is blank
             let payload_chars = payload.content.as_str().unwrap().chars().count();
             // TODO: condense the "above MAX_CHARS" chars length path a bit -- written out "the dumb way" just to reason out the logic a bit
@@ -231,10 +350,18 @@ impl ActionApi for TextEntry {
                     };
 
                     log::trace!("action payload: {}", content);
-                    if payload_chars < MAX_CHARS {
+                    if modal.growable {
+                        tv.bounds_hint = TextBounds::GrowableFromBl(
+                            Point::new(left_text_margin, current_height + self.action_payloads_allowed_heights.borrow()[index] - modal.margin - 4),
+                            (modal.canvas_width - (modal.margin + bullet_margin) - left_text_margin) as u16,
+                        );
                         write!(tv.text, "{}", content).unwrap();
                     } else {
-                        write!(tv.text, "...{}", &content[content.chars().count()-(MAX_CHARS - 3)..]).unwrap();
+                        if payload_chars < MAX_CHARS {
+                            write!(tv.text, "{}", content).unwrap();
+                        } else {
+                            write!(tv.text, "...{}", &content[content.chars().count()-(MAX_CHARS - 3)..]).unwrap();
+                        }
                     }
                     modal.gam.post_textview(&mut tv).expect("couldn't post textview");
                 },
@@ -356,13 +483,22 @@ impl ActionApi for TextEntry {
             }
 
             // draw a line for where text gets entered (don't use a box, fitting could be awkward)
+            let line_height = if modal.growable {
+                self.action_payloads_allowed_heights.borrow()[index] - modal.margin
+            } else {
+                modal.line_height
+            };
             modal.gam.draw_line(modal.canvas, Line::new_with_style(
-                Point::new(left_text_margin, current_height + modal.line_height + 3),
-                Point::new(modal.canvas_width - (modal.margin + bullet_margin), current_height + modal.line_height + 3),
+                Point::new(left_text_margin, current_height + line_height + 3),
+                Point::new(modal.canvas_width - (modal.margin + bullet_margin), current_height + line_height + 3),
                 DrawStyle::new(color, color, 1))
                 ).expect("couldn't draw entry line");
 
-            current_height += self.field_height.get();
+            if modal.growable {
+                current_height += self.action_payloads_allowed_heights.borrow()[index];
+            } else {
+                current_height += self.field_height.get();
+            }
         }
     }
     fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
@@ -390,6 +526,12 @@ impl ActionApi for TextEntry {
                         if let Some(placeholder) = payload.placeholder {
                             payload.content.append(placeholder.to_str()).ok();
                         }
+                    } else {
+                        if let Some(index) = payload.insertion_point {
+                            payload.insertion_point = Some(index.saturating_sub(1));
+                        } else {
+                            payload.insertion_point = Some(payload.content.len().saturating_sub(1));
+                        }
                     }
                 }
             },
@@ -409,6 +551,14 @@ impl ActionApi for TextEntry {
                     if payload.content.len() == 0 {
                         if let Some(placeholder) = payload.placeholder {
                             payload.content.append(placeholder.to_str()).ok();
+                        }
+                    } else {
+                        if let Some(index) = payload.insertion_point.take() {
+                            if index + 1 < payload.content.len() {
+                                payload.insertion_point = Some(index + 1);
+                            }
+                        } else {
+                            // going right on a field without an insertion point does nothing
                         }
                     }
                 }
@@ -477,16 +627,53 @@ impl ActionApi for TextEntry {
                     // copy the placeholder into the content string before processing the backspace
                     payload.content.append(payload.placeholder.unwrap().to_str()).ok();
                 }
-                // coded in a conservative manner to avoid temporary allocations that can leave the plaintext on the stack
-                if payload.content.len() > 0 { // don't backspace if we have no string.
-                    let mut temp_str = String::<256>::from_str(payload.content.as_str().unwrap());
-                    let cur_len = temp_str.as_str().unwrap().chars().count();
-                    let mut c_iter = temp_str.as_str().unwrap().chars();
-                    payload.content.clear();
-                    for _ in 0..cur_len-1 {
-                        payload.content.push(c_iter.next().unwrap()).unwrap();
+                if let Some(insertion_point) = payload.insertion_point {
+                    if insertion_point > 0 {
+                        assert!(insertion_point < payload.content.len(), "insertion point beyond content length!");
+                        let new_len = payload.content.as_str().unwrap().chars().count() - 1;
+
+                        // have to use a temporary string because index operators are not implemented on Xous strings
+                        let mut temp_str = String::<256>::new();
+                        let mut original = payload.content.as_str().unwrap().chars().enumerate().peekable();
+                        // copy the data over, skipping the character that was deleted
+                        loop {
+                            if let Some((index, c)) = original.next() {
+                                if index < insertion_point.saturating_sub(1) {
+                                    temp_str.push(c).ok();
+                                } else {
+                                    if let Some((_, next_char)) = original.peek() {
+                                        temp_str.push(*next_char).ok();
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                        // now copy the data back into the original string
+                        let mut c_iter = temp_str.as_str().unwrap().chars();
+                        payload.content.clear();
+                        for _ in 0..new_len {
+                            payload.content.push(c_iter.next().unwrap()).unwrap();
+                        }
+                        // clear the temp string
+                        temp_str.volatile_clear();
+                        // bring the insertion point back one index
+                        payload.insertion_point = Some(insertion_point.saturating_sub(1));
                     }
-                    temp_str.volatile_clear();
+                } else {
+                    // coded in a conservative manner to avoid temporary allocations that can leave the plaintext on the stack
+                    if payload.content.len() > 0 { // don't backspace if we have no string.
+                        let mut temp_str = String::<256>::from_str(payload.content.as_str().unwrap());
+                        let cur_len = temp_str.as_str().unwrap().chars().count();
+                        let mut c_iter = temp_str.as_str().unwrap().chars();
+                        payload.content.clear();
+                        for _ in 0..cur_len-1 {
+                            payload.content.push(c_iter.next().unwrap()).unwrap();
+                        }
+                        temp_str.volatile_clear();
+                    }
                 }
             }
             _ => { // text entry
@@ -505,9 +692,30 @@ impl ActionApi for TextEntry {
                     tts.tts_blocking(&k.to_string()).unwrap();
                 }
                     match k {
-                        '\u{f701}' |  '\u{f700}' => (),
+                    '\u{f701}' |  '\u{f700}' => (),
                     _ => {
-                        payload.content.push(k).expect("ran out of space storing password");
+                        if let Some(insertion_point) = payload.insertion_point {
+                            if insertion_point >= payload.content.len() {
+                                payload.content.push(k).expect("ran out of space storing password");
+                                payload.insertion_point = None;
+                            } else {
+                                // have to use a temporary string because index operators are not implemented on Xous strings
+                                let mut temp_str = String::<256>::from_str(payload.content.as_str().unwrap());
+                                let cur_len = temp_str.as_str().unwrap().chars().count();
+                                let mut c_iter = temp_str.as_str().unwrap().chars();
+                                payload.content.clear();
+                                for i in 0..cur_len {
+                                    if i == insertion_point {
+                                        payload.content.push(k).ok(); // don't panic if we type too much, just silently drop the character
+                                    }
+                                    payload.content.push(c_iter.next().unwrap()).unwrap();
+                                }
+                                payload.insertion_point = Some(insertion_point + 1);
+                                temp_str.volatile_clear();
+                            }
+                        } else {
+                            payload.content.push(k).ok(); // don't panic if we type too much, just silently drop the character
+                        }
                         log::trace!("****update payload: {}", payload.content);
                         payload.dirty = true;
                     }

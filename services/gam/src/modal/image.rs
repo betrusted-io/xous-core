@@ -28,7 +28,7 @@ impl ActionApi for Image {
     fn set_action_opcode(&mut self, op: u32) {
         self.action_opcode = op
     }
-    fn height(&self, _glyph_height: i16, margin: i16) -> i16 {
+    fn height(&self, _glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
         let bm_height = match &self.bitmap {
             Some(bm) => bm.bound.br.y - bm.bound.tl.y,
             None => 0,

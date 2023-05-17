@@ -483,6 +483,8 @@ fn wrapped_main() -> ! {
                         log::debug!("initiating text entry modal");
                         #[cfg(feature = "tts")]
                         tts.tts_simple(config.prompt.as_str().unwrap()).unwrap();
+                        log::info!("setting growable to: {:?}", config.growable);
+                        renderer_modal.set_growable(config.growable);
                         renderer_modal.modify(
                             Some(ActionType::TextEntry({
                                 let mut ta = text_action.clone();
@@ -815,6 +817,7 @@ fn wrapped_main() -> ! {
             },
             Some(Opcode::TextEntryReturn) => match op {
                 RendererState::RunText(_config) => {
+                    renderer_modal.set_growable(false); // reset the growable state, it's assumed to be default false
                     log::trace!("validating text entry modal");
                     let buf =
                         unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };

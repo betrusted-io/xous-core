@@ -151,7 +151,7 @@ impl ActionApi for Notification {
     fn set_action_opcode(&mut self, op: u32) {
         self.action_opcode = op
     }
-    fn height(&self, glyph_height: i16, margin: i16) -> i16 {
+    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
         if self.manual_dismiss {
             let qr_height = if self.qrwidth > 0 { 300 } else { 0 };
             glyph_height + margin * 2 + 5 + qr_height

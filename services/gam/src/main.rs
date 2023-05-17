@@ -262,7 +262,7 @@ fn wrapped_main() -> ! {
                         }
                     },
                     TextOp::ComputeBounds => {
-                        log::trace!("render request for {:?}", tv);
+                        log::trace!("bounds request for {:?}", tv);
                         tv.set_dry_run(true);
 
                         if tv.clip_rect.is_none() {

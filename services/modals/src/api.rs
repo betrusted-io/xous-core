@@ -33,6 +33,7 @@ pub struct ManagedPromptWithTextResponse {
     pub fields: u32,
     /// placeholders
     pub placeholders: Option<[Option<(xous_ipc::String<256>, bool)>; 10]>,
+    pub growable: bool,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]

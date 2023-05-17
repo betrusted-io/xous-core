@@ -22,6 +22,7 @@ pub struct AlertModalBuilder<'a> {
     prompt: String,
     validators: Vec<Option<TextValidationFn>>,
     placeholders: Vec<Option<(String, bool)>>,
+    growable: bool,
     modals: &'a Modals,
 }
 
@@ -54,6 +55,10 @@ impl<'a> AlertModalBuilder<'a> {
         } else {
             self.placeholders.push(None)
         }
+        self
+    }
+    pub fn set_growable(&'a mut self) -> &'a mut Self {
+        self.growable = true;
         self
     }
 
@@ -97,6 +102,7 @@ impl<'a> AlertModalBuilder<'a> {
             prompt: xous_ipc::String::from_str(&self.prompt),
             fields: fields_amt as u32,
             placeholders: final_placeholders,
+            growable: self.growable,
         };
 
         // question: do we want to add a retry limit?
@@ -190,6 +196,7 @@ impl Modals {
             validators: vec![],
             placeholders: vec![],
             modals: self,
+            growable: false,
         }
     }
 

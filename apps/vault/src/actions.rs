@@ -766,6 +766,7 @@ impl<'a> ActionManager<'a> {
                     .field_placeholder_persist(Some(pw.username), Some(password_validator))
                     .field_placeholder_persist(Some(pw.password), Some(password_validator))
                     .field_placeholder_persist(Some(pw.notes), Some(password_validator))
+                    .set_growable()
                     .build().expect("modals error in edit")
                 } else { // note is placeholder text, treat it as such
                 self.modals
@@ -774,6 +775,7 @@ impl<'a> ActionManager<'a> {
                     .field_placeholder_persist(Some(pw.username), Some(password_validator))
                     .field_placeholder_persist(Some(pw.password), Some(password_validator))
                     .field(Some(pw.notes), Some(password_validator))
+                    .set_growable()
                     .build().expect("modals error in edit")
                 };
 

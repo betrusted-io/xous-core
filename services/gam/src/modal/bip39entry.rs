@@ -77,7 +77,7 @@ impl ActionApi for Bip39Entry {
     }
     /// The total canvas height is computed with this API call
     /// The canvas height is not dynamically adjustable for modals.
-    fn height(&self, glyph_height: i16, margin: i16) -> i16 {
+    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
         /*
 
               cat                   <-- active entry 1 line + 2x margin

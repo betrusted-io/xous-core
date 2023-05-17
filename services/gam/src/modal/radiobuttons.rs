@@ -51,7 +51,7 @@ impl RadioButtons {
 }
 impl ActionApi for RadioButtons {
     fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}
-    fn height(&self, glyph_height: i16, margin: i16) -> i16 {
+    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
         // total items, then +1 for the "Okay" message
         (self.items.len() as i16 + 1) * glyph_height + margin * 2 + margin * 2 + 5 // +4 for some bottom margin slop
     }
