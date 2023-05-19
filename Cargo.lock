@@ -3991,7 +3991,6 @@ dependencies = [
 name = "svd2utra"
 version = "0.1.16"
 dependencies = [
- "convert_case",
  "quick-xml",
 ]
 
