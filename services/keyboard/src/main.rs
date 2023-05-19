@@ -938,18 +938,22 @@ fn main() -> ! {
                 #[cfg(all(feature="debuginject", not(feature="rawserial")))]
                 if let Some(conn) = listener_conn {
                     if key != '\u{0000}' {
-                        log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
-                        xous::try_send_message(conn,
-                            xous::Message::new_scalar(listener_op.unwrap(),
-                                key as u32 as usize,
-                                '\u{0000}' as u32 as usize,
-                                '\u{0000}' as u32 as usize,
-                                '\u{0000}' as u32 as usize,
-                            )
-                        ).unwrap_or_else(|_| {
-                            log::info!("Input overflow, dropping keys!");
-                            xous::Result::Ok
-                        });
+                        if key > '\u{f000}' {
+                            log::info!("ignoring key '{}'({:x})", key, key as u32); // ignore macOS weird characters
+                        } else {
+                            log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
+                            xous::try_send_message(conn,
+                                xous::Message::new_scalar(listener_op.unwrap(),
+                                    key as u32 as usize,
+                                    '\u{0000}' as u32 as usize,
+                                    '\u{0000}' as u32 as usize,
+                                    '\u{0000}' as u32 as usize,
+                                )
+                            ).unwrap_or_else(|_| {
+                                log::info!("Input overflow, dropping keys!");
+                                xous::Result::Ok
+                            });
+                        }
                     }
                 }
 
