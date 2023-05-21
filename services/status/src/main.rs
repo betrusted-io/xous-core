@@ -634,18 +634,16 @@ fn wrapped_main() -> ! {
         // reset it for good measure
         early_settings.set_early_sleep(false).unwrap();
 
-        while ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
-            modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
-        }
-
-        match susres.initiate_suspend() {
-            Ok(_) => {},
-            Err(xous::Error::Timeout) => {
-                // TODO: maybe this branch needs a different log message/flow?
-                modals.show_notification(t!("suspend.fail", xous::LANG), None).unwrap();
-            }
-            Err(_e) => {
-                panic!("Unhandled error on suspend request");
+        if ((llio.adc_vbus().unwrap() as u32) * 503) <= 150_000 {
+            match susres.initiate_suspend() {
+                Ok(_) => {},
+                Err(xous::Error::Timeout) => {
+                    // TODO: maybe this branch needs a different log message/flow?
+                    modals.show_notification(t!("suspend.fail", xous::LANG), None).unwrap();
+                }
+                Err(_e) => {
+                    panic!("Unhandled error on suspend request");
+                }
             }
         }
     }
