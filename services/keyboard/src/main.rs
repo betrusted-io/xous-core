@@ -938,8 +938,8 @@ fn main() -> ! {
                 #[cfg(all(feature="debuginject", not(feature="rawserial")))]
                 if let Some(conn) = listener_conn {
                     if key != '\u{0000}' {
-                        if key > '\u{f000}' {
-                            log::info!("ignoring key '{}'({:x})", key, key as u32); // ignore macOS weird characters
+                        if key >= '\u{f700}' && key <= '\u{f8ff}' {
+                            log::info!("ignoring key '{}'({:x})", key, key as u32); // ignore Apple PUA characters
                         } else {
                             log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
                             xous::try_send_message(conn,
