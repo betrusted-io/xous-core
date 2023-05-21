@@ -765,7 +765,7 @@ fn main() -> ! {
     #[cfg(any(feature="precursor", feature="renode"))]
     let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(5)).expect("can't register server");
     #[cfg(not(target_os = "xous"))]
-    let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(2)).expect("can't register server");
+    let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, None).expect("can't register server"); // hosted mode we don't care about security of the spinor server
     log::trace!("registered with NS -- {:?}", spinor_sid);
 
     let handler_conn = xous::connect(spinor_sid).expect("couldn't create interrupt handler callback connection");
