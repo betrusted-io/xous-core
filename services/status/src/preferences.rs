@@ -17,6 +17,8 @@ enum DevicePrefsOp {
     ConnectKnownNetworksOnBoot,
     AutobacklightOnBoot,
     AutobacklightTimeout,
+    AutoSleepTimeout,
+    AutoUnmountTimeout,
     KeyboardLayout,
     WLANMenu,
     SetTime,
@@ -43,6 +45,8 @@ impl Display for DevicePrefsOp {
         match self {
             Self::AutobacklightOnBoot => write!(f, "{}", t!("prefs.autobacklight_enable", xous::LANG)),
             Self::AutobacklightTimeout => write!(f, "{}", t!("prefs.autobacklight_duration", xous::LANG)),
+            Self::AutoSleepTimeout => write!(f, "{}", t!("prefs.autosleep_duration", xous::LANG)),
+            Self::AutoUnmountTimeout => write!(f, "{}", t!("prefs.autounmount_duration", xous::LANG)),
             Self::ConnectKnownNetworksOnBoot => write!(f, "{}", t!("prefs.wifi_connect_auto", xous::LANG)),
             Self::WifiKill => write!(f, "{}", t!("prefs.wifi_kill", xous::LANG)),
             Self::KeyboardLayout => write!(f, "{}", t!("prefs.keyboard_layout", xous::LANG)),
@@ -123,7 +127,7 @@ impl PrefHandler for DevicePrefs {
             return true;
         }
 
-        match FromPrimitive::from_usize(op) {
+        let result = match FromPrimitive::from_usize(op) {
             Some(other) => {
                 self.consume_menu_action(other);
 
@@ -133,7 +137,14 @@ impl PrefHandler for DevicePrefs {
                 log::error!("Got unknown message");
                 false
             }
-        }
+        };
+        // trigger the status thread to reload preferences, as some may have changed
+        xous::send_message(self.status_cid, xous::Message::new_scalar(
+            crate::StatusOpcode::ReloadPrefs.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).ok();
+
+        result
     }
 
     fn claim_menumatic_menu(&mut self, cid: xous::CID) {
@@ -197,6 +208,8 @@ impl DevicePrefs {
             WifiKill,
             AutobacklightOnBoot,
             AutobacklightTimeout,
+            AutoSleepTimeout,
+            // AutoUnmountTimeout, // placeholder for when the feature is implemented
             KeyboardLayout,
             // Note: this vec sets the order of items in the preferences menu
             // The CI system assumes that the time setting items are always at
@@ -233,6 +246,8 @@ impl DevicePrefs {
             WifiKill => self.wifi_kill(),
             ConnectKnownNetworksOnBoot => self.connect_known_networks_on_boot(),
             AutobacklightTimeout => self.autobacklight_timeout(),
+            AutoSleepTimeout => self.autosleep_timeout(),
+            AutoUnmountTimeout => self.autounmount_timeout(),
             KeyboardLayout => self.keyboard_layout(),
             WLANMenu => self.wlan_menu(),
             SetTime => self.set_time_menu(),
@@ -328,6 +343,52 @@ impl DevicePrefs {
         let new_timeout = raw_timeout.first().as_str().parse::<u64>().unwrap(); // we know this is a number, we checked with validator;
 
         Ok(self.up.set_autobacklight_timeout(new_timeout)?)
+    }
+
+    fn autosleep_timeout(&self) -> Result<(), DevicePrefsError> {
+        let cv = self.up.autosleep_timeout_or_default()?;
+
+        let raw_timeout = self
+            .modals
+            .alert_builder(t!("prefs.autosleep_duration_in_mins", xous::LANG))
+            .field(
+                Some(cv.to_string()),
+                Some(|tf| match tf.as_str().parse::<u64>() {
+                    Ok(_) => None,
+                    Err(_) => Some(xous_ipc::String::from_str(
+                        t!("prefs.autobacklight_err", xous::LANG),
+                    )),
+                }),
+            )
+            .build()
+            .unwrap();
+
+        let new_timeout = raw_timeout.first().as_str().parse::<u64>().unwrap(); // we know this is a number, we checked with validator;
+
+        Ok(self.up.set_autosleep_timeout(new_timeout)?)
+    }
+
+    fn autounmount_timeout(&self) -> Result<(), DevicePrefsError> {
+        let cv = self.up.autounmount_timeout_or_default()?;
+
+        let raw_timeout = self
+            .modals
+            .alert_builder(t!("prefs.autounmount_duration_in_mins", xous::LANG))
+            .field(
+                Some(cv.to_string()),
+                Some(|tf| match tf.as_str().parse::<u64>() {
+                    Ok(_) => None,
+                    Err(_) => Some(xous_ipc::String::from_str(
+                        t!("prefs.autobacklight_err", xous::LANG),
+                    )),
+                }),
+            )
+            .build()
+            .unwrap();
+
+        let new_timeout = raw_timeout.first().as_str().parse::<u64>().unwrap(); // we know this is a number, we checked with validator;
+
+        Ok(self.up.set_autounmount_timeout(new_timeout)?)
     }
 
     fn wifi_kill(&mut self) -> Result<(), DevicePrefsError> {
