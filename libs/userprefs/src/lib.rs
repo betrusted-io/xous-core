@@ -48,6 +48,8 @@ pub struct UserPrefs {
     pub connect_known_networks_on_boot: bool,
     pub autobacklight_on_boot: bool,
     pub autobacklight_timeout: u64,
+    pub autosleep_timeout: u64,
+    pub autounmount_timeout: u64,
     pub audio_enabled: bool,
     pub earpiece_volume: u32,
     pub headset_volume: u32,
