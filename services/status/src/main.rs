@@ -14,6 +14,7 @@ mod preferences;
 use com::api::*;
 use root_keys::api::{BackupOp, BackupKeyboardLayout};
 use core::fmt::Write;
+use core::sync::atomic::AtomicU32;
 use num_traits::*;
 use xous::{msg_scalar_unpack, send_message, Message, CID};
 use graphics_server::*;
@@ -82,6 +83,9 @@ pub(crate) enum StatusOpcode {
     EnableAutomaticBacklight,
     /// Disables automatic backlight handling.
     DisableAutomaticBacklight,
+    /// Reloads preference variables from PDDB. Called by preferences manager when a variable is updated.
+    /// The usage may not be consistent, because this was patched in after the initial architecture was set up.
+    ReloadPrefs,
 
     /// Suspend handler from the main menu
     TrySuspend,
@@ -116,8 +120,17 @@ fn battstats_cb(stats: BattStats) {
     }
 }
 
-pub fn pump_thread(conn: usize, pump_run: Arc<AtomicBool>) {
+pub fn pump_thread(
+    conn: usize,
+    pump_run: Arc<AtomicBool>,
+    last_key_hit_secs: Arc<AtomicU32>,
+    autosleep_duration_mins: Arc<AtomicU32>,
+    _autounmount_duration_mins: Arc<AtomicU32>,
+) {
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+    let xns = xous_names::XousNames::new().unwrap();
+    let llio = llio::Llio::new(&xns);
+    let mut last_power_state = llio.is_plugged_in();
     loop {
         if pump_run.load(Ordering::Relaxed) {
             match send_message(
@@ -130,6 +143,35 @@ pub fn pump_thread(conn: usize, pump_run: Arc<AtomicBool>) {
             }
         }
         ticktimer.sleep_ms(1000).unwrap();
+
+        let cur_power_state = llio.is_plugged_in();
+        // note that this will miss fast plug/unplug events of < 1 second
+        if last_power_state != cur_power_state {
+            log::debug!("power state change detected, resetting timer");
+            // power state changed. Consider this a "key press" for the purposes of auto-events.
+            last_key_hit_secs.store((ticktimer.elapsed_ms() / 1000) as u32, Ordering::SeqCst);
+            last_power_state = cur_power_state;
+        }
+
+        let asdm = autosleep_duration_mins.load(Ordering::SeqCst);
+        if asdm != 0 {
+            let last_key_hit_duration_mins = ((ticktimer.elapsed_ms() / 1000) as u32
+                - last_key_hit_secs.load(Ordering::SeqCst)) / 60;
+            if last_key_hit_duration_mins >= asdm {
+                log::debug!("autosleep duration hit, trying to sleep");
+                if cur_power_state == false { // is_plugged_in() is false
+                    log::info!("Autosleeping...");
+                    send_message(
+                        conn as u32,
+                        Message::new_scalar(StatusOpcode::TrySuspend.to_usize().unwrap(), 0, 0, 0, 0),
+                    ).ok();
+                } else {
+                    log::debug!("can't sleep, plugged in!");
+                }
+            }
+        }
+
+        // TODO: autounmount
     }
 }
 fn main () -> ! {
@@ -185,11 +227,25 @@ fn wrapped_main() -> ! {
     let cb_cid = xous::connect(status_sid).unwrap();
     unsafe { CB_TO_MAIN_CONN = Some(cb_cid) };
     let pump_run = Arc::new(AtomicBool::new(false));
+    // allocate shared variables for automatic timers that get polled in the pump thread
+    let last_key_hit_secs = Arc::new(AtomicU32::new(0)); // rolls over in 126 years. Can't AtomicU64 on a 32-bit platform.
+    let autosleep_duration_mins = Arc::new(AtomicU32::new(0));
+    let autounmount_duration_mins = Arc::new(AtomicU32::new(0));
+    let autobacklight_duration_secs = Arc::new(AtomicU32::new(0));
     let pump_conn = xous::connect(status_sid).unwrap();
     let _ = thread::spawn({
         let pump_run = pump_run.clone();
+        let last_key_hit_secs = last_key_hit_secs.clone();
+        let autosleep_duration_mins = autosleep_duration_mins.clone();
+        let autounmount_duration_mins = autounmount_duration_mins.clone();
         move || {
-            pump_thread(pump_conn as _, pump_run);
+            pump_thread(
+                pump_conn as _,
+                pump_run,
+                last_key_hit_secs,
+                autosleep_duration_mins,
+                autounmount_duration_mins,
+            );
         }
     });
     // used to show notifications, e.g. can't sleep while power is engaged.
@@ -634,7 +690,7 @@ fn wrapped_main() -> ! {
         // reset it for good measure
         early_settings.set_early_sleep(false).unwrap();
 
-        if ((llio.adc_vbus().unwrap() as u32) * 503) <= 150_000 {
+        if !llio.is_plugged_in() {
             match susres.initiate_suspend() {
                 Ok(_) => {},
                 Err(xous::Error::Timeout) => {
@@ -666,7 +722,7 @@ fn wrapped_main() -> ! {
                     // this indicates system was guttered due to a retry failure
                     let susres = susres::Susres::new_without_hook(&xns).unwrap();
                     let llio = llio::Llio::new(&xns);
-                    if ((llio.adc_vbus().unwrap() as u32) * 503) < 150_000 {
+                    if !llio.is_plugged_in() {
                         // try to force suspend if possible, so that users who are just playing around with
                         // the device don't run the battery down accidentally.
                         susres.initiate_suspend().ok();
@@ -691,7 +747,11 @@ fn wrapped_main() -> ! {
     It'll wait until PDDB is ready to load stuff off the preference
     dictionary.
     */
-    std::thread::spawn(move || {
+    std::thread::spawn({
+        let autosleep_duration_mins = autosleep_duration_mins.clone();
+        let autounmount_duration_mins = autounmount_duration_mins.clone();
+        let autobacklight_duration_secs = autobacklight_duration_secs.clone();
+        move || {
         let pddb = pddb::Pddb::new();
         let prefs = prefs_thread_clone.lock().unwrap();
         let netmgr = net::NetManager::new();
@@ -785,7 +845,10 @@ fn wrapped_main() -> ! {
                 });
             }
         }
-    });
+        autosleep_duration_mins.store(prefs.autosleep_timeout_or_value(0).unwrap() as u32, Ordering::SeqCst);
+        autounmount_duration_mins.store(prefs.autounmount_timeout_or_value(0).unwrap() as u32, Ordering::SeqCst);
+        autobacklight_duration_secs.store(prefs.autobacklight_timeout_or_value(10).unwrap() as u32, Ordering::SeqCst);
+    }});
 
     // this thread handles updating the PDDB basis list
     thread::spawn({
@@ -826,6 +889,12 @@ fn wrapped_main() -> ! {
         let opcode: Option<StatusOpcode> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("{:?}", opcode);
         match opcode {
+            Some(StatusOpcode::ReloadPrefs) => {
+                let p = prefs.lock().unwrap(); // lock it once in this block
+                autosleep_duration_mins.store(p.autosleep_timeout_or_value(0).unwrap() as u32, Ordering::SeqCst);
+                autounmount_duration_mins.store(p.autounmount_timeout_or_value(0).unwrap() as u32, Ordering::SeqCst);
+                autobacklight_duration_secs.store(p.autobacklight_timeout_or_value(10).unwrap() as u32, Ordering::SeqCst);
+            }
             Some(StatusOpcode::EnableAutomaticBacklight) => {
                 if *autobacklight_enabled.lock().unwrap() {
                     // already enabled, don't re-enable
@@ -1042,7 +1111,7 @@ fn wrapped_main() -> ! {
                     // confirm that the charger is in the right state.
                     if stats.soc < 95 || stats.remaining_capacity < 1000 {
                         // only request if we aren't fully charged, either by SOC or capacity metrics
-                        if (llio.adc_vbus().unwrap() as u32) * 503 > 445_000 { // 0.005033 * 100_000 against 4.45V * 100_000
+                        if llio.is_plugged_in() {
                             // 4.45V is our threshold for deciding if a cable is present
                             // charging cable is present
                             if !com.is_charging().expect("couldn't check charging state") {
@@ -1165,9 +1234,11 @@ fn wrapped_main() -> ! {
                 ).expect("couldn't trigger status update");
             }),
             Some(StatusOpcode::TrySuspend) => {
-                if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
+                if llio.is_plugged_in() {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
+                    // reset the last key hit timer, so that when we wake up we get a full timeout period
+                    last_key_hit_secs.store((ticktimer.elapsed_ms() / 1000) as u32, Ordering::SeqCst);
                     // log::set_max_level(log::LevelFilter::Debug);
                     match susres.initiate_suspend() {
                         Ok(_) => {},
@@ -1187,7 +1258,7 @@ fn wrapped_main() -> ! {
                 // dialog boxes fairly quickly. If this turns out not to be the case, we can
                 // turn the interactive dialog box into a thread that fires a message to move
                 // to the next stage (see `PrepareBackup` implementation for a template).
-                if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
+                if llio.is_plugged_in() {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
                     // show a note to inform the user that you can't turn it on without an external power source...
@@ -1221,6 +1292,9 @@ fn wrapped_main() -> ! {
             },
 
             Some(StatusOpcode::Keypress) => {
+                // this will roll over in 126 years of uptime. meh?
+                last_key_hit_secs.store((ticktimer.elapsed_ms() / 1000) as u32, Ordering::SeqCst);
+
                 if !*autobacklight_enabled.lock().unwrap() {
                     log::trace!("ignoring keypress, automatic backlight is disabled");
                     continue
@@ -1235,19 +1309,8 @@ fn wrapped_main() -> ! {
                     false => {
                         *run_lock = true;
 
-                        // TODO(gsora): this code queries PDDB every time autobacklight timeout expired
-                        // and user presses a button.
-                        // Too intensive? Needs a dirty bit+cache?
                         let abl_timeout = if pddb_poller.is_mounted_nonblocking() {
-                            let prefs = prefs.clone();
-                            let prefs = prefs.lock().unwrap();
-                            match prefs.autobacklight_timeout() {
-                                Ok(timeout) => timeout,
-                                Err(error) => {
-                                    log::warn!("Autobacklight timeout not set or corrupted, {:?}, defaulting to 10s", error);
-                                    10
-                                }
-                            }
+                            autobacklight_duration_secs.load(Ordering::SeqCst) as u64
                         } else {
                             // this routine can be polled before the pddb is mounted, e.g. while the pddb password is entered
                             10

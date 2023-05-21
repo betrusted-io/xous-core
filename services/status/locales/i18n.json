@@ -554,22 +554,22 @@
         "zh": "不间断操作挂起。 请在几秒钟后重试睡眠请求。"
     },
     "prefs.autobacklight_enable": {
-        "en": "Autobacklight setting",
-        "en-tts": "Autobacklight setting",
+        "en": "Auto-Backlight setting",
+        "en-tts": "Auto-Backlight setting",
         "fr": "Réglage du rétroéclairage automatique *MT*",
         "ja": "自動バックライト設定",
         "zh": "自动背光设置"
     },
     "prefs.autobacklight_duration": {
-        "en": "Autobacklight duration",
-        "en-tts": "Autobacklight duration",
+        "en": "Auto-Backlight duration",
+        "en-tts": "Auto-Backlight duration",
         "fr": "Durée du rétroéclairage automatique *MT*",
         "ja": "自動バックライトの持続時間",
         "zh": "自动背光持续时间"
     },
     "prefs.autobacklight_duration_in_secs": {
-        "en": "Autobacklight duration in seconds:",
-        "en-tts": "Autobacklight duration in seconds",
+        "en": "Auto-Backlight duration in seconds:",
+        "en-tts": "Auto-Backlight duration in seconds",
         "fr": "Durée du rétroéclairage automatique en secondes: *MT*",
         "ja": "自動バックライトの持続時間 (秒):",
         "zh": "自动背光持续时间（以秒为单位):"
@@ -580,6 +580,34 @@
         "fr": "La durée doit être positive! *MT*",
         "ja": "期間は正でなければなりません!",
         "zh": "持续时间必须为正数！"
+    },
+    "prefs.autosleep_duration": {
+        "en": "Auto-Sleep duration",
+        "en-tts": "Auto-Sleep duration",
+        "fr": "Durée de veille automatique *MT*",
+        "ja": "自動スリープ時間",
+        "zh": "自动休眠持续时间"
+    },
+    "prefs.autosleep_duration_in_mins": {
+        "en": "Auto-sleep duration in minutes (0 to disable):",
+        "en-tts": "Auto-sleep duration in minutes (0 to disable)",
+        "fr": "Durée de la mise en veille automatique en minutes (0 pour désactiver): *MT*",
+        "ja": "自動スリープ期間 (分単位) (無効にする場合は 0):",
+        "zh": "以分钟为单位的自动休眠持续时间 (0 表示禁用）："
+    },
+    "prefs.autounmount_duration": {
+        "en": "Auto-Unmount duration",
+        "en-tts": "Auto-Unmount duration",
+        "fr": "Durée du démontage automatique *MT*",
+        "ja": "自動アンマウント期間",
+        "zh": "自动卸载持续时间"
+    },
+    "prefs.autounmount_duration_in_mins": {
+        "en": "Auto-unmount duration in minutes (0 to disable):",
+        "en-tts": "Auto-unmount duration in minutes (0 to disable)",
+        "fr": "Durée du démontage automatique en minutes (0 pour désactiver): *MT*",
+        "ja": "自動アンマウント期間 (分単位) (無効にする場合は 0):",
+        "zh": "以分钟为单位的自动卸载持续时间 (0 表示禁用）："
     },
     "prefs.wifi_connect_auto": {
         "en": "Connect to WiFi automatically",
