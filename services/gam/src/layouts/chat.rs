@@ -53,6 +53,8 @@ impl ChatLayout {
         let input_cr = input_canvas.clip_rect();
         canvases.insert(input_canvas.gid(), input_canvas);
 
+        // trust level must be lower than "modals" otherwise a modal can't draw over the content
+        // dividing by 2 does the trick
         let content_canvas = Canvas::new(
             Rectangle::new_v_span(*status_cliprect, input_cr),
             (MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET) / 2, &trng, None, crate::api::CanvasType::ChatContent
