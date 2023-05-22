@@ -386,6 +386,9 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Device will not try to suspend on lock if it is plugged in
 - Autosleep timer option added. By default it is 0 (disabled). It is adjustable in increments of minutes. Note that if you try to lock the device while plugged in, and then unplug it without unlocking it, the system will stay "awake" because it can't consult the PDDB to know what the autosleep setting is.
 - Autosleep can also optionally lock the device on sleep. However, by default it just sleeps.
+- Add "lefty mode" option for `vault` (flips deny key from F1 to F4)
+- Add "autotype delay" setting. The default is 30ms, but some computers can't handle key strokes that fast (password characters will be dropped). This allows users to tune this down, to a maximum of 500ms (at which point you may actually get multiple key entries depending on your hold-to-repeat delay). Probably a setting of 80ms should be fine to deal with deeply virtualized USB stacks running on slower computers.
+- Fix #325, u2f authentication requests now sunset even when the host stops polling
 
 ## Roadmap
 - Lots of testing and bug fixes
