@@ -300,6 +300,13 @@
         "ja": "ホスト読み出しを有効にする",
         "zh": "启用主机读出"
     },
+    "vault.menu_set_lefty_mode": {
+        "en": "Set left-handed UI",
+        "en-tts": "Set left-handed UI",
+        "fr": "Définir l'interface utilisateur gaucher *MT*",
+        "ja": "左手用 UI を設定する",
+        "zh": "设置左手用户界面"
+    },
     "vault.menu_unlock_basis": {
         "en": "Unlock secret Basis",
         "en-tts": "Unlock secret basis",
@@ -579,6 +586,13 @@
         "fr": "Demande FIDO.\n\nRefuser la demande en appuyant sur F1.\nApprouver en appuyant sur une autre touche.",
         "ja": "FIDOリクエスト\n\nF1 を押して要求を拒否するか、その他のキーを押して承認します。\n",
         "zh": "FIDO 请求\n\n按 F1 拒绝请求，或按任何其他键批准它。\n"
+    },
+    "vault.u2freq_lefty": {
+        "en": "FIDO Request.\n\nDENY the request by pressing F4.\nAPPROVE by pressing any other key.\n",
+        "en-tts": "FIDO Request.\n\nPress F4 to DENY the request.\nPress any other key to approve it.\n",
+        "fr": "Demande FIDO.\n\nRefuser la demande en appuyant sur F4.\nApprouver en appuyant sur une autre touche.",
+        "ja": "FIDOリクエスト\n\nF4 を押して要求を拒否するか、その他のキーを押して承認します。\n",
+        "zh": "FIDO 请求\n\n按 F4 拒绝请求，或按任何其他键批准它。\n"
     },
     "vault.yes": {
         "en": "Yes",

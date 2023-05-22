@@ -139,6 +139,8 @@ fn main() -> ! {
     let allow_host = Arc::new(AtomicBool::new(false));
     // Protects access to the openSK PDDB entries from simultaneous readout on the UX while OpenSK is updating it
     let opensk_mutex = Arc::new(Mutex::new(0));
+    // storage for lefty mode
+    let lefty_mode = Arc::new(AtomicBool::new(false));
 
     // spawn the actions server. This is responsible for grooming the UX elements. It
     // has to be in its own thread because it uses blocking modal calls that would cause
@@ -205,6 +207,7 @@ fn main() -> ! {
         let allow_host = allow_host.clone();
         let opensk_mutex = opensk_mutex.clone();
         let conn = conn.clone();
+        let lefty_mode = lefty_mode.clone();
         move || {
             let xns = xous_names::XousNames::new().unwrap();
             let mut vendor_session = VendorSession::default();
@@ -224,7 +227,7 @@ fn main() -> ! {
                 }
             };
 
-            let env = XousEnv::new(conn);
+            let env = XousEnv::new(conn, lefty_mode); // lefty_mode is now owned by env
             // only run the main loop if the SoC is compatible
             if env.is_soc_compatible() {
                 let mut ctap = vault::Ctap::new(env, Instant::now());
@@ -374,6 +377,12 @@ fn main() -> ! {
 
     // starts a thread to keep NTP up-to-date
     ntp_updater(time_conn);
+
+    // gets the user preferences that configure vault
+    let prefs = userprefs::Manager::new();
+    let mut autotype_delay_ms = prefs.autotype_rate_or_value(30).unwrap();
+    vaultux.set_autotype_delay_ms(autotype_delay_ms);
+    lefty_mode.store(prefs.lefty_mode_or_value(false).unwrap(), Ordering::SeqCst);
 
     let modals = modals::Modals::new(&xns).unwrap();
     let tt = ticktimer_server::Ticktimer::new().unwrap();
@@ -601,6 +610,45 @@ fn main() -> ! {
                 vaultux.readout_mode(false);
                 modals.dynamic_notification_close().ok();
             }
+            Some(VaultOp::MenuAutotypeRate) => {
+                let cv = {
+                    let mut rate = prefs.autotype_rate_or_default().unwrap();
+                    if rate == 0 {
+                        rate = 30;
+                    }
+                    rate
+                };
+                let raw = modals
+                    .alert_builder(t!("prefs.autotype_rate_in_ms", xous::LANG))
+                    .field(
+                        Some(cv.to_string()),
+                        Some(|tf| match tf.as_str().parse::<usize>() {
+                            Ok(_) => None,
+                            Err(_) => Some(xous_ipc::String::from_str(
+                                t!("prefs.autobacklight_err", xous::LANG),
+                            )),
+                        }),
+                    )
+                    .build()
+                    .unwrap();
+                autotype_delay_ms = raw.first().as_str().parse::<usize>().unwrap(); // we know this is a number, we checked with validator;
+                prefs.set_autotype_rate(autotype_delay_ms).unwrap();
+                vaultux.set_autotype_delay_ms(autotype_delay_ms);
+            }
+            Some(VaultOp::MenuLeftyMode) => {
+                let cv = prefs.lefty_mode_or_default().unwrap();
+
+                modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
+                let mode = yes_no_to_bool(
+                    modals
+                        .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
+                            bool_to_yes_no(cv)))
+                        .unwrap()
+                        .as_str(),
+                );
+                prefs.set_lefty_mode(mode).unwrap();
+                lefty_mode.store(mode, Ordering::SeqCst);
+            }
             Some(VaultOp::Quit) => {
                 log::error!("got Quit");
                 break;
@@ -618,4 +666,20 @@ fn main() -> ! {
     xous::destroy_server(sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
+}
+
+fn bool_to_yes_no(val: bool) -> String {
+    match val {
+        true => t!("prefs.yes", xous::LANG).to_owned(),
+        false => t!("prefs.no", xous::LANG).to_owned(),
+    }
+}
+fn yes_no_to_bool(val: &str) -> bool {
+    if val == t!("prefs.yes", xous::LANG) {
+        true
+    } else if val == t!("prefs.no", xous::LANG) {
+        false
+    } else {
+        unreachable!("cannot go here!");
+    }
 }

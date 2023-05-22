@@ -53,6 +53,8 @@ pub struct UserPrefs {
     pub audio_enabled: bool,
     pub earpiece_volume: u32,
     pub headset_volume: u32,
+    pub autotype_rate: usize,
+    pub lefty_mode: bool,
 }
 
 pub struct Manager {

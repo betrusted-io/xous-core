@@ -38,6 +38,8 @@ pub enum VaultOp {
     MenuEditStage1,
     MenuAutotype,
     MenuReadoutMode,
+    MenuAutotypeRate,
+    MenuLeftyMode,
 
     /// PDDB basis change
     BasisChange,

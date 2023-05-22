@@ -708,6 +708,9 @@ impl VaultUx {
         }
     }
 
+    pub(crate) fn set_autotype_delay_ms(&self, rate: usize) {
+        self.usb_dev.set_autotype_delay_ms(rate);
+    }
     pub(crate) fn autotype(&mut self) -> Result<(), xous::Error> {
         if self.selection_index >= self.filtered_list.len() {
             return Err(xous::Error::InvalidPID);

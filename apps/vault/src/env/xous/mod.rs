@@ -9,6 +9,7 @@ use crate::KEEPALIVE_DELAY_MS;
 use crate::env::Env;
 use core::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 use persistent_store::Store;
 use ctap_crypto::rng256::XousRng256;
@@ -93,12 +94,13 @@ pub struct XousEnv {
     modals: Modals,
     last_user_presence_request: Option::<Instant>,
     ctap1_cid: xous::CID,
+    lefty_mode: Arc<AtomicBool>,
 }
 
 impl XousEnv {
     /// Returns the unique instance of the Xous environment.
     /// Blocks until the PDDB is mounted
-    pub fn new(conn: xous::CID) -> Self {
+    pub fn new(conn: xous::CID, lefty_mode: Arc<AtomicBool>) -> Self {
         // We rely on `take_storage` to ensure that this function is called only once.
         let storage = XousStorage {};
         let store = Store::new(storage).ok().unwrap();
@@ -108,6 +110,7 @@ impl XousEnv {
 
         std::thread::spawn({
             let main_cid = conn.clone();
+            let lefty_mode = lefty_mode.clone();
             move || {
                 let xns = xous_names::XousNames::new().unwrap();
                 let pddb = pddb::Pddb::new();
@@ -148,12 +151,17 @@ impl XousEnv {
                                     continue;
                                 } else {
                                     let key = kbhit.load(Ordering::SeqCst);
-                                    if key != 0 && key != 0x11 { // approved
+                                    if key != 0 &&
+                                    ((!lefty_mode.load(Ordering::SeqCst) && (key != 0x11))
+                                    || (lefty_mode.load(Ordering::SeqCst) && (key != 0x14))
+                                    ) { // approved
                                         log::trace!("approved");
                                         request.approved = true;
                                         current_id = None;
                                         modals.dynamic_notification_close().ok();
-                                    } else if key == 0x11 { // denied
+                                    } else if
+                                    (!lefty_mode.load(Ordering::SeqCst) && (key == 0x11))
+                                    || (lefty_mode.load(Ordering::SeqCst) && (key == 0x14)) { // denied
                                         log::trace!("denied");
                                         request.approved = false;
                                         denied_id = current_id.take();
@@ -174,7 +182,13 @@ impl XousEnv {
                                                     t!("vault.fido.countdown", xous::LANG)
                                                 ));
                                                 modals.dynamic_notification_update(
-                                                    Some(t!("vault.u2freq", xous::LANG)),
+                                                    Some(
+                                                        if lefty_mode.load(Ordering::SeqCst) {
+                                                            t!("vault.u2freq_lefty", xous::LANG)
+                                                        } else {
+                                                            t!("vault.u2freq", xous::LANG)
+                                                        }
+                                                    ),
                                                     Some(&to_request_str),
                                                 ).unwrap();
                                             }
@@ -269,7 +283,13 @@ impl XousEnv {
                                 ));
 
                                 modals.dynamic_notification(
-                                    Some(t!("vault.u2freq", xous::LANG)),
+                                    Some(
+                                        if lefty_mode.load(Ordering::SeqCst) {
+                                            t!("vault.u2freq_lefty", xous::LANG)
+                                        } else {
+                                            t!("vault.u2freq", xous::LANG)
+                                        }
+                                    ),
                                     Some(&to_request_str),
                                 ).unwrap();
                                 // start a keyboard listener
@@ -416,6 +436,7 @@ impl XousEnv {
             modals: modals::Modals::new(&xns).unwrap(),
             last_user_presence_request: None,
             ctap1_cid,
+            lefty_mode,
         }
     }
     /// Checks if the SoC is compatible with USB drivers (older versions of Precursor's FPGA don't have the USB device core)
@@ -487,7 +508,13 @@ impl UserPresence for XousEnv {
         let kbhit = Arc::new(AtomicU32::new(0));
         let expiration = Instant::now().checked_add(timeout).expect("duration bug");
         self.modals.dynamic_notification(
-            Some(t!("vault.u2freq", xous::LANG)),
+            Some(
+                if self.lefty_mode.load(Ordering::SeqCst) {
+                    t!("vault.u2freq_lefty", xous::LANG)
+                } else {
+                    t!("vault.u2freq", xous::LANG)
+                }
+            ),
             None,
         ).unwrap();
         // start the keyboard hit listener thread
@@ -524,7 +551,13 @@ impl UserPresence for XousEnv {
                     t!("vault.fido.countdown", xous::LANG)
                 ));
                 self.modals.dynamic_notification_update(
-                    Some(t!("vault.u2freq", xous::LANG)),
+                    Some(
+                        if self.lefty_mode.load(Ordering::SeqCst) {
+                            t!("vault.u2freq_lefty", xous::LANG)
+                        } else {
+                            t!("vault.u2freq", xous::LANG)
+                        }
+                    ),
                     Some(&request_str),
                 ).unwrap();
                 last_remaining = remaining;
@@ -536,10 +569,18 @@ impl UserPresence for XousEnv {
                 return Err(UserPresenceError::Timeout)
             }
             let key_hit = kbhit.load(Ordering::SeqCst);
-            if key_hit != 0 && key_hit != 0x11 { // 0x11 is the F1 key
+            if key_hit != 0
+            && ( // approve
+                (!self.lefty_mode.load(Ordering::SeqCst) && (key_hit != 0x11)) // 0x11 is the F1 key
+                || (self.lefty_mode.load(Ordering::SeqCst) && (key_hit != 0x14)) // 0x14 is the F4 key
+            )
+            {
                 self.modals.dynamic_notification_close().ok();
                 return Ok(())
-            } else if key_hit == 0x11 {
+            } else if // deny
+                (!self.lefty_mode.load(Ordering::SeqCst) && (key_hit == 0x11))
+                || (self.lefty_mode.load(Ordering::SeqCst) && (key_hit == 0x14))
+            {
                 self.modals.dynamic_notification_close().ok();
                 return Err(UserPresenceError::Declined)
             }

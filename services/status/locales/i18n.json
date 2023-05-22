@@ -602,6 +602,20 @@
         "ja": "デバイスをオートスリープにロックする",
         "zh": "锁定设备自动休眠"
     },
+    "prefs.autotype_rate": {
+        "en": "Set autotype rate",
+        "en-tts": "Set autotype rate",
+        "fr": "Définir le taux de saisie automatique *MT*",
+        "ja": "オートタイプ速度を設定する",
+        "zh": "设置自动打字率"
+    },
+    "prefs.autotype_rate_in_ms": {
+        "en": "Delay between key strokes, in ms:",
+        "en-tts": "Delay between key strokes, in ms:",
+        "fr": "Délai entre les frappes de touches, en ms: *MT*",
+        "ja": "キーストローク間の遅延 (ミリ秒単位):",
+        "zh": "击键之间的延迟，以毫秒为单位："
+    },
     "prefs.wifi_connect_auto": {
         "en": "Connect to WiFi automatically",
         "en-tts": "Connect to WiFi automatically",

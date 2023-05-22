@@ -4732,6 +4732,7 @@ dependencies = [
  "tts-frontend",
  "usb-device-xous",
  "usbd-human-interface-device 0.2.1",
+ "userprefs",
  "utralib",
  "xous 0.9.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
