@@ -1402,7 +1402,7 @@ impl<'a> ActionManager<'a> {
             "entropy", "👀", "mysite.com", "hax", "1336", "yo", "b", "mando", "Grogu", "zebra", "aws"];
         let weights = [1; 21];
         const TARGET_ENTRIES: usize = 12;
-        const TARGET_ENTRIES_PW: usize = 200;
+        const TARGET_ENTRIES_PW: usize = 350;
         // for each database, populate up to TARGET_ENTRIES
         // as this is testing code, it's written a bit more fragile in terms of error handling (fail-panic, rather than fail-dialog)
         // --- passwords ---
@@ -1413,7 +1413,14 @@ impl<'a> ActionManager<'a> {
             let extra_count = TARGET_ENTRIES_PW - pws.len();
             for _index in 0..extra_count {
                 let desc = random_pick::pick_multiple_from_slice(&words, &weights, 3);
-                let description = format!("{} {} {}", desc[0], desc[1], desc[2]);
+                // this exposes raw unicode and symbols to the sorting list
+                // let description = format!("{} {} {}", desc[0], desc[1], desc[2]);
+                // this will make a list that's a bit more challenging for the sorter to deal with because it has more bins
+                let r = self.trng.borrow_mut().get_u32().unwrap();
+                let description = format!("{}{}{} {} {}",
+                    char::from_u32((r % 26) + 0x61).unwrap_or('.'),
+                    char::from_u32(((r >> 8) % 26) + 0x61).unwrap_or('.'),
+                    desc[0], desc[1], desc[2]);
                 let username = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
                 let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
                 let pg = PasswordGenerator {
