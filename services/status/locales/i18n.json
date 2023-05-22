@@ -595,19 +595,12 @@
         "ja": "自動スリープ期間 (分単位) (無効にする場合は 0):",
         "zh": "以分钟为单位的自动休眠持续时间 (0 表示禁用）："
     },
-    "prefs.autounmount_duration": {
-        "en": "Auto-Unmount duration",
-        "en-tts": "Auto-Unmount duration",
-        "fr": "Durée du démontage automatique *MT*",
-        "ja": "自動アンマウント期間",
-        "zh": "自动卸载持续时间"
-    },
-    "prefs.autounmount_duration_in_mins": {
-        "en": "Auto-unmount duration in minutes (0 to disable):",
-        "en-tts": "Auto-unmount duration in minutes (0 to disable)",
-        "fr": "Durée du démontage automatique en minutes (0 pour désactiver): *MT*",
-        "ja": "自動アンマウント期間 (分単位) (無効にする場合は 0):",
-        "zh": "以分钟为单位的自动卸载持续时间 (0 表示禁用）："
+    "prefs.autosleep_reboot": {
+        "en": "Lock device on Auto-sleep",
+        "en-tts": "Lock device on Auto-sleep",
+        "fr": "Verrouiller l'appareil en veille automatique *MT*",
+        "ja": "デバイスをオートスリープにロックする",
+        "zh": "锁定设备自动休眠"
     },
     "prefs.wifi_connect_auto": {
         "en": "Connect to WiFi automatically",

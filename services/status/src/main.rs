@@ -125,7 +125,7 @@ pub fn pump_thread(
     pump_run: Arc<AtomicBool>,
     last_key_hit_secs: Arc<AtomicU32>,
     autosleep_duration_mins: Arc<AtomicU32>,
-    _autounmount_duration_mins: Arc<AtomicU32>,
+    reboot_on_autosleep: Arc<AtomicBool>,
 ) {
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     let xns = xous_names::XousNames::new().unwrap();
@@ -160,11 +160,19 @@ pub fn pump_thread(
             if last_key_hit_duration_mins >= asdm {
                 log::debug!("autosleep duration hit, trying to sleep");
                 if cur_power_state == false { // is_plugged_in() is false
-                    log::info!("Autosleeping...");
-                    send_message(
-                        conn as u32,
-                        Message::new_scalar(StatusOpcode::TrySuspend.to_usize().unwrap(), 0, 0, 0, 0),
-                    ).ok();
+                    if reboot_on_autosleep.load(Ordering::SeqCst) {
+                        log::info!("Autolocking...");
+                        send_message(
+                            conn as u32,
+                            Message::new_scalar(StatusOpcode::Reboot.to_usize().unwrap(), 0, 0, 0, 0),
+                        ).ok();
+                    } else {
+                        log::info!("Autosleeping...");
+                        send_message(
+                            conn as u32,
+                            Message::new_scalar(StatusOpcode::TrySuspend.to_usize().unwrap(), 0, 0, 0, 0),
+                        ).ok();
+                    }
                 } else {
                     log::debug!("can't sleep, plugged in!");
                 }
@@ -230,21 +238,21 @@ fn wrapped_main() -> ! {
     // allocate shared variables for automatic timers that get polled in the pump thread
     let last_key_hit_secs = Arc::new(AtomicU32::new(0)); // rolls over in 126 years. Can't AtomicU64 on a 32-bit platform.
     let autosleep_duration_mins = Arc::new(AtomicU32::new(0));
-    let autounmount_duration_mins = Arc::new(AtomicU32::new(0));
+    let reboot_on_autosleep = Arc::new(AtomicBool::new(false));
     let autobacklight_duration_secs = Arc::new(AtomicU32::new(0));
     let pump_conn = xous::connect(status_sid).unwrap();
     let _ = thread::spawn({
         let pump_run = pump_run.clone();
         let last_key_hit_secs = last_key_hit_secs.clone();
         let autosleep_duration_mins = autosleep_duration_mins.clone();
-        let autounmount_duration_mins = autounmount_duration_mins.clone();
+        let reboot_on_autosleep = reboot_on_autosleep.clone();
         move || {
             pump_thread(
                 pump_conn as _,
                 pump_run,
                 last_key_hit_secs,
                 autosleep_duration_mins,
-                autounmount_duration_mins,
+                reboot_on_autosleep,
             );
         }
     });
@@ -749,7 +757,7 @@ fn wrapped_main() -> ! {
     */
     std::thread::spawn({
         let autosleep_duration_mins = autosleep_duration_mins.clone();
-        let autounmount_duration_mins = autounmount_duration_mins.clone();
+        let reboot_on_autosleep = reboot_on_autosleep.clone();
         let autobacklight_duration_secs = autobacklight_duration_secs.clone();
         move || {
         let pddb = pddb::Pddb::new();
@@ -846,7 +854,7 @@ fn wrapped_main() -> ! {
             }
         }
         autosleep_duration_mins.store(prefs.autosleep_timeout_or_value(0).unwrap() as u32, Ordering::SeqCst);
-        autounmount_duration_mins.store(prefs.autounmount_timeout_or_value(0).unwrap() as u32, Ordering::SeqCst);
+        reboot_on_autosleep.store(prefs.reboot_on_autosleep_or_value(false).unwrap(), Ordering::SeqCst);
         autobacklight_duration_secs.store(prefs.autobacklight_timeout_or_value(10).unwrap() as u32, Ordering::SeqCst);
     }});
 
@@ -892,7 +900,7 @@ fn wrapped_main() -> ! {
             Some(StatusOpcode::ReloadPrefs) => {
                 let p = prefs.lock().unwrap(); // lock it once in this block
                 autosleep_duration_mins.store(p.autosleep_timeout_or_value(0).unwrap() as u32, Ordering::SeqCst);
-                autounmount_duration_mins.store(p.autounmount_timeout_or_value(0).unwrap() as u32, Ordering::SeqCst);
+                reboot_on_autosleep.store(p.reboot_on_autosleep_or_value(false).unwrap(), Ordering::SeqCst);
                 autobacklight_duration_secs.store(p.autobacklight_timeout_or_value(10).unwrap() as u32, Ordering::SeqCst);
             }
             Some(StatusOpcode::EnableAutomaticBacklight) => {

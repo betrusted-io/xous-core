@@ -382,6 +382,10 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - `gdb-stub` on hardware is now quite reliable, thanks to some performance improvements by @xobs. Just remember that single stepping does not work on XIP images (and by default now, apps are compiled as `xip`)
 - "Notes" fields in `vault` app that start with the keyword 'bip39' will trigger a BIP39 password entry box (if the password field is blank), or BIP39 rendering of the hex data. Password generation prompt also uses the password 'bip39' to trigger the BIP39 generation sequence. It does mean that you can't use just 'bip39' as a regular password but...
 - Add multi-line text editing to `vault` password fields, as well as left/right cursor movement to call up an insertion point that can be used to insert and delete characters in the middle of a field.
+- Extra characters added to arrow keys and Fn keys from MacOS hosted mode cleaned up (thanks @wizzard0)
+- Device will not try to suspend on lock if it is plugged in
+- Autosleep timer option added. By default it is 0 (disabled). It is adjustable in increments of minutes. Note that if you try to lock the device while plugged in, and then unplug it without unlocking it, the system will stay "awake" because it can't consult the PDDB to know what the autosleep setting is.
+- Autosleep can also optionally lock the device on sleep. However, by default it just sleeps.
 
 ## Roadmap
 - Lots of testing and bug fixes
