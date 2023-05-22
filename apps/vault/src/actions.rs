@@ -1457,8 +1457,8 @@ impl<'a> ActionManager<'a> {
                 let name = format!("{} {}", n[0], n[1]);
                 let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
                 let mut id = [0u8; 32];
-                self.trng.borrow_mut().fill_bytes(&mut id);
-                let record = AppInfo {
+                self.trng.borrow_mut().fill_bytes_via_next(&mut id);
+                let record = vault::AppInfo {
                     name,
                     id,
                     notes,
@@ -1540,7 +1540,7 @@ impl<'a> ActionManager<'a> {
                 let name = format!("{} {} {}", names[0], names[1], names[2]);
                 let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
                 let mut secret_bytes = [0u8; 10];
-                self.trng.borrow_mut().fill_bytes(&mut secret_bytes);
+                self.trng.borrow_mut().fill_bytes_via_next(&mut secret_bytes);
                 let mut record = storage::TotpRecord {
                     version: VAULT_TOTP_REC_VERSION,
                     secret: base32::encode(base32::Alphabet::RFC4648 { padding: false }, &secret_bytes),
