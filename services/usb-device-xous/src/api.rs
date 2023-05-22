@@ -24,6 +24,8 @@ pub(crate) enum Opcode {
     IsRestricted = 8,
     /// Set-and-check of USB debug restriction
     DebugUsbOp = 9,
+    /// Set autotype rate
+    SetAutotypeRate = 10,
 
     /// Send a U2F message
     U2fTx = 128,

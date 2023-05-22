@@ -309,6 +309,7 @@ pub(crate) fn main_hw() -> ! {
 
     let mut lockstatus_force_update = true; // some state to track if we've been through a suspend/resume, to help out the status thread with its UX update after a restart-from-cold
     let mut was_suspend = true;
+    let mut autotype_delay_ms = 30;
 
     #[cfg(feature="minimal")]
     std::thread::spawn(move || {
@@ -1026,11 +1027,11 @@ pub(crate) fn main_hw() -> ! {
                             let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                             keyboard.write_report(&codes).ok();
                             keyboard.tick().ok();
-                            tt.sleep_ms(30).ok();
+                            tt.sleep_ms(autotype_delay_ms).ok();
                             if auto_up {
                                 keyboard.write_report(&[]).ok(); // this is the key-up
                                 keyboard.tick().ok();
-                                tt.sleep_ms(30).ok();
+                                tt.sleep_ms(autotype_delay_ms).ok();
                             }
                             xous::return_scalar(msg.sender, 0).unwrap();
                         } else {
@@ -1074,6 +1075,15 @@ pub(crate) fn main_hw() -> ! {
                     _ => {} // do nothing; don't fail, don't report any error.
                 }
             }
+            Some(Opcode::SetAutotypeRate) => msg_scalar_unpack!(msg, rate, _, _, _, {
+                // limit rate to 0.5s delay. Even then, this will probably cause repeated characters because
+                // it also adjusts keydown delays
+                let checked_rate = if rate > 500 {
+                    500
+                } else { rate };
+                // there is no limit on the minimum rate. good luck if you set it to 0!
+                autotype_delay_ms = checked_rate;
+            }),
             Some(Opcode::SendString) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
@@ -1093,10 +1103,10 @@ pub(crate) fn main_hw() -> ! {
                             let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                             keyboard.write_report(&codes).ok();
                             keyboard.tick().ok();
-                            tt.sleep_ms(30).ok();
+                            tt.sleep_ms(autotype_delay_ms).ok();
                             keyboard.write_report(&[]).ok(); // this is the key-up
                             keyboard.tick().ok();
-                            tt.sleep_ms(30).ok();
+                            tt.sleep_ms(autotype_delay_ms).ok();
                             sent += 1;
                         }
                     }
