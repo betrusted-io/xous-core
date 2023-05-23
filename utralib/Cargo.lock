@@ -16,18 +16,16 @@ checksum = "3728d817d99e5ac407411fa471ff9800a778d88a24685968b36824eaf4bee400"
 
 [[package]]
 name = "quick-xml"
-version = "0.19.0"
+version = "0.28.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3d72d5477478f85bd00b6521780dfba1ec6cdaadcf90b8b181c36d7de561f9b"
+checksum = "0ce5e73202a820a31f8a0ee32ada5e21029c81fd9e3ebf668a40832e4219d9d1"
 dependencies = [
  "memchr",
 ]
 
 [[package]]
 name = "svd2utra"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f4c9cee7701453535677289fac10ee40ab105ca501f80b81962174c5226cdd6"
+version = "0.1.17"
 dependencies = [
  "convert_case",
  "quick-xml",
@@ -35,7 +33,7 @@ dependencies = [
 
 [[package]]
 name = "utralib"
-version = "0.1.15"
+version = "0.1.19"
 dependencies = [
  "svd2utra",
 ]

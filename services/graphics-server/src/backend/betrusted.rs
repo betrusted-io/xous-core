@@ -107,7 +107,7 @@ impl XousDisplay {
     pub unsafe fn hw_regs(&self) -> (u32, u32) {
         (
             self.hwfb.as_mut_ptr() as u32,
-            self.csr.base as u32
+            self.csr.base() as u32
         )
     }
 

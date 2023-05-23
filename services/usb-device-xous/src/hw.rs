@@ -25,7 +25,7 @@ fn handle_usb(_irq_no: usize, arg: *mut usize) {
 }
 
 pub struct SpinalUsbMgmt {
-    csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactoring AtomicCsr so it is non-mutable
+    csr: AtomicCsr<u32>,
     usb: AtomicPtr<u8>,
     eps: AtomicPtr<UdcEpStatus>,
     // can't use the srmem macro because the memory region window is not exactly the size of the memory to be stored.
@@ -202,7 +202,7 @@ pub struct SpinalUsbDevice {
     pub(crate) conn: xous::CID,
     usb: xous::MemoryRange,
     csr_addr: u32,
-    csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactoring AtomicCsr so it is non-mutable
+    csr: AtomicCsr<u32>,
     regs: SpinalUdcRegs,
     // 1:1 mapping of endpoint structures to offsets in the memory space for the actual ep storage
     // data must be committed to this in a single write, and not composed dynamically using this as scratch space

@@ -36,7 +36,7 @@ fn handle_usb(_irq_no: usize, arg: *mut usize) {
 }
 
 pub struct SpinalUsbMgmt {
-    csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactory AtomicCsr so it is non-mutable
+    csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactor AtomicCsr so it is non-mutable
     usb: AtomicPtr<u8>,
     eps: AtomicPtr<UdcEpStatus>,
     srmem: ManagedMem<{ utralib::generated::HW_USBDEV_MEM_LEN / core::mem::size_of::<u32>() }>,

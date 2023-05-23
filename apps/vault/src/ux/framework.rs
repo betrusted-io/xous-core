@@ -684,13 +684,18 @@ impl VaultUx {
     }
 
     pub(crate) fn filter(&mut self, criteria: &str) {
+        let tt = ticktimer_server::Ticktimer::new().unwrap();
+        let mut ts = [0u64; 5];
+        ts[0] = tt.elapsed_ms();
         self.filtered_list.clear();
+        ts[1] = tt.elapsed_ms();
         let il = &self.item_lists.lock().unwrap();
         let item_list = match self.mode.lock().unwrap().clone() {
             VaultMode::Fido => &il.fido,
             VaultMode::Totp => &il.totp,
             VaultMode::Password => &il.pw,
         };
+        ts[2] = tt.elapsed_ms();
         for item in item_list.values() {
             if item.name.to_lowercase().starts_with(criteria) {
                 let mut staged_item = item.clone();
@@ -698,6 +703,7 @@ impl VaultUx {
                 self.filtered_list.push(staged_item);
             }
         }
+        ts[3] = tt.elapsed_ms();
         // the selection index must always be at a valid point
         if self.selection_index >= self.filtered_list.len() {
             if self.filtered_list.len() > 0 {
@@ -705,6 +711,10 @@ impl VaultUx {
             } else {
                 self.selection_index = 0;
             }
+        }
+        ts[4] = tt.elapsed_ms();
+        for(index, &elapsed) in ts[1..].iter().enumerate() {
+            log::debug!("{}: {}", index + 1, elapsed - ts[0]);
         }
     }
 

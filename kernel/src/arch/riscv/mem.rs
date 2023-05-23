@@ -4,7 +4,9 @@
 use crate::arch::process::InitialProcess;
 use crate::mem::MemoryManager;
 use core::fmt;
-use riscv::register::{satp, sstatus};
+use riscv::register::satp;
+#[cfg(feature="gdb-stub")]
+use riscv::register::sstatus;
 use xous_kernel::{MemoryFlags, PID};
 
 // pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;

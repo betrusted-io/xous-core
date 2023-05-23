@@ -17,6 +17,6 @@ serde_json = "1.0.41"
 serde = { version = "1.0.130", features = ["derive"] }
 tempfile = "3.3.0"
 ureq = { version = "2.5.0", features = ["json"] }
-svd2utra = "0.1.16"
+svd2utra = "0.1.17"
 lazy_static = "1.4.0"
 # toml_edit = "0.14.4" # would be used to verify Cargo.toml files, but it's too hard to do this right now.
