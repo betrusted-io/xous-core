@@ -19,7 +19,8 @@ const BOOT_POLL_INTERVAL_MS: usize = 4_758; // a slightly faster poll during boo
 const POLL_INTERVAL_MS: usize = 7_151; // stagger slightly off of an integer-seconds interval to even out loads. impacts rssi update frequency.
 const INTERVALS_BEFORE_RETRY: usize = 3; // how many poll intervals we'll wait before we give up and try a new AP
 const SCAN_COUNT_MAX: usize = 5;
-const SSID_SCAN_AGING_THRESHOLD: Duration = Duration::from_secs(10); // time before a scan is considered "stale" and needs to be redone
+const SSID_SCAN_AGING_THRESHOLD: Duration = Duration::from_secs(5); // time before a scan is considered "stale" and needs to be redone
+const SSID_RESULT_AGING_THRESHOLD: Duration = Duration::from_secs(60); // time before an individual scan result is retired for being "too rarely seen"
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum ConnectionManagerOpcode {
@@ -64,6 +65,32 @@ enum SsidScanState {
     Invalid,
 }
 
+#[derive(Eq, PartialEq, Clone, Debug)]
+struct SsidOrdByRssi {
+    pub ssid: String,
+    pub rssi: u8,
+    pub last_seen: Instant,
+}
+impl SsidOrdByRssi {
+    pub fn new(ssid: String, rssi: u8) -> Self {
+        Self {
+            ssid,
+            rssi,
+            last_seen: Instant::now(),
+        }
+    }
+}
+impl Ord for SsidOrdByRssi {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.rssi.cmp(&other.rssi)
+    }
+}
+impl PartialOrd for SsidOrdByRssi {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU32>) {
     let tt = ticktimer_server::Ticktimer::new().unwrap();
     let xns = xous_names::XousNames::new().unwrap();
@@ -91,7 +118,8 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let mut status_subscribers = HashMap::<xous::CID, WifiStateSubscription>::new();
     let mut wifi_state = WifiState::Unknown;
     let mut last_wifi_state = wifi_state;
-    let mut ssid_list = HashMap::<String, u8>::new();
+    // keyed on String so that dups of ssid records are replaced
+    let mut ssid_list = HashMap::<String, SsidOrdByRssi>::new();
     let mut ssid_attempted = HashSet::<String>::new();
     let mut wait_count = 0;
     let mut scan_count = 0;
@@ -265,7 +293,11 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             match com.ssid_fetch_as_list() {
                                 Ok(slist) => {
                                     for (rssi, ssid) in slist.iter() {
-                                        ssid_list.insert(ssid.to_string(), *rssi);
+                                        // dupes removed by nature of the HashMap
+                                        ssid_list.insert(
+                                            ssid.to_string(),
+                                            SsidOrdByRssi::new(ssid.to_string(), *rssi)
+                                        );
                                     }
                                 },
                                 _ => continue,
@@ -276,8 +308,15 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             match com.ssid_fetch_as_list() {
                                 Ok(slist) => {
                                     for (rssi, ssid) in slist.iter() {
-                                        ssid_list.insert(ssid.to_string(), *rssi);
+                                        ssid_list.insert(
+                                            ssid.to_string(),
+                                            SsidOrdByRssi::new(ssid.to_string(), *rssi)
+                                        );
                                     }
+                                    // prune any results that haven't been seen in a while
+                                    ssid_list.retain(|_k, v|{
+                                        v.last_seen.elapsed() <= SSID_RESULT_AGING_THRESHOLD
+                                    });
                                 },
                                 _ => continue,
                             }
@@ -481,10 +520,13 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                 };
                 let mut ret_list = buffer.to_original::<SsidList, _>().unwrap();
-                for (i, (ssid, rssi)) in ssid_list.iter().enumerate() {
-                    ret_list.list[i] = Some(SsidRecord {
-                        name: xous_ipc::String::<32>::from_str(&ssid),
-                        rssi: *rssi,
+                let mut sorted_ssids: Vec<_> = ssid_list.values().cloned().collect();
+                sorted_ssids.sort_unstable();
+                for (strongest_ssids, ret_list_item)
+                in sorted_ssids.iter().zip(ret_list.list.iter_mut()) {
+                    *ret_list_item = Some(SsidRecord {
+                        name: xous_ipc::String::<32>::from_str(&strongest_ssids.ssid),
+                        rssi: strongest_ssids.rssi,
                     });
                 }
                 if wifi_state == WifiState::Off || wifi_state == WifiState::Error || wifi_state == WifiState::Unknown {
@@ -627,7 +669,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     xous::destroy_server(sid).unwrap();
 }
 
-fn get_next_ssid(ssid_list_map: &mut HashMap<String, u8>, ssid_attempted: &mut HashSet<String>, ap_list: HashSet::<String>) -> Option<String> {
+fn get_next_ssid(ssid_list_map: &mut HashMap<String, SsidOrdByRssi>, ssid_attempted: &mut HashSet<String>, ap_list: HashSet::<String>) -> Option<String> {
     log::trace!("ap_list: {:?}", ap_list);
     log::trace!("ssid_list: {:?}", ssid_list_map);
     // 0. convert the HashMap of ssid_list into a HashSet
