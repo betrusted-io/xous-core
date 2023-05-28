@@ -3,6 +3,8 @@
 
 use crate::arch::arm::process::InitialProcess;
 use crate::mem::MemoryManager;
+use crate::SystemServices;
+
 use core::num::NonZeroU8;
 
 pub use armv7::structures::paging::{
@@ -627,6 +629,35 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
     }
 
     Err(xous_kernel::Error::BadAddress)
+}
+
+/// Translates the virtual address from a mapping of the specific process to a physical address.
+#[allow(dead_code)]
+pub fn virt_to_phys_pid(pid: PID, virt: usize) -> Result<usize, xous_kernel::Error> {
+    let current_pid = SystemServices::with(|ss| {
+        ss.current_pid()
+    });
+
+    /// Ensures switching back to the source memory space whenever this function returns
+    /// in successful and error cases
+    struct SwitchBackGuard(PID);
+    impl Drop for SwitchBackGuard {
+        fn drop(&mut self) {
+            SystemServices::with(|ss| {
+                let p = ss.get_process(self.0).expect("current process");
+                p.mapping.activate().ok();
+            });
+        }
+    }
+
+    let _guard = SwitchBackGuard(current_pid);
+
+    SystemServices::with(|ss| {
+        let target_process = ss.get_process(pid).or_else(|_| Err(xous_kernel::Error::InvalidPID))?;
+        target_process.mapping.activate().or_else(|_| Err(xous_kernel::Error::InvalidPID))?;
+
+        virt_to_phys(virt)
+    })
 }
 
 fn get_s_flag_from_tex_bits(tex_bits: u32) -> bool {
