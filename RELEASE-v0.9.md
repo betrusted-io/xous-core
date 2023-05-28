@@ -389,6 +389,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Add "lefty mode" option for `vault` (flips deny key from F1 to F4)
 - Add "autotype delay" setting. The default is 30ms, but some computers can't handle key strokes that fast (password characters will be dropped). This allows users to tune this down, to a maximum of 500ms (at which point you may actually get multiple key entries depending on your hold-to-repeat delay). Probably a setting of 80ms should be fine to deal with deeply virtualized USB stacks running on slower computers.
 - Fix #325, u2f authentication requests now sunset even when the host stops polling
+- #388 via @eupn adds physical address resolution for a remote virtual memory process, allowing for coordination with remote DMA initiators. Does introduce some potential security problems, so gated behind the `v2p` flag.
+- Fix #339 by adjusting the shellchat API call to match what is done in status bar
 
 ## Roadmap
 - Lots of testing and bug fixes
