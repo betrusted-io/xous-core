@@ -45,10 +45,10 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                         Ok(_) => write!(ret, "wlan on"),
                         Err(e) => write!(ret, "Error: {:?}", e),
                     };
-                    env.netmgr.connection_manager_run().unwrap();
+                    env.netmgr.connection_manager_wifi_on_and_run().unwrap();
                 }
                 "off" => {
-                    env.netmgr.connection_manager_stop().unwrap();
+                    env.netmgr.connection_manager_wifi_off_and_stop().unwrap();
                     let _ = match env.com.wlan_set_off() {
                         Ok(_) => write!(ret, "wlan off"),
                         Err(e) => write!(ret, "Error: {:?}", e),
