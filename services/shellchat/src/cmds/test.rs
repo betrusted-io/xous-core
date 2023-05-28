@@ -487,7 +487,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         match oqc_status(oqc_cid) {
                             Some(true) => {
                                 log::info!("wrapping up: fetching SSID list");
-                                let ssid_list = env.netmgr.wifi_get_ssid_list().unwrap();
+                                let (ssid_list, _state) = env.netmgr.wifi_get_ssid_list().unwrap();
                                 write!(ret, "RSSI reported in dBm:\n").unwrap();
                                 for ssid in ssid_list {
                                     if ssid.name.len() > 0 {

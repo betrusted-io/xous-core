@@ -805,6 +805,20 @@
         "ja": "{ssid} のパスワードを入力してください:",
         "zh": "请输入 {ssid} 的密码："
     },
+    "wlan.ssid_scanning": {
+        "en": "Please wait, scanning...",
+        "en-tts": "Please wait, scanning...",
+        "fr": "Veuillez patienter, recherche de réseaux... *MT*",
+        "ja": "スキャン中です。お待ちください...",
+        "zh": "请稍候，正在扫描..."
+    },
+    "wlan.ssid_off_error": {
+        "en": "WiFi is off!",
+        "en-tts": "WiFi is off!",
+        "fr": "Le WiFi est désactivé! *MT*",
+        "ja": "Wi-Fiがオフになっています！",
+        "zh": "WiFi 已关闭！"
+    },
     "wlan.status": {
         "en": "Network status",
         "en-tts": "Network status",

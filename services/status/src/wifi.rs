@@ -1,6 +1,7 @@
 use crate::preferences::PrefHandler;
 use core::fmt::Display;
 use locales::t;
+use net::ScanState;
 use num_traits::*;
 use std::io::Write;
 
@@ -212,17 +213,58 @@ impl WLANMan {
         }
     }
 
-    fn scan_networks(&self) -> Result<Vec<String>, WLANError> {
-        let scan_result = self.netmgr.wifi_get_ssid_list()?;
+    fn scan_networks(&self) -> Result<(Vec<String>, ScanState), WLANError> {
+        let (scan_result, state) = self.netmgr.wifi_get_ssid_list()?;
 
-        Ok(scan_result
+        Ok((scan_result
             .iter()
             .map(|ssid| ssid.name.to_string())
-            .collect())
+            .collect(),
+            state
+            )
+        )
     }
 
     fn show_available_networks(&mut self) -> Result<(), WLANError> {
-        let networks = self.scan_networks()?;
+        let mut networks: Vec<String>;
+        let mut state: ScanState;
+        let tt = ticktimer_server::Ticktimer::new().unwrap();
+        let mut showing_wait = false;
+        loop {
+            (networks, state) = self.scan_networks()?;
+            // note to self: if we wanted to "scan more", probably this is the place
+            // where we would want to insert multiple calls to scan_networks() and
+            // accumulate the results.
+            match state {
+                ScanState::Updating => {
+                    let mut progress = t!("wlan.ssid_scanning", xous::LANG).to_string();
+                    let networks: Vec<&str> = networks.iter().map(|s| s.as_str()).collect();
+                    progress.push_str("\n\n");
+                    for network in networks {
+                        progress.push_str(&format!("\t{}\n", network));
+                    }
+
+                    if !showing_wait {
+                        self.modals.dynamic_notification(Some(&progress), None).unwrap();
+                        showing_wait = true;
+                    } else {
+                        self.modals.dynamic_notification_update(Some(&progress), None).unwrap();
+                    };
+                    tt.sleep_ms(1000).ok();
+                },
+                ScanState::Idle => break,
+                ScanState::Off => {
+                    if showing_wait {
+                        self.modals.dynamic_notification_close().unwrap();
+                    }
+                    self.modals.show_notification(t!("wlan.ssid_off_error", xous::LANG), None).unwrap();
+                    return Ok(());
+                }
+            }
+        }
+        if showing_wait {
+            self.modals.dynamic_notification_close().ok();
+        }
         let mut networks: Vec<&str> = networks.iter().map(|s| s.as_str()).collect();
 
         if networks.is_empty() {

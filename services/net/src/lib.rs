@@ -147,7 +147,7 @@ impl NetManager {
         }
         Ok(())
     }
-    pub fn wifi_get_ssid_list(&self) -> Result<Vec::<SsidRecord>, xous::Error> {
+    pub fn wifi_get_ssid_list(&self) -> Result<(Vec::<SsidRecord>, ScanState), xous::Error> {
         let alloc = SsidList::default();
         let mut buf = Buffer::into_buf(alloc).map_err(|_| xous::Error::InternalError)?;
         buf.lend_mut(self.netconn.conn(), Opcode::FetchSsidList.to_u32().unwrap())?;
@@ -158,7 +158,7 @@ impl NetManager {
                 ret.push(*item);
             }
         }
-        Ok(ret)
+        Ok((ret, ssid_list.state))
     }
     pub fn connection_manager_stop(&self) -> Result<(), xous::Error> {
         send_message(self.netconn.conn(),

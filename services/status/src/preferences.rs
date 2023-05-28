@@ -121,7 +121,7 @@ impl PrefHandler for DevicePrefs {
                 true
             }
             _ => {
-                log::error!("Got unknown message");
+                log::error!("Got unknown message: {}", op);
                 false
             }
         } {
@@ -135,7 +135,7 @@ impl PrefHandler for DevicePrefs {
                 true
             }
             _ => {
-                log::error!("Got unknown message");
+                log::error!("Got unknown message: {}", op);
                 false
             }
         };
