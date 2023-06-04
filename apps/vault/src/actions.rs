@@ -1,11 +1,10 @@
 use core::convert::TryFrom;
-use std::{thread, io::ErrorKind};
+use std::io::ErrorKind;
 use gam::TextEntryPayload;
 use pddb::BasisRetentionPolicy;
 use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 use num_traits::*;
-use xous::{SID, msg_blocking_scalar_unpack, Message, send_message};
-use xous_ipc::Buffer;
+use xous::{Message, send_message};
 use locales::t;
 use std::io::{Write, Read};
 use passwords::PasswordGenerator;
@@ -16,7 +15,7 @@ use vault::{
     VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, VAULT_ALLOC_HINT, utc_now,
     atime_to_str
 };
-use crate::ux::framework::ListItem;
+use crate::ListItem;
 use crate::{ItemLists, VaultMode, SelectedEntry};
 use crate::storage::{self, PasswordRecord, StorageContent};
 use crate::totp::TotpAlgorithm;
@@ -52,11 +51,11 @@ pub enum ActionOp {
     /// Testing
     GenerateTests,
 }
-
-pub(crate) fn start_actions_thread(
+/*
+pub(crate) fn start_actions_thread<'a> (
     main_conn: xous::CID,
     sid: SID, mode: Arc::<Mutex::<VaultMode>>,
-    item_lists: Arc::<Mutex::<ItemLists>>,
+    item_lists: Arc::<Mutex::<ItemLists<'a>>>,
     action_active: Arc::<AtomicBool>,
     opensk_mutex: Arc::<Mutex::<i32>>,
 ) {
@@ -140,8 +139,9 @@ pub(crate) fn start_actions_thread(
         }
     });
 }
+*/
 
-struct ActionManager<'a> {
+pub struct ActionManager<'a> {
     modals: modals::Modals,
     storage: RefCell<storage::Manager>,
 
@@ -149,7 +149,7 @@ struct ActionManager<'a> {
     trng: RefCell::<trng::Trng>,
 
     mode: Arc::<Mutex::<VaultMode>>,
-    item_lists: Arc::<Mutex::<ItemLists>>,
+    pub item_lists: Arc::<Mutex::<ItemLists>>,
     pddb: RefCell::<pddb::Pddb>,
     tt: ticktimer_server::Ticktimer,
     action_active: Arc::<AtomicBool>,
@@ -559,7 +559,7 @@ impl<'a> ActionManager<'a> {
                     let mut desc = String::with_capacity(256);
                     make_pw_name(&pw.description, &pw.username, &mut desc);
                     let key = ListItem::key_from_parts(&desc, guid);
-                    self.item_lists.lock().unwrap().pw.remove(&key);
+                    self.item_lists.lock().unwrap().remove(entry.mode, key);
                     /*
                     if self.item_lists.lock().unwrap().pw.remove(&key).is_some() {
                         self.modals.show_notification(&format!("deleted UX {}", &key), None).ok();
@@ -608,8 +608,10 @@ impl<'a> ActionManager<'a> {
                     count: pw.count,
                 };
                 log::debug!("updating {} to list item {}", li.extra, li.key());
-                let il = &mut self.item_lists.lock().unwrap().pw;
-                assert!(il.insert(li.key(), li).is_some(), "Somehow, the autotyped record isn't in the UX list for updating!");
+                assert!(
+                    self.item_lists.lock().unwrap().insert(entry.mode, li.key(), li).is_some(),
+                    "Somehow, the autotyped record isn't in the UX list for updating!")
+                ;
             },
             _ => {
                 // no cached data, no action
@@ -756,7 +758,8 @@ impl<'a> ActionManager<'a> {
                 // remove the entry from the old UX list
                 let mut desc = String::new();
                 make_pw_name(&pw.description, &pw.username, &mut desc);
-                self.item_lists.lock().unwrap().pw.remove(&ListItem::key_from_parts(&desc, key_name));
+
+                self.item_lists.lock().unwrap().remove(VaultMode::Password, ListItem::key_from_parts(&desc, key_name));
 
                 // display previous data for edit
                 let edit_data = if pw.notes != t!("vault.notes", xous::LANG) {
@@ -950,7 +953,6 @@ impl<'a> ActionManager<'a> {
         log::debug!("heap usage A: {}", heap_usage());
         match self.mode_cache {
             VaultMode::Password => {
-                let il = &mut self.item_lists.lock().unwrap().pw;
                 let start = self.tt.elapsed_ms();
                 #[cfg(feature="vaultperf")]
                 self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 1, std::line!());
@@ -965,6 +967,7 @@ impl<'a> ActionManager<'a> {
                         let mut extra = String::with_capacity(256);
                         let mut desc = String::with_capacity(256);
                         let mut lookup_key = String::with_capacity(384);
+                        let il = self.item_lists.lock().unwrap();
                         for key in keys {
                             #[cfg(feature="vaultperf")]
                             self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 2, std::line!());
@@ -985,13 +988,13 @@ impl<'a> ActionManager<'a> {
 
                                     #[cfg(feature="vaultperf")]
                                     self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
-                                    if let Some(prev_entry) = il.get_mut(&lookup_key) {
+                                    if let Some(prev_entry) = il.get(self.mode_cache, &lookup_key) {
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 3, std::line!());
-                                        prev_entry.dirty = true;
+                                        prev_entry.lock().unwrap().dirty = true;
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                                        if prev_entry.atime != pw_rec.atime || prev_entry.count != pw_rec.count {
+                                        if prev_entry.lock().unwrap().atime != pw_rec.atime || prev_entry.lock().unwrap().count != pw_rec.count {
                                             // this is expensive, so don't run it unless we have to
                                             let human_time = atime_to_str(pw_rec.atime);
                                             // note this code is duplicated in update_db_entry()
@@ -999,20 +1002,20 @@ impl<'a> ActionManager<'a> {
                                             extra.push_str("; ");
                                             extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
                                             extra.push_str(&pw_rec.count.to_string());
-                                            prev_entry.extra.clear();
-                                            prev_entry.extra.push_str(&extra);
+                                            prev_entry.lock().unwrap().extra.clear();
+                                            prev_entry.lock().unwrap().extra.push_str(&extra);
                                         }
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                                        if prev_entry.name != desc { // this check should be redundant, but, leave it in to be safe
-                                            prev_entry.name.clear();
-                                            prev_entry.name.push_str(&desc);
+                                        if prev_entry.lock().unwrap().name != desc { // this check should be redundant, but, leave it in to be safe
+                                            prev_entry.lock().unwrap().name.clear();
+                                            prev_entry.lock().unwrap().name.push_str(&desc);
                                         }
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                                        if prev_entry.guid != key.name {
-                                            prev_entry.guid.clear();
-                                            prev_entry.guid.push_str(&key.name);
+                                        if prev_entry.lock().unwrap().guid != key.name {
+                                            prev_entry.lock().unwrap().guid.clear();
+                                            prev_entry.lock().unwrap().guid.push_str(&key.name);
                                         }
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 3, std::line!());
@@ -1035,7 +1038,8 @@ impl<'a> ActionManager<'a> {
                                             atime: pw_rec.atime,
                                             count: pw_rec.count,
                                         };
-                                        il.insert(li.key(), li); // this push is very slow, but we only have to do it once on boot
+                                        self.item_lists.lock().unwrap()
+                                        .insert(self.mode_cache, li.key(), li); // this push is very slow, but we only have to do it once on boot
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 4, std::line!());
                                     }
@@ -1087,9 +1091,8 @@ impl<'a> ActionManager<'a> {
             VaultMode::Fido => {
                 // first assemble U2F records
                 log::debug!("listing in {}", U2F_APP_DICT);
-                let il = &mut self.item_lists.lock().unwrap().fido;
                 // regen from scratch every time, It's slow, but we're counting on <20 FIDO entries on average
-                il.clear();
+                self.item_lists.lock().unwrap().clear(self.mode_cache);
                 match self.pddb.borrow().read_dict(U2F_APP_DICT, None, Some(256 * 1024)) {
                     Ok(keys) => {
                         let mut oom_keys = 0;
@@ -1110,7 +1113,7 @@ impl<'a> ActionManager<'a> {
                                         count: ai.count,
                                         atime: ai.atime,
                                     };
-                                    il.insert(li.key(), li);
+                                    self.item_lists.lock().unwrap().insert(self.mode_cache, li.key(), li);
                                 } else {
                                     let err = format!("{}:{}:{}: ({})[moved data]...",
                                         key.basis, U2F_APP_DICT, key.name, key.len
@@ -1168,7 +1171,7 @@ impl<'a> ActionManager<'a> {
                                                     count: 0,
                                                     atime: 0,
                                                 };
-                                                il.insert(li.key(), li);
+                                                self.item_lists.lock().unwrap().insert(self.mode_cache, li.key(), li);
                                             }
                                             None => {
                                                 // Probably more indicative of a mismatch in OpenSK key range mapping, rather than a hard error.
@@ -1204,8 +1207,7 @@ impl<'a> ActionManager<'a> {
                 }
             }
             VaultMode::Totp => {
-                let il = &mut self.item_lists.lock().unwrap().totp;
-                il.clear();
+                self.item_lists.lock().unwrap().clear(self.mode_cache);
                 match self.pddb.borrow().read_dict(VAULT_TOTP_DICT, None, Some(256 * 1024)) {
                     Ok(keys) => {
                         let mut oom_keys = 0;
@@ -1228,7 +1230,7 @@ impl<'a> ActionManager<'a> {
                                         count: 0,
                                         atime: 0,
                                     };
-                                    il.insert(li.key(), li);
+                                    self.item_lists.lock().unwrap().insert(self.mode_cache, li.key(), li);
                                 } else {
                                     let err = format!("{}:{}:{}: ({})[moved data]...",
                                         key.basis, VAULT_TOTP_DICT, key.name, key.len
@@ -1301,9 +1303,7 @@ impl<'a> ActionManager<'a> {
             Ok(_) => {
                 log::debug!("Basis {} unlocked", name);
                 // clear local caches
-                self.item_lists.lock().unwrap().pw.clear();
-                self.item_lists.lock().unwrap().fido.clear();
-                self.item_lists.lock().unwrap().totp.clear();
+                self.item_lists.lock().unwrap().clear_all();
             },
             Err(e) => match e.kind() {
                 ErrorKind::PermissionDenied => {
@@ -1330,9 +1330,7 @@ impl<'a> ActionManager<'a> {
                             Ok(_) => {
                                 log::debug!("basis {} locked", b);
                                 // clear local caches
-                                self.item_lists.lock().unwrap().pw.clear();
-                                self.item_lists.lock().unwrap().fido.clear();
-                                self.item_lists.lock().unwrap().totp.clear();
+                                self.item_lists.lock().unwrap().clear_all();
                             },
                             Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
@@ -1361,9 +1359,7 @@ impl<'a> ActionManager<'a> {
                             Ok(_) => {
                                 log::debug!("Basis {} unlocked", name);
                                 // clear local caches
-                                self.item_lists.lock().unwrap().pw.clear();
-                                self.item_lists.lock().unwrap().fido.clear();
-                                self.item_lists.lock().unwrap().totp.clear();
+                                self.item_lists.lock().unwrap().clear_all();
                             },
                             Err(e) => match e.kind() {
                                 ErrorKind::PermissionDenied => {
