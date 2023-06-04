@@ -307,7 +307,7 @@ impl Message {
 
 pub struct Resolver {
     /// DnsServerManager is a service of the Net crate that automatically updates the DNS server list
-    mgr: net::DnsServerManager,
+    mgr: net::protocols::DnsServerManager,
     socket: UdpSocket,
     buf: [u8; DNS_PKT_MAX_LEN],
     trng: trng::Trng,
@@ -328,7 +328,7 @@ impl Resolver {
                                                 // blocking is probably what we actually want this time.
 
         Resolver {
-            mgr: net::DnsServerManager::register(&xns)
+            mgr: net::protocols::DnsServerManager::register(&xns)
                 .expect("Couldn't register the DNS server list auto-manager"),
             socket,
             buf: [0; DNS_PKT_MAX_LEN],

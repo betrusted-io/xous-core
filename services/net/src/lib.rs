@@ -7,7 +7,6 @@ use xous_ipc::Buffer;
 use num_traits::*;
 
 pub mod protocols;
-pub use protocols::*;
 pub use smoltcp::time::Duration;
 pub use api::*;
 pub use smoltcp::wire::IpEndpoint;
