@@ -28,7 +28,7 @@ pub struct NetCmd {
     callback_conn: u32,
     dns: dns::Dns,
     #[cfg(any(feature="precursor", feature="renode"))]
-    ping: Option<net::Ping>,
+    ping: Option<net::protocols::Ping>,
     #[cfg(feature="tls")]
     ws: Option<WebSocket<MaybeTlsStream<TcpStream>>>,
     #[cfg(feature="shellperf")]
@@ -635,7 +635,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             Ok(ipaddr) => {
                                 log::debug!("sending ping to {:?}", ipaddr);
                                 if self.ping.is_none() {
-                                    self.ping = Some(net::Ping::non_blocking_handle(
+                                    self.ping = Some(net::protocols::Ping::non_blocking_handle(
                                         XousServerId::ServerName(xous_ipc::String::from_str(crate::SERVER_NAME_SHELLCHAT)),
                                         self.callback_id.unwrap() as usize,
                                     ));
