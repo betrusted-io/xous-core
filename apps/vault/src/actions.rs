@@ -51,95 +51,6 @@ pub enum ActionOp {
     /// Testing
     GenerateTests,
 }
-/*
-pub(crate) fn start_actions_thread<'a> (
-    main_conn: xous::CID,
-    sid: SID, mode: Arc::<Mutex::<VaultMode>>,
-    item_lists: Arc::<Mutex::<ItemLists<'a>>>,
-    action_active: Arc::<AtomicBool>,
-    opensk_mutex: Arc::<Mutex::<i32>>,
-) {
-    let _ = thread::spawn({
-        move || {
-            let mut manager = ActionManager::new(main_conn, mode, item_lists, action_active, opensk_mutex);
-            loop {
-                let msg = xous::receive_message(sid).unwrap();
-                let opcode: Option<ActionOp> = FromPrimitive::from_usize(msg.body.id());
-                log::debug!("{:?}", opcode);
-                match opcode {
-                    Some(ActionOp::MenuAddnew) => {
-                        manager.activate();
-                        manager.menu_addnew();
-                        // this is necessary so the next redraw shows the newly added entry
-                        // no cache clear is called for because new entries will always add to the list;
-                        // there is no risk of "stale" entries persisting
-                        manager.retrieve_db();
-                        manager.deactivate();
-                    },
-                    Some(ActionOp::MenuDeleteStage2) => {
-                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
-                        manager.activate();
-                        manager.menu_delete(entry);
-                        manager.retrieve_db();
-                        manager.deactivate();
-                    },
-                    Some(ActionOp::MenuEditStage2) => {
-                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
-                        manager.activate();
-                        manager.menu_edit(entry);
-                        manager.retrieve_db();
-                        manager.deactivate();
-                    },
-                    Some(ActionOp::MenuUnlockBasis) => {
-                        manager.activate();
-                        manager.unlock_basis();
-                        manager.item_lists.lock().unwrap().pw.clear(); // clear the cached item list for passwords (totp/fido are not cached and don't need clearing)
-                        manager.retrieve_db();
-                        manager.deactivate();
-                    },
-                    Some(ActionOp::MenuManageBasis) => {
-                        manager.activate();
-                        manager.manage_basis();
-                        manager.item_lists.lock().unwrap().pw.clear(); // clear the cached item list for passwords
-                        manager.retrieve_db();
-                        manager.deactivate();
-                    }
-                    Some(ActionOp::MenuClose) => {
-                        // dummy activate/de-activate cycle because we have to trigger a redraw of the underlying UX
-                        manager.activate();
-                        manager.deactivate();
-                    },
-                    Some(ActionOp::UpdateOneItem) => {
-                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
-                        manager.activate();
-                        manager.update_db_entry(entry);
-                        manager.deactivate();
-                    }
-                    Some(ActionOp::UpdateMode) => msg_blocking_scalar_unpack!(msg, _, _, _, _,{
-                        manager.retrieve_db();
-                        xous::return_scalar(msg.sender, 1).unwrap();
-                    }),
-                    Some(ActionOp::Quit) => {
-                        break;
-                    }
-                    None => {
-                        log::error!("msg could not be decoded {:?}", msg);
-                    }
-                    #[cfg(feature="vault-testing")]
-                    Some(ActionOp::GenerateTests) => {
-                        manager.populate_tests();
-                        manager.retrieve_db();
-                    }
-                }
-            }
-            xous::destroy_server(sid).ok();
-        }
-    });
-}
-*/
 
 pub struct ActionManager<'a> {
     modals: modals::Modals,
@@ -758,7 +669,10 @@ impl<'a> ActionManager<'a> {
                 // remove the entry from the old UX list
                 let mut desc = String::new();
                 make_pw_name(&pw.description, &pw.username, &mut desc);
-
+                match self.item_lists.try_lock() {
+                    Ok(_) => log::debug!("list is not locked"),
+                    Err(_) => log::debug!("list is locked"),
+                }
                 self.item_lists.lock().unwrap().remove(VaultMode::Password, ListItem::key_from_parts(&desc, key_name));
 
                 // display previous data for edit
@@ -967,7 +881,7 @@ impl<'a> ActionManager<'a> {
                         let mut extra = String::with_capacity(256);
                         let mut desc = String::with_capacity(256);
                         let mut lookup_key = String::with_capacity(384);
-                        let il = self.item_lists.lock().unwrap();
+                        let mut il = self.item_lists.lock().unwrap();
                         for key in keys {
                             #[cfg(feature="vaultperf")]
                             self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 2, std::line!());
@@ -988,13 +902,14 @@ impl<'a> ActionManager<'a> {
 
                                     #[cfg(feature="vaultperf")]
                                     self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
-                                    if let Some(prev_entry) = il.get(self.mode_cache, &lookup_key) {
+                                    if let Some(prev_entry_locked) = il.get(self.mode_cache, &lookup_key) {
+                                        let mut prev_entry = prev_entry_locked.lock().unwrap();
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 3, std::line!());
-                                        prev_entry.lock().unwrap().dirty = true;
+                                        prev_entry.dirty = true;
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                                        if prev_entry.lock().unwrap().atime != pw_rec.atime || prev_entry.lock().unwrap().count != pw_rec.count {
+                                        if prev_entry.atime != pw_rec.atime || prev_entry.count != pw_rec.count {
                                             // this is expensive, so don't run it unless we have to
                                             let human_time = atime_to_str(pw_rec.atime);
                                             // note this code is duplicated in update_db_entry()
@@ -1002,20 +917,20 @@ impl<'a> ActionManager<'a> {
                                             extra.push_str("; ");
                                             extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
                                             extra.push_str(&pw_rec.count.to_string());
-                                            prev_entry.lock().unwrap().extra.clear();
-                                            prev_entry.lock().unwrap().extra.push_str(&extra);
+                                            prev_entry.extra.clear();
+                                            prev_entry.extra.push_str(&extra);
                                         }
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                                        if prev_entry.lock().unwrap().name != desc { // this check should be redundant, but, leave it in to be safe
-                                            prev_entry.lock().unwrap().name.clear();
-                                            prev_entry.lock().unwrap().name.push_str(&desc);
+                                        if prev_entry.name != desc { // this check should be redundant, but, leave it in to be safe
+                                            prev_entry.name.clear();
+                                            prev_entry.name.push_str(&desc);
                                         }
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                                        if prev_entry.lock().unwrap().guid != key.name {
-                                            prev_entry.lock().unwrap().guid.clear();
-                                            prev_entry.lock().unwrap().guid.push_str(&key.name);
+                                        if prev_entry.guid != key.name {
+                                            prev_entry.guid.clear();
+                                            prev_entry.guid.push_str(&key.name);
                                         }
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 3, std::line!());
@@ -1038,8 +953,10 @@ impl<'a> ActionManager<'a> {
                                             atime: pw_rec.atime,
                                             count: pw_rec.count,
                                         };
-                                        self.item_lists.lock().unwrap()
-                                        .insert(self.mode_cache, li.key(), li); // this push is very slow, but we only have to do it once on boot
+                                        unsafe { // safety: fixup_filter() is called after this loop
+                                            // this push is very slow, but we only have to do it once on boot
+                                            il.bulk_insert(self.mode_cache, li.key(), li);
+                                        }
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 4, std::line!());
                                     }
@@ -1067,6 +984,8 @@ impl<'a> ActionManager<'a> {
                             #[cfg(feature="vaultperf")]
                             self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 2, std::line!());
                         }
+                        log::debug!("before fixup_filter: {}", self.tt.elapsed_ms() - start);
+                        il.fixup_filter(); // meets the safety condition for bulk_insert()
                         if oom_keys != 0 {
                             log::warn!("Ran out of cache space handling password keys. {} keys are not loaded.", oom_keys);
                             self.report_err(&format!("Ran out of cache space handling passwords. {} passwords not loaded", oom_keys), None::<crate::storage::Error>);
@@ -1260,6 +1179,7 @@ impl<'a> ActionManager<'a> {
                 }
             }
         }
+        self.item_lists.lock().unwrap().filter_reset(self.mode_cache);
         log::debug!("heap usage B: {}", heap_usage());
         #[cfg(feature="vaultperf")]
         {

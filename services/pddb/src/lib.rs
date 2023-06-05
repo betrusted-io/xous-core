@@ -1046,7 +1046,7 @@ impl Pddb {
                         index += size_of::<u32>();
                         let pos = u32::from_le_bytes(msg_mem.as_slice()[index..index + size_of::<u32>()].try_into().unwrap());
                         index += size_of::<u32>();
-                        log::debug!("unpacking message at {}({})", size, pos);
+                        log::trace!("unpacking message at {}({})", size, pos);
                         if size != 0 && pos != 0 {
                             //log::info!("extract archive: {}, {}, {}, {}", index, size, pos, msg_mem.len());
                             //log::info!("{:x?}", &msg_mem.as_slice::<u8>()[index..index + (size as usize)]);

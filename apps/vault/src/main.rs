@@ -113,7 +113,7 @@ const ERR_TIMEOUT_MS: usize = 5000;
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -171,7 +171,9 @@ fn main() -> ! {
                     Some(ActionOp::MenuEditStage2) => {
                         let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
+                        log::debug!("bef activate");
                         manager.activate();
+                        log::debug!("bef edit");
                         manager.menu_edit(entry);
                         manager.retrieve_db();
                         manager.deactivate();
@@ -657,6 +659,7 @@ fn main() -> ! {
             }
             Some(VaultOp::MenuEditStage1) => {
                 // stage 1 happens here because the filtered list and selection entry are in the responsive UX section.
+                log::debug!("selecting entry for edit");
                 if let Some(entry) = vaultux.selected_entry() {
                     let buf = Buffer::into_buf(entry).expect("IPC error");
                     buf.send(actions_conn, ActionOp::MenuEditStage2.to_u32().unwrap()).expect("messaging error");

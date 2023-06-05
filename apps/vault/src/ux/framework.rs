@@ -16,7 +16,6 @@ use std::convert::TryFrom;
 use usb_device_xous::UsbDeviceType;
 use locales::t;
 use num_traits::*;
-use crate::ListItem;
 
 pub enum NavDir {
     Up,
@@ -45,8 +44,6 @@ pub struct VaultUx {
 
     /// list of all items to be displayed
     item_lists: Arc::<Mutex::<ItemLists>>,
-    /// list of items displayable after filtering
-    filtered_list: Vec::<ListItem>,
     /// last filter query, so we can re-use it when mode is changed
     last_query: String,
 
@@ -141,7 +138,6 @@ impl VaultUx {
             mode,
             title_dirty: true,
             item_lists,
-            filtered_list: Vec::new(),
             pddb: RefCell::new(pddb),
             style,
             item_height,
@@ -240,12 +236,12 @@ impl VaultUx {
                 GlyphStyle::Regular
             },
         };
-        // force redraw of all the items
-        self.title_dirty = true;
-        for item in self.filtered_list.iter_mut() {
-            item.dirty = true;
+        if self.style != style {
+            // force redraw of all the items
+            self.title_dirty = true;
+            self.item_lists.lock().unwrap().mark_all_dirty();
+            self.style = style;
         }
-        self.style = style;
         let available_height = self.screensize.y - TITLE_HEIGHT;
         let glyph_height = self.gam.glyph_height_hint(self.style).unwrap();
         self.item_height = (glyph_height * 2) as i16 + self.margin.y * 2 + 2; // +2 because of the border width
@@ -271,7 +267,7 @@ impl VaultUx {
         self.get_glyph_style();
     }
     pub(crate) fn nav(&mut self, dir: NavDir) {
-        self.item_lists.lock().unwrap().nav(self.mode.lock().unwrap().clone(), dir);
+        self.item_lists.lock().unwrap().nav(dir);
     }
     /// accept a new input string
     pub(crate) fn input(&mut self, line: &str) -> Result<(), xous::Error> {
@@ -285,7 +281,7 @@ impl VaultUx {
         let items_height = self.items_per_screen * self.item_height;
         let mut insert_at = 1 + self.screensize.y - items_height; // +1 to get the border to overlap at the bottom
 
-        if self.filtered_list.len() == 0 || self.action_active.load(AtomicOrdering::SeqCst) {
+        if self.item_lists.lock().unwrap().filter_len() == 0 || self.action_active.load(AtomicOrdering::SeqCst) {
             // no items in list case -- just blank the whole area
             self.gam.draw_rectangle(self.content,
                 Rectangle::new_with_style(
@@ -299,7 +295,7 @@ impl VaultUx {
             )).expect("can't clear content area");
             self.title_dirty = true; // just blanked the whole area, have to redraw the title.
             return;
-        } else if self.title_dirty && self.filtered_list.len() != 0 {
+        } else if self.title_dirty && self.item_lists.lock().unwrap().filter_len() != 0 {
             // handle the title region separately
             self.gam.draw_rectangle(self.content,
                 Rectangle::new_with_style(
@@ -396,9 +392,7 @@ impl VaultUx {
             if self.last_epoch != epoch {
                 self.last_epoch = epoch;
                 // force a redraw of all the items if the epoch has changed
-                for item in self.filtered_list.iter_mut() {
-                    item.dirty = true;
-                }
+                self.item_lists.lock().unwrap().mark_all_dirty();
             }
         }
         self.clear_area();
@@ -449,7 +443,7 @@ impl VaultUx {
         let items_height = self.items_per_screen * self.item_height;
         let mut insert_at = 1 + self.screensize.y - items_height; // +1 to get the border to overlap at the bottom
 
-        if self.filtered_list.len() == 0 {
+        if self.item_lists.lock().unwrap().filter_len() == 0 {
             let mut box_text = TextView::new(self.content,
                 graphics_server::TextBounds::CenteredBot(
                     Rectangle::new(
@@ -470,6 +464,7 @@ impl VaultUx {
         let selected = self.item_lists.lock().unwrap().selected_index();
         let mut guarded_list = self.item_lists.lock().unwrap();
         let current_page = guarded_list.selected_page();
+        log::debug!("current_page len {}", current_page.len());
         for (index, maybe_item) in current_page.iter_mut().enumerate() {
             if insert_at - 1 > self.screensize.y - self.item_height { // -1 because of the overlapping border
                 break;
@@ -477,6 +472,7 @@ impl VaultUx {
             if let Some(item_mutex) = maybe_item {
                 let mut item = item_mutex.lock().unwrap();
                 if item.dirty {
+                    log::debug!("drawing {}", item.name);
                     let mut box_text = TextView::new(self.content,
                         graphics_server::TextBounds::BoundingBox(
                             Rectangle::new(
@@ -776,9 +772,8 @@ impl VaultUx {
         Ok(())
     }
     pub(crate) fn selected_entry(&self) -> Option<SelectedEntry> {
-        self.item_lists.lock().unwrap().selected_entry(
-            (*self.mode.lock().unwrap()).clone()
-        )
+        let mode = (*self.mode.lock().unwrap()).clone();
+        self.item_lists.lock().unwrap().selected_entry(mode)
     }
     pub(crate) fn ensure_hid(&self) {
         self.usb_dev.ensure_core(self.usb_type).unwrap();

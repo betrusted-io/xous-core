@@ -90,6 +90,28 @@ impl ItemLists {
             selection_index: 0,
         }
     }
+    /// safety: caller must call fixup_filter() after successive calls to this are done.
+    pub unsafe fn bulk_insert(&mut self, list_type: VaultMode, key: String, item: ListItem) {
+        match list_type {
+            VaultMode::Fido => self.fido.insert(key, Arc::new(Mutex::new(item))),
+            VaultMode::Totp => self.totp.insert(key, Arc::new(Mutex::new(item))),
+            VaultMode::Password => self.pw.insert(key, Arc::new(Mutex::new(item))),
+        };
+    }
+    pub fn fixup_filter(&mut self) {
+        // grow the filter to accommodate the largest possible list
+        let new_len = self.fido.len()
+        .max(self.totp.len())
+        .max(self.pw.len());
+        // clear the existing records
+        self.filtered_list.iter_mut().for_each(|i| *i = None);
+        self.valid_len = 0;
+        // fill in any growth with null records, guaranteeing that we can always index using slice offsets
+        for _ in 0..new_len.saturating_sub(self.filtered_list.len()) {
+            self.filtered_list.push(None);
+        }
+        self.max_len = new_len;
+    }
     pub fn insert(&mut self, list_type: VaultMode, key: String, item: ListItem) -> Option<ListItem> {
         let maybe_replaced = match list_type {
             VaultMode::Fido => self.fido.insert(key, Arc::new(Mutex::new(item))),
@@ -101,12 +123,14 @@ impl ItemLists {
             VaultMode::Totp => self.totp.len(),
             VaultMode::Password => self.pw.len(),
         };
+        // clear the filter, because we don't know where in the sort that the updated record should go...
+        self.filtered_list.iter_mut().for_each(|i| *i = None);
+        self.valid_len = 0;
+        // fill in any growth with null records, guaranteeing that we can always index using slice offsets
         for _ in 0..new_len.saturating_sub(self.filtered_list.len()) {
-            // fills in any growth with null records, guaranteeing that
-            // we can always index into the vector.
             self.filtered_list.push(None);
         }
-        self.max_len = new_len;
+        self.max_len = self.max_len.max(new_len);
         if let Some(replaced) = maybe_replaced {
             Some(
                 Arc::<_>::try_unwrap(replaced).unwrap().into_inner().unwrap()
@@ -129,9 +153,10 @@ impl ItemLists {
             VaultMode::Password => self.pw.remove(&key),
         };
         if let Some(item) = maybe_item {
+            log::debug!("count bef: {}", Arc::<_>::strong_count(&item));
             self.filtered_list.retain(|x|
                 if let Some(filter_item) = x {
-                    if filter_item.lock().unwrap().guid == item.lock().unwrap().guid {
+                    if Arc::as_ptr(filter_item) == Arc::as_ptr(&item) {
                         false // don't retain
                     } else {
                         true
@@ -140,6 +165,7 @@ impl ItemLists {
                     true
                 }
             );
+            log::debug!("count aft: {}", Arc::<_>::strong_count(&item));
             Some(
                 Arc::<_>::try_unwrap(item).unwrap().into_inner().unwrap()
             )
@@ -190,6 +216,9 @@ impl ItemLists {
         };
         ts[2] = tt.elapsed_ms();
         let mut filter_index = 0;
+        // search the whole list for now -- maybe optimize to a subset later on,
+        // but would require keeping two copies of the filtered list because we can't do
+        // in-place operation on an already filtered list
         for item in itemlist.values_mut() {
             if item.lock().unwrap().name.to_lowercase().starts_with(criteria) {
                 item.lock().unwrap().dirty = true;
@@ -211,7 +240,36 @@ impl ItemLists {
             log::info!("{}: {}", index + 1, elapsed - ts[0]);
         }
     }
-    pub fn nav(&mut self, list_type: VaultMode, dir: NavDir) {
+    /// Sets the filter's buffer to point to the entire contents of the specified list (no filtering)
+    pub fn filter_reset(&mut self, list_type: VaultMode) {
+        // clear the list
+        self.filtered_list.iter_mut().for_each(|i| *i = None);
+        self.valid_len = 0;
+
+        let itemlist = match list_type {
+            VaultMode::Fido => &mut self.fido,
+            VaultMode::Totp => &mut self.totp,
+            VaultMode::Password => &mut self.pw,
+        };
+        assert!(itemlist.len() <= self.filtered_list.len(), "consistency error in filter vector size");
+        for (item, filt)
+        in itemlist.values_mut().zip(self.filtered_list.iter_mut()) {
+            item.lock().unwrap().dirty = true;
+            *filt = Some(item.clone());
+        }
+        self.valid_len = itemlist.len();
+        if self.selection_index >= self.valid_len {
+            if self.valid_len > 0 {
+                self.selection_index = self.valid_len - 1;
+            } else {
+                self.selection_index = 0;
+            }
+        }
+    }
+    pub fn filter_len(&self) -> usize {
+        self.valid_len
+    }
+    pub fn nav(&mut self, dir: NavDir) {
         match dir {
             NavDir::Up => {
                 if self.selection_index > 0 {
@@ -266,6 +324,13 @@ impl ItemLists {
             }
         }
     }
+    pub fn mark_all_dirty(&mut self) {
+        for maybe_item in self.filtered_list.iter_mut() {
+            if let Some(item) = maybe_item {
+                item.lock().unwrap().dirty = true;
+            }
+        }
+    }
     fn mark_screen_as_dirty(&mut self, index: usize) {
         let page = index as i16 / self.items_per_screen.get() as i16;
         for item in self.filtered_list[
@@ -311,21 +376,23 @@ impl ItemLists {
         self.filtered_list[self.selection_index].as_mut().unwrap().lock().unwrap().dirty = true;
     }
     pub fn selected_entry(&self, mode: VaultMode) -> Option<SelectedEntry> {
-        if self.selection_index > self.valid_len {
+        let ret = if self.selection_index > self.valid_len {
             None
         } else {
             if let Some(entry) = &self.filtered_list[self.selection_index] {
+                let guarded_entry = entry.lock().unwrap();
                 Some(
                     SelectedEntry {
-                        key_name: xous_ipc::String::from_str(entry.lock().unwrap().guid.to_string()),
-                        description: xous_ipc::String::from_str(entry.lock().unwrap().name.to_string()),
+                        key_name: xous_ipc::String::from_str(guarded_entry.guid.to_string()),
+                        description: xous_ipc::String::from_str(guarded_entry.name.to_string()),
                         mode
                     }
                 )
             } else {
                 None
             }
-        }
+        };
+        ret
     }
 
 }
