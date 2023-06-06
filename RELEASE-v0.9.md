@@ -392,7 +392,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - #388 via @eupn adds physical address resolution for a remote virtual memory process, allowing for coordination with remote DMA initiators. Does introduce some potential security problems, so gated behind the `v2p` flag.
 - Fix #339 by adjusting the shellchat API call to match what is done in status bar
 - Improved wifi scanning (fixes #336) - scans are now sorted by strength; old APs are retired; and the UX will pause while the scan occurs. Repeated scans still require going through the entire menu tree again; this is because modal radio-box lists aren't dynamically updateable.
-- Improve performance of filtering operations in `vault` by ~100x by refactoring the item cache to work on `Vec` that is repeatedly sorted, instead of on a `BTreeMap` that is referenced. Turns out that sorting is a far cheaper operation than reference-counted shared references, or copying data to the heap (to avoid the shared reference).
+- Improve performance of filtering operations in `vault` by ~100x by refactoring the item cache to work on `Vec` that is repeatedly sorted, instead of on a `BTreeMap` that is referenced. Turns out that sorting is a far cheaper operation than reference-counted shared references, or copying data to the heap (to avoid the shared reference). See PR#389 for details.
 
 ## Roadmap
 - Lots of testing and bug fixes
