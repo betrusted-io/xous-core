@@ -467,7 +467,7 @@ impl VaultUx {
                 break;
             }
             if item.dirty {
-                log::debug!("drawing {}", item.name);
+                log::debug!("drawing {}", item.name());
                 let mut box_text = TextView::new(self.content,
                     graphics_server::TextBounds::BoundingBox(
                         Rectangle::new(
@@ -485,7 +485,7 @@ impl VaultUx {
                     box_text.border_width = 4;
                 }
                 match mode_at_entry {
-                    VaultMode::Fido | VaultMode::Password => {write!(box_text, "{}\n{}", item.name, item.extra).ok();},
+                    VaultMode::Fido | VaultMode::Password => {write!(box_text, "{}\n{}", item.name(), item.extra).ok();},
                     VaultMode::Totp => {
                         let fields = item.extra.split(':').collect::<Vec<&str>>();
                         if fields.len() == 5 {
@@ -509,7 +509,7 @@ impl VaultUx {
                                 ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
                                 // why code on top? because the item.name can be very long, and it can wrap which would cause
                                 // the code to become hidden.
-                                write!(box_text, "{}\n{}", code, item.name).ok();
+                                write!(box_text, "{}\n{}", code, item.name()).ok();
                             } else {
                                 let code = generate_totp_code(
                                     step_seconds,
@@ -517,7 +517,7 @@ impl VaultUx {
                                 ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
                                 // why code on top? because the item.name can be very long, and it can wrap which would cause
                                 // the code to become hidden.
-                                write!(box_text, "HOTP {}\n{}", code, item.name).ok();
+                                write!(box_text, "HOTP {}\n{}", code, item.name()).ok();
                             }
                         } else {
                             write!(box_text, "{}", t!("vault.error.record_error", xous::LANG)).ok();

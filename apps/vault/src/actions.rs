@@ -512,14 +512,14 @@ impl<'a> ActionManager<'a> {
                 extra.push_str("; ");
                 extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
                 extra.push_str(&pw.count.to_string());
-                let li = ListItem {
-                    name: desc.to_string(), // these allocs will be slow, but we do it only once on boot
-                    extra: extra.to_string(),
-                    dirty: true,
-                    guid: guid.to_string(),
-                    atime: pw.atime,
-                    count: pw.count,
-                };
+                let li = ListItem::new(
+                    desc.to_string(), // these allocs will be slow, but we do it only once on boot
+                    extra.to_string(),
+                    true,
+                    guid.to_string(),
+                    pw.atime,
+                    pw.count,
+                );
                 log::debug!("updating {} to list item {}", li.extra, li.key());
                 assert!(
                     self.item_lists.lock().unwrap().insert_unique(entry.mode, li).is_some(),
@@ -923,9 +923,9 @@ impl<'a> ActionManager<'a> {
                                         }
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                                        if prev_entry.name != desc { // this check should be redundant, but, leave it in to be safe
-                                            prev_entry.name.clear();
-                                            prev_entry.name.push_str(&desc);
+                                        if prev_entry.name() != &desc { // this check should be redundant, but, leave it in to be safe
+                                            prev_entry.name_clear();
+                                            prev_entry.name_push_str(&desc);
                                         }
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
@@ -946,14 +946,14 @@ impl<'a> ActionManager<'a> {
                                         extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
                                         extra.push_str(&pw_rec.count.to_string());
 
-                                        let li = ListItem {
-                                            name: desc.to_string(), // these allocs will be slow, but we do it only once on boot
-                                            extra: extra.to_string(),
-                                            dirty: true,
-                                            guid: key.name,
-                                            atime: pw_rec.atime,
-                                            count: pw_rec.count,
-                                        };
+                                        let li = ListItem::new(
+                                            desc.to_string(), // these allocs will be slow, but we do it only once on boot
+                                            extra.to_string(),
+                                            true,
+                                            key.name,
+                                            pw_rec.atime,
+                                            pw_rec.count,
+                                        );
                                         il.push(self.mode_cache, li);
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 4, std::line!());
@@ -1022,14 +1022,14 @@ impl<'a> ActionManager<'a> {
                                         ai.count,
                                     );
                                     let desc = format!("{} (U2F)", ai.name);
-                                    let li = ListItem {
-                                        name: desc,
+                                    let li = ListItem::new(
+                                        desc,
                                         extra,
-                                        dirty: true,
-                                        guid: key.name,
-                                        count: ai.count,
-                                        atime: ai.atime,
-                                    };
+                                        true,
+                                        key.name,
+                                        ai.count,
+                                        ai.atime,
+                                    );
                                     self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                                 } else {
                                     let err = format!("{}:{}:{}: ({})[moved data]...",
@@ -1080,14 +1080,14 @@ impl<'a> ActionManager<'a> {
                                                 };
                                                 let desc = format!("{} / {} (FIDO2)", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
                                                 let extra = format!("{}", name);
-                                                let li = ListItem {
-                                                    name: desc,
+                                                let li = ListItem::new(
+                                                    desc,
                                                     extra,
-                                                    dirty: true,
-                                                    guid: key.name,
-                                                    count: 0,
-                                                    atime: 0,
-                                                };
+                                                    true,
+                                                    key.name,
+                                                    0,
+                                                    0,
+                                                );
                                                 self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                                             }
                                             None => {
@@ -1139,14 +1139,14 @@ impl<'a> ActionManager<'a> {
                                         if totp.is_hotp {"HOTP"} else {"TOTP"}
                                     );
                                     let desc = format!("{}", totp.name);
-                                    let li = ListItem {
-                                        name: desc,
+                                    let li = ListItem::new(
+                                        desc,
                                         extra,
-                                        dirty: true,
-                                        guid: key.name,
-                                        count: 0,
-                                        atime: 0,
-                                    };
+                                        true,
+                                        key.name,
+                                        0,
+                                        0,
+                                    );
                                     self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                                 } else {
                                     let err = format!("{}:{}:{}: ({})[moved data]...",

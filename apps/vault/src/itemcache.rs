@@ -11,7 +11,7 @@ pub struct ListKey {
 impl ListKey {
     pub fn key_from_parts(name: &str, guid: &str) -> Self {
         ListKey {
-            name: name.to_owned(),
+            name: name.to_owned().to_lowercase(),
             guid: guid.to_owned(),
         }
     }
@@ -24,9 +24,39 @@ impl ListKey {
     // re-uses the existing storage to avoid allocations
     pub fn reset_from_parts(&mut self, name: &str, guid: &str) {
         self.name.clear();
-        self.name.push_str(name);
+        self.name.push_str(&name.to_lowercase());
         self.guid.clear();
         self.guid.push_str(guid);
+    }
+}
+
+impl Ord for ListKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.name.cmp(&other.name) {
+            Ordering::Equal => {
+                self.guid.cmp(&other.guid)
+            },
+            Ordering::Greater => Ordering::Greater,
+            Ordering::Less => Ordering::Less,
+        }
+    }
+}
+impl PartialOrd::<ListItem> for ListKey {
+    fn partial_cmp(&self, other: &ListItem) -> Option<Ordering> {
+        Some(
+            match self.name.cmp(&other.sortable_name) {
+                Ordering::Equal => {
+                    self.guid.cmp(&other.guid)
+                },
+                Ordering::Greater => Ordering::Greater,
+                Ordering::Less => Ordering::Less,
+            }
+        )
+    }
+}
+impl PartialOrd for ListKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 impl PartialEq for ListKey {
@@ -34,42 +64,20 @@ impl PartialEq for ListKey {
         self.name == other.name && self.guid == other.guid
     }
 }
-impl PartialOrd for ListKey {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(
-            match self.name.to_lowercase().cmp(&other.name.to_lowercase()) {
-                Ordering::Equal => {
-                    self.guid.cmp(&other.guid)
-                },
-                Ordering::Greater => Ordering::Greater,
-                Ordering::Less => Ordering::Less,
-            }
-        )
-    }
-}
+impl Eq for ListKey {}
 impl PartialEq::<ListItem> for ListKey {
     fn eq(&self, other: &ListItem) -> bool {
-        self.name == other.name && self.guid == other.guid
+        self.name == other.sortable_name && self.guid == other.guid
     }
 }
-impl PartialOrd::<ListItem> for ListKey {
-    fn partial_cmp(&self, other: &ListItem) -> Option<Ordering> {
-        Some(
-            match self.name.to_lowercase().cmp(&other.name.to_lowercase()) {
-                Ordering::Equal => {
-                    self.guid.cmp(&other.guid)
-                },
-                Ordering::Greater => Ordering::Greater,
-                Ordering::Less => Ordering::Less,
-            }
-        )
-    }
-}
+
+
 /// Display list for items. "name" is the key by which the list is sorted.
 /// "extra" is more information about the item, which should not be part of the sort.
 #[derive(Debug)]
 pub struct ListItem {
-    pub name: String,
+    name: String,
+    sortable_name: String,
     pub extra: String,
     /// used by drawing routines to optimize refresh time
     pub dirty: bool,
@@ -79,30 +87,9 @@ pub struct ListItem {
     pub atime: u64,
     pub count: u64,
 }
-impl ListItem {
-    // good riddance.
-    /* pub fn clone(&self) -> ListItem {
-        ListItem {
-            name: self.name.to_string(),
-            extra: self.extra.to_string(),
-            dirty: self.dirty,
-            guid: self.guid.to_string(),
-            atime: self.atime,
-            count: self.count,
-        }
-    } */
-    /// This is made available for edit/delete routines to generate the key without having to
-    /// make a whole ListItem record (which is somewhat expensive).
-    pub fn key_from_parts(name: &str, guid: &str) -> String {
-        name.to_lowercase() + &guid.to_string()
-    }
-    pub fn key(&self) -> String {
-        Self::key_from_parts(&self.name, &self.guid)
-    }
-}
 impl Ord for ListItem {
     fn cmp(&self, other: &Self) -> Ordering {
-        match self.name.to_lowercase().cmp(&other.name.to_lowercase()) {
+        match self.sortable_name.cmp(&other.sortable_name) {
             Ordering::Equal => {
                 self.guid.cmp(&other.guid)
             },
@@ -120,7 +107,7 @@ impl PartialOrd::<ListKey> for ListItem {
     fn partial_cmp(&self, other: &ListKey) -> Option<Ordering> {
         // log::info!("self {}:{}\nother: {}:{}", self.name, self.guid, other.name, other.guid);
         Some(
-            match self.name.to_lowercase().cmp(&other.name.to_lowercase()) {
+            match self.sortable_name.cmp(&other.name) {
                 Ordering::Equal => {
                     self.guid.cmp(&other.guid)
                 },
@@ -132,15 +119,56 @@ impl PartialOrd::<ListKey> for ListItem {
 }
 impl PartialEq::<ListKey> for ListItem {
     fn eq(&self, other: &ListKey) -> bool {
-        self.name == other.name && self.guid == other.guid
+        self.sortable_name == other.name && self.guid == other.guid
     }
 }
 impl PartialEq for ListItem {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.guid == other.guid
+        self.sortable_name == other.sortable_name && self.guid == other.guid
     }
 }
 impl Eq for ListItem {}
+
+impl ListItem {
+    pub fn new(
+        name: String,
+        extra: String,
+        dirty: bool,
+        guid: String,
+        atime: u64,
+        count: u64,
+    ) -> Self {
+        let sortable_name = name.to_lowercase();
+        Self {
+            name,
+            sortable_name,
+            extra,
+            dirty,
+            guid,
+            atime,
+            count,
+        }
+    }
+    /// This is made available for edit/delete routines to generate the key without having to
+    /// make a whole ListItem record (which is somewhat expensive).
+    pub fn key_from_parts(name: &str, guid: &str) -> String {
+        name.to_lowercase() + &guid.to_string()
+    }
+    pub fn key(&self) -> String {
+        Self::key_from_parts(&self.name, &self.guid)
+    }
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+    pub fn name_clear(&mut self) {
+        self.name.clear();
+        self.sortable_name.clear();
+    }
+    pub fn name_push_str(&mut self, name: &String) {
+        self.name.push_str(name);
+        self.sortable_name.push_str(&name.to_lowercase());
+    }
+}
 
 pub struct FilteredListView {
     list: Vec<ListItem>,
@@ -240,7 +268,7 @@ impl FilteredListView {
             return;
         }
         // step 1. binary search to find if the criteria is even anywhere in the list.
-        match self.list.binary_search_by(|probe| probe.name.partial_cmp(criteria).unwrap()) {
+        match self.list.binary_search_by(|probe| probe.sortable_name.partial_cmp(criteria).unwrap()) {
             Ok(mut index) | Err(mut index) => {
                 if !self.list[index].name.to_lowercase().starts_with(criteria) {
                     self.filter_range = None
