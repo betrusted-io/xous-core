@@ -872,7 +872,6 @@ impl<'a> ActionManager<'a> {
     ///   - `format!()` is very slow, so we use `push_str()` where possible
     ///   - allocations are slow, so we try to avoid them at all costs
     pub(crate) fn retrieve_db(&mut self) {
-        self.modals.dynamic_notification(Some(t!("vault.reloading_database", xous::LANG)), None).ok();
         #[cfg(feature="vaultperf")]
         self.pm.stop_and_reset();
         #[cfg(feature="vaultperf")]
@@ -886,6 +885,7 @@ impl<'a> ActionManager<'a> {
         log::debug!("heap usage A: {}", heap_usage());
         match self.mode_cache {
             VaultMode::Password => {
+                self.modals.dynamic_notification(Some(t!("vault.reloading_database", xous::LANG)), None).ok();
                 let start = self.tt.elapsed_ms();
                 #[cfg(feature="vaultperf")]
                 self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 1, std::line!());
@@ -1021,6 +1021,7 @@ impl<'a> ActionManager<'a> {
                 #[cfg(feature="vaultperf")]
                 self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 1, std::line!());
                 log::info!("readout took {} ms for {} elements", self.tt.elapsed_ms() - start, klen);
+                self.modals.dynamic_notification_close().ok();
             }
             VaultMode::Fido => {
                 // first assemble U2F records
@@ -1154,7 +1155,6 @@ impl<'a> ActionManager<'a> {
         }
         self.item_lists.lock().unwrap().filter_reset(self.mode_cache);
         log::debug!("heap usage B: {}", heap_usage());
-        self.modals.dynamic_notification_close().ok();
         #[cfg(feature="vaultperf")]
         {
             self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 0, std::line!());
