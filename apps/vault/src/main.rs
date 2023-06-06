@@ -9,6 +9,8 @@ mod prereqs;
 mod vendor_commands;
 mod storage;
 mod migration_v1;
+mod itemcache;
+use itemcache::*;
 
 use locales::t;
 
@@ -19,14 +21,14 @@ use vault::{
     SELF_CONN, Transport, VaultOp
 };
 
-use actions::{ActionOp, start_actions_thread};
-use crate::ux::framework::{ListItem, NavDir};
+use actions::ActionOp;
+use crate::ux::framework::NavDir;
 use crate::prereqs::ntp_updater;
 use crate::vendor_commands::VendorSession;
 
 use ux::framework::{VaultUx, DEFAULT_FONT, FONT_LIST, name_to_style};
 use xous_ipc::Buffer;
-use xous::{send_message, Message};
+use xous::{send_message, Message, msg_blocking_scalar_unpack};
 use usbd_human_interface_device::device::fido::*;
 use num_traits::*;
 
@@ -34,8 +36,6 @@ use std::thread;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use std::collections::BTreeMap;
-
 
 // CTAP2 testing notes:
 //
@@ -104,19 +104,9 @@ pub enum VaultMode {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct SelectedEntry {
-    pub key_name: xous_ipc::String::<256>,
+    pub key_guid: xous_ipc::String::<256>,
     pub description: xous_ipc::String::<256>,
     pub mode: VaultMode,
-}
-pub struct ItemLists {
-    pub fido: BTreeMap::<String, ListItem>,
-    pub totp: BTreeMap::<String, ListItem>,
-    pub pw: BTreeMap::<String, ListItem>,
-}
-impl ItemLists {
-    pub fn new() -> Self {
-        ItemLists { fido: BTreeMap::new(), totp: BTreeMap::new(), pw: BTreeMap::new() }
-    }
 }
 
 const ERR_TIMEOUT_MS: usize = 5000;
@@ -147,14 +137,94 @@ fn main() -> ! {
     // redraws of the background list to block/fail.
     let actions_sid = xous::create_server().unwrap();
     SELF_CONN.store(conn, Ordering::SeqCst);
-    start_actions_thread(
-        conn,
-        actions_sid,
-        mode.clone(),
-        item_lists.clone(),
-        action_active.clone(),
-        opensk_mutex.clone(),
-    );
+    let _ = thread::spawn({
+        let main_conn = conn.clone();
+        let sid = actions_sid.clone();
+        let mode = mode.clone();
+        let item_lists = item_lists.clone();
+        let action_active = action_active.clone();
+        let opensk_mutex = opensk_mutex.clone();
+        move || {
+            let mut manager = crate::actions::ActionManager::new(main_conn, mode, item_lists, action_active, opensk_mutex);
+            loop {
+                let msg = xous::receive_message(sid).unwrap();
+                let opcode: Option<ActionOp> = FromPrimitive::from_usize(msg.body.id());
+                log::debug!("{:?}", opcode);
+                match opcode {
+                    Some(ActionOp::MenuAddnew) => {
+                        manager.activate();
+                        manager.menu_addnew(); // this is responsible for updating the item cache
+                        manager.deactivate();
+                    },
+                    Some(ActionOp::MenuDeleteStage2) => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
+                        manager.activate();
+                        manager.menu_delete(entry);
+                        manager.retrieve_db();
+                        manager.deactivate();
+                    },
+                    Some(ActionOp::MenuEditStage2) => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
+                        manager.activate();
+                        manager.menu_edit(entry); // this is responsible for updating the item cache
+                        manager.deactivate();
+                    },
+                    Some(ActionOp::MenuUnlockBasis) => {
+                        manager.activate();
+                        manager.unlock_basis();
+                        manager.item_lists.lock().unwrap().clear(VaultMode::Password); // clear the cached item list for passwords (totp/fido are not cached and don't need clearing)
+                        manager.retrieve_db();
+                        manager.deactivate();
+                    },
+                    Some(ActionOp::MenuManageBasis) => {
+                        manager.activate();
+                        manager.manage_basis();
+                        manager.item_lists.lock().unwrap().clear(VaultMode::Password); // clear the cached item list for passwords
+                        manager.retrieve_db();
+                        manager.deactivate();
+                    }
+                    Some(ActionOp::MenuClose) => {
+                        // dummy activate/de-activate cycle because we have to trigger a redraw of the underlying UX
+                        manager.activate();
+                        manager.deactivate();
+                    },
+                    Some(ActionOp::UpdateOneItem) => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
+                        manager.activate();
+                        manager.update_db_entry(entry);
+                        manager.deactivate();
+                    }
+                    Some(ActionOp::UpdateMode) => msg_blocking_scalar_unpack!(msg, _, _, _, _,{
+                        // the password DBs are now not shared between modes, so no need to re-retrieve it.
+                        if manager.is_db_empty() {
+                            manager.retrieve_db();
+                        }
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                    }),
+                    Some(ActionOp::ReloadDb) => msg_blocking_scalar_unpack!(msg, _, _, _, _,{
+                        manager.retrieve_db();
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                    }),
+                    Some(ActionOp::Quit) => {
+                        break;
+                    }
+                    None => {
+                        log::error!("msg could not be decoded {:?}", msg);
+                    }
+                    #[cfg(feature="vault-testing")]
+                    Some(ActionOp::GenerateTests) => {
+                        manager.populate_tests();
+                        manager.retrieve_db();
+                    }
+                }
+            }
+            xous::destroy_server(sid).ok();
+        }
+    });
+
     let actions_conn = xous::connect(actions_sid).unwrap();
 
     // spawn the FIDO USB->UX update kicker thread. It is responsible for issuing a UX refresh command
@@ -369,7 +439,7 @@ fn main() -> ! {
         menu_mgr,
         actions_conn,
         mode.clone(),
-        item_lists,
+        item_lists.clone(),
         action_active.clone()
     );
     vaultux.update_mode();
@@ -482,7 +552,7 @@ fn main() -> ! {
             }
             Some(VaultOp::ReloadDbAndFullRedraw) => {
                 send_message(actions_conn,
-                    Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                    Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0)
                 ).ok();
                 vaultux.update_mode();
                 if allow_redraw {
@@ -494,7 +564,7 @@ fn main() -> ! {
                 // this set of calls will effectively force a reload of any UX data
                 *mode.lock().unwrap() = VaultMode::Fido;
                 send_message(actions_conn,
-                    Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                    Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0)
                 ).ok();
                 vaultux.update_mode();
                 vaultux.input("").unwrap();
@@ -589,6 +659,7 @@ fn main() -> ! {
             }
             Some(VaultOp::MenuEditStage1) => {
                 // stage 1 happens here because the filtered list and selection entry are in the responsive UX section.
+                log::debug!("selecting entry for edit");
                 if let Some(entry) = vaultux.selected_entry() {
                     let buf = Buffer::into_buf(entry).expect("IPC error");
                     buf.send(actions_conn, ActionOp::MenuEditStage2.to_u32().unwrap()).expect("messaging error");

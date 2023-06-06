@@ -13,66 +13,9 @@ use std::sync::atomic::Ordering as AtomicOrdering;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;
 use std::convert::TryFrom;
-use std::cmp::Ordering;
 use usb_device_xous::UsbDeviceType;
 use locales::t;
 use num_traits::*;
-
-/// Display list for items. "name" is the key by which the list is sorted.
-/// "extra" is more information about the item, which should not be part of the sort.
-pub struct ListItem {
-    pub name: String,
-    pub extra: String,
-    pub dirty: bool,
-    /// this is the name of the key used to refer to the item
-    pub guid: String,
-    /// stash a copy so we can compare to the DB record and avoid re-generating the atime/count string if it hasn't changed.
-    pub atime: u64,
-    pub count: u64,
-}
-impl ListItem {
-    pub fn clone(&self) -> ListItem {
-        ListItem {
-            name: self.name.to_string(),
-            extra: self.extra.to_string(),
-            dirty: self.dirty,
-            guid: self.guid.to_string(),
-            atime: self.atime,
-            count: self.count,
-        }
-    }
-    /// This is made available for edit/delete routines to generate the key without having to
-    /// make a whole ListItem record (which is somewhat expensive).
-    pub fn key_from_parts(name: &str, guid: &str) -> String {
-        name.to_lowercase() + &guid.to_string()
-    }
-    pub fn key(&self) -> String {
-        Self::key_from_parts(&self.name, &self.guid)
-    }
-}
-impl Ord for ListItem {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.name.cmp(&other.name) {
-            Ordering::Equal => {
-                self.guid.cmp(&other.guid)
-            },
-            Ordering::Greater => Ordering::Greater,
-            Ordering::Less => Ordering::Less,
-        }
-    }
-}
-impl PartialOrd for ListItem {
-
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl PartialEq for ListItem {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.guid == other.guid
-    }
-}
-impl Eq for ListItem {}
 
 pub enum NavDir {
     Up,
@@ -101,10 +44,6 @@ pub struct VaultUx {
 
     /// list of all items to be displayed
     item_lists: Arc::<Mutex::<ItemLists>>,
-    /// list of items displayable after filtering
-    filtered_list: Vec::<ListItem>,
-    /// the index into the item_list that is selected
-    selection_index: usize,
     /// last filter query, so we can re-use it when mode is changed
     last_query: String,
 
@@ -186,6 +125,7 @@ impl VaultUx {
         let glyph_height = gam.glyph_height_hint(style).unwrap();
         let item_height = (glyph_height * 2) as i16 + margin.y * 2 + 2; // +2 because of the border width
         let items_per_screen = available_height / item_height;
+        item_lists.lock().unwrap().set_items_per_screen(items_per_screen);
 
         let current_time = get_current_unix_time().unwrap_or(0);
 
@@ -198,8 +138,6 @@ impl VaultUx {
             mode,
             title_dirty: true,
             item_lists,
-            selection_index: 0,
-            filtered_list: Vec::new(),
             pddb: RefCell::new(pddb),
             style,
             item_height,
@@ -217,17 +155,18 @@ impl VaultUx {
     }
 
     pub(crate) fn basis_change(&mut self) {
-        self.item_lists.lock().unwrap().pw.clear();
-        self.item_lists.lock().unwrap().fido.clear();
-        self.item_lists.lock().unwrap().totp.clear();
+        self.item_lists.lock().unwrap().clear_all();
     }
 
     pub(crate) fn update_mode(&mut self) {
         self.title_dirty = true;
-        self.filtered_list.clear();
-        self.selection_index = 0;
-        let query = self.last_query.to_string();
-        self.filter(&query);
+        {
+            let mut guarded_list = self.item_lists.lock().unwrap();
+            guarded_list.clear_filter();
+            let query = self.last_query.to_string();
+            guarded_list
+            .filter(self.mode.lock().unwrap().clone(), &query);
+        }
         self.swap_submenu();
     }
 
@@ -297,16 +236,17 @@ impl VaultUx {
                 GlyphStyle::Regular
             },
         };
-        // force redraw of all the items
-        self.title_dirty = true;
-        for item in self.filtered_list.iter_mut() {
-            item.dirty = true;
+        if self.style != style {
+            // force redraw of all the items
+            self.title_dirty = true;
+            self.item_lists.lock().unwrap().mark_all_dirty();
+            self.style = style;
         }
-        self.style = style;
         let available_height = self.screensize.y - TITLE_HEIGHT;
         let glyph_height = self.gam.glyph_height_hint(self.style).unwrap();
         self.item_height = (glyph_height * 2) as i16 + self.margin.y * 2 + 2; // +2 because of the border width
         self.items_per_screen = available_height / self.item_height;
+        self.item_lists.lock().unwrap().set_items_per_screen(self.items_per_screen);
     }
     pub(crate) fn set_glyph_style(&mut self, style: GlyphStyle) {
         self.pddb.borrow().delete_key(VAULT_CONFIG_DICT, VAULT_CONFIG_KEY_FONT, Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS))
@@ -326,96 +266,24 @@ impl VaultUx {
         self.pddb.borrow().sync().ok();
         self.get_glyph_style();
     }
-    fn mark_as_dirty(&mut self, index: usize) {
-        let list_len = self.filtered_list.len();
-        if list_len > 0 {
-            self.filtered_list[index.min(list_len - 1)].dirty = true;
-        }
-    }
-    fn mark_screen_as_dirty(&mut self, index: usize) {
-        let page = index as i16 / self.items_per_screen;
-        let list_len = self.filtered_list.len();
-        for item in self.filtered_list[
-            ((page as usize) * self.items_per_screen as usize).min(list_len) ..
-            ((1 + page as usize) * self.items_per_screen as usize).min(list_len)
-        ].iter_mut() {
-            item.dirty = true;
-        }
-    }
-    fn backpropagate_item(&mut self, mut updated_item: ListItem) -> bool {
-        let il = &mut self.item_lists.lock().unwrap();
-        let item_list = match self.mode.lock().unwrap().clone() {
-            VaultMode::Fido => &mut il.fido,
-            VaultMode::Totp => &mut il.totp,
-            VaultMode::Password => &mut il.pw,
-        };
-        updated_item.dirty = true;
-        item_list.insert(updated_item.key(), updated_item).is_some()
-    }
     pub(crate) fn nav(&mut self, dir: NavDir) {
-        match dir {
-            NavDir::Up => {
-                if self.selection_index > 0 {
-                    let starting_page = self.get_page();
-                    self.mark_as_dirty(self.selection_index);
-                    self.selection_index -= 1;
-                    self.mark_as_dirty(self.selection_index);
-                    if starting_page != self.get_page() {
-                        self.mark_screen_as_dirty(self.selection_index);
-                    }
-                }
-            }
-            NavDir::Down => {
-                if self.selection_index < self.filtered_list.len() {
-                    let starting_page = self.get_page();
-                    self.mark_as_dirty(self.selection_index);
-                    self.selection_index += 1;
-                    self.mark_as_dirty(self.selection_index);
-                    if starting_page != self.get_page() {
-                        self.mark_screen_as_dirty(self.selection_index);
-                    }
-                }
-            }
-            NavDir::PageUp => {
-                if self.selection_index > self.items_per_screen as usize {
-                    self.mark_screen_as_dirty(self.selection_index);
-                    self.selection_index -= self.items_per_screen as usize;
-                    self.mark_screen_as_dirty(self.selection_index);
-                } else {
-                    self.mark_as_dirty(self.selection_index);
-                    self.selection_index = 0;
-                    self.mark_as_dirty(self.selection_index);
-                }
-            }
-            NavDir::PageDown => {
-                if self.selection_index < self.filtered_list.len() - self.items_per_screen as usize {
-                    self.mark_screen_as_dirty(self.selection_index);
-                    self.selection_index += self.items_per_screen as usize;
-                    self.mark_screen_as_dirty(self.selection_index);
-                } else {
-                    self.mark_as_dirty(self.selection_index);
-                    self.selection_index = self.filtered_list.len() - 1;
-                    self.mark_as_dirty(self.selection_index);
-                }
-            }
-        }
+        self.item_lists.lock().unwrap().nav((*self.mode.lock().unwrap()).clone(), dir);
     }
     /// accept a new input string
     pub(crate) fn input(&mut self, line: &str) -> Result<(), xous::Error> {
         self.title_dirty = true;
-        self.filter(line);
-        self.last_query = line.to_string();
+        let owned_line = line.to_owned();
+        self.filter(&owned_line);
+        self.last_query = owned_line;
         Ok(())
-    }
-    fn get_page(&self) -> i16 {
-        self.selection_index as i16 / self.items_per_screen
     }
 
     fn clear_area(&mut self) {
         let items_height = self.items_per_screen * self.item_height;
         let mut insert_at = 1 + self.screensize.y - items_height; // +1 to get the border to overlap at the bottom
+        let mode_cache = (*self.mode.lock().unwrap()).clone();
 
-        if self.filtered_list.len() == 0 || self.action_active.load(AtomicOrdering::SeqCst) {
+        if self.item_lists.lock().unwrap().filter_len(mode_cache) == 0 || self.action_active.load(AtomicOrdering::SeqCst) {
             // no items in list case -- just blank the whole area
             self.gam.draw_rectangle(self.content,
                 Rectangle::new_with_style(
@@ -429,7 +297,7 @@ impl VaultUx {
             )).expect("can't clear content area");
             self.title_dirty = true; // just blanked the whole area, have to redraw the title.
             return;
-        } else if self.title_dirty && self.filtered_list.len() != 0 {
+        } else if self.title_dirty && self.item_lists.lock().unwrap().filter_len(mode_cache) != 0 {
             // handle the title region separately
             self.gam.draw_rectangle(self.content,
                 Rectangle::new_with_style(
@@ -446,12 +314,9 @@ impl VaultUx {
         let mut dirty_tl: Option<Point> = None;
         let mut dirty_br: Option<Point> = None;
 
-        let page = self.get_page();
-        let list_len = self.filtered_list.len();
-        for item in self.filtered_list[
-            ((page as usize) * self.items_per_screen as usize).min(list_len) ..
-            ((1 + page as usize) * self.items_per_screen as usize).min(list_len)
-        ].iter() {
+        let mut guarded_list = self.item_lists.lock().unwrap();
+        let current_page = guarded_list.selected_page(mode_cache);
+        for item in current_page.iter() {
             if item.dirty && dirty_tl.is_none() {
                 // start the dirty area
                 dirty_tl = Some(Point::new(0, insert_at));
@@ -524,9 +389,7 @@ impl VaultUx {
             if self.last_epoch != epoch {
                 self.last_epoch = epoch;
                 // force a redraw of all the items if the epoch has changed
-                for item in self.filtered_list.iter_mut() {
-                    item.dirty = true;
-                }
+                self.item_lists.lock().unwrap().mark_all_dirty();
             }
         }
         self.clear_area();
@@ -577,7 +440,7 @@ impl VaultUx {
         let items_height = self.items_per_screen * self.item_height;
         let mut insert_at = 1 + self.screensize.y - items_height; // +1 to get the border to overlap at the bottom
 
-        if self.filtered_list.len() == 0 {
+        if self.item_lists.lock().unwrap().filter_len(mode_at_entry) == 0 {
             let mut box_text = TextView::new(self.content,
                 graphics_server::TextBounds::CenteredBot(
                     Rectangle::new(
@@ -595,17 +458,16 @@ impl VaultUx {
             return Ok(());
         }
         // ---- draw list body area ----
-        let page = self.get_page();
-        let selected = self.selection_index as i16 % self.items_per_screen;
-        let list_len = self.filtered_list.len();
-        for (index, item) in self.filtered_list[
-            ((page as usize) * self.items_per_screen as usize).min(list_len) ..
-            ((1 + page as usize) * self.items_per_screen as usize).min(list_len)
-        ].iter_mut().enumerate() {
+        let selected = self.item_lists.lock().unwrap().selected_index(mode_at_entry);
+        let mut guarded_list = self.item_lists.lock().unwrap();
+        let current_page = guarded_list.selected_page(mode_at_entry);
+        log::debug!("current_page len {}", current_page.len());
+        for (index, item) in current_page.iter_mut().enumerate() {
             if insert_at - 1 > self.screensize.y - self.item_height { // -1 because of the overlapping border
                 break;
             }
             if item.dirty {
+                log::debug!("drawing {}", item.name());
                 let mut box_text = TextView::new(self.content,
                     graphics_server::TextBounds::BoundingBox(
                         Rectangle::new(
@@ -619,11 +481,11 @@ impl VaultUx {
                 box_text.clear_area = true;
                 box_text.style = self.style;
                 box_text.margin = self.margin;
-                if index == selected as usize {
+                if index == selected {
                     box_text.border_width = 4;
                 }
                 match mode_at_entry {
-                    VaultMode::Fido | VaultMode::Password => {write!(box_text, "{}\n{}", item.name, item.extra).ok();},
+                    VaultMode::Fido | VaultMode::Password => {write!(box_text, "{}\n{}", item.name(), item.extra).ok();},
                     VaultMode::Totp => {
                         let fields = item.extra.split(':').collect::<Vec<&str>>();
                         if fields.len() == 5 {
@@ -647,7 +509,7 @@ impl VaultUx {
                                 ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
                                 // why code on top? because the item.name can be very long, and it can wrap which would cause
                                 // the code to become hidden.
-                                write!(box_text, "{}\n{}", code, item.name).ok();
+                                write!(box_text, "{}\n{}", code, item.name()).ok();
                             } else {
                                 let code = generate_totp_code(
                                     step_seconds,
@@ -655,7 +517,7 @@ impl VaultUx {
                                 ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
                                 // why code on top? because the item.name can be very long, and it can wrap which would cause
                                 // the code to become hidden.
-                                write!(box_text, "HOTP {}\n{}", code, item.name).ok();
+                                write!(box_text, "HOTP {}\n{}", code, item.name()).ok();
                             }
                         } else {
                             write!(box_text, "{}", t!("vault.error.record_error", xous::LANG)).ok();
@@ -683,56 +545,24 @@ impl VaultUx {
         self.title_dirty = true;
     }
 
-    pub(crate) fn filter(&mut self, criteria: &str) {
-        let tt = ticktimer_server::Ticktimer::new().unwrap();
-        let mut ts = [0u64; 5];
-        ts[0] = tt.elapsed_ms();
-        self.filtered_list.clear();
-        ts[1] = tt.elapsed_ms();
-        let il = &self.item_lists.lock().unwrap();
-        let item_list = match self.mode.lock().unwrap().clone() {
-            VaultMode::Fido => &il.fido,
-            VaultMode::Totp => &il.totp,
-            VaultMode::Password => &il.pw,
-        };
-        ts[2] = tt.elapsed_ms();
-        for item in item_list.values() {
-            if item.name.to_lowercase().starts_with(criteria) {
-                let mut staged_item = item.clone();
-                staged_item.dirty = true;
-                self.filtered_list.push(staged_item);
-            }
-        }
-        ts[3] = tt.elapsed_ms();
-        // the selection index must always be at a valid point
-        if self.selection_index >= self.filtered_list.len() {
-            if self.filtered_list.len() > 0 {
-                self.selection_index = self.filtered_list.len() - 1;
-            } else {
-                self.selection_index = 0;
-            }
-        }
-        ts[4] = tt.elapsed_ms();
-        for(index, &elapsed) in ts[1..].iter().enumerate() {
-            log::debug!("{}: {}", index + 1, elapsed - ts[0]);
-        }
+    pub(crate) fn filter(&mut self, criteria: &String) {
+        self.item_lists.lock().unwrap()
+        .filter(self.mode.lock().unwrap().clone(), criteria);
     }
 
     pub(crate) fn set_autotype_delay_ms(&self, rate: usize) {
         self.usb_dev.set_autotype_delay_ms(rate);
     }
     pub(crate) fn autotype(&mut self) -> Result<(), xous::Error> {
-        if self.selection_index >= self.filtered_list.len() {
-            return Err(xous::Error::InvalidPID);
-        }
         let mode_cache = (*self.mode.lock().unwrap()).clone();
         match mode_cache {
             VaultMode::Password => {
-                let entry = &self.filtered_list[self.selection_index].guid;
+                let entry = self.item_lists.lock().unwrap().selected_guid(mode_cache);
                 // we re-fetch the entry for autotype, because the PDDB could have unmounted a basis.
+                let atime = utc_now().timestamp() as u64;
                 let updated_pw = match self.pddb.borrow().get(
                     vault::VAULT_PASSWORD_DICT,
-                    entry,
+                    &entry,
                     None,
                     false, false, None,
                     Some(vault::basis_change)
@@ -745,7 +575,7 @@ impl VaultUx {
                                     match self.usb_dev.send_str(&pw.password) {
                                         Ok(_) => {
                                             pw.count += 1;
-                                            pw.atime = utc_now().timestamp() as u64;
+                                            pw.atime = atime;
                                             pw
                                         },
                                         Err(e) => {
@@ -773,7 +603,7 @@ impl VaultUx {
                 // this get determines which basis the key is in
                 let basis = match self.pddb.borrow().get(
                     vault::VAULT_PASSWORD_DICT,
-                    entry,
+                    &entry,
                     None, true, true,
                     Some(256), Some(vault::basis_change)
                 ) {
@@ -787,14 +617,14 @@ impl VaultUx {
                     }
                 };
 
-                match self.pddb.borrow().delete_key(vault::VAULT_PASSWORD_DICT, entry, Some(&basis)) {
+                match self.pddb.borrow().delete_key(vault::VAULT_PASSWORD_DICT, &entry, Some(&basis)) {
                     Ok(_) => {}
                     Err(_e) => {
                         return Err(xous::Error::InternalError);
                     }
                 }
                 match self.pddb.borrow().get(
-                    vault::VAULT_PASSWORD_DICT, entry, Some(&basis),
+                    vault::VAULT_PASSWORD_DICT, &entry, Some(&basis),
                     false, true, Some(vault::VAULT_ALLOC_HINT),
                     Some(vault::basis_change)
                 ) {
@@ -815,11 +645,11 @@ impl VaultUx {
                 }
                 self.pddb.borrow().sync().ok();
                 // force a redraw of the record as the access count updated
-                self.filtered_list[self.selection_index].dirty = true;
-                self.backpropagate_item(self.filtered_list[self.selection_index].clone());
+                self.item_lists.lock().unwrap().selected_update_atime(mode_cache, atime);
             }
             VaultMode::Totp => {
-                let fields = self.filtered_list[self.selection_index].extra.split(':').collect::<Vec<&str>>();
+                let extra = self.item_lists.lock().unwrap().selected_extra(mode_cache);
+                let fields = extra.split(':').collect::<Vec<&str>>();
                 if fields.len() == 5 {
                     let shared_secret = base32::decode(
                         base32::Alphabet::RFC4648 { padding: false }, fields[0])
@@ -849,7 +679,7 @@ impl VaultUx {
                         Ok(_) => {
                             if is_hotp {
                                 // update the count once the HOTP has been typed successfully
-                                let entry = self.filtered_list[self.selection_index].guid.to_string();
+                                let entry = self.item_lists.lock().unwrap().selected_guid(mode_cache);
 
                                 // this get determines which basis the key is in
                                 let (basis, hotp_rec) = match self.pddb.borrow().get(
@@ -892,15 +722,16 @@ impl VaultUx {
                                     }
                                 }
                                 // update the "extra" field, because the timestep field has been altered
-                                self.filtered_list[self.selection_index].extra = format!("{}:{}:{}:{}:{}",
-                                    hotp_rec.secret,
-                                    hotp_rec.digits,
-                                    hotp_rec.timestep,
-                                    hotp_rec.algorithm,
-                                    if hotp_rec.is_hotp {"HOTP"} else {"TOTP"}
+                                self.item_lists.lock().unwrap().selected_update_extra(
+                                    mode_cache,
+                                    format!("{}:{}:{}:{}:{}",
+                                        hotp_rec.secret,
+                                        hotp_rec.digits,
+                                        hotp_rec.timestep,
+                                        hotp_rec.algorithm,
+                                        if hotp_rec.is_hotp {"HOTP"} else {"TOTP"}
+                                    )
                                 );
-                                self.filtered_list[self.selection_index].dirty = true;
-                                self.backpropagate_item(self.filtered_list[self.selection_index].clone());
                                 // now write to disk
                                 match self.pddb.borrow().get(
                                     vault::VAULT_TOTP_DICT, &entry, Some(&basis),
@@ -934,18 +765,8 @@ impl VaultUx {
         Ok(())
     }
     pub(crate) fn selected_entry(&self) -> Option<SelectedEntry> {
-        if self.selection_index >= self.filtered_list.len() {
-            None
-        } else {
-            let entry = &self.filtered_list[self.selection_index];
-            Some(
-                SelectedEntry {
-                    key_name: xous_ipc::String::from_str(entry.guid.to_string()),
-                    mode: (*self.mode.lock().unwrap()).clone(),
-                    description: xous_ipc::String::from_str(entry.name.to_string()),
-                }
-            )
-        }
+        let mode = (*self.mode.lock().unwrap()).clone();
+        self.item_lists.lock().unwrap().selected_entry(mode)
     }
     pub(crate) fn ensure_hid(&self) {
         self.usb_dev.ensure_core(self.usb_type).unwrap();
