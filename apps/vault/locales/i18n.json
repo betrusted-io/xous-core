@@ -447,6 +447,13 @@
         "ja": "USB機能を切り替え中...",
         "zh": "切换 USB 功能..."
     },
+    "vault.reloading_database": {
+        "en": "Reloading database...",
+        "en-tts": "Reloading database...",
+        "fr": "Rechargement de la base de données...*MT*",
+        "ja": "データベースをリロードしています...",
+        "zh": "正在重新加载数据库..."
+    },
     "vault.select_font": {
         "en": "Select a font style",
         "en-tts": "Select a font style",
