@@ -171,6 +171,10 @@ impl ListItem {
 }
 
 pub struct FilteredListView {
+    // You might be thinking "why use a vec when a BTreeMap can guarantee uniqueness and sorting?"
+    // See PR #389 for an explanation of why that's a terrible idea. The TL;DR is that sorting is cheap
+    // compared to copying data. Or more precisely, sorting is cheap compared to figuring out where
+    // on the heap to copy data.
     list: Vec<ListItem>,
     sorted: bool,
     selection_index: usize,
