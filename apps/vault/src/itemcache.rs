@@ -256,15 +256,15 @@ impl FilteredListView {
         }
     }
     pub fn filter(&mut self, criteria: &String) {
-        let tt = ticktimer_server::Ticktimer::new().unwrap();
-        let mut ts = [0u64; 6];
-        ts[0] = tt.elapsed_ms();
+        //let tt = ticktimer_server::Ticktimer::new().unwrap();
+        //let mut ts = [0u64; 6];
+        //ts[0] = tt.elapsed_ms();
         // always ensure the list is sorted
         if !self.sorted {
             self.list.sort();
             self.sorted = true;
         }
-        ts[1] = tt.elapsed_ms();
+        //ts[1] = tt.elapsed_ms();
         // sanity checks on the request
         if criteria.len() == 0 {
             self.filter_reset();
@@ -282,7 +282,7 @@ impl FilteredListView {
                 } else {
                     // step 2. we have to go backwards in the list because if we have several matches, we are
                     // not guaranteed to be at the first match. Find that first match with a linear search.
-                    ts[2] = tt.elapsed_ms();
+                    //ts[2] = tt.elapsed_ms();
                     while index.saturating_sub(1) > 0 {
                         if self.list[index - 1].name.to_lowercase().starts_with(criteria) {
                             index -= 1;
@@ -292,7 +292,7 @@ impl FilteredListView {
                     }
                     // the index now starts at the range of matches. Find the end of matches with another linear search.
                     let mut end_index = index + 1;
-                    ts[3] = tt.elapsed_ms();
+                    //ts[3] = tt.elapsed_ms();
                     while end_index < self.list.len() {
                         if self.list[end_index].name.to_lowercase().starts_with(criteria) {
                             end_index += 1;
@@ -304,17 +304,17 @@ impl FilteredListView {
                 }
             }
         }
-        ts[4] = tt.elapsed_ms();
+        //ts[4] = tt.elapsed_ms();
         if let Some(r) = &self.filter_range {
             if self.selection_index >= r.len() {
                 self.selection_index = 0;
             }
         }
         self.mark_filtered_as_dirty();
-        ts[5] = tt.elapsed_ms();
-        for(index, &elapsed) in ts[1..].iter().enumerate() {
-            log::info!("{}: {}", index + 1, elapsed.saturating_sub(ts[0]));
-        }
+        //ts[5] = tt.elapsed_ms();
+        //for(index, &elapsed) in ts[1..].iter().enumerate() {
+        //    log::info!("{}: {}", index + 1, elapsed.saturating_sub(ts[0]));
+        //}
     }
     fn mark_filtered_as_dirty(&mut self) {
         if let Some(r) = self.filter_range.clone() {
