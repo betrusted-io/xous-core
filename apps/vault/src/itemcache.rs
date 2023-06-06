@@ -187,6 +187,9 @@ impl FilteredListView {
             filter_range: None,
         }
     }
+    pub fn is_db_empty(&self) -> bool {
+        self.list.len() == 0
+    }
     pub fn expand(&mut self, capacity: usize) {
         self.list.reserve(capacity.saturating_sub(self.list.len()))
     }
@@ -466,6 +469,9 @@ impl ItemLists {
             totp: FilteredListView::new(),
             pw: FilteredListView::new(),
         }
+    }
+    pub fn is_db_empty(&self, list_type: VaultMode) -> bool {
+        self.li(list_type).is_db_empty()
     }
     fn li_mut(&mut self, list_type: VaultMode) -> &mut FilteredListView {
         match list_type {

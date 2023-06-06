@@ -13,9 +13,9 @@ use std::cell::RefCell;
 use vault::{
     deserialize_app_info, serialize_app_info, basis_change,
     VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, VAULT_ALLOC_HINT, utc_now,
-    atime_to_str
+    atime_to_str, AppInfo, ctap::data_formats::PublicKeyCredentialSource
 };
-use crate::{ListItem, ListKey};
+use crate::{ListItem, ListKey, storage::TotpRecord};
 use crate::{ItemLists, VaultMode, SelectedEntry};
 use crate::storage::{self, PasswordRecord, StorageContent};
 use crate::totp::TotpAlgorithm;
@@ -46,6 +46,7 @@ pub enum ActionOp {
     /// Internal ops
     UpdateMode,
     UpdateOneItem,
+    ReloadDb,
     Quit,
     #[cfg(feature="vault-testing")]
     /// Testing
@@ -145,6 +146,8 @@ impl<'a> ActionManager<'a> {
             )
         ).ok();
     }
+    /// This routine is now required to update the itemlist data as well as the PDDB to save on
+    /// a full retrieve of the db.
     pub(crate) fn menu_addnew(&mut self) {
         match self.mode_cache {
             VaultMode::Password => {
@@ -305,9 +308,13 @@ impl<'a> ActionManager<'a> {
                         self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
                     },
                 };
+                // update the ux cache
+                let li = make_pw_item_from_record(&storage::hex(record.hash()), record);
+                self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
             }
             VaultMode::Fido => {
                 self.report_err(t!("vault.error.add_fido2", xous::LANG), None::<std::io::Error>);
+                // no DB entry update because it's an error to even get here
             }
             VaultMode::Totp => {
                 let description = match self.modals
@@ -407,6 +414,8 @@ impl<'a> ActionManager<'a> {
                         self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
                     },
                 };
+                let li = make_totp_item_from_record(&storage::hex(totp.hash()), totp);
+                self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
             }
         }
     }
@@ -489,7 +498,10 @@ impl<'a> ActionManager<'a> {
         }
     }
 
-    /// Update UX cached data for just one entry
+    /// Update UX cached data for just one entry by reading it back from the disk.
+    /// This is mainly used by the autotype routine to ensure that the single entry that
+    /// was autotyped has an updated atime in the UX; otherwise routines should update
+    /// the cache directly.
     pub(crate) fn update_db_entry(&mut self, entry: SelectedEntry) {
         match entry.mode {
             VaultMode::Password => {
@@ -503,28 +515,10 @@ impl<'a> ActionManager<'a> {
                         return;
                     }
                 };
-                // create the list item from the updated entry
-                let mut desc = String::with_capacity(256);
-                make_pw_name(&pw.description, &pw.username, &mut desc);
-                let mut extra = String::with_capacity(256);
-                let human_time = atime_to_str(pw.atime);
-                extra.push_str(&human_time);
-                extra.push_str("; ");
-                extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
-                extra.push_str(&pw.count.to_string());
-                let li = ListItem::new(
-                    desc.to_string(), // these allocs will be slow, but we do it only once on boot
-                    extra.to_string(),
-                    true,
-                    guid.to_string(),
-                    pw.atime,
-                    pw.count,
-                );
+                let li = make_pw_item_from_record(guid, pw);
                 log::debug!("updating {} to list item {}", li.extra, li.key());
-                assert!(
-                    self.item_lists.lock().unwrap().insert_unique(entry.mode, li).is_some(),
-                    "Somehow, the autotyped record isn't in the UX list for updating!")
-                ;
+                let exists = self.item_lists.lock().unwrap().insert_unique(entry.mode, li).is_some();
+                assert!(exists, "Somehow, the autotyped record isn't in the UX list for updating!");
             },
             _ => {
                 // no cached data, no action
@@ -599,6 +593,9 @@ impl<'a> ActionManager<'a> {
                         let ser = serialize_app_info(&update);
                         record.write(&ser).unwrap_or_else(|e| {
                             self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); 0});
+                        // update the item cache so it appears on the screen
+                        let li = make_u2f_item_from_record(entry.key_guid.as_str().unwrap(), update);
+                        self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                     }
                     Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                 }
@@ -657,8 +654,14 @@ impl<'a> ActionManager<'a> {
                 if let Ok(d) = u32::from_str_radix(edit_data.content()[5].content.as_str().unwrap(), 10) {
                     pw.digits = d;
                 }
-
-                storage.update(&choice, key_guid, &mut pw)
+                // update the disk
+                let ret = storage.update(&choice, key_guid, &mut pw);
+                if ret.is_ok() {
+                    // update the item cache
+                    let li = make_totp_item_from_record(key_guid, pw);
+                    self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
+                }
+                ret
             },
             storage::ContentKind::Password => {
                 let mut pw: storage::PasswordRecord =  match storage.get_record(&choice, key_guid) {
@@ -812,7 +815,14 @@ impl<'a> ActionManager<'a> {
                 // note the edit access, this counts as an access since the password was revealed
                 pw.count += 1;
                 pw.atime = utc_now().timestamp() as u64;
-                storage.update(&choice, key_guid, &mut pw)
+                // update disk
+                let ret = storage.update(&choice, key_guid, &mut pw);
+                if ret.is_ok() {
+                    // update item cache
+                    let li = make_pw_item_from_record(&storage::hex(pw.hash()), pw);
+                    self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
+                }
+                ret
            },
         };
 
@@ -849,6 +859,12 @@ impl<'a> ActionManager<'a> {
         pm.log_event_unchecked(event);
     }
 
+    pub(crate) fn is_db_empty(&mut self) -> bool {
+        self.mode_cache = {
+            (*self.mode.lock().unwrap()).clone()
+        };
+        self.item_lists.lock().unwrap().is_db_empty(self.mode_cache)
+    }
     /// Populate the display list with data from the PDDB. Limited by total available RAM; probably
     /// would stop working if you have over 500-1k records with the current heap limits.
     ///
@@ -913,7 +929,7 @@ impl<'a> ActionManager<'a> {
                                         if prev_entry.atime != pw_rec.atime || prev_entry.count != pw_rec.count {
                                             // this is expensive, so don't run it unless we have to
                                             let human_time = atime_to_str(pw_rec.atime);
-                                            // note this code is duplicated in update_db_entry()
+                                            // note this code is duplicated in make_pw_item_from_record()
                                             extra.push_str(&human_time);
                                             extra.push_str("; ");
                                             extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
@@ -1016,20 +1032,7 @@ impl<'a> ActionManager<'a> {
                         for key in keys {
                             if let Some(data) = key.data {
                                 if let Some(ai) = deserialize_app_info(data) {
-                                    let extra = format!("{}; {}{}",
-                                        atime_to_str(ai.atime),
-                                        t!("vault.u2f.appinfo.authcount", xous::LANG),
-                                        ai.count,
-                                    );
-                                    let desc = format!("{} (U2F)", ai.name);
-                                    let li = ListItem::new(
-                                        desc,
-                                        extra,
-                                        true,
-                                        key.name,
-                                        ai.count,
-                                        ai.atime,
-                                    );
+                                    let li = make_u2f_item_from_record(&key.name, ai);
                                     self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                                 } else {
                                     let err = format!("{}:{}:{}: ({})[moved data]...",
@@ -1073,21 +1076,7 @@ impl<'a> ActionManager<'a> {
                                     if let Some(data) = key.data {
                                         match vault::ctap::storage::deserialize_credential(&data) {
                                             Some(result) => {
-                                                let name = if let Some(display_name) = result.user_display_name {
-                                                    display_name
-                                                } else {
-                                                    String::from_utf8(result.user_handle).unwrap_or("".to_string())
-                                                };
-                                                let desc = format!("{} / {} (FIDO2)", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
-                                                let extra = format!("{}", name);
-                                                let li = ListItem::new(
-                                                    desc,
-                                                    extra,
-                                                    true,
-                                                    key.name,
-                                                    0,
-                                                    0,
-                                                );
+                                                let li = make_fido_item_from_record(&key.name, result);
                                                 self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                                             }
                                             None => {
@@ -1131,22 +1120,7 @@ impl<'a> ActionManager<'a> {
                         for key in keys {
                             if let Some(data) = key.data {
                                 if let Some(totp) = storage::TotpRecord::try_from(data).ok() {
-                                    let extra = format!("{}:{}:{}:{}:{}",
-                                        totp.secret,
-                                        totp.digits,
-                                        totp.timestep,
-                                        totp.algorithm,
-                                        if totp.is_hotp {"HOTP"} else {"TOTP"}
-                                    );
-                                    let desc = format!("{}", totp.name);
-                                    let li = ListItem::new(
-                                        desc,
-                                        extra,
-                                        true,
-                                        key.name,
-                                        0,
-                                        0,
-                                    );
+                                    let li = make_totp_item_from_record(&key.name, totp);
                                     self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                                 } else {
                                     let err = format!("{}:{}:{}: ({})[moved data]...",
@@ -1617,4 +1591,75 @@ fn make_pw_name(description: &str, username: &str, dest: &mut String) {
     dest.push_str(description);
     dest.push_str("/");
     dest.push_str(username);
+}
+
+fn make_u2f_item_from_record(guid: &str, ai: AppInfo) -> ListItem {
+    let extra = format!("{}; {}{}",
+        atime_to_str(ai.atime),
+        t!("vault.u2f.appinfo.authcount", xous::LANG),
+        ai.count,
+    );
+    let desc: String = format!("{} (U2F)", ai.name);
+    ListItem::new(
+        desc,
+        extra,
+        true,
+        guid.to_owned(),
+        ai.count,
+        ai.atime,
+    )
+}
+fn make_fido_item_from_record(guid: &str, result: PublicKeyCredentialSource) -> ListItem {
+    let name = if let Some(display_name) = result.user_display_name {
+        display_name
+    } else {
+        String::from_utf8(result.user_handle).unwrap_or("".to_string())
+    };
+    let desc = format!("{} / {} (FIDO2)", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
+    let extra = format!("{}", name);
+    ListItem::new(
+        desc,
+        extra,
+        true,
+        guid.to_owned(),
+        0,
+        0,
+    )
+}
+fn make_totp_item_from_record(guid: &str, totp: TotpRecord) -> ListItem {
+    let extra = format!("{}:{}:{}:{}:{}",
+        totp.secret,
+        totp.digits,
+        totp.timestep,
+        totp.algorithm,
+        if totp.is_hotp {"HOTP"} else {"TOTP"}
+    );
+    let desc = format!("{}", totp.name);
+    ListItem::new(
+        desc,
+        extra,
+        true,
+        guid.to_owned(),
+        0,
+        0,
+    )
+}
+fn make_pw_item_from_record(guid: &str, pw: PasswordRecord) -> ListItem {
+    // create the list item from the updated entry
+    let mut desc = String::with_capacity(256);
+    make_pw_name(&pw.description, &pw.username, &mut desc);
+    let mut extra = String::with_capacity(256);
+    let human_time = atime_to_str(pw.atime);
+    extra.push_str(&human_time);
+    extra.push_str("; ");
+    extra.push_str(t!("vault.u2f.appinfo.authcount", xous::LANG));
+    extra.push_str(&pw.count.to_string());
+    ListItem::new(
+        desc.to_string(), // these allocs will be slow, but we do it only once on boot
+        extra.to_string(),
+        true,
+        guid.to_string(),
+        pw.atime,
+        pw.count,
+    )
 }

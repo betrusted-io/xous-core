@@ -833,7 +833,7 @@ fn utc_now() -> DateTime<Utc> {
     DateTime::from_utc(naive, Utc)
 }
 
-fn hex(data: Vec<u8>) -> String {
+pub fn hex(data: Vec<u8>) -> String {
     use std::fmt::Write;
     let mut s = String::with_capacity(2 * data.len());
     for byte in data {

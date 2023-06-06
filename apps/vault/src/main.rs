@@ -153,11 +153,7 @@ fn main() -> ! {
                 match opcode {
                     Some(ActionOp::MenuAddnew) => {
                         manager.activate();
-                        manager.menu_addnew();
-                        // this is necessary so the next redraw shows the newly added entry
-                        // no cache clear is called for because new entries will always add to the list;
-                        // there is no risk of "stale" entries persisting
-                        manager.retrieve_db();
+                        manager.menu_addnew(); // this is responsible for updating the item cache
                         manager.deactivate();
                     },
                     Some(ActionOp::MenuDeleteStage2) => {
@@ -172,8 +168,7 @@ fn main() -> ! {
                         let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
                         manager.activate();
-                        manager.menu_edit(entry);
-                        manager.retrieve_db();
+                        manager.menu_edit(entry); // this is responsible for updating the item cache
                         manager.deactivate();
                     },
                     Some(ActionOp::MenuUnlockBasis) => {
@@ -203,6 +198,13 @@ fn main() -> ! {
                         manager.deactivate();
                     }
                     Some(ActionOp::UpdateMode) => msg_blocking_scalar_unpack!(msg, _, _, _, _,{
+                        // the password DBs are now not shared between modes, so no need to re-retrieve it.
+                        if manager.is_db_empty() {
+                            manager.retrieve_db();
+                        }
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                    }),
+                    Some(ActionOp::ReloadDb) => msg_blocking_scalar_unpack!(msg, _, _, _, _,{
                         manager.retrieve_db();
                         xous::return_scalar(msg.sender, 1).unwrap();
                     }),
@@ -550,7 +552,7 @@ fn main() -> ! {
             }
             Some(VaultOp::ReloadDbAndFullRedraw) => {
                 send_message(actions_conn,
-                    Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                    Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0)
                 ).ok();
                 vaultux.update_mode();
                 if allow_redraw {
@@ -562,7 +564,7 @@ fn main() -> ! {
                 // this set of calls will effectively force a reload of any UX data
                 *mode.lock().unwrap() = VaultMode::Fido;
                 send_message(actions_conn,
-                    Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                    Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0)
                 ).ok();
                 vaultux.update_mode();
                 vaultux.input("").unwrap();
