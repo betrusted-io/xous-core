@@ -104,7 +104,7 @@ pub enum VaultMode {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct SelectedEntry {
-    pub key_name: xous_ipc::String::<256>,
+    pub key_guid: xous_ipc::String::<256>,
     pub description: xous_ipc::String::<256>,
     pub mode: VaultMode,
 }
@@ -171,9 +171,7 @@ fn main() -> ! {
                     Some(ActionOp::MenuEditStage2) => {
                         let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
-                        log::debug!("bef activate");
                         manager.activate();
-                        log::debug!("bef edit");
                         manager.menu_edit(entry);
                         manager.retrieve_db();
                         manager.deactivate();

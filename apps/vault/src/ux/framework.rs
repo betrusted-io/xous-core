@@ -267,21 +267,23 @@ impl VaultUx {
         self.get_glyph_style();
     }
     pub(crate) fn nav(&mut self, dir: NavDir) {
-        self.item_lists.lock().unwrap().nav(dir);
+        self.item_lists.lock().unwrap().nav((*self.mode.lock().unwrap()).clone(), dir);
     }
     /// accept a new input string
     pub(crate) fn input(&mut self, line: &str) -> Result<(), xous::Error> {
         self.title_dirty = true;
-        self.filter(line);
-        self.last_query = line.to_string();
+        let owned_line = line.to_owned();
+        self.filter(&owned_line);
+        self.last_query = owned_line;
         Ok(())
     }
 
     fn clear_area(&mut self) {
         let items_height = self.items_per_screen * self.item_height;
         let mut insert_at = 1 + self.screensize.y - items_height; // +1 to get the border to overlap at the bottom
+        let mode_cache = (*self.mode.lock().unwrap()).clone();
 
-        if self.item_lists.lock().unwrap().filter_len() == 0 || self.action_active.load(AtomicOrdering::SeqCst) {
+        if self.item_lists.lock().unwrap().filter_len(mode_cache) == 0 || self.action_active.load(AtomicOrdering::SeqCst) {
             // no items in list case -- just blank the whole area
             self.gam.draw_rectangle(self.content,
                 Rectangle::new_with_style(
@@ -295,7 +297,7 @@ impl VaultUx {
             )).expect("can't clear content area");
             self.title_dirty = true; // just blanked the whole area, have to redraw the title.
             return;
-        } else if self.title_dirty && self.item_lists.lock().unwrap().filter_len() != 0 {
+        } else if self.title_dirty && self.item_lists.lock().unwrap().filter_len(mode_cache) != 0 {
             // handle the title region separately
             self.gam.draw_rectangle(self.content,
                 Rectangle::new_with_style(
@@ -313,40 +315,35 @@ impl VaultUx {
         let mut dirty_br: Option<Point> = None;
 
         let mut guarded_list = self.item_lists.lock().unwrap();
-        let current_page = guarded_list.selected_page();
+        let current_page = guarded_list.selected_page(mode_cache);
         for item in current_page.iter() {
-            if let Some(item_mutex) = item {
-                let item = item_mutex.lock().unwrap();
-                if item.dirty && dirty_tl.is_none() {
-                    // start the dirty area
-                    dirty_tl = Some(Point::new(0, insert_at));
-                }
-                if !item.dirty && dirty_tl.is_some() && dirty_br.is_none() {
-                    // end the dirty area
-                    dirty_br = Some(Point::new(self.screensize.y, insert_at));
-                }
-                if let Some(tl) = dirty_tl {
-                    if let Some(br) = dirty_br {
-                        // start & end found: now draw a rectangle over it
-                        self.gam.draw_rectangle(self.content,
-                            Rectangle::new_with_style(
-                                tl,
-                                br,
-                            DrawStyle {
-                                fill_color: Some(PixelColor::Light),
-                                stroke_color: None,
-                                stroke_width: 0
-                            }
-                        )).expect("can't clear content area");
-                        // reset the search
-                        dirty_tl = None;
-                        dirty_br = None;
-                    }
-                }
-                insert_at += self.item_height;
-            } else {
-                log::error!("Filtered list consistency error!")
+            if item.dirty && dirty_tl.is_none() {
+                // start the dirty area
+                dirty_tl = Some(Point::new(0, insert_at));
             }
+            if !item.dirty && dirty_tl.is_some() && dirty_br.is_none() {
+                // end the dirty area
+                dirty_br = Some(Point::new(self.screensize.y, insert_at));
+            }
+            if let Some(tl) = dirty_tl {
+                if let Some(br) = dirty_br {
+                    // start & end found: now draw a rectangle over it
+                    self.gam.draw_rectangle(self.content,
+                        Rectangle::new_with_style(
+                            tl,
+                            br,
+                        DrawStyle {
+                            fill_color: Some(PixelColor::Light),
+                            stroke_color: None,
+                            stroke_width: 0
+                        }
+                    )).expect("can't clear content area");
+                    // reset the search
+                    dirty_tl = None;
+                    dirty_br = None;
+                }
+            }
+            insert_at += self.item_height;
         }
         if let Some(tl) = dirty_tl {
             // handle the case that we were dirty all the way to the bottom
@@ -443,7 +440,7 @@ impl VaultUx {
         let items_height = self.items_per_screen * self.item_height;
         let mut insert_at = 1 + self.screensize.y - items_height; // +1 to get the border to overlap at the bottom
 
-        if self.item_lists.lock().unwrap().filter_len() == 0 {
+        if self.item_lists.lock().unwrap().filter_len(mode_at_entry) == 0 {
             let mut box_text = TextView::new(self.content,
                 graphics_server::TextBounds::CenteredBot(
                     Rectangle::new(
@@ -461,82 +458,77 @@ impl VaultUx {
             return Ok(());
         }
         // ---- draw list body area ----
-        let selected = self.item_lists.lock().unwrap().selected_index();
+        let selected = self.item_lists.lock().unwrap().selected_index(mode_at_entry);
         let mut guarded_list = self.item_lists.lock().unwrap();
-        let current_page = guarded_list.selected_page();
+        let current_page = guarded_list.selected_page(mode_at_entry);
         log::debug!("current_page len {}", current_page.len());
-        for (index, maybe_item) in current_page.iter_mut().enumerate() {
+        for (index, item) in current_page.iter_mut().enumerate() {
             if insert_at - 1 > self.screensize.y - self.item_height { // -1 because of the overlapping border
                 break;
             }
-            if let Some(item_mutex) = maybe_item {
-                let mut item = item_mutex.lock().unwrap();
-                if item.dirty {
-                    log::debug!("drawing {}", item.name);
-                    let mut box_text = TextView::new(self.content,
-                        graphics_server::TextBounds::BoundingBox(
-                            Rectangle::new(
-                                Point::new(0, insert_at),
-                                Point::new(self.screensize.x, insert_at + self.item_height)
-                            )
+            if item.dirty {
+                log::debug!("drawing {}", item.name);
+                let mut box_text = TextView::new(self.content,
+                    graphics_server::TextBounds::BoundingBox(
+                        Rectangle::new(
+                            Point::new(0, insert_at),
+                            Point::new(self.screensize.x, insert_at + self.item_height)
                         )
-                    );
-                    box_text.draw_border = true;
-                    box_text.rounded_border = None;
-                    box_text.clear_area = true;
-                    box_text.style = self.style;
-                    box_text.margin = self.margin;
-                    if index == selected {
-                        box_text.border_width = 4;
-                    }
-                    match mode_at_entry {
-                        VaultMode::Fido | VaultMode::Password => {write!(box_text, "{}\n{}", item.name, item.extra).ok();},
-                        VaultMode::Totp => {
-                            let fields = item.extra.split(':').collect::<Vec<&str>>();
-                            if fields.len() == 5 {
-                                let shared_secret = base32::decode(
-                                    base32::Alphabet::RFC4648 { padding: false }, fields[0])
-                                    .unwrap_or(vec![]);
-                                let digit_count = u8::from_str_radix(fields[1], 10).unwrap_or(6);
-                                let step_seconds = u64::from_str_radix(fields[2], 10).unwrap_or(30);
-                                let algorithm = TotpAlgorithm::try_from(fields[3]).unwrap_or(TotpAlgorithm::HmacSha1);
-                                let is_hotp = fields[4].to_uppercase() == "HOTP";
-                                let totp = TotpEntry {
-                                    step_seconds: if !is_hotp {step_seconds} else {1},  // step_seconds is re-used by hotp as the code.
-                                    shared_secret,
-                                    digit_count,
-                                    algorithm
-                                };
-                                if !is_hotp {
-                                    let code = generate_totp_code(
-                                        get_current_unix_time().unwrap_or(0),
-                                        &totp
-                                    ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
-                                    // why code on top? because the item.name can be very long, and it can wrap which would cause
-                                    // the code to become hidden.
-                                    write!(box_text, "{}\n{}", code, item.name).ok();
-                                } else {
-                                    let code = generate_totp_code(
-                                        step_seconds,
-                                        &totp
-                                    ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
-                                    // why code on top? because the item.name can be very long, and it can wrap which would cause
-                                    // the code to become hidden.
-                                    write!(box_text, "HOTP {}\n{}", code, item.name).ok();
-                                }
-                            } else {
-                                write!(box_text, "{}", t!("vault.error.record_error", xous::LANG)).ok();
-                            }
-                        },
-                    }
-                    self.gam.post_textview(&mut box_text).expect("couldn't post list item");
-                    item.dirty = false;
+                    )
+                );
+                box_text.draw_border = true;
+                box_text.rounded_border = None;
+                box_text.clear_area = true;
+                box_text.style = self.style;
+                box_text.margin = self.margin;
+                if index == selected {
+                    box_text.border_width = 4;
                 }
-
-                insert_at += self.item_height;
-            } else {
-                log::error!("Consistency bug! Filtered list has invalid items");
+                match mode_at_entry {
+                    VaultMode::Fido | VaultMode::Password => {write!(box_text, "{}\n{}", item.name, item.extra).ok();},
+                    VaultMode::Totp => {
+                        let fields = item.extra.split(':').collect::<Vec<&str>>();
+                        if fields.len() == 5 {
+                            let shared_secret = base32::decode(
+                                base32::Alphabet::RFC4648 { padding: false }, fields[0])
+                                .unwrap_or(vec![]);
+                            let digit_count = u8::from_str_radix(fields[1], 10).unwrap_or(6);
+                            let step_seconds = u64::from_str_radix(fields[2], 10).unwrap_or(30);
+                            let algorithm = TotpAlgorithm::try_from(fields[3]).unwrap_or(TotpAlgorithm::HmacSha1);
+                            let is_hotp = fields[4].to_uppercase() == "HOTP";
+                            let totp = TotpEntry {
+                                step_seconds: if !is_hotp {step_seconds} else {1},  // step_seconds is re-used by hotp as the code.
+                                shared_secret,
+                                digit_count,
+                                algorithm
+                            };
+                            if !is_hotp {
+                                let code = generate_totp_code(
+                                    get_current_unix_time().unwrap_or(0),
+                                    &totp
+                                ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
+                                // why code on top? because the item.name can be very long, and it can wrap which would cause
+                                // the code to become hidden.
+                                write!(box_text, "{}\n{}", code, item.name).ok();
+                            } else {
+                                let code = generate_totp_code(
+                                    step_seconds,
+                                    &totp
+                                ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
+                                // why code on top? because the item.name can be very long, and it can wrap which would cause
+                                // the code to become hidden.
+                                write!(box_text, "HOTP {}\n{}", code, item.name).ok();
+                            }
+                        } else {
+                            write!(box_text, "{}", t!("vault.error.record_error", xous::LANG)).ok();
+                        }
+                    },
+                }
+                self.gam.post_textview(&mut box_text).expect("couldn't post list item");
+                item.dirty = false;
             }
+
+            insert_at += self.item_height;
         }
 
         log::trace!("vault app redraw##");
@@ -553,7 +545,7 @@ impl VaultUx {
         self.title_dirty = true;
     }
 
-    pub(crate) fn filter(&mut self, criteria: &str) {
+    pub(crate) fn filter(&mut self, criteria: &String) {
         self.item_lists.lock().unwrap()
         .filter(self.mode.lock().unwrap().clone(), criteria);
     }
@@ -565,7 +557,7 @@ impl VaultUx {
         let mode_cache = (*self.mode.lock().unwrap()).clone();
         match mode_cache {
             VaultMode::Password => {
-                let entry = self.item_lists.lock().unwrap().selected_guid();
+                let entry = self.item_lists.lock().unwrap().selected_guid(mode_cache);
                 // we re-fetch the entry for autotype, because the PDDB could have unmounted a basis.
                 let atime = utc_now().timestamp() as u64;
                 let updated_pw = match self.pddb.borrow().get(
@@ -653,10 +645,10 @@ impl VaultUx {
                 }
                 self.pddb.borrow().sync().ok();
                 // force a redraw of the record as the access count updated
-                self.item_lists.lock().unwrap().selected_update_atime(atime);
+                self.item_lists.lock().unwrap().selected_update_atime(mode_cache, atime);
             }
             VaultMode::Totp => {
-                let extra = self.item_lists.lock().unwrap().selected_extra();
+                let extra = self.item_lists.lock().unwrap().selected_extra(mode_cache);
                 let fields = extra.split(':').collect::<Vec<&str>>();
                 if fields.len() == 5 {
                     let shared_secret = base32::decode(
@@ -687,7 +679,7 @@ impl VaultUx {
                         Ok(_) => {
                             if is_hotp {
                                 // update the count once the HOTP has been typed successfully
-                                let entry = self.item_lists.lock().unwrap().selected_guid();
+                                let entry = self.item_lists.lock().unwrap().selected_guid(mode_cache);
 
                                 // this get determines which basis the key is in
                                 let (basis, hotp_rec) = match self.pddb.borrow().get(
@@ -731,6 +723,7 @@ impl VaultUx {
                                 }
                                 // update the "extra" field, because the timestep field has been altered
                                 self.item_lists.lock().unwrap().selected_update_extra(
+                                    mode_cache,
                                     format!("{}:{}:{}:{}:{}",
                                         hotp_rec.secret,
                                         hotp_rec.digits,

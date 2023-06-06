@@ -15,7 +15,7 @@ use vault::{
     VAULT_PASSWORD_DICT, VAULT_TOTP_DICT, VAULT_ALLOC_HINT, utc_now,
     atime_to_str
 };
-use crate::ListItem;
+use crate::{ListItem, ListKey};
 use crate::{ItemLists, VaultMode, SelectedEntry};
 use crate::storage::{self, PasswordRecord, StorageContent};
 use crate::totp::TotpAlgorithm;
@@ -421,7 +421,7 @@ impl<'a> ActionManager<'a> {
 
             if choice.is_none() {
                 // we're dealing with FIDO stuff, use the custom code path
-                let dictionary = match usize::from_str_radix(entry.key_name.as_str().unwrap_or("UTF8-error"), 10) {
+                let dictionary = match usize::from_str_radix(entry.key_guid.as_str().unwrap_or("UTF8-error"), 10) {
                     Ok(fido_key) => {
                         if vault::ctap::storage::key::CREDENTIALS.contains(&fido_key) {
                             persistent_store::store::OPENSK2_DICT // heuristic: all fido2 keys are simple integers
@@ -431,7 +431,7 @@ impl<'a> ActionManager<'a> {
                     }
                     Err(_) => U2F_APP_DICT, // u2f keys are long hex strings
                 };
-                match self.pddb.borrow().get(dictionary, entry.key_name.as_str().unwrap_or("UTF8-error"),
+                match self.pddb.borrow().get(dictionary, entry.key_guid.as_str().unwrap_or("UTF8-error"),
                 None, false, false, None, None::<fn()>
                 ) {
                     Ok(candidate) => {
@@ -439,7 +439,7 @@ impl<'a> ActionManager<'a> {
                         match self.pddb.borrow()
                         .delete_key(
                             dictionary,
-                            entry.key_name.as_str().unwrap_or("UTF8-error"),
+                            entry.key_guid.as_str().unwrap_or("UTF8-error"),
                             Some(&attr.basis)
                         ) {
                             Ok(_) => {
@@ -455,7 +455,7 @@ impl<'a> ActionManager<'a> {
             } else {
                 // we're deleting either a password, or a totp
                 let choice = choice.unwrap();
-                let guid = entry.key_name.as_str().unwrap_or("UTF8-error");
+                let guid = entry.key_guid.as_str().unwrap_or("UTF8-error");
                 if entry.mode == VaultMode::Password {
                     // self.modals.show_notification(&format!("deleting key {}", guid), None).ok();
                     // if it's a password, we have to pull the full record, and then reconstitute the item_lists index key so we can remove it from the UX cache
@@ -469,8 +469,10 @@ impl<'a> ActionManager<'a> {
                     };
                     let mut desc = String::with_capacity(256);
                     make_pw_name(&pw.description, &pw.username, &mut desc);
-                    let key = ListItem::key_from_parts(&desc, guid);
-                    self.item_lists.lock().unwrap().remove(entry.mode, key);
+                    let key = ListKey::key_from_parts(&desc, guid);
+                    assert!(self.item_lists.lock().unwrap().remove(entry.mode, key).is_some(),
+                        "requested to delete item, but it wasn't found!"
+                    );
                     /*
                     if self.item_lists.lock().unwrap().pw.remove(&key).is_some() {
                         self.modals.show_notification(&format!("deleted UX {}", &key), None).ok();
@@ -492,7 +494,7 @@ impl<'a> ActionManager<'a> {
         match entry.mode {
             VaultMode::Password => {
                 let choice = storage::ContentKind::Password;
-                let guid = entry.key_name.as_str().unwrap_or("UTF8-error");
+                let guid = entry.key_guid.as_str().unwrap_or("UTF8-error");
                 let storage = self.storage.borrow_mut();
                 let pw: storage::PasswordRecord =  match storage.get_record(&choice, guid) {
                     Ok(record) => record,
@@ -520,7 +522,7 @@ impl<'a> ActionManager<'a> {
                 };
                 log::debug!("updating {} to list item {}", li.extra, li.key());
                 assert!(
-                    self.item_lists.lock().unwrap().insert(entry.mode, li.key(), li).is_some(),
+                    self.item_lists.lock().unwrap().insert_unique(entry.mode, li).is_some(),
                     "Somehow, the autotyped record isn't in the UX list for updating!")
                 ;
             },
@@ -542,7 +544,7 @@ impl<'a> ActionManager<'a> {
             // at the moment only U2F records are supported for editing. The FIDO2 stuff is done with a different record
             // storage format that's a bit funkier to edit.
             let maybe_update = match self.pddb.borrow().get(
-                dict, entry.key_name.as_str().unwrap(), None,
+                dict, entry.key_guid.as_str().unwrap(), None,
                 false, false, None, Some(basis_change)
             ) {
                 Ok(mut record) => {
@@ -586,10 +588,10 @@ impl<'a> ActionManager<'a> {
                 }
             };
             if let Some((update, basis)) = maybe_update {
-                self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), Some(&basis))
+                self.pddb.borrow().delete_key(dict, entry.key_guid.as_str().unwrap(), Some(&basis))
                 .unwrap_or_else(|e| self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)));
                 match self.pddb.borrow().get(
-                    dict, entry.key_name.as_str().unwrap(), Some(&basis),
+                    dict, entry.key_guid.as_str().unwrap(), Some(&basis),
                     false, true, Some(VAULT_ALLOC_HINT),
                     Some(basis_change)
                 ) {
@@ -606,12 +608,12 @@ impl<'a> ActionManager<'a> {
         }
 
         let choice = choice.unwrap();
-        let key_name =  entry.key_name.as_str().unwrap();
+        let key_guid =  entry.key_guid.as_str().unwrap();
         let mut storage = self.storage.borrow_mut();
 
         let maybe_edited = match choice {
             storage::ContentKind::TOTP => {
-                let mut pw: storage::TotpRecord =  match storage.get_record(&choice, key_name) {
+                let mut pw: storage::TotpRecord =  match storage.get_record(&choice, key_guid) {
                     Ok(record) => record,
                     Err(error) => {
                         self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
@@ -656,10 +658,10 @@ impl<'a> ActionManager<'a> {
                     pw.digits = d;
                 }
 
-                storage.update(&choice, key_name, &mut pw)
+                storage.update(&choice, key_guid, &mut pw)
             },
             storage::ContentKind::Password => {
-                let mut pw: storage::PasswordRecord =  match storage.get_record(&choice, key_name) {
+                let mut pw: storage::PasswordRecord =  match storage.get_record(&choice, key_guid) {
                     Ok(record) => record,
                     Err(error) => {
                         self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
@@ -669,11 +671,11 @@ impl<'a> ActionManager<'a> {
                 // remove the entry from the old UX list
                 let mut desc = String::new();
                 make_pw_name(&pw.description, &pw.username, &mut desc);
-                match self.item_lists.try_lock() {
-                    Ok(_) => log::debug!("list is not locked"),
-                    Err(_) => log::debug!("list is locked"),
-                }
-                self.item_lists.lock().unwrap().remove(VaultMode::Password, ListItem::key_from_parts(&desc, key_name));
+                log::info!("editing {}:{}", desc, key_guid);
+                assert!(self.item_lists.lock().unwrap()
+                .remove(VaultMode::Password, ListKey::key_from_parts(&desc, &key_guid)).is_some()
+                , "requested to edit a selection, but the selected item wasn't found!"
+                );
 
                 // display previous data for edit
                 let edit_data = if pw.notes != t!("vault.notes", xous::LANG) {
@@ -810,7 +812,7 @@ impl<'a> ActionManager<'a> {
                 // note the edit access, this counts as an access since the password was revealed
                 pw.count += 1;
                 pw.atime = utc_now().timestamp() as u64;
-                storage.update(&choice, key_name, &mut pw)
+                storage.update(&choice, key_guid, &mut pw)
            },
         };
 
@@ -880,15 +882,16 @@ impl<'a> ActionManager<'a> {
                         let mut pw_rec = PasswordRecord::alloc();
                         let mut extra = String::with_capacity(256);
                         let mut desc = String::with_capacity(256);
-                        let mut lookup_key = String::with_capacity(384);
+                        let mut lookup_key = ListKey::reserved();
                         let mut il = self.item_lists.lock().unwrap();
+                        // pre-reserve the space at the top, to avoid lots of allocs
+                        il.expand(self.mode_cache, keys.len());
                         for key in keys {
                             #[cfg(feature="vaultperf")]
                             self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 2, std::line!());
                             if let Some(data) = key.data {
                                 if pw_rec.from_vec(data).is_ok() {
                                     // reset the re-usable structures
-                                    lookup_key.clear();
                                     extra.clear();
                                     #[cfg(feature="vaultperf")]
                                     self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
@@ -897,13 +900,11 @@ impl<'a> ActionManager<'a> {
                                     make_pw_name(&pw_rec.description, &pw_rec.username, &mut desc);
 
                                     // build the storage key in the list array
-                                    lookup_key.push_str(&desc);
-                                    lookup_key.push_str(&key.name);
+                                    lookup_key.reset_from_parts(&desc, &key.name);
 
                                     #[cfg(feature="vaultperf")]
                                     self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
-                                    if let Some(prev_entry_locked) = il.get(self.mode_cache, &lookup_key) {
-                                        let mut prev_entry = prev_entry_locked.lock().unwrap();
+                                    if let Some(mut prev_entry) = il.get(self.mode_cache, &lookup_key) {
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 3, std::line!());
                                         prev_entry.dirty = true;
@@ -953,10 +954,7 @@ impl<'a> ActionManager<'a> {
                                             atime: pw_rec.atime,
                                             count: pw_rec.count,
                                         };
-                                        unsafe { // safety: fixup_filter() is called after this loop
-                                            // this push is very slow, but we only have to do it once on boot
-                                            il.bulk_insert(self.mode_cache, li.key(), li);
-                                        }
+                                        il.push(self.mode_cache, li);
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 4, std::line!());
                                     }
@@ -985,7 +983,7 @@ impl<'a> ActionManager<'a> {
                             self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 2, std::line!());
                         }
                         log::debug!("before fixup_filter: {}", self.tt.elapsed_ms() - start);
-                        il.fixup_filter(); // meets the safety condition for bulk_insert()
+                        il.filter_reset(self.mode_cache);
                         if oom_keys != 0 {
                             log::warn!("Ran out of cache space handling password keys. {} keys are not loaded.", oom_keys);
                             self.report_err(&format!("Ran out of cache space handling passwords. {} passwords not loaded", oom_keys), None::<crate::storage::Error>);
@@ -1032,7 +1030,7 @@ impl<'a> ActionManager<'a> {
                                         count: ai.count,
                                         atime: ai.atime,
                                     };
-                                    self.item_lists.lock().unwrap().insert(self.mode_cache, li.key(), li);
+                                    self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                                 } else {
                                     let err = format!("{}:{}:{}: ({})[moved data]...",
                                         key.basis, U2F_APP_DICT, key.name, key.len
@@ -1090,7 +1088,7 @@ impl<'a> ActionManager<'a> {
                                                     count: 0,
                                                     atime: 0,
                                                 };
-                                                self.item_lists.lock().unwrap().insert(self.mode_cache, li.key(), li);
+                                                self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                                             }
                                             None => {
                                                 // Probably more indicative of a mismatch in OpenSK key range mapping, rather than a hard error.
@@ -1149,7 +1147,7 @@ impl<'a> ActionManager<'a> {
                                         count: 0,
                                         atime: 0,
                                     };
-                                    self.item_lists.lock().unwrap().insert(self.mode_cache, li.key(), li);
+                                    self.item_lists.lock().unwrap().insert_unique(self.mode_cache, li);
                                 } else {
                                     let err = format!("{}:{}:{}: ({})[moved data]...",
                                         key.basis, VAULT_TOTP_DICT, key.name, key.len
