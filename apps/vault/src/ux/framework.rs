@@ -539,7 +539,7 @@ impl VaultUx {
     pub(crate) fn raise_menu(&mut self) {
         self.title_dirty = true;
         self.gam.raise_menu(gam::APP_MENU_0_VAULT).expect("couldn't raise our submenu");
-        log::info!("raised menu");
+        log::debug!("raised menu");
     }
     pub (crate) fn change_focus_to(&mut self, _state: &gam::FocusState) {
         self.title_dirty = true;

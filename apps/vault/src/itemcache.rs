@@ -202,7 +202,7 @@ impl FilteredListView {
         self.sorted = false;
     }
     pub fn clear(&mut self) {
-        log::info!("filter clear");
+        log::debug!("filter clear");
         self.list.clear();
         self.sorted = false;
         self.selection_index = 0;
@@ -271,7 +271,7 @@ impl FilteredListView {
             return;
         }
         if self.list.len() == 0 {
-            log::info!("zero-length list!");
+            log::debug!("zero-length list!");
             return;
         }
         // step 1. binary search to find if the criteria is even anywhere in the list.
@@ -313,7 +313,7 @@ impl FilteredListView {
         self.mark_filtered_as_dirty();
         ts[5] = tt.elapsed_ms();
         for(index, &elapsed) in ts[1..].iter().enumerate() {
-            log::info!("{}: {}", index + 1, elapsed - ts[0]);
+            log::info!("{}: {}", index + 1, elapsed.saturating_sub(ts[0]));
         }
     }
     fn mark_filtered_as_dirty(&mut self) {
@@ -329,10 +329,10 @@ impl FilteredListView {
     }
     pub fn filter_len(&self) -> usize {
         if let Some(r) = &self.filter_range {
-            log::info!("filter len {}", r.len());
+            log::debug!("filter len {}", r.len());
             r.len()
         } else {
-            log::info!("filter is not present (0)");
+            log::debug!("filter is not present (0)");
             0
         }
     }
@@ -377,7 +377,7 @@ impl FilteredListView {
         ]
     }
     pub fn nav(&mut self, dir: NavDir) {
-        log::info!("index bef: {}, filter: {:?}", self.selection_index, self.filter_range);
+        log::debug!("index bef: {}, filter: {:?}", self.selection_index, self.filter_range);
         match dir {
             NavDir::Up => {
                 if self.selection_index > 0 {
@@ -424,7 +424,7 @@ impl FilteredListView {
                 }
             }
         }
-        log::info!("index after: {}", self.selection_index);
+        log::debug!("index after: {}", self.selection_index);
     }
     pub fn selected_guid(&self) -> String {
         self.list[self.selection_index + self.filter_start()].guid.to_owned()
@@ -442,9 +442,9 @@ impl FilteredListView {
     }
     pub fn selected_entry(&self, mode: VaultMode) -> Option<SelectedEntry> {
         if let Some(r) = self.filter_range.clone() {
-            log::info!("filter range: {:?}", r);
-            log::info!("selection index: {}", self.selection_index);
-            log::info!("filter start: {}", self.filter_start());
+            log::debug!("filter range: {:?}", r);
+            log::debug!("selection index: {}", self.selection_index);
+            log::debug!("filter start: {}", self.filter_start());
             if r.contains(&(self.selection_index + self.filter_start())) {
                 Some(
                     SelectedEntry {
