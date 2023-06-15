@@ -393,6 +393,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Fix #339 by adjusting the shellchat API call to match what is done in status bar
 - Improved wifi scanning (fixes #336) - scans are now sorted by strength; old APs are retired; and the UX will pause while the scan occurs. Repeated scans still require going through the entire menu tree again; this is because modal radio-box lists aren't dynamically updateable.
 - Improve performance of filtering operations in `vault` by ~100x by refactoring the item cache to work on `Vec` that is repeatedly sorted, instead of on a `BTreeMap` that is referenced. Turns out that sorting is a far cheaper operation than reference-counted shared references, or copying data to the heap (to avoid the shared reference). See PR#389 for details.
+- @jeandudey contributed #390 and #391 which improve interoperability of svd2utra across build hosts and modularizes the language to the locales crate.
 
 ## Roadmap
 - Lots of testing and bug fixes
