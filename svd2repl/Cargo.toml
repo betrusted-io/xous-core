@@ -10,4 +10,3 @@ edition = "2018"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 quick-xml = "0.28.1"
-convert_case = "0.4.0"
