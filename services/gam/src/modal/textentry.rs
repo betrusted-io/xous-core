@@ -621,7 +621,7 @@ impl ActionApi for TextEntry {
                 {
                     let xns = xous_names::XousNames::new().unwrap();
                     let tts = tts_frontend::TtsFrontend::new(&xns).unwrap();
-                    tts.tts_blocking(locales::t!("input.delete-tts", xous::LANG)).unwrap();
+                    tts.tts_blocking(locales::t!("input.delete-tts", locales::LANG)).unwrap();
                 }
                 if payload.placeholder_persist && payload.placeholder.is_some() && payload.content.len() == 0 {
                     // copy the placeholder into the content string before processing the backspace

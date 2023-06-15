@@ -67,13 +67,13 @@ impl<'a> ShellCmdApi<'a> for JtagCmd {
                     match self.jtag.seal_device() {
                         Ok(result) => {
                             if !result {
-                                log::info!("{}", t!("rootkeys.efuse_seal_fail", xous::LANG));
+                                log::info!("{}", t!("rootkeys.efuse_seal_fail", locales::LANG));
                             } else {
                                 log::info!("eFuse sealing success!");
                             }
                         }
                         Err(e) => {
-                            log::info!("{}", &format!("{}\n{:?}", t!("rootkeys.efuse_internal_error", xous::LANG), e));
+                            log::info!("{}", &format!("{}\n{:?}", t!("rootkeys.efuse_internal_error", locales::LANG), e));
                         }
                     }
                     log::info!("{}EFUSE.SEAL_OK,{}", xous::BOOKEND_START, xous::BOOKEND_END);

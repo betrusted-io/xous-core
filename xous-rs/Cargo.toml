@@ -16,12 +16,6 @@ compiler_builtins = { version = '0.1.0', optional = true }
 v2p = []
 default = []
 
-# alternative language targets. Only one may be specified at a time
-lang-ja = []
-lang-zh = []
-lang-en-tts = []
-lang-fr = []
-
 # If this is set, then the "Drop" feature of MemoryMessage structs
 # will not be implemented.  This should only be set by the kernel.
 forget-memory-messages = []

@@ -44,20 +44,20 @@ pub enum PrefsMenuUpdateOp {
 impl Display for DevicePrefsOp {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::AutobacklightOnBoot => write!(f, "{}", t!("prefs.autobacklight_enable", xous::LANG)),
-            Self::AutobacklightTimeout => write!(f, "{}", t!("prefs.autobacklight_duration", xous::LANG)),
-            Self::AutoSleepTimeout => write!(f, "{}", t!("prefs.autosleep_duration", xous::LANG)),
-            Self::RebootOnAutoSleep => write!(f, "{}", t!("prefs.autosleep_reboot", xous::LANG)),
-            Self::ConnectKnownNetworksOnBoot => write!(f, "{}", t!("prefs.wifi_connect_auto", xous::LANG)),
-            Self::WifiKill => write!(f, "{}", t!("prefs.wifi_kill", xous::LANG)),
-            Self::KeyboardLayout => write!(f, "{}", t!("prefs.keyboard_layout", xous::LANG)),
-            Self::WLANMenu => write!(f, "{}", t!("prefs.wifi_setting", xous::LANG)),
-            Self::SetTime => write!(f, "{}", t!("mainmenu.set_rtc", xous::LANG)),
-            Self::SetTimezone => write!(f, "{}", t!("mainmenu.set_tz", xous::LANG)),
-            Self::AudioOn => write!(f, "{}", t!("prefs.enable_audio", xous::LANG)),
-            Self::AudioOff => write!(f, "{}", t!("prefs.disable_audio", xous::LANG)),
-            Self::HeadsetVolume => write!(f, "{}", t!("prefs.headphone_volume", xous::LANG)),
-            Self::EarpieceVolume => write!(f, "{}", t!("prefs.speaker_volume", xous::LANG)),
+            Self::AutobacklightOnBoot => write!(f, "{}", t!("prefs.autobacklight_enable", locales::LANG)),
+            Self::AutobacklightTimeout => write!(f, "{}", t!("prefs.autobacklight_duration", locales::LANG)),
+            Self::AutoSleepTimeout => write!(f, "{}", t!("prefs.autosleep_duration", locales::LANG)),
+            Self::RebootOnAutoSleep => write!(f, "{}", t!("prefs.autosleep_reboot", locales::LANG)),
+            Self::ConnectKnownNetworksOnBoot => write!(f, "{}", t!("prefs.wifi_connect_auto", locales::LANG)),
+            Self::WifiKill => write!(f, "{}", t!("prefs.wifi_kill", locales::LANG)),
+            Self::KeyboardLayout => write!(f, "{}", t!("prefs.keyboard_layout", locales::LANG)),
+            Self::WLANMenu => write!(f, "{}", t!("prefs.wifi_setting", locales::LANG)),
+            Self::SetTime => write!(f, "{}", t!("mainmenu.set_rtc", locales::LANG)),
+            Self::SetTimezone => write!(f, "{}", t!("mainmenu.set_tz", locales::LANG)),
+            Self::AudioOn => write!(f, "{}", t!("prefs.enable_audio", locales::LANG)),
+            Self::AudioOff => write!(f, "{}", t!("prefs.disable_audio", locales::LANG)),
+            Self::HeadsetVolume => write!(f, "{}", t!("prefs.headphone_volume", locales::LANG)),
+            Self::EarpieceVolume => write!(f, "{}", t!("prefs.speaker_volume", locales::LANG)),
 
             _ => unimplemented!("should not end up here!"),
         }
@@ -163,7 +163,7 @@ impl PrefHandler for DevicePrefs {
             .collect::<Vec<gam::MenuItem>>();
 
         menus.push(gam::MenuItem {
-            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", xous::LANG)),
+            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", locales::LANG)),
             action_conn: None,
             action_opcode: 0,
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -271,7 +271,7 @@ impl DevicePrefs {
     fn show_error_modal(&self, e: DevicePrefsError) {
         self.modals
             .show_notification(
-                format!("{}: {}", t!("wlan.error", xous::LANG), e).as_str(),
+                format!("{}: {}", t!("wlan.error", locales::LANG), e).as_str(),
                 None,
             )
             .unwrap()
@@ -282,11 +282,11 @@ impl DevicePrefs {
     fn autobacklight_on_boot(&mut self) -> Result<(), DevicePrefsError> {
         let cv = self.up.autobacklight_on_boot_or_value(true)?;
 
-        self.modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
+        self.modals.add_list(vec![t!("prefs.yes", locales::LANG), t!("prefs.no", locales::LANG)]).unwrap();
 
         let new_result = yes_no_to_bool(
             self.modals
-                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
+                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
                     bool_to_yes_no(cv)))
                 .unwrap()
                 .as_str(),
@@ -328,13 +328,13 @@ impl DevicePrefs {
 
         let raw_timeout = self
             .modals
-            .alert_builder(t!("prefs.autobacklight_duration_in_secs", xous::LANG))
+            .alert_builder(t!("prefs.autobacklight_duration_in_secs", locales::LANG))
             .field(
                 Some(cv.to_string()),
                 Some(|tf| match tf.as_str().parse::<u64>() {
                     Ok(_) => None,
                     Err(_) => Some(xous_ipc::String::from_str(
-                        t!("prefs.autobacklight_err", xous::LANG),
+                        t!("prefs.autobacklight_err", locales::LANG),
                     )),
                 }),
             )
@@ -351,13 +351,13 @@ impl DevicePrefs {
 
         let raw_timeout = self
             .modals
-            .alert_builder(t!("prefs.autosleep_duration_in_mins", xous::LANG))
+            .alert_builder(t!("prefs.autosleep_duration_in_mins", locales::LANG))
             .field(
                 Some(cv.to_string()),
                 Some(|tf| match tf.as_str().parse::<u64>() {
                     Ok(_) => None,
                     Err(_) => Some(xous_ipc::String::from_str(
-                        t!("prefs.autobacklight_err", xous::LANG),
+                        t!("prefs.autobacklight_err", locales::LANG),
                     )),
                 }),
             )
@@ -372,10 +372,10 @@ impl DevicePrefs {
     fn reboot_on_autosleep(&self) -> Result<(), DevicePrefsError> {
         let cv = self.up.reboot_on_autosleep_or_default()?;
 
-        self.modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
+        self.modals.add_list(vec![t!("prefs.yes", locales::LANG), t!("prefs.no", locales::LANG)]).unwrap();
         let new_result = yes_no_to_bool(
             self.modals
-                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
+                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
                     bool_to_yes_no(cv)))
                 .unwrap()
                 .as_str(),
@@ -387,11 +387,11 @@ impl DevicePrefs {
     fn wifi_kill(&mut self) -> Result<(), DevicePrefsError> {
         let cv = self.up.wifi_kill_or_default()?;
 
-        self.modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
+        self.modals.add_list(vec![t!("prefs.yes", locales::LANG), t!("prefs.no", locales::LANG)]).unwrap();
 
         let new_result = yes_no_to_bool(
             self.modals
-                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
+                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
                     bool_to_yes_no(cv)))
                 .unwrap()
                 .as_str(),
@@ -412,11 +412,11 @@ impl DevicePrefs {
     fn connect_known_networks_on_boot(&mut self) -> Result<(), DevicePrefsError> {
         let cv = self.up.connect_known_networks_on_boot_or_value(true)?;
 
-        self.modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
+        self.modals.add_list(vec![t!("prefs.yes", locales::LANG), t!("prefs.no", locales::LANG)]).unwrap();
 
         let new_result = yes_no_to_bool(
             self.modals
-                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
+                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
                     bool_to_yes_no(cv)))
                 .unwrap()
                 .as_str(),
@@ -482,7 +482,7 @@ impl DevicePrefs {
 
         let new_result = self
             .modals
-            .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
+            .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
                 keyboard::KeyMap::from(kl)))
             .unwrap();
 
@@ -513,7 +513,7 @@ impl DevicePrefs {
     fn alter_menu_audio_on(&mut self) {
         let menu = self.menu.as_ref().unwrap();
 
-        menu.delete_item(t!("mainmenu.closemenu", xous::LANG));
+        menu.delete_item(t!("mainmenu.closemenu", locales::LANG));
         menu.delete_item(&DevicePrefsOp::AudioOn.to_string());
         menu.add_item(gam::MenuItem {
             name: xous_ipc::String::from_str(&DevicePrefsOp::AudioOff.to_string()),
@@ -538,7 +538,7 @@ impl DevicePrefs {
         });
 
         menu.add_item(gam::MenuItem {
-            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", xous::LANG)),
+            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", locales::LANG)),
             action_conn: None,
             action_opcode: 0,
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -558,7 +558,7 @@ impl DevicePrefs {
     fn alter_menu_audio_off(&mut self) {
         let menu = self.menu.as_ref().unwrap();
         // hide volume toggles
-        menu.delete_item(t!("mainmenu.closemenu", xous::LANG));
+        menu.delete_item(t!("mainmenu.closemenu", locales::LANG));
         menu.delete_item(&DevicePrefsOp::AudioOff.to_string());
         menu.delete_item(&DevicePrefsOp::EarpieceVolume.to_string());
         menu.delete_item(&DevicePrefsOp::HeadsetVolume.to_string());
@@ -570,7 +570,7 @@ impl DevicePrefs {
             close_on_select: true,
         });
         menu.add_item(gam::MenuItem {
-            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", xous::LANG)),
+            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", locales::LANG)),
             action_conn: None,
             action_opcode: 0,
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -603,7 +603,7 @@ impl DevicePrefs {
     }
     #[cfg(not(feature="no-codec"))]
     fn headset_volume(&mut self) -> Result<(), DevicePrefsError> { // headset -> headphone
-        let (db_val, slider_val) = self.volume_slider(t!("prefs.headphone_volume", xous::LANG), true)?;
+        let (db_val, slider_val) = self.volume_slider(t!("prefs.headphone_volume", locales::LANG), true)?;
         self.codec.set_headphone_volume(codec::VolumeOps::Set, Some(db_val as f32))?;
         self.up.set_headset_volume(slider_val)?;
 
@@ -611,7 +611,7 @@ impl DevicePrefs {
     }
     #[cfg(not(feature="no-codec"))]
     fn earpiece_volume(&mut self) -> Result<(), DevicePrefsError> { // earpiece -> speaker
-        let (db_val, slider_val) = self.volume_slider(t!("prefs.speaker_volume", xous::LANG), false)?;
+        let (db_val, slider_val) = self.volume_slider(t!("prefs.speaker_volume", locales::LANG), false)?;
         self.codec.set_speaker_volume(codec::VolumeOps::Set, Some(db_val as f32))?;
         self.up.set_earpiece_volume(slider_val)?;
         Ok(())
@@ -625,9 +625,9 @@ pub fn percentage_to_db(value: u32) -> i32 {
 }
 
 fn yes_no_to_bool(val: &str) -> bool {
-    if val == t!("prefs.yes", xous::LANG) {
+    if val == t!("prefs.yes", locales::LANG) {
         true
-    } else if val == t!("prefs.no", xous::LANG) {
+    } else if val == t!("prefs.no", locales::LANG) {
         false
     } else {
         unreachable!("cannot go here!");
@@ -636,8 +636,8 @@ fn yes_no_to_bool(val: &str) -> bool {
 
 fn bool_to_yes_no(val: bool) -> String {
     match val {
-        true => t!("prefs.yes", xous::LANG).to_owned(),
-        false => t!("prefs.no", xous::LANG).to_owned(),
+        true => t!("prefs.yes", locales::LANG).to_owned(),
+        false => t!("prefs.no", locales::LANG).to_owned(),
     }
 }
 

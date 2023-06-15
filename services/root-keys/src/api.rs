@@ -283,7 +283,7 @@ pub enum BackupLanguage {
 }
 impl Default for BackupLanguage {
     fn default() -> Self {
-        match xous::LANG {
+        match locales::LANG {
             "en" => BackupLanguage::En,
             "en-tts" => BackupLanguage::EnTts,
             "ja" => BackupLanguage::Ja,

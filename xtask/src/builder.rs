@@ -872,7 +872,7 @@ impl Builder {
             { // stash the existing locale
                 let mut locale_file = OpenOptions::new()
                     .read(true)
-                    .open("xous-rs/src/locale.rs")
+                    .open("locales/src/locale.rs")
                     .expect("Can't open locale file for reading");
                 locale_file.read_to_string(&mut self.locale_stash).unwrap();
             }
@@ -882,7 +882,7 @@ impl Builder {
                 .write(true)
                 .create(true)
                 .truncate(true)
-                .open("xous-rs/src/locale.rs")
+                .open("locales/src/locale.rs")
                 .expect("Can't open locale for modification");
             write!(
                 locale_override,
@@ -899,7 +899,7 @@ impl Builder {
                 .write(true)
                 .create(true)
                 .truncate(true)
-                .open("xous-rs/src/locale.rs")
+                .open("locales/src/locale.rs")
                 .expect("Can't open locale for modification");
             write!(
                 locale_restore,

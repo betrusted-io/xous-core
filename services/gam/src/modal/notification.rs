@@ -46,7 +46,7 @@ impl Notification {
             Some(setting) => {
                 let qrcode = match QrCode::new(setting) {
                     Ok(code) => code,
-                    Err(_e) => QrCode::new(t!("notification.qrcode.error", xous::LANG)).unwrap(),
+                    Err(_e) => QrCode::new(t!("notification.qrcode.error", locales::LANG)).unwrap(),
                 };
                 self.qrwidth = qrcode.width();
                 log::info!(
@@ -87,7 +87,7 @@ impl Notification {
             Point::new(modal.margin, at_height + modal.margin * 2),
             (modal.canvas_width - modal.margin * 2) as u16,
         );
-        write!(tv, "{}", t!("notification.dismiss", xous::LANG)).unwrap();
+        write!(tv, "{}", t!("notification.dismiss", locales::LANG)).unwrap();
         modal
             .gam
             .bounds_compute_textview(&mut tv)

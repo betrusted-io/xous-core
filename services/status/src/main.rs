@@ -321,7 +321,7 @@ fn wrapped_main() -> ! {
     uptime_tv.style = GlyphStyle::Regular;
     uptime_tv.draw_border = false;
     uptime_tv.margin = Point::new(3, 0);
-    write!(uptime_tv, "{}", t!("secnote.startup", xous::LANG)).expect("|status: couldn't init uptime text");
+    write!(uptime_tv, "{}", t!("secnote.startup", locales::LANG)).expect("|status: couldn't init uptime text");
     gam.post_textview(&mut uptime_tv)
         .expect("|status: can't draw battery stats");
     log::debug!("|status: screensize as reported: {:?}", screensize);
@@ -355,7 +355,7 @@ fn wrapped_main() -> ! {
     security_tv.token = gam.claim_token(gam::STATUS_BAR_NAME).expect("couldn't request token"); // this is a shared magic word to identify this process
     security_tv.clear_area = true;
     security_tv.invert = true;
-    write!(&mut security_tv, "{}", t!("secnote.startup", xous::LANG)).unwrap();
+    write!(&mut security_tv, "{}", t!("secnote.startup", locales::LANG)).unwrap();
     gam.post_textview(&mut security_tv).unwrap();
     gam.draw_line(status_gid, Line::new_with_style(
         Point::new(0, screensize.y), screensize,
@@ -370,7 +370,7 @@ fn wrapped_main() -> ! {
     if !debug_locked {
         sec_notes.lock().unwrap().insert(
             "secnote.usb_unlock".to_string(),
-            t!("secnote.usb_unlock", xous::LANG).to_string(),
+            t!("secnote.usb_unlock", locales::LANG).to_string(),
         );
     }
 
@@ -453,7 +453,7 @@ fn wrapped_main() -> ! {
                 }
                 Some(ecup::UpdateResult::NothingToDo) => log::info!("EC update check: nothing to do, firmware is up to date."),
                 Some(ecup::UpdateResult::Abort) => {
-                    modals.show_notification(t!("ecup.abort", xous::LANG), None).unwrap();
+                    modals.show_notification(t!("ecup.abort", locales::LANG), None).unwrap();
                 }
                 // note: invalid package triggers a pop-up in the update procedure, so we don't need to pop one up here.
                 Some(ecup::UpdateResult::PackageInvalid) => log::error!("EC firmware package did not validate"),
@@ -507,7 +507,7 @@ fn wrapped_main() -> ! {
                             log::info!("Rekey of PDDB to current device completed successfully")
                         },
                         Err(e) => {
-                            modals.show_notification(&format!("{}{:?}", t!("rekey.fail", xous::LANG), e), None).ok();
+                            modals.show_notification(&format!("{}{:?}", t!("rekey.fail", locales::LANG), e), None).ok();
                             log::error!("Backup was aborted. Reason: {:?}", e);
                         }
                     }
@@ -540,7 +540,7 @@ fn wrapped_main() -> ! {
     if !keys.lock().unwrap().is_initialized().unwrap() {
         sec_notes.lock().unwrap().insert(
             "secnotes.no_keys".to_string(),
-            t!("secnote.no_keys", xous::LANG).to_string(),
+            t!("secnote.no_keys", locales::LANG).to_string(),
         );
         if !restore_running {
             if let Some(staged) = staged_sv {
@@ -574,14 +574,14 @@ fn wrapped_main() -> ! {
                         let mut sn = clone.lock().unwrap();
                         sn.insert(
                             "secnotes.gateware_fail".to_string(),
-                            t!("secnote.gateware_fail", xous::LANG).to_string(),
+                            t!("secnote.gateware_fail", locales::LANG).to_string(),
                         );
                     }
                 } else {
                     let mut sn = clone.lock().unwrap();
                     sn.insert(
                         "secnotes.state_fail".to_string(),
-                        t!("secnote.state_fail", xous::LANG).to_string(),
+                        t!("secnote.state_fail", locales::LANG).to_string(),
                     );
                 }
             }
@@ -591,15 +591,15 @@ fn wrapped_main() -> ! {
             if (staged > soc) && !soc_updated { // if the soc was updated, we should reboot before we try this
                 if keys.lock().unwrap().prompt_for_update() {
                     // prompt to apply the update
-                    modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
-                    modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
-                    modals.add_list_item(t!("socup.ignore", xous::LANG)).expect("couldn't build radio item list");
-                    match modals.get_radiobutton(t!("socup.candidate", xous::LANG)) {
+                    modals.add_list_item(t!("rootkeys.gwup.yes", locales::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("rootkeys.gwup.no", locales::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("socup.ignore", locales::LANG)).expect("couldn't build radio item list");
+                    match modals.get_radiobutton(t!("socup.candidate", locales::LANG)) {
                         Ok(response) => {
-                            if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                            if response.as_str() == t!("rootkeys.gwup.yes", locales::LANG) {
                                 keys.lock().unwrap().do_update_gw_ux_flow_blocking();
                                 soc_updated = true;
-                            } else if response.as_str() == t!("socup.ignore", xous::LANG) {
+                            } else if response.as_str() == t!("socup.ignore", locales::LANG) {
                                 keys.lock().unwrap().set_update_prompt(false);
                             }
                         }
@@ -679,7 +679,7 @@ fn wrapped_main() -> ! {
             true => {
                 sec_notes.lock().unwrap().insert(
                     "secnote.zero_key".to_string(),
-                    t!("secnote.zero_key", xous::LANG).to_string(),
+                    t!("secnote.zero_key", locales::LANG).to_string(),
                 );
             },
             false => {},
@@ -703,7 +703,7 @@ fn wrapped_main() -> ! {
                 Ok(_) => {},
                 Err(xous::Error::Timeout) => {
                     // TODO: maybe this branch needs a different log message/flow?
-                    modals.show_notification(t!("suspend.fail", xous::LANG), None).unwrap();
+                    modals.show_notification(t!("suspend.fail", locales::LANG), None).unwrap();
                 }
                 Err(_e) => {
                     panic!("Unhandled error on suspend request");
@@ -737,7 +737,7 @@ fn wrapped_main() -> ! {
                         tt.sleep_ms(1000).unwrap();
                         let modals = modals::Modals::new(&xns).unwrap();
                         modals.show_notification(
-                            &t!("login.fail", xous::LANG).replace("{fails}", &count.to_string()),
+                            &t!("login.fail", locales::LANG).replace("{fails}", &count.to_string()),
                             None
                         ).ok();
                     } else {
@@ -872,7 +872,7 @@ fn wrapped_main() -> ! {
 
                 // only if there are more bases open than just the .System basis, insert a new key
                 if basis_list_vec.len() > 1 {
-                    let mut new_list_str = t!("secnote.basis", xous::LANG).to_string();
+                    let mut new_list_str = t!("secnote.basis", locales::LANG).to_string();
                     // initially, just concatenate all the basis names...
                     basis_list_vec.reverse(); // reverse the order so the highest priority basis is on the left.
                     for basis in basis_list_vec {
@@ -911,8 +911,8 @@ fn wrapped_main() -> ! {
                 *autobacklight_enabled.lock().unwrap() = true;
 
                 // second: delete the first three elements off the menu
-                menu_manager.delete_item(t!("mainmenu.backlighton", xous::LANG));
-                menu_manager.delete_item(t!("mainmenu.backlightoff", xous::LANG));
+                menu_manager.delete_item(t!("mainmenu.backlighton", locales::LANG));
+                menu_manager.delete_item(t!("mainmenu.backlightoff", locales::LANG));
             }
             Some(StatusOpcode::DisableAutomaticBacklight) => {
                 if !(*autobacklight_enabled.lock().unwrap()) {
@@ -925,14 +925,14 @@ fn wrapped_main() -> ! {
                 // third: construct an array of the new elements to add to the menu.
                 let new_elems = [
                     gam::MenuItem {
-                        name: xous_ipc::String::from_str(t!("mainmenu.backlighton", xous::LANG)),
+                        name: xous_ipc::String::from_str(t!("mainmenu.backlighton", locales::LANG)),
                         action_conn: Some(com.conn()),
                         action_opcode: com.getop_backlight(),
                         action_payload: gam::MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
                         close_on_select: true,
                     },
                     gam::MenuItem {
-                        name: xous_ipc::String::from_str(t!("mainmenu.backlightoff", xous::LANG)),
+                        name: xous_ipc::String::from_str(t!("mainmenu.backlightoff", locales::LANG)),
                         action_conn: Some(com.conn()),
                         action_opcode: com.getop_backlight(),
                         action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -968,7 +968,7 @@ fn wrapped_main() -> ! {
                 if stats.current == -8739 /* 0xdddd */
                 || stats.voltage == 0xdddd || stats.voltage == 0xffff
                 || stats.soc == 0xdd || stats.soc == 0xff {
-                    write!(&mut battstats_tv, "{}", t!("stats.measuring", xous::LANG)).unwrap();
+                    write!(&mut battstats_tv, "{}", t!("stats.measuring", locales::LANG)).unwrap();
                 } else {
                     // toggle between two views of the data every time we have a status update
                     let mut wattage_mw = (stats.current as i32 * stats.voltage as i32) / 1000i32;
@@ -1001,13 +1001,13 @@ fn wrapped_main() -> ! {
                                 write!(
                                     &mut battstats_tv,
                                     "{}",
-                                    t!("stats.wifi_off", xous::LANG)
+                                    t!("stats.wifi_off", locales::LANG)
                                 ).unwrap();
                             } else {
                                 write!(
                                     &mut battstats_tv,
                                     "{}",
-                                    t!("stats.disconnected", xous::LANG)
+                                    t!("stats.disconnected", locales::LANG)
                                 ).unwrap();
                             }
                         }
@@ -1077,7 +1077,7 @@ fn wrapped_main() -> ! {
                         } else {
                             sec_notes.lock().unwrap().insert(
                                 "secnotes.usb_unlock".to_string(),
-                                t!("secnote.usb_unlock", xous::LANG).to_string(),
+                                t!("secnote.usb_unlock", locales::LANG).to_string(),
                             );
                         }
                         debug_locked = is_locked;
@@ -1101,7 +1101,7 @@ fn wrapped_main() -> ! {
                             }
                         }
                     } else {
-                        write!(&mut security_tv, "{}", t!("secnote.allclear", xous::LANG)).unwrap();
+                        write!(&mut security_tv, "{}", t!("secnote.allclear", locales::LANG)).unwrap();
                     }
 
                     secnotes_force_redraw = false;
@@ -1161,13 +1161,13 @@ fn wrapped_main() -> ! {
                             write!(
                                 &mut uptime_tv,
                                 "{}",
-                                t!("stats.set_time", xous::LANG)
+                                t!("stats.set_time", locales::LANG)
                             ).unwrap();
                         } else {
                             write!(
                                 &mut uptime_tv,
                                 "{}",
-                                t!("stats.mount_pddb", xous::LANG)
+                                t!("stats.mount_pddb", locales::LANG)
                             ).unwrap();
                         }
                     }
@@ -1175,7 +1175,7 @@ fn wrapped_main() -> ! {
                     write!(
                         &mut uptime_tv,
                         " {}{}:{:02}:{:02}",
-                        t!("stats.uptime", xous::LANG),
+                        t!("stats.uptime", locales::LANG),
                         (elapsed_time / 3_600_000),
                         (elapsed_time / 60_000) % 60,
                         (elapsed_time / 1000) % 60,
@@ -1200,7 +1200,7 @@ fn wrapped_main() -> ! {
             Some(StatusOpcode::Reboot) => { // this is described as "Lock device" on the menu
                 let pddb = pddb::Pddb::new();
                 if !pddb.try_unmount() { // sync the pddb prior to lock
-                    modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
+                    modals.show_notification(t!("socup.unmount_fail", locales::LANG), None).ok();
                 } else {
                     early_settings.set_early_sleep(true).unwrap();
 
@@ -1243,7 +1243,7 @@ fn wrapped_main() -> ! {
             }),
             Some(StatusOpcode::TrySuspend) => {
                 if llio.is_plugged_in() {
-                    modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
+                    modals.show_notification(t!("mainmenu.cant_sleep", locales::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
                     // reset the last key hit timer, so that when we wake up we get a full timeout period
                     last_key_hit_secs.store((ticktimer.elapsed_ms() / 1000) as u32, Ordering::SeqCst);
@@ -1251,7 +1251,7 @@ fn wrapped_main() -> ! {
                     match susres.initiate_suspend() {
                         Ok(_) => {},
                         Err(xous::Error::Timeout) => {
-                            modals.show_notification(t!("suspend.fail", xous::LANG), None).unwrap();
+                            modals.show_notification(t!("suspend.fail", locales::LANG), None).unwrap();
                         }
                         Err(_e) => {
                             panic!("Unhandled error on suspend request");
@@ -1267,14 +1267,14 @@ fn wrapped_main() -> ! {
                 // turn the interactive dialog box into a thread that fires a message to move
                 // to the next stage (see `PrepareBackup` implementation for a template).
                 if llio.is_plugged_in() {
-                    modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
+                    modals.show_notification(t!("mainmenu.cant_sleep", locales::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
                     // show a note to inform the user that you can't turn it on without an external power source...
-                    modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
-                    modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
-                    match modals.get_radiobutton(t!("mainmenu.shutdown_confirm", xous::LANG)) {
+                    modals.add_list_item(t!("rootkeys.gwup.yes", locales::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("rootkeys.gwup.no", locales::LANG)).expect("couldn't build radio item list");
+                    match modals.get_radiobutton(t!("mainmenu.shutdown_confirm", locales::LANG)) {
                         Ok(response) => {
-                            if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                            if response.as_str() == t!("rootkeys.gwup.yes", locales::LANG) {
                                 {}
                             } else {
                                 // abort the flow now by returning to the main dispatch handler
@@ -1286,7 +1286,7 @@ fn wrapped_main() -> ! {
                     // unmount things before shutting down
                     let pddb = pddb::Pddb::new();
                     if !pddb.try_unmount() {
-                        modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
+                        modals.show_notification(t!("socup.unmount_fail", locales::LANG), None).ok();
                     } else {
                         pddb.pddb_halt();
                         gam.shipmode_blank_request().ok();
@@ -1350,27 +1350,27 @@ fn wrapped_main() -> ! {
                     move || {
                         let xns = xous_names::XousNames::new().unwrap();
                         let modals = modals::Modals::new(&xns).unwrap();
-                        modals.add_list_item(t!("burnkey.bbram", xous::LANG)).expect("couldn't build radio item list");
-                        modals.add_list_item(t!("burnkey.efuse", xous::LANG)).expect("couldn't build radio item list");
-                        modals.add_list_item(t!("wlan.cancel", xous::LANG)).expect("couldn't build radio item list");
-                        match modals.get_radiobutton(t!("burnkey.type", xous::LANG)) {
+                        modals.add_list_item(t!("burnkey.bbram", locales::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("burnkey.efuse", locales::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("wlan.cancel", locales::LANG)).expect("couldn't build radio item list");
+                        match modals.get_radiobutton(t!("burnkey.type", locales::LANG)) {
                             Ok(response) => {
-                                if response.as_str() == t!("burnkey.bbram", xous::LANG) {
+                                if response.as_str() == t!("burnkey.bbram", locales::LANG) {
                                     // do BBRAM flow
                                     log::info!("{}BBRAM.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                                     // punts to a script-driven flow on the pi
                                     modals.show_notification(
-                                        t!("burnkey.bbram_exec", xous::LANG),
+                                        t!("burnkey.bbram_exec", locales::LANG),
                                         Some("https://github.com/betrusted-io/betrusted-wiki/wiki/FAQ:-FPGA-AES-Encryption-Key-(eFuse-BBRAM)"),
                                     ).ok();
-                                } else if response.as_str() == t!("burnkey.efuse", xous::LANG) {
+                                } else if response.as_str() == t!("burnkey.efuse", locales::LANG) {
                                     log::info!("{}EFUSE.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                                     // do eFuse flow
-                                    modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
-                                    modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
-                                    match modals.get_radiobutton(t!("burnkey.efuse_confirm", xous::LANG)) {
+                                    modals.add_list_item(t!("rootkeys.gwup.yes", locales::LANG)).expect("couldn't build radio item list");
+                                    modals.add_list_item(t!("rootkeys.gwup.no", locales::LANG)).expect("couldn't build radio item list");
+                                    match modals.get_radiobutton(t!("burnkey.efuse_confirm", locales::LANG)) {
                                         Ok(response) => {
-                                            if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                            if response.as_str() == t!("rootkeys.gwup.yes", locales::LANG) {
                                                 // do the efuse burn
                                                 keys.lock().unwrap().do_efuse_burn();
                                             } else {
@@ -1394,12 +1394,12 @@ fn wrapped_main() -> ! {
                     move || {
                         let xns = xous_names::XousNames::new().unwrap();
                         let modals = modals::Modals::new(&xns).unwrap();
-                        modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
-                        modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("rootkeys.gwup.yes", locales::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("rootkeys.gwup.no", locales::LANG)).expect("couldn't build radio item list");
                         log::info!("{}BACKUP.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                        match modals.get_radiobutton(t!("backup.confirm", xous::LANG)) {
+                        match modals.get_radiobutton(t!("backup.confirm", locales::LANG)) {
                             Ok(response) => {
-                                if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                if response.as_str() == t!("rootkeys.gwup.yes", locales::LANG) {
                                     send_message(cb_cid,
                                         Message::new_scalar(StatusOpcode::PrepareBackupConfirmed.to_usize().unwrap(), 0, 0, 0, 0)
                                     ).expect("couldn't initiate backup");
@@ -1435,7 +1435,7 @@ fn wrapped_main() -> ! {
                         if !pddb.try_unmount() {
                             let xns = xous_names::XousNames::new().unwrap();
                             let modals = modals::Modals::new(&xns).unwrap();
-                            modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
+                            modals.show_notification(t!("socup.unmount_fail", locales::LANG), None).ok();
                         } else {
                             *checksums.lock().unwrap() = Some(pddb.compute_checksums());
                             // PDDB is halted forever. However, the system is reset after a backup is run.
@@ -1498,7 +1498,7 @@ fn wrapped_main() -> ! {
                                     Some(ecup::UpdateResult::Abort) => {
                                         let xns = xous_names::XousNames::new().unwrap();
                                         let modals = modals::Modals::new(&xns).unwrap();
-                                        modals.show_notification(t!("ecup.abort", xous::LANG), None).unwrap();
+                                        modals.show_notification(t!("ecup.abort", locales::LANG), None).unwrap();
                                     }
                                     // note: invalid package triggers a pop-up in the update procedure, so we don't need to pop one up here.
                                     Some(ecup::UpdateResult::PackageInvalid) => log::error!("EC firmware package did not validate"),

@@ -1732,6 +1732,7 @@ name = "graphics-server"
 version = "0.1.0"
 dependencies = [
  "keyboard",
+ "locales",
  "log",
  "minifb",
  "num-derive",

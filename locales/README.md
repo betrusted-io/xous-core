@@ -44,7 +44,7 @@ the following idiom:
 // insert `locales = {path = "../../locales"}` inside the Cargo.toml of the server
 use locales::t;
 
-name: String::<64>::from_str(t!("mainmenu.backlighton", xous::LANG)),
+name: String::<64>::from_str(t!("mainmenu.backlighton", locales::LANG)),
 ```
 
 The `t!(string_reference, language)` takes `string_reference` which is a programmer-readable
@@ -52,7 +52,7 @@ string that refers to the localized string, and `language` is the language code 
 the localization file.
 
 ## How to Change the Display Language
-A global `LANG` variable is provide inside `xous-rs/src/locale.rs` so that the language
+A global `LANG` variable is provide inside `src/locale.rs` so that the language
 may be set by changing a single file.
 
 Strings are statically mapped into the kernel for a given locale, so changing languages requires

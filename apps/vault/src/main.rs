@@ -292,7 +292,7 @@ fn main() -> ! {
                     log::warn!("Migration encountered errors! {:?}", e);
                     let modals = modals::Modals::new(&xns).unwrap();
                     modals.show_notification(
-                        &format!("{}\n{:?}", t!("vault.migration_error", xous::LANG), e), None
+                        &format!("{}\n{:?}", t!("vault.migration_error", locales::LANG), e), None
                     ).ok();
                 }
             };
@@ -601,7 +601,7 @@ fn main() -> ! {
                         .add_list_item(item)
                         .expect("couldn't build radio item list");
                 }
-                match modals.get_radiobutton(t!("vault.select_font", xous::LANG)) {
+                match modals.get_radiobutton(t!("vault.select_font", locales::LANG)) {
                     Ok(style) => {
                         vaultux.set_glyph_style(name_to_style(&style).unwrap_or(DEFAULT_FONT));
                     },
@@ -610,32 +610,32 @@ fn main() -> ! {
                 vaultux.update_mode();
             }
             Some(VaultOp::MenuAutotype) => {
-                modals.dynamic_notification(Some(t!("vault.autotyping", xous::LANG)), None).ok();
+                modals.dynamic_notification(Some(t!("vault.autotyping", locales::LANG)), None).ok();
                 match vaultux.autotype() {
                     Err(xous::Error::UseBeforeInit) => { // USB not plugged in
-                        modals.dynamic_notification_update(Some(t!("vault.error.usb_error", xous::LANG)), None).ok();
+                        modals.dynamic_notification_update(Some(t!("vault.error.usb_error", locales::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     },
                     Err(xous::Error::InvalidString) => { // deserialzation error
-                        modals.dynamic_notification_update(Some(t!("vault.error.record_error", xous::LANG)), None).ok();
+                        modals.dynamic_notification_update(Some(t!("vault.error.record_error", locales::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     },
                     Err(xous::Error::ProcessNotFound) => { // key or dictionary not found
-                        modals.dynamic_notification_update(Some(t!("vault.error.not_found", xous::LANG)), None).ok();
+                        modals.dynamic_notification_update(Some(t!("vault.error.not_found", locales::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     },
                     Err(xous::Error::InvalidPID) => { // nothing was selected
-                        modals.dynamic_notification_update(Some(t!("vault.error.nothing_selected", xous::LANG)), None).ok();
+                        modals.dynamic_notification_update(Some(t!("vault.error.nothing_selected", locales::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     },
                     Err(xous::Error::OutOfMemory) => { // trouble updating the key
-                        modals.dynamic_notification_update(Some(t!("vault.error.update_error", xous::LANG)), None).ok();
+                        modals.dynamic_notification_update(Some(t!("vault.error.update_error", locales::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     }
                     Ok(_) => {},
                     Err(e) => { // unknown error
                         modals.dynamic_notification(Some(
-                            &format!("{}\n{:?}", t!("vault.error.internal_error", xous::LANG), e),
+                            &format!("{}\n{:?}", t!("vault.error.internal_error", locales::LANG), e),
                         ), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     }
@@ -654,7 +654,7 @@ fn main() -> ! {
                     buf.send(actions_conn, ActionOp::MenuDeleteStage2.to_u32().unwrap()).expect("messaging error");
                 } else {
                     // this will block redraws, but it's just one notification in a sequence so it's OK.
-                    modals.show_notification(t!("vault.error.nothing_selected", xous::LANG), None).ok();
+                    modals.show_notification(t!("vault.error.nothing_selected", locales::LANG), None).ok();
                 }
             }
             Some(VaultOp::MenuEditStage1) => {
@@ -665,19 +665,19 @@ fn main() -> ! {
                     buf.send(actions_conn, ActionOp::MenuEditStage2.to_u32().unwrap()).expect("messaging error");
                 } else {
                     // this will block redraws, but it's just one notification in a sequence so it's OK.
-                    modals.show_notification(t!("vault.error.nothing_selected", xous::LANG), None).ok();
+                    modals.show_notification(t!("vault.error.nothing_selected", locales::LANG), None).ok();
                 }
             }
             Some(VaultOp::MenuReadoutMode) => {
-                modals.dynamic_notification(Some(t!("vault.readout_switchover", xous::LANG)), None).ok();
+                modals.dynamic_notification(Some(t!("vault.readout_switchover", locales::LANG)), None).ok();
                 vaultux.readout_mode(true);
                 modals.dynamic_notification_close().ok();
 
                 allow_host.store(true, Ordering::SeqCst);
-                modals.show_notification(t!("vault.readout_active", xous::LANG), None).ok();
+                modals.show_notification(t!("vault.readout_active", locales::LANG), None).ok();
                 allow_host.store(false, Ordering::SeqCst);
 
-                modals.dynamic_notification(Some(t!("vault.readout_switchover", xous::LANG)), None).ok();
+                modals.dynamic_notification(Some(t!("vault.readout_switchover", locales::LANG)), None).ok();
                 vaultux.readout_mode(false);
                 modals.dynamic_notification_close().ok();
             }
@@ -690,13 +690,13 @@ fn main() -> ! {
                     rate
                 };
                 let raw = modals
-                    .alert_builder(t!("prefs.autotype_rate_in_ms", xous::LANG))
+                    .alert_builder(t!("prefs.autotype_rate_in_ms", locales::LANG))
                     .field(
                         Some(cv.to_string()),
                         Some(|tf| match tf.as_str().parse::<usize>() {
                             Ok(_) => None,
                             Err(_) => Some(xous_ipc::String::from_str(
-                                t!("prefs.autobacklight_err", xous::LANG),
+                                t!("prefs.autobacklight_err", locales::LANG),
                             )),
                         }),
                     )
@@ -709,10 +709,10 @@ fn main() -> ! {
             Some(VaultOp::MenuLeftyMode) => {
                 let cv = prefs.lefty_mode_or_default().unwrap();
 
-                modals.add_list(vec![t!("prefs.yes", xous::LANG), t!("prefs.no", xous::LANG)]).unwrap();
+                modals.add_list(vec![t!("prefs.yes", locales::LANG), t!("prefs.no", locales::LANG)]).unwrap();
                 let mode = yes_no_to_bool(
                     modals
-                        .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", xous::LANG),
+                        .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
                             bool_to_yes_no(cv)))
                         .unwrap()
                         .as_str(),
@@ -741,14 +741,14 @@ fn main() -> ! {
 
 fn bool_to_yes_no(val: bool) -> String {
     match val {
-        true => t!("prefs.yes", xous::LANG).to_owned(),
-        false => t!("prefs.no", xous::LANG).to_owned(),
+        true => t!("prefs.yes", locales::LANG).to_owned(),
+        false => t!("prefs.no", locales::LANG).to_owned(),
     }
 }
 fn yes_no_to_bool(val: &str) -> bool {
-    if val == t!("prefs.yes", xous::LANG) {
+    if val == t!("prefs.yes", locales::LANG) {
         true
-    } else if val == t!("prefs.no", xous::LANG) {
+    } else if val == t!("prefs.no", locales::LANG) {
         false
     } else {
         unreachable!("cannot go here!");
