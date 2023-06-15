@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
+// SPDX-FileCopyrightText: 2020 bunnie <bunnie@kosagi.com>
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use quick_xml::events::{attributes::Attribute, Event};
 use quick_xml::reader::Reader;
 use quick_xml::name::QName;
@@ -18,14 +22,14 @@ pub enum ParseError {
 #[derive(Default, Debug, Clone)]
 pub struct Field {
     name: String,
-    lsb: usize,
-    msb: usize,
+    lsb: u32,
+    msb: u32,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct Register {
     name: String,
-    offset: usize,
+    offset: u64,
     description: Option<String>,
     fields: Vec<Field>,
 }
@@ -33,14 +37,14 @@ pub struct Register {
 #[derive(Default, Debug, Clone)]
 pub struct Interrupt {
     name: String,
-    value: usize,
+    value: u64,
 }
 
 #[derive(Default, Debug)]
 pub struct Peripheral {
     name: String,
-    pub base: usize,
-    _size: usize,
+    pub base: u64,
+    _size: u64,
     interrupt: Vec<Interrupt>,
     registers: Vec<Register>,
 }
@@ -48,8 +52,8 @@ pub struct Peripheral {
 #[derive(Default, Debug)]
 pub struct MemoryRegion {
     pub name: String,
-    pub base: usize,
-    pub size: usize,
+    pub base: u64,
+    pub size: u64,
 }
 
 #[derive(Default, Debug)]
@@ -98,10 +102,16 @@ pub fn get_base(value: &str) -> (&str, u32) {
     }
 }
 
-fn parse_usize(value: &[u8]) -> Result<usize, ParseError> {
+fn parse_u64(value: &[u8]) -> Result<u64, ParseError> {
     let value_as_str = String::from_utf8(value.to_vec()).or(Err(ParseError::NonUTF8))?;
     let (value, base) = get_base(&value_as_str);
-    usize::from_str_radix(value, base).or(Err(ParseError::ParseIntError))
+    u64::from_str_radix(value, base).or(Err(ParseError::ParseIntError))
+}
+
+fn parse_u32(value: &[u8]) -> Result<u32, ParseError> {
+    let value_as_str = String::from_utf8(value.to_vec()).or(Err(ParseError::NonUTF8))?;
+    let (value, base) = get_base(&value_as_str);
+    u32::from_str_radix(value, base).or(Err(ParseError::ParseIntError))
 }
 
 fn extract_contents<T: BufRead>(reader: &mut Reader<T>) -> Result<String, ParseError> {
@@ -133,8 +143,8 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
                 let tag_name = std::str::from_utf8(&tag_binding).unwrap();
                 match tag_name {
                     "name" if name.is_none() => name = Some(extract_contents(reader)?),
-                    "lsb" => lsb = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
-                    "msb" => msb = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
+                    "lsb" => lsb = Some(parse_u32(extract_contents(reader)?.as_bytes())?),
+                    "msb" => msb = Some(parse_u32(extract_contents(reader)?.as_bytes())?),
                     "bitRange" => {
                         let range = extract_contents(reader)?;
                         if !range.starts_with('[') || !range.ends_with(']') {
@@ -146,22 +156,22 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
                             parts
                                 .next()
                                 .ok_or(ParseError::UnexpectedValue)?
-                                .parse::<usize>()
+                                .parse::<u32>()
                                 .map_err(|_| ParseError::ParseIntError)?,
                         );
                         lsb = Some(
                             parts
                                 .next()
                                 .ok_or(ParseError::UnexpectedValue)?
-                                .parse::<usize>()
+                                .parse::<u32>()
                                 .map_err(|_| ParseError::ParseIntError)?,
                         );
                     }
                     "bitWidth" => {
-                        bit_width = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
+                        bit_width = Some(parse_u32(extract_contents(reader)?.as_bytes())?)
                     }
                     "bitOffset" => {
-                        bit_offset = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
+                        bit_offset = Some(parse_u32(extract_contents(reader)?.as_bytes())?)
                     }
                     _ => (),
                 }
@@ -233,7 +243,7 @@ fn generate_register<T: BufRead>(reader: &mut Reader<T>) -> Result<Register, Par
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
                     "addressOffset" => {
-                        offset = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
+                        offset = Some(parse_u64(extract_contents(reader)?.as_bytes())?)
                     }
                     "fields" => generate_fields(reader, &mut fields)?,
                     _ => (),
@@ -272,7 +282,7 @@ fn generate_interrupts<T: BufRead>(
                     .map_err(|_| ParseError::NonUTF8)?;
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
-                    "value" => value = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
+                    "value" => value = Some(parse_u64(extract_contents(reader)?.as_bytes())?),
                     _ => (),
                 }
             }
@@ -318,7 +328,7 @@ fn generate_registers<T: BufRead>(
     Ok(())
 }
 
-fn derive_peripheral(base: &Peripheral, child_name: &str, child_base: usize) -> Peripheral {
+fn derive_peripheral(base: &Peripheral, child_name: &str, child_base: u64) -> Peripheral {
     Peripheral {
         name: child_name.to_owned(),
         base: child_base,
@@ -348,9 +358,9 @@ fn generate_peripheral<T: BufRead>(
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
                     "baseAddress" => {
-                        base = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
+                        base = Some(parse_u64(extract_contents(reader)?.as_bytes())?)
                     }
-                    "size" => size = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
+                    "size" => size = Some(parse_u64(extract_contents(reader)?.as_bytes())?),
                     "registers" => generate_registers(reader, &mut registers)?,
                     "interrupt" => generate_interrupts(reader, &mut interrupts)?,
                     _ => (),
@@ -438,9 +448,9 @@ fn generate_memory_region<T: BufRead>(reader: &mut Reader<T>) -> Result<MemoryRe
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
                     "baseAddress" => {
-                        base = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
+                        base = Some(parse_u64(extract_contents(reader)?.as_bytes())?)
                     }
-                    "size" => size = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
+                    "size" => size = Some(parse_u64(extract_contents(reader)?.as_bytes())?),
                     _ => (),
                 }
             }
