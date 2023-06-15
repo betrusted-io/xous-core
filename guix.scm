@@ -37,11 +37,35 @@
 
 (use-modules (gnu packages)
              (gnu packages crates-io)
+             (gnu packages libusb)
+             (gnu packages python-crypto)
+             (gnu packages python-web)
+             (gnu packages python-xyz)
              (guix build-system cargo)
+             (guix build-system python)
              (guix download)
              (guix gexp)
              ((guix licenses) #:prefix license:)
              (guix packages))
+
+(define-public precursorupdater
+  (package
+    (name "precursorupdater")
+    (version "0.1.3")
+    (source (local-file "tools/updater" #:recursive? #t))
+    (build-system python-build-system)
+    (arguments (list #:tests? #f))
+    (propagated-inputs
+      (list python-progressbar2
+            python-pycryptodome
+            python-pyusb
+            python-requests))
+    (home-page "https://github.com/betrusted-io/xous-core")
+    (synopsis "Tool to update Precursor devices operating system")
+    (description "This package provides a command line interface application
+that can be used to update Precursor devices operating system through the
+@acronym{USB, Universal Serial Bus} interface.")
+    (license license:asl2.0)))
 
 (define-public rust-quick-xml-0.28
   (package
@@ -103,5 +127,6 @@ using the @acronym{UTRA, Unambiguous Thin Register Abstraction} abstractions.")
     (license (list license:expat license:asl2.0))))
 
 ;;; Expand with packages that need to be built.
-(list rust-svd2repl-0.1
+(list precursorupdater
+      rust-svd2repl-0.1
       rust-svd2utra-0.1)
