@@ -7,9 +7,9 @@ description = "Content Canvas Plugin Common APIs"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.44"
+xous = "0.9.45"
 rkyv = { version = "0.4.3", default_features = false }
 graphics-server = { path="../graphics-server"} # this is used by the IMEF portion of the API
-xous-names = {package = "xous-api-names", version = "0.9.42"} # used by the IMEF for registering listeners
+xous-names = {package = "xous-api-names", version = "0.9.43"} # used by the IMEF for registering listeners
 log = "0.4.14"
 
