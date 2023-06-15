@@ -337,7 +337,7 @@ impl<'a> Modal<'a> {
         assert!(authtoken.is_some(), "Couldn't register modal. Did you remember to add the app_name to the tokens.rs expected boot contexts list?");
         log::debug!("requesting content canvas for modal");
         let canvas = gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
-        let line_height = if xous::LANG == "zh" {
+        let line_height = if locales::LANG == "zh" {
             // zh has no "small" style
             gam.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height hint") as i16
         } else {

@@ -16,7 +16,7 @@ use crate::backend::{FB_SIZE, FB_WIDTH_PIXELS, FB_LINES};
 /// defined by a `bounds` record.
 ///
 /// The exact GlyphSprite chosen is picked based on a hierarchy that starts with a hint based on
-/// `xous::LANG`, then rules based on the `base_style: GlyphStyle` field, which allows for all the text within
+/// `locales::LANG`, then rules based on the `base_style: GlyphStyle` field, which allows for all the text within
 /// a given string to be eg. small, regular, monospace, bold (mixing of different styles is not yet supported,
 /// but could be in the future if we add some sort of markup parsing to the text stream).
 ///
@@ -565,7 +565,7 @@ fn tsw_debug(tsw: &TypesetWord) {
 
 /// Find glyph for char using latin regular, emoji, ja, zh, and kr font data
 pub fn style_glyph(ch: char, base_style: &GlyphStyle) -> GlyphSprite {
-    match xous::LANG {
+    match locales::LANG {
         "zh" => {
             style_wrapper!(zh_rules, base_style, ch)
         }

@@ -157,17 +157,17 @@ impl Ball {
         let mut note = String::new();
         use std::fmt::Write;
         write!(note, "{}'{}'.\n\n{}",
-            t!("ballapp.notification_a", xous::LANG),
+            t!("ballapp.notification_a", locales::LANG),
             keys[0],
-            t!("ballapp.notification_b", xous::LANG),
+            t!("ballapp.notification_b", locales::LANG),
         ).unwrap();
         self.modals.show_notification(&note, None).unwrap();
-        self.modals.add_list_item(t!("ballapp.random", xous::LANG)).unwrap();
-        self.modals.add_list_item(t!("ballapp.tilt", xous::LANG)).unwrap();
-        let mode = self.modals.get_radiobutton(t!("ballapp.mode_prompt", xous::LANG)).unwrap();
-        if mode == t!("ballapp.random", xous::LANG) {
+        self.modals.add_list_item(t!("ballapp.random", locales::LANG)).unwrap();
+        self.modals.add_list_item(t!("ballapp.tilt", locales::LANG)).unwrap();
+        let mode = self.modals.get_radiobutton(t!("ballapp.mode_prompt", locales::LANG)).unwrap();
+        if mode == t!("ballapp.random", locales::LANG) {
             self.mode = BallMode::Random;
-        } else if mode == t!("ballapp.tilt", xous::LANG) {
+        } else if mode == t!("ballapp.tilt", locales::LANG) {
             self.mode = BallMode::Tilt;
         } else {
             log::warn!("got an unexpected response from the radio button function: {}", mode);

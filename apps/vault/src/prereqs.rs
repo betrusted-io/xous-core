@@ -102,10 +102,10 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
                     title_text.clear_area = true;
                     title_text.style = GlyphStyle::Bold;
                     if !is_mounted {
-                        write!(title_text, "{}\n\n", t!("vault.error.mount_pddb", xous::LANG)).ok();
+                        write!(title_text, "{}\n\n", t!("vault.error.mount_pddb", locales::LANG)).ok();
                     }
                     if !time_init {
-                        write!(title_text, "{}", t!("vault.error.time_init", xous::LANG)).ok();
+                        write!(title_text, "{}", t!("vault.error.time_init", locales::LANG)).ok();
                     }
                     gam.post_textview(&mut title_text).expect("couldn't post title");
                 }

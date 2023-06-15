@@ -987,7 +987,7 @@ impl<'a> RootKeys {
         // now show the init wait note...
         rootkeys_modal.modify(
             Some(ActionType::Slider(progress_action)),
-            Some(t!("rootkeys.setup_wait", xous::LANG)), false,
+            Some(t!("rootkeys.setup_wait", locales::LANG)), false,
             None, true, None);
         rootkeys_modal.activate();
 
@@ -1140,12 +1140,12 @@ impl<'a> RootKeys {
         }
 
         // sign the kernel
-        pb.update_text(t!("rootkeys.init.signing_kernel", xous::LANG));
+        pb.update_text(t!("rootkeys.init.signing_kernel", locales::LANG));
         pb.set_percentage(15);
         let (kernel_sig, kernel_len) = self.sign_kernel(&keypair);
 
         // sign the loader
-        pb.update_text(t!("rootkeys.init.signing_loader", xous::LANG));
+        pb.update_text(t!("rootkeys.init.signing_loader", locales::LANG));
         pb.rebase_subtask_percentage(20, 30);
         let (loader_sig, loader_len) = self.sign_loader(&keypair, Some(&mut pb));
         log::debug!("loader signature: {:x?}", loader_sig.to_bytes());
@@ -1164,7 +1164,7 @@ impl<'a> RootKeys {
         // Because we're initializing keys for the *first* time, make a backup copy of the bitstream to
         // the staging area. Note that if we're doing an update, the update target would already be
         // in the staging area, so this step should be skipped.
-        pb.update_text(t!("rootkeys.init.backup_gateware", xous::LANG));
+        pb.update_text(t!("rootkeys.init.backup_gateware", locales::LANG));
         pb.rebase_subtask_percentage(30, 50);
         self.make_gateware_backup(Some(&mut pb), false)?;
 
@@ -1180,7 +1180,7 @@ impl<'a> RootKeys {
 
         // compute the keyrom patch set for the bitstream
         // at this point the KEYROM as replicated in sensitive_slice should have all its assets in place
-        pb.update_text(t!("rootkeys.init.patching_keys", xous::LANG));
+        pb.update_text(t!("rootkeys.init.patching_keys", locales::LANG));
         pb.rebase_subtask_percentage(50, 70);
 
         self.gateware_copy_and_patch(&src_oracle, &dst_oracle, Some(&mut pb))?;
@@ -1191,12 +1191,12 @@ impl<'a> RootKeys {
         ).map_err(|_| RootkeyResult::FlashError)?;
 
         // verify that the patch worked
-        pb.update_text(t!("rootkeys.init.verifying_gateware", xous::LANG));
+        pb.update_text(t!("rootkeys.init.verifying_gateware", locales::LANG));
         pb.rebase_subtask_percentage(70, 90);
         self.verify_gateware(&dst_oracle, Some(&mut pb))?;
 
         // sign the image, commit the signature
-        pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
+        pb.update_text(t!("rootkeys.init.commit_signatures", locales::LANG));
         self.commit_signature(loader_sig, loader_len, SignatureType::Loader)?;
         log::debug!("loader {} bytes, sig: {:x?}", loader_len, loader_sig.to_bytes());
         pb.set_percentage(92);
@@ -1276,7 +1276,7 @@ impl<'a> RootKeys {
             // now show the init wait note...
             rootkeys_modal.modify(
                 Some(ActionType::Slider(progress_action)),
-                Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
+                Some(t!("rootkeys.gwup_starting", locales::LANG)), false,
                 None, true, None);
             rootkeys_modal.activate();
             xous::yield_slice(); // give some time to the GAM to render
@@ -1426,29 +1426,29 @@ impl<'a> RootKeys {
                     log::info!("{}", crate::CONSOLE_SENTINEL);
                 } else if update_type == UpdateType::EfuseProvision {
                     // share the backup key with the user so it can be saved somewhere safe
-                    modals.show_bip39(Some(t!("rootkeys.backup_key", xous::LANG)), &pcache.fpga_key.to_vec()).ok();
+                    modals.show_bip39(Some(t!("rootkeys.backup_key", locales::LANG)), &pcache.fpga_key.to_vec()).ok();
                     loop {
-                        modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("modals error");
-                        modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("modals error");
+                        modals.add_list_item(t!("rootkeys.gwup.yes", locales::LANG)).expect("modals error");
+                        modals.add_list_item(t!("rootkeys.gwup.no", locales::LANG)).expect("modals error");
                         log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                        match modals.get_radiobutton(t!("rootkeys.backup_verify", xous::LANG)) {
+                        match modals.get_radiobutton(t!("rootkeys.backup_verify", locales::LANG)) {
                             Ok(response) => {
-                                if response == t!("rootkeys.gwup.yes", xous::LANG) {
-                                    match modals.input_bip39(Some(t!("rootkeys.backup_key_enter", xous::LANG))) {
+                                if response == t!("rootkeys.gwup.yes", locales::LANG) {
+                                    match modals.input_bip39(Some(t!("rootkeys.backup_key_enter", locales::LANG))) {
                                         Ok(verify) => {
                                             log::debug!("got bip39 verification: {:x?}", verify);
                                             if &verify == &pcache.fpga_key {
                                                 log::debug!("verify succeeded");
-                                                modals.show_notification(t!("rootkeys.backup_key_match", xous::LANG), None).ok();
+                                                modals.show_notification(t!("rootkeys.backup_key_match", locales::LANG), None).ok();
                                                 break;
                                             } else {
                                                 log::debug!("verify failed");
-                                                modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", xous::LANG)), &pcache.fpga_key.to_vec()).ok();
+                                                modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", locales::LANG)), &pcache.fpga_key.to_vec()).ok();
                                             }
                                         }
                                         _ => {
                                             log::debug!("bip39 verification aborted");
-                                            modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", xous::LANG)), &pcache.fpga_key.to_vec()).ok();
+                                            modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", locales::LANG)), &pcache.fpga_key.to_vec()).ok();
                                         }
                                     }
                                 } else {
@@ -1466,7 +1466,7 @@ impl<'a> RootKeys {
             // *now* show the progress bar...
             rootkeys_modal.modify(
                 Some(ActionType::Slider(progress_action)),
-                Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
+                Some(t!("rootkeys.gwup_starting", locales::LANG)), false,
                 None, true, None);
             rootkeys_modal.activate();
             xous::yield_slice(); // give some time to the GAM to render
@@ -1511,7 +1511,7 @@ impl<'a> RootKeys {
         };
 
         let mut next_progress = if (update_type == UpdateType::BbramProvision) || (update_type == UpdateType::EfuseProvision) {
-            pb.update_text(t!("rootkeys.init.backup_gateware", xous::LANG));
+            pb.update_text(t!("rootkeys.init.backup_gateware", locales::LANG));
             pb.rebase_subtask_percentage(5, 25);
             self.make_gateware_backup(Some(&mut pb), false)?;
             25
@@ -1550,7 +1550,7 @@ impl<'a> RootKeys {
         log::info!("destination key type: {:?}", dst_oracle.get_target_key_type());
 
         pb.set_percentage(next_progress);
-        pb.update_text(t!("rootkeys.init.patching_keys", xous::LANG));
+        pb.update_text(t!("rootkeys.init.patching_keys", locales::LANG));
         pb.rebase_subtask_percentage(next_progress, 60);
         self.gateware_copy_and_patch(&src_oracle, &dst_oracle, Some(&mut pb))?;
 
@@ -1560,7 +1560,7 @@ impl<'a> RootKeys {
         ).map_err(|_| RootkeyResult::FlashError)?;
 
         // verify that the patch worked
-        pb.update_text(t!("rootkeys.init.verifying_gateware", xous::LANG));
+        pb.update_text(t!("rootkeys.init.verifying_gateware", locales::LANG));
         pb.rebase_subtask_percentage(60, 75);
         log::debug!("making verification oracle");
         let verify_oracle = match BitstreamOracle::new(
@@ -1578,23 +1578,23 @@ impl<'a> RootKeys {
 
         // commit signatures
         let keypair = if let Some(kp) = keypair {
-            pb.update_text(t!("rootkeys.init.signing_gateware", xous::LANG));
+            pb.update_text(t!("rootkeys.init.signing_gateware", locales::LANG));
             let (gateware_sig, gateware_len) = self.sign_gateware(&kp);
             log::debug!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
             self.commit_signature(gateware_sig, gateware_len, SignatureType::Gateware)?;
 
             // sign the kernel
-            pb.update_text(t!("rootkeys.init.signing_kernel", xous::LANG));
+            pb.update_text(t!("rootkeys.init.signing_kernel", locales::LANG));
             pb.set_percentage(80);
             let (kernel_sig, kernel_len) = self.sign_kernel(&kp);
 
             // sign the loader
-            pb.update_text(t!("rootkeys.init.signing_loader", xous::LANG));
+            pb.update_text(t!("rootkeys.init.signing_loader", locales::LANG));
             pb.rebase_subtask_percentage(85, 92);
             let (loader_sig, loader_len) = self.sign_loader(&kp, Some(&mut pb));
 
             // commit the signatures
-            pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
+            pb.update_text(t!("rootkeys.init.commit_signatures", locales::LANG));
             self.commit_signature(loader_sig, loader_len, SignatureType::Loader)?;
             log::debug!("loader {} bytes, sig: {:x?}", loader_len, loader_sig.to_bytes());
             pb.set_percentage(88);
@@ -1652,12 +1652,12 @@ impl<'a> RootKeys {
             // the key burning routine should finish before this timeout happens, and the system should have been rebooted
             self.ticktimer.sleep_ms(10_000).unwrap();
 
-            pb.update_text(t!("rootkeys.bbram.failed_restore", xous::LANG));
+            pb.update_text(t!("rootkeys.bbram.failed_restore", locales::LANG));
             pb.set_percentage(0);
             pb.rebase_subtask_percentage(0, 100);
             self.make_gateware_backup(Some(&mut pb), true)?;
         } else if update_type == UpdateType::EfuseProvision {
-            pb.update_text(t!("rootkeys.efuse_burning", xous::LANG));
+            pb.update_text(t!("rootkeys.efuse_burning", locales::LANG));
             self.ticktimer.sleep_ms(300).ok();
             pb.set_percentage(93);
             self.ticktimer.sleep_ms(300).ok();
@@ -1676,7 +1676,7 @@ impl<'a> RootKeys {
             match self.jtag.efuse_key_burn(pcache.fpga_key) {
                 Ok(result) => {
                     if !result {
-                        pb.update_text(t!("rootkeys.efuse_burn_fail", xous::LANG));
+                        pb.update_text(t!("rootkeys.efuse_burn_fail", locales::LANG));
                         self.ticktimer.sleep_ms(2000).ok();
                         return Err(RootkeyResult::KeyError)
                     } else {
@@ -1684,7 +1684,7 @@ impl<'a> RootKeys {
                     }
                 }
                 Err(e) => {
-                    pb.update_text(&format!("{}\n{:?}", t!("rootkeys.efuse_internal_error", xous::LANG), e));
+                    pb.update_text(&format!("{}\n{:?}", t!("rootkeys.efuse_internal_error", locales::LANG), e));
                     self.ticktimer.sleep_ms(2000).ok();
                     return Err(RootkeyResult::StateError)
                 }
@@ -1703,19 +1703,19 @@ impl<'a> RootKeys {
             }
 
             // seal the device from key readout, force encrypted boot
-            pb.update_text(t!("rootkeys.efuse_sealing", xous::LANG));
+            pb.update_text(t!("rootkeys.efuse_sealing", locales::LANG));
             pb.set_percentage(96);
             log::info!("{}EFUSE.SEAL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
             match self.jtag.seal_device() {
                 Ok(result) => {
                     if !result {
-                        pb.update_text(t!("rootkeys.efuse_seal_fail", xous::LANG));
+                        pb.update_text(t!("rootkeys.efuse_seal_fail", locales::LANG));
                         self.ticktimer.sleep_ms(2000).ok();
                         return Err(RootkeyResult::FlashError)
                     }
                 }
                 Err(e) => {
-                    pb.update_text(&format!("{}\n{:?}", t!("rootkeys.efuse_internal_error", xous::LANG), e));
+                    pb.update_text(&format!("{}\n{:?}", t!("rootkeys.efuse_internal_error", locales::LANG), e));
                     self.ticktimer.sleep_ms(2000).ok();
                     return Err(RootkeyResult::StateError)
                 }
@@ -1755,7 +1755,7 @@ impl<'a> RootKeys {
         // now show the init wait note...
         rootkeys_modal.modify(
             Some(ActionType::Slider(progress_action)),
-            Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
+            Some(t!("rootkeys.gwup_starting", locales::LANG)), false,
             None, true, None);
         rootkeys_modal.activate();
         xous::yield_slice(); // give some time to the GAM to render
@@ -1812,19 +1812,19 @@ impl<'a> RootKeys {
         // a TOCTOU by not re-verifying them.
 
         // sign the kernel
-        pb.update_text(t!("rootkeys.init.signing_kernel", xous::LANG));
+        pb.update_text(t!("rootkeys.init.signing_kernel", locales::LANG));
         pb.set_percentage(35);
         let (kernel_sig, kernel_len) = self.sign_kernel(&keypair);
 
         // sign the loader
-        pb.update_text(t!("rootkeys.init.signing_loader", xous::LANG));
+        pb.update_text(t!("rootkeys.init.signing_loader", locales::LANG));
         pb.rebase_subtask_percentage(35, 85);
         let (loader_sig, loader_len) = self.sign_loader(&keypair, Some(&mut pb));
         log::info!("loader signature: {:x?}", loader_sig.to_bytes());
         log::info!("loader len: {} bytes", loader_len);
 
         // commit the signatures
-        pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
+        pb.update_text(t!("rootkeys.init.commit_signatures", locales::LANG));
         self.commit_signature(loader_sig, loader_len, SignatureType::Loader)?;
         log::debug!("loader {} bytes, sig: {:x?}", loader_len, loader_sig.to_bytes());
         pb.set_percentage(90);
@@ -1864,7 +1864,7 @@ impl<'a> RootKeys {
         // now show the init wait note...
         rootkeys_modal.modify(
             Some(ActionType::Slider(progress_action)),
-            Some(t!("rootkeys.setup_wait", xous::LANG)), false,
+            Some(t!("rootkeys.setup_wait", locales::LANG)), false,
             None, true, None);
         rootkeys_modal.activate();
 
@@ -1950,7 +1950,7 @@ impl<'a> RootKeys {
         progress_action.set_is_password(true);
         rootkeys_modal.modify(
             Some(ActionType::Slider(progress_action)),
-            Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
+            Some(t!("rootkeys.gwup_starting", locales::LANG)), false,
             None, true, None);
         rootkeys_modal.activate();
         xous::yield_slice(); // give some time to the GAM to render
@@ -2715,7 +2715,7 @@ impl<'a> RootKeys {
             progress_action.set_is_password(true);
             rootkeys_modal.modify(
                 Some(ActionType::Slider(progress_action)),
-                Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
+                Some(t!("rootkeys.gwup_starting", locales::LANG)), false,
                 None, true, None);
             rootkeys_modal.activate();
             xous::yield_slice(); // give some time to the GAM to render

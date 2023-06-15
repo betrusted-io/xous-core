@@ -233,7 +233,7 @@ impl Repl{
             if let Some(res) = self.env.dispatch(Some(&mut xous_ipc::String::<1024>::from_str(&local)), None).expect("command dispatch failed") {
                 #[cfg(feature="tts")]
                 {
-                    let mut output = t!("shellchat.output-tts", xous::LANG).to_string();
+                    let mut output = t!("shellchat.output-tts", locales::LANG).to_string();
                     output.push_str(res.as_str().unwrap_or("UTF-8 error"));
                     self.tts.tts_simple(&output).unwrap();
                 }
@@ -250,7 +250,7 @@ impl Repl{
             if let Some(res) = self.env.dispatch(None, Some(msg)).expect("callback failed") {
                 #[cfg(feature="tts")]
                 {
-                    let mut output = t!("shellchat.output-tts", xous::LANG).to_string();
+                    let mut output = t!("shellchat.output-tts", locales::LANG).to_string();
                     output.push_str(res.as_str().unwrap_or("UTF-8 error"));
                     self.tts.tts_simple(&output).unwrap();
                 }
@@ -307,7 +307,7 @@ impl Repl{
             );
             init_tv.style = GlyphStyle::Bold;
             init_tv.draw_border = false;
-            write!(init_tv.text, "{}", t!("shellchat.bootwait", xous::LANG)).ok();
+            write!(init_tv.text, "{}", t!("shellchat.bootwait", locales::LANG)).ok();
             self.gam.post_textview(&mut init_tv).expect("couldn't render wait text");
             self.gam.redraw().expect("couldn't redraw screen");
         }
@@ -447,7 +447,7 @@ fn wrapped_main() -> ! {
                 log::trace!("shell got input line: {}", s.as_str());
                 #[cfg(feature="tts")]
                 {
-                    let mut input = t!("shellchat.input-tts", xous::LANG).to_string();
+                    let mut input = t!("shellchat.input-tts", locales::LANG).to_string();
                     input.push_str(s.as_str());
                     tts.tts_simple(&input).unwrap();
                 }

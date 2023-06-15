@@ -101,7 +101,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 if !validate_package(package,PackageType::Ec) {
                     log::error!("firmware package did not pass validation");
                     modals.show_notification(
-                        &format!("{} gateware", t!("ecup.invalid", xous::LANG)), None).unwrap();
+                        &format!("{} gateware", t!("ecup.invalid", locales::LANG)), None).unwrap();
                 } else {
                     log::info!("updating GW");
                     netmgr.connection_manager_stop().ok();
@@ -123,7 +123,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 if !validate_package(package,PackageType::Ec) {
                     log::error!("firmware package did not pass validation");
                     modals.show_notification(
-                        &format!("{} firmware", t!("ecup.invalid", xous::LANG)), None).unwrap();
+                        &format!("{} firmware", t!("ecup.invalid", locales::LANG)), None).unwrap();
                 } else {
                     let length = u32::from_le_bytes(package[0x28..0x2c].try_into().unwrap());
                     if length == 0xffff_ffff { // nothing was staged at all
@@ -163,7 +163,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 } else {
                     log::error!("wf200 package did not pass validation");
                     modals.show_notification(
-                        &format!("{} WF200", t!("ecup.invalid", xous::LANG)), None).unwrap();
+                        &format!("{} WF200", t!("ecup.invalid", locales::LANG)), None).unwrap();
                     xous::return_scalar(msg.sender, UpdateResult::PackageInvalid.to_usize().unwrap()).unwrap();
                     continue;
                 }
@@ -174,8 +174,8 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 let ec_rev = com.get_ec_sw_tag().unwrap(); // fetch the purported rev from the EC. We take it at face value.
                 if ec_rev < net::MIN_EC_REV {
                     log::warn!("EC firmware is too old to interoperate with the connection manager.");
-                    let mut note = String::from(t!("net.ec_rev_old", xous::LANG));
-                    note.push_str(&format!("\n\n{}{}", t!("net.ec_current_rev", xous::LANG), ec_rev.to_string()));
+                    let mut note = String::from(t!("net.ec_rev_old", locales::LANG));
+                    note.push_str(&format!("\n\n{}{}", t!("net.ec_current_rev", locales::LANG), ec_rev.to_string()));
                     modals.show_notification(&note, None).unwrap();
                     xous::return_scalar(msg.sender, 0).unwrap();
                 } else {
@@ -232,7 +232,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                     // only show the warning if the update was forced; otherwise we shouldn't show the warning because it'll pop up every time on a new unit
                     if force {
                         modals.show_notification(
-                            &format!("{} gateware", t!("ecup.invalid", xous::LANG)), None).unwrap();
+                            &format!("{} gateware", t!("ecup.invalid", locales::LANG)), None).unwrap();
                     }
                     xous::return_scalar(msg.sender, UpdateResult::PackageInvalid.to_usize().unwrap()).unwrap();
                     continue;
@@ -305,7 +305,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                     } else {
                         log::error!("firmware package did not pass validation");
                         modals.show_notification(
-                            &format!("{} gateware", t!("ecup.invalid", xous::LANG)), None).unwrap();
+                            &format!("{} gateware", t!("ecup.invalid", locales::LANG)), None).unwrap();
                         xous::return_scalar(msg.sender, UpdateResult::PackageInvalid.to_usize().unwrap()).unwrap();
                         continue;
                     }
@@ -364,14 +364,14 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                     } else {
                         log::error!("wf200 package did not pass validation");
                         modals.show_notification(
-                            &format!("{} WF200", t!("ecup.invalid", xous::LANG)), None).unwrap();
+                            &format!("{} WF200", t!("ecup.invalid", locales::LANG)), None).unwrap();
                         xous::return_scalar(msg.sender, UpdateResult::PackageInvalid.to_usize().unwrap()).unwrap();
                         continue;
                     }
                 }
 
                 if did_something {
-                    modals.dynamic_notification(Some(t!("ecup.resetting", xous::LANG)), None).unwrap();
+                    modals.dynamic_notification(Some(t!("ecup.resetting", locales::LANG)), None).unwrap();
                     log::info!("EC firmware had an update");
                     ticktimer.sleep_ms(500).unwrap(); // paranoia wait
                     llio.ec_reset().unwrap(); // firmware should reload
@@ -411,7 +411,7 @@ fn do_update(com: &mut com::Com, modals: &Modals, package: &[u8], pkg_offset: u3
     let ut = com.get_ec_uptime().unwrap();
     // pop up a dialog box to warn users, in case they are in the process of resetting the device
     modals.dynamic_notification(Some(
-        &format!("{}", t!("ecup.preparing", xous::LANG))
+        &format!("{}", t!("ecup.preparing", locales::LANG))
         ), None).unwrap();
     tt.sleep_ms(3000).ok();
     // check the uptime again as a very basic link-up check
@@ -428,7 +428,7 @@ fn do_update(com: &mut com::Com, modals: &Modals, package: &[u8], pkg_offset: u3
     }
     // erase
     modals.dynamic_notification_update(Some(
-        &format!("{}\n({})", t!("ecup.erasing", xous::LANG), name)
+        &format!("{}\n({})", t!("ecup.erasing", locales::LANG), name)
         ), None).unwrap();
     log::info!("{}, erasing from 0x{:08x}, 0x{:x} bytes", name, flash_start, image_len);
     if com.flash_erase(flash_start, image_len).unwrap() {
@@ -436,7 +436,7 @@ fn do_update(com: &mut com::Com, modals: &Modals, package: &[u8], pkg_offset: u3
     } else {
         modals.dynamic_notification_close().unwrap();
         modals.show_notification(
-            &format!("{}\n({})", t!("ecup.abort", xous::LANG), name), None
+            &format!("{}\n({})", t!("ecup.abort", locales::LANG), name), None
         ).unwrap();
         return false;
     }
@@ -445,7 +445,7 @@ fn do_update(com: &mut com::Com, modals: &Modals, package: &[u8], pkg_offset: u3
     // program
     log::info!("init progress: {:x}->{:x}", pkg_offset, pkg_offset + image_len);
     modals.start_progress(
-        &format!("{} {}...", t!("ecup.writing", xous::LANG), name),
+        &format!("{} {}...", t!("ecup.writing", locales::LANG), name),
         flash_start, flash_start + image_len, flash_start).unwrap();
     // divide into 1k chunks and send over
     let exact_chunks = package[pkg_offset as usize..(pkg_offset + image_len) as usize].chunks_exact(1024);
@@ -469,7 +469,7 @@ fn do_update(com: &mut com::Com, modals: &Modals, package: &[u8], pkg_offset: u3
         if com.flash_program(prog_addr, pages).unwrap() == false {
             modals.finish_progress().unwrap();
             modals.show_notification(
-                &format!("{} {}...", t!("ecup.abort", xous::LANG), name), None
+                &format!("{} {}...", t!("ecup.abort", locales::LANG), name), None
             ).unwrap();
             return false;
         }
@@ -518,7 +518,7 @@ fn do_update(com: &mut com::Com, modals: &Modals, package: &[u8], pkg_offset: u3
         if com.flash_program(prog_addr, pages).unwrap() == false {
             modals.finish_progress().unwrap();
             modals.show_notification(
-                &format!("{}\n({})", t!("ecup.abort", xous::LANG), name), None
+                &format!("{}\n({})", t!("ecup.abort", locales::LANG), name), None
             ).unwrap();
             return false
         }

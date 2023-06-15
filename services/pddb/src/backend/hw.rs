@@ -776,7 +776,7 @@ impl PddbOs {
             self.clear_password(); // clear the bad password entry
             let xns = xous_names::XousNames::new().unwrap();
             let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
-            modals.show_notification(t!("pddb.badpass_infallible", xous::LANG), None).expect("notification failed");
+            modals.show_notification(t!("pddb.badpass_infallible", locales::LANG), None).expect("notification failed");
         }
     }
 
@@ -1758,7 +1758,7 @@ impl PddbOs {
 
             log::info!("{}PDDB.CHECKPASS,{}", xous::BOOKEND_START, xous::BOOKEND_END);
             #[cfg(any(feature="precursor", feature="renode"))] // skip this dialog in hosted mode
-            modals.show_notification(t!("pddb.checkpass", xous::LANG), None).expect("notification failed");
+            modals.show_notification(t!("pddb.checkpass", locales::LANG), None).expect("notification failed");
 
             self.clear_password();
             let mut checkblock_b = [0u8; BLOCK_SIZE];
@@ -1768,7 +1768,7 @@ impl PddbOs {
                 success = true;
             } else {
                 log::info!("{}PDDB.PWFAIL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                modals.show_notification(t!("pddb.checkpass_fail", xous::LANG), None).expect("notification failed");
+                modals.show_notification(t!("pddb.checkpass_fail", locales::LANG), None).expect("notification failed");
                 self.clear_password();
             }
         }
@@ -1784,7 +1784,7 @@ impl PddbOs {
         if let Some(system_keys) = &self.system_basis_key {
             // get the new password
             self.clear_password();
-            modals.show_notification(t!("pddb.changepin.enter_new_pin", xous::LANG), None)
+            modals.show_notification(t!("pddb.changepin.enter_new_pin", locales::LANG), None)
                 .map_err(|_| Error::new(ErrorKind::Other, "Internal error"))?;
             self.pw_check(modals)?;
 
@@ -1821,7 +1821,7 @@ impl PddbOs {
             log::info!("Erasing the PDDB region");
             if let Some(modals) = progress {
                 modals.start_progress(
-                    t!("pddb.erase", xous::LANG),
+                    t!("pddb.erase", locales::LANG),
                     xous::PDDB_LOC, xous::PDDB_LOC + PDDB_A_LEN as u32, xous::PDDB_LOC)
                     .expect("couldn't raise progress bar");
                 // retain this delay, because the next section is so compute-intensive, it may take a
@@ -1858,7 +1858,7 @@ impl PddbOs {
 
         // step 2. fill in the page table with junk, which marks it as cryptographically empty
         if let Some(modals) = progress {
-            modals.start_progress(t!("pddb.initpt", xous::LANG), 0, size_of::<PageTableInFlash>() as u32, 0).expect("couldn't raise progress bar");
+            modals.start_progress(t!("pddb.initpt", locales::LANG), 0, size_of::<PageTableInFlash>() as u32, 0).expect("couldn't raise progress bar");
         }
         let mut temp: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
         for page in (0..(size_of::<PageTableInFlash>() & !(PAGE_SIZE - 1))).step_by(PAGE_SIZE) {
@@ -1894,7 +1894,7 @@ impl PddbOs {
         //    return Err(Error::new(ErrorKind::PermissionDenied, "unlock password was incorrect"));
         //}
         if let Some(modals) = progress {
-            modals.start_progress(t!("pddb.key", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            modals.start_progress(t!("pddb.key", locales::LANG), 0, 100, 0).expect("couldn't raise progress bar");
             #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
@@ -1956,7 +1956,7 @@ impl PddbOs {
         // pick a set of random pages from the free pool and assign it to the fscb
         // pass the generator an empty cache - this causes it to treat the entire disk as free space
         if let Some(modals) = progress {
-            modals.start_progress(t!("pddb.fastspace", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            modals.start_progress(t!("pddb.fastspace", locales::LANG), 0, 100, 0).expect("couldn't raise progress bar");
             self.tt.sleep_ms(100).unwrap();
         }
         let free_pool = self.fast_space_generate(BinaryHeap::<Reverse<u32>>::new());
@@ -1988,7 +1988,7 @@ impl PddbOs {
         // this is coded using "direct disk" offsets...under the assumption that we only ever really want to do this here, and
         // not re-use this routine elsewhere.
         if let Some(modals) = progress {
-            modals.start_progress(t!("pddb.randomize", xous::LANG),
+            modals.start_progress(t!("pddb.randomize", locales::LANG),
             self.data_phys_base.as_u32(), PDDB_A_LEN as u32, self.data_phys_base.as_u32()).expect("couldn't raise progress bar");
             #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
@@ -2039,7 +2039,7 @@ impl PddbOs {
 
         // step 6. create the system basis root structure
         if let Some(modals) = progress {
-            modals.start_progress(t!("pddb.structure", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            modals.start_progress(t!("pddb.structure", locales::LANG), 0, 100, 0).expect("couldn't raise progress bar");
             #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
@@ -2199,7 +2199,7 @@ impl PddbOs {
             let xns = xous_names::XousNames::new().unwrap();
             let modals = modals::Modals::new(&xns).unwrap();
 
-            modals.start_progress(t!("pddb.rekey.keys", xous::LANG), 0, all_keys.len() as u32, 0).ok();
+            modals.start_progress(t!("pddb.rekey.keys", locales::LANG), 0, all_keys.len() as u32, 0).ok();
             // we need a map of page numbers to encryption keys. The keys are referenced by their basis name.
             let mut pagemap = HashMap::<PhysAddr, &str>::new();
             // transform the returned Vec into a HashMap that maps basis names into pre-keyed ciphers.
@@ -2257,7 +2257,7 @@ impl PddbOs {
             let pagetable: &[u8] = &self.pddb_mr.as_slice()[..pddb_data_pages * size_of::<Pte>()];
             log::info!("Derived page table of len 0x{:x}", pagetable.len());
             let entries_per_page = PAGE_SIZE / size_of::<Pte>();
-            modals.start_progress(t!("pddb.rekey.running", xous::LANG), 0, (pddb_data_pages * size_of::<Pte>()) as u32, 0).ok();
+            modals.start_progress(t!("pddb.rekey.running", locales::LANG), 0, (pddb_data_pages * size_of::<Pte>()) as u32, 0).ok();
             for (chunk_enum, page) in pagetable.chunks(PAGE_SIZE).enumerate() {
                 // this is the actual offset into pagetable[] that the page[] slice comes from
                 let chunk_start_address = chunk_enum * PAGE_SIZE;
@@ -2361,7 +2361,7 @@ impl PddbOs {
             };
             if do_fscb {
                 log::info!("regenerating fast space...");
-                modals.dynamic_notification(Some(t!("pddb.rekey.fastspace", xous::LANG)), None).ok();
+                modals.dynamic_notification(Some(t!("pddb.rekey.fastspace", locales::LANG)), None).ok();
                 // convert our used page map into the structure needed by fast_space_generate()
                 let mut page_heap = BinaryHeap::new();
                 // drain doesn't actually de-allocate memory, but it gives us an opportunity
@@ -2435,16 +2435,16 @@ impl PddbOs {
         let modals = modals::Modals::new(&xns).unwrap();
         modals.show_notification(
             match self.dna_mode {
-                DnaMode::Normal => t!("pddb.freespace.request", xous::LANG),
-                DnaMode::Migration => t!("pddb.rekey.request", xous::LANG),
-                DnaMode::Churn => t!("pddb.churn.request", xous::LANG),
+                DnaMode::Normal => t!("pddb.freespace.request", locales::LANG),
+                DnaMode::Migration => t!("pddb.rekey.request", locales::LANG),
+                DnaMode::Churn => t!("pddb.churn.request", locales::LANG),
             },
             None).ok();
         #[cfg(feature="ux-swap-delay")]
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
         // 0.5 display the Bases that we know
-        let mut blist = String::from(t!("pddb.freespace.currentlist", xous::LANG));
+        let mut blist = String::from(t!("pddb.freespace.currentlist", locales::LANG));
         for (_key, name) in ret.iter() {
             blist.push_str("\n");
             blist.push_str(name);
@@ -2454,12 +2454,12 @@ impl PddbOs {
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
         // 1. prompt user to enter any name/password combos for other basis we want to keep
-        while self.yes_no_approval(&modals, t!("pddb.freespace.enumerate_another", xous::LANG)) {
+        while self.yes_no_approval(&modals, t!("pddb.freespace.enumerate_another", locales::LANG)) {
             #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
             match modals
-                .alert_builder(t!("pddb.freespace.name", xous::LANG))
+                .alert_builder(t!("pddb.freespace.name", locales::LANG))
                 .field(None, None)
                 .build()
             {
@@ -2500,7 +2500,7 @@ impl PddbOs {
                     if let Some((basis_key, name)) = maybe_entry {
                         ret.push((basis_key, name));
                     } else {
-                        modals.show_notification(t!("pddb.freespace.badpass", xous::LANG), None).ok();
+                        modals.show_notification(t!("pddb.freespace.badpass", locales::LANG), None).ok();
                         #[cfg(feature="ux-swap-delay")]
                         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                     }
@@ -2510,7 +2510,7 @@ impl PddbOs {
             #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
             // 4. repeat summary print-out
-            let mut blist = String::from(t!("pddb.freespace.currentlist", xous::LANG));
+            let mut blist = String::from(t!("pddb.freespace.currentlist", locales::LANG));
             for (_key, name) in ret.iter() {
                 blist.push_str("\n");
                 blist.push_str(name);
@@ -2523,9 +2523,9 @@ impl PddbOs {
         if self.yes_no_approval(
             &modals,
             match self.dna_mode {
-                DnaMode::Normal => t!("pddb.freespace.finished", xous::LANG),
-                DnaMode::Migration => t!("pddb.rekey.finished", xous::LANG),
-                DnaMode::Churn => t!("pddb.churn.finished", xous::LANG),
+                DnaMode::Normal => t!("pddb.freespace.finished", locales::LANG),
+                DnaMode::Migration => t!("pddb.rekey.finished", locales::LANG),
+                DnaMode::Churn => t!("pddb.churn.finished", locales::LANG),
         }) {
             Some(ret)
         } else {
@@ -2535,11 +2535,11 @@ impl PddbOs {
 
     fn yes_no_approval(&self, modals: &modals::Modals, request: &str) -> bool {
         modals.add_list(
-            vec![t!("pddb.yes", xous::LANG), t!("pddb.no", xous::LANG)]
+            vec![t!("pddb.yes", locales::LANG), t!("pddb.no", locales::LANG)]
         ).expect("couldn't build confirmation dialog");
         match modals.get_radiobutton(request) {
             Ok(response) => {
-                if &response == t!("pddb.yes", xous::LANG) {
+                if &response == t!("pddb.yes", locales::LANG) {
                     true
                 } else {
                     false
@@ -2635,7 +2635,7 @@ impl PddbOs {
         let pddb = self.pddb_mr.as_slice();
         if let Some(m) = modals {
             m.start_progress(
-                t!("pddb.checksums", xous::LANG),
+                t!("pddb.checksums", locales::LANG),
                 0,
                 checksums.checksums.len() as u32,
                 0
@@ -3064,11 +3064,11 @@ impl PddbOs {
                 modals.dynamic_notification_close().unwrap();
                 let mut prompt = String::from("Any secret Bases must be migrated now, or else their data will be lost.\n\nUnlock a Basis for migration?");
                 loop {
-                    modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
-                    modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("pddb.yes", locales::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("pddb.no", locales::LANG)).expect("couldn't build radio item list");
                     match modals.get_radiobutton(&prompt) {
                         Ok(response) => {
-                            if response.as_str() == t!("pddb.yes", xous::LANG) {
+                            if response.as_str() == t!("pddb.yes", locales::LANG) {
                                 match modals.alert_builder("Enter the Basis name")
                                 .field(Some("My Secret Basis".to_string()), None)
                                 .build() {
@@ -3137,7 +3137,7 @@ impl PddbOs {
                                         prompt.push_str("Error unlocking Basis, retry?");
                                     }
                                 }
-                            } else if response.as_str() == t!("pddb.no", xous::LANG) {
+                            } else if response.as_str() == t!("pddb.no", locales::LANG) {
                                 break;
                             } else {
                                 log::warn!("Got unexpected return from radiobutton: {}", response);

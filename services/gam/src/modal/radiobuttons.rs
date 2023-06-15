@@ -134,7 +134,7 @@ impl ActionApi for RadioButtons {
             modal.gam.post_textview(&mut tv).expect("couldn't post tv");
             #[cfg(feature="tts")]
             {
-                self.tts.tts_blocking(t!("radio.select_and_close_tts", xous::LANG)).unwrap();
+                self.tts.tts_blocking(t!("radio.select_and_close_tts", locales::LANG)).unwrap();
                 self.tts.tts_blocking(self.action_payload.as_str()).unwrap();
             }
         }
@@ -144,7 +144,7 @@ impl ActionApi for RadioButtons {
         tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
             Point::new(text_x, cur_y), Point::new(modal.canvas_width - modal.margin, cur_y + modal.line_height)
         ));
-        write!(tv, "{}", t!("radio.select_and_close", xous::LANG)).unwrap();
+        write!(tv, "{}", t!("radio.select_and_close", locales::LANG)).unwrap();
         modal.gam.post_textview(&mut tv).expect("couldn't post tv");
 
         // divider lines
@@ -175,7 +175,7 @@ impl ActionApi for RadioButtons {
                     self.action_payload = RadioButtonPayload::new(self.items[self.select_index as usize].as_str());
                     #[cfg(feature="tts")]
                     {
-                        self.tts.tts_blocking(t!("radio.selection_tts", xous::LANG)).unwrap();
+                        self.tts.tts_blocking(t!("radio.selection_tts", locales::LANG)).unwrap();
                         self.tts.tts_simple(self.items[self.select_index as usize].as_str()).unwrap();
                     }
                 } else {  // the OK button select

@@ -253,14 +253,14 @@ impl XousEnv {
                                                 to_request_str.push_str(
                                                     &format!("\n\n⚠   {}{}   ⚠\n",
                                                     last_remaining,
-                                                    t!("vault.fido.countdown", xous::LANG)
+                                                    t!("vault.fido.countdown", locales::LANG)
                                                 ));
                                                 modals.dynamic_notification_update(
                                                     Some(
                                                         if lefty_mode.load(Ordering::SeqCst) {
-                                                            t!("vault.u2freq_lefty", xous::LANG)
+                                                            t!("vault.u2freq_lefty", locales::LANG)
                                                         } else {
-                                                            t!("vault.u2freq", xous::LANG)
+                                                            t!("vault.u2freq", locales::LANG)
                                                         }
                                                     ),
                                                     Some(&to_request_str),
@@ -332,20 +332,20 @@ impl XousEnv {
                                     request_str.clear();
                                     // we have some prior record of the app, human-format it
                                     request_str.push_str(&format!("\n{}{}",
-                                        t!("vault.u2f.appinfo.name", xous::LANG), info.name
+                                        t!("vault.u2f.appinfo.name", locales::LANG), info.name
                                     ));
                                     request_str.push_str(&format!("\n{}",
                                         crate::atime_to_str(info.atime)
                                     ));
                                     request_str.push_str(&format!("\n{}{}",
-                                        t!("vault.u2f.appinfo.authcount", xous::LANG),
+                                        t!("vault.u2f.appinfo.authcount", locales::LANG),
                                         info.count,
                                     ));
                                 } else {
                                     request_str.clear();
                                     // request approval of the new app ID
                                     request_str.push_str(&format!("\n{}\nApp ID: {:x?}",
-                                        t!("vault.u2f.appinfo.newapp", xous::LANG), request.app_id
+                                        t!("vault.u2f.appinfo.newapp", locales::LANG), request.app_id
                                     ));
                                 }
                                 let mut to_request_str = request_str.to_string();
@@ -355,15 +355,15 @@ impl XousEnv {
                                 to_request_str.push_str(
                                     &format!("\n\n⚠   {}{}   ⚠\n",
                                     last_remaining,
-                                    t!("vault.fido.countdown", xous::LANG)
+                                    t!("vault.fido.countdown", locales::LANG)
                                 ));
 
                                 modals.dynamic_notification(
                                     Some(
                                         if lefty_mode.load(Ordering::SeqCst) {
-                                            t!("vault.u2freq_lefty", xous::LANG)
+                                            t!("vault.u2freq_lefty", locales::LANG)
                                         } else {
-                                            t!("vault.u2freq", xous::LANG)
+                                            t!("vault.u2freq", locales::LANG)
                                         }
                                     ),
                                     Some(&to_request_str),
@@ -442,14 +442,14 @@ impl XousEnv {
                                     || {
                                         // otherwise, create it
                                     match modals
-                                        .alert_builder(t!("vault.u2f.give_app_name", xous::LANG))
+                                        .alert_builder(t!("vault.u2f.give_app_name", locales::LANG))
                                         .field(None, None)
                                         .build()
                                         {
                                             Ok(name) => {
                                                 let info = AppInfo {
                                                     name: name.content()[0].content.to_string(),
-                                                    notes: t!("vault.notes", xous::LANG).to_string(),
+                                                    notes: t!("vault.notes", locales::LANG).to_string(),
                                                     id: update.app_id,
                                                     ctime: crate::utc_now().timestamp() as u64,
                                                     atime: 0,
@@ -596,9 +596,9 @@ impl UserPresence for XousEnv {
         self.modals.dynamic_notification(
             Some(
                 if self.lefty_mode.load(Ordering::SeqCst) {
-                    t!("vault.u2freq_lefty", xous::LANG)
+                    t!("vault.u2freq_lefty", locales::LANG)
                 } else {
-                    t!("vault.u2freq", xous::LANG)
+                    t!("vault.u2freq", locales::LANG)
                 }
             ),
             None,
@@ -634,14 +634,14 @@ impl UserPresence for XousEnv {
                 request_str.push_str(
                     &format!("\n\n⚠   {}{}   ⚠\n",
                     remaining,
-                    t!("vault.fido.countdown", xous::LANG)
+                    t!("vault.fido.countdown", locales::LANG)
                 ));
                 self.modals.dynamic_notification_update(
                     Some(
                         if self.lefty_mode.load(Ordering::SeqCst) {
-                            t!("vault.u2freq_lefty", xous::LANG)
+                            t!("vault.u2freq_lefty", locales::LANG)
                         } else {
-                            t!("vault.u2freq", xous::LANG)
+                            t!("vault.u2freq", locales::LANG)
                         }
                     ),
                     Some(&request_str),

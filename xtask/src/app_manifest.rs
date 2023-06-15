@@ -169,7 +169,7 @@ pub(crate) fn app_index_to_name(index: usize) -> Result<&'static str, AppDispatc
         for name in _manifest.menu_name.keys() {
             writeln!(
                 menu,
-                "        {} => Ok(t!(\"{}\", xous::LANG)),",
+                "        {} => Ok(t!(\"{}\", locales::LANG)),",
                 index, name,
             )
             .unwrap();
@@ -194,7 +194,7 @@ pub(crate) fn app_menu_items(menu_items: &mut Vec::<MenuItem>, status_conn: u32)
         for name in manifest.menu_name.keys() {
             writeln!(
                 menu,
-                "        name: xous_ipc::String::from_str(t!(\"{}\", xous::LANG)),",
+                "        name: xous_ipc::String::from_str(t!(\"{}\", locales::LANG)),",
                 name
             )
             .unwrap();

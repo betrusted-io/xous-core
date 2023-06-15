@@ -105,9 +105,9 @@ impl Hello {
         text_view.clear_area = true;
         text_view.rounded_border = Some(3);
         text_view.style = GlyphStyle::Regular;
-        write!(text_view.text, "{}", t!("helloworld.hello", xous::LANG)).expect("Could not write to text view");
+        write!(text_view.text, "{}", t!("helloworld.hello", locales::LANG)).expect("Could not write to text view");
         #[cfg(feature="tts")]
-        self.tts.tts_simple(t!("helloworld.hello", xous::LANG)).unwrap();
+        self.tts.tts_simple(t!("helloworld.hello", locales::LANG)).unwrap();
 
         self.gam
             .post_textview(&mut text_view)

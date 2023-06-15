@@ -184,14 +184,14 @@ impl VaultUx {
     */
     pub fn swap_submenu(&mut self) {
         // always call delete on the potential optional items, to return us to a known state
-        self.menu_mgr.delete_item(t!("vault.menu_autotype", xous::LANG));
-        self.menu_mgr.delete_item(t!("vault.menu_addnew", xous::LANG));
+        self.menu_mgr.delete_item(t!("vault.menu_autotype", locales::LANG));
+        self.menu_mgr.delete_item(t!("vault.menu_addnew", locales::LANG));
         match *self.mode.lock().unwrap() {
             VaultMode::Fido => (),
             VaultMode::Password | VaultMode::Totp => {
                 self.menu_mgr.insert_item(
                     MenuItem {
-                        name: xous_ipc::String::from_str(t!("vault.menu_addnew", xous::LANG)),
+                        name: xous_ipc::String::from_str(t!("vault.menu_addnew", locales::LANG)),
                         action_conn: Some(self.actions_conn),
                         action_opcode: ActionOp::MenuAddnew.to_u32().unwrap(),
                         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -201,7 +201,7 @@ impl VaultUx {
                 );
                 self.menu_mgr.insert_item(
                     MenuItem {
-                        name: xous_ipc::String::from_str(t!("vault.menu_autotype", xous::LANG)),
+                        name: xous_ipc::String::from_str(t!("vault.menu_autotype", locales::LANG)),
                         action_conn: Some(self.main_conn),
                         action_opcode: VaultOp::MenuAutotype.to_u32().unwrap(),
                         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -453,7 +453,7 @@ impl VaultUx {
             box_text.clear_area = true;
             box_text.style = self.style;
             box_text.margin = self.margin;
-            write!(box_text, "{}", t!("vault.no_items", xous::LANG)).ok();
+            write!(box_text, "{}", t!("vault.no_items", locales::LANG)).ok();
             self.gam.post_textview(&mut box_text).expect("couldn't post empty notification");
             return Ok(());
         }
@@ -506,7 +506,7 @@ impl VaultUx {
                                 let code = generate_totp_code(
                                     get_current_unix_time().unwrap_or(0),
                                     &totp
-                                ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
+                                ).unwrap_or(t!("vault.error.record_error", locales::LANG).to_string());
                                 // why code on top? because the item.name can be very long, and it can wrap which would cause
                                 // the code to become hidden.
                                 write!(box_text, "{}\n{}", code, item.name()).ok();
@@ -514,13 +514,13 @@ impl VaultUx {
                                 let code = generate_totp_code(
                                     step_seconds,
                                     &totp
-                                ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
+                                ).unwrap_or(t!("vault.error.record_error", locales::LANG).to_string());
                                 // why code on top? because the item.name can be very long, and it can wrap which would cause
                                 // the code to become hidden.
                                 write!(box_text, "HOTP {}\n{}", code, item.name()).ok();
                             }
                         } else {
-                            write!(box_text, "{}", t!("vault.error.record_error", xous::LANG)).ok();
+                            write!(box_text, "{}", t!("vault.error.record_error", locales::LANG)).ok();
                         }
                     },
                 }
@@ -668,12 +668,12 @@ impl VaultUx {
                         generate_totp_code(
                             get_current_unix_time().unwrap_or(0),
                             &totp
-                        ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string())
+                        ).unwrap_or(t!("vault.error.record_error", locales::LANG).to_string())
                     } else {
                         generate_totp_code(
                             step_seconds,
                             &totp
-                        ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string())
+                        ).unwrap_or(t!("vault.error.record_error", locales::LANG).to_string())
                     };
                     match self.usb_dev.send_str(&code) {
                         Ok(_) => {

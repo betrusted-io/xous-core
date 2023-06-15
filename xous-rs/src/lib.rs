@@ -17,8 +17,5 @@ pub use string::*;
 pub use stringbuffer::*;
 pub use syscall::*;
 
-pub mod locale;
-pub use locale::LANG;
-
 #[cfg(feature = "processes-as-threads")]
 pub use crate::arch::ProcessArgsAsThread;

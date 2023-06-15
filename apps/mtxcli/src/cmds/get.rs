@@ -23,7 +23,7 @@ impl<'a> ShellCmdApi<'a> for Get {
         if let Some(key) = tokens.next() {
             match key {
                 "" => {
-                    write!(ret, "{}", t!("mtxcli.get.help", xous::LANG)).unwrap();
+                    write!(ret, "{}", t!("mtxcli.get.help", locales::LANG)).unwrap();
                 }
                 _ => {
                     match env.get(key) {
