@@ -197,7 +197,7 @@ fn main() {
             // Ignore the "CSR" region and manually reconstruct it, because this
             // region is largely empty and we want to avoid allocating too much space.
             if region.name == "CSR" {
-                const PAGE_SIZE: usize = 4096;
+                const PAGE_SIZE: u64 = 4096;
                 // round to the nearest page, then add one page as the last entry in the csr_top
                 // is an alloatable page, and not an end-stop.
                 let length = if csr_top - region.base & (PAGE_SIZE - 1) == 0 {

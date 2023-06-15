@@ -165,14 +165,14 @@ rev="4296c2e7904898766cf7d8d589759a129794783b" # use the commitref because we're
 #######################################################
 
 ### Selectively patch in these crates, or more, as needed depending on your dev activity
-# [patch.crates-io.utralib]
-# path = "./utralib"
-# [patch.crates-io.svd2utra]
-# path = "./svd2utra"
-# [patch.crates-io.xous]
-# path = "./xous-rs"
-# [patch.crates-io.xous-ipc]
-# path = "./xous-ipc"
+[patch.crates-io.utralib]
+path = "./utralib"
+[patch.crates-io.svd2utra]
+path = "./svd2utra"
+[patch.crates-io.xous]
+path = "./xous-rs"
+[patch.crates-io.xous-ipc]
+path = "./xous-ipc"
 # [patch.crates-io.xous-api-names]
 # path = "./api/xous-api-names"
 # [patch.crates-io.xous-api-susres]
