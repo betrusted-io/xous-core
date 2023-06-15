@@ -3983,7 +3983,7 @@ dependencies = [
 
 [[package]]
 name = "svd2utra"
-version = "0.1.17"
+version = "0.1.18"
 dependencies = [
  "quick-xml",
 ]
@@ -4651,7 +4651,7 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "utralib"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "svd2utra",
 ]
@@ -5164,7 +5164,7 @@ checksum = "d2d7d3948613f75c98fd9328cfdcc45acc4d360655289d0a7d4ec931392200a3"
 
 [[package]]
 name = "xous"
-version = "0.9.44"
+version = "0.9.45"
 dependencies = [
  "compiler_builtins",
  "lazy_static",
@@ -5173,9 +5173,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-log"
-version = "0.1.40"
+version = "0.1.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd6b15ea09891f09b02d763422dc99733c96e62d0f8ab476c6bc663c90b17e72"
+checksum = "24aad5ecdee87526a97eaaa7f26d22c0fe419667727598d694bda183dfa31847"
 dependencies = [
  "log",
  "num-derive",
@@ -5186,9 +5186,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-names"
-version = "0.9.42"
+version = "0.9.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b470fbf177d58767fa001acfcb5294a88d3938d3935865ff6b8f1db40f1004e"
+checksum = "92baa5a52f91e40d015a53db1891c66ee7c715b22d1e9731a6fb29e3d9df1061"
 dependencies = [
  "log",
  "num-derive",
@@ -5201,9 +5201,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-susres"
-version = "0.9.40"
+version = "0.9.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a1f1973b29dd107f2e12761aa5c070afc33782f67b2a22a86f42af938bed1fe"
+checksum = "5324cd9fbea0a18bae2bd706c2f2f4abdc8fd9bacd6338bd4ef24dccfba5b814"
 dependencies = [
  "log",
  "num-derive",
@@ -5218,9 +5218,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-ticktimer"
-version = "0.9.40"
+version = "0.9.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ad02ed7d581a1ec15607a01fd22cbb9f000d02630cc6fe93cbeb5d59c46af8a"
+checksum = "1eec5426d66ac219ace8e787b8f1c0f844dbea19f941b81061366b6f89e34d6b"
 dependencies = [
  "log",
  "num-derive",
@@ -5236,7 +5236,7 @@ dependencies = [
 
 [[package]]
 name = "xous-ipc"
-version = "0.9.44"
+version = "0.9.45"
 dependencies = [
  "bitflags",
  "rkyv",
