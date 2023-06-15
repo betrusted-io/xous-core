@@ -71,10 +71,25 @@
         ("rust-serde-value" ,rust-serde-value-0.7)
         ("rust-tokio-test" ,rust-tokio-test-0.4))))))
 
+(define-public rust-svd2repl-0.1
+  (package
+    (name "rust-svd2repl")
+    (version "0.1.0")
+    (source (local-file "svd2repl" #:recursive? #t))
+    (build-system cargo-build-system)
+    (arguments
+      `(#:cargo-inputs
+         (("rust-quick-xml" ,rust-quick-xml-0.28))))
+    (home-page "https://github.com/betrusted-io/xous-core")
+    (synopsis "Generate Renode platform files from SVD files")
+    (description "The svd2repl is a tool to generate Renode platform files
+from @acronym{CMSIS-SVD, CMSIS System View Description} files.")
+    (license (list license:expat license:asl2.0))))
+
 (define-public rust-svd2utra-0.1
   (package
     (name "rust-svd2utra")
-    (version "0.1.16")
+    (version "0.1.17")
     (source (local-file "svd2utra" #:recursive? #t))
     (build-system cargo-build-system)
     (arguments
