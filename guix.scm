@@ -37,16 +37,19 @@
 
 (use-modules (gnu packages)
              (gnu packages crates-io)
+             (gnu packages cross-base)
              (gnu packages libusb)
              (gnu packages python-crypto)
              (gnu packages python-web)
              (gnu packages python-xyz)
+             (gnu packages rust)
              (guix build-system cargo)
              (guix build-system python)
              (guix download)
              (guix gexp)
              ((guix licenses) #:prefix license:)
-             (guix packages))
+             (guix packages)
+             (guix utils))
 
 (define-public precursorupdater
   (package
@@ -171,6 +174,86 @@ that can be used to update Precursor devices operating system through the
        (("rust-darling-core" ,rust-darling-core-0.20)
         ("rust-quote" ,rust-quote-1)
         ("rust-syn" ,rust-syn-2))))))
+
+;; Based on dist-various-1 Dockerfile from Rust.
+(define-public rust-dist-various-1
+  (let ((targets (string-join
+                   (list ;; "asmjs-unknown-emscripten"
+                         ;; "wasm32-unknown-emscripten"
+                         ;; "mips-unknown-linux-musl"
+                         ;; "mipsel-unknown-linux-musl"
+                         ;; "mips64-unknown-linux-muslabi64"
+                         ;; "mips64el-unknown-linux-muslabi64"
+                         ;; "arm-unknown-linux-musleabi"
+                         ;; "arm-unknown-linux-musleabihf"
+                         ;; "armv5te-unknown-linux-gnueabi"
+                         ;; "armv5te-unknown-linux-musleabi"
+                         ;; "armv7-unknown-linux-musleabihf"
+                         ;; "aarch64-unknown-none"
+                         ;; "aarch64-unknown-none-softfloat"
+                         ;; "sparc64-unknown-linux-gnu"
+                         ;; "x86_64-unknown-redox"
+                         ;; "thumbv6m-none-eabi"
+                         ;; "thumbv7m-none-eabi"
+                         ;; "thumbv7em-none-eabi"
+                         ;; "thumbv7em-none-eabihf"
+                         ;; "thumbv8m.base-none-eabi"
+                         ;; "thumbv8m.main-none-eabi"
+                         ;; "thumbv8m.main-none-eabihf"
+                         ;; "riscv32i-unknown-none-elf"
+                         ;; "riscv32imc-unknown-none-elf"
+                         "riscv32imac-unknown-none-elf"
+                         ;; "riscv64imac-unknown-none-elf"
+                         ;; "riscv64gc-unknown-none-elf"
+                         ;; "armebv7r-none-eabi"
+                         ;; "armebv7r-none-eabihf"
+                         ;; "armv7r-none-eabi"
+                         ;; "armv7r-none-eabihf"
+                         ;; "thumbv7neon-unknown-linux-gnueabihf"
+                         "armv7a-none-eabi")
+                   ",")))
+    (package
+      (inherit rust)
+      (outputs '("out"))
+      (name "rust-dist-various-1")
+      (arguments
+        (substitute-keyword-arguments (package-arguments rust)
+          ((#:tests? _ #f) #f)
+          ((#:phases phases)
+            `(modify-phases ,phases
+               (add-before 'unpack 'set-compilers
+                 (lambda _
+                   ;; (setenv "CC_riscv32i_unknown_none_elf" "false")
+                   ;; (setenv "CC_riscv32imc_unknown_none_elf" "false")
+                   (setenv "CC_riscv32imac_unknown_none_elf" "false")
+                   ;; (setenv "CC_riscv64imac_unknown_none_elf" "false")
+                   ;; (setenv "CC_riscv64gc_unknown_none_elf" "false")
+                   (setenv "AR_armv7a_none_eabi" (which "arm-none-eabi-ar"))
+                   (setenv "CC_armv7a_none_eabi" (which "arm-none-eabi-gcc"))
+                   (setenv "AR_armv7a_none_eabihf" (which "arm-none-eabi-ar"))
+                   (setenv "CC_armv7a_none_eabihf" (which "arm-none-eabi-gcc"))))
+               (replace 'build
+                 (lambda* (#:key parallel-build? #:allow-other-keys)
+                   (let ((job-spec (string-append
+                                     "-j" (if parallel-build?
+                                            (number->string (parallel-job-count))
+                                            "1"))))
+                     (invoke "./x.py" job-spec "build"
+                       "--host="
+                       "library/std"
+                       "--target"
+                       ,targets))))
+               (replace 'install
+                 (lambda _
+                   (invoke "./x.py" "install"
+                           "--host="
+                           "--target"
+                           ,targets)))
+               (delete 'wrap-rustc)))))
+      (native-inputs
+        (modify-inputs (package-native-inputs rust)
+          (append (cross-binutils "arm-none-eabi"))
+          (append (cross-gcc "arm-none-eabi")))))))
 
 (define-public rust-quick-xml-0.28
   (package
