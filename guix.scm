@@ -550,6 +550,21 @@ using the @acronym{UTRA, Unambiguous Thin Register Abstraction} abstractions.")
     (description "libyaml transpiled to rust by c2rust")
     (license license:expat)))
 
+(define-public rust-utralib-0.1
+  (package
+    (name "rust-utralib")
+    (version "0.1.20")
+    (source (local-file "utralib" #:recursive? #t))
+    (build-system cargo-build-system)
+    (arguments
+     `(#:cargo-inputs
+       (("rust-svd2utra" ,rust-svd2utra-0.1))))
+    (inputs (list rust-svd2utra-0.1))
+    (home-page "")
+    (synopsis "")
+    (description "")
+    (license license:expat)))
+
 (define-public wycheproof-import
   (package
     (name "wycheproof-import")
@@ -574,4 +589,5 @@ Wycheproof} project for usage on Xous.")
 (list precursorupdater
       rust-svd2repl-0.1
       rust-svd2utra-0.1
+      rust-utralib-0.1
       wycheproof-import)
