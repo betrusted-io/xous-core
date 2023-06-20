@@ -451,10 +451,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         write!(ret, "\nWeb socket session closed.").ok();
                     }
                 }
-                #[cfg(feature="tls")]
+                #[cfg(feature = "tls")]
                 "tls" => {
-                    log::set_max_level(log::LevelFilter::Info);
-                    log::info!("starting TLS run");
+                    if let Some(tls_cmd) = tokens.next() {
+                        match tls_cmd {
                     let mut root_store = rustls::RootCertStore::empty();
                     log::info!("create root store");
                     root_store.add_server_trust_anchors(
@@ -466,49 +466,68 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                     ta.subject,
                                     ta.spki,
                                     ta.name_constraints,
+                            "test" => {
+                                log::set_max_level(log::LevelFilter::Info);
+                                log::info!("starting TLS run");
+                                let mut root_store = rustls::RootCertStore::empty();
+                                log::info!("create root store");
+                                root_store.add_server_trust_anchors(
+                                        webpki_roots::TLS_SERVER_ROOTS
+                                            .0
+                                            .iter()
+                                            .map(|ta| {
+                                                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                                                    ta.subject,
+                                                    ta.spki,
+                                                    ta.name_constraints,
+                                                )
+                                            })
+                                    );
+                                log::info!("build TLS client config");
+                                let config = rustls::ClientConfig::builder()
+                                    .with_safe_defaults()
+                                    .with_root_certificates(root_store)
+                                    .with_no_client_auth();
+
+                                log::info!("point TLS to bunniefoo.com");
+                                let server_name = "bunniefoo.com".try_into().unwrap();
+                                let mut conn =
+                                    rustls::ClientConnection::new(Arc::new(config), server_name)
+                                        .unwrap();
+
+                                log::info!("connect TCPstream to bunniefoo.com");
+                                let mut sock = TcpStream::connect("bunniefoo.com:443").unwrap();
+                                let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+                                log::info!("create http headers and write to server");
+                                tls.write_all(
+                                    concat!(
+                                        "GET / HTTP/1.1\r\n",
+                                        "Host: bunniefoo.com\r\n",
+                                        "Connection: close\r\n",
+                                        "Accept-Encoding: identity\r\n",
+                                        "\r\n"
+                                    )
+                                    .as_bytes(),
                                 )
-                            })
-                    );
-                    log::info!("build TLS client config");
-                    let config = rustls::ClientConfig::builder()
-                        .with_safe_defaults()
-                        .with_root_certificates(root_store)
-                        .with_no_client_auth();
-
-                    log::info!("point TLS to bunniefoo.com");
-                    let server_name = "bunniefoo.com".try_into().unwrap();
-                    let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-
-                    log::info!("connect TCPstream to bunniefoo.com");
-                    let mut sock = TcpStream::connect("bunniefoo.com:443").unwrap();
-                    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
-                    log::info!("create http headers and write to server");
-                    tls.write_all(
-                        concat!(
-                            "GET / HTTP/1.1\r\n",
-                            "Host: bunniefoo.com\r\n",
-                            "Connection: close\r\n",
-                            "Accept-Encoding: identity\r\n",
-                            "\r\n"
-                        )
-                        .as_bytes(),
-                    )
-                    .unwrap();
-                    log::info!("readout cipher suite");
-                    let ciphersuite = tls
-                        .conn
-                        .negotiated_cipher_suite()
-                        .unwrap();
-                    log::info!(
-                        "Current ciphersuite: {:?}",
-                        ciphersuite.suite()
-                    );
-                    let mut plaintext = Vec::new();
-                    log::info!("read TLS response");
-                    tls.read_to_end(&mut plaintext).unwrap();
-                    log::info!("len: {}", plaintext.len());
-                    log::info!("{}", std::str::from_utf8(&plaintext).unwrap_or("utf-error"));
-                    log::set_max_level(log::LevelFilter::Info);
+                                .unwrap();
+                                log::info!("readout cipher suite");
+                                let ciphersuite = tls.conn.negotiated_cipher_suite().unwrap();
+                                log::info!("Current ciphersuite: {:?}", ciphersuite.suite());
+                                let mut plaintext = Vec::new();
+                                log::info!("read TLS response");
+                                tls.read_to_end(&mut plaintext).unwrap();
+                                log::info!("len: {}", plaintext.len());
+                                log::info!(
+                                    "{}",
+                                    std::str::from_utf8(&plaintext).unwrap_or("utf-error")
+                                );
+                                log::set_max_level(log::LevelFilter::Info);
+                            }
+                            _ => {
+                                write!(ret, "net commands: test").ok();
+                            }
+                        }
+                    }
                 }
                 // note: to use the `shellperf` option, you need to load a version of the SOC that has the performance counters built in.
                 // this can be generated using the command `python3 .\betrusted_soc.py -e .\dummy.nky --perfcounter` in the betrusted-soc repo.
