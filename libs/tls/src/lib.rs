@@ -9,6 +9,7 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::path::PathBuf;
+use x509_parser::prelude::{FromDer, X509Certificate};
 use xous_names::XousNames;
 
 /// PDDB Dict for tls trusted certificates keys
@@ -22,6 +23,76 @@ pub struct RustlsOwnedTrustAnchor {
     name_constraints: Option<Vec<u8>>,
 }
 
+impl<'a> From<&X509Certificate<'a>> for RustlsOwnedTrustAnchor {
+    fn from(x509: &X509Certificate) -> Self {
+        RustlsOwnedTrustAnchor {
+            subject: x509.subject().as_raw().to_vec(),
+            spki: x509.public_key().raw.to_vec(),
+            name_constraints: None::<Vec<u8>>,
+            // may have to pass value thru from certificates parameter
+            // name_constraints: match x509.name_constraints() {
+            //     Ok(Some(nc)) => Some(nc.value),
+            //     Ok(None) => None,
+            //     Err(e) => {
+            //         log::warn!("failed to extract x509 name_constraints: {}", e);
+            //         None
+            //     }
+            // },
+        }
+    }
+}
+
+// presents a modal to the user to select trusted tls certificates
+// and saves the selected certificates to the pddb
+// returns false if no certificates are trusted - and true otherwise
+pub fn check_trust(certificates: &[Certificate]) -> bool {
+    let xns = XousNames::new().unwrap();
+    let modals = Modals::new(&xns).unwrap();
+
+    let certificates: Vec<X509Certificate> = certificates
+        .iter()
+        .map(|cert| X509Certificate::from_der(cert.as_ref()))
+        .filter(|result| result.is_ok())
+        .map(|result| result.unwrap().1)
+        .filter(|x509| x509.is_ca())
+        .collect();
+
+    let chain: Vec<String> = certificates
+        .iter()
+        .map(|x509| format!("{}", &x509.tbs_certificate.issuer()))
+        .collect();
+    let chain: Vec<&str> = chain.iter().map(AsRef::as_ref).collect();
+
+    modals
+        .add_list(chain)
+        .expect("couldn't build checkbox list");
+    match modals.get_checkbox("Do you trust any of these certificate authorities?") {
+        Ok(trusted) => {
+            trusted
+                .iter()
+                .for_each(|cert| log::info!("trusts {}", cert));
+            modals
+                .get_check_index()
+                .unwrap()
+                .iter()
+                .map(|i| &certificates[*i])
+                .map(|x509| {
+                    (
+                        x509.raw_serial_as_string(),
+                        RustlsOwnedTrustAnchor::from(x509),
+                    )
+                })
+                .for_each(|(key, val)| {
+                    save_cert(&key, &val).expect("failed to save trusted cert");
+                });
+            trusted.len() > 0
+        }
+        _ => {
+            log::error!("get_checkbox failed");
+            false
+        }
+    }
+}
 
 // saves a tls trust-anchor to the pddb
 pub fn save_cert(key: &str, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
