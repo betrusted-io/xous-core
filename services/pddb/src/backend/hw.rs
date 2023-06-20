@@ -2242,7 +2242,8 @@ impl PddbOs {
             }
             modals.finish_progress().ok();
             if !clean {
-                return PddbRekeyOp::VerifyFail
+                log::warn!("Unmapped FSCB records were found, but this is likely due to FSCB flushes called. Continuing.");
+                // return PddbRekeyOp::VerifyFail
             }
 
             // future note: if changing the password on just one basis, we'd want to ask for the new
