@@ -75,7 +75,8 @@ tracing = {version = "0.1.35", optional = true}
 tracing-subscriber = {version = "0.3.11", optional = true}
 
 # for rustls testing
-rustls = {version = "0.20.6", optional = true} # note requirement for patch to xous-ring in workspace Cargo.toml
+tls = {path="../../libs/tls"}
+rustls = {version = "0.21.2", optional = true} # note requirement for patch to xous-ring in workspace Cargo.toml
 # rustls = {path="../../../rustls/rustls"}
 webpki-roots = {version = "0.22.4", optional = true}
 ring = {version = "0.16.20", optional = true} # for testing ring math functions  # note requirement for patch to xous-ring in workspace Cargo.toml

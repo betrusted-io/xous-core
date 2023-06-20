@@ -8,6 +8,8 @@ use xous::MessageEnvelope;
 use num_traits::*;
 use std::net::{IpAddr, TcpStream, TcpListener};
 use std::io::Write;
+#[cfg(feature = "tls")]
+use rustls::{Certificate, OwnedTrustAnchor};
 use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -466,6 +468,64 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                     ta.subject,
                                     ta.spki,
                                     ta.name_constraints,
+                            "probe" => {
+                                log::set_max_level(log::LevelFilter::Info);
+                                log::info!("starting TLS probe");
+                                let mut root_store = rustls::RootCertStore::empty();
+                                root_store.add_server_trust_anchors(
+                                        webpki_roots::TLS_SERVER_ROOTS
+                                            .0
+                                            .iter()
+                                            .map(|ta| {
+                                                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                                                    ta.subject,
+                                                    ta.spki,
+                                                    ta.name_constraints,
+                                                )
+                                            })
+                                    );
+                                let config = rustls::ClientConfig::builder()
+                                    .with_safe_defaults()
+                                    .with_root_certificates(root_store)
+                                    .with_no_client_auth();
+                                let target = match tokens.next() {
+                                    Some(target) => target,
+                                    None => "bunnyfoo.com",
+                                };
+                                let server_name = target.try_into().unwrap();
+                                let mut conn =
+                                    rustls::ClientConnection::new(Arc::new(config), server_name)
+                                        .unwrap();
+                                log::info!("connect TCPstream to {}", target);
+                                let url = format!("{}:443", target);
+                                let mut sock = match TcpStream::connect(url) {
+                                    Ok(mut sock) => {
+                                        let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+                                        log::info!("create http headers and write to server");
+                                        let msg = format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: keep-alive\r\nAccept-Encoding: identity\r\n\r\n", target);
+                                        match tls.write_all(msg.as_bytes()) {
+                                            Ok(()) => (),
+                                            Err(e) => log::warn!(
+                                                "failed to write to tls connection {}",
+                                                e
+                                            ),
+                                        };
+
+                                        log::info!("close tls connection");
+                                        tls.conn.send_close_notify();
+
+                                        match tls.conn.peer_certificates() {
+                                            Some(certificates) => tls::check_trust(certificates),
+                                            None => false,
+                                        };
+                                    }
+                                    Err(e) => {
+                                        log::warn!("failed to establish tls connection {}", e)
+                                    }
+                                };
+
+                                log::set_max_level(log::LevelFilter::Info);
+                            }
                             "test" => {
                                 log::set_max_level(log::LevelFilter::Info);
                                 log::info!("starting TLS run");
