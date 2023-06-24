@@ -500,27 +500,24 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 let url = format!("{}:443", target);
                                 let mut sock = match TcpStream::connect(url) {
                                     Ok(mut sock) => {
-                                        let mut tls = rustls::Stream::new(&mut conn, &mut sock);
-                                        log::info!("create http headers and write to server");
-                                        let msg = format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: keep-alive\r\nAccept-Encoding: identity\r\n\r\n", target);
-                                        match tls.write_all(msg.as_bytes()) {
-                                            Ok(()) => (),
-                                            Err(e) => log::warn!(
-                                                "failed to write to tls connection {}",
-                                                e
-                                            ),
-                                        };
+                                        match conn.complete_io(&mut sock){
+                                            Ok(_) => log::info!("handshake complete"),
+                                            Err(e) => {
+                                                write!(ret, "{e}").ok();
+                                                log::warn!("{e}");
+                                            }
+                                        }
+                                        conn.send_close_notify();
 
-                                        log::info!("close tls connection");
-                                        tls.conn.send_close_notify();
-
-                                        match tls.conn.peer_certificates() {
+                                        match conn.peer_certificates() {
                                             Some(certificates) => tls::check_trust(certificates),
                                             None => false,
                                         };
+
                                     }
                                     Err(e) => {
-                                        log::warn!("failed to establish tls connection {}", e)
+                                        write!(ret, "{e}").ok();
+                                        log::warn!("{e}")
                                     }
                                 };
 
