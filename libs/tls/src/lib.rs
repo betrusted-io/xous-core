@@ -113,7 +113,8 @@ pub fn check_trust(certificates: &[Certificate]) -> bool {
         .map(|x509| {
             let subject = x509.subject();
             format!(
-                "{}\n{}\n{}",
+                "{}{}\n{}\n{}",
+                if x509.is_ca() { "🏛 " } else { "" },
                 &subject,
                 &x509.raw_serial_as_string()[0..24],
                 &x509.raw_serial_as_string()[24..],
