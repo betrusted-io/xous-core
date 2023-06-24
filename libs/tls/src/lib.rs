@@ -110,10 +110,17 @@ pub fn check_trust(certificates: &[Certificate]) -> bool {
 
     let chain: Vec<String> = certificates
         .iter()
-        .map(|x509| format!("{}", &x509.tbs_certificate.issuer()))
+        .map(|x509| {
+            let subject = x509.subject();
+            format!(
+                "{}\n{}\n{}",
+                &subject,
+                &x509.raw_serial_as_string()[0..24],
+                &x509.raw_serial_as_string()[24..],
+            )
+        })
         .collect();
     let chain: Vec<&str> = chain.iter().map(AsRef::as_ref).collect();
-
     modals
         .add_list(chain)
         .expect("couldn't build checkbox list");
