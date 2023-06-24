@@ -23,6 +23,15 @@ pub struct RustlsOwnedTrustAnchor {
     name_constraints: Option<Vec<u8>>,
 }
 
+impl RustlsOwnedTrustAnchor {
+    pub fn to_owned_trust_anchor(self) -> rustls::OwnedTrustAnchor {
+        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+            self.subject,
+            self.spki,
+            self.name_constraints,
+        )
+    }
+}
 impl<'a> From<&X509Certificate<'a>> for RustlsOwnedTrustAnchor {
     fn from(x509: &X509Certificate) -> Self {
         RustlsOwnedTrustAnchor {
