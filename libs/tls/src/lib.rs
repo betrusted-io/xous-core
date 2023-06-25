@@ -26,12 +26,12 @@ pub struct RustlsOwnedTrustAnchor {
 }
 
 impl RustlsOwnedTrustAnchor {
-    pub fn to_owned_trust_anchor(self) -> rustls::OwnedTrustAnchor {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            self.subject,
-            self.spki,
-            self.name_constraints,
-        )
+
+
+
+
+
+
     }
 }
 impl<'a> From<&X509Certificate<'a>> for RustlsOwnedTrustAnchor {
@@ -53,6 +53,15 @@ impl<'a> From<&X509Certificate<'a>> for RustlsOwnedTrustAnchor {
     }
 }
 
+impl Into<rustls::OwnedTrustAnchor> for RustlsOwnedTrustAnchor {
+    fn into(self) -> rustls::OwnedTrustAnchor {
+        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+            self.subject,
+            self.spki,
+            self.name_constraints,
+        )
+    }
+}
 
 pub struct Trusted {
     trusted: std::fs::ReadDir,
