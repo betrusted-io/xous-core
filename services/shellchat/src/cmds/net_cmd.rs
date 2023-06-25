@@ -1,30 +1,36 @@
-use crate::{ShellCmdApi, CommonEnv};
+use crate::{CommonEnv, ShellCmdApi};
 use com::api::NET_MTU;
-use xous_ipc::String;
-#[cfg(any(feature="precursor", feature="renode"))]
-use net::XousServerId;
 use net::NetPingCallback;
-use xous::MessageEnvelope;
 use num_traits::*;
-use std::net::{IpAddr, TcpStream, TcpListener};
-use std::io::Write;
-#[cfg(feature = "tls")]
-use rustls::{Certificate, OwnedTrustAnchor};
+use rustls::internal::msgs::base::PayloadU16;
+use rustls::internal::msgs::handshake::DistinguishedName;
 use std::io::Read;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use std::thread;
+use std::io::Write;
+use std::net::{IpAddr, TcpListener, TcpStream};
 use std::sync::mpsc;
-#[cfg(feature="ditherpunk")]
-use std::str::FromStr;
-#[cfg(feature="ditherpunk")]
-use gam::DecodePng;
-#[cfg(feature="tls")]
-use std::convert::TryInto;
-#[cfg(feature="tls")]
-use tungstenite::{WebSocket, stream::MaybeTlsStream};
-#[cfg(feature="shellperf")]
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+use xous::MessageEnvelope;
+use xous_ipc::String;
+
+#[cfg(feature = "ditherpunk")]
+use {gam::DecodePng, std::str::FromStr};
+
+#[cfg(any(feature = "precursor", feature = "renode"))]
+use net::XousServerId;
+
+#[cfg(feature = "shellperf")]
 use perflib::*;
+
+#[cfg(feature = "tls")]
+use {
+    rustls::{Certificate, OwnedTrustAnchor},
+    std::convert::TryInto,
+    tls::{danger, Trusted},
+    tungstenite::{stream::MaybeTlsStream, WebSocket},
+};
+
 pub struct NetCmd {
     callback_id: Option<u32>,
     callback_conn: u32,

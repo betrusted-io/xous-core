@@ -76,12 +76,19 @@ tracing-subscriber = {version = "0.3.11", optional = true}
 
 # for rustls testing
 tls = {path="../../libs/tls"}
-rustls = {version = "0.21.2", optional = true} # note requirement for patch to xous-ring in workspace Cargo.toml
-# rustls = {path="../../../rustls/rustls"}
+
+# note requirement for patch to xous-ring in workspace Cargo.toml
+rustls = {version = "0.21.2", optional = true} 
 webpki-roots = {version = "0.22.4", optional = true}
-ring = {version = "0.16.20", optional = true} # for testing ring math functions  # note requirement for patch to xous-ring in workspace Cargo.toml
-tungstenite = {version = "0.17.3", optional = true, features = ["rustls-tls-webpki-roots"]}
 url = {version = "2.2.2", optional = true}
+x509-parser = "0.15.0"
+
+# for testing ring math functions
+# note requirement for patch to xous-ring in workspace Cargo.toml
+ring = {version = "0.16.20", optional = true}   
+
+# for websocket testing
+tungstenite = {version = "0.17.3", optional = true, features = ["rustls-tls-webpki-roots"]}
 
 # for performance testing
 perflib = {path="../../tools/perflib", optional = true}

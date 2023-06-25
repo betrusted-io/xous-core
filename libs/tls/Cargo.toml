@@ -20,5 +20,5 @@ net = { path = "../../services/net" }
 pddb = { path = "../../services/pddb" }
 
 rkyv = "0.4.3"
-rustls = "0.21.2"
+rustls = { version = "0.21.2", features = ["dangerous_configuration"]}
 x509-parser = "0.15.0"

@@ -7,7 +7,7 @@ use rkyv::{
     AlignedVec, Archive, Deserialize, Serialize,
 };
 use rustls::{Certificate, DistinguishedName, RootCertStore};
-use std::convert::TryFrom;
+use std::cmp::min;
 use std::convert::{Into, TryFrom};
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read, Write};
