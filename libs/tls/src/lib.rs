@@ -6,8 +6,9 @@ use rkyv::{
     ser::{serializers::WriteSerializer, Serializer},
     AlignedVec, Archive, Deserialize, Serialize,
 };
-use rustls::Certificate;
+use rustls::{Certificate, DistinguishedName, RootCertStore};
 use std::convert::TryFrom;
+use std::convert::{Into, TryFrom};
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::path::PathBuf;
@@ -105,6 +106,15 @@ impl Iterator for Trusted {
     }
 }
 
+impl Into<RootCertStore> for Trusted {
+    fn into(self) -> RootCertStore {
+        let mut root_store = rustls::RootCertStore::empty();
+        let trusted = Trusted::new().unwrap();
+        root_store
+            .add_server_trust_anchors(trusted.map(|t| Into::<rustls::OwnedTrustAnchor>::into(t)));
+        root_store
+    }
+}
 
 // presents a modal to the user to select trusted tls certificates
 // and saves the selected certificates to the pddb
