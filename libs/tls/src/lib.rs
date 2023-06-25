@@ -1,3 +1,5 @@
+pub mod danger;
+
 use modals::Modals;
 use rkyv::{
     de::deserializers::AllocDeserializer,
@@ -93,6 +95,8 @@ impl Iterator for Trusted {
         }
     }
 }
+
+
 // presents a modal to the user to select trusted tls certificates
 // and saves the selected certificates to the pddb
 // returns false if no certificates are trusted - and true otherwise

@@ -471,22 +471,14 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             "probe" => {
                                 log::set_max_level(log::LevelFilter::Info);
                                 log::info!("starting TLS probe");
+                                // Attempt to open the tls connection with an empty root_store
                                 let mut root_store = rustls::RootCertStore::empty();
-                                root_store.add_server_trust_anchors(
-                                        webpki_roots::TLS_SERVER_ROOTS
-                                            .0
-                                            .iter()
-                                            .map(|ta| {
-                                                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                                                    ta.subject,
-                                                    ta.spki,
-                                                    ta.name_constraints,
-                                                )
-                                            })
-                                    );
+                                // Stifle the default rustls certificate verification's complaint about an
+                                // unknown/untrusted CA root certificate so that we get to see the certificate chain
+                                let stifled_verifier = Arc::new(danger::StifledCertificateVerification{ roots: root_store });
                                 let config = rustls::ClientConfig::builder()
                                     .with_safe_defaults()
-                                    .with_root_certificates(root_store)
+                                    .with_custom_certificate_verifier(stifled_verifier)
                                     .with_no_client_auth();
                                 let target = match tokens.next() {
                                     Some(target) => target,
