@@ -21,13 +21,24 @@ const CURRENT_VERSION_KEY: &str = "__version";
 
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct RustlsOwnedTrustAnchor {
-    subject: Vec<u8>,
-    spki: Vec<u8>,
-    name_constraints: Option<Vec<u8>>,
+    pub subject: Vec<u8>,
+    pub spki: Vec<u8>,
+    pub name_constraints: Option<Vec<u8>>,
 }
 
 impl RustlsOwnedTrustAnchor {
 
+pub fn from_subject_spki_name_constraints(
+    subject: impl Into<Vec<u8>>,
+    spki: impl Into<Vec<u8>>,
+    name_constraints: Option<impl Into<Vec<u8>>>,
+) -> Self {
+    Self { 
+        subject: subject.into(), 
+        spki: spki.into(), 
+        name_constraints: name_constraints.map(|x| x.into()) 
+    }
+}
 
 
 
