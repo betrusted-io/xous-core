@@ -463,17 +463,23 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 "tls" => {
                     if let Some(tls_cmd) = tokens.next() {
                         match tls_cmd {
-                    let mut root_store = rustls::RootCertStore::empty();
-                    log::info!("create root store");
-                    root_store.add_server_trust_anchors(
-                        webpki_roots::TLS_SERVER_ROOTS
-                            .0
-                            .iter()
-                            .map(|ta| {
-                                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                                    ta.subject,
-                                    ta.spki,
-                                    ta.name_constraints,
+                            // save/trust all Root CA's in webpki-roots en-masse
+                            "mozilla" => {
+                                let mut rotas: Vec<tls::RustlsOwnedTrustAnchor> = webpki_roots::TLS_SERVER_ROOTS
+                                    .0
+                                    .iter()
+                                    .map(|ta| tls::RustlsOwnedTrustAnchor::from_subject_spki_name_constraints(
+                                        ta.subject,
+                                        ta.spki,
+                                        ta.name_constraints,
+                                    ))
+                                    .collect();
+                                let mut i = 0;
+                                for rota in rotas {
+                                    tls::save_cert(format!("webpki-root-{i}").as_str(), &rota).unwrap();
+                                    i += 1;
+                                }
+                            }
                             "probe" => {
                                 log::set_max_level(log::LevelFilter::Info);
                                 log::info!("starting TLS probe");
@@ -579,7 +585,15 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 log::set_max_level(log::LevelFilter::Info);
                             }
                             _ => {
-                                write!(ret, "net commands: test").ok();
+                                write!(ret, "net tls <sub-command>\n").ok();
+                                write!(
+                                    ret,
+                                    "\tmozilla\ttrust all Root CA's in webpki-roots\n"
+                                )
+                                .ok();
+                                write!(ret, "\tprobe <host>\tsave host CA'a if trusted\n").ok();
+                                write!(ret, "\ttest <host>\tmake tls connection to host\n")
+                                    .ok();
                             }
                         }
                     }
