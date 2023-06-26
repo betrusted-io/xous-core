@@ -461,73 +461,79 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 }
                 #[cfg(feature = "tls")]
                 "tls" => {
-                    if let Some(tls_cmd) = tokens.next() {
-                        match tls_cmd {
-                            // save/trust all Root CA's in webpki-roots en-masse
-                            "mozilla" => {
-                                let mut rotas: Vec<tls::RustlsOwnedTrustAnchor> = webpki_roots::TLS_SERVER_ROOTS
-                                    .0
-                                    .iter()
-                                    .map(|ta| tls::RustlsOwnedTrustAnchor::from_subject_spki_name_constraints(
-                                        ta.subject,
-                                        ta.spki,
-                                        ta.name_constraints,
-                                    ))
-                                    .collect();
-                                let mut i = 0;
-                                for rota in rotas {
-                                    tls::save_cert(format!("webpki-root-{i}").as_str(), &rota).unwrap();
-                                    i += 1;
-                                }
+                    match tokens.next() {
+                        // save/trust all Root CA's in webpki-roots en-masse
+                        Some("mozilla") => {
+                            let mut rotas: Vec<tls::RustlsOwnedTrustAnchor> = webpki_roots::TLS_SERVER_ROOTS
+                                .0
+                                .iter()
+                                .map(|ta| tls::RustlsOwnedTrustAnchor::from_subject_spki_name_constraints(
+                                    ta.subject,
+                                    ta.spki,
+                                    ta.name_constraints,
+                                ))
+                                .collect();
+                            let mut i = 0;
+                            for rota in rotas {
+                                tls::save_cert(format!("webpki-root-{i}").as_str(), &rota).unwrap();
+                                i += 1;
                             }
-                            "probe" => {
-                                log::set_max_level(log::LevelFilter::Info);
-                                log::info!("starting TLS probe");
-                                // Attempt to open the tls connection with an empty root_store
-                                let mut root_store = rustls::RootCertStore::empty();
-                                // Stifle the default rustls certificate verification's complaint about an
-                                // unknown/untrusted CA root certificate so that we get to see the certificate chain
-                                let stifled_verifier = Arc::new(danger::StifledCertificateVerification{ roots: root_store });
-                                let config = rustls::ClientConfig::builder()
-                                    .with_safe_defaults()
-                                    .with_custom_certificate_verifier(stifled_verifier)
-                                    .with_no_client_auth();
-                                let target = match tokens.next() {
-                                    Some(target) => target,
-                                    None => "bunnyfoo.com",
-                                };
-                                let server_name = target.try_into().unwrap();
-                                let mut conn =
-                                    rustls::ClientConnection::new(Arc::new(config), server_name)
-                                        .unwrap();
-                                log::info!("connect TCPstream to {}", target);
-                                let url = format!("{}:443", target);
-                                let mut sock = match TcpStream::connect(url) {
-                                    Ok(mut sock) => {
-                                        match conn.complete_io(&mut sock){
-                                            Ok(_) => log::info!("handshake complete"),
-                                            Err(e) => {
-                                                write!(ret, "{e}").ok();
-                                                log::warn!("{e}");
-                                            }
+                        }
+                        // probe establishes a tls connection to the supplied host, extracts the
+                        // certificates offered and immediately closes the connection.
+                        // The certificates are presented by modal to the user, and saved to the
+                        // pddb if trusted.
+                        Some("probe") => {
+                            log::set_max_level(log::LevelFilter::Info);
+                            log::info!("starting TLS probe");
+                            // Attempt to open the tls connection with an empty root_store
+                            let mut root_store = rustls::RootCertStore::empty();
+                            // Stifle the default rustls certificate verification's complaint about an
+                            // unknown/untrusted CA root certificate so that we get to see the certificate chain
+                            let stifled_verifier =
+                                Arc::new(danger::StifledCertificateVerification {
+                                    roots: root_store,
+                                });
+                            let config = rustls::ClientConfig::builder()
+                                .with_safe_defaults()
+                                .with_custom_certificate_verifier(stifled_verifier)
+                                .with_no_client_auth();
+                            let target = match tokens.next() {
+                                Some(target) => target,
+                                None => "bunnyfoo.com",
+                            };
+                            let server_name = target.try_into().unwrap();
+                            let mut conn =
+                                rustls::ClientConnection::new(Arc::new(config), server_name)
+                                    .unwrap();
+                            log::info!("connect TCPstream to {}", target);
+                            let url = format!("{}:443", target);
+                            let mut sock = match TcpStream::connect(url) {
+                                Ok(mut sock) => {
+                                    match conn.complete_io(&mut sock) {
+                                        Ok(_) => log::info!("handshake complete"),
+                                        Err(e) => {
+                                            write!(ret, "{e}").ok();
+                                            log::warn!("{e}");
                                         }
-                                        conn.send_close_notify();
-
-                                        match conn.peer_certificates() {
-                                            Some(certificates) => tls::check_trust(certificates),
-                                            None => false,
-                                        };
-
                                     }
-                                    Err(e) => {
-                                        write!(ret, "{e}").ok();
-                                        log::warn!("{e}")
-                                    }
-                                };
+                                    conn.send_close_notify();
 
-                                log::set_max_level(log::LevelFilter::Info);
-                            }
-                            "test" => {
+                                    match conn.peer_certificates() {
+                                        Some(certificates) => tls::check_trust(certificates),
+                                        None => false,
+                                    };
+                                }
+                                Err(e) => {
+                                    write!(ret, "{e}").ok();
+                                    log::warn!("{e}")
+                                }
+                            };
+
+                            log::set_max_level(log::LevelFilter::Info);
+                        }
+
+                        Some("test") => {
                                 log::set_max_level(log::LevelFilter::Info);
                                 log::info!("starting TLS run");
                                 let mut root_store = rustls::RootCertStore::empty();
@@ -583,30 +589,29 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                     std::str::from_utf8(&plaintext).unwrap_or("utf-error")
                                 );
                                 log::set_max_level(log::LevelFilter::Info);
+                        }
+                        // list trusted Certificate Authority certificates
+                        Some("trusted") => {
+                            log::set_max_level(log::LevelFilter::Info);
+                            log::info!("starting TLS trusted listing");
+                            let trusted =
+                                Trusted::new().expect("failed to initiate trusted iterator");
+                            for rota in trusted {
+                                write!(ret, "🏛 {}\n", rota.subject()).ok();
                             }
-                            // list trusted Certificate Authority certificates
-                            "trusted" => {
-                                log::set_max_level(log::LevelFilter::Info);
-                                log::info!("starting TLS trusted listing");
-                                let trusted =
-                                    Trusted::new().expect("failed to initiate trusted iterator");
-                                for rota in trusted {
-                                    write!(ret, "🏛 {}\n", rota.subject()).ok();
-                                }
-                                log::info!("finished TLS trusted listing");
-                            }
-                            _ => {
-                                write!(ret, "net tls <sub-command>\n").ok();
-                                write!(
-                                    ret,
-                                    "\tmozilla\ttrust all Root CA's in webpki-roots\n"
-                                )
+                            log::info!("finished TLS trusted listing");
+                        }
+                        _ | None => {
+                            write!(ret, "net tls <sub-command>\n").ok();
+                            write!(
+                                ret,
+                                "\tmozilla\ttrust all Root CA's in webpki-roots\n"
+                            )
+                            .ok();
+                            write!(ret, "\tprobe <host>\tsave host CA'a if trusted\n").ok();
+                            write!(ret, "\ttest <host>\tmake tls connection to host\n")
                                 .ok();
-                                write!(ret, "\tprobe <host>\tsave host CA'a if trusted\n").ok();
-                                write!(ret, "\ttest <host>\tmake tls connection to host\n")
-                                    .ok();
-                                write!(ret, "\ttrusted\tlist trusted CA certificates\n").ok();
-                            }
+                            write!(ret, "\ttrusted\tlist trusted CA certificates\n").ok();
                         }
                     }
                 }
