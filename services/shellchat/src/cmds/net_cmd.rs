@@ -534,61 +534,58 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
 
                         Some("test") => {
-                                log::set_max_level(log::LevelFilter::Info);
-                                log::info!("starting TLS run");
-                                let mut root_store = rustls::RootCertStore::empty();
-                                log::info!("create root store");
-                                root_store.add_server_trust_anchors(
-                                        webpki_roots::TLS_SERVER_ROOTS
-                                            .0
-                                            .iter()
-                                            .map(|ta| {
-                                                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                                                    ta.subject,
-                                                    ta.spki,
-                                                    ta.name_constraints,
-                                                )
-                                            })
-                                    );
-                                log::info!("build TLS client config");
-                                let config = rustls::ClientConfig::builder()
-                                    .with_safe_defaults()
-                                    .with_root_certificates(root_store)
-                                    .with_no_client_auth();
+                            log::set_max_level(log::LevelFilter::Info);
+                            log::info!("starting TLS run");
+                            log::info!("build TLS client config");
+                            let trusted = Trusted::new().unwrap();
+                            let config = rustls::ClientConfig::builder()
+                                .with_safe_defaults()
+                                .with_root_certificates(trusted.into())
+                                .with_no_client_auth();
+                            let target = match tokens.next() {
+                                Some(target) => target,
+                                None => "bunnyfoo.com",
+                            };
+                            log::info!("point TLS to {}", target);
+                            let mut conn =
+                                rustls::ClientConnection::new(Arc::new(config), target.try_into().unwrap())
+                                    .unwrap();
 
-                                log::info!("point TLS to bunniefoo.com");
-                                let server_name = "bunniefoo.com".try_into().unwrap();
-                                let mut conn =
-                                    rustls::ClientConnection::new(Arc::new(config), server_name)
-                                        .unwrap();
+                            log::info!("connect TCPstream to {}", target);
+                            let url = format!("{}:443", target);
+                            let mut sock = TcpStream::connect(url).unwrap();
+                            let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+                            log::info!("create http headers and write to server");
+                            let msg = format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n", target);
+                            match tls.write_all(msg.as_bytes()) {
+                                Ok(()) => {
+                                    log::info!("GET on tls accepted");
+                                    write!(ret, "GET on tls accepted\n").ok();
+                                }
+                                Err(e) => {
+                                    log::warn!("failed to GET on tls connection: {e}");
+                                    write!(ret, "{e}\n").ok();
+                                }
+                            };
 
-                                log::info!("connect TCPstream to bunniefoo.com");
-                                let mut sock = TcpStream::connect("bunniefoo.com:443").unwrap();
-                                let mut tls = rustls::Stream::new(&mut conn, &mut sock);
-                                log::info!("create http headers and write to server");
-                                tls.write_all(
-                                    concat!(
-                                        "GET / HTTP/1.1\r\n",
-                                        "Host: bunniefoo.com\r\n",
-                                        "Connection: close\r\n",
-                                        "Accept-Encoding: identity\r\n",
-                                        "\r\n"
-                                    )
-                                    .as_bytes(),
-                                )
-                                .unwrap();
-                                log::info!("readout cipher suite");
-                                let ciphersuite = tls.conn.negotiated_cipher_suite().unwrap();
-                                log::info!("Current ciphersuite: {:?}", ciphersuite.suite());
-                                let mut plaintext = Vec::new();
-                                log::info!("read TLS response");
-                                tls.read_to_end(&mut plaintext).unwrap();
-                                log::info!("len: {}", plaintext.len());
-                                log::info!(
-                                    "{}",
-                                    std::str::from_utf8(&plaintext).unwrap_or("utf-error")
-                                );
-                                log::set_max_level(log::LevelFilter::Info);
+                            let mut plaintext = Vec::new();
+                            log::info!("read TLS response");
+                            match tls.read_to_end(&mut plaintext) {
+                                Ok(n) => {
+                                    log::info!("received {} bytes in response on tls", n);
+                                    write!(ret, "received {} bytes in response on tls\n", n).ok();
+                                }
+                                Err(e) => {
+                                    log::warn!("failed to read tls response: {e}");
+                                    write!(ret, "{e}\n").ok();
+                                }
+                            };
+                            log::info!(
+                                "{}",
+                                std::str::from_utf8(&plaintext).unwrap_or("utf-error")
+                            );
+
+                            log::set_max_level(log::LevelFilter::Info);
                         }
                         // list trusted Certificate Authority certificates
                         Some("trusted") => {
