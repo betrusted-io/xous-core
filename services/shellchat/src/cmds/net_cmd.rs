@@ -584,6 +584,17 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 );
                                 log::set_max_level(log::LevelFilter::Info);
                             }
+                            // list trusted Certificate Authority certificates
+                            "trusted" => {
+                                log::set_max_level(log::LevelFilter::Info);
+                                log::info!("starting TLS trusted listing");
+                                let trusted =
+                                    Trusted::new().expect("failed to initiate trusted iterator");
+                                for rota in trusted {
+                                    write!(ret, "🏛 {}\n", rota.subject()).ok();
+                                }
+                                log::info!("finished TLS trusted listing");
+                            }
                             _ => {
                                 write!(ret, "net tls <sub-command>\n").ok();
                                 write!(
@@ -594,6 +605,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 write!(ret, "\tprobe <host>\tsave host CA'a if trusted\n").ok();
                                 write!(ret, "\ttest <host>\tmake tls connection to host\n")
                                     .ok();
+                                write!(ret, "\ttrusted\tlist trusted CA certificates\n").ok();
                             }
                         }
                     }
