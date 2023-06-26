@@ -188,7 +188,15 @@ pub fn check_trust(certificates: &[Certificate]) -> bool {
                     )
                 })
                 .for_each(|(key, val)| {
-                    save_cert(&key, &val).expect("failed to save trusted cert");
+                    save_cert(&key, &val).unwrap_or_else(|e| {
+                        log::warn!("failed to save cert: {e}");
+                        modals
+                            .show_notification(
+                                format!("failed to save: {}", &val.subject()).as_str(),
+                                None,
+                            )
+                            .expect("modal failed");
+                    });
                 });
             trusted.len() > 0
         }
