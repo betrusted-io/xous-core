@@ -32,12 +32,12 @@ fn main() -> ! {
 		// create the spawn process
 		let stub = include_bytes!("spawn-stub");
 		let args = xous::ProcessArgs::new(stub, xous::MemoryAddress::new(0x2050_1000).unwrap(), xous::MemoryAddress::new(0x2050_1000).unwrap());
-		let spawn = xous::create_process(args).expect("Couldn't create process!");
+		let spawn = xous::create_process(args).expect("Couldn't create spawn process");
 		log::info!("Spawn PID: {}, Spawn CID: {}", spawn.pid, spawn.cid);
 
 		// perform a ping to make sure that spawn is running
 		let result = xous::send_message(
-		    spawn.cid,
+		    6,
 		    xous::Message::new_blocking_scalar(4, 1, 2, 3, 4),
 		)
 		    .unwrap();
@@ -77,18 +77,26 @@ fn main() -> ! {
 		    // only load PT_LOAD segments
 		    if  to_usize(start, 4) == 0x00000001 {
 			let offset = to_usize(start+0x04, 4);
+			let src_addr = bin.as_ptr() as usize + offset;
+			let src_addr = src_addr - if src_addr & 0xFFF == 0 { 0 } else { src_addr & 0xFFF };
 			let vaddr = to_usize(start+0x08, 4);
+			let vaddr = vaddr + if vaddr & 0xFFF == 0 { 0 } else { 0x1000 - (vaddr & 0xFFF) };
 			let mem_size = to_usize(start+0x14, 4);
+			let mem_size = mem_size + if mem_size & 0xFFF == 0 { 0 } else { 0x1000 - (mem_size & 0xFFF) };
+
+			assert_eq!(0, mem_size & 0xFFF);
+			assert_eq!(0, vaddr & 0xFFF);
+			assert_eq!(0, src_addr & 0xFFF);
 
 			log::info!("Loading offset {} to virtual address {} with memory size {}", offset, vaddr, mem_size);
 			
-			let buf = unsafe { xous::MemoryRange::new(bin[offset..offset+mem_size].as_ptr() as usize, core::mem::size_of::<u8>()).expect("Couldn't create a buffer from the segment") };
-			xous::send_message(spawn.cid, xous::Message::new_lend(1, buf, xous::MemoryAddress::new(vaddr), None)).expect("Couldn't send a message to spawn");
+			let buf = unsafe { xous::MemoryRange::new(src_addr, mem_size).expect("Couldn't create a buffer from the segment") };
+			xous::send_message(6, xous::Message::new_lend(1, buf, xous::MemoryAddress::new(vaddr), None)).expect("Couldn't send a message to spawn");
 		    }
 		}
 
 		// tell spawn to switch to the new program
-		xous::send_message(spawn.cid, xous::Message::new_scalar(255, entry_point, 0, 0, 0)).expect("Couldn't send a message to spawn");
+		xous::send_message(6, xous::Message::new_scalar(255, entry_point, 0, 0, 0)).expect("Couldn't send a message to spawn");
 
 		// let run_app: fn() -> ! = unsafe { core::mem::transmute(entry_point) };
 		// xous::create_thread_0(run_app).expect("Couldn't run app!");
