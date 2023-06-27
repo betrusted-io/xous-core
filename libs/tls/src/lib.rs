@@ -1,3 +1,4 @@
+pub mod cmd;
 pub mod danger;
 
 use modals::Modals;
