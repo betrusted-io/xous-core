@@ -1,7 +1,7 @@
 use crate::get_cert;
-use crate::{RustlsOwnedTrustAnchor, TLS_CERT_DICT};
+use crate::{rota::RustlsOwnedTrustAnchor, TLS_CERT_DICT};
 use rustls::RootCertStore;
-use std::io::{Error, ErrorKind, Read, Write};
+use std::io::Error;
 use std::path::PathBuf;
 
 pub struct Trusted {

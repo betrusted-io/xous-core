@@ -1,106 +1,26 @@
 pub mod cmd;
 pub mod danger;
+pub mod rota;
 pub mod trusted;
 
+use crate::rota::RustlsOwnedTrustAnchor;
 use modals::Modals;
 use rkyv::{
     de::deserializers::AllocDeserializer,
     ser::{serializers::WriteSerializer, Serializer},
-    AlignedVec, Archive, Deserialize, Serialize,
+    AlignedVec, Deserialize
 };
-use rustls::{Certificate, RootCertStore};
-use std::cmp::min;
+use rustls::Certificate;
 use std::convert::{Into, TryFrom};
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::path::PathBuf;
 use x509_parser::prelude::{FromDer, X509Certificate};
-use x509_parser::der_parser::der::Tag;
 use xous_names::XousNames;
 
 /// PDDB Dict for tls trusted certificates keys
 const TLS_CERT_DICT: &str = "tls/cert";
 const CURRENT_VERSION_KEY: &str = "__version";
-
-#[derive(Archive, Serialize, Deserialize, Debug)]
-pub struct RustlsOwnedTrustAnchor {
-    pub subject: Vec<u8>,
-    pub spki: Vec<u8>,
-    pub name_constraints: Option<Vec<u8>>,
-}
-
-impl RustlsOwnedTrustAnchor {
-
-pub fn from_subject_spki_name_constraints(
-    subject: impl Into<Vec<u8>>,
-    spki: impl Into<Vec<u8>>,
-    name_constraints: Option<impl Into<Vec<u8>>>,
-) -> Self {
-    Self { 
-        subject: subject.into(), 
-        spki: spki.into(), 
-        name_constraints: name_constraints.map(|x| x.into()) 
-    }
-}
-
-
-    pub fn subject(&self) -> String {
-        let der = self.subject.clone();
-        let len = min(der.len(), 127);
-        let mut der = der[..len].to_owned();
-        der.insert(0, len as u8);
-        der.insert(0, Tag::Sequence.0 as u8);
-        match x509_parser::x509::X509Name::from_der(&der) {
-            Ok((_, decoded)) => decoded.to_string(),
-            Err(e) => format!("der parse failed: {e}").to_string(),
-        }
-    }
-
-
-
-    }
-}
-impl<'a> From<&X509Certificate<'a>> for RustlsOwnedTrustAnchor {
-    fn from(x509: &X509Certificate) -> Self {
-        RustlsOwnedTrustAnchor {
-            subject: x509.subject().as_raw().to_vec(),
-            spki: x509.public_key().raw.to_vec(),
-            name_constraints: None::<Vec<u8>>,
-            // may have to pass value thru from certificates parameter
-            // name_constraints: match x509.name_constraints() {
-            //     Ok(Some(nc)) => Some(nc.value),
-            //     Ok(None) => None,
-            //     Err(e) => {
-            //         log::warn!("failed to extract x509 name_constraints: {}", e);
-            //         None
-            //     }
-            // },
-        }
-    }
-}
-
-impl Into<rustls::OwnedTrustAnchor> for RustlsOwnedTrustAnchor {
-    fn into(self) -> rustls::OwnedTrustAnchor {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            self.subject,
-            self.spki,
-            self.name_constraints,
-        )
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-    }
-}
 
 // presents a modal to the user to select trusted tls certificates
 // and saves the selected certificates to the pddb
