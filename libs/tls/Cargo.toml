@@ -24,5 +24,8 @@ rkyv = "0.4.3"
 # note requirement for patch to xous-ring in workspace Cargo.toml
 rustls = { version = "0.21.2", features = ["dangerous_configuration"] }
 webpki = { package = "rustls-webpki", version = "0.100.1" }
-webpki-roots = {version = "0.23.1" }
+webpki-roots = {version = "0.23.1", optional = true}
 x509-parser = "0.15.0"
+
+[features]
+rootCA = ["webpki-roots"]

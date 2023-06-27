@@ -23,7 +23,7 @@ use net::XousServerId;
 #[cfg(feature = "shellperf")]
 use perflib::*;
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "websocket")]
 use tungstenite::{stream::MaybeTlsStream, WebSocket};
 
 pub struct NetCmd {
@@ -32,7 +32,7 @@ pub struct NetCmd {
     dns: dns::Dns,
     #[cfg(any(feature="precursor", feature="renode"))]
     ping: Option<net::protocols::Ping>,
-    #[cfg(feature="tls")]
+    #[cfg(feature = "websocket")]
     ws: Option<WebSocket<MaybeTlsStream<TcpStream>>>,
     #[cfg(feature="shellperf")]
     perfbuf: xous::MemoryRange,
@@ -53,7 +53,7 @@ impl NetCmd {
             dns: dns::Dns::new(&xns).unwrap(),
             #[cfg(any(feature="precursor", feature="renode"))]
             ping: None,
-            #[cfg(feature="tls")]
+            #[cfg(feature = "websocket")]
             ws: None,
             #[cfg(feature="shellperf")]
             perfbuf,
@@ -414,7 +414,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     ring::xous_test::p256_elem_add_test();
                     log::set_max_level(log::LevelFilter::Info);
                 }
-                #[cfg(feature="tls")]
+                #[cfg(feature = "websocket")]
                 "ws" => {
                     if self.ws.is_none() {
                         let (socket, response) =
@@ -460,8 +460,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 //     test <host>   make tls connection to host
                 //     trusted       list trusted CA certificates
                 #[cfg(feature = "tls")]
-                "tls" => if let Ok(Some(r)) = tls::cmd::shellchat(&mut tokens) {
-                    write!(ret, "{r}").unwrap();
+                "tls" => {
+                    if let Ok(Some(r)) = tls::cmd::shellchat(&mut tokens) {
+                        write!(ret, "{r}").unwrap();
+                    }
                 }
                 // note: to use the `shellperf` option, you need to load a version of the SOC that has the performance counters built in.
                 // this can be generated using the command `python3 .\betrusted_soc.py -e .\dummy.nky --perfcounter` in the betrusted-soc repo.
@@ -886,7 +888,7 @@ fn heap_usage() -> usize {
     }
 }
 
-#[cfg(feature ="tls")]
+#[cfg(feature = "websocket")]
 fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>) {
     use core::fmt::Write;
     for (i, tok) in tokens.enumerate() {

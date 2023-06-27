@@ -75,7 +75,7 @@ tracing = {version = "0.1.35", optional = true}
 tracing-subscriber = {version = "0.3.11", optional = true}
 
 # for rustls testing
-tls = {path="../../libs/tls"}
+tls = {path = "../../libs/tls", optional = true}
 url = {version = "2.2.2", optional = true}
 # for testing ring math functions
 # note requirement for patch to xous-ring in workspace Cargo.toml
@@ -126,7 +126,9 @@ dbg-ecupdate = [] # for issuing manual commands to initiate an EC update (vs UX)
 test-rekey = []
 no-codec = []
 nettest = [] # batch network tests
-tls = ["ring", "tungstenite", "url"]
+tls = ["dep:tls"]
+rootCA = ["tls/rootCA"]
+websocket = ["tls", "tungstenite", "url"]
 shellperf = ["ring", "perflib", "xous/v2p", "random-pick"] # this also needs the project-wide "perfcounter" feature to be selected. shellchat is the exclusive manager of the performance counter, do not use with e.g. "vaultperf" feature
 extra-tests = []
 mass-storage = []
