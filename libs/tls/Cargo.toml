@@ -19,6 +19,7 @@ modals = { path = "../../services/modals" }
 net = { path = "../../services/net" }
 pddb = { path = "../../services/pddb" }
 
+der = { version = "0.7.6", features = ["derive"] }
 locales = {path = "../../locales"}
 rkyv = "0.4.3"
 
