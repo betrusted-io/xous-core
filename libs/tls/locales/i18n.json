@@ -1,0 +1,46 @@
+{
+    "tls.check_trust_prompt": {
+        "en": "Do you trust any of these certificate authorities?",
+        "en-tts": "Do you trust any of these certificate authorities?"
+    },
+    "tls.cmd_help": {
+        "en": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls probe <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser.",
+        "en-tts": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls probe <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser."
+    },        
+    "tls.cmd": {
+        "en": "net tls <sub-command>",
+        "en-tts": "net tls <sub-command>"
+    },
+    "tls.mozilla_cmd": {
+        "en": "trust all Root CA's in webpki-roots",
+        "en-tts": "trust all Root CA's in webpki-roots"
+    },
+    "tls.probe_cmd": {
+        "en": "save host CA'a if trusted",
+        "en-tts": "save host CA'a if trusted"
+    },
+    "tls.probe_fail_servername": {
+        "en": "failed to create sever name from",
+        "en-tts": "failed to create sever name from"
+    },
+    "tls.test_cmd": {
+        "en": "make tls connection to host",
+        "en-tts": "make tls connection to host"
+    },
+    "tls.test_success_tcp": {
+        "en": "tcp connected\n",
+        "en-tts": "tcp connected"
+    },
+    "tls.test_success_get": {
+        "en": "tls accepted GET\n",
+        "en-tts": "tls accepted GET"
+    },
+    "tls.test_success_bytes": {
+        "en": "tls received bytes",
+        "en-tts": "tls received bytes"
+    },
+    "tls.trusted_cmd": {
+        "en": "list trusted CA certificates",
+        "en-tts": "list trusted CA certificates"
+    }
+}

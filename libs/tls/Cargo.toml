@@ -19,6 +19,7 @@ modals = { path = "../../services/modals" }
 net = { path = "../../services/net" }
 pddb = { path = "../../services/pddb" }
 
+locales = {path = "../../locales"}
 rkyv = "0.4.3"
 
 # note requirement for patch to xous-ring in workspace Cargo.toml

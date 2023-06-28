@@ -4,6 +4,7 @@ pub mod rota;
 pub mod trusted;
 
 use crate::rota::RustlsOwnedTrustAnchor;
+use locales::t;
 use modals::Modals;
 use rkyv::{
     de::deserializers::AllocDeserializer,
@@ -54,7 +55,7 @@ pub fn check_trust(certificates: &[Certificate]) -> bool {
     modals
         .add_list(chain)
         .expect("couldn't build checkbox list");
-    match modals.get_checkbox("Do you trust any of these certificate authorities?") {
+    match modals.get_checkbox(t!("tls.check_trust_prompt", locales::LANG)) {
         Ok(trusted) => {
             trusted
                 .iter()

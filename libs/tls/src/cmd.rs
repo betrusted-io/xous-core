@@ -1,4 +1,5 @@
 use crate::{check_trust, danger, trusted::Trusted};
+use locales::t;
 use std::convert::TryInto;
 use std::io::Read;
 use std::io::Write;
@@ -11,6 +12,10 @@ pub fn shellchat<'a>(
     use core::fmt::Write;
     let mut ret = String::new();
     match tokens.next() {
+        Some("help") => {
+                write!(ret, "{}", t!("tls.cmd_help", locales::LANG)).ok();
+                ()
+            }
         // save/trust all Root CA's in webpki-roots en-masse
         #[cfg(feature = "rootCA")]
         Some("mozilla") => {
@@ -54,7 +59,7 @@ pub fn shellchat<'a>(
             };
             let server_name = target.try_into().unwrap_or_else(|e| {
                 log::warn!("failed to create sever_name from {target}: {e}");
-                write!(ret, "failed to create sever_name from {target}").ok();
+                write!(ret, "{} {target}", t!("tls.probe_fail_servername", locales::LANG)).ok();
                 "bunnyfoo.com".try_into().unwrap()
             });
             let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
@@ -108,20 +113,20 @@ pub fn shellchat<'a>(
             match TcpStream::connect(url) {
                 Ok(mut sock) => {
                     log::info!("tcp connected");
-                    write!(ret, "tcp connected\n").ok();
+                    write!(ret, "{}", t!("tls.test_success_tcp", locales::LANG)).ok();
                     let mut tls = rustls::Stream::new(&mut conn, &mut sock);
                     log::info!("create http headers and write to server");
                     let msg = format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n", target);
                     match tls.write_all(msg.as_bytes()) {
                         Ok(()) => {
                             log::info!("tls accepted GET");
-                            write!(ret, "tls accepted GET\n").ok();
+                            write!(ret, "{}", t!("tls.test_success_get", locales::LANG)).ok();
                             let mut plaintext = Vec::new();
                             log::info!("read TLS response");
                             match tls.read_to_end(&mut plaintext) {
                                 Ok(n) => {
                                     log::info!("tls received {} bytes", n);
-                                    write!(ret, "tls received {} bytes\n", n).ok();
+                                    write!(ret, "{} {}\n", t!("tls.test_success_bytes", locales::LANG), n).ok();
                                     log::info!(
                                         "{}",
                                         std::str::from_utf8(&plaintext).unwrap_or("utf-error")
@@ -158,12 +163,13 @@ pub fn shellchat<'a>(
             log::info!("finished TLS trusted listing");
         }
         None | _ => {
-            write!(ret, "net tls <sub-command>\n").ok();
+            write!(ret, "{}\n", t!("tls.cmd", locales::LANG)).ok();
+            write!(ret, "\thelp\n").ok();
             #[cfg(feature = "rootCA")]
-            write!(ret, "\tmozilla\ttrust all Root CA's in webpki-roots\n").ok();
-            write!(ret, "\tprobe <host>\tsave host CA'a if trusted\n").ok();
-            write!(ret, "\ttest <host>\tmake tls connection to host\n").ok();
-            write!(ret, "\ttrusted\tlist trusted CA certificates\n").ok();
+            write!(ret, "\tmozilla\t{}\n", t!("tls.mozilla_cmd", locales::LANG)).ok();
+            write!(ret, "\tprobe <host>\t{}\n", t!("tls.probe_cmd", locales::LANG)).ok();
+            write!(ret, "\ttest <host>\t{}\n", t!("tls.test_cmd", locales::LANG)).ok();
+            write!(ret, "\ttrusted\t{}\n", t!("tls.trusted_cmd", locales::LANG)).ok();
         }
     }
     Ok(Some(ret))
