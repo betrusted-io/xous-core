@@ -20,7 +20,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use xous_names::XousNames;
 
 /// PDDB Dict for tls trusted certificates keys
-const TLS_CERT_DICT: &str = "tls/cert";
+const TLS_TRUSTED_DICT: &str = "tls.trusted";
 const CURRENT_VERSION_KEY: &str = "__version";
 
 // presents a modal to the user to select trusted tls certificates
@@ -97,7 +97,7 @@ pub fn check_trust(certificates: &[Certificate]) -> usize {
 pub fn del_all_cert() -> Result<usize, Error> {
     let mut count = 0;
     let mut keypath = PathBuf::new();
-    keypath.push(TLS_CERT_DICT);
+    keypath.push(TLS_TRUSTED_DICT);
     if std::fs::metadata(&keypath).is_ok() {
         for entry in std::fs::read_dir(keypath)? {
             let entry = entry?;
@@ -119,7 +119,7 @@ pub fn del_all_cert() -> Result<usize, Error> {
 // deletes a tls trust-anchor from the pddb
 pub fn del_cert(key: &str) -> Result<(), Error> {
     let mut keypath = PathBuf::new();
-    keypath.push(TLS_CERT_DICT);
+    keypath.push(TLS_TRUSTED_DICT);
     keypath.push(key);
     match std::fs::remove_file(keypath) {
                 Ok(_) => log::info!("deleted {key}") ,
@@ -137,9 +137,9 @@ pub fn save_cert(key: &str, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
     } else {
         log::trace!("set '{}' = '{:?}'", key, ta);
         let mut keypath = PathBuf::new();
-        keypath.push(TLS_CERT_DICT);
+        keypath.push(TLS_TRUSTED_DICT);
         if !std::fs::metadata(&keypath).is_ok() {
-            log::info!("dict '{}' does NOT exist.. creating it", TLS_CERT_DICT);
+            log::info!("dict '{}' does NOT exist.. creating it", TLS_TRUSTED_DICT);
             std::fs::create_dir_all(&keypath)?;
         }
         keypath.push(key);
@@ -163,9 +163,9 @@ pub fn save_cert(key: &str, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
 // retrieves a tls trust-anchor from the pddb
 pub fn get_cert(key: &str) -> Result<Option<RustlsOwnedTrustAnchor>, Error> {
     let mut keypath = PathBuf::new();
-    keypath.push(TLS_CERT_DICT);
+    keypath.push(TLS_TRUSTED_DICT);
     if !std::fs::metadata(&keypath).is_ok() {
-        log::info!("dict '{}' does NOT exist.. creating it", TLS_CERT_DICT);
+        log::info!("dict '{}' does NOT exist.. creating it", TLS_TRUSTED_DICT);
         std::fs::create_dir_all(&keypath)?;
     }
 

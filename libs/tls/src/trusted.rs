@@ -1,5 +1,5 @@
 use crate::get_cert;
-use crate::{rota::RustlsOwnedTrustAnchor, TLS_CERT_DICT};
+use crate::{rota::RustlsOwnedTrustAnchor, TLS_TRUSTED_DICT};
 use rustls::RootCertStore;
 use std::io::Error;
 use std::path::PathBuf;
@@ -11,9 +11,9 @@ pub struct Trusted {
 impl Trusted {
     pub fn new() -> Result<Trusted, Error> {
         let mut keypath = PathBuf::new();
-        keypath.push(TLS_CERT_DICT);
+        keypath.push(TLS_TRUSTED_DICT);
         if !std::fs::metadata(&keypath).is_ok() {
-            log::info!("dict '{}' does NOT exist.. creating it", TLS_CERT_DICT);
+            log::info!("dict '{}' does NOT exist.. creating it", TLS_TRUSTED_DICT);
             std::fs::create_dir_all(&keypath)?;
         }
         Ok(Self {
