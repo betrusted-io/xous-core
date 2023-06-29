@@ -30,7 +30,7 @@ fn main() -> ! {
 		let name = "_Hello World_"; // note: this MUST match up with the gam name
 
 		// create the spawn process
-		let stub = include_bytes!("spawn-stub");
+		let stub = include_bytes!("../../../target/riscv32imac-unknown-xous-elf/debug/spawn.bin");
 		let args = xous::ProcessArgs::new(stub, xous::MemoryAddress::new(0x2050_1000).unwrap(), xous::MemoryAddress::new(0x2050_1000).unwrap());
 		let spawn = xous::create_process(args).expect("Couldn't create spawn process");
 		log::info!("Spawn PID: {}, Spawn CID: {}", spawn.pid, spawn.cid);
@@ -96,6 +96,7 @@ fn main() -> ! {
 		}
 
 		// tell spawn to switch to the new program
+		log::info!("Jumping...");
 		xous::send_message(6, xous::Message::new_scalar(255, entry_point, 0, 0, 0)).expect("Couldn't send a message to spawn");
 
 		// let run_app: fn() -> ! = unsafe { core::mem::transmute(entry_point) };
