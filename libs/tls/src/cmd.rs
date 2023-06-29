@@ -1,4 +1,4 @@
-use crate::{check_trust, danger, trusted::Trusted};
+use crate::{check_trust, danger, del_all_cert, trusted::Trusted};
 use locales::t;
 use std::convert::TryInto;
 use std::io::Read;
@@ -12,6 +12,13 @@ pub fn shellchat<'a>(
     use core::fmt::Write;
     let mut ret = String::new();
     match tokens.next() {
+        // delete ALL trusted CA Certificates
+        Some("delete") => {
+            log::info!("starting TLS delete certificates");
+            let count = del_all_cert().unwrap();
+            write!(ret, "delete {count} certificates").ok();
+            log::info!("finished TLS delete certificates");
+        }
         Some("help") => {
                 write!(ret, "{}", t!("tls.cmd_help", locales::LANG)).ok();
                 ()
@@ -168,6 +175,7 @@ pub fn shellchat<'a>(
         }
         None | _ => {
             write!(ret, "{}\n", t!("tls.cmd", locales::LANG)).ok();
+            write!(ret, "\tdelete\t{}\n", t!("tls.delete_cmd", locales::LANG)).ok();
             write!(ret, "\thelp\n").ok();
             #[cfg(feature = "rootCA")]
             write!(ret, "\tmozilla\t{}\n", t!("tls.mozilla_cmd", locales::LANG)).ok();

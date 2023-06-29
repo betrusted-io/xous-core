@@ -11,6 +11,10 @@
         "en": "net tls <sub-command>",
         "en-tts": "net tls <sub-command>"
     },
+    "tls.delete_cmd": {
+        "en": "delete ALL trusted Certificates",
+        "en-tts": "delete ALL trusted Certificates"
+    },
     "tls.mozilla_cmd": {
         "en": "trust all Root CA's in webpki-roots",
         "en-tts": "trust all Root CA's in webpki-roots"

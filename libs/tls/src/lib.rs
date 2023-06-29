@@ -91,6 +91,42 @@ pub fn check_trust(certificates: &[Certificate]) -> usize {
     }
 }
 
+
+// deletes ALL tls trust-anchors from the pddb
+// returns the number of certs deleted
+pub fn del_all_cert() -> Result<usize, Error> {
+    let mut count = 0;
+    let mut keypath = PathBuf::new();
+    keypath.push(TLS_CERT_DICT);
+    if std::fs::metadata(&keypath).is_ok() {
+        for entry in std::fs::read_dir(keypath)? {
+            let entry = entry?;
+            let key = entry.file_name().into_string().unwrap();
+            let path = entry.path();
+            match std::fs::remove_file(path) {
+                Ok(_) => {
+                    log::info!("deleted {key}");
+                    count += 1;
+                }
+                Err(e) => log::warn!("failed to delete {key} : {e}"),
+            };
+        };
+    };
+    Ok(count)
+}
+
+
+// deletes a tls trust-anchor from the pddb
+pub fn del_cert(key: &str) -> Result<(), Error> {
+    let mut keypath = PathBuf::new();
+    keypath.push(TLS_CERT_DICT);
+    keypath.push(key);
+    match std::fs::remove_file(keypath) {
+                Ok(_) => log::info!("deleted {key}") ,
+                Err(e) => log::warn!("failed to delete {key} : {e}"),
+    };
+    return Ok(());
+}
 // saves a tls trust-anchor to the pddb
 pub fn save_cert(key: &str, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
     if key.starts_with("__") {
