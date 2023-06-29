@@ -2,8 +2,6 @@ use crate::{CommonEnv, ShellCmdApi};
 use com::api::NET_MTU;
 use net::NetPingCallback;
 use num_traits::*;
-use rustls::internal::msgs::base::PayloadU16;
-use rustls::internal::msgs::handshake::DistinguishedName;
 use std::io::Read;
 use std::io::Write;
 use std::net::{IpAddr, TcpListener, TcpStream};
