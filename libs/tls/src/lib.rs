@@ -25,8 +25,8 @@ const CURRENT_VERSION_KEY: &str = "__version";
 
 // presents a modal to the user to select trusted tls certificates
 // and saves the selected certificates to the pddb
-// returns false if no certificates are trusted - and true otherwise
-pub fn check_trust(certificates: &[Certificate]) -> bool {
+// returns a count of trusted certificates
+pub fn check_trust(certificates: &[Certificate]) -> usize {
     let xns = XousNames::new().unwrap();
     let modals = Modals::new(&xns).unwrap();
 
@@ -82,11 +82,11 @@ pub fn check_trust(certificates: &[Certificate]) -> bool {
                             .expect("modal failed");
                     });
                 });
-            trusted.len() > 0
+            trusted.len()
         }
         _ => {
             log::error!("get_checkbox failed");
-            false
+            0
         }
     }
 }

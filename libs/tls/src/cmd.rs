@@ -30,11 +30,12 @@ pub fn shellchat<'a>(
                     )
                 })
                 .collect();
-            let mut i = 0;
+            let mut count = 0;
             for rota in rotas {
-                crate::save_cert(format!("webpki-root-{i}").as_str(), &rota).unwrap();
-                i += 1;
+                crate::save_cert(format!("webpki-root-{count}").as_str(), &rota).unwrap();
+                count += 1;
             }
+            write!(ret, "trusted {count} certificates").ok();
         }
         // probe establishes a tls connection to the supplied host, extracts the
         // certificates offered and immediately closes the connection.
@@ -77,8 +78,11 @@ pub fn shellchat<'a>(
                     conn.send_close_notify();
 
                     match conn.peer_certificates() {
-                        Some(certificates) => check_trust(certificates),
-                        None => false,
+                        Some(certificates) => {
+                            let count = check_trust(certificates);
+                            write!(ret, "trusted {count} certificates").ok();
+                        }
+                        None => (),
                     };
                 }
                 Err(e) => {
