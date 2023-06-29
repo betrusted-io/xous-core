@@ -1,12 +1,9 @@
 // A mirror of rustls::OwnedTrustAnchor
 
-use der::{Encode, Reader};
+use der::{Encode, Header, Reader, Tag};
 use rkyv::{Archive, Deserialize, Serialize};
-use std::cmp::min;
 use std::convert::TryInto;
-use std::fmt;
 use std::io::{Error, ErrorKind};
-use x509_parser::der_parser::der::Tag;
 use x509_parser::prelude::{FromDer, X509Certificate};
 
 /// A close mirror of rustls::OwnedTrustAnchor - but with extras
@@ -32,16 +29,20 @@ impl RustlsOwnedTrustAnchor {
         }
     }
 
+    // decoded subject
     pub fn subject(&self) -> String {
-        let der = self.subject.clone();
-        let len = min(der.len(), 127);
-        let mut der = der[..len].to_owned();
-        // hack back in the DER header to enable decode :-/
-        der.insert(0, len as u8);
-        der.insert(0, Tag::Sequence.0 as u8);
-        match x509_parser::x509::X509Name::from_der(&der) {
-            Ok((_, decoded)) => decoded.to_string(),
-            Err(e) => format!("der parse failed: {e}").to_string(),
+        match add_der_header(Tag::Sequence, &self.subject) {
+            Ok(der) => match x509_parser::x509::X509Name::from_der(&der) {
+                Ok((_, decoded)) => decoded.to_string(),
+                Err(e) => {
+                    log::warn!("{:?}", e);
+                    "der decode failed".to_string()
+                }
+            },
+            Err(e) => {
+                log::warn!("{:?}", e);
+                "der decode failed".to_string()
+            }
         }
     }
 }
@@ -79,7 +80,32 @@ impl<'a> From<&X509Certificate<'a>> for RustlsOwnedTrustAnchor {
     }
 }
 
-/// Remove the DER header from the DER encoded [u8]
+/// Add a DER header to a DER encoded [u8]
+fn add_der_header(tag: Tag, chook: &Vec<u8>) -> Result<Vec<u8>, Error> {
+    match Header::new(tag, chook.len()) {
+        Ok(header) => {
+            let mut buff: [u8; 32] = [0u8; 32];
+            match header.encode_to_slice(&mut buff) {
+                Ok(der) => {
+                    let der = [der, chook].concat();
+                    match x509_parser::x509::X509Name::from_der(&der) {
+                        Ok((_, decoded)) => Ok(decoded.as_raw().to_vec()),
+                        Err(_) => Err(Error::new(ErrorKind::InvalidData, "der parse failed: from")),
+                    }
+                }
+                Err(_) => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "der parse failed: encode",
+                )),
+            }
+        }
+        Err(_) => Err(Error::new(
+            ErrorKind::InvalidData,
+            "der parse failed: header",
+        )),
+    }
+}
+
 /// Remove a DER header from a DER encoded [u8]
 fn rm_der_header(der: &[u8]) -> Result<Vec<u8>, Error> {
     match der::SliceReader::new(der) {
