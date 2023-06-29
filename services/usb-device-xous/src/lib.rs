@@ -259,6 +259,13 @@ impl UsbHid {
             None => Err(xous::Error::UseBeforeInit),
         }
     }
+    /// Sets the autotype delay. Defaults to 30ms on boot, must be reset every time on reboot.
+    pub fn set_autotype_delay_ms(&self, rate: usize) {
+        send_message(
+            self.conn,
+            Message::new_scalar(Opcode::SetAutotypeRate.to_usize().unwrap(), rate, 0, 0, 0)
+        ).unwrap(); // just unwrap it. If the send fails, we want to see the panic at this spot!
+    }
     pub fn get_led_state(&self) -> Result<KeyboardLedsReport, xous::Error> {
         match send_message(
             self.conn,

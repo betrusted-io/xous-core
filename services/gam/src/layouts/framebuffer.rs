@@ -20,9 +20,11 @@ impl Framebuffer {
     ) -> Result<Framebuffer, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
 
+        // trust level must be lower than "modals" otherwise a modal can't draw over the content
+        // dividing by 2 does the trick
         let fb_canvas = Canvas::new(
             Rectangle::new(Point::new(0, status_cliprect.br().y + 1), screensize),
-            MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET, &trng, None, crate::api::CanvasType::Framebuffer
+            (MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET) / 2, &trng, None, crate::api::CanvasType::Framebuffer
         ).expect("couldn't create modal canvas");
         let fb_gid = fb_canvas.gid();
         canvases.insert(fb_canvas.gid(), fb_canvas);

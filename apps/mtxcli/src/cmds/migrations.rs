@@ -42,7 +42,7 @@ macro_rules! migration_api {
 pub fn run_migrations(common: &mut CommonEnv) {
     let version = common.get_default(VERSION_KEY, DEFAULT_VERSION);
     if version.ne(&common.version) {
-        let running_migrations = t!("mtxcli.running.migrations", xous::LANG);
+        let running_migrations = t!("mtxcli.running.migrations", locales::LANG);
         let msg = format!("{} {} .. {}",
                           running_migrations, version, common.version);
         log::info!("{}", msg);
@@ -53,7 +53,7 @@ pub fn run_migrations(common: &mut CommonEnv) {
             if migration.applies(&version) {
                 match migration.process(common) {
                     Ok(boolean) => {
-                        let migration_completed = t!("mtxcli.migration.completed", xous::LANG);
+                        let migration_completed = t!("mtxcli.migration.completed", locales::LANG);
                         let msg = format!("{}: {}: {}",
                                           migration_completed, migration.version(), boolean);
                         common.send_async_msg(&msg);
@@ -71,7 +71,7 @@ pub fn run_migrations(common: &mut CommonEnv) {
         }
         common.set(VERSION_KEY, &common.version.clone())
             .expect("cannot set _version");
-        let migrations_complete = t!("mtxcli.migrations.complete", xous::LANG);
+        let migrations_complete = t!("mtxcli.migrations.complete", locales::LANG);
         log::info!("{}", migrations_complete);
         common.send_async_msg(&migrations_complete);
     }

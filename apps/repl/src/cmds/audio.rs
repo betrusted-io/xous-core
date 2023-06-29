@@ -66,7 +66,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
 
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
-        let helpstring = t!("replapp.audio.help", xous::LANG);
+        let helpstring = t!("replapp.audio.help", locales::LANG);
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
@@ -117,7 +117,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
                             xous::send_message(conn, Message::new_scalar(cb_id as usize, 0, 0, 0, STOP_ID)).unwrap();
                         }
                     });
-                    write!(ret, "{}", t!("replapp.audio.start", xous::LANG)).unwrap();
+                    write!(ret, "{}", t!("replapp.audio.start", locales::LANG)).unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
@@ -163,9 +163,9 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     let mut ret = String::<1024>::new();
                     env.codec.abort().unwrap(); // this should stop callbacks from occurring too.
                     write!(ret, "{} {} {}.",
-                        t!("replapp.audio.completion_a", xous::LANG),
+                        t!("replapp.audio.completion_a", locales::LANG),
                         self.framecount,
-                        t!("replapp.audio.completion_b", xous::LANG),
+                        t!("replapp.audio.completion_b", locales::LANG),
                     ).unwrap();
                     self.framecount = 0;
                     self.play_sample = 0.0;

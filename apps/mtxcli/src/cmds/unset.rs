@@ -23,7 +23,7 @@ impl<'a> ShellCmdApi<'a> for Unset {
         if let Some(key) = tokens.next() {
             match key {
                 "" => {
-                    write!(ret, "{}", t!("mtxcli.unset.help", xous::LANG)).unwrap();
+                    write!(ret, "{}", t!("mtxcli.unset.help", locales::LANG)).unwrap();
                 }
                 _ => {
                     match env.unset(key) {

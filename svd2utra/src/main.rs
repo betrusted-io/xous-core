@@ -1,4 +1,6 @@
-mod generate;
+// SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
+// SPDX-FileCopyrightText: 2020 bunnie <bunnie@kosagi.com>
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().count() != 3 {
@@ -10,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut dest_file = std::fs::File::create(generated_filename).expect("couldn't open dest file");
 
-    generate::generate(svd_filename, &mut dest_file)?;
+    svd2utra::generate(svd_filename, &mut dest_file)?;
 
     Ok(())
 }

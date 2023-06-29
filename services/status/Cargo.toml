@@ -10,17 +10,17 @@ version = "0.1.0"
 com = {path = "../com"}
 content-plugin-api = {path = "../content-plugin-api"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.38"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.38"}
+log-server = {package = "xous-api-log", version = "0.1.41"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.41"}
 trng = {path = "../trng"}
 llio = {path = "../llio"}
-xous = "0.9.42"
-xous-ipc = "0.9.42"
-xous-names = {package = "xous-api-names", version = "0.9.40"}
+xous = "0.9.45"
+xous-ipc = "0.9.45"
+xous-names = {package = "xous-api-names", version = "0.9.43"}
 graphics-server = {path = "../graphics-server"}
 gam = {path = "../gam"}
 locales = {path = "../../locales"}
-susres = {package = "xous-api-susres", version = "0.9.38"}
+susres = {package = "xous-api-susres", version = "0.9.41"}
 root-keys = {path = "../root-keys"}
 modals = {path = "../modals"}
 pddb = {path = "../pddb"}
@@ -45,7 +45,7 @@ digest = "0.9.0"
 xous-semver = "0.1.2"
 com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
-utralib = {version = "0.1.18", optional = true, default-features = false }
+utralib = {version = "0.1.20", optional = true, default-features = false }
 
 app-loader = {path = "../app-loader/", optional = true}
 

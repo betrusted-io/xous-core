@@ -12,15 +12,15 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     // TODO: retire utralib/svd2utra from publication as well
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous@0.9.42",
-        "xous-ipc@0.9.42",
-        "xous-api-log@0.1.38",
-        "xous-api-names@0.9.40",
-        "xous-api-susres@0.9.38",
-        "xous-api-ticktimer@0.9.38",
+        "xous@0.9.45",
+        "xous-ipc@0.9.45",
+        "xous-api-log@0.1.41",
+        "xous-api-names@0.9.43",
+        "xous-api-susres@0.9.41",
+        "xous-api-ticktimer@0.9.41",
         // this set is only updated if the utralib changes
-        "utralib@0.1.18",
-        "svd2utra@0.1.16",
+        "utralib@0.1.20",
+        "svd2utra@0.1.18",
     ];
     for pkg in check_pkgs {
         verify(pkg.into())?;

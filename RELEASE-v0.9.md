@@ -378,6 +378,23 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - "Lock device" now sleeps after reboot (thanks to patches by @gsora)
 - Hosted mode now runs more smoothly, with less lag (thanks @yvt for the patch!)
 
+## New in 0.9.14
+- `gdb-stub` on hardware is now quite reliable, thanks to some performance improvements by @xobs. Just remember that single stepping does not work on XIP images (and by default now, apps are compiled as `xip`)
+- "Notes" fields in `vault` app that start with the keyword 'bip39' will trigger a BIP39 password entry box (if the password field is blank), or BIP39 rendering of the hex data. Password generation prompt also uses the password 'bip39' to trigger the BIP39 generation sequence. It does mean that you can't use just 'bip39' as a regular password but...
+- Add multi-line text editing to `vault` password fields, as well as left/right cursor movement to call up an insertion point that can be used to insert and delete characters in the middle of a field.
+- Extra characters added to arrow keys and Fn keys from MacOS hosted mode cleaned up (thanks @wizzard0)
+- Device will not try to suspend on lock if it is plugged in
+- Autosleep timer option added. By default it is 0 (disabled). It is adjustable in increments of minutes. Note that if you try to lock the device while plugged in, and then unplug it without unlocking it, the system will stay "awake" because it can't consult the PDDB to know what the autosleep setting is.
+- Autosleep can also optionally lock the device on sleep. However, by default it just sleeps.
+- Add "lefty mode" option for `vault` (flips deny key from F1 to F4)
+- Add "autotype delay" setting. The default is 30ms, but some computers can't handle key strokes that fast (password characters will be dropped). This allows users to tune this down, to a maximum of 500ms (at which point you may actually get multiple key entries depending on your hold-to-repeat delay). Probably a setting of 80ms should be fine to deal with deeply virtualized USB stacks running on slower computers.
+- Fix #325, u2f authentication requests now sunset even when the host stops polling
+- #388 via @eupn adds physical address resolution for a remote virtual memory process, allowing for coordination with remote DMA initiators. Does introduce some potential security problems, so gated behind the `v2p` flag.
+- Fix #339 by adjusting the shellchat API call to match what is done in status bar
+- Improved wifi scanning (fixes #336) - scans are now sorted by strength; old APs are retired; and the UX will pause while the scan occurs. Repeated scans still require going through the entire menu tree again; this is because modal radio-box lists aren't dynamically updateable.
+- Improve performance of filtering operations in `vault` by ~100x by refactoring the item cache to work on `Vec` that is repeatedly sorted, instead of on a `BTreeMap` that is referenced. Turns out that sorting is a far cheaper operation than reference-counted shared references, or copying data to the heap (to avoid the shared reference). See PR#389 for details.
+- @jeandudey contributed #390 and #391 which improve interoperability of svd2utra across build hosts and modularizes the language to the locales crate.
+
 ## Roadmap
 - Lots of testing and bug fixes
 - Fixing performance issues in `pddb`

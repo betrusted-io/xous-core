@@ -46,6 +46,11 @@ impl Llio {
         ).map(|_| ())
     }
 
+    pub fn is_plugged_in(&self) -> bool {
+        // 0.005033 * 100_000 against 1.50V * 100_000
+        ((self.adc_vbus().unwrap() as u32) * 503) > 150_000
+    }
+
     pub fn adc_vbus(&self) -> Result<u16, xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::AdcVbus.to_usize().unwrap(), 0, 0, 0, 0))?;

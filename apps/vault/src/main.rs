@@ -9,6 +9,8 @@ mod prereqs;
 mod vendor_commands;
 mod storage;
 mod migration_v1;
+mod itemcache;
+use itemcache::*;
 
 use locales::t;
 
@@ -19,14 +21,14 @@ use vault::{
     SELF_CONN, Transport, VaultOp
 };
 
-use actions::{ActionOp, start_actions_thread};
-use crate::ux::framework::{ListItem, NavDir};
+use actions::ActionOp;
+use crate::ux::framework::NavDir;
 use crate::prereqs::ntp_updater;
 use crate::vendor_commands::VendorSession;
 
 use ux::framework::{VaultUx, DEFAULT_FONT, FONT_LIST, name_to_style};
 use xous_ipc::Buffer;
-use xous::{send_message, Message};
+use xous::{send_message, Message, msg_blocking_scalar_unpack};
 use usbd_human_interface_device::device::fido::*;
 use num_traits::*;
 
@@ -34,8 +36,6 @@ use std::thread;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use std::collections::BTreeMap;
-
 
 // CTAP2 testing notes:
 //
@@ -104,19 +104,9 @@ pub enum VaultMode {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct SelectedEntry {
-    pub key_name: xous_ipc::String::<256>,
+    pub key_guid: xous_ipc::String::<256>,
     pub description: xous_ipc::String::<256>,
     pub mode: VaultMode,
-}
-pub struct ItemLists {
-    pub fido: BTreeMap::<String, ListItem>,
-    pub totp: BTreeMap::<String, ListItem>,
-    pub pw: BTreeMap::<String, ListItem>,
-}
-impl ItemLists {
-    pub fn new() -> Self {
-        ItemLists { fido: BTreeMap::new(), totp: BTreeMap::new(), pw: BTreeMap::new() }
-    }
 }
 
 const ERR_TIMEOUT_MS: usize = 5000;
@@ -139,20 +129,102 @@ fn main() -> ! {
     let allow_host = Arc::new(AtomicBool::new(false));
     // Protects access to the openSK PDDB entries from simultaneous readout on the UX while OpenSK is updating it
     let opensk_mutex = Arc::new(Mutex::new(0));
+    // storage for lefty mode
+    let lefty_mode = Arc::new(AtomicBool::new(false));
 
     // spawn the actions server. This is responsible for grooming the UX elements. It
     // has to be in its own thread because it uses blocking modal calls that would cause
     // redraws of the background list to block/fail.
     let actions_sid = xous::create_server().unwrap();
     SELF_CONN.store(conn, Ordering::SeqCst);
-    start_actions_thread(
-        conn,
-        actions_sid,
-        mode.clone(),
-        item_lists.clone(),
-        action_active.clone(),
-        opensk_mutex.clone(),
-    );
+    let _ = thread::spawn({
+        let main_conn = conn.clone();
+        let sid = actions_sid.clone();
+        let mode = mode.clone();
+        let item_lists = item_lists.clone();
+        let action_active = action_active.clone();
+        let opensk_mutex = opensk_mutex.clone();
+        move || {
+            let mut manager = crate::actions::ActionManager::new(main_conn, mode, item_lists, action_active, opensk_mutex);
+            loop {
+                let msg = xous::receive_message(sid).unwrap();
+                let opcode: Option<ActionOp> = FromPrimitive::from_usize(msg.body.id());
+                log::debug!("{:?}", opcode);
+                match opcode {
+                    Some(ActionOp::MenuAddnew) => {
+                        manager.activate();
+                        manager.menu_addnew(); // this is responsible for updating the item cache
+                        manager.deactivate();
+                    },
+                    Some(ActionOp::MenuDeleteStage2) => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
+                        manager.activate();
+                        manager.menu_delete(entry);
+                        manager.retrieve_db();
+                        manager.deactivate();
+                    },
+                    Some(ActionOp::MenuEditStage2) => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
+                        manager.activate();
+                        manager.menu_edit(entry); // this is responsible for updating the item cache
+                        manager.deactivate();
+                    },
+                    Some(ActionOp::MenuUnlockBasis) => {
+                        manager.activate();
+                        manager.unlock_basis();
+                        manager.item_lists.lock().unwrap().clear(VaultMode::Password); // clear the cached item list for passwords (totp/fido are not cached and don't need clearing)
+                        manager.retrieve_db();
+                        manager.deactivate();
+                    },
+                    Some(ActionOp::MenuManageBasis) => {
+                        manager.activate();
+                        manager.manage_basis();
+                        manager.item_lists.lock().unwrap().clear(VaultMode::Password); // clear the cached item list for passwords
+                        manager.retrieve_db();
+                        manager.deactivate();
+                    }
+                    Some(ActionOp::MenuClose) => {
+                        // dummy activate/de-activate cycle because we have to trigger a redraw of the underlying UX
+                        manager.activate();
+                        manager.deactivate();
+                    },
+                    Some(ActionOp::UpdateOneItem) => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
+                        manager.activate();
+                        manager.update_db_entry(entry);
+                        manager.deactivate();
+                    }
+                    Some(ActionOp::UpdateMode) => msg_blocking_scalar_unpack!(msg, _, _, _, _,{
+                        // the password DBs are now not shared between modes, so no need to re-retrieve it.
+                        if manager.is_db_empty() {
+                            manager.retrieve_db();
+                        }
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                    }),
+                    Some(ActionOp::ReloadDb) => msg_blocking_scalar_unpack!(msg, _, _, _, _,{
+                        manager.retrieve_db();
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                    }),
+                    Some(ActionOp::Quit) => {
+                        break;
+                    }
+                    None => {
+                        log::error!("msg could not be decoded {:?}", msg);
+                    }
+                    #[cfg(feature="vault-testing")]
+                    Some(ActionOp::GenerateTests) => {
+                        manager.populate_tests();
+                        manager.retrieve_db();
+                    }
+                }
+            }
+            xous::destroy_server(sid).ok();
+        }
+    });
+
     let actions_conn = xous::connect(actions_sid).unwrap();
 
     // spawn the FIDO USB->UX update kicker thread. It is responsible for issuing a UX refresh command
@@ -205,6 +277,7 @@ fn main() -> ! {
         let allow_host = allow_host.clone();
         let opensk_mutex = opensk_mutex.clone();
         let conn = conn.clone();
+        let lefty_mode = lefty_mode.clone();
         move || {
             let xns = xous_names::XousNames::new().unwrap();
             let mut vendor_session = VendorSession::default();
@@ -219,12 +292,12 @@ fn main() -> ! {
                     log::warn!("Migration encountered errors! {:?}", e);
                     let modals = modals::Modals::new(&xns).unwrap();
                     modals.show_notification(
-                        &format!("{}\n{:?}", t!("vault.migration_error", xous::LANG), e), None
+                        &format!("{}\n{:?}", t!("vault.migration_error", locales::LANG), e), None
                     ).ok();
                 }
             };
 
-            let env = XousEnv::new(conn);
+            let env = XousEnv::new(conn, lefty_mode); // lefty_mode is now owned by env
             // only run the main loop if the SoC is compatible
             if env.is_soc_compatible() {
                 let mut ctap = vault::Ctap::new(env, Instant::now());
@@ -366,7 +439,7 @@ fn main() -> ! {
         menu_mgr,
         actions_conn,
         mode.clone(),
-        item_lists,
+        item_lists.clone(),
         action_active.clone()
     );
     vaultux.update_mode();
@@ -374,6 +447,12 @@ fn main() -> ! {
 
     // starts a thread to keep NTP up-to-date
     ntp_updater(time_conn);
+
+    // gets the user preferences that configure vault
+    let prefs = userprefs::Manager::new();
+    let mut autotype_delay_ms = prefs.autotype_rate_or_value(30).unwrap();
+    vaultux.set_autotype_delay_ms(autotype_delay_ms);
+    lefty_mode.store(prefs.lefty_mode_or_value(false).unwrap(), Ordering::SeqCst);
 
     let modals = modals::Modals::new(&xns).unwrap();
     let tt = ticktimer_server::Ticktimer::new().unwrap();
@@ -473,7 +552,7 @@ fn main() -> ! {
             }
             Some(VaultOp::ReloadDbAndFullRedraw) => {
                 send_message(actions_conn,
-                    Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                    Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0)
                 ).ok();
                 vaultux.update_mode();
                 if allow_redraw {
@@ -485,7 +564,7 @@ fn main() -> ! {
                 // this set of calls will effectively force a reload of any UX data
                 *mode.lock().unwrap() = VaultMode::Fido;
                 send_message(actions_conn,
-                    Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                    Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0)
                 ).ok();
                 vaultux.update_mode();
                 vaultux.input("").unwrap();
@@ -522,7 +601,7 @@ fn main() -> ! {
                         .add_list_item(item)
                         .expect("couldn't build radio item list");
                 }
-                match modals.get_radiobutton(t!("vault.select_font", xous::LANG)) {
+                match modals.get_radiobutton(t!("vault.select_font", locales::LANG)) {
                     Ok(style) => {
                         vaultux.set_glyph_style(name_to_style(&style).unwrap_or(DEFAULT_FONT));
                     },
@@ -531,32 +610,32 @@ fn main() -> ! {
                 vaultux.update_mode();
             }
             Some(VaultOp::MenuAutotype) => {
-                modals.dynamic_notification(Some(t!("vault.autotyping", xous::LANG)), None).ok();
+                modals.dynamic_notification(Some(t!("vault.autotyping", locales::LANG)), None).ok();
                 match vaultux.autotype() {
                     Err(xous::Error::UseBeforeInit) => { // USB not plugged in
-                        modals.dynamic_notification_update(Some(t!("vault.error.usb_error", xous::LANG)), None).ok();
+                        modals.dynamic_notification_update(Some(t!("vault.error.usb_error", locales::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     },
                     Err(xous::Error::InvalidString) => { // deserialzation error
-                        modals.dynamic_notification_update(Some(t!("vault.error.record_error", xous::LANG)), None).ok();
+                        modals.dynamic_notification_update(Some(t!("vault.error.record_error", locales::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     },
                     Err(xous::Error::ProcessNotFound) => { // key or dictionary not found
-                        modals.dynamic_notification_update(Some(t!("vault.error.not_found", xous::LANG)), None).ok();
+                        modals.dynamic_notification_update(Some(t!("vault.error.not_found", locales::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     },
                     Err(xous::Error::InvalidPID) => { // nothing was selected
-                        modals.dynamic_notification_update(Some(t!("vault.error.nothing_selected", xous::LANG)), None).ok();
+                        modals.dynamic_notification_update(Some(t!("vault.error.nothing_selected", locales::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     },
                     Err(xous::Error::OutOfMemory) => { // trouble updating the key
-                        modals.dynamic_notification_update(Some(t!("vault.error.update_error", xous::LANG)), None).ok();
+                        modals.dynamic_notification_update(Some(t!("vault.error.update_error", locales::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     }
                     Ok(_) => {},
                     Err(e) => { // unknown error
                         modals.dynamic_notification(Some(
-                            &format!("{}\n{:?}", t!("vault.error.internal_error", xous::LANG), e),
+                            &format!("{}\n{:?}", t!("vault.error.internal_error", locales::LANG), e),
                         ), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     }
@@ -575,31 +654,71 @@ fn main() -> ! {
                     buf.send(actions_conn, ActionOp::MenuDeleteStage2.to_u32().unwrap()).expect("messaging error");
                 } else {
                     // this will block redraws, but it's just one notification in a sequence so it's OK.
-                    modals.show_notification(t!("vault.error.nothing_selected", xous::LANG), None).ok();
+                    modals.show_notification(t!("vault.error.nothing_selected", locales::LANG), None).ok();
                 }
             }
             Some(VaultOp::MenuEditStage1) => {
                 // stage 1 happens here because the filtered list and selection entry are in the responsive UX section.
+                log::debug!("selecting entry for edit");
                 if let Some(entry) = vaultux.selected_entry() {
                     let buf = Buffer::into_buf(entry).expect("IPC error");
                     buf.send(actions_conn, ActionOp::MenuEditStage2.to_u32().unwrap()).expect("messaging error");
                 } else {
                     // this will block redraws, but it's just one notification in a sequence so it's OK.
-                    modals.show_notification(t!("vault.error.nothing_selected", xous::LANG), None).ok();
+                    modals.show_notification(t!("vault.error.nothing_selected", locales::LANG), None).ok();
                 }
             }
             Some(VaultOp::MenuReadoutMode) => {
-                modals.dynamic_notification(Some(t!("vault.readout_switchover", xous::LANG)), None).ok();
+                modals.dynamic_notification(Some(t!("vault.readout_switchover", locales::LANG)), None).ok();
                 vaultux.readout_mode(true);
                 modals.dynamic_notification_close().ok();
 
                 allow_host.store(true, Ordering::SeqCst);
-                modals.show_notification(t!("vault.readout_active", xous::LANG), None).ok();
+                modals.show_notification(t!("vault.readout_active", locales::LANG), None).ok();
                 allow_host.store(false, Ordering::SeqCst);
 
-                modals.dynamic_notification(Some(t!("vault.readout_switchover", xous::LANG)), None).ok();
+                modals.dynamic_notification(Some(t!("vault.readout_switchover", locales::LANG)), None).ok();
                 vaultux.readout_mode(false);
                 modals.dynamic_notification_close().ok();
+            }
+            Some(VaultOp::MenuAutotypeRate) => {
+                let cv = {
+                    let mut rate = prefs.autotype_rate_or_default().unwrap();
+                    if rate == 0 {
+                        rate = 30;
+                    }
+                    rate
+                };
+                let raw = modals
+                    .alert_builder(t!("prefs.autotype_rate_in_ms", locales::LANG))
+                    .field(
+                        Some(cv.to_string()),
+                        Some(|tf| match tf.as_str().parse::<usize>() {
+                            Ok(_) => None,
+                            Err(_) => Some(xous_ipc::String::from_str(
+                                t!("prefs.autobacklight_err", locales::LANG),
+                            )),
+                        }),
+                    )
+                    .build()
+                    .unwrap();
+                autotype_delay_ms = raw.first().as_str().parse::<usize>().unwrap(); // we know this is a number, we checked with validator;
+                prefs.set_autotype_rate(autotype_delay_ms).unwrap();
+                vaultux.set_autotype_delay_ms(autotype_delay_ms);
+            }
+            Some(VaultOp::MenuLeftyMode) => {
+                let cv = prefs.lefty_mode_or_default().unwrap();
+
+                modals.add_list(vec![t!("prefs.yes", locales::LANG), t!("prefs.no", locales::LANG)]).unwrap();
+                let mode = yes_no_to_bool(
+                    modals
+                        .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
+                            bool_to_yes_no(cv)))
+                        .unwrap()
+                        .as_str(),
+                );
+                prefs.set_lefty_mode(mode).unwrap();
+                lefty_mode.store(mode, Ordering::SeqCst);
             }
             Some(VaultOp::Quit) => {
                 log::error!("got Quit");
@@ -618,4 +737,20 @@ fn main() -> ! {
     xous::destroy_server(sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
+}
+
+fn bool_to_yes_no(val: bool) -> String {
+    match val {
+        true => t!("prefs.yes", locales::LANG).to_owned(),
+        false => t!("prefs.no", locales::LANG).to_owned(),
+    }
+}
+fn yes_no_to_bool(val: &str) -> bool {
+    if val == t!("prefs.yes", locales::LANG) {
+        true
+    } else if val == t!("prefs.no", locales::LANG) {
+        false
+    } else {
+        unreachable!("cannot go here!");
+    }
 }

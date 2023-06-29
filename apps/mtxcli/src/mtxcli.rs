@@ -56,7 +56,7 @@ impl Mtxcli{
 
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
         let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
-        let history: Vec::<History> = vec![History{text: String::from(t!("mtxcli.greeting", xous::LANG)), is_input: false}];
+        let history: Vec::<History> = vec![History{text: String::from(t!("mtxcli.greeting", locales::LANG)), is_input: false}];
         let env = CmdEnv::new();
         Mtxcli {
             input: None,

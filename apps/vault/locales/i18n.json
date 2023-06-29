@@ -48,6 +48,27 @@
         "ja": "アンマウントするベースを選択します:",
         "zh": "选择要卸载的基础:"
     },
+    "vault.bip39.input": {
+        "en": "Enter your BIP39 password:",
+        "en-tts": "Enter your BIP39 password:",
+        "fr": "Saisissez votre mot de passe BIP39: *MT*",
+        "ja": "BIP39 パスワードを入力してください:",
+        "zh": "输入您的 BIP39 密码："
+    },
+    "vault.bip39.output": {
+        "en": "Password as BIP39:",
+        "en-tts": "Password as BIP39:",
+        "fr": "Mot de passe en tant que BIP39: *MT*",
+        "ja": "BIP39としてのパスワード:",
+        "zh": "密码为 BIP39:"
+    },
+    "vault.bip39.output_error": {
+        "en": "Password field is not encodable as BIP39.",
+        "en-tts": "Password field is not encodable as BIP39.",
+        "fr": "Le champ Mot de passe n'est pas encodable en tant que BIP39. *MT*",
+        "ja": "パスワードフィールドはBIP39としてエンコードできません。",
+        "zh": "密码字段不可编码为 BIP39。"
+    },
     "vault.completed": {
         "en": "Operation completed.",
         "en-tts": "Operation completed.",
@@ -279,6 +300,13 @@
         "ja": "ホスト読み出しを有効にする",
         "zh": "启用主机读出"
     },
+    "vault.menu_set_lefty_mode": {
+        "en": "Set left-handed UI",
+        "en-tts": "Set left-handed UI",
+        "fr": "Définir l'interface utilisateur gaucher *MT*",
+        "ja": "左手用 UI を設定する",
+        "zh": "设置左手用户界面"
+    },
     "vault.menu_unlock_basis": {
         "en": "Unlock secret Basis",
         "en-tts": "Unlock secret basis",
@@ -343,11 +371,11 @@
         "zh": "数字"
     },
     "vault.newitem.password": {
-        "en": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator.\n",
-        "en-tts": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator.\n",
-        "fr": "Appuyez sur Entrée pour accepter la suggestion, ou commencez à taper pour créer le votre.\n\nLaissez vide pour personnaliser le générateur.\n",
-        "ja": "Enterキーを押して提案を受け入れるか、入力を開始して独自の提案を作成します。\n\n空白のままにしてジェネレータをカスタマイズします。\n",
-        "zh": "按 Enter 接受建议，或开始输入以创建您自己的建议。\n\n留空以自定义生成器。\n"
+        "en": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator, or type 'bip39'.\n",
+        "en-tts": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator, or type 'bip39'.\n",
+        "fr": "Appuyez sur Entrée pour accepter la suggestion, ou commencez à taper pour créer le votre.\n\nLaissez vide pour personnaliser le générateur, ou tapez 'bip39'.\n",
+        "ja": "Enterキーを押して提案を受け入れるか、入力を開始して独自の提案を作成します。\n\n空白のままにしてジェネレータをカスタマイズします, または「bip39」と入力します\n",
+        "zh": "按 Enter 接受建议，或开始输入以创建您自己的建议。\n\n留空以自定义生成器, 或输入“bip39”。\n"
     },
     "vault.newitem.symbols": {
         "en": "Symbols",
@@ -418,6 +446,13 @@
         "fr": "Commutation des fonctions USB...",
         "ja": "USB機能を切り替え中...",
         "zh": "切换 USB 功能..."
+    },
+    "vault.reloading_database": {
+        "en": "Reloading database...",
+        "en-tts": "Reloading database...",
+        "fr": "Rechargement de la base de données...*MT*",
+        "ja": "データベースをリロードしています...",
+        "zh": "正在重新加载数据库..."
     },
     "vault.select_font": {
         "en": "Select a font style",
@@ -558,6 +593,13 @@
         "fr": "Demande FIDO.\n\nRefuser la demande en appuyant sur F1.\nApprouver en appuyant sur une autre touche.",
         "ja": "FIDOリクエスト\n\nF1 を押して要求を拒否するか、その他のキーを押して承認します。\n",
         "zh": "FIDO 请求\n\n按 F1 拒绝请求，或按任何其他键批准它。\n"
+    },
+    "vault.u2freq_lefty": {
+        "en": "FIDO Request.\n\nDENY the request by pressing F4.\nAPPROVE by pressing any other key.\n",
+        "en-tts": "FIDO Request.\n\nPress F4 to DENY the request.\nPress any other key to approve it.\n",
+        "fr": "Demande FIDO.\n\nRefuser la demande en appuyant sur F4.\nApprouver en appuyant sur une autre touche.",
+        "ja": "FIDOリクエスト\n\nF4 を押して要求を拒否するか、その他のキーを押して承認します。\n",
+        "zh": "FIDO 请求\n\n按 F4 拒绝请求，或按任何其他键批准它。\n"
     },
     "vault.yes": {
         "en": "Yes",

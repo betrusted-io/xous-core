@@ -272,7 +272,7 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
                     digits: elem.digit_count,
                     timestep: elem.step_seconds,
                     ctime: 0, // Will be filled in later by storage::new_totp_record();
-                    notes: t!("vault.notes", xous::LANG).to_string(),
+                    notes: t!("vault.notes", locales::LANG).to_string(),
                     is_hotp: false,
                 };
                 entries.push(Box::new(totp));

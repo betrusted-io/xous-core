@@ -1,7 +1,15 @@
 {
-    "rust-analyzer.checkOnSave.allTargets": false,
     "rust-analyzer.cargo.target":"riscv32imac-unknown-xous-elf",
-    "rust-analyzer.checkOnSave.extraArgs": ["--target-dir", "./target/check"],
+    "rust-analyzer.check.overrideCommand":[
+        "cargo",
+        "check",
+        "--target", "riscv32imac-unknown-xous-elf",
+        "--target-dir", "target/analyzer",
+        "--features", "precursor",
+        "--features", "utralib/precursor",
+        "--features", "utralib/precursor-pvt",
+        "--message-format", "json"
+    ],
     "rust-analyzer.server.extraEnv": {
         "XOUS_SVD_FILE": "../precursors/soc.svd"
     },
@@ -13,7 +21,7 @@
         "**/.hg": true,
         "**/CVS": true,
         "**/.DS_Store": true,
-        "**/Thumbs.db": true,
+        "**/Thumbs.db": true
     },
     "cSpell.language": "en,fr"
 }

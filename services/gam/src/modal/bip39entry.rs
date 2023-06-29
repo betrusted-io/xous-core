@@ -77,7 +77,7 @@ impl ActionApi for Bip39Entry {
     }
     /// The total canvas height is computed with this API call
     /// The canvas height is not dynamically adjustable for modals.
-    fn height(&self, glyph_height: i16, margin: i16) -> i16 {
+    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
         /*
 
               cat                   <-- active entry 1 line + 2x margin
@@ -209,13 +209,13 @@ impl ActionApi for Bip39Entry {
             // put in some error/guidance text instead of a recco list
             let mut guidance = String::new();
             if self.user_input.len() > 0 {
-                guidance.push_str(t!("bip39.invalid_word", xous::LANG));
+                guidance.push_str(t!("bip39.invalid_word", locales::LANG));
             } else {
                 // no input yet, give some options
                 if self.payload.is_some() {
-                    guidance.push_str(t!("bip39.enter_to_complete", xous::LANG));
+                    guidance.push_str(t!("bip39.enter_to_complete", locales::LANG));
                 } else {
-                    guidance.push_str(t!("bip39.start_typing", xous::LANG));
+                    guidance.push_str(t!("bip39.start_typing", locales::LANG));
                 }
             }
             let mut tv = TextView::new(
@@ -272,16 +272,16 @@ impl ActionApi for Bip39Entry {
         // ------- status --------
         let mut status = String::new();
         if let Some(p) = &self.payload {
-            status.push_str(t!("bip39.valid_phrase", xous::LANG));
+            status.push_str(t!("bip39.valid_phrase", locales::LANG));
             status.push_str( " ");
             status.push_str(&hex::encode(&p));
         } else {
             if self.user_input.len() == 0 && self.accepted_words.len() == 0 {
-                status.push_str(t!("bip39.waiting", xous::LANG));
+                status.push_str(t!("bip39.waiting", locales::LANG));
             } else {
-                status.push_str(t!("bip39.invalid_phrase", xous::LANG));
+                status.push_str(t!("bip39.invalid_phrase", locales::LANG));
                 status.push_str("\n");
-                status.push_str(t!("bip39.abort_help", xous::LANG));
+                status.push_str(t!("bip39.abort_help", locales::LANG));
             }
         }
         let mut tv = TextView::new(
@@ -363,7 +363,7 @@ impl ActionApi for Bip39Entry {
                 {
                     let xns = xous_names::XousNames::new().unwrap();
                     let tts = tts_frontend::TtsFrontend::new(&xns).unwrap();
-                    tts.tts_blocking(locales::t!("input.delete-tts", xous::LANG)).unwrap();
+                    tts.tts_blocking(locales::t!("input.delete-tts", locales::LANG)).unwrap();
                 }
                 if self.user_input.len() > 0 { // don't backspace if we have no string.
                     self.user_input.pop();

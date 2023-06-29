@@ -449,7 +449,7 @@ fn wrapped_main() -> ! {
                     #[cfg(feature = "tts")]
                     {
                         if tt.elapsed_ms() - last_tick > TICK_INTERVAL {
-                            tts.tts_blocking(t!("progress.increment", xous::LANG))
+                            tts.tts_blocking(t!("progress.increment", locales::LANG))
                                 .unwrap();
                             last_tick = tt.elapsed_ms();
                         }
@@ -483,6 +483,8 @@ fn wrapped_main() -> ! {
                         log::debug!("initiating text entry modal");
                         #[cfg(feature = "tts")]
                         tts.tts_simple(config.prompt.as_str().unwrap()).unwrap();
+                        log::info!("setting growable to: {:?}", config.growable);
+                        renderer_modal.set_growable(config.growable);
                         renderer_modal.modify(
                             Some(ActionType::TextEntry({
                                 let mut ta = text_action.clone();
@@ -538,7 +540,7 @@ fn wrapped_main() -> ! {
                         }
 
                         let phrase = renderer_modal.gam.bytes_to_bip39(&config.bip39_data[..config.bip39_len as usize].to_vec())
-                        .unwrap_or(vec![t!("bip39.invalid_bytes", xous::LANG).to_string()]);
+                        .unwrap_or(vec![t!("bip39.invalid_bytes", locales::LANG).to_string()]);
                         #[cfg(feature = "hazardous-debug")]
                         log::info!("BIP-39 phrase: {:?}", phrase);
 
@@ -642,7 +644,7 @@ fn wrapped_main() -> ! {
                         fixed_items.clear();
                         #[cfg(feature = "tts")]
                         {
-                            tts.tts_blocking(t!("modals.radiobutton", xous::LANG))
+                            tts.tts_blocking(t!("modals.radiobutton", locales::LANG))
                                 .unwrap();
                             tts.tts_blocking(config.prompt.as_str().unwrap()).unwrap();
                         }
@@ -670,7 +672,7 @@ fn wrapped_main() -> ! {
                         fixed_items.clear();
                         #[cfg(feature = "tts")]
                         {
-                            tts.tts_blocking(t!("modals.checkbox", xous::LANG)).unwrap();
+                            tts.tts_blocking(t!("modals.checkbox", locales::LANG)).unwrap();
                             tts.tts_blocking(config.prompt.as_str().unwrap()).unwrap();
                         }
                         renderer_modal.modify(
@@ -815,6 +817,7 @@ fn wrapped_main() -> ! {
             },
             Some(Opcode::TextEntryReturn) => match op {
                 RendererState::RunText(_config) => {
+                    renderer_modal.set_growable(false); // reset the growable state, it's assumed to be default false
                     log::trace!("validating text entry modal");
                     let buf =
                         unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };

@@ -197,6 +197,7 @@ impl CheckedHashMap {
                         (*entry).current_conns += 1;
                         (Some(entry.sid), entry.token)
                     } else {
+                        log::warn!("Attempt to connect, but no connections available: {:?}", name.to_str());
                         (None, None)
                     }
                 }

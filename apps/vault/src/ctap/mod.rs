@@ -711,7 +711,7 @@ impl CtapState {
             if auth_param.is_empty() {
                 check_user_presence(env, channel, Some(
                     format!("{}\n{:x?}",
-                        t!("vault.fido.pin_uv_auth", xous::LANG),
+                        t!("vault.fido.pin_uv_auth", locales::LANG),
                         channel
                     )
                 ))?;
@@ -844,7 +844,7 @@ impl CtapState {
                     // without user interaction.
                     #[cfg(feature="xous")]
                     {
-                        let mut desc = String::from(t!("vault.fido.exclude_list", xous::LANG));
+                        let mut desc = String::from(t!("vault.fido.exclude_list", locales::LANG));
                         desc.push_str(
                             &format!("\n\nRelying Party: {}\nUser name: {}",
                                 if let Some(name) = rp.rp_name {name.to_string()} else {rp_id.to_string()},
@@ -862,7 +862,7 @@ impl CtapState {
 
         #[cfg(feature="xous")]
         {
-            let mut make_cred_desc = String::from(t!("vault.fido.make_credential", xous::LANG));
+            let mut make_cred_desc = String::from(t!("vault.fido.make_credential", locales::LANG));
             let alt_name = user.user_name.as_deref().unwrap_or("*Unspecified*");
             make_cred_desc.push_str(
                 &format!("\n\nRelying Party: {}\nUser name: {}",
@@ -1257,7 +1257,7 @@ impl CtapState {
         if options.up {
             #[cfg(feature="xous")]
             {
-                let mut desc = String::from(t!("vault.fido.get_assertion", xous::LANG));
+                let mut desc = String::from(t!("vault.fido.get_assertion", locales::LANG));
                 desc.push_str(
                     &format!("\n\nRelying Party: {}\nClient data hash: {}",
                         rp_id,
@@ -1397,7 +1397,7 @@ impl CtapState {
         {
             check_user_presence(env, channel, Some(
                 format!("{}\n{:x?}",
-                    t!("vault.u2f.factoryreset", xous::LANG),
+                    t!("vault.u2f.factoryreset", locales::LANG),
                     channel
                 )
             ))?;
@@ -1425,7 +1425,7 @@ impl CtapState {
         {
             check_user_presence(env, channel, Some(
                 format!("{}\n{:x?}",
-                    t!("vault.u2f.authenticator_selection", xous::LANG),
+                    t!("vault.u2f.authenticator_selection", locales::LANG),
                     channel
                 )
             ))?;
@@ -1446,7 +1446,7 @@ impl CtapState {
             {
                 check_user_presence(env, channel, Some(
                     format!("{}\n{:x?}",
-                        t!("vault.u2f.vendor_configure", xous::LANG),
+                        t!("vault.u2f.vendor_configure", locales::LANG),
                         channel
                     )
                 ))?;

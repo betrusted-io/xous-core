@@ -1,6 +1,6 @@
 [package]
 name = "xous"
-version = "0.9.42"
+version = "0.9.45"
 authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -15,12 +15,6 @@ compiler_builtins = { version = '0.1.0', optional = true }
 [features]
 v2p = []
 default = []
-
-# alternative language targets. Only one may be specified at a time
-lang-ja = []
-lang-zh = []
-lang-en-tts = []
-lang-fr = []
 
 # If this is set, then the "Drop" feature of MemoryMessage structs
 # will not be implemented.  This should only be set by the kernel.

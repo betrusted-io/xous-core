@@ -1,6 +1,6 @@
 [package]
 name = "svd2utra"
-version = "0.1.16"
+version = "0.1.18"
 authors = ["Sean Cross <sean@xobs.io>", "bunnie <bunnie@kosagi.com>"]
 description = "SVD to UTRA library generator"
 edition = "2018"
@@ -11,4 +11,3 @@ homepage = "https://betrusted.io/xous-book/"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 quick-xml = "0.28.1"
-convert_case = "0.4.0"

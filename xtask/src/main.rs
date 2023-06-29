@@ -475,7 +475,7 @@ Renode emulation:
  renode-aes-test         Renode image for AES emulation development. Extremely minimal.
 
 Other commands:
- generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
+ generate-locales        (re)generate the locales include for the language selected in locales/src/locale.rs
  wycheproof-import       generate binary test vectors for engine-25519 from whycheproof-import/x25519.json
  install-toolkit         installs Xous toolkit with no prompt, useful in CI. Specify `--force` to remove existing toolchains
 

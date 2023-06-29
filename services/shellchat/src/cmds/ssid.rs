@@ -37,13 +37,14 @@ impl<'a> ShellCmdApi<'a> for Ssid {
                 }
                 "scan" => {
                     // SSID scanning is automatically initiated by the connection manager, so we don't initiate it explicitly, just report results
-                    let ssid_list = env.netmgr.wifi_get_ssid_list().unwrap();
+                    let (ssid_list, state) = env.netmgr.wifi_get_ssid_list().unwrap();
                     write!(ret, "RSSI reported in dBm:\n").unwrap();
                     for ssid in ssid_list {
                         if ssid.name.len() > 0 {
                             write!(ret, "-{} {}\n", ssid.rssi, &ssid.name.as_str().unwrap_or("UTF-8 error")).unwrap();
                         }
                     }
+                    write!(ret, "Scan state: {:?}\n", state).unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();

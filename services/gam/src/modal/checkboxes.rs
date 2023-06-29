@@ -44,7 +44,7 @@ impl CheckBoxes {
 }
 impl ActionApi for CheckBoxes {
     fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}
-    fn height(&self, glyph_height: i16, margin: i16) -> i16 {
+    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
         // total items, then +1 for the "Okay" message
         (self.items.len() as i16 + 1) * glyph_height + margin * 2 + 5 // some slop needed because of the prompt character
     }
@@ -119,7 +119,7 @@ impl ActionApi for CheckBoxes {
             modal.gam.post_textview(&mut tv).expect("couldn't post tv");
             #[cfg(feature="tts")]
             {
-                self.tts.tts_blocking(t!("checkbox.select_and_close_tts", xous::LANG)).unwrap();
+                self.tts.tts_blocking(t!("checkbox.select_and_close_tts", locales::LANG)).unwrap();
                 for item in self.action_payload.payload().iter() {
                     if let Some(name) = item {
                         self.tts.tts_blocking(name.as_str()).unwrap();
@@ -133,7 +133,7 @@ impl ActionApi for CheckBoxes {
         tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
             Point::new(text_x, cur_y), Point::new(modal.canvas_width - modal.margin, cur_y + modal.line_height)
         ));
-        write!(tv, "{}", t!("radio.select_and_close", xous::LANG)).unwrap();
+        write!(tv, "{}", t!("radio.select_and_close", locales::LANG)).unwrap();
         modal.gam.post_textview(&mut tv).expect("couldn't post tv");
 
         // divider lines
@@ -166,7 +166,7 @@ impl ActionApi for CheckBoxes {
                         self.action_payload.remove(item_name);
                         #[cfg(feature="tts")]
                         {
-                            self.tts.tts_blocking(t!("checkbox.uncheck", xous::LANG)).unwrap();
+                            self.tts.tts_blocking(t!("checkbox.uncheck", locales::LANG)).unwrap();
                             self.tts.tts_blocking(item_name).unwrap();
                         }
                     } else {
@@ -176,7 +176,7 @@ impl ActionApi for CheckBoxes {
                         } else {
                             #[cfg(feature="tts")]
                             {
-                                self.tts.tts_blocking(t!("checkbox.check", xous::LANG)).unwrap();
+                                self.tts.tts_blocking(t!("checkbox.check", locales::LANG)).unwrap();
                                 self.tts.tts_blocking(item_name).unwrap();
                             }
                         }

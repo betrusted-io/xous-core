@@ -9,9 +9,11 @@ use crate::KEEPALIVE_DELAY_MS;
 use crate::env::Env;
 use core::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 use persistent_store::Store;
 use ctap_crypto::rng256::XousRng256;
+use xous::try_send_message;
 use xous_names::XousNames;
 use crate::env::xous::storage::XousUpgradeStorage;
 use usbd_human_interface_device::device::fido::*;
@@ -82,6 +84,14 @@ struct Ctap1Request {
 enum Ctap1Op {
     PollPermission,
     UpdateAppInfo,
+    ForceTimeout,
+    Invalid,
+}
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+enum Ctap1TimeoutOp {
+    Run,
+    Pump,
+    Stop,
     Invalid,
 }
 pub struct XousEnv {
@@ -93,12 +103,13 @@ pub struct XousEnv {
     modals: Modals,
     last_user_presence_request: Option::<Instant>,
     ctap1_cid: xous::CID,
+    lefty_mode: Arc<AtomicBool>,
 }
 
 impl XousEnv {
     /// Returns the unique instance of the Xous environment.
     /// Blocks until the PDDB is mounted
-    pub fn new(conn: xous::CID) -> Self {
+    pub fn new(conn: xous::CID, lefty_mode: Arc<AtomicBool>) -> Self {
         // We rely on `take_storage` to ensure that this function is called only once.
         let storage = XousStorage {};
         let store = Store::new(storage).ok().unwrap();
@@ -106,8 +117,68 @@ impl XousEnv {
         let ctap1_sid = xous::create_server().unwrap();
         let ctap1_cid = xous::connect(ctap1_sid).unwrap();
 
+        let ctap1_timeout_sid = xous::create_server().unwrap();
+        let ctap1_timeout_cid = xous::connect(ctap1_timeout_sid).unwrap();
+        std::thread::spawn({
+            const MARGIN_MS: u128 = 2000; // auto-clears the box 2 seconds after the timeout deadline.
+            // some margin is desired because this is basically a huge race condition.
+            move || {
+                let tt = ticktimer_server::Ticktimer::new().unwrap();
+                let mut msg_opt = None;
+                let mut _return_type = 0;
+                let ctap1_timeout_cid = ctap1_timeout_cid.clone();
+                let ctap1_cid = ctap1_cid.clone();
+                let mut start_time = Instant::now();
+                let mut run = false;
+                loop {
+                    xous::reply_and_receive_next_legacy(ctap1_timeout_sid, &mut msg_opt, &mut _return_type)
+                    .unwrap();
+                    let msg = msg_opt.as_mut().unwrap();
+                    log::debug!("msg: {:x?}", msg);
+                    match num_traits::FromPrimitive::from_usize(msg.body.id())
+                        .unwrap_or(Ctap1TimeoutOp::Invalid)
+                    {
+                        Ctap1TimeoutOp::Run => {
+                            if !run { // only kick off the loop on the first request to run
+                                start_time = Instant::now();
+                                try_send_message(ctap1_timeout_cid, xous::Message::new_scalar(
+                                    Ctap1TimeoutOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                            }
+                            run = true;
+                        },
+                        Ctap1TimeoutOp::Pump => {
+                            let elapsed = Instant::now().duration_since(start_time);
+                            if run {
+                                if elapsed.as_millis() > crate::ctap::U2F_UP_PROMPT_TIMEOUT.as_millis() + MARGIN_MS {
+                                    run = false;
+                                    // timed out, force the dialog box to close
+                                    try_send_message(ctap1_cid, xous::Message::new_scalar(
+                                        Ctap1Op::ForceTimeout.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                                    // no pump message, so the thread should stop running.
+                                } else {
+                                    // no timeout, keep pinging
+                                    tt.sleep_ms(1000).unwrap();
+                                    try_send_message(ctap1_timeout_cid, xous::Message::new_scalar(
+                                        Ctap1TimeoutOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                                }
+                            }
+                        },
+                        Ctap1TimeoutOp::Stop => {
+                            // this can come asynchronously from the ctap1 thread once the box is ack'd.
+                            run = false;
+                            // this will stop the pump from running, and the thread will block at waiting for incoming messages
+                        },
+                        Ctap1TimeoutOp::Invalid => {
+                            log::error!("invalid opcode received: {:?}", msg);
+                        }
+                    }
+                }
+            }
+        });
+
         std::thread::spawn({
             let main_cid = conn.clone();
+            let lefty_mode = lefty_mode.clone();
             move || {
                 let xns = xous_names::XousNames::new().unwrap();
                 let pddb = pddb::Pddb::new();
@@ -143,20 +214,31 @@ impl XousEnv {
                                 if *id != request.app_id {
                                     log::error!("Request ID changed while request is in progress. Ignoring request");
                                     buf.replace(request).ok();
+                                    xous::send_message(ctap1_timeout_cid, xous::Message::new_scalar(
+                                        Ctap1TimeoutOp::Stop.to_usize().unwrap(), 0, 0, 0, 0)).ok();
                                     modals.dynamic_notification_close().ok();
                                     current_id = None;
                                     continue;
                                 } else {
                                     let key = kbhit.load(Ordering::SeqCst);
-                                    if key != 0 && key != 0x11 { // approved
+                                    if key != 0 &&
+                                    ((!lefty_mode.load(Ordering::SeqCst) && (key != 0x11))
+                                    || (lefty_mode.load(Ordering::SeqCst) && (key != 0x14))
+                                    ) { // approved
                                         log::trace!("approved");
                                         request.approved = true;
                                         current_id = None;
+                                        xous::send_message(ctap1_timeout_cid, xous::Message::new_scalar(
+                                            Ctap1TimeoutOp::Stop.to_usize().unwrap(), 0, 0, 0, 0)).ok();
                                         modals.dynamic_notification_close().ok();
-                                    } else if key == 0x11 { // denied
+                                    } else if
+                                    (!lefty_mode.load(Ordering::SeqCst) && (key == 0x11))
+                                    || (lefty_mode.load(Ordering::SeqCst) && (key == 0x14)) { // denied
                                         log::trace!("denied");
                                         request.approved = false;
                                         denied_id = current_id.take();
+                                        xous::send_message(ctap1_timeout_cid, xous::Message::new_scalar(
+                                            Ctap1TimeoutOp::Stop.to_usize().unwrap(), 0, 0, 0, 0)).ok();
                                         modals.dynamic_notification_close().ok();
                                     } else {
                                         log::trace!("waiting");
@@ -171,10 +253,16 @@ impl XousEnv {
                                                 to_request_str.push_str(
                                                     &format!("\n\n⚠   {}{}   ⚠\n",
                                                     last_remaining,
-                                                    t!("vault.fido.countdown", xous::LANG)
+                                                    t!("vault.fido.countdown", locales::LANG)
                                                 ));
                                                 modals.dynamic_notification_update(
-                                                    Some(t!("vault.u2freq", xous::LANG)),
+                                                    Some(
+                                                        if lefty_mode.load(Ordering::SeqCst) {
+                                                            t!("vault.u2freq_lefty", locales::LANG)
+                                                        } else {
+                                                            t!("vault.u2freq", locales::LANG)
+                                                        }
+                                                    ),
                                                     Some(&to_request_str),
                                                 ).unwrap();
                                             }
@@ -184,6 +272,8 @@ impl XousEnv {
                                             current_id = None;
                                             denied_id = None;
                                             request.approved = false;
+                                            xous::send_message(ctap1_timeout_cid, xous::Message::new_scalar(
+                                                Ctap1TimeoutOp::Stop.to_usize().unwrap(), 0, 0, 0, 0)).ok();
                                             modals.dynamic_notification_close().ok();
                                         }
                                     }
@@ -242,20 +332,20 @@ impl XousEnv {
                                     request_str.clear();
                                     // we have some prior record of the app, human-format it
                                     request_str.push_str(&format!("\n{}{}",
-                                        t!("vault.u2f.appinfo.name", xous::LANG), info.name
+                                        t!("vault.u2f.appinfo.name", locales::LANG), info.name
                                     ));
                                     request_str.push_str(&format!("\n{}",
                                         crate::atime_to_str(info.atime)
                                     ));
                                     request_str.push_str(&format!("\n{}{}",
-                                        t!("vault.u2f.appinfo.authcount", xous::LANG),
+                                        t!("vault.u2f.appinfo.authcount", locales::LANG),
                                         info.count,
                                     ));
                                 } else {
                                     request_str.clear();
                                     // request approval of the new app ID
                                     request_str.push_str(&format!("\n{}\nApp ID: {:x?}",
-                                        t!("vault.u2f.appinfo.newapp", xous::LANG), request.app_id
+                                        t!("vault.u2f.appinfo.newapp", locales::LANG), request.app_id
                                     ));
                                 }
                                 let mut to_request_str = request_str.to_string();
@@ -265,11 +355,17 @@ impl XousEnv {
                                 to_request_str.push_str(
                                     &format!("\n\n⚠   {}{}   ⚠\n",
                                     last_remaining,
-                                    t!("vault.fido.countdown", xous::LANG)
+                                    t!("vault.fido.countdown", locales::LANG)
                                 ));
 
                                 modals.dynamic_notification(
-                                    Some(t!("vault.u2freq", xous::LANG)),
+                                    Some(
+                                        if lefty_mode.load(Ordering::SeqCst) {
+                                            t!("vault.u2freq_lefty", locales::LANG)
+                                        } else {
+                                            t!("vault.u2freq", locales::LANG)
+                                        }
+                                    ),
                                     Some(&to_request_str),
                                 ).unwrap();
                                 // start a keyboard listener
@@ -294,6 +390,10 @@ impl XousEnv {
                                     }
                                 });
                                 current_id = Some(request.app_id);
+                                // start the timeout watchdog, because if another token responds to the request,
+                                // we will be left hanging.
+                                xous::try_send_message(ctap1_timeout_cid, xous::Message::new_scalar(
+                                    Ctap1TimeoutOp::Run.to_usize().unwrap(), 0, 0, 0, 0)).ok();
                                 denied_id = None; // reset the denial timers, too
                                 request.approved = false;
                                 buf.replace(request).ok();
@@ -342,14 +442,14 @@ impl XousEnv {
                                     || {
                                         // otherwise, create it
                                     match modals
-                                        .alert_builder(t!("vault.u2f.give_app_name", xous::LANG))
+                                        .alert_builder(t!("vault.u2f.give_app_name", locales::LANG))
                                         .field(None, None)
                                         .build()
                                         {
                                             Ok(name) => {
                                                 let info = AppInfo {
                                                     name: name.content()[0].content.to_string(),
-                                                    notes: t!("vault.notes", xous::LANG).to_string(),
+                                                    notes: t!("vault.notes", locales::LANG).to_string(),
                                                     id: update.app_id,
                                                     ctime: crate::utc_now().timestamp() as u64,
                                                     atime: 0,
@@ -395,6 +495,12 @@ impl XousEnv {
                                     0, 0, 0, 0)
                             ).unwrap();
                         }
+                        Ctap1Op::ForceTimeout => {
+                            log::info!("polling timed out");
+                            current_id.take(); // clear out the ID token
+                            // close the dynamic notification box
+                            modals.dynamic_notification_close().ok();
+                        }
                         Ctap1Op::Invalid => {
                             log::error!("got invalid opcode: {}, ignoring", msg.body.id());
                         }
@@ -416,6 +522,7 @@ impl XousEnv {
             modals: modals::Modals::new(&xns).unwrap(),
             last_user_presence_request: None,
             ctap1_cid,
+            lefty_mode,
         }
     }
     /// Checks if the SoC is compatible with USB drivers (older versions of Precursor's FPGA don't have the USB device core)
@@ -487,7 +594,13 @@ impl UserPresence for XousEnv {
         let kbhit = Arc::new(AtomicU32::new(0));
         let expiration = Instant::now().checked_add(timeout).expect("duration bug");
         self.modals.dynamic_notification(
-            Some(t!("vault.u2freq", xous::LANG)),
+            Some(
+                if self.lefty_mode.load(Ordering::SeqCst) {
+                    t!("vault.u2freq_lefty", locales::LANG)
+                } else {
+                    t!("vault.u2freq", locales::LANG)
+                }
+            ),
             None,
         ).unwrap();
         // start the keyboard hit listener thread
@@ -521,10 +634,16 @@ impl UserPresence for XousEnv {
                 request_str.push_str(
                     &format!("\n\n⚠   {}{}   ⚠\n",
                     remaining,
-                    t!("vault.fido.countdown", xous::LANG)
+                    t!("vault.fido.countdown", locales::LANG)
                 ));
                 self.modals.dynamic_notification_update(
-                    Some(t!("vault.u2freq", xous::LANG)),
+                    Some(
+                        if self.lefty_mode.load(Ordering::SeqCst) {
+                            t!("vault.u2freq_lefty", locales::LANG)
+                        } else {
+                            t!("vault.u2freq", locales::LANG)
+                        }
+                    ),
                     Some(&request_str),
                 ).unwrap();
                 last_remaining = remaining;
@@ -536,10 +655,18 @@ impl UserPresence for XousEnv {
                 return Err(UserPresenceError::Timeout)
             }
             let key_hit = kbhit.load(Ordering::SeqCst);
-            if key_hit != 0 && key_hit != 0x11 { // 0x11 is the F1 key
+            if key_hit != 0
+            && ( // approve
+                (!self.lefty_mode.load(Ordering::SeqCst) && (key_hit != 0x11)) // 0x11 is the F1 key
+                || (self.lefty_mode.load(Ordering::SeqCst) && (key_hit != 0x14)) // 0x14 is the F4 key
+            )
+            {
                 self.modals.dynamic_notification_close().ok();
                 return Ok(())
-            } else if key_hit == 0x11 {
+            } else if // deny
+                (!self.lefty_mode.load(Ordering::SeqCst) && (key_hit == 0x11))
+                || (self.lefty_mode.load(Ordering::SeqCst) && (key_hit == 0x14))
+            {
                 self.modals.dynamic_notification_close().ok();
                 return Err(UserPresenceError::Declined)
             }

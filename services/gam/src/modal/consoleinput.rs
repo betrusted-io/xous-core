@@ -30,7 +30,7 @@ impl ConsoleInput {
 }
 impl ActionApi for ConsoleInput {
     fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}
-    fn height(&self, _glyph_height: i16, margin: i16) -> i16 {
+    fn height(&self, _glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
         margin
     }
     fn redraw(&self, _at_height: i16, _modal: &Modal) {

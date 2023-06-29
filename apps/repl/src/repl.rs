@@ -63,7 +63,7 @@ impl Repl{
         Repl {
             input: None,
             msg: None,
-            history: vec![History{text: String::from(t!("replapp.greeting", xous::LANG)), is_input: false}],
+            history: vec![History{text: String::from(t!("replapp.greeting", locales::LANG)), is_input: false}],
             history_len: 10,
             content,
             gam,

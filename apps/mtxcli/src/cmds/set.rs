@@ -23,13 +23,13 @@ impl<'a> ShellCmdApi<'a> for Set {
         if let Some(key) = tokens.next() {
             match key {
                 "" => {
-                    write!(ret, "{}", t!("mtxcli.set.help", xous::LANG)).unwrap();
+                    write!(ret, "{}", t!("mtxcli.set.help", locales::LANG)).unwrap();
                 }
                 _ => {
                     if let Some(value) = tokens.next() {
                         match value {
                             "" => {
-                                write!(ret, "{}", t!("mtxcli.set.help", xous::LANG)).unwrap();
+                                write!(ret, "{}", t!("mtxcli.set.help", locales::LANG)).unwrap();
                             }
                             _ => {
                                 match env.set(key, value) {
@@ -44,8 +44,8 @@ impl<'a> ShellCmdApi<'a> for Set {
                         }
                     } else {
                         // Instead of an error -- set to the empty string
-                        // write!(ret, "{}", t!("mtxcli.set.help", xous::LANG)).unwrap();
-                        // write!(ret, "{}", t!("mtxcli.set.help", xous::LANG)).unwrap();
+                        // write!(ret, "{}", t!("mtxcli.set.help", locales::LANG)).unwrap();
+                        // write!(ret, "{}", t!("mtxcli.set.help", locales::LANG)).unwrap();
                         match env.set(key, "") {
                             Ok(()) => {
                                 write!(ret, "set {} EMPTY", key).unwrap();

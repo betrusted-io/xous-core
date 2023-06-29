@@ -1,7 +1,10 @@
 
 #![allow(dead_code)]
 use core::convert::TryInto;
+#[cfg(feature="std")]
 use core::sync::atomic::AtomicPtr;
+#[cfg(feature="std")]
+use std::sync::Arc;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Register {
@@ -14,6 +17,8 @@ impl Register {
     pub const fn new(offset: usize, mask: usize) -> Register {
         Register { offset, mask }
     }
+    pub const fn offset(&self) -> usize { self.offset }
+    pub const fn mask(&self) -> usize { self.mask }
 }
 #[derive(Debug, Copy, Clone)]
 pub struct Field {
@@ -31,56 +36,19 @@ impl Field {
     /// Define a new CSR field with the given width at a specified
     /// offset from the start of the register.
     pub const fn new(width: usize, offset: usize, register: Register) -> Field {
-        // Asserts don't work in const fn yet.
-        // assert!(width != 0, "field width cannot be 0");
-        // assert!((width + offset) < 32, "field with and offset must fit within a 32-bit value");
-        // It would be lovely if we could call `usize::pow()` in a const fn.
-        let mask = match width {
-            0 => 0,
-            1 => 1,
-            2 => 3,
-            3 => 7,
-            4 => 15,
-            5 => 31,
-            6 => 63,
-            7 => 127,
-            8 => 255,
-            9 => 511,
-            10 => 1023,
-            11 => 2047,
-            12 => 4095,
-            13 => 8191,
-            14 => 16383,
-            15 => 32767,
-            16 => 65535,
-            17 => 131071,
-            18 => 262143,
-            19 => 524287,
-            20 => 1048575,
-            21 => 2097151,
-            22 => 4194303,
-            23 => 8388607,
-            24 => 16777215,
-            25 => 33554431,
-            26 => 67108863,
-            27 => 134217727,
-            28 => 268435455,
-            29 => 536870911,
-            30 => 1073741823,
-            31 => 2147483647,
-            32 => 4294967295,
-            _ => 0,
-        };
+        let mask = if width < 32 { (1 << width) - 1 } else {0xFFFF_FFFF};
         Field {
             mask,
             offset,
             register,
         }
     }
+    pub const fn offset(&self) -> usize { self.offset }
+    pub const fn mask(&self) -> usize { self.mask }
 }
 #[derive(Debug, Copy, Clone)]
 pub struct CSR<T> {
-    pub base: *mut T,
+    base: *mut T,
 }
 impl<T> CSR<T>
 where
@@ -88,6 +56,13 @@ where
 {
     pub fn new(base: *mut T) -> Self {
         CSR { base }
+    }
+    /// Retrieve the raw pointer used as the base of the CSR. This is unsafe because the copied
+    /// value can be used to do all kinds of awful shared mutable operations (like creating
+    /// another CSR accessor owned by another thread). However, sometimes this is unavoidable
+    /// because hardware is in fact shared mutable state.
+    pub unsafe fn base(&self) -> *mut T {
+        self.base
     }
     /// Read the contents of this register
     pub fn r(&self, reg: Register) -> T {
@@ -165,27 +140,28 @@ where
 }
 
 #[derive(Debug)]
+#[cfg(feature="std")]
 pub struct AtomicCsr<T> {
-    pub base: AtomicPtr<T>,
+    base: Arc::<AtomicPtr<T>>,
 }
+#[cfg(feature="std")]
 impl<T> AtomicCsr<T>
 where
     T: core::convert::TryFrom<usize> + core::convert::TryInto<usize> + core::default::Default,
 {
+    /// AtomicCsr wraps the CSR in an Arc + AtomicPtr, so that write operations don't require
+    /// a mutable reference. This allows us to stick CSR accesses into APIs that require
+    /// non-mutable references to hardware state (such as certain "standardized" USB APIs).
+    /// Hiding the fact that you're tweaking hardware registers behind Arc/AtomicPtr seems a little
+    /// scary, but, it does make for nicer Rust semantics.
     pub fn new(base: *mut T) -> Self {
         AtomicCsr {
-            base: AtomicPtr::new(base)
+            base: Arc::new(AtomicPtr::new(base))
         }
     }
-    /// In reality, we should wrap this in an `Arc` so we can be truly safe across a multi-core
-    /// implementation, but for our single-core system this is fine. The reason we don't do it
-    /// immediately is that UTRA also needs to work in a `no_std` environment, where `Arc`
-    /// does not exist, and so additional config flags would need to be introduced to not break
-    /// that compability issue. If migrating to multicore, this technical debt would have to be
-    /// addressed.
     pub fn clone(&self) -> Self {
         AtomicCsr {
-            base: AtomicPtr::new(self.base.load(core::sync::atomic::Ordering::SeqCst))
+            base: self.base.clone()
         }
     }
     /// Read the contents of this register

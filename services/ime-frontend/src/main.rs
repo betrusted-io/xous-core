@@ -359,7 +359,7 @@ impl InputTracker {
                     }
                     '\u{0008}' => { // backspace
                         #[cfg(feature="tts")]
-                        self.tts.tts_simple(t!("input.delete-tts", xous::LANG)).unwrap();
+                        self.tts.tts_simple(t!("input.delete-tts", locales::LANG)).unwrap();
                         if (self.characters > 0) && (self.insertion == self.characters) {
                             if debug1{info!("simple backspace case")}
                             self.line.pop();
@@ -625,7 +625,7 @@ impl InputTracker {
                 empty_tv.draw_border = false;
                 empty_tv.border_width = 1;
                 empty_tv.clear_area = true;
-                write!(empty_tv.text, "{}", t!("input.greeting", xous::LANG)).expect("couldn't set up empty TextView");
+                write!(empty_tv.text, "{}", t!("input.greeting", locales::LANG)).expect("couldn't set up empty TextView");
                 if debug_canvas { info!("pc canvas {:?}", pc) }
                 self.gam.post_textview(&mut empty_tv).expect("can't draw prediction TextView");
             } else if update_predictor || force_redraw {
