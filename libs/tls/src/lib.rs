@@ -11,6 +11,7 @@ use rkyv::{
     Deserialize,
 };
 use rustls::{Certificate, RootCertStore};
+use sha2::Digest;
 use std::convert::{Into, TryFrom};
 use std::io::{Error, ErrorKind, Read, Write};
 use x509_parser::prelude::{oid_registry, FromDer, X509Certificate};
@@ -38,25 +39,24 @@ impl Tls {
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
 
-        let certificates: Vec<X509Certificate> = certificates
+        let certificates: Vec<(String, X509Certificate)> = certificates
             .iter()
-            .map(|cert| X509Certificate::from_der(cert.as_ref()))
-            .filter(|result| result.is_ok())
-            .map(|result| result.unwrap().1)
-            .filter(|x509| x509.is_ca())
+            .map(|cert| {
+                let mut hasher = sha2::Sha256::new();
+                hasher.update(&cert);
+                (
+                    format!("{:X}", hasher.finalize()),
+                    X509Certificate::from_der(cert.as_ref()),
+                )
+            })
+            .filter(|(_fingerprint, result)| result.is_ok())
+            .map(|(fingerprint, result)| (fingerprint, result.unwrap().1))
+            .filter(|(_fingerprint, x509)| x509.is_ca())
             .collect();
 
         let chain: Vec<String> = certificates
             .iter()
-            .map(|x509| {
-                let subject = x509.subject();
-                format!(
-                    "{}{}\n{}",
-                    if x509.is_ca() { "🏛 " } else { "" },
-                    &subject,
-                    "sha256 fingerprint here",
-                )
-            })
+            .map(|(fingerprint, x509)| format!("🏛 {}\n{}", &x509.subject(), open_hex(fingerprint),))
             .collect();
         let chain: Vec<&str> = chain.iter().map(AsRef::as_ref).collect();
         modals
@@ -71,7 +71,7 @@ impl Tls {
                     .get_check_index()
                     .unwrap()
                     .iter()
-                    .map(|i| &certificates[*i])
+                    .map(|i| &certificates[*i].1)
                     .map(|x509| {
                         let subject = &x509
                             .subject()
@@ -259,6 +259,22 @@ impl Tls {
     }
 }
 
+// https://stackoverflow.com/questions/57029974/how-to-split-string-into-chunks-in-rust-to-insert-spaces
+// insert a space between each hex value
+fn open_hex(text: &str) -> String {
+    text.chars()
+        .enumerate()
+        .flat_map(|(i, c)| {
+            if i != 0 && i % 2 == 0 {
+                Some(' ')
+            } else {
+                None
+            }
+            .into_iter()
+            .chain(std::iter::once(c))
+        })
+        .collect::<String>()
+}
 
 
 
