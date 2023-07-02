@@ -2,9 +2,14 @@
 
 use der::{Encode, Header, Reader, Tag};
 use rkyv::{Archive, Deserialize, Serialize};
+use sha2::Digest;
+
 use std::convert::TryInto;
+use std::fmt;
 use std::io::{Error, ErrorKind};
 use x509_parser::prelude::{FromDer, X509Certificate};
+
+pub const MAX_ROTA_BYTES: usize = 1028;
 
 /// A close mirror of rustls::OwnedTrustAnchor - but with extras
 /// Note that the subject, spki & name_constraints fields are
@@ -40,7 +45,7 @@ impl RustlsOwnedTrustAnchor {
                 }
             },
             Err(e) => {
-                log::warn!("{:?}", e);
+                log::warn!("{:?}", e.into_inner().unwrap());
                 "der decode failed".to_string()
             }
         }

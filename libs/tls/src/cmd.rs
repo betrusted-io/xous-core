@@ -1,9 +1,10 @@
-use crate::{check_trust, danger, del_all_cert, trusted::Trusted};
+use crate::{danger, Tls};
 use locales::t;
 use std::convert::TryInto;
 use std::io::Read;
 use std::io::Write;
 use std::net::TcpStream;
+use std::str::from_utf8;
 use std::sync::Arc;
 
 pub fn shellchat<'a>(
@@ -15,8 +16,9 @@ pub fn shellchat<'a>(
         // delete ALL trusted CA Certificates
         Some("delete") => {
             log::info!("starting TLS delete certificates");
-            let count = del_all_cert().unwrap();
-            write!(ret, "delete {count} certificates").ok();
+            let tls = Tls::new();
+            let count = tls.del_all_cert().unwrap();
+            write!(ret, "deleted {count} certificates").ok();
             log::info!("finished TLS delete certificates");
         }
         Some("help") => {
@@ -26,20 +28,26 @@ pub fn shellchat<'a>(
         // save/trust all Root CA's in webpki-roots en-masse
         #[cfg(feature = "rootCA")]
         Some("mozilla") => {
-            let rotas: Vec<crate::RustlsOwnedTrustAnchor> = webpki_roots::TLS_SERVER_ROOTS
-                .0
-                .iter()
-                .map(|ta| {
-                    crate::RustlsOwnedTrustAnchor::from_subject_spki_name_constraints(
-                        ta.subject,
-                        ta.spki,
-                        ta.name_constraints,
-                    )
-                })
-                .collect();
+            let rotas: Vec<(String, crate::RustlsOwnedTrustAnchor)> =
+                webpki_roots::TLS_SERVER_ROOTS
+                    .0
+                    .iter()
+                    .map(|ta| {
+                        let rota =
+                            crate::RustlsOwnedTrustAnchor::from_subject_spki_name_constraints(
+                                ta.subject,
+                                ta.spki,
+                                ta.name_constraints,
+                            );
+                        let key = rota.subject();
+                        (key, rota)
+                    })
+                    .collect();
             let mut count = 0;
-            for rota in rotas {
-                crate::save_cert(format!("webpki-root-{count}").as_str(), &rota).unwrap();
+            let tls = Tls::new();
+            for (key, rota) in rotas {
+                tls.save_cert(&key, &rota)
+                    .unwrap_or_else(|e| log::warn!("{e}"));
                 count += 1;
             }
             write!(ret, "trusted {count} certificates").ok();
@@ -86,7 +94,8 @@ pub fn shellchat<'a>(
 
                     match conn.peer_certificates() {
                         Some(certificates) => {
-                            let count = check_trust(certificates);
+                            let tls = Tls::new();
+                            let count = tls.check_trust(certificates);
                             write!(ret, "trusted {count} certificates").ok();
                         }
                         None => (),
@@ -105,10 +114,10 @@ pub fn shellchat<'a>(
             log::set_max_level(log::LevelFilter::Info);
             log::info!("starting TLS run");
             log::info!("build TLS client config");
-            let trusted = Trusted::new().unwrap();
+            let tls = Tls::new();
             let config = rustls::ClientConfig::builder()
                 .with_safe_defaults()
-                .with_root_certificates(trusted.into())
+                .with_root_certificates(tls.root_store())
                 .with_no_client_auth();
             let target = match tokens.next() {
                 Some(target) => target,
@@ -167,8 +176,8 @@ pub fn shellchat<'a>(
         Some("trusted") => {
             log::set_max_level(log::LevelFilter::Info);
             log::info!("starting TLS trusted listing");
-            let trusted = Trusted::new().expect("failed to initiate trusted iterator");
-            for rota in trusted {
+            let tls = Tls::new();
+            for rota in tls.trusted() {
                 write!(ret, "🏛 {}\n", rota.subject()).ok();
             }
             log::info!("finished TLS trusted listing");
