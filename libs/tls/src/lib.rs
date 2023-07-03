@@ -134,8 +134,6 @@ impl Tls {
 
     // saves a tls trust-anchor to the pddb
     pub fn save_cert(&self, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
-        //         let xns = XousNames::new().unwrap();
-        // let modals = Modals::new(&xns).unwrap();
         let key = ta.pddb_key();
         match self.pddb.get(
             TLS_TRUSTED_DICT,
@@ -163,7 +161,6 @@ impl Tls {
                 let pos_bytes = pos.to_be_bytes();
                 bytes[0] = pos_bytes[0];
                 bytes[1] = pos_bytes[1];
-
                 match pddb_key.write(&bytes) {
                     Ok(len) => {
                         self.pddb.sync().ok();

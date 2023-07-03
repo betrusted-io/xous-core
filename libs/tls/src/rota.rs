@@ -50,6 +50,26 @@ impl RustlsOwnedTrustAnchor {
         }
     }
 
+    // decoded public key
+    // see https://docs.rs/x509-parser/0.15.0/src/x509_parser/x509.rs.html#260-274
+    #[allow(unreachable_code)]
+    pub fn public_key(&self) -> Result<Vec<u8>, Error> {
+        todo!(); // fails decode
+        match add_der_header(Tag::Sequence, &self.spki) {
+            Ok(der) => match x509_parser::x509::SubjectPublicKeyInfo::from_der(&der) {
+                Ok((_, spki)) => Ok(spki.subject_public_key.data.to_vec()),
+                Err(e) => {
+                    log::warn!("{:?}", e);
+                    Err(Error::new(ErrorKind::InvalidData, "failed spki der decode"))
+                }
+            },
+            Err(e) => {
+                log::warn!("{:?}", e.into_inner().unwrap());
+                Err(Error::new(ErrorKind::InvalidData, "failed spki der header"))
+            }
+        }
+    }
+
     pub fn pddb_key(&self) -> String {
         let subject = &self.subject();
         let begin = match subject.find("CN=") {
