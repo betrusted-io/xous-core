@@ -28,26 +28,21 @@ pub fn shellchat<'a>(
         // save/trust all Root CA's in webpki-roots en-masse
         #[cfg(feature = "rootCA")]
         Some("mozilla") => {
-            let rotas: Vec<(String, crate::RustlsOwnedTrustAnchor)> =
-                webpki_roots::TLS_SERVER_ROOTS
-                    .0
-                    .iter()
-                    .map(|ta| {
-                        let rota =
-                            crate::RustlsOwnedTrustAnchor::from_subject_spki_name_constraints(
-                                ta.subject,
-                                ta.spki,
-                                ta.name_constraints,
-                            );
-                        let key = rota.subject();
-                        (key, rota)
-                    })
-                    .collect();
+            let rotas: Vec<crate::RustlsOwnedTrustAnchor> = webpki_roots::TLS_SERVER_ROOTS
+                .0
+                .iter()
+                .map(|ta| {
+                    crate::RustlsOwnedTrustAnchor::from_subject_spki_name_constraints(
+                        ta.subject,
+                        ta.spki,
+                        ta.name_constraints,
+                    )
+                })
+                .collect();
             let mut count = 0;
             let tls = Tls::new();
-            for (key, rota) in rotas {
-                tls.save_cert(&key, &rota)
-                    .unwrap_or_else(|e| log::warn!("{e}"));
+            for rota in rotas {
+                tls.save_cert(&rota).unwrap_or_else(|e| log::warn!("{e}"));
                 count += 1;
             }
             write!(ret, "trusted {count} certificates").ok();

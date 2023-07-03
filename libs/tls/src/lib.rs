@@ -13,8 +13,8 @@ use rkyv::{
 use rustls::{Certificate, RootCertStore};
 use sha2::Digest;
 use std::convert::{Into, TryFrom};
-use std::io::{Error, ErrorKind, Read, Write};
-use x509_parser::prelude::{oid_registry, FromDer, X509Certificate};
+use std::io::{Error, Read, Write};
+use x509_parser::prelude::{FromDer, X509Certificate};
 use xous_names::XousNames;
 
 /// PDDB Dict for tls trusted certificates keys
@@ -72,19 +72,13 @@ impl Tls {
                     .unwrap()
                     .iter()
                     .map(|i| &certificates[*i].1)
-                    .map(|x509| {
-                        let subject = &x509
-                            .subject()
-                            .to_string_with_registry(oid_registry())
-                            .unwrap();
-                        (subject.to_owned(), RustlsOwnedTrustAnchor::from(x509))
-                    })
-                    .for_each(|(key, val)| {
-                        self.save_cert(&key, &val).unwrap_or_else(|e| {
+                    .map(|x509| RustlsOwnedTrustAnchor::from(x509))
+                    .for_each(|rota| {
+                        self.save_cert(&rota).unwrap_or_else(|e| {
                             log::warn!("failed to save cert: {e}");
                             modals
                                 .show_notification(
-                                    format!("failed to save:\n{}\n{e}", &val.subject()).as_str(),
+                                    format!("failed to save:\n{}\n{e}", &rota.subject()).as_str(),
                                     None,
                                 )
                                 .expect("modal failed");
@@ -139,53 +133,49 @@ impl Tls {
     }
 
     // saves a tls trust-anchor to the pddb
-    pub fn save_cert(&self, key: &str, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
-        if key.starts_with("__") {
-            Err(Error::new(
-                ErrorKind::PermissionDenied,
-                "may not set a variable beginning with __ ",
-            ))
-        } else {
-            match self.pddb.get(
-                TLS_TRUSTED_DICT,
-                key,
-                None,
-                true,
-                true,
-                Some(rota::MAX_ROTA_BYTES),
-                None::<fn()>,
-            ) {
-                Ok(mut pddb_key) => {
-                    let mut buf = Vec::<u8>::new();
-                    // reserve 2 bytes to hold a u16 (see below)
-                    buf.push(0u8);
-                    buf.push(0u8);
+    pub fn save_cert(&self, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
+        //         let xns = XousNames::new().unwrap();
+        // let modals = Modals::new(&xns).unwrap();
+        let key = ta.pddb_key();
+        match self.pddb.get(
+            TLS_TRUSTED_DICT,
+            &key,
+            None,
+            true,
+            true,
+            Some(rota::MAX_ROTA_BYTES),
+            None::<fn()>,
+        ) {
+            Ok(mut pddb_key) => {
+                let mut buf = Vec::<u8>::new();
+                // reserve 2 bytes to hold a u16 (see below)
+                buf.push(0u8);
+                buf.push(0u8);
 
-                    // serialize the trust-anchor
-                    let mut serializer = WriteSerializer::new(buf);
-                    let pos = serializer.serialize_value(ta).unwrap();
-                    let mut bytes = serializer.into_inner();
+                // serialize the trust-anchor
+                let mut serializer = WriteSerializer::new(buf);
+                let pos = serializer.serialize_value(ta).unwrap();
+                let mut bytes = serializer.into_inner();
 
-                    // copy pop u16 into the first 2 bytes to enable the rkyv archive to be deserialised
-                    let pos:u16 = u16::try_from(pos).expect("data > u16");
-                    let pos_bytes = pos.to_be_bytes();
-                    bytes[0] = pos_bytes[0];
-                    bytes[1] = pos_bytes[1];
+                // copy pop u16 into the first 2 bytes to enable the rkyv archive to be deserialised
+                let pos: u16 = u16::try_from(pos).expect("data > u16");
+                let pos_bytes = pos.to_be_bytes();
+                bytes[0] = pos_bytes[0];
+                bytes[1] = pos_bytes[1];
 
-                    match pddb_key.write(&bytes) {
-                        Ok(len) => {
-                            self.pddb.sync().ok();
-                            log::info!("Wrote {} bytes to {}:{}", len, TLS_TRUSTED_DICT, key);
-                        }
-                        Err(e) => {
-                            log::warn!("Error writing {}:{}: {:?}", TLS_TRUSTED_DICT, key, e);
-                        }
+                match pddb_key.write(&bytes) {
+                    Ok(len) => {
+                        self.pddb.sync().ok();
+                        log::info!("Wrote {} bytes to {}:{}", len, TLS_TRUSTED_DICT, key);
+                    }
+                    Err(e) => {
+                        log::warn!("Error writing {}:{}: {:?}", TLS_TRUSTED_DICT, key, e);
                     }
                 }
-                _ => log::warn!("failed to create {}:{}", TLS_TRUSTED_DICT, key),
             }
-            Ok(())
+            Err(e) => log::warn!("failed to create {}:{}\n{}", TLS_TRUSTED_DICT, key, e),
         }
+        Ok(())
     }
 
 

@@ -2,8 +2,7 @@
 
 use der::{Encode, Header, Reader, Tag};
 use rkyv::{Archive, Deserialize, Serialize};
-use sha2::Digest;
-
+use std::cmp::min;
 use std::convert::TryInto;
 use std::fmt;
 use std::io::{Error, ErrorKind};
@@ -49,6 +48,40 @@ impl RustlsOwnedTrustAnchor {
                 "der decode failed".to_string()
             }
         }
+    }
+
+    pub fn pddb_key(&self) -> String {
+        let subject = &self.subject();
+        let begin = match subject.find("CN=") {
+            Some(begin) => Some(begin),
+            None => subject.find("OU="),
+        };
+
+        let mut pddb_key = match begin {
+            Some(mut begin) => {
+                begin += 3;
+                let end = match subject[begin..].find(",") {
+                    Some(e) => begin + e,
+                    None => subject.len(),
+                };
+                &subject[begin..end]
+            }
+            None => {
+                log::warn!("Subject missing CN= & OU= :{}", &subject);
+                &subject
+            }
+        }
+        .to_string();
+
+        // grab a few arbitrary bytes from spki so pddb_key is deterministic & unique
+        let k = &self.spki;
+        pddb_key.push_str(&format!(" {:X}{:X}{:X}{:X}", k[6], k[7], k[8], k[9]));
+
+        // mirror of pddb::KEY_NAME_LEN
+        // u64: vaddr/len/resvd, u32: flags, age = 95
+        // would this be better as a pddb pub?
+        const KEY_NAME_LEN: usize = 127 - 8 - 8 - 8 - 4 - 4;
+        pddb_key[..min(pddb_key.len(), KEY_NAME_LEN - 1)].to_string()
     }
 }
 
