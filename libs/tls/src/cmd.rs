@@ -21,10 +21,10 @@ pub fn shellchat<'a>(
             write!(ret, "deleted {count} certificates").ok();
             log::info!("finished TLS delete certificates");
         }
+        // helpful stuff
         Some("help") => {
-                write!(ret, "{}", t!("tls.cmd_help", locales::LANG)).ok();
-                ()
-            }
+            write!(ret, "{}", t!("tls.cmd_help", locales::LANG)).ok();
+        }
         // save/trust all Root CA's in webpki-roots en-masse
         #[cfg(feature = "rootCA")]
         Some("mozilla") => {
@@ -70,7 +70,12 @@ pub fn shellchat<'a>(
             };
             let server_name = target.try_into().unwrap_or_else(|e| {
                 log::warn!("failed to create sever_name from {target}: {e}");
-                write!(ret, "{} {target}", t!("tls.probe_fail_servername", locales::LANG)).ok();
+                write!(
+                    ret,
+                    "{} {target}",
+                    t!("tls.probe_fail_servername", locales::LANG)
+                )
+                .ok();
                 "bunnyfoo.com".try_into().unwrap()
             });
             let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
@@ -141,11 +146,14 @@ pub fn shellchat<'a>(
                             match tls.read_to_end(&mut plaintext) {
                                 Ok(n) => {
                                     log::info!("tls received {} bytes", n);
-                                    write!(ret, "{} {}\n", t!("tls.test_success_bytes", locales::LANG), n).ok();
-                                    log::info!(
-                                        "{}",
-                                        std::str::from_utf8(&plaintext).unwrap_or("utf-error")
-                                    );
+                                    write!(
+                                        ret,
+                                        "{} {}\n",
+                                        t!("tls.test_success_bytes", locales::LANG),
+                                        n
+                                    )
+                                    .ok();
+                                    log::info!("{}", from_utf8(&plaintext).unwrap_or("utf-error"));
                                 }
                                 Err(e) => {
                                     log::warn!("failed to read tls response: {e}");
@@ -183,8 +191,18 @@ pub fn shellchat<'a>(
             write!(ret, "\thelp\n").ok();
             #[cfg(feature = "rootCA")]
             write!(ret, "\tmozilla\t{}\n", t!("tls.mozilla_cmd", locales::LANG)).ok();
-            write!(ret, "\tprobe <host>\t{}\n", t!("tls.probe_cmd", locales::LANG)).ok();
-            write!(ret, "\ttest <host>\t{}\n", t!("tls.test_cmd", locales::LANG)).ok();
+            write!(
+                ret,
+                "\tprobe <host>\t{}\n",
+                t!("tls.probe_cmd", locales::LANG)
+            )
+            .ok();
+            write!(
+                ret,
+                "\ttest <host>\t{}\n",
+                t!("tls.test_cmd", locales::LANG)
+            )
+            .ok();
             write!(ret, "\ttrusted\t{}\n", t!("tls.trusted_cmd", locales::LANG)).ok();
         }
     }

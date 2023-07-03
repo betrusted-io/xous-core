@@ -119,13 +119,13 @@ impl<'a> From<&X509Certificate<'a>> for RustlsOwnedTrustAnchor {
 }
 
 /// Add a DER header to a DER encoded [u8]
-fn add_der_header(tag: Tag, chook: &Vec<u8>) -> Result<Vec<u8>, Error> {
-    match Header::new(tag, chook.len()) {
+fn add_der_header(tag: Tag, naked: &Vec<u8>) -> Result<Vec<u8>, Error> {
+    match Header::new(tag, naked.len()) {
         Ok(header) => {
             let mut buff: [u8; 32] = [0u8; 32];
             match header.encode_to_slice(&mut buff) {
                 Ok(der) => {
-                    let der = [der, chook].concat();
+                    let der = [der, naked].concat();
                     match x509_parser::x509::X509Name::from_der(&der) {
                         Ok((_, decoded)) => Ok(decoded.as_raw().to_vec()),
                         Err(_) => Err(Error::new(ErrorKind::InvalidData, "der parse failed: from")),

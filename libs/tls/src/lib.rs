@@ -265,14 +265,3 @@ fn open_hex(text: &str) -> String {
         })
         .collect::<String>()
 }
-
-
-
-
-
-
-
-
-
-
-
