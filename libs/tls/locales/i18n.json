@@ -19,6 +19,10 @@
         "en": "deleted Certificates",
         "en-tts": "deleted Certificates"
     },
+    "tls.list_cmd": {
+        "en": "list trusted CA certificates",
+        "en-tts": "list trusted CA certificates"
+    },
     "tls.mozilla_cmd": {
         "en": "trust all Root CA's in webpki-roots",
         "en-tts": "trust all Root CA's in webpki-roots"
@@ -54,9 +58,5 @@
     "tls.test_success_bytes": {
         "en": "tls received bytes",
         "en-tts": "tls received bytes"
-    },
-    "tls.trusted_cmd": {
-        "en": "list trusted CA certificates",
-        "en-tts": "list trusted CA certificates"
     }
 }

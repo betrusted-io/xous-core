@@ -27,6 +27,16 @@ pub fn shellchat<'a>(
         Some("help") => {
             write!(ret, "{}", t!("tls.cmd_help", locales::LANG)).ok();
         }
+        // list trusted Certificate Authority certificates
+        Some("list") => {
+            log::set_max_level(log::LevelFilter::Info);
+            log::info!("starting TLS trusted listing");
+            let tls = Tls::new();
+            for rota in tls.trusted() {
+                write!(ret, "🏛 {}\n", rota.subject()).ok();
+            }
+            log::info!("finished TLS trusted listing");
+        }
         // save/trust all Root CA's in webpki-roots en-masse
         #[cfg(feature = "rootCA")]
         Some("mozilla") => {
@@ -185,20 +195,11 @@ pub fn shellchat<'a>(
 
             log::set_max_level(log::LevelFilter::Info);
         }
-        // list trusted Certificate Authority certificates
-        Some("trusted") => {
-            log::set_max_level(log::LevelFilter::Info);
-            log::info!("starting TLS trusted listing");
-            let tls = Tls::new();
-            for rota in tls.trusted() {
-                write!(ret, "🏛 {}\n", rota.subject()).ok();
-            }
-            log::info!("finished TLS trusted listing");
-        }
         None | _ => {
             write!(ret, "{}\n", t!("tls.cmd", locales::LANG)).ok();
             write!(ret, "\tdeleteall\t{}\n", t!("tls.deleteall_cmd", locales::LANG)).ok();
             write!(ret, "\thelp\n").ok();
+            write!(ret, "\tlist\t{}\n", t!("tls.list_cmd", locales::LANG)).ok();
             #[cfg(feature = "rootCA")]
             write!(ret, "\tmozilla\t{}\n", t!("tls.mozilla_cmd", locales::LANG)).ok();
             write!(
@@ -213,7 +214,6 @@ pub fn shellchat<'a>(
                 t!("tls.test_cmd", locales::LANG)
             )
             .ok();
-            write!(ret, "\ttrusted\t{}\n", t!("tls.trusted_cmd", locales::LANG)).ok();
         }
     }
     Ok(Some(ret))
