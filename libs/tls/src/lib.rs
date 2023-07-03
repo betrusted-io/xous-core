@@ -149,11 +149,12 @@ impl Tls {
             Ok(mut pddb_key) => {
                 let mut buf = Vec::<u8>::new();
                 // reserve 2 bytes to hold a u16 (see below)
+                let reserved = 2;
                 buf.push(0u8);
                 buf.push(0u8);
 
                 // serialize the trust-anchor
-                let mut serializer = WriteSerializer::new(buf);
+                let mut serializer = WriteSerializer::with_pos(buf, reserved);
                 let pos = serializer.serialize_value(ta).unwrap();
                 let mut bytes = serializer.into_inner();
 
@@ -199,7 +200,7 @@ impl Tls {
                         let pos: usize = pos.into();
                         // deserialize the trust-anchor
                         let archive = unsafe {
-                            rkyv::archived_value::<RustlsOwnedTrustAnchor>(&bytes[2..2+pos], pos)
+                            rkyv::archived_value::<RustlsOwnedTrustAnchor>(&bytes, pos)
                         };
                         let ta = archive.deserialize(&mut AllocDeserializer {}).ok();
                         log::info!("get '{}' = '{:?}'", key, &ta);
