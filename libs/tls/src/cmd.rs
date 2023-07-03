@@ -1,11 +1,13 @@
 use crate::{danger, Tls};
 use locales::t;
+use modals::Modals;
 use std::convert::TryInto;
 use std::io::Read;
 use std::io::Write;
 use std::net::TcpStream;
 use std::str::from_utf8;
 use std::sync::Arc;
+use xous_names::XousNames;
 
 pub fn shellchat<'a>(
     mut tokens: impl Iterator<Item = &'a str>,
@@ -39,13 +41,21 @@ pub fn shellchat<'a>(
                     )
                 })
                 .collect();
-            let mut count = 0;
+            let mut count:u32 = rotas.len().try_into().unwrap();
+            let xns = XousNames::new().unwrap();
+            let modals = Modals::new(&xns).unwrap();
+            modals
+                .start_progress(t!("tls.mozilla_progress", locales::LANG), 0, count, 0)
+                .expect("no progress");
+            count = 0;
             let tls = Tls::new();
             for rota in rotas {
                 tls.save_cert(&rota).unwrap_or_else(|e| log::warn!("{e}"));
+                modals.update_progress(count).expect("no progress");
                 count += 1;
             }
-            write!(ret, "trusted {count} certificates").ok();
+            modals.finish_progress().expect("finish progress");
+            write!(ret, "{} {}", count, t!("tls.mozilla_done", locales::LANG)).ok();
         }
         // probe establishes a tls connection to the supplied host, extracts the
         // certificates offered and immediately closes the connection.

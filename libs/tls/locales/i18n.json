@@ -19,6 +19,14 @@
         "en": "trust all Root CA's in webpki-roots",
         "en-tts": "trust all Root CA's in webpki-roots"
     },
+    "tls.mozilla_progress": {
+        "en": "trusting Mozilla Root CA's",
+        "en-tts": "trusting Mozilla Root CA's"
+    },
+    "tls.mozilla_done": {
+        "en": "trusted Root CA's",
+        "en-tts": "trusted Root CA's"
+    },
     "tls.probe_cmd": {
         "en": "save host CA'a if trusted",
         "en-tts": "save host CA'a if trusted"
