@@ -103,17 +103,17 @@ impl<'a> From<&X509Certificate<'a>> for RustlsOwnedTrustAnchor {
                     b"der decode failed".to_vec()
                 }
             },
-            name_constraints: None,
-            // name_constraints: x509.name_constraints().unwrap_or(None).map(|c| c.value.into()),
-            // may have to pass value thru from certificates parameter
-            // name_constraints: match x509.name_constraints() {
-            //     Ok(Some(nc)) => Some(nc.value),
-            //     Ok(None) => None,
-            //     Err(e) => {
-            //         log::warn!("failed to extract x509 name_constraints: {}", e);
-            //         None
-            //     }
-            // },
+            name_constraints: match x509.name_constraints() {
+                Ok(Some(_)) => {
+                    log::warn!("Name Constraints ignored");
+                    None
+                }
+                Ok(None) => None,
+                Err(e) => {
+                    log::warn!("{e}");
+                    None
+                }
+            },
         }
     }
 }
