@@ -16,11 +16,11 @@ pub fn shellchat<'a>(
     let mut ret = String::new();
     match tokens.next() {
         // delete ALL trusted CA Certificates
-        Some("delete") => {
+        Some("deleteall") => {
             log::info!("starting TLS delete certificates");
             let tls = Tls::new();
             let count = tls.del_all_cert().unwrap();
-            write!(ret, "deleted {count} certificates").ok();
+            write!(ret, "{} {}", count, t!("tls.deleteall_done", locales::LANG)).ok();
             log::info!("finished TLS delete certificates");
         }
         // helpful stuff
@@ -197,7 +197,7 @@ pub fn shellchat<'a>(
         }
         None | _ => {
             write!(ret, "{}\n", t!("tls.cmd", locales::LANG)).ok();
-            write!(ret, "\tdelete\t{}\n", t!("tls.delete_cmd", locales::LANG)).ok();
+            write!(ret, "\tdeleteall\t{}\n", t!("tls.deleteall_cmd", locales::LANG)).ok();
             write!(ret, "\thelp\n").ok();
             #[cfg(feature = "rootCA")]
             write!(ret, "\tmozilla\t{}\n", t!("tls.mozilla_cmd", locales::LANG)).ok();
