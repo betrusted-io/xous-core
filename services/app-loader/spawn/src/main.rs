@@ -31,6 +31,23 @@ fn handle_panic(_arg: &core::panic::PanicInfo) -> ! {
 #[no_mangle]
 pub extern "C" fn init(server1: u32, server2: u32, server3: u32, server4: u32) -> ! {
     let server = xous::SID::from_u32(server1, server2, server3, server4);
+
+    // recreate the extra sections that were cut out of the stub
+    let mut memory = xous::map_memory(
+	None,
+	core::num::NonZeroUsize::new(0x40000000),
+	0x1000,
+	xous::MemoryFlags::R | xous::MemoryFlags::W
+    ).unwrap();
+    let connection = core::sync::atomic::AtomicU32::new(0);
+    let slice = unsafe { core::slice::from_raw_parts(&connection as *const _ as *const u8, core::mem::size_of::<core::sync::atomic::AtomicU32>()) };
+    for (dest, src) in memory.as_slice_mut::<u8>().iter_mut().skip(8).zip(slice) {
+	*dest = *src;
+    }
+    
+    log_server::init_wait().unwrap();
+    log::set_max_level(log::LevelFilter::Info);
+    log::info!("my PID is {}", xous::process::id());
     loop {
         if let Ok(xous::Result::MessageEnvelope(envelope)) =
             xous::rsyscall(xous::SysCall::ReceiveMessage(server))
