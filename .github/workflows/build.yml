@@ -22,7 +22,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: "1.62.1"
+          toolchain: "1.70.0"
           default: true
 
       - name: Checkout sources
