@@ -9,11 +9,11 @@ version = "0.1.0"
 [dependencies]
 ime-plugin-api = {path = "../ime-plugin-api"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.41"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.41"}
-xous = "0.9.45"
-xous-ipc = "0.9.45"
-xous-names = {package = "xous-api-names", version = "0.9.43"}
+log-server = {package = "xous-api-log", version = "0.1.42"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.42"}
+xous = "0.9.46"
+xous-ipc = "0.9.46"
+xous-names = {package = "xous-api-names", version = "0.9.44"}
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
