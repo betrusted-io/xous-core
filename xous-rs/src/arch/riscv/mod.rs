@@ -321,5 +321,9 @@ extern "C" {
 }
 
 pub fn cache_flush() {
-    unsafe { riscv_cache_flush() };
+    unsafe { 
+        asm!(
+            "fence"
+        )
+     };
 }
