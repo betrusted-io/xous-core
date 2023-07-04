@@ -39,7 +39,7 @@ pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
             let path = entry.path();
             // this should *really* exist if the build system is stable, so just unwrap all the things
             let regdir = path.file_name().unwrap().to_str().unwrap().to_string();
-            if regdir.contains("git") { // crates.io sticks sources in something with git yadda yadda...docs don't really say what/why/how...
+            if regdir.contains("crates.io") { // crates.io sticks sources in something with git yadda yadda...docs don't really say what/why/how...
                 cache_leaf.push_str(&regdir);
             }
         }
