@@ -9,7 +9,7 @@ set -euxo pipefail
 crate=xous-kernel
 
 usage() {
-    echo "Usage: $0 [-a <riscv|arm>]"
+    echo "Usage: $0 [-a riscv]"
     exit 1
 }
 
@@ -45,13 +45,6 @@ case $arch in
         riscv-none-elf-gcc -ggdb3 -c -mabi=lp64 -march=rv64imac src/arch/riscv/asm.S -o bin/$crate.o
         ar crs bin/riscv64imac-unknown-none-elf.a bin/$crate.o
         ar crs bin/riscv64gc-unknown-none-elf.a bin/$crate.o
-        ;;
-
-    arm)
-        rm -f bin/arm*.a
-
-        arm-none-eabi-gcc -ggdb3 -c -march=armv7-a src/arch/arm/asm.S -o bin/$crate.o
-        ar crs bin/armv7a-unknown-xous-elf.a bin/$crate.o
         ;;
 
     default)
