@@ -119,22 +119,22 @@ pub const MAX_HEIGHT: u8 = {{.Font.Size}};
 pub const CODEPOINTS: [u32; {{.GS.CodepointsLen}}] = [
 {{.GS.Codepoints}}];
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 pub(crate) static GLYPH_LOCATION: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 pub(crate) const GLYPH_LEN: usize = {{.GS.GlyphsLen}};
 
 pub(crate) fn glyphs() -> &'static [u32] {
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     unsafe {
         let data: *const u32 = core::mem::transmute(GLYPH_LOCATION.load(core::sync::atomic::Ordering::SeqCst));
         core::slice::from_raw_parts(data, GLYPH_LEN)
     }
 
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     &GLYPHS
 }
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="precursor", feature="renode"))]
 /// Packed 16px * 16px glyph pattern data.
 /// Pixels are packed in row-major order with LSB of first pixel word
 /// containing the top left pixel. Bit of 0 means clear, 1 means set

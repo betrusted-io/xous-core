@@ -1,0 +1,4 @@
+// This code includes encoded bitmaps of glyphs from the Helvetica typeface.
+// The PNG sprite sheets of Helvetica glyphs came from screenshots taken on
+// Macintosh System 7, with additional Latin Extended characters added by Sam Blenny.
+//
