@@ -43,6 +43,10 @@
         "en": "failed to create sever name from",
         "en-tts": "failed to create sever name from"
     },
+    "tls.probe_done": {
+        "en": "trusted CA's",
+        "en-tts": "trusted CA's"
+    },
     "tls.test_cmd": {
         "en": "make tls connection to host",
         "en-tts": "make tls connection to host"

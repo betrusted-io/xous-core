@@ -116,7 +116,7 @@ pub fn shellchat<'a>(
                         Some(certificates) => {
                             let tls = Tls::new();
                             let count = tls.check_trust(certificates);
-                            write!(ret, "trusted {count} certificates").ok();
+                            write!(ret, "{} {}", count, t!("tls.probe_done", locales::LANG)).ok();
                         }
                         None => (),
                     };

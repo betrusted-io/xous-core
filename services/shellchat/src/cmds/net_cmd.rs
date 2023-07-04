@@ -453,10 +453,12 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                 }
                 // net tls <sub-command>
+                //     deleteall     deleteall trusted CA certificates
+                //     help
+                //     list          list all trusted CA certificates
                 //     mozilla       trust all Root CA's in webpki-roots
                 //     probe <host>  save host CA'a if trusted
                 //     test <host>   make tls connection to host
-                //     trusted       list trusted CA certificates
                 #[cfg(feature = "tls")]
                 "tls" => {
                     if let Ok(Some(r)) = tls::cmd::shellchat(&mut tokens) {
