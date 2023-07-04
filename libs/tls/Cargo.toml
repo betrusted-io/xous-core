@@ -1,0 +1,34 @@
+[package]
+authors = ["john brown <john@nhoj.info>"]
+description = "TLS tools"
+edition = "2018"
+name = "tls"
+version = "0.1.0"
+
+[dependencies]
+log = "0.4.14"
+num-derive = { version = "0.3.3", default-features = false}
+num-traits = { version = "0.2.14", default-features = false}
+xous = "0.9.45"
+xous-ipc = "0.9.45"
+log-server = { package = "xous-api-log", version = "0.1.41" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.41" }
+xous-names = { package = "xous-api-names", version = "0.9.43" }
+
+modals = { path = "../../services/modals" }
+net = { path = "../../services/net" }
+pddb = { path = "../../services/pddb" }
+
+der = { version = "0.7.6", features = ["derive"] }
+locales = {path = "../../locales"}
+rkyv = "0.4.3"
+sha2 = "0.9.8"
+
+# note requirement for patch to xous-ring in workspace Cargo.toml
+rustls = { version = "0.21.2", features = ["dangerous_configuration"] }
+webpki = { package = "rustls-webpki", version = "0.100.1" }
+webpki-roots = {version = "0.23.1", optional = true}
+x509-parser = "0.15.0"
+
+[features]
+rootCA = ["webpki-roots"]

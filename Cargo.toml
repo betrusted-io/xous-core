@@ -89,7 +89,8 @@ members = [
   "tools/perflib",
   "kernel",
   "loader",
-  "libs/userprefs"
+  "libs/userprefs",
+  "libs/tls"
 ]
 resolver = "2"
 

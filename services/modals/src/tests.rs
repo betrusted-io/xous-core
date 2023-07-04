@@ -7,7 +7,7 @@ use xous_names::XousNames;
 
 const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
 
-const CHECKBOX_TEST: [&'static str; 5] = ["happy", "😃", "安", "peaceful", "...something else!"];
+const CHECKBOX_TEST: [&'static str; 5] = ["happy", "😃", "安", "peace &\n tranquility", "Once apon a time, in a land far far away, there was a"];
 
 /// This is an integration test of the Modals crate. It creates two competing threads
 /// that both try to throw up dialog boxes at the same time. Normally you *don't* want
