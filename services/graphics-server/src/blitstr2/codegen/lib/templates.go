@@ -130,11 +130,11 @@ pub(crate) fn glyphs() -> &'static [u32] {
         core::slice::from_raw_parts(data, GLYPH_LEN)
     }
 
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(not(target_os = "xous"))]
     &GLYPHS
 }
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(not(target_os = "xous"))]
 /// Packed 16px * 16px glyph pattern data.
 /// Pixels are packed in row-major order with LSB of first pixel word
 /// containing the top left pixel. Bit of 0 means clear, 1 means set
