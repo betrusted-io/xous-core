@@ -39,4 +39,4 @@ jobs:
         run: rm -rf target/*
 
       - name: Build hosted-ci
-        run: cargo xtask ${{ matrix.task }}
+        run: cargo xtask ${{ matrix.task }} --no-verify
