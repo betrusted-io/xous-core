@@ -316,13 +316,9 @@ where
     })
 }
 
-extern "C" {
-    fn riscv_cache_flush();
-}
-
 pub fn cache_flush() {
     unsafe { 
-        asm!(
+        core::arch::asm!(
             "fence"
         )
      };
