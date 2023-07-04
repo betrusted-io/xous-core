@@ -33,7 +33,7 @@ jobs:
       - uses: Swatinem/rust-cache@v1
 
       - name: Install RISC-V toolkit
-        run: cargo xtask install-toolkit --force
+        run: cargo xtask install-toolkit --force --no-verify
 
       - name: Clean out old target directory (in case of libstd change)
         run: rm -rf target/*
