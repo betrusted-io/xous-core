@@ -141,7 +141,15 @@ impl ComposedType {
                         clip_rect.tl().x, clip_rect.tl().y,
                         clip_rect.br().x, clip_rect.br().y
                     );
-                    if !glyph.double {
+                    if glyph.large {
+                        blitstr2::xor_glyph_large(
+                            frbuf,
+                            &Point::new(maybe_x, maybe_y),
+                            *glyph,
+                            glyph.invert ^ invert,
+                            cr
+                        );
+                    } else if !glyph.double {
                         blitstr2::xor_glyph(
                             frbuf,
                             &Point::new(maybe_x, maybe_y),

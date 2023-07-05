@@ -139,7 +139,12 @@ pub fn xor_glyph_large(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr
     let x1 = p.x + (wide << 1) - 1;
     if x1 < cr.min.x as i16 { log::trace!("out the left"); return } // out the left hand side
     let dest_low_word = x0 >> 5;
-    let dest_high_word = x1 >> 5;
+    let mut dest_high_word = x1 >> 5;
+    // fixup case where a glyph is very narrow and and gs.wide / 2 is rounded down to 0.
+    // this happens on things like '.' and '1'.
+    if dest_high_word == dest_low_word {
+        dest_high_word += 1;
+    }
     let px_in_dest_low_word = 32 - (x0 & 0x1f);
     // Blit it (use glyph height to avoid blitting empty rows)
     let mut row_base = p.y * WORDS_PER_LINE as i16;
@@ -173,7 +178,7 @@ pub fn xor_glyph_large(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr
                 } else {
                     fb[(row_base + dest_low_word) as usize] &= 0xffff_ffff ^ ((src << (32 - px_in_dest_low_word)) & partial_mask_lo);
                 }
-                if (wide << 1) > px_in_dest_low_word {
+                if (wide << 1) >= px_in_dest_low_word {
                     if xor {
                         fb[(row_base + dest_high_word) as usize] ^= (src >> px_in_dest_low_word) & partial_mask_hi;
                     } else {
@@ -213,7 +218,10 @@ pub fn xor_glyph_2x(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: C
     let x1 = p.x + (wide << 1) - 1;
     if x1 < cr.min.x as i16 { log::trace!("out the left"); return } // out the left hand side
     let dest_low_word = x0 >> 5;
-    let dest_high_word = x1 >> 5;
+    let mut dest_high_word = x1 >> 5;
+    if dest_high_word == dest_low_word {
+        dest_high_word += 1;
+    }
     let px_in_dest_low_word = 32 - (x0 & 0x1f);
     // Blit it (use glyph height to avoid blitting empty rows)
     let mut row_base = p.y * WORDS_PER_LINE as i16;
@@ -260,7 +268,7 @@ pub fn xor_glyph_2x(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: C
                 } else {
                     fb[(row_base + dest_low_word) as usize] &= 0xffff_ffff ^ ((src << (32 - px_in_dest_low_word)) & partial_mask_lo);
                 }
-                if (wide << 1) > px_in_dest_low_word {
+                if (wide << 1) >= px_in_dest_low_word {
                     if xor {
                         fb[(row_base + dest_high_word) as usize] ^= (src >> px_in_dest_low_word) & partial_mask_hi;
                     } else {
