@@ -10,7 +10,6 @@ use ime_plugin_api::{ImefCallback, ImefDescriptor, ImefOpcode};
 use log::{error, info};
 
 use graphics_server::{Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView, DrawStyle};
-use gam::GlyphStyle;
 use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi, ApiToken};
 
 use num_traits::{ToPrimitive,FromPrimitive};
@@ -262,6 +261,7 @@ impl InputTracker {
             input_tv.draw_border = false;
             input_tv.border_width = 1;
             input_tv.clear_area = true; // need this so that the insertion point is cleared and moved
+            input_tv.style = gam::SYSTEM_STYLE;
 
             let mut do_redraw = false;
             for &k in newkeys.iter() {
@@ -657,7 +657,7 @@ impl InputTracker {
                         p_tv.border_width = 1;
                         p_tv.clear_area = false;
                         p_tv.ellipsis = true;
-                        p_tv.style = GlyphStyle::Regular;
+                        p_tv.style = gam::SYSTEM_STYLE;
                         write!(p_tv.text, "{}", pred_str).expect("can't write the prediction string");
                         log::trace!("posting string with length {}", p_tv.text.as_str().unwrap().len());
                         self.gam.post_textview(&mut p_tv).expect("couldn't post prediction text");
