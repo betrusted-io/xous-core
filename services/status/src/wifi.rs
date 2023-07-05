@@ -266,6 +266,8 @@ impl WLANMan {
             self.modals.dynamic_notification_close().ok();
         }
         let mut networks: Vec<&str> = networks.iter().map(|s| s.as_str()).collect();
+        // TODO: we may need to add code here to truncate the list if it is too long, with the larger
+        // font, the dialog box could run off the screen.
 
         if networks.is_empty() {
             self.modals

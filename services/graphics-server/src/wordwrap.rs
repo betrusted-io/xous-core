@@ -269,7 +269,7 @@ impl Typesetter {
         // going out of scope at the end of the call.
         let mut composition = Vec::<TypesetWord>::new();
 
-        if self.bb.max.x - self.bb.min.y < glyph_to_height_hint(GlyphStyle::Regular) as i16 {
+        if self.bb.max.y - self.bb.min.y < glyph_to_height_hint(GlyphStyle::Regular) as i16 {
             // we flag this because the typesetter algorithm may never converge if it can't set any characters
             // because the region is just too narrow.
             log::error!("Words cannot be typset because the width of the typset region is too narrow.");
