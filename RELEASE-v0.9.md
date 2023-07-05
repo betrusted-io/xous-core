@@ -393,7 +393,9 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Fix #339 by adjusting the shellchat API call to match what is done in status bar
 - Improved wifi scanning (fixes #336) - scans are now sorted by strength; old APs are retired; and the UX will pause while the scan occurs. Repeated scans still require going through the entire menu tree again; this is because modal radio-box lists aren't dynamically updateable.
 - Improve performance of filtering operations in `vault` by ~100x by refactoring the item cache to work on `Vec` that is repeatedly sorted, instead of on a `BTreeMap` that is referenced. Turns out that sorting is a far cheaper operation than reference-counted shared references, or copying data to the heap (to avoid the shared reference). See PR#389 for details.
-- @jeandudey contributed #390 and #391 which improve interoperability of svd2utra across build hosts and modularizes the language to the locales crate.
+- @jeandudey contributed #390 and #391 which improve interoperability of svd2utra across build hosts and modularizes the language to the locales crate. Unused assembly code was also stripped out of xous-rs.
+- @samblenny contributed a Tall font. NOTE: if you are doing kernel development, you *must* update the loader with this change, otherwise some fonts will not render correctly.
+- The rendering subsystem has been updated to handle this and the default system font is now Tall, which should improve readability without sacrificing user prompts (i.e. dialog boxes should still fit on the screen). Please create issues for dialog boxes that are broken by this change. Also, a deliberate choice was made to leave selection lists in the original more dense font, as selection lists benefit from vertical density.
 
 ## Roadmap
 - Lots of testing and bug fixes
