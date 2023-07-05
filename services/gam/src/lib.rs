@@ -31,6 +31,8 @@ use ime_plugin_api::{ImefCallback, ApiToken};
 
 #[doc = include_str!("../README.md")]
 
+pub const SYSTEM_STYLE: GlyphStyle = GlyphStyle::Tall;
+
 // Add names here and insert them into the EXPECTED_BOOT_CONTEXTS structure below.
 pub const MAIN_MENU_NAME: &'static str = "main menu";
 pub const PDDB_MODAL_NAME: &'static str = "pddb modal";

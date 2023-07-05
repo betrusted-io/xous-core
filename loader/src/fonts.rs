@@ -9,4 +9,5 @@ pub mod kr;
 pub mod bold;
 pub mod mono;
 pub mod regular;
+pub mod tall;
 pub mod small;

@@ -18,6 +18,9 @@ macro_rules! style_wrapper {
             GlyphStyle::ExtraLarge => {
                 $rule!(extra_large_glyph, emoji_large_glyph, $ch)
             }
+            GlyphStyle::Tall => {
+                $rule!(tall_glyph, emoji_glyph, $ch)
+            }
             // default to regular
             _ => {
                 $rule!(regular_glyph, emoji_glyph, $ch)

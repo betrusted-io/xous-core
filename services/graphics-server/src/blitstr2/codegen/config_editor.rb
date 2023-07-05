@@ -100,6 +100,16 @@ config = {
       loaderout: "../../../../../loader/src/fonts/regular.rs",
     },
     {
+      name: "Tall",
+      sprites: "src_data/latin_tall.png", size: 19, cols: 30, gutter: 1, border: 1,
+      legal: "src_data/helvetica_legal.txt",
+      index: latin_index_outfile,
+      indexType: "json-grid-coord",
+      glyphTrim: "proportional",
+      rustout: "../fonts/tall.rs",
+      loaderout: "../../../../../loader/src/fonts/tall.rs",
+    },
+    {
       name: "Small",
       sprites: "src_data/latin_small.png", size: 12, cols: 16, gutter: 1, border: 1,
       legal: "src_data/geneva_legal.txt",

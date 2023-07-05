@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::api::CanvasType;
-use crate::{Canvas, GlyphStyle};
+use crate::Canvas;
 
 use graphics_server::*;
 
@@ -24,7 +24,7 @@ impl ModalLayout {
     pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut HashMap<Gid, Canvas>) -> Result<ModalLayout, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
-        let height: i16 = gfx.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height") as i16;
+        let height: i16 = gfx.glyph_height_hint(gam::SYSTEM_STYLE).expect("couldn't get glyph height") as i16;
 
         const MODAL_Y_PAD: i16 = 80;
         const MODAL_X_PAD: i16 = 20;
