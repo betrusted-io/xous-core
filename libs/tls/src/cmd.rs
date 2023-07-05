@@ -1,5 +1,6 @@
 use crate::{danger, Tls};
 use locales::t;
+#[cfg(feature = "rootCA")]
 use modals::Modals;
 use std::convert::TryInto;
 use std::io::Read;
@@ -7,6 +8,7 @@ use std::io::Write;
 use std::net::TcpStream;
 use std::str::from_utf8;
 use std::sync::Arc;
+#[cfg(feature = "rootCA")]
 use xous_names::XousNames;
 
 pub fn shellchat<'a>(

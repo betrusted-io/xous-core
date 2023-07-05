@@ -4,6 +4,7 @@ use der::{Encode, Header, Reader, Tag};
 use rkyv::{Archive, Deserialize, Serialize};
 use std::cmp::min;
 use std::convert::TryInto;
+#[allow(unused_imports)]
 use std::fmt;
 use std::io::{Error, ErrorKind};
 use x509_parser::prelude::{FromDer, X509Certificate};

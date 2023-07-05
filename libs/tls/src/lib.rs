@@ -19,6 +19,7 @@ use xous_names::XousNames;
 
 /// PDDB Dict for tls trusted certificates keys
 const TLS_TRUSTED_DICT: &str = "tls.trusted";
+#[allow(dead_code)]
 const CURRENT_VERSION_KEY: &str = "__version";
 
 pub struct Tls {
