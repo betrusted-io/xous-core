@@ -304,7 +304,7 @@ impl Repl{
                     )
                 )
             );
-            init_tv.style = GlyphStyle::Bold;
+            init_tv.style = graphics_server::GlyphStyle::Bold;
             init_tv.draw_border = false;
             write!(init_tv.text, "{}", t!("shellchat.bootwait", locales::LANG)).ok();
             self.gam.post_textview(&mut init_tv).expect("couldn't render wait text");
