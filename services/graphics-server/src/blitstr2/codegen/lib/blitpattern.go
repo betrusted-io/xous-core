@@ -55,10 +55,19 @@ func NewBlitPattern(img image.Image, font FontSpec, cs CharSpec, dbg bool) BlitP
 	}
 	pxMatrix = pxMatrix.Trim(font, row, col)
 	width := uint8(len(pxMatrix[0]))
-	pxMatrix = pxMatrix.padTo16x16()
+	if font.Size <= 16 {
+		pxMatrix = pxMatrix.padTo16x16()
+	} else {
+		pxMatrix = pxMatrix.padTo32x32()
+	}
 	pxMatrix.Debug(cs, dbg)
-	patternBytes := pxMatrix.convertToPattern()
-	return BlitPattern{patternBytes, width, cs}
+	if font.Size <= 16 {
+		patternBytes := pxMatrix.convertToPattern()
+		return BlitPattern{patternBytes, width, cs}
+	} else {
+		patternBytes := pxMatrix.convertToPattern32()
+		return BlitPattern{patternBytes, width, cs}
+	}
 }
 
 // Convert blit pattern to rust source code for part of an array of bytes
