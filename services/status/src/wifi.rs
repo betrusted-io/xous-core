@@ -266,8 +266,15 @@ impl WLANMan {
             self.modals.dynamic_notification_close().ok();
         }
         let mut networks: Vec<&str> = networks.iter().map(|s| s.as_str()).collect();
-        // TODO: we may need to add code here to truncate the list if it is too long, with the larger
-        // font, the dialog box could run off the screen.
+        // don't show empty strings
+        networks.retain(|&n| n.len() != 0);
+        // limit the total number displayed so that the "okay" button does not disappear off the bottom
+        let max_entries = match gam::SYSTEM_STYLE {
+            graphics_server::GlyphStyle::Tall => 13,
+            graphics_server::GlyphStyle::Regular => 16,
+            _ => 12,
+        };
+        networks.truncate(max_entries);
 
         if networks.is_empty() {
             self.modals
