@@ -126,7 +126,7 @@ pub fn xor_glyph_large(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr
         return;
     }
     let high = gs.high as i16 / 2;
-    let wide = gs.wide as i16 / 2;
+    let wide = (gs.wide as i16 / 2).max(1);
     if high > SPRITE_PX || wide > SPRITE_PX {
         // Fail silently if glyph height or width is out of spec
         // TODO: Maybe return an error?
@@ -206,7 +206,7 @@ pub fn xor_glyph_2x(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: C
         return;
     }
     let high = gs.high as i16 / 2;
-    let wide = gs.wide as i16 / 2;
+    let wide = (gs.wide as i16 / 2).max(1);
     if high > SPRITE_PX || wide > SPRITE_PX {
         // Fail silently if glyph height or width is out of spec
         // TODO: Maybe return an error?
