@@ -127,6 +127,7 @@ fn main() -> ! {
     let item_lists = Arc::new(Mutex::new(ItemLists::new()));
     let action_active = Arc::new(AtomicBool::new(false));
     let allow_host = Arc::new(AtomicBool::new(false));
+    let allow_totp_rendering = Arc::new(AtomicBool::new(true));
     // Protects access to the openSK PDDB entries from simultaneous readout on the UX while OpenSK is updating it
     let opensk_mutex = Arc::new(Mutex::new(0));
     // storage for lefty mode
@@ -424,7 +425,7 @@ fn main() -> ! {
     });
     // spawn the TOTP pumper
     let pump_sid = xous::create_server().unwrap();
-    crate::totp::pumper(mode.clone(), pump_sid, conn, allow_host.clone());
+    crate::totp::pumper(mode.clone(), pump_sid, conn, allow_totp_rendering.clone());
     let pump_conn = xous::connect(pump_sid).unwrap();
 
     let menu_sid = xous::create_server().unwrap();
@@ -601,15 +602,18 @@ fn main() -> ! {
                         .add_list_item(item)
                         .expect("couldn't build radio item list");
                 }
+                allow_totp_rendering.store(false, Ordering::SeqCst);
                 match modals.get_radiobutton(t!("vault.select_font", locales::LANG)) {
                     Ok(style) => {
                         vaultux.set_glyph_style(name_to_style(&style).unwrap_or(DEFAULT_FONT));
                     },
                     _ => log::error!("get_radiobutton failed"),
                 }
+                allow_totp_rendering.store(true, Ordering::SeqCst);
                 vaultux.update_mode();
             }
             Some(VaultOp::MenuAutotype) => {
+                allow_totp_rendering.store(false, Ordering::SeqCst);
                 modals.dynamic_notification(Some(t!("vault.autotyping", locales::LANG)), None).ok();
                 match vaultux.autotype() {
                     Err(xous::Error::UseBeforeInit) => { // USB not plugged in
@@ -641,6 +645,7 @@ fn main() -> ! {
                     }
                 }
                 modals.dynamic_notification_close().ok();
+                allow_totp_rendering.store(true, Ordering::SeqCst);
                 // force the one entry to update its UX cache so that the autotype time increments up
                 if let Some(entry) = vaultux.selected_entry() {
                     let buf = Buffer::into_buf(entry).expect("IPC error");
@@ -653,8 +658,10 @@ fn main() -> ! {
                     let buf = Buffer::into_buf(entry).expect("IPC error");
                     buf.send(actions_conn, ActionOp::MenuDeleteStage2.to_u32().unwrap()).expect("messaging error");
                 } else {
-                    // this will block redraws, but it's just one notification in a sequence so it's OK.
+                    allow_totp_rendering.store(false, Ordering::SeqCst);
+                    // this will block redraws
                     modals.show_notification(t!("vault.error.nothing_selected", locales::LANG), None).ok();
+                    allow_totp_rendering.store(true, Ordering::SeqCst);
                 }
             }
             Some(VaultOp::MenuEditStage1) => {
@@ -664,8 +671,10 @@ fn main() -> ! {
                     let buf = Buffer::into_buf(entry).expect("IPC error");
                     buf.send(actions_conn, ActionOp::MenuEditStage2.to_u32().unwrap()).expect("messaging error");
                 } else {
-                    // this will block redraws, but it's just one notification in a sequence so it's OK.
+                    // this will block redraws
+                    allow_totp_rendering.store(false, Ordering::SeqCst);
                     modals.show_notification(t!("vault.error.nothing_selected", locales::LANG), None).ok();
+                    allow_totp_rendering.store(true, Ordering::SeqCst);
                 }
             }
             Some(VaultOp::MenuReadoutMode) => {
@@ -674,8 +683,10 @@ fn main() -> ! {
                 modals.dynamic_notification_close().ok();
 
                 allow_host.store(true, Ordering::SeqCst);
+                allow_totp_rendering.store(false, Ordering::SeqCst);
                 modals.show_notification(t!("vault.readout_active", locales::LANG), None).ok();
                 allow_host.store(false, Ordering::SeqCst);
+                allow_totp_rendering.store(true, Ordering::SeqCst);
 
                 modals.dynamic_notification(Some(t!("vault.readout_switchover", locales::LANG)), None).ok();
                 vaultux.readout_mode(false);
@@ -710,6 +721,7 @@ fn main() -> ! {
                 let cv = prefs.lefty_mode_or_default().unwrap();
 
                 modals.add_list(vec![t!("prefs.yes", locales::LANG), t!("prefs.no", locales::LANG)]).unwrap();
+                allow_totp_rendering.store(false, Ordering::SeqCst);
                 let mode = yes_no_to_bool(
                     modals
                         .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
@@ -717,6 +729,7 @@ fn main() -> ! {
                         .unwrap()
                         .as_str(),
                 );
+                allow_totp_rendering.store(true, Ordering::SeqCst);
                 prefs.set_lefty_mode(mode).unwrap();
                 lefty_mode.store(mode, Ordering::SeqCst);
             }

@@ -163,7 +163,7 @@ pub(crate) fn pumper(
     mode: Arc<Mutex<VaultMode>>,
     sid: xous::SID,
     main_conn: xous::CID,
-    allow_host: Arc<core::sync::atomic::AtomicBool>
+    allow_totp_rendering: Arc<core::sync::atomic::AtomicBool>
 ) {
     let _ = thread::spawn({
         move || {
@@ -175,7 +175,7 @@ pub(crate) fn pumper(
                 log::trace!("{:?}", opcode);
                 match opcode {
                     Some(PumpOp::Pump) => {
-                        if !allow_host.load(core::sync::atomic::Ordering::SeqCst) { // don't redraw if we're in host access mode
+                        if allow_totp_rendering.load(core::sync::atomic::Ordering::SeqCst) { // don't redraw if we're in host access mode
                             xous::try_send_message(main_conn,
                                 Message::new_scalar(crate::VaultOp::Redraw.to_usize().unwrap(),
                                 0, 0, 0, 0)
