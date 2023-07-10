@@ -23,7 +23,7 @@ use locales::t;
 use gam::{GamObjectList, GamObjectType};
 use chrono::prelude::*;
 use crossbeam::channel::{at, select, unbounded, Receiver, Sender};
-#[cfg(feature = "app_loader")]
+#[cfg(feature = "app-loader")]
 use app_loader::AppLoader;
 
 use std::collections::HashMap;
@@ -66,7 +66,7 @@ pub(crate) enum StatusOpcode {
     /// Switch to an app
     SwitchToApp,
     /// Switch to an app loaded by apploader
-    #[cfg(feature="app_loader")]
+    #[cfg(feature="app-loader")]
     SwitchToLoadedApp,
 
     /// Prepare for a backup
@@ -897,9 +897,9 @@ fn wrapped_main() -> ! {
     let mut wifi_bars: [PixelColor; 5] = [PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light, PixelColor::Light];
 
     // the app loader
-    #[cfg(feature = "app_loader")]
+    #[cfg(feature = "app-loader")]
     let mut app_loader = AppLoader::new(&xns, status_cid, StatusOpcode::SwitchToLoadedApp.to_u32().unwrap(), app_menu_manager.unwrap()).expect("Couldn't load app loader");
-    #[cfg(feature = "app_loader")]
+    #[cfg(feature = "app-loader")]
     app_loader.load_app(xous_ipc::String::from_str("hello")).expect("Couldn't load hello");
 
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
@@ -1252,7 +1252,7 @@ fn wrapped_main() -> ! {
                     Message::new_scalar(StatusOpcode::Pump.to_usize().unwrap(), 0, 0, 0, 0),
                 ).expect("couldn't trigger status update");
             }),
-	    #[cfg(feature = "app_loader")]
+	    #[cfg(feature = "app-loader")]
 	    Some(StatusOpcode::SwitchToLoadedApp) => msg_scalar_unpack!(msg, index, _, _, _, {
                 ticktimer.sleep_ms(100).ok();
 		let app_name = app_loader.app_index_to_name(index).expect("app index not found");
