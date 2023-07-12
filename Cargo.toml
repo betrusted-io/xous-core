@@ -89,6 +89,7 @@ members = [
   "tools/perflib",
   "kernel",
   "loader",
+  "libs/chat",
   "libs/userprefs",
   "libs/tls"
 ]

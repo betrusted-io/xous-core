@@ -1,0 +1,14 @@
+{
+    "chat.cmd": {
+        "en": "chat <subcommand>",
+        "en-tts": "chat <subcommand>"
+    },
+    "chat.help_cmd": {
+        "en": "hello",
+        "en-tts": "hello"
+    },
+    "chat.test_cmd": {
+        "en": "test chat library UI",
+        "en-tts": "test chat library UI"
+    }
+}
