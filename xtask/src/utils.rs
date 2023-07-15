@@ -81,7 +81,7 @@ pub(crate) fn ensure_compiler(
 
                 let rustc_version_str = format!("{}", rustc_version::version().unwrap());
                 if version_str.trim() != rustc_version_str.trim() {
-                    println!("Version upgrade. Compiler is version {}, the installed toolchain is for {}", version_str.trim(), rustc_version_str.trim());
+                    println!("Version upgrade. Compiler is version {}, the installed toolchain is for {}", rustc_version_str.trim(), version_str.trim(), );
                     // return Err(format!("Version upgrade. Compiler is version {}, the installed toolchain is for {}", version_str, rustc_version_str));
                     return Ok(None);
                 }
