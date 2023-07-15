@@ -165,13 +165,7 @@ impl WLANMan {
             )
             .field(
                 Some(t!("wlan.password", locales::LANG).to_string()),
-                Some(|text| {
-                    if text.as_str().is_empty() {
-                        return Some(xous_ipc::String::from_str("Password cannot be empty"));
-                    }
-
-                    None
-                }),
+                None,
             )
             .build()
             .unwrap();
@@ -305,16 +299,7 @@ impl WLANMan {
             .alert_builder(&t!("wlan.ssid_password", locales::LANG).replace("{ssid}", ssid))
             .field(
                 Some(t!("wlan.password", locales::LANG).to_string()),
-                Some(|text| {
-                    if text.as_str().is_empty() {
-                        return Some(xous_ipc::String::from_str(t!(
-                            "wlan.password_empty",
-                            locales::LANG
-                        )));
-                    }
-
-                    None
-                }),
+                None,
             )
             .build()
             .unwrap();

@@ -396,6 +396,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - @jeandudey contributed #390 and #391 which improve interoperability of svd2utra across build hosts and modularizes the language to the locales crate. Unused assembly code was also stripped out of xous-rs.
 - @samblenny contributed a Tall font. NOTE: if you are doing kernel development, you *must* update the loader with this change, otherwise some fonts will not render correctly.
 - The rendering subsystem has been updated to handle this and the default system font is now Tall, which should improve readability without sacrificing user prompts (i.e. dialog boxes should still fit on the screen). Please create issues for dialog boxes that are broken by this change. Also, a deliberate choice was made to leave selection lists in the original more dense font, as selection lists benefit from vertical density.
+- A proper TLS library for incorporation into apps that require it has been created by @nhoj. You can find it in `libs/tls`.
+- Issue #341 closed (support open wifi networks) - requires EC update.
 
 ## Roadmap
 - Lots of testing and bug fixes
