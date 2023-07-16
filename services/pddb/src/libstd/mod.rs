@@ -162,7 +162,6 @@ pub(crate) fn list_path(
         utils::split_basis_and_dict(path, || basis_cache.basis_latest().map(|m| m.to_owned()))
             .or(Err(crate::PddbRetcode::InternalError))?;
 
-    core::mem::drop(path);
     core::mem::drop(reader);
 
     let mut writer = backing
