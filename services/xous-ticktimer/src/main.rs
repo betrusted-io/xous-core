@@ -47,7 +47,7 @@ fn main() -> ! {
 
     // Create a new ticktimer object
     let mut ticktimer = XousTickTimer::new(ticktimer_client);
-    ticktimer.reset(); // make sure the time starts from zero
+    ticktimer.reset(); // make sure the time starts from zero; also maps interrupts (note HAL convention deviation, this combines .init() into a single call).
 
     // register a suspend/resume listener
     #[cfg(not(target_arch = "arm"))]

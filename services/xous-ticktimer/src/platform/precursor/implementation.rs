@@ -101,7 +101,7 @@ impl XousTickTimer {
     pub fn clear_last_response(&mut self) {
         self.last_response = None;
     }
-
+    /// This combines the functions normally found in .init() into the ticktimer reset routine.
     pub fn reset(&mut self) {
         if ! self.initialized {
             xous::claim_interrupt(
