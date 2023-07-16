@@ -347,7 +347,7 @@ fn main() -> ! {
     trace!("registered with NS -- {:?}", com_sid);
 
     // Create a new com object
-    let mut com = XousCom::new();
+    let mut com = Box::new(XousCom::new());
     com.init();
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
 
