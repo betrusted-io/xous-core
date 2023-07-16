@@ -188,32 +188,6 @@ mod implementation {
             trng.susres_manager
                 .push(RegOrField::Reg(utra::trng_server::CHACHA), None);
 
-            // handle error interrupts
-            xous::claim_interrupt(
-                utra::trng_server::TRNG_SERVER_IRQ,
-                trng_handler,
-                (&mut trng) as *mut Trng as *mut usize,
-            )
-            .expect("couldn't claim audio irq");
-            trng.csr.wo(
-                utra::trng_server::EV_PENDING,
-                trng.csr.ms(utra::trng_server::EV_PENDING_ERROR, 1)
-                    | trng.csr.ms(utra::trng_server::EV_PENDING_HEALTH, 1)
-                    | trng.csr.ms(utra::trng_server::EV_PENDING_EXCURSION0, 1)
-                    | trng.csr.ms(utra::trng_server::EV_PENDING_EXCURSION1, 1),
-            );
-            trng.csr.wo(
-                utra::trng_server::EV_ENABLE,
-                trng.csr.ms(utra::trng_server::EV_ENABLE_ERROR, 1)
-                    | trng.csr.ms(utra::trng_server::EV_ENABLE_HEALTH, 1)
-                    | trng.csr.ms(utra::trng_server::EV_ENABLE_EXCURSION0, 1)
-                    | trng.csr.ms(utra::trng_server::EV_ENABLE_EXCURSION1, 1),
-            );
-            trng.susres_manager
-                .push_fixed_value(RegOrField::Reg(utra::trng_server::EV_PENDING), 0xFFFF_FFFF);
-            trng.susres_manager
-                .push(RegOrField::Reg(utra::trng_server::EV_ENABLE), None);
-
             log::debug!("hardware initialized");
 
             if trng.csr.rf(utra::trng_server::STATUS_CHACHA_READY) == 0 {
@@ -233,6 +207,33 @@ mod implementation {
             );
 
             trng
+        }
+        pub fn init(&mut self) {
+            // handle error interrupts
+            xous::claim_interrupt(
+                utra::trng_server::TRNG_SERVER_IRQ,
+                trng_handler,
+                self as *mut Trng as *mut usize,
+            )
+            .expect("couldn't claim audio irq");
+            self.csr.wo(
+                utra::trng_server::EV_PENDING,
+                self.csr.ms(utra::trng_server::EV_PENDING_ERROR, 1)
+                    | self.csr.ms(utra::trng_server::EV_PENDING_HEALTH, 1)
+                    | self.csr.ms(utra::trng_server::EV_PENDING_EXCURSION0, 1)
+                    | self.csr.ms(utra::trng_server::EV_PENDING_EXCURSION1, 1),
+            );
+            self.csr.wo(
+                utra::trng_server::EV_ENABLE,
+                self.csr.ms(utra::trng_server::EV_ENABLE_ERROR, 1)
+                    | self.csr.ms(utra::trng_server::EV_ENABLE_HEALTH, 1)
+                    | self.csr.ms(utra::trng_server::EV_ENABLE_EXCURSION0, 1)
+                    | self.csr.ms(utra::trng_server::EV_ENABLE_EXCURSION1, 1),
+            );
+            self.susres_manager
+                .push_fixed_value(RegOrField::Reg(utra::trng_server::EV_PENDING), 0xFFFF_FFFF);
+            self.susres_manager
+                .push(RegOrField::Reg(utra::trng_server::EV_ENABLE), None);
         }
 
         pub fn get_errors(&self) -> TrngErrors {
@@ -549,6 +550,7 @@ mod implementation {
                 msgcount: 0,
             }
         }
+        pub fn init(&mut self) {}
 
         fn move_lfsr(&self, mut lfsr: u32) -> u32 {
             lfsr ^= lfsr >> 7;
@@ -632,7 +634,8 @@ fn main() -> ! {
         .expect("can't register server");
     log::trace!("registered with NS -- {:?}", trng_sid);
 
-    let mut trng = Trng::new(&xns);
+    let mut trng = Box::new(Trng::new(&xns));
+    trng.init();
 
     #[cfg(feature = "avalanchetest")]
     log::info!("TRNG built with avalanche test enabled");
