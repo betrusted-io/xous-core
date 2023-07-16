@@ -10,7 +10,6 @@ use utralib::generated::*;
 
 pub struct XousTickTimer {
     csr: utralib::CSR<u32>,
-    initialized: bool,
     current_response: Option<TimerRequest>,
     last_response: Option<TimerRequest>,
     connection: xous::CID,
@@ -74,7 +73,6 @@ impl XousTickTimer {
 
         let mut xtt = XousTickTimer {
             csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-            initialized: false,
             current_response: None,
             last_response: None,
             connection,
@@ -101,27 +99,24 @@ impl XousTickTimer {
     pub fn clear_last_response(&mut self) {
         self.last_response = None;
     }
-    /// This combines the functions normally found in .init() into the ticktimer reset routine.
+    pub fn init(&mut self) {
+        xous::claim_interrupt(
+            utra::ticktimer::TICKTIMER_IRQ,
+            handle_irq,
+            self as *mut XousTickTimer as *mut usize,
+        )
+            .expect("couldn't claim irq");
+
+        self.ticktimer_sr_manager
+            .push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET0), None);
+        self.ticktimer_sr_manager
+            .push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET1), None);
+        self.ticktimer_sr_manager
+            .push_fixed_value(RegOrField::Reg(utra::ticktimer::EV_PENDING), 0xFFFF_FFFF);
+        self.ticktimer_sr_manager
+            .push(RegOrField::Reg(utra::ticktimer::EV_ENABLE), None);
+    }
     pub fn reset(&mut self) {
-        if ! self.initialized {
-            xous::claim_interrupt(
-                utra::ticktimer::TICKTIMER_IRQ,
-                handle_irq,
-                self as *mut XousTickTimer as *mut usize,
-            )
-                .expect("couldn't claim irq");
-
-            self.ticktimer_sr_manager
-                .push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET0), None);
-            self.ticktimer_sr_manager
-                .push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET1), None);
-            self.ticktimer_sr_manager
-                .push_fixed_value(RegOrField::Reg(utra::ticktimer::EV_PENDING), 0xFFFF_FFFF);
-            self.ticktimer_sr_manager
-                .push(RegOrField::Reg(utra::ticktimer::EV_ENABLE), None);
-
-            self.initialized = true;
-        }
         self.csr.wfo(utra::ticktimer::CONTROL_RESET, 0b1);
         self.csr.wo(utra::ticktimer::CONTROL, 0); // not paused, not reset -> free-run
     }

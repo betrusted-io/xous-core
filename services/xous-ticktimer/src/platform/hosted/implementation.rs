@@ -150,6 +150,7 @@ impl XousTickTimer {
     ) -> Result<(), xous::Error> {
         Ok(())
     }
+    pub fn init(&mut self) {}
     pub fn suspend(&self) {}
     pub fn resume(&self) {}
 
