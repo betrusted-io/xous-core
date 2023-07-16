@@ -158,7 +158,7 @@ mod implementation {
                 map
             };
 
-            let mut kbd = Keyboard {
+            Keyboard {
                 conn: xous::connect(sid).unwrap(),
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 new_state: HashSet::with_capacity(16), // pre-allocate space since this has to work in an interrupt context
@@ -181,24 +181,24 @@ mod implementation {
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
                 debug: 0,
                 early_settings: ea,
-            };
+            }
+        }
 
+        pub fn init(&mut self) {
             xous::claim_interrupt(
                 utra::keyboard::KEYBOARD_IRQ,
                 handle_kbd,
-                (&mut kbd) as *mut Keyboard as *mut usize,
+                self as *mut Keyboard as *mut usize,
             )
             .expect("couldn't claim irq");
-            kbd.csr.wo(utra::keyboard::EV_PENDING, kbd.csr.r(utra::keyboard::EV_PENDING)); // clear in case it's pending for some reason
-            kbd.csr.wo(utra::keyboard::EV_ENABLE,
-                kbd.csr.ms(utra::keyboard::EV_ENABLE_KEYPRESSED, 1) |
-                kbd.csr.ms(utra::keyboard::EV_ENABLE_INJECT, 1)
+            self.csr.wo(utra::keyboard::EV_PENDING, self.csr.r(utra::keyboard::EV_PENDING)); // clear in case it's pending for some reason
+            self.csr.wo(utra::keyboard::EV_ENABLE,
+            self.csr.ms(utra::keyboard::EV_ENABLE_KEYPRESSED, 1) |
+            self.csr.ms(utra::keyboard::EV_ENABLE_INJECT, 1)
             );
 
-            kbd.susres.push_fixed_value(RegOrField::Reg(utra::keyboard::EV_PENDING), 0xFFFF_FFFF);
-            kbd.susres.push(RegOrField::Reg(utra::keyboard::EV_ENABLE), None);
-
-            kbd
+            self.susres.push_fixed_value(RegOrField::Reg(utra::keyboard::EV_PENDING), 0xFFFF_FFFF);
+            self.susres.push(RegOrField::Reg(utra::keyboard::EV_ENABLE), None);
         }
 
         pub(crate) fn suspend(&mut self) {
@@ -736,6 +736,7 @@ fn main() -> ! {
 
     // Create a new kbd object
     let mut kbd = Keyboard::new(kbd_sid);
+    kbd.init();
 
     // register a suspend/resume listener
     let self_cid = xous::connect(kbd_sid).expect("couldn't create suspend callback connection");
