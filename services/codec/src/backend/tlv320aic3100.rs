@@ -6,6 +6,9 @@ use susres::{RegManager, RegOrField, SuspendResume};
 use llio::I2cStatus;
 use crate::api::*;
 use num_traits::*;
+use core::sync::atomic::{AtomicBool, Ordering::SeqCst};
+
+static INTERRUPT_HOOKED: AtomicBool = AtomicBool::new(false);
 
 pub const TLV320AIC3100_I2C_ADR: u8 = 0b0011_000;
 const I2C_TIMEOUT: u32 = 50;
@@ -181,7 +184,8 @@ impl Codec {
     }
 
     pub fn init(&mut self) {
-        if ! self.initialized {
+        // this should only be called once per reboot
+        if !INTERRUPT_HOOKED.swap(true, SeqCst) {
             xous::claim_interrupt(
                 utra::audio::AUDIO_IRQ,
                 audio_handler,
@@ -196,6 +200,7 @@ impl Codec {
             self.susres_manager.push(RegOrField::Reg(utra::audio::EV_ENABLE), None);
         }
 
+        // this may be called repeatedly, e.g if the code was put through suspend/resume
         log::trace!("audio_clocks");
         self.audio_clocks();
         log::trace!("audio_ports");
