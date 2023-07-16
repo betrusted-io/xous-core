@@ -120,7 +120,7 @@ impl I2cStateMachine {
         i2c
     }
 
-    pub fn setup(&mut self) {
+    pub fn init(&mut self) {
         xous::claim_interrupt(
             utra::i2c::I2C_IRQ,
             handle_i2c_irq,

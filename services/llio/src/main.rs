@@ -36,7 +36,7 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
 
     let handler_conn = xous::connect(i2c_sid).expect("couldn't make handler connection for i2c");
     let mut i2c = Box::new(i2c::I2cStateMachine::new(handler_conn, power_csr_raw as *mut u32, wfi_state));
-    i2c.setup();
+    i2c.init();
 
     // register a suspend/resume listener
     let self_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
