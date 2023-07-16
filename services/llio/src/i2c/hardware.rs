@@ -117,34 +117,37 @@ impl I2cStateMachine {
 
         // disable interrupt, just in case it's enabled from e.g. a warm boot
         i2c.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 0);
+        i2c
+    }
+
+    pub fn init(&mut self) {
         xous::claim_interrupt(
             utra::i2c::I2C_IRQ,
             handle_i2c_irq,
-            (&mut i2c) as *mut I2cStateMachine as *mut usize,
+            self as *mut I2cStateMachine as *mut usize,
         )
         .expect("couldn't claim I2C irq");
-        i2c.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
-        i2c.ticktimer.sleep_ms(10).ok();
+        self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
+        self.ticktimer.sleep_ms(10).ok();
 
         // initialize i2c clocks
         // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
         let clkcode = (utralib::LITEX_CONFIG_CLOCK_FREQUENCY as u32) / (5 * 100_000) - 1;
-        i2c.i2c_csr.wfo(utra::i2c::PRESCALE_PRESCALE, clkcode & 0xFFFF);
+        self.i2c_csr.wfo(utra::i2c::PRESCALE_PRESCALE, clkcode & 0xFFFF);
         // enable the block
-        i2c.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
+        self.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
         // clear any interrupts pending, just in case something went pear-shaped during initialization
-        i2c.i2c_csr.wo(utra::i2c::EV_PENDING, i2c.i2c_csr.r(utra::i2c::EV_PENDING));
+        self.i2c_csr.wo(utra::i2c::EV_PENDING, self.i2c_csr.r(utra::i2c::EV_PENDING));
         // now enable interrupts
-        i2c.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 1);
+        self.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 1);
 
         // setup suspend/resume manager
-        i2c.i2c_susres.push(RegOrField::Field(utra::i2c::PRESCALE_PRESCALE), None);
-        i2c.i2c_susres.push(RegOrField::Reg(utra::i2c::CONTROL), None);
-        i2c.i2c_susres.push_fixed_value(RegOrField::Reg(utra::i2c::EV_PENDING), 0xFFFF_FFFF); // clear pending interrupts
-        i2c.i2c_susres.push(RegOrField::Reg(utra::i2c::EV_ENABLE), None);
-
-        i2c
+        self.i2c_susres.push(RegOrField::Field(utra::i2c::PRESCALE_PRESCALE), None);
+        self.i2c_susres.push(RegOrField::Reg(utra::i2c::CONTROL), None);
+        self.i2c_susres.push_fixed_value(RegOrField::Reg(utra::i2c::EV_PENDING), 0xFFFF_FFFF); // clear pending interrupts
+        self.i2c_susres.push(RegOrField::Reg(utra::i2c::EV_ENABLE), None);
     }
+
     pub fn get_expiry(&self) -> Option<u64> {
         self.expiry
     }

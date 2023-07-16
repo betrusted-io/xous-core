@@ -321,7 +321,7 @@ impl ProgramDescription {
             allocator.change_owner(pid as XousPid, 0xF000_2000);
         }
 
-        let mut process = &mut allocator.processes[pid_idx];
+        let process = &mut allocator.processes[pid_idx];
         process.entrypoint = self.entrypoint as usize;
         process.sp = stack_addr;
         process.satp = 0x8000_0000 | ((pid as usize) << 22) | (satp_address >> 12);

@@ -453,7 +453,7 @@ mod implementation {
             )
             .expect("couldn't map flusher memory");
 
-            let mut spinor = Spinor {
+            Spinor {
                 id: 0,
                 handler_conn,
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
@@ -463,36 +463,36 @@ mod implementation {
                 ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
                 #[cfg(feature="extra_flush")]
                 flusher,
-            };
+            }
+        }
 
+        pub fn init(&mut self) {
             xous::claim_interrupt(
                 utra::spinor_soft_int::SPINOR_SOFT_INT_IRQ,
                 spinor_safe_context,
-                (&mut spinor) as *mut Spinor as *mut usize,
+                self as *mut Spinor as *mut usize,
             )
             .expect("couldn't claim SPINOR irq");
-            spinor.softirq.wfo(utra::spinor_soft_int::EV_PENDING_SPINOR_INT, 1);
-            spinor.softirq.wfo(utra::spinor_soft_int::EV_ENABLE_SPINOR_INT, 1);
+            self.softirq.wfo(utra::spinor_soft_int::EV_PENDING_SPINOR_INT, 1);
+            self.softirq.wfo(utra::spinor_soft_int::EV_ENABLE_SPINOR_INT, 1);
 
             xous::claim_interrupt(
                 utra::spinor::SPINOR_IRQ,
                 ecc_handler,
-                (&mut spinor) as *mut Spinor as *mut usize,
+                self as *mut Spinor as *mut usize,
             )
             .expect("couldn't claim SPINOR irq");
-            spinor.csr.wfo(utra::spinor::EV_PENDING_ECC_ERROR, 1);
-            spinor.csr.wfo(utra::spinor::EV_ENABLE_ECC_ERROR, 1);
-            spinor.susres.push_fixed_value(RegOrField::Reg(utra::spinor::EV_PENDING), 0xFFFF_FFFF);
-            spinor.susres.push(RegOrField::Reg(utra::spinor::EV_ENABLE), None);
+            self.csr.wfo(utra::spinor::EV_PENDING_ECC_ERROR, 1);
+            self.csr.wfo(utra::spinor::EV_ENABLE_ECC_ERROR, 1);
+            self.susres.push_fixed_value(RegOrField::Reg(utra::spinor::EV_PENDING), 0xFFFF_FFFF);
+            self.susres.push(RegOrField::Reg(utra::spinor::EV_ENABLE), None);
 
             // now populate the id field
-            spinor.cur_op = Some(FlashOp::ReadId);
+            self.cur_op = Some(FlashOp::ReadId);
             SPINOR_RUNNING.store(true, Ordering::SeqCst);
-            spinor.softirq.wfo(utra::spinor_soft_int::SOFTINT_SOFTINT, 1);
+            self.softirq.wfo(utra::spinor_soft_int::SOFTINT_SOFTINT, 1);
             while SPINOR_RUNNING.load(Ordering::SeqCst) {}
-            spinor.id = SPINOR_RESULT.load(Ordering::SeqCst);
-
-            spinor
+            self.id = SPINOR_RESULT.load(Ordering::SeqCst);
         }
 
         /// changes into the spinor interrupt handler context, which is "safe" for ROM operations because we guarantee
@@ -769,7 +769,8 @@ fn main() -> ! {
     log::trace!("registered with NS -- {:?}", spinor_sid);
 
     let handler_conn = xous::connect(spinor_sid).expect("couldn't create interrupt handler callback connection");
-    let mut spinor = Spinor::new(handler_conn);
+    let mut spinor = Box::new(Spinor::new(handler_conn));
+    spinor.init();
 
     log::trace!("ready to accept requests");
 

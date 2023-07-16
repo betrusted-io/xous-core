@@ -328,7 +328,7 @@ impl MiniElf {
             current_page_addr = previous_addr & !(PAGE_SIZE - 1);
         }
 
-        let mut process = &mut allocator.processes[pid as usize - 1];
+        let process = &mut allocator.processes[pid as usize - 1];
         process.entrypoint = self.entry_point as usize;
         process.sp = stack_addr;
         #[cfg(not(feature = "atsama5d27"))]
