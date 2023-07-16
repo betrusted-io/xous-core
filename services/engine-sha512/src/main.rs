@@ -274,6 +274,7 @@ mod implementation {
         pub(crate) fn new(_handler_conn: Option<xous::CID>) -> Engine512 {
             Engine512 {}
         }
+        pub(crate) fn init(&mut self) {}
         pub(crate) fn suspend(&self) {}
         pub(crate) fn resume(&self) {}
         pub(crate) fn reset(&self) {}

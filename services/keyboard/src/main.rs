@@ -671,6 +671,7 @@ mod implementation {
                 debug: 0,
             }
         }
+        pub fn init(&mut self) {}
         pub fn suspend(&self) {
         }
         pub fn resume(&self) {

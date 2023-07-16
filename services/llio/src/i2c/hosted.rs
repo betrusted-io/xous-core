@@ -9,6 +9,7 @@ impl I2cStateMachine {
         I2cStateMachine {
         }
     }
+    pub fn init(&mut self) {}
     pub fn suspend(&mut self) {}
     pub fn resume(&mut self) {}
     pub fn re_initiate(&mut self) {}

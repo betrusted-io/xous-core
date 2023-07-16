@@ -454,6 +454,7 @@ mod implementation {
         pub fn new() -> Self {
             SusResHw {}
         }
+        pub fn init(&mut self) {}
         pub fn reboot(&self, _reboot_soc: bool) {}
         pub fn set_reboot_vector(&self, _vector: u32) {}
         pub fn force_power_off(&mut self) {}

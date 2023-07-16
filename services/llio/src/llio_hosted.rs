@@ -11,6 +11,7 @@ impl Llio {
         Llio {
         }
     }
+    pub fn init(&mut self) {}
     pub fn suspend(&self) {}
     pub fn resume(&self) {}
     pub fn gpio_dout(&self, _d: u32) {}

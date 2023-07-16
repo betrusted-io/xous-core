@@ -720,6 +720,7 @@ mod implementation {
             Engine25519Hw {
             }
         }
+        pub fn init(&mut self) {}
         pub fn suspend(&self) {
         }
         pub fn resume(&self) {
