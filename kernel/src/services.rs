@@ -370,7 +370,9 @@ impl SystemServices {
         let mut arg_iter = args.iter().peekable();
         loop {
             if let Some(arg) = arg_iter.peek() {
-                if arg.name == u32::from_le_bytes(*b"IniE") || arg.name == u32::from_le_bytes(*b"IniF") {
+                if arg.name == u32::from_le_bytes(*b"IniE")
+                    || arg.name == u32::from_le_bytes(*b"IniF")
+                {
                     break;
                 }
             } else {
@@ -484,7 +486,7 @@ impl SystemServices {
 
         #[cfg(baremetal)]
         {
-            let mut entry = &mut self.processes[entry_idx.unwrap()];
+            let entry = &mut self.processes[entry_idx.unwrap()];
             // The `Process::create()` call above set up the process so that it will
             // be ready to run right away, meaning we will not need to first set
             // the state to `ProcessState::Allocated` and we can go straight to running
@@ -560,7 +562,7 @@ impl SystemServices {
         // as Ready.  Note that the new PID may very well be the same PID.
         {
             let current_pid = self.current_pid();
-            let mut current = self
+            let current = self
                 .get_process_mut(current_pid)
                 .expect("couldn't get current PID");
             klog!("Finishing callback in PID {}", current_pid);
@@ -580,7 +582,7 @@ impl SystemServices {
         // to run. Again, if the new process isn't fit to run, then the system
         // is in a very bad state.
         {
-            let mut process = self.get_process_mut(pid)?;
+            let process = self.get_process_mut(pid)?;
             #[cfg(feature = "gdb-stub")]
             let ppid = process.ppid;
             // Ensure the new context is available to be run
@@ -646,7 +648,7 @@ impl SystemServices {
         // state.
         {
             let current_pid = self.current_pid();
-            let mut current = self
+            let current = self
                 .get_process_mut(current_pid)
                 .expect("couldn't get current PID");
             // The current thread should never be 0, but for some reason it ends up
@@ -667,7 +669,7 @@ impl SystemServices {
         // to run.  Again, if the new process isn't fit to run, then the system
         // is in a very bad state.
         {
-            let mut process = self.get_process_mut(pid)?;
+            let process = self.get_process_mut(pid)?;
             let available_threads = match process.state {
                 ProcessState::Ready(x) | ProcessState::Running(x) | ProcessState::Exception(x) => x,
                 #[cfg(feature = "gdb-stub")]
@@ -1673,7 +1675,7 @@ impl SystemServices {
         pid: PID,
         thread_init: ThreadInit,
     ) -> Result<TID, xous_kernel::Error> {
-        let mut process = self.get_process_mut(pid)?;
+        let process = self.get_process_mut(pid)?;
         process.activate()?;
 
         let mut arch_process = ArchProcess::current();
