@@ -219,7 +219,7 @@ pub struct SpinalUsbDevice {
 }
 impl SpinalUsbDevice {
     pub fn new(sid: xous::SID, usb: MemoryRange, csr: MemoryRange) -> SpinalUsbDevice {
-        let mut usbdev = SpinalUsbDevice {
+        SpinalUsbDevice {
             conn: xous::connect(sid).unwrap(),
             csr_addr: csr.as_ptr() as u32,
             csr: AtomicCsr::new(csr.as_mut_ptr() as *mut u32),
@@ -236,24 +236,23 @@ impl SpinalUsbDevice {
             address: AtomicUsize::new(0),
             read_allowed: AtomicU16::new(0),
             last_wr_desc: Arc::new(Mutex::new([None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,])),
-        };
-
+        }
+    }
+    pub fn init(&self) {
         if !INTERRUPT_INIT_DONE.fetch_or(true, Ordering::SeqCst) {
             xous::claim_interrupt(
                 utra::usbdev::USBDEV_IRQ,
                 handle_usb,
-                (&mut usbdev) as *mut SpinalUsbDevice as *mut usize,
+                self as *const SpinalUsbDevice as *mut usize,
             )
             .expect("couldn't claim irq");
-            let p = usbdev.csr.r(utra::usbdev::EV_PENDING);
-            usbdev.csr.wo(utra::usbdev::EV_PENDING, p); // clear in case it's pending for some reason
-            usbdev.csr.wfo(utra::usbdev::EV_ENABLE_USB, 1);
+            let p = self.csr.r(utra::usbdev::EV_PENDING);
+            self.csr.wo(utra::usbdev::EV_PENDING, p); // clear in case it's pending for some reason
+            self.csr.wfo(utra::usbdev::EV_ENABLE_USB, 1);
         }
         let mut cfg = UdcConfig(0);
         cfg.set_pullup_on(true); // required for proper operation
-        usbdev.regs.set_config(cfg);
-
-        usbdev
+        self.regs.set_config(cfg);
     }
     pub fn get_iface(&self) -> SpinalUsbMgmt {
         SpinalUsbMgmt {

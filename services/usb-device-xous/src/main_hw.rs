@@ -192,15 +192,26 @@ pub(crate) fn main_hw() -> ! {
     )
     .expect("couldn't map USB CSR range");
 
+    // Notes:
+    //  - Most drivers would `Box()` the hardware management structure to make sure the compiler doesn't
+    //    move its location. However, we can't do this here because we are trying to maintain compatibility
+    //    with another crate that implements the USB stack which can't handle Box'd structures.
+    //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that
+    //    tracks if the interrupt handler has been hooked, and ignores further requests to hook it.
     let usb_fidokbd_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    usb_fidokbd_dev.init();
     let mut usbmgmt = usb_fidokbd_dev.get_iface();
     // before doing any allocs, clone a copy of the hardware access structure so we can build a second
     // view into the hardware with only FIDO descriptors
     let usb_fido_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    usb_fido_dev.init();
     // do the same thing for mass storage
     #[cfg(feature="mass-storage")]
     let ums_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    #[cfg(feature="mass-storage")]
+    ums_dev.init();
     let serial_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    serial_dev.init();
 
     // track which view is visible on the device core
     #[cfg(not(feature="minimal"))]
