@@ -24,16 +24,6 @@ macro_rules! println
 	});
 }
 
-#[allow(dead_code)]
-fn handle_irq(irq_no: usize, arg: *mut usize) {
-    print!("Handling IRQ {} (arg: {:08x}): ", irq_no, arg as usize);
-
-    while let Some(c) = { crate::platform::debug::Uart {} }.getc() {
-        print!("{}", c as char);
-    }
-    println!();
-}
-
 pub struct Uart {}
 
 // this is a hack to bypass an explicit initialization/allocation step for the debug structure
@@ -58,16 +48,6 @@ impl Uart {
             DEFAULT_UART_ADDR = uart.as_mut_ptr() as _;
         }
         println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
-        // core::mem::forget(uart);
-
-        println!("Allocating IRQ...");
-        /* xous::claim_interrupt(
-            utra::console::CONSOLE_IRQ,
-            handle_irq,
-            core::ptr::null_mut::<usize>(),
-        )
-        .expect("unable to allocate IRQ"); */
-        self.enable_rx();
     }
 
     pub fn putc(&self, c: u8) {
@@ -80,26 +60,13 @@ impl Uart {
         while uart_csr.r(utra::uart::TXFULL) != 0 {}
         uart_csr.wo(utra::uart::RXTX, c as u32);
     }
-
+    /// This is an abstraction violation, but this call is actually relied upon by the
+    /// non-debug path to re-enable UART RX during a resume. This should be cleaned up.
     pub fn enable_rx(&self) {
         let mut uart_csr = CSR::new(unsafe { DEFAULT_UART_ADDR as *mut u32 });
         uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
     }
-    #[allow(dead_code)]
-    pub fn getc(&self) -> Option<u8> {
-        if unsafe { DEFAULT_UART_ADDR } as usize == 0 {
-            self.map_uart();
-        }
-        let mut uart_csr = CSR::new(unsafe { DEFAULT_UART_ADDR as *mut u32 });
-        match uart_csr.rf(utra::uart::EV_PENDING_RX) {
-            0 => None,
-            ack => {
-                let c = Some(uart_csr.rf(utra::uart::RXTX_RXTX) as u8);
-                uart_csr.wfo(utra::uart::EV_PENDING_RX, ack);
-                c
-            }
-        }
-    }
+
 }
 
 impl Write for Uart {
