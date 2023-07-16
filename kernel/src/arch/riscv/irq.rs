@@ -21,6 +21,9 @@ static SIM_BACKING: AtomicUsize = AtomicUsize::new(0);
 // Interrupts are enabled very early on, so just assume they're on by default
 static IRQ_ENABLED: AtomicBool = AtomicBool::new(true);
 
+// Indicate when we handle an IRQ
+static HANDLING_IRQ: AtomicBool = AtomicBool::new(false);
+
 fn sim_read() -> usize {
     let existing: usize;
     unsafe { core::arch::asm!("csrrs {0}, 0x9C0, zero", out(reg) existing) };
@@ -90,6 +93,36 @@ pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) {
 #[cfg(feature = "gdb-stub")]
 pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
     PREVIOUS_PAIR.take()
+}
+
+/// Finish a pending ISR. Return `false` if there was none.
+fn finish_isr() -> bool {
+    if !HANDLING_IRQ.swap(false, Ordering::Relaxed) {
+        return false;
+    }
+
+    // If we hit this address, then an ISR has just returned.  Since
+    // we're in an interrupt context, it is safe to access this
+    // global variable.
+    let (previous_pid, previous_context) = unsafe {
+        PREVIOUS_PAIR
+            .take()
+            .expect("got RETURN_FROM_ISR with no previous PID")
+    };
+    // println!(
+    //     "ISR: Resuming previous pair of ({}, {})",
+    //     previous_pid, previous_context
+    // );
+    // Switch to the previous process' address space.
+    SystemServices::with_mut(|ss| {
+        ss.finish_callback_and_resume(previous_pid, previous_context)
+            .expect("unable to resume previous PID")
+    });
+
+    // Re-enable interrupts now that they're handled
+    enable_all_irqs();
+
+    true
 }
 
 /// Convert a RISC-V `Exception` into a Xous exception argument list.
@@ -177,7 +210,10 @@ pub extern "C" fn trap_handler(
     {
         let pid = current_pid();
         let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
-        panic!("KERNEL({}): RISC-V fault: {} - maybe ran out of kernel stack?", pid, ex);
+        panic!(
+            "KERNEL({}): RISC-V fault: {} - maybe ran out of kernel stack?",
+            pid, ex
+        );
     }
 
     let pid = current_pid();
@@ -237,6 +273,7 @@ pub extern "C" fn trap_handler(
                     PREVIOUS_PAIR = Some((pid, tid));
                 }
             }
+            HANDLING_IRQ.store(true, Ordering::Relaxed);
             crate::irq::handle(irqs_pending).expect("Couldn't handle IRQ");
             ArchProcess::with_current_mut(|process| {
                 crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
@@ -273,6 +310,9 @@ pub extern "C" fn trap_handler(
                     .expect("unable to finish exception handler")
             });
 
+            // TODO: Handle the case where this happens in an ISR
+            // finish_isr();
+
             // Resume the new thread within the same process.
             ArchProcess::with_current_mut(|p| {
                 // Adjust the program counter by the amount returned by the exception handler
@@ -296,6 +336,10 @@ pub extern "C" fn trap_handler(
                 crate::syscall::reset_switchto_caller();
             }
 
+            // Now that the thread is destroyed, switch to a different process if
+            // we're in an interrupt handler.
+            finish_isr();
+
             // Resume the new thread within the same process.
             ArchProcess::with_current_mut(|p| {
                 crate::arch::syscall::resume(current_pid().get() == 1, p.current_thread())
@@ -303,27 +347,7 @@ pub extern "C" fn trap_handler(
         }
 
         RiscvException::InstructionPageFault(RETURN_FROM_ISR, _offset) => {
-            // If we hit this address, then an ISR has just returned.  Since
-            // we're in an interrupt context, it is safe to access this
-            // global variable.
-            let (previous_pid, previous_context) = unsafe {
-                PREVIOUS_PAIR
-                    .take()
-                    .expect("got RETURN_FROM_ISR with no previous PID")
-            };
-            // println!(
-            //     "ISR: Resuming previous pair of ({}, {})",
-            //     previous_pid, previous_context
-            // );
-            // Switch to the previous process' address space.
-            SystemServices::with_mut(|ss| {
-                ss.finish_callback_and_resume(previous_pid, previous_context)
-                    .expect("unable to resume previous PID")
-            });
-
-            // Re-enable interrupts now that they're handled
-            enable_all_irqs();
-
+            finish_isr();
             ArchProcess::with_current_mut(|process| {
                 crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
             });
@@ -347,6 +371,9 @@ pub extern "C" fn trap_handler(
                         .expect("couldn't debug current process");
                     crate::syscall::reset_switchto_caller();
                 });
+
+                // Don't lock up when debugging ISRs
+                finish_isr();
 
                 // Resume the parent process.
                 ArchProcess::with_current_mut(|process| {
@@ -432,6 +459,8 @@ pub extern "C" fn trap_handler(
         #[allow(clippy::empty_loop)]
         loop {}
     }
+
+    finish_isr();
 
     // If it's not a failure in the kernel, terminate or debug the current process.
     SystemServices::with_mut(|ss| {
