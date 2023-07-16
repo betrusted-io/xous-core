@@ -124,7 +124,7 @@ impl Codec {
         let llio = llio::Llio::new(xns);
         let i2c = llio::I2c::new(xns);
 
-        let mut codec = Codec {
+        Codec {
             csr: CSR::new(csr.as_mut_ptr() as *mut u32),
             susres_manager: RegManager::new(csr.as_mut_ptr() as *mut u32),
             fifo,
@@ -145,23 +145,9 @@ impl Codec {
             speaker_gain: -6.0,
             headphone_left_gain: -15.0,
             headphone_right_gain: -15.0,
-        };
-
-        xous::claim_interrupt(
-            utra::audio::AUDIO_IRQ,
-            audio_handler,
-            (&mut codec) as *mut Codec as *mut usize,
-        )
-        .expect("couldn't claim audio irq");
-        codec.csr.wfo(utra::audio::EV_PENDING_RX_READY, 1);
-
-        codec.susres_manager.push(RegOrField::Reg(utra::audio::RX_CTL), None);
-        codec.susres_manager.push(RegOrField::Reg(utra::audio::TX_CTL), None);
-        codec.susres_manager.push_fixed_value(RegOrField::Reg(utra::audio::EV_PENDING), 0xFFFF_FFFF);
-        codec.susres_manager.push(RegOrField::Reg(utra::audio::EV_ENABLE), None);
-
-        codec
+        }
     }
+
     fn trace(&mut self) {
         if self.tx_stat_errors > 0 || self.rx_stat_errors > 0 {
             log::trace!("drop p:{} r:{} | staterr tx:{} rx:{}", self.play_frames_dropped, self.rec_frames_dropped, self.tx_stat_errors, self.rx_stat_errors);
@@ -195,6 +181,21 @@ impl Codec {
     }
 
     pub fn init(&mut self) {
+        if ! self.initialized {
+            xous::claim_interrupt(
+                utra::audio::AUDIO_IRQ,
+                audio_handler,
+                self as *mut Codec as *mut usize,
+            )
+            .expect("couldn't claim audio irq");
+            self.csr.wfo(utra::audio::EV_PENDING_RX_READY, 1);
+
+            self.susres_manager.push(RegOrField::Reg(utra::audio::RX_CTL), None);
+            self.susres_manager.push(RegOrField::Reg(utra::audio::TX_CTL), None);
+            self.susres_manager.push_fixed_value(RegOrField::Reg(utra::audio::EV_PENDING), 0xFFFF_FFFF);
+            self.susres_manager.push(RegOrField::Reg(utra::audio::EV_ENABLE), None);
+        }
+
         log::trace!("audio_clocks");
         self.audio_clocks();
         log::trace!("audio_ports");
