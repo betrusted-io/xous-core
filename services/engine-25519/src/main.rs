@@ -111,7 +111,7 @@ mod implementation {
                 RF_TOTAL_U8_SIZE,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             ).expect("couldn't map RF backing store");
-            let mut engine = Engine25519Hw {
+            Engine25519Hw {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
                 ucode_hw: unsafe{core::slice::from_raw_parts_mut(mem.as_mut_ptr().add(UCODE_U8_BASE) as *mut u32, UCODE_U32_SIZE)},
@@ -124,38 +124,38 @@ mod implementation {
                 do_notify: false,
                 illegal_opcode: false,
                 montgomery_len: None,
-            };
+            }
+        }
 
+        pub fn init(&mut self) {
             log::trace!("claiming interrupt");
             xous::claim_interrupt(
                 utra::engine::ENGINE_IRQ,
                 handle_engine_irq,
-                (&mut engine) as *mut Engine25519Hw as *mut usize,
+                self as *mut Engine25519Hw as *mut usize,
             )
             .expect("couldn't claim engine irq");
 
             log::trace!("enabling interrupt");
-            engine.csr.wo(utra::engine::EV_PENDING, 0xFFFF_FFFF); // clear any droppings.
-            engine.csr.wo(utra::engine::EV_ENABLE,
-                engine.csr.ms(utra::engine::EV_ENABLE_FINISHED, 1) |
-                engine.csr.ms(utra::engine::EV_ENABLE_ILLEGAL_OPCODE, 1)
+            self.csr.wo(utra::engine::EV_PENDING, 0xFFFF_FFFF); // clear any droppings.
+            self.csr.wo(utra::engine::EV_ENABLE,
+                self.csr.ms(utra::engine::EV_ENABLE_FINISHED, 1) |
+                self.csr.ms(utra::engine::EV_ENABLE_ILLEGAL_OPCODE, 1)
             );
 
             // setup the susres context. Most of the defaults are fine, so they aren't explicitly initialized in the code above,
             // but they still have to show up down here in case we're suspended mid-op
             log::trace!("setting up susres");
-            engine.susres.push(RegOrField::Reg(utra::engine::POWER), None); // on resume, this needs to be setup first, so that the "pause" state is captured correctly
-            engine.susres.push(RegOrField::Reg(utra::engine::WINDOW), None);
-            engine.susres.push(RegOrField::Reg(utra::engine::MPSTART), None);
-            engine.susres.push(RegOrField::Reg(utra::engine::MPLEN), None);
-            engine.susres.push_fixed_value(RegOrField::Reg(utra::engine::EV_PENDING), 0xFFFF_FFFF);
+            self.susres.push(RegOrField::Reg(utra::engine::POWER), None); // on resume, this needs to be setup first, so that the "pause" state is captured correctly
+            self.susres.push(RegOrField::Reg(utra::engine::WINDOW), None);
+            self.susres.push(RegOrField::Reg(utra::engine::MPSTART), None);
+            self.susres.push(RegOrField::Reg(utra::engine::MPLEN), None);
+            self.susres.push_fixed_value(RegOrField::Reg(utra::engine::EV_PENDING), 0xFFFF_FFFF);
 
             // manually handle event enable, because the bootloader could have messed with our current state
-            // engine.susres.push(RegOrField::Reg(utra::engine::EV_ENABLE), None);
+            // self.susres.push(RegOrField::Reg(utra::engine::EV_ENABLE), None);
 
-            // engine.susres.push(RegOrField::Reg(utra::engine::CONTROL), None); // don't push this, we need to manually coordinate `mpcresume` before resuming
-
-            engine
+            // self.susres.push(RegOrField::Reg(utra::engine::CONTROL), None); // don't push this, we need to manually coordinate `mpcresume` before resuming
         }
 
         pub fn suspend(&mut self) {
@@ -803,12 +803,13 @@ fn main() -> ! {
 
     let handler_conn = xous::connect(engine25519_sid).expect("couldn't create IRQ handler connection");
     log::trace!("creating engine25519 object");
-    let mut engine25519 = Engine25519Hw::new(handler_conn);
+    let mut engine25519 = Box::new(Engine25519Hw::new(handler_conn));
+    engine25519.init();
 
     log::trace!("ready to accept requests");
 
     // register a suspend/resume listener
-    xous::create_thread_1(susres_thread, (&mut engine25519) as *mut Engine25519Hw as usize).expect("couldn't start susres handler thread");
+    xous::create_thread_1(susres_thread, engine25519.as_mut() as *mut Engine25519Hw as usize).expect("couldn't start susres handler thread");
 
     let mut client_cid: Option<xous::CID> = None;
     let mut job_count = 0;
