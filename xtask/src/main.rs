@@ -359,6 +359,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_feature("avalanchetest");
         }
 
+        // ------ Cramium hardware image configs ------
+        Some("cramium-fpga") | Some("cramium-soc") => {
+            let cramium_pkgs = [
+                "xous-log",
+                "xous-names",
+                "xous-ticktimer",
+                "cram-console",
+                // "mbox1",
+                // "mbox2",
+            ].to_vec();
+            match task.as_deref() {
+                Some("cramium-fpga") => builder.target_cramium_fpga(),
+                Some("cramium-soc") => builder.target_cramium_soc(),
+                _ => panic!("should be unreachable"),
+            };
+            builder.add_services(&get_cratespecs());
+            for service in cramium_pkgs {
+                builder.add_service(service, true);
+            }
+        }
+
         // ------ ARM hardware image configs ------
         Some("arm-tiny") => {
             builder.target_arm()

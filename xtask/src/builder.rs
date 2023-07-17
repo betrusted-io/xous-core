@@ -249,6 +249,26 @@ impl Builder {
         self
     }
 
+    /// Configure various Cramium targets
+    pub fn target_cramium_fpga<'a>(&'a mut self) -> &'a mut Builder {
+        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.stream = BuildStream::Release;
+        self.utra_target = "cramium-fpga".to_string();
+        self.run_svd2repl = false;
+        self.loader = CrateSpec::Local("loader".to_string(), false);
+        self.kernel = CrateSpec::Local("xous-kernel".to_string(), false);
+        self
+    }
+    pub fn target_cramium_soc<'a>(&'a mut self) -> &'a mut Builder {
+        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.stream = BuildStream::Release;
+        self.utra_target = "cramium-soc".to_string();
+        self.run_svd2repl = false;
+        self.loader = CrateSpec::Local("loader".to_string(), false);
+        self.kernel = CrateSpec::Local("xous-kernel".to_string(), false);
+        self
+    }
+
     /// Override the default kernel. For example, to use the kernel from crates.io, specify as "xous-kernel@0.9.9"
     #[allow(dead_code)]
     pub fn use_kernel<'a>(&'a mut self, spec: &str) -> &'a mut Builder {
@@ -336,6 +356,7 @@ impl Builder {
         // the stream is specified separately here because the loader is special-case always release
         stream: BuildStream,
         extra_args: &Vec::<String>,
+        no_default_features: bool,
     ) -> Result<Vec::<String>, DynError> {
         // list of build artifacts, as full paths specific to the host OS
         let mut artifacts = Vec::<String>::new();
@@ -398,6 +419,9 @@ impl Builder {
                 local_args.push(pkg);
                 artifacts.push(format!("{}{}", &output_root, pkg));
             }
+            if no_default_features {
+                local_args.push("--no-default-features");
+            }
             if features.len() > 0 {
                 for feature in features {
                     local_args.push("--features");
@@ -422,6 +446,9 @@ impl Builder {
         }
         if remote_pkgs.len() > 0 {
             // remote packages are installed one at a time
+            if no_default_features {
+                local_args.push("--no-default-features");
+            }
             if features.len() > 0 {
                 for feature in features {
                     remote_args.push("--features");
@@ -528,6 +555,22 @@ impl Builder {
             self.kernel_features.push("atsama5d27".into());
             self.loader_features.push("atsama5d27".into());
             Some(crate::TARGET_TRIPLE_ARM)
+        } else if self.utra_target.contains("cramium-fpga") {
+            self.features.push("cramium-fpga".into());
+            self.features.push(format!("utralib/{}", &self.utra_target));
+            self.kernel_features.push("cramium-fpga".into());
+            self.kernel_features.push(format!("utralib/{}", &self.utra_target));
+            self.loader_features.push("cramium-fpga".into());
+            self.loader_features.push(format!("utralib/{}", &self.utra_target));
+            Some(crate::TARGET_TRIPLE_RISCV32)
+        } else if self.utra_target.contains("cramium-soc") {
+            self.features.push("cramium-soc".into());
+            self.features.push(format!("utralib/{}", &self.utra_target));
+            self.kernel_features.push("cramium-soc".into());
+            self.kernel_features.push(format!("utralib/{}", &self.utra_target));
+            self.loader_features.push("cramium-soc".into());
+            self.loader_features.push(format!("utralib/{}", &self.utra_target));
+            Some(crate::TARGET_TRIPLE_RISCV32)
         } else {
             return Err("Target unknown: please check your UTRA target".into());
         };
@@ -551,6 +594,7 @@ impl Builder {
             &target,
             self.stream,
             &vec![],
+            false
         )?;
 
         // ------ either create an image, or launch hosted mode ------
@@ -606,6 +650,7 @@ impl Builder {
                     &target,
                     self.stream,
                     &vec![],
+                    false,
                 )?;
                 println!("Dry run requested: only building and not running");
             }
@@ -621,6 +666,7 @@ impl Builder {
                 &target,
                 self.stream,
                 &kernel_extra,
+                false,
             )?;
 
             // ------ build the loader ------
@@ -645,6 +691,7 @@ impl Builder {
                 &target,
                 BuildStream::Release, // loader doesn't fit if you build with Debug
                 &loader_extra,
+                true, // loader builds without any default features
             )?;
             // restore the LTO settings
             if let Some(existing) = existing_lto {
