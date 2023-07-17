@@ -483,7 +483,7 @@ fn parse_memory_regions<T: BufRead>(
                     // keep adding _ to the end of the name until it's unique
                     loop {
                         if description.memory_regions.iter().find(|&m| m.name == mr.name).is_some() {
-                            mr.name.push_str("_");
+                            mr.name.push_str("_X");
                             continue;
                         }
                         break;
@@ -538,7 +538,7 @@ fn generate_constants<T: BufRead>(
                     // keep adding _ to the end of the name until it's unique
                     loop {
                         if description.constants.iter().find(|&c| c.name == constant_descriptor.name).is_some() {
-                            constant_descriptor.name.push_str("_");
+                            constant_descriptor.name.push_str("_X");
                             continue;
                         }
                         break;
