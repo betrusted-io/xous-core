@@ -31,9 +31,12 @@ fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
     fn round_mem(src: u32) -> u32 {
         (src + 4095) & !4095
     }
-    // Look for the largest "ram" block, which we'll treat as main memory
+    // Look for the largest memory block, which we'll treat as main memory
     for (k, v) in &hv.regions {
-        if k.find("ram").is_some() && v.length > ram_config.size {
+        if (
+            k.find("sram").is_some()  // uniquely finds region on Precursor and Cramium (excludes 'reram' correctly)
+            || k.find("ddr_ram").is_some() // finds region on atsama5d27 uniquely
+        ) && v.length > ram_config.size {
             ram_config.size = round_mem(v.length);
             ram_config.offset = v.start;
             found_ram_name = Some(k.clone());
@@ -41,12 +44,13 @@ fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
     }
 
     if found_ram_name.is_none() {
-        eprintln!("Error: Couldn't find a memory region named \"ram\" in config file");
+        eprintln!("Error: Couldn't find a memory region named \"sram\" in config file");
         return;
     }
 
     // Now that we know which block is ram, add the other regions.
     let found_ram_name = MemoryRegion::make_name(&found_ram_name.unwrap());
+    let mut raw_regions = Vec::<MemoryRegion>::new();
     for (k, v) in &hv.regions {
         ram_config.memory_required += round_mem(v.length) / 4096;
         let region_name = MemoryRegion::make_name(k);
@@ -59,11 +63,22 @@ fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
         if round_mem(v.length) == 0 {
             continue;
         }
-        ram_config
-            .regions
-            .add(MemoryRegion::new(v.start, round_mem(v.length), region_name));
+        raw_regions.push(MemoryRegion::new(v.start, round_mem(v.length), region_name));
     }
+    // condense adjacent regions & eliminate overlapping regions
+    raw_regions.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap() );
+    let mut candidate_region = raw_regions[0];
+    for r in raw_regions[1..].iter() {
+        if r.start > candidate_region.start + candidate_region.length {
+            ram_config.regions.add(candidate_region);
+            candidate_region = r.to_owned();
+        } else {
+            candidate_region.length = (r.start + r.length) - candidate_region.start;
+        }
+    }
+    ram_config.regions.add(candidate_region);
 }
+
 fn main() {
     env_logger::init();
     let matches = App::new("Xous Image Creator")
@@ -113,9 +128,18 @@ fn main() {
                 .short("s")
                 .long("svd")
                 .value_name("SOC_SVD")
-                .help("soc.csv file from litex")
+                .help("soc.svd file from litex (system-level)")
                 .takes_value(true)
                 .required_unless_one(&["ram", "svd", "csv"]),
+        )
+        .arg(
+            Arg::with_name("extra-svd")
+                .long("extra-svd")
+                .value_name("EXTRA_SVD")
+                .help("extra SVD files")
+                .takes_value(true)
+                .multiple(true)
+                .number_of_values(1)
         )
         .arg(
             Arg::with_name("ram")
@@ -184,7 +208,8 @@ fn main() {
 
     if let Some(soc_svd) = matches.value_of("svd") {
         let soc_svd_file = std::path::Path::new(soc_svd);
-        let desc = svd2utra::parse_svd(soc_svd_file).unwrap();
+        let svd_file = std::fs::File::open(soc_svd_file).unwrap();
+        let desc = svd2utra::parse_svd(vec![svd_file]).unwrap();
         let mut map = std::collections::BTreeMap::new();
 
         let mut csr_top = 0;
@@ -224,6 +249,42 @@ fn main() {
                 );
             }
         }
+        // insert additional regions from core.svd, if specified
+        if matches.is_present("extra-svd") {
+            let files: Vec<_> = matches.values_of("extra-svd").unwrap().collect();
+            for soc_svd in files {
+                let soc_svd_file = std::path::Path::new(soc_svd);
+                let svd_file = std::fs::File::open(soc_svd_file).unwrap();
+                let desc = svd2utra::parse_svd(vec![svd_file]).unwrap();
+
+                let mut csr_top = 0;
+                for peripheral in desc.peripherals {
+                    if peripheral.base > csr_top {
+                        csr_top = peripheral.base;
+                    }
+                }
+                for mut region in desc.memory_regions {
+                    loop {
+                        if map.contains_key(&region.name.to_lowercase()) {
+                            let mut new_name = region.name.to_lowercase();
+                            new_name.push_str("_");
+                            region.name = new_name;
+                            continue;
+                        }
+                        break;
+                    }
+                    println!("{}: {:x}", region.name, region.base);
+                    map.insert(
+                        region.name.to_lowercase(),
+                        tools::utils::CsrMemoryRegion {
+                            start: region.base.try_into().unwrap(),
+                            length: region.size.try_into().unwrap(),
+                        },
+                    );
+                }
+            }
+        }
+
         csr_to_config(tools::utils::CsrConfig { regions: map }, &mut ram_config);
     }
 

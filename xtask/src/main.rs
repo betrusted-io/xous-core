@@ -486,10 +486,6 @@ Note: By default, the `ticktimer` will get rebuilt every time. You can skip this
 
 type DynError = Box<dyn std::error::Error>;
 
-enum MemorySpec {
-    SvdFile(String),
-}
-
 /// [cratespecs] are positional arguments, and is a list of 0 to N tokens that immediately
 /// follow [verb]
 fn get_cratespecs() -> Vec<String> {

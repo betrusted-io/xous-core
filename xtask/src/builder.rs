@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-use crate::{DynError, app_manifest::generate_app_menus, MemorySpec};
+use crate::{DynError, app_manifest::generate_app_menus};
 
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
@@ -674,8 +674,12 @@ impl Builder {
             let mut svd_spec_file = OpenOptions::new()
                 .read(true)
                 .open(&svd_spec_path)?;
-            let mut svd_path = String::new();
-            svd_spec_file.read_to_string(&mut svd_path)?;
+            let mut svd_path_str = String::new();
+            svd_spec_file.read_to_string(&mut svd_path_str)?;
+            let mut svd_paths = Vec::new();
+            for line in svd_path_str.lines() {
+                svd_paths.push(line.to_owned());
+            }
 
             // ---------- install any pre-built packages ----------
             services_path.append(&mut self.fetch_prebuilds()?);
@@ -687,7 +691,7 @@ impl Builder {
                 &kernel_path[0],
                 &inie,
                 &inif,
-                MemorySpec::SvdFile(svd_path)
+                svd_paths,
             )?;
             println!();
             println!(
@@ -780,7 +784,7 @@ impl Builder {
         kernel: &String,
         init: &[String],
         inif: &[String],
-        memory_spec: MemorySpec,
+        memory_spec: Vec::<String>,
     ) -> Result<PathBuf, DynError> {
         let stream = self.stream.to_str();
         let mut args = vec!["run", "--package", "tools", "--bin", "create-image", "--"];
@@ -805,10 +809,15 @@ impl Builder {
             args.push(i);
         }
 
-        match memory_spec {
-            MemorySpec::SvdFile(ref s) => {
-                args.push("--svd");
-                args.push(s);
+        if memory_spec.len() == 1 {
+            args.push("--svd");
+            args.push(&memory_spec[0])
+        } else {
+            args.push("--svd");
+            args.push(&memory_spec[0]);
+            for spec in memory_spec[1..].iter() {
+                args.push("--extra-svd");
+                args.push(&spec);
             }
         }
 

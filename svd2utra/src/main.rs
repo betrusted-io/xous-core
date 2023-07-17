@@ -11,8 +11,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let generated_filename = std::env::args().nth(2).ok_or("Must specify destination utralib filename")?;
 
     let mut dest_file = std::fs::File::create(generated_filename).expect("couldn't open dest file");
+    let src_file = std::fs::File::open(svd_filename).expect("couldn't open source file");
 
-    svd2utra::generate(svd_filename, &mut dest_file)?;
+    svd2utra::generate(vec![src_file], &mut dest_file)?;
 
     Ok(())
 }

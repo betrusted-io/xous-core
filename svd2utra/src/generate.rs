@@ -5,8 +5,7 @@
 use quick_xml::events::{attributes::Attribute, Event};
 use quick_xml::reader::Reader;
 use quick_xml::name::QName;
-use std::io::{BufRead, Write};
-use std::path::Path;
+use std::io::{BufRead, BufReader, Read, Write};
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -479,9 +478,20 @@ fn parse_memory_regions<T: BufRead>(
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => match e.name() {
-                QName(b"memoryRegion") => description
+                QName(b"memoryRegion") => {
+                    let mut mr = generate_memory_region(reader)?;
+                    // keep adding _ to the end of the name until it's unique
+                    loop {
+                        if description.memory_regions.iter().find(|&m| m.name == mr.name).is_some() {
+                            mr.name.push_str("_");
+                            continue;
+                        }
+                        break;
+                    }
+                    description
                     .memory_regions
-                    .push(generate_memory_region(reader)?),
+                    .push(mr)
+                },
                 _ => panic!("unexpected tag in <memoryRegions>: {:?}", e),
             },
             Ok(Event::End(ref e)) => match e.name() {
@@ -524,6 +534,14 @@ fn generate_constants<T: BufRead>(
                             }
                             _ => panic!("unexpected value in constant: {:?}", maybe_att),
                         }
+                    }
+                    // keep adding _ to the end of the name until it's unique
+                    loop {
+                        if description.constants.iter().find(|&c| c.name == constant_descriptor.name).is_some() {
+                            constant_descriptor.name.push_str("_");
+                            continue;
+                        }
+                        break;
                     }
                     description.constants.push(constant_descriptor)
                 }
@@ -1014,31 +1032,34 @@ mod tests {
     Ok(())
 }
 
-pub fn parse_svd<P: AsRef<Path>>(src: P) -> Result<Description, ParseError> {
-    let mut buf = Vec::new();
-    let mut reader = Reader::from_file(src).expect("couldn't open SVD for reading");
+pub fn parse_svd<T: Read>(sources: Vec::<T>) -> Result<Description, ParseError> {
     let mut description = Description::default();
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => match e.name() {
-                QName(b"peripherals") => {
-                    description.peripherals = generate_peripherals(&mut reader)?;
-                }
-                QName(b"vendorExtensions") => {
-                    parse_vendor_extensions(&mut reader, &mut description)?;
-                }
+    for src in sources {
+        let mut buf = Vec::new();
+        let buf_reader = BufReader::new(src);
+        let mut reader = Reader::from_reader(buf_reader);
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(ref e)) => match e.name() {
+                    QName(b"peripherals") => {
+                        description.peripherals = generate_peripherals(&mut reader)?;
+                    }
+                    QName(b"vendorExtensions") => {
+                        parse_vendor_extensions(&mut reader, &mut description)?;
+                    }
+                    _ => (),
+                },
+                Ok(Event::Eof) => break,
+                Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
                 _ => (),
-            },
-            Ok(Event::Eof) => break,
-            Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
-            _ => (),
+            }
+            buf.clear();
         }
-        buf.clear();
     }
     Ok(description)
 }
 
-pub fn generate<T: AsRef<Path>, U: Write>(src: T, dest: &mut U) -> Result<(), ParseError> {
+pub fn generate<T: Read, U: Write>(src: Vec::<T>, dest: &mut U) -> Result<(), ParseError> {
     let description = parse_svd(src)?;
 
     print_header(dest).or(Err(ParseError::WriteError))?;
