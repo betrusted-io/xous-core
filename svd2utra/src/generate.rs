@@ -1042,7 +1042,7 @@ pub fn parse_svd<T: Read>(sources: Vec::<T>) -> Result<Description, ParseError> 
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Start(ref e)) => match e.name() {
                     QName(b"peripherals") => {
-                        description.peripherals = generate_peripherals(&mut reader)?;
+                        description.peripherals.append(&mut generate_peripherals(&mut reader)?);
                     }
                     QName(b"vendorExtensions") => {
                         parse_vendor_extensions(&mut reader, &mut description)?;
