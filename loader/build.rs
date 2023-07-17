@@ -10,9 +10,21 @@ fn main() {
 
     let linker_file_path = if target.starts_with("riscv") {
         println!("cargo:rustc-link-search={}", out_dir.display());
-        println!("cargo:rustc-link-arg=-Tlink.x");
+        #[cfg(feature="cramium-soc")]
+        println!("cargo:rustc-link-arg=-Tlink-soc.x");
+        #[cfg(feature="cramium-soc")]
+        let p = PathBuf::from("src/platform/cramium/link-soc.x");
+        #[cfg(feature="cramium-fpga")]
+        println!("cargo:rustc-link-arg=-Tlink-fpga.x");
+        #[cfg(feature="cramium-fpga")]
+        let p = PathBuf::from("src/platform/cramium/link-fpga.x");
 
-        PathBuf::from("link.x")
+        #[cfg(not(any(feature="cramium-fpga", feature="cramium-soc")))]
+        println!("cargo:rustc-link-arg=-Tlink.x");
+        #[cfg(not(any(feature="cramium-fpga", feature="cramium-soc")))]
+        let p = PathBuf::from("link.x");
+
+        p
     } else if target.starts_with("armv7a") {
         let name = env::var("CARGO_PKG_NAME").unwrap();
 
