@@ -13,7 +13,7 @@ pub mod duart {
     pub const UART_BUSY: utralib::Register = utralib::Register::new(2, 1);
     pub const UART_BUSY_BUSY: utralib::Field = utralib::Field::new(1, 0, UART_BUSY);
 
-    pub const HW_DUART_BASE: usize = 0x4000_1000;
+    pub const HW_DUART_BASE: usize = 0x4004_2000;
 }
 #[cfg(feature="platform-tests")]
 struct Duart {
@@ -58,4 +58,40 @@ fn test_duart() {
 #[cfg(feature="platform-tests")]
 pub fn platform_tests() {
     test_duart();
+}
+
+#[cfg(feature="cramium-soc")]
+pub fn early_init() {
+    unsafe {
+        (0x400400a0 as *mut u32).write_volatile(0x1F598); // F
+        crate::println!("F: {:08x}", ((0x400400a0 as *const u32).read_volatile()));
+        let poke_array: [(u32, u32, bool); 12] = [
+            (0x400400a4, 0x2812, false),   //  MN
+            (0x400400a8, 0x3301, false),   //  Q
+            (0x40040090, 0x0032, true),  // setpll
+            (0x40040014, 0x7f7f, false),  // fclk
+            (0x40040018, 0x7f7f, false),  // aclk
+            (0x4004001c, 0x3f3f, false),  // hclk
+            (0x40040020, 0x1f1f, false),  // iclk
+            (0x40040024, 0x0f0f, false),  // pclk
+            (0x40040010, 0x0001, false),  // sel0
+            (0x4004002c, 0x0032, true),  // setcgu
+            (0x40040060, 0x0003, false),  // aclk gates
+            (0x40040064, 0x0003, false),  // hclk gates
+        ];
+        for &(addr, dat, is_u32) in poke_array.iter() {
+            let rbk = if is_u32 {
+                (addr as *mut u32).write_volatile(dat);
+                (addr as *const u32).read_volatile()
+            } else {
+                (addr as *mut u16).write_volatile(dat as u16);
+                (addr as *const u16).read_volatile() as u32
+            };
+            if dat != rbk {
+                crate::println!("{:08x}(w) != {:08x}(r)", dat, rbk);
+            } else {
+                crate::println!("{:08x} ok", dat);
+            }
+        }
+    }
 }

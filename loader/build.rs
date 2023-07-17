@@ -13,9 +13,11 @@ fn main() {
         #[cfg(feature="cramium-soc")]
         let p = PathBuf::from("src/platform/cramium/link-soc.x");
         #[cfg(feature="cramium-fpga")]
-        let p = PathBuf::from("src/platform/cramium/link-fpga.x");
+        let p = PathBuf::from("src/platform/cramium/link-soc.x");  // note deviation -- this is because we are still simulating the FPGA model and offsets are not yet settled for that
+        #[cfg(not(any(feature="cramium-soc", feature="cramium-fpga")))]
+        let p = PathBuf::from("src/platform/precursor/link.x");
 
-        #[cfg(not(any(feature="cramium-fpga", feature="cramium-soc")))]
+        println!("cargo:rerun-if-changed={}", p.clone().into_os_string().into_string().unwrap());
         println!("cargo:rustc-link-arg=-Tlink.x");
 
         p
@@ -37,8 +39,9 @@ fn main() {
         unreachable!("unsupported target");
     };
 
+    println!("{}", out_dir.join("link.x").display());
     // Put the linker script somewhere the linker can find it
-    fs::File::create(out_dir.join("link.x"))
+    std::fs::OpenOptions::new().create(true).write(true).truncate(true).open(out_dir.join("link.x"))
         .unwrap()
         .write_all(fs::read_to_string(linker_file_path).expect("linker file read").as_bytes())
         .unwrap();
