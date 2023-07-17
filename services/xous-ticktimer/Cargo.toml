@@ -28,13 +28,22 @@ atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", bra
 
 [features]
 atsama5d27 = ["utralib/atsama5d27"]
-precursor = ["utralib/precursor", "susres/precursor"]
-hosted = ["utralib/hosted", "susres/hosted"]
-renode = ["utralib/renode", "susres/renode"]
+
+# you may want to remove the watchdog feature if you're debugging a crash, as it will force the system to reboot automatically
+precursor = ["utralib/precursor", "susres/precursor", "watchdog"]
+hosted = ["utralib/hosted", "susres/hosted", "watchdog"]
+renode = ["utralib/renode", "susres/renode", "watchdog"]
+
+cramium-soc = ["utralib/cramium-soc"]
+cramium-fpga = ["utralib/cramium-fpga"]
+
 debug-print = []
 watchdog = []
 timestamp = []
-# you may want to remove the watchdog feature if you're debugging a crash, as it will force the system to reboot automatically
-default = ["watchdog"]
+default = [] # watchdog option is now moved into individual platform configs
 # default = []
 # default = ["debug-print"]
+
+# Note to self: if implementing "susres" for cramium targets,
+# it's currently a "susres" feature flag in the implementation crate,
+# but 'feature = "cramium-fpga"' clauses in main.rs!

@@ -14,7 +14,7 @@ mod platform;
 use platform::implementation::*;
 use platform::*;
 
-#[cfg(not(target_arch = "arm"))]
+#[cfg(not(any(target_arch = "arm", feature="cramium-soc", feature="cramium-fpga")))]
 use susres::SuspendOrder;
 
 fn main() -> ! {
@@ -52,15 +52,15 @@ fn main() -> ! {
     ticktimer.reset(); // reset the time to 0
 
     // register a suspend/resume listener
-    #[cfg(not(target_arch = "arm"))]
+    #[cfg(not(any(target_arch = "arm", feature="cramium-soc", feature="cramium-fpga")))]
     let xns = xous_names::XousNames::new().unwrap();
 
-    #[cfg(not(target_arch = "arm"))]
+    #[cfg(not(any(target_arch = "arm", feature="cramium-soc", feature="cramium-fpga")))]
     let sr_cid =
         xous::connect(ticktimer_server).expect("couldn't create suspend callback connection");
 
-    #[cfg(not(target_arch = "arm"))]
-    let mut susres = susres::Susres::new(
+    #[cfg(not(any(target_arch = "arm", feature="cramium-soc", feature="cramium-fpga")))]
+        let mut susres = susres::Susres::new(
         Some(SuspendOrder::Last),
         &xns,
         api::Opcode::SuspendResume as u32,
@@ -222,7 +222,7 @@ fn main() -> ! {
 
             api::Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, _token, _, _, _, {
                 ticktimer.suspend();
-                #[cfg(not(target_arch = "arm"))]
+                #[cfg(not(any(target_arch = "arm", feature="cramium-soc", feature="cramium-fpga")))]
                 susres
                     .suspend_until_resume(_token)
                     .expect("couldn't execute suspend/resume");
@@ -230,6 +230,7 @@ fn main() -> ! {
             }),
 
             api::Opcode::PingWdt => {
+                #[cfg(feature="watchdog")]
                 ticktimer.reset_wdt();
             }
 

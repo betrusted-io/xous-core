@@ -5,11 +5,11 @@ pub mod precursor;
 pub use precursor::*;
 
 #[cfg(any(not(target_os = "xous"),
-    not(any(feature="precursor", feature="renode", feature="atsama5d27", not(target_os = "xous")))
+    not(any(feature="precursor", feature="renode", feature="atsama5d27", feature="cramium-fpga", feature="cramium-soc", not(target_os = "xous")))
 ))]
 pub mod hosted;
 #[cfg(any(not(target_os = "xous"),
-    not(any(feature="precursor", feature="renode", feature="atsama5d27", not(target_os = "xous")))
+    not(any(feature="precursor", feature="renode", feature="atsama5d27", feature="cramium-fpga", feature="cramium-soc", not(target_os = "xous")))
 ))]
 pub use hosted::*;
 
@@ -18,6 +18,12 @@ pub use hosted::*;
 pub mod atsama5d2;
 #[cfg(any(feature="atsama5d27"))]
 pub use atsama5d2::*;
+
+#[cfg(any(feature="cramium-fpga", feature="cramium-soc"))]
+#[macro_use]
+pub mod cramium;
+#[cfg(any(feature="cramium-fpga", feature="cramium-soc"))]
+pub use cramium::*;
 
 pub(crate) type TimeoutExpiry = i64;
 
