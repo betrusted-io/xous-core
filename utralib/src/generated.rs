@@ -26,6 +26,16 @@ mod atsama5d27;
 #[cfg(feature = "atsama5d27")]
 pub use atsama5d27::*;
 
+#[cfg(feature="cramium-soc")]
+mod cramium_soc;
+#[cfg(feature="cramium-soc")]
+pub use cramium_soc::*;
+
+#[cfg(feature="cramium-fpga")]
+mod cramium_fpga;
+#[cfg(feature="cramium-fpga")]
+pub use cramium_fpga::*;
+
 // Hosted mode includes nothing, as it relies on the abstract host
 // architecture for I/O; so this file is empty when the "hosted"
 // configuration is selected and there are no corresponding "hosted"

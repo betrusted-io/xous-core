@@ -85,7 +85,7 @@ fn main() {
     // This script retains the use of an explicit "hosted" flag because we want to catch
     // unintentional build system misconfigurations that meant to build for a target other
     // than "hosted", rather than just falling back silently to defaults.
-    allow_single_target_feature!("precursor", "hosted", "renode", "atsama5d27");
+    allow_single_target_feature!("precursor", "hosted", "renode", "atsama5d27", "cramium-soc", "cramium-fpga");
 
     #[cfg(feature = "precursor")]
     allow_single_gitrev_feature!(
@@ -119,6 +119,16 @@ fn main() {
     let svd_filenames = vec!["atsama5d/ATSAMA5D27.svd"];
     #[cfg(feature = "atsama5d27")]
     let generated_filename = "src/generated/atsama5d27.rs";
+
+    #[cfg(feature = "cramium-soc")]
+    let svd_filenames = vec!["cramium/core.svd", "cramium/daric.svd"];
+    #[cfg(feature = "cramium-soc")]
+    let generated_filename = "src/generated/cramium_soc.rs";
+
+    #[cfg(feature = "cramium-fpga")]
+    let svd_filenames = vec!["cramium/soc.svd", "cramium/core.svd", "cramium/daric.svd"];
+    #[cfg(feature = "cramium-fpga")]
+    let generated_filename = "src/generated/cramium_fpga.rs";
 
     // ----- control file generation and rebuild sequence -----
     // check and see if the configuration has changed since the last build. This should be
