@@ -82,6 +82,7 @@ members = [
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
+  "services/cram-console",
   #"services/test-spawn",
   #"services/test-spawn/spawn",
   "services/usb-test",
@@ -90,7 +91,9 @@ members = [
   "kernel",
   "loader",
   "libs/userprefs",
-  "libs/tls"
+  "libs/tls",
+  "libs/xous-pio",
+  "libs/xous-pl230",
 ]
 resolver = "2"
 
