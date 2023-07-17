@@ -18,17 +18,25 @@ pub fn check_project_consistency() -> Result<(), DynError> {
         "xous-api-names@0.9.45",
         "xous-api-susres@0.9.43",
         "xous-api-ticktimer@0.9.43",
+    ];
+    // utra/svd2utra changes are downgraded to warnings because these now prefer to pull
+    // from the local patch version, so any inconsistency simply indicates we forgot to
+    // publish the packages, rather than something nefarious has happened.
+    let warn_pkgs = [
         // this set is only updated if the utralib changes
         "utralib@0.1.20",
         "svd2utra@0.1.18",
     ];
     for pkg in check_pkgs {
-        verify(pkg.into())?;
+        verify(pkg.into(), true)?;
+    }
+    for pkg in warn_pkgs {
+        verify(pkg.into(), false)?;
     }
     Ok(())
 }
 
-pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
+pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
     if let CrateSpec::CratesIo(name, version, _xip) = spec {
         let mut cache_path = Path::new(&env::var("CARGO_HOME").unwrap()).to_path_buf();
         cache_path.push("registry");
@@ -86,7 +94,12 @@ pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
         println!("Comparing {} <-> {}", src_path.as_os_str().to_str().unwrap(), cache_path.as_os_str().to_str().unwrap());
         match compare_dirs(src_path, &cache_path) {
             Ok(true) => Ok(()),
-            Ok(false) => Err("Crates.io downloaded data does not match local source".into()),
+            Ok(false) => if hard_failure {
+                    Err("Crates.io downloaded data does not match local source".into())}
+                else {
+                    println!("**WARNING**: Local package does not match the published source. Third parties downloading from crates.io will be inconsistent with this build.");
+                    Ok(())
+                },
             _ => Err("Error matching local source to crates.io cache files".into()),
         }
     } else {

@@ -4130,15 +4130,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "svd2utra"
-version = "0.1.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ba87b81de81a553ec5904993a676aa29d1583a4f6ab96e03f8b44e4d6c05a61"
-dependencies = [
- "quick-xml",
-]
-
-[[package]]
 name = "syn"
 version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4378,7 +4369,7 @@ dependencies = [
  "log",
  "pem",
  "ring",
- "svd2utra 0.1.18 (registry+https://github.com/rust-lang/crates.io-index)",
+ "svd2utra",
  "xmas-elf",
  "xous-semver",
 ]
@@ -4849,10 +4840,8 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 [[package]]
 name = "utralib"
 version = "0.1.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99e69095d8616b8ff89850fb3693710ceab2923b4d094844c701ca5141563683"
 dependencies = [
- "svd2utra 0.1.18 (registry+https://github.com/rust-lang/crates.io-index)",
+ "svd2utra",
 ]
 
 [[package]]
@@ -5616,7 +5605,7 @@ dependencies = [
  "rustc_version 0.4.0",
  "serde",
  "serde_json",
- "svd2utra 0.1.18 (registry+https://github.com/rust-lang/crates.io-index)",
+ "svd2utra",
  "tempfile",
  "ureq",
  "zip",
