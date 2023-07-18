@@ -4,7 +4,7 @@ pub struct Uart {
 }
 
 impl Uart {
-    #[cfg(feature="precursor")]
+    #[cfg(any(feature="precursor", feature="renode"))]
     pub fn putc(&self, c: u8) {
         let base = utra::uart::HW_UART_BASE as *mut u32;
         let mut uart = CSR::new(base);

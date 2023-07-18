@@ -6,7 +6,7 @@ use crate::platform;
 #[link_section = ".text.init"]
 #[export_name = "_start"]
 pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
-    #[cfg(feature="precursor")]
+    #[cfg(any(feature="precursor", feature="renode"))]
     let _kernel_args = _kernel_args;
     #[cfg(any(feature="cramium-soc", feature="cramium-fpga"))]
     let _kernel_args = _start as *const usize as usize + platform::KERNEL_OFFSET;
