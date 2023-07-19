@@ -9,11 +9,11 @@ version = "0.1.0"
 log = "0.4.14"
 num-derive = { version = "0.3.3", default-features = false}
 num-traits = { version = "0.2.14", default-features = false}
-xous = "0.9.47"
-xous-ipc = "0.9.47"
-log-server = { package = "xous-api-log", version = "0.1.43" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.43" }
-xous-names = { package = "xous-api-names", version = "0.9.45" }
+xous = "0.9.48"
+xous-ipc = "0.9.48"
+log-server = { package = "xous-api-log", version = "0.1.44" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.44" }
+xous-names = { package = "xous-api-names", version = "0.9.46" }
 
 modals = { path = "../../services/modals" }
 net = { path = "../../services/net" }
