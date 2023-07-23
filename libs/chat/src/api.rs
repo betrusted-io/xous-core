@@ -30,6 +30,8 @@ pub enum ChatOp {
 
 const POST_TEXT_MAX: usize = 3072;
 
+pub const POST_TEXT_MAX: usize = 3072;
+
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct Find {
     pub author: xous_ipc::String<128>,

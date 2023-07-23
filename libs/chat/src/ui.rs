@@ -1,13 +1,18 @@
 use super::*;
 //use crate::{ChatOp, Dialogue, Event, Post, CHAT_SERVER_NAME};
-use core::fmt::Write;
 use dialogue::{author::Author, post::Post, Dialogue};
 use gam::UxRegistration;
 use graphics_server::api::GlyphStyle;
 use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
 use locales::t;
 use modals::Modals;
-use std::io::{Error, ErrorKind};
+use rkyv::de::deserializers::AllocDeserializer;
+use rkyv::ser::serializers::WriteSerializer;
+use rkyv::ser::Serializer;
+use rkyv::Deserialize;
+use std::convert::TryFrom;
+
+use std::io::{Error, ErrorKind, Read, Write};
 use xous::{MessageEnvelope, CID};
 
 use xous_names::XousNames;
@@ -79,10 +84,12 @@ impl Ui {
         let screensize = gam
             .get_canvas_bounds(canvas)
             .expect("couldn't get dimensions of content canvas");
+        let pddb = pddb::Pddb::new();
+        pddb.try_mount();
         Ui {
             input: None,
             msg: None,
-            pddb: pddb::Pddb::new(),
+            pddb: pddb,
             pddb_dict: None,
             pddb_key: None,
             dialogue: None,
@@ -100,10 +107,116 @@ impl Ui {
         }
     }
 
+    fn dialogue_read(&mut self) -> Result<(), Error> {
+        match (&self.pddb_dict, &self.pddb_key) {
+            (Some(dict), Some(key)) => {
+                match self
+                    .pddb
+                    .get(&dict, &key, None, false, false, None, None::<fn()>)
+                {
+                    Ok(mut pddb_key) => {
+                        let mut bytes = [0u8; dialogue::MAX_BYTES + 2];
+                        match pddb_key.read(&mut bytes) {
+                            Ok(_) => {
+                                // extract pos u16 from the first 2 bytes
+                                let pos: u16 = u16::from_be_bytes([bytes[0], bytes[1]]);
+                                let pos: usize = pos.into();
+                                // deserialize the Dialogue
+                                let archive =
+                                    unsafe { rkyv::archived_value::<Dialogue>(&bytes, pos) };
+                                self.dialogue = match archive.deserialize(&mut AllocDeserializer {})
+                                {
+                                    Ok(dialogue) => Some(dialogue),
+                                    Err(e) => {
+                                        log::warn!(
+                                            "failed to deserialize Dialogue {}:{} {}",
+                                            dict,
+                                            key,
+                                            e
+                                        );
+                                        None
+                                    }
+                                };
+                                log::debug!("get '{}' = '{:?}'", key, self.dialogue);
+                            }
+                            Err(e) => log::warn!("failed to read {}: {e}", key),
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("failed to get {}: {e}", key);
+                        return Err(Error::new(ErrorKind::InvalidData, "missing"));
+                    }
+                }
+                Ok(())
+            }
+            _ => {
+                log::warn!("missing pddb dict or key");
+                Err(Error::new(ErrorKind::InvalidData, "missing"))
+            }
+        }
+    }
+
+    fn dialogue_save(&self) -> Result<(), Error> {
+        match (&self.dialogue, &self.pddb_dict, &self.pddb_key) {
+            (Some(dialogue), Some(dict), Some(key)) => {
+                let hint = Some(dialogue::MAX_BYTES + 2);
+                match self
+                    .pddb
+                    .get(&dict, &key, None, true, true, hint, None::<fn()>)
+                {
+                    Ok(mut pddb_key) => {
+                        let mut buf = Vec::<u8>::new();
+                        // reserve 2 bytes to hold a u16 (see below)
+                        let reserved = 2;
+                        buf.push(0u8);
+                        buf.push(0u8);
+
+                        // serialize the Dialogue
+                        let mut serializer = WriteSerializer::with_pos(buf, reserved);
+                        let pos = serializer.serialize_value(dialogue).unwrap();
+                        let mut bytes = serializer.into_inner();
+
+                        // copy pop u16 into the first 2 bytes to enable the rkyv archive to be deserialised
+                        let pos: u16 = u16::try_from(pos).expect("data > u16");
+                        let pos_bytes = pos.to_be_bytes();
+                        bytes[0] = pos_bytes[0];
+                        bytes[1] = pos_bytes[1];
+                        match pddb_key.write(&bytes) {
+                            Ok(len) => {
+                                self.pddb.sync().ok();
+                                log::info!("Wrote {} bytes to {}:{}", len, dict, key);
+                            }
+                            Err(e) => {
+                                log::warn!("Error writing {}:{}: {:?}", dict, key, e);
+                            }
+                        }
+                    }
+                    Err(e) => log::warn!("failed to create {}:{}\n{}", dict, key, e),
+                }
+                Ok(())
+            }
+            _ => {
+                log::warn!("missing dict, key or dialogue");
+                Ok(())
+            }
+        }
+    }
+
     // set the current Dialogue
     pub fn dialogue_set(&mut self, pddb_dict: &str, pddb_key: &str) {
         self.pddb_dict = Some(pddb_dict.to_string());
         self.pddb_key = Some(pddb_key.to_string());
+        log::info!("Dialogue set to {}:{}", pddb_dict, pddb_key);
+        match self.dialogue_read() {
+            Ok(_) => (),
+            Err(_) => {
+                self.dialogue = Some(Dialogue::new(pddb_key));
+                match self.dialogue_save() {
+                    Ok(_) => log::info!("Dialogue created {}:{}", pddb_dict, pddb_key),
+                    Err(e) => log::warn!("Failed to create Dialogue {}:{}", pddb_dict, pddb_key),
+                }
+            }
+        }
     }
 
     // set listener sid and opcodes to receive UI-event msgs & user posts
@@ -129,9 +242,15 @@ impl Ui {
         attach_url: Option<&str>,
     ) -> Result<(), Error> {
         match &mut self.dialogue {
-            Some(ref mut dialogue) => dialogue
-                .post_add(author, timestamp, text, attach_url)
-                .unwrap(),
+            Some(ref mut dialogue) => {
+                dialogue
+                    .post_add(author, timestamp, text, attach_url)
+                    .unwrap();
+                match self.dialogue_save() {
+                    Ok(_) => log::info!("Dialogue saved"),
+                    Err(e) => log::warn!("Failed to save Dialogue"),
+                }
+            }
             None => log::warn!("no Dialogue available to add Post"),
         }
         Ok(())
@@ -192,6 +311,7 @@ impl Ui {
     }
 
     fn bubble(&self, post: &Post, author: &Author, baseline: i16) -> TextView {
+        use std::fmt::Write;
         let mut bubble_tv = if author.flag_is(AuthorFlag::Right) {
             TextView::new(
                 self.canvas,

@@ -13,6 +13,8 @@ use std::collections::HashMap;
 
 use std::io::{Error, ErrorKind};
 
+pub const MAX_BYTES: usize = 4000;
+
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct Dialogue {
     pub title: String,
@@ -38,7 +40,6 @@ impl Dialogue {
             last_author_id: first_author_id + 1,
         }
     }
-
 
     // add a new post to the dialog
     // note: posts are sorted by timestamp, so:
