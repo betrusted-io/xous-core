@@ -69,10 +69,10 @@ pub enum ModalOpcode { // if changes are made here, also update MenuOpcode
 
 /// We use a new type for item names, so that it's easy to resize this as needed.
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct ItemName(String::<64>);
+pub struct ItemName(String::<128>);
 impl ItemName {
     pub fn new(name: &str) -> Self {
-        ItemName(String::<64>::from_str(name))
+        ItemName(String::<128>::from_str(name))
     }
     pub fn as_str(&self) -> &str {
         self.0.as_str().expect("couldn't convert item into string")

@@ -27,3 +27,13 @@ pub use atsama5d2::console;
 
 #[cfg(feature="atsama5d27")]
 pub use atsama5d2::implementation;
+
+#[cfg(any(feature="cramium-soc", feature="cramium-fpga"))]
+#[macro_use]
+pub mod cramium;
+
+#[cfg(any(feature="cramium-soc", feature="cramium-fpga"))]
+pub use cramium::debug;
+
+#[cfg(any(feature="cramium-soc", feature="cramium-fpga"))]
+pub use cramium::implementation;

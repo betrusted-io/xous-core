@@ -496,7 +496,7 @@ fn main() -> ! {
         ActionType::TextEntry(password_action.clone()),
         Some(t!("rootkeys.updatefirstpass", locales::LANG)),
         None,
-        GlyphStyle::Regular,
+        gam::SYSTEM_STYLE,
         8
     );
     rootkeys_modal.spawn_helper(keys_sid, rootkeys_modal.sid,

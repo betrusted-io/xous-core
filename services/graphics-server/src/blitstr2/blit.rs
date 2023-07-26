@@ -18,6 +18,7 @@ pub const NULL_GLYPH_SPRITE: GlyphSprite = GlyphSprite {
     invert: false,
     insert: false,
     double: false,
+    large: false,
 };
 
 /// Unicode replacement character
@@ -113,6 +114,83 @@ pub fn xor_glyph(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: Clip
     }
 }
 
+/// Blit a glyph that is based off of 32x sprites.
+///
+pub fn xor_glyph_large(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: ClipRect) {
+    const SPRITE_PX: i16 = 32;
+    const SPRITE_WORDS: i16 = 8;
+    if gs.glyph.len() < SPRITE_WORDS as usize {
+        // Fail silently if the glyph slice was too small
+        // TODO: Maybe return an error? Not sure which way is better.
+        log::info!("len err: {}", gs.glyph.len());
+        return;
+    }
+    let high = gs.high as i16 / 2;
+    let wide = (gs.wide as i16 / 2).max(1);
+    if high > SPRITE_PX || wide > SPRITE_PX {
+        // Fail silently if glyph height or width is out of spec
+        // TODO: Maybe return an error?
+        log::info!("high/wide err");
+        return;
+    }
+    // Calculate word alignment for destination buffer
+    let x0 = p.x;
+    if x0 >= cr.max.x as i16 { log::trace!("out the right"); return } // out the right hand side
+    let x1 = p.x + (wide << 1) - 1;
+    if x1 < cr.min.x as i16 { log::trace!("out the left"); return } // out the left hand side
+    let dest_low_word = x0 >> 5;
+    let mut dest_high_word = x1 >> 5;
+    // fixup case where a glyph is very narrow and and gs.wide / 2 is rounded down to 0.
+    // this happens on things like '.' and '1'.
+    if dest_high_word == dest_low_word {
+        dest_high_word += 1;
+    }
+    let px_in_dest_low_word = 32 - (x0 & 0x1f);
+    // Blit it (use glyph height to avoid blitting empty rows)
+    let mut row_base = p.y * WORDS_PER_LINE as i16;
+    let row_upper_limit = cr.max.y as i16 * WORDS_PER_LINE as i16;
+    let row_lower_limit = cr.min.y as i16 * WORDS_PER_LINE as i16;
+    let glyph = gs.glyph;
+    // Blit the large glyph
+    for src in glyph {
+        if row_base >= row_upper_limit {
+            // Clip anything that would run off the end of the frame buffer
+            break;
+        }
+        if row_base >= row_lower_limit {
+            // compute partial masks to prevent glyphs from "spilling over" the clip rectangle
+            let mut partial_mask_lo = 0xffff_ffff;
+            let mut partial_mask_hi = 0xffff_ffff;
+            let x1_2x = p.x + ((gs.wide as i16) << 1) - 1;
+            if x0 < cr.min.x as i16 || x1_2x >= cr.max.x as i16 {
+                let x0a = if x0 < cr.min.x as i16 { cr.min.x as i16 } else { x0 };
+                let x1a = if x1_2x >= cr.max.x as i16 { cr.max.x as i16 } else { x1_2x };
+                let mut ones = (1u64 << ((x1a - x0a) as u64 + 1)) - 1;
+                ones <<= x0a as u64 & 0x1f;
+                partial_mask_lo = ones as u32;
+                partial_mask_hi = (ones >> 32) as u32;
+            }
+
+            // XOR glyph pixels onto destination buffer
+            if x0 >= 0 && x1_2x < WIDTH as i16 {
+                if xor {
+                    fb[(row_base + dest_low_word) as usize] ^= (src << (32 - px_in_dest_low_word)) & partial_mask_lo;
+                } else {
+                    fb[(row_base + dest_low_word) as usize] &= 0xffff_ffff ^ ((src << (32 - px_in_dest_low_word)) & partial_mask_lo);
+                }
+                if (wide << 1) >= px_in_dest_low_word {
+                    if xor {
+                        fb[(row_base + dest_high_word) as usize] ^= (src >> px_in_dest_low_word) & partial_mask_hi;
+                    } else {
+                        fb[(row_base + dest_high_word) as usize] &= 0xffff_ffff ^ ((src >> px_in_dest_low_word) & partial_mask_hi);
+                    }
+                }
+            }
+        }
+        // Advance destination offset using + instead of * to maybe save some CPU cycles
+        row_base += WORDS_PER_LINE as i16;
+    }
+}
 
 /// Blit a 2x scaled glyph with XOR at point; caller is responsible for word wrap.
 ///
@@ -128,7 +206,7 @@ pub fn xor_glyph_2x(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: C
         return;
     }
     let high = gs.high as i16 / 2;
-    let wide = gs.wide as i16 / 2;
+    let wide = (gs.wide as i16 / 2).max(1);
     if high > SPRITE_PX || wide > SPRITE_PX {
         // Fail silently if glyph height or width is out of spec
         // TODO: Maybe return an error?
@@ -140,7 +218,10 @@ pub fn xor_glyph_2x(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: C
     let x1 = p.x + (wide << 1) - 1;
     if x1 < cr.min.x as i16 { log::trace!("out the left"); return } // out the left hand side
     let dest_low_word = x0 >> 5;
-    let dest_high_word = x1 >> 5;
+    let mut dest_high_word = x1 >> 5;
+    if dest_high_word == dest_low_word {
+        dest_high_word += 1;
+    }
     let px_in_dest_low_word = 32 - (x0 & 0x1f);
     // Blit it (use glyph height to avoid blitting empty rows)
     let mut row_base = p.y * WORDS_PER_LINE as i16;
@@ -187,7 +268,7 @@ pub fn xor_glyph_2x(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: C
                 } else {
                     fb[(row_base + dest_low_word) as usize] &= 0xffff_ffff ^ ((src << (32 - px_in_dest_low_word)) & partial_mask_lo);
                 }
-                if (wide << 1) > px_in_dest_low_word {
+                if (wide << 1) >= px_in_dest_low_word {
                     if xor {
                         fb[(row_base + dest_high_word) as usize] ^= (src >> px_in_dest_low_word) & partial_mask_hi;
                     } else {

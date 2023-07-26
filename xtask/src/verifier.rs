@@ -12,23 +12,31 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     // TODO: retire utralib/svd2utra from publication as well
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous@0.9.45",
-        "xous-ipc@0.9.45",
-        "xous-api-log@0.1.41",
-        "xous-api-names@0.9.43",
-        "xous-api-susres@0.9.41",
-        "xous-api-ticktimer@0.9.41",
+        "xous@0.9.48",
+        "xous-ipc@0.9.48",
+        "xous-api-log@0.1.44",
+        "xous-api-names@0.9.46",
+        "xous-api-susres@0.9.44",
+        "xous-api-ticktimer@0.9.44",
+    ];
+    // utra/svd2utra changes are downgraded to warnings because these now prefer to pull
+    // from the local patch version, so any inconsistency simply indicates we forgot to
+    // publish the packages, rather than something nefarious has happened.
+    let warn_pkgs = [
         // this set is only updated if the utralib changes
-        "utralib@0.1.20",
-        "svd2utra@0.1.18",
+        "utralib@0.1.21",
+        "svd2utra@0.1.19",
     ];
     for pkg in check_pkgs {
-        verify(pkg.into())?;
+        verify(pkg.into(), true)?;
+    }
+    for pkg in warn_pkgs {
+        verify(pkg.into(), false)?;
     }
     Ok(())
 }
 
-pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
+pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
     if let CrateSpec::CratesIo(name, version, _xip) = spec {
         let mut cache_path = Path::new(&env::var("CARGO_HOME").unwrap()).to_path_buf();
         cache_path.push("registry");
@@ -39,7 +47,7 @@ pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
             let path = entry.path();
             // this should *really* exist if the build system is stable, so just unwrap all the things
             let regdir = path.file_name().unwrap().to_str().unwrap().to_string();
-            if regdir.contains("git") { // crates.io sticks sources in something with git yadda yadda...docs don't really say what/why/how...
+            if regdir.contains("crates.io") { // crates.io sticks sources in something with git yadda yadda...docs don't really say what/why/how...
                 cache_leaf.push_str(&regdir);
             }
         }
@@ -86,7 +94,12 @@ pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
         println!("Comparing {} <-> {}", src_path.as_os_str().to_str().unwrap(), cache_path.as_os_str().to_str().unwrap());
         match compare_dirs(src_path, &cache_path) {
             Ok(true) => Ok(()),
-            Ok(false) => Err("Crates.io downloaded data does not match local source".into()),
+            Ok(false) => if hard_failure {
+                    Err("Crates.io downloaded data does not match local source".into())}
+                else {
+                    println!("**WARNING**: Local package does not match the published source. Third parties downloading from crates.io will be inconsistent with this build.");
+                    Ok(())
+                },
             _ => Err("Error matching local source to crates.io cache files".into()),
         }
     } else {

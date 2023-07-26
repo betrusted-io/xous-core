@@ -1,35 +1,36 @@
-use crate::{ShellCmdApi, CommonEnv};
+use crate::{CommonEnv, ShellCmdApi};
 use com::api::NET_MTU;
-use xous_ipc::String;
-#[cfg(any(feature="precursor", feature="renode"))]
-use net::XousServerId;
 use net::NetPingCallback;
-use xous::MessageEnvelope;
 use num_traits::*;
-use std::net::{IpAddr, TcpStream, TcpListener};
-use std::io::Write;
 use std::io::Read;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use std::thread;
+use std::io::Write;
+use std::net::{IpAddr, TcpListener, TcpStream};
 use std::sync::mpsc;
-#[cfg(feature="ditherpunk")]
-use std::str::FromStr;
-#[cfg(feature="ditherpunk")]
-use gam::DecodePng;
-#[cfg(feature="tls")]
-use std::convert::TryInto;
-#[cfg(feature="tls")]
-use tungstenite::{WebSocket, stream::MaybeTlsStream};
-#[cfg(feature="shellperf")]
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+use xous::MessageEnvelope;
+use xous_ipc::String;
+
+#[cfg(feature = "ditherpunk")]
+use {gam::DecodePng, std::str::FromStr};
+
+#[cfg(any(feature = "precursor", feature = "renode"))]
+use net::XousServerId;
+
+#[cfg(feature = "shellperf")]
 use perflib::*;
+
+#[cfg(feature = "websocket")]
+use tungstenite::{stream::MaybeTlsStream, WebSocket};
+
 pub struct NetCmd {
     callback_id: Option<u32>,
     callback_conn: u32,
     dns: dns::Dns,
     #[cfg(any(feature="precursor", feature="renode"))]
     ping: Option<net::protocols::Ping>,
-    #[cfg(feature="tls")]
+    #[cfg(feature = "websocket")]
     ws: Option<WebSocket<MaybeTlsStream<TcpStream>>>,
     #[cfg(feature="shellperf")]
     perfbuf: xous::MemoryRange,
@@ -50,7 +51,7 @@ impl NetCmd {
             dns: dns::Dns::new(&xns).unwrap(),
             #[cfg(any(feature="precursor", feature="renode"))]
             ping: None,
-            #[cfg(feature="tls")]
+            #[cfg(feature = "websocket")]
             ws: None,
             #[cfg(feature="shellperf")]
             perfbuf,
@@ -411,7 +412,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     ring::xous_test::p256_elem_add_test();
                     log::set_max_level(log::LevelFilter::Info);
                 }
-                #[cfg(feature="tls")]
+                #[cfg(feature = "websocket")]
                 "ws" => {
                     if self.ws.is_none() {
                         let (socket, response) =
@@ -451,64 +452,18 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         write!(ret, "\nWeb socket session closed.").ok();
                     }
                 }
-                #[cfg(feature="tls")]
+                // net tls <sub-command>
+                //     deleteall     deleteall trusted CA certificates
+                //     help
+                //     list          list all trusted CA certificates
+                //     mozilla       trust all Root CA's in webpki-roots
+                //     probe <host>  save host CA'a if trusted
+                //     test <host>   make tls connection to host
+                #[cfg(feature = "tls")]
                 "tls" => {
-                    log::set_max_level(log::LevelFilter::Info);
-                    log::info!("starting TLS run");
-                    let mut root_store = rustls::RootCertStore::empty();
-                    log::info!("create root store");
-                    root_store.add_server_trust_anchors(
-                        webpki_roots::TLS_SERVER_ROOTS
-                            .0
-                            .iter()
-                            .map(|ta| {
-                                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                                    ta.subject,
-                                    ta.spki,
-                                    ta.name_constraints,
-                                )
-                            })
-                    );
-                    log::info!("build TLS client config");
-                    let config = rustls::ClientConfig::builder()
-                        .with_safe_defaults()
-                        .with_root_certificates(root_store)
-                        .with_no_client_auth();
-
-                    log::info!("point TLS to bunniefoo.com");
-                    let server_name = "bunniefoo.com".try_into().unwrap();
-                    let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-
-                    log::info!("connect TCPstream to bunniefoo.com");
-                    let mut sock = TcpStream::connect("bunniefoo.com:443").unwrap();
-                    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
-                    log::info!("create http headers and write to server");
-                    tls.write_all(
-                        concat!(
-                            "GET / HTTP/1.1\r\n",
-                            "Host: bunniefoo.com\r\n",
-                            "Connection: close\r\n",
-                            "Accept-Encoding: identity\r\n",
-                            "\r\n"
-                        )
-                        .as_bytes(),
-                    )
-                    .unwrap();
-                    log::info!("readout cipher suite");
-                    let ciphersuite = tls
-                        .conn
-                        .negotiated_cipher_suite()
-                        .unwrap();
-                    log::info!(
-                        "Current ciphersuite: {:?}",
-                        ciphersuite.suite()
-                    );
-                    let mut plaintext = Vec::new();
-                    log::info!("read TLS response");
-                    tls.read_to_end(&mut plaintext).unwrap();
-                    log::info!("len: {}", plaintext.len());
-                    log::info!("{}", std::str::from_utf8(&plaintext).unwrap_or("utf-error"));
-                    log::set_max_level(log::LevelFilter::Info);
+                    if let Ok(Some(r)) = tls::cmd::shellchat(&mut tokens) {
+                        write!(ret, "{r}").unwrap();
+                    }
                 }
                 // note: to use the `shellperf` option, you need to load a version of the SOC that has the performance counters built in.
                 // this can be generated using the command `python3 .\betrusted_soc.py -e .\dummy.nky --perfcounter` in the betrusted-soc repo.
@@ -933,7 +888,7 @@ fn heap_usage() -> usize {
     }
 }
 
-#[cfg(feature ="tls")]
+#[cfg(feature = "websocket")]
 fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>) {
     use core::fmt::Write;
     for (i, tok) in tokens.enumerate() {

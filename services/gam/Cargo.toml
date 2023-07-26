@@ -14,18 +14,18 @@ ime-plugin-api = {path = "../ime-plugin-api"}
 ime-plugin-shell = {path = "../ime-plugin-shell"}
 keyboard = {path = "../keyboard"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.41"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.41"}
+log-server = {package = "xous-api-log", version = "0.1.44"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.44"}
 trng = {path = "../trng"}
-xous = "0.9.45"
-xous-ipc = "0.9.45"
-xous-names = {package = "xous-api-names", version = "0.9.43"}
+xous = "0.9.48"
+xous-ipc = "0.9.48"
+xous-names = {package = "xous-api-names", version = "0.9.46"}
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
-susres = {package = "xous-api-susres", version = "0.9.41"} # used for the sleep now menu item
+susres = {package = "xous-api-susres", version = "0.9.44"} # used for the sleep now menu item
 
 enum_dispatch = "0.3.7" # used for trait-based dispatch off of multiple layout objects.
 locales = {path = "../../locales"}
@@ -41,7 +41,7 @@ hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 sha2 = {path="../engine-sha512"}
 digest = "0.9.0"
 
-utralib = {version = "0.1.20", optional = true, default-features = false }
+utralib = {version = "0.1.21", optional = true, default-features = false }
 
 [features]
 precursor = ["utralib/precursor"]

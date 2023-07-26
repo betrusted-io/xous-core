@@ -11,16 +11,16 @@ macro_rules! make_type {
     }};
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct MemoryRegion {
     /// Starting offset (in bytes)
-    start: u32,
+    pub start: u32,
 
     /// Length (in bytes)
-    length: u32,
+    pub length: u32,
 
     /// Region name (as a type)
-    name: XousArgumentCode,
+    pub name: XousArgumentCode,
 
     /// Unused
     _padding: u32,

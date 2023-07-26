@@ -10,6 +10,7 @@ pub mod mono;
 pub mod regular;
 pub mod small;
 pub mod zh;
+pub mod tall;
 
 use crate::GlyphSprite;
 
@@ -30,6 +31,7 @@ pub fn small_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     invert: false,
                     insert: false,
                     double: false,
+                    large: false,
                 }),
                 false => Err(0),
             }
@@ -53,6 +55,7 @@ pub fn regular_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     invert: false,
                     insert: false,
                     double: false,
+                    large: false,
                 }),
                 false => Err(0),
             }
@@ -76,6 +79,7 @@ pub fn large_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     invert: false,
                     insert: false,
                     double: true,
+                    large: false,
                 }),
                 false => Err(0),
             }
@@ -99,6 +103,7 @@ pub fn extra_large_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     invert: false,
                     insert: false,
                     double: true,
+                    large: false,
                 }),
                 false => Err(0),
             }
@@ -122,6 +127,7 @@ pub fn bold_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     invert: false,
                     insert: false,
                     double: false,
+                    large: false,
                 }),
                 false => Err(0),
             }
@@ -145,6 +151,31 @@ pub fn mono_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     invert: false,
                     insert: false,
                     double: false,
+                    large: false,
+                }),
+                false => Err(0),
+            }
+        }
+        _ => Err(1),
+    }
+}
+
+pub fn tall_glyph(ch: char) -> Result<GlyphSprite, usize> {
+    match tall::CODEPOINTS.binary_search(&(ch as u32)) {
+        Ok(n) => {
+            let offset = n << 5;
+            let end = offset + 32;
+            match end <= tall::glyphs().len() {
+                true => Ok(GlyphSprite {
+                    glyph: &tall::glyphs()[offset..end],
+                    wide: tall::WIDTHS[n],
+                    high: tall::MAX_HEIGHT,
+                    kern: DEFAULT_KERN,
+                    ch,
+                    invert: false,
+                    insert: false,
+                    double: false,
+                    large: true,
                 }),
                 false => Err(0),
             }
@@ -168,6 +199,7 @@ pub fn emoji_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     invert: false,
                     insert: false,
                     double: false,
+                    large: false,
                 }),
                 false => Err(0),
             }
@@ -191,6 +223,7 @@ pub fn emoji_large_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     invert: false,
                     insert: false,
                     double: true,
+                    large: false,
                 }),
                 false => Err(0),
             }
@@ -214,6 +247,7 @@ pub fn zh_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     invert: false,
                     insert: false,
                     double: false,
+                    large: false,
                 }),
                 false => Err(0),
             }
@@ -237,6 +271,7 @@ pub fn ja_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     invert: false,
                     insert: false,
                     double: false,
+                    large: false,
                 }),
                 false => Err(0),
             }
@@ -260,6 +295,7 @@ pub fn kr_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     invert: false,
                     insert: false,
                     double: false,
+                    large: false,
                 }),
                 false => Err(0),
             }

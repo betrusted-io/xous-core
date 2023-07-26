@@ -76,37 +76,39 @@ mod implementation {
             .expect("couldn't map Engine512 CSR range");
 
             #[cfg(not(feature = "event_wait"))]
-            let mut engine512 = Engine512 {
+            let engine512 = Engine512 {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 fifo,
             };
 
             #[cfg(feature = "event_wait")]
-            let mut engine512 = Engine512 {
+            let engine512 = Engine512 {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 fifo,
                 handler_conn: _handler_conn,
             };
+            engine512
+        }
+
+        pub (crate) fn init(&mut self) {
             #[cfg(feature = "event_wait")]
             xous::claim_interrupt(
                 utra::sha512::SHA512_IRQ,
                 handle_irq,
-                (&mut engine512) as *mut Engine512 as *mut usize,
+                self as *mut Engine512 as *mut usize,
             )
             .expect("couldn't claim irq");
             // note: we can't use a "susres" manager here because this block has un-suspendable state
             // instead, we rely on every usage of this mechanism to explicitly set this enable bit before relying upon it
             #[cfg(feature = "event_wait")]
-            engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
+            self.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
 
             // reset the block on boot
             // we don't save this as part of the susres set because
             // on a "proper" resume, the block was already reset by the secure boot process
             // the code path where this really becomes necessary is if we have a WDT reset or
             // some sort of server-restart.
-            engine512.csr.wfo(utra::sha512::CONFIG_RESET, 1); // takes ~32 cycles to complete
-
-            engine512
+            self.csr.wfo(utra::sha512::CONFIG_RESET, 1); // takes ~32 cycles to complete
         }
 
         pub(crate) fn setup(&mut self, config: Sha2Config) {
@@ -272,6 +274,7 @@ mod implementation {
         pub(crate) fn new(_handler_conn: Option<xous::CID>) -> Engine512 {
             Engine512 {}
         }
+        pub(crate) fn init(&mut self) {}
         pub(crate) fn suspend(&self) {}
         pub(crate) fn resume(&self) {}
         pub(crate) fn reset(&self) {}
@@ -348,9 +351,10 @@ fn main() -> ! {
     log::trace!("registered with NS -- {:?}", engine512_sid);
 
     #[cfg(feature="event_wait")]
-    let mut engine512 = Engine512::new(xous::connect(engine512_sid).ok());
+    let mut engine512 = Box::new(Engine512::new(xous::connect(engine512_sid).ok()));
     #[cfg(not(feature="event_wait"))]
-    let mut engine512 = Engine512::new(None);
+    let mut engine512 = Box::new(Engine512::new(None));
+    engine512.init();
 
     log::trace!("ready to accept requests");
 

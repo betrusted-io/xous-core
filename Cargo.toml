@@ -82,16 +82,20 @@ members = [
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
-  "services/test-spawn",
-  # "services/test-spawn/spawn",
   "services/app-loader/spawn",
+  "services/cram-console",
+  #"services/test-spawn",
+  #"services/test-spawn/spawn",
   "services/usb-test",
   "services/usb-device-xous",
   "tools/perflib",
   "kernel",
   "loader",
   "libs/userprefs",
-  "services/app-loader"
+  "services/app-loader",
+  "libs/tls",
+  "libs/xous-pio",
+  "libs/xous-pl230",
 ]
 resolver = "2"
 
@@ -167,10 +171,10 @@ rev="4296c2e7904898766cf7d8d589759a129794783b" # use the commitref because we're
 #######################################################
 
 ### Selectively patch in these crates, or more, as needed depending on your dev activity
-# [patch.crates-io.utralib]
-# path = "./utralib"
-# [patch.crates-io.svd2utra]
-# path = "./svd2utra"
+[patch.crates-io.utralib]
+path = "./utralib"
+[patch.crates-io.svd2utra]
+path = "./svd2utra"
 # [patch.crates-io.xous]
 # path = "./xous-rs"
 # [patch.crates-io.xous-ipc]

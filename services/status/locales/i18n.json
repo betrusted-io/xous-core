@@ -792,18 +792,18 @@
         "zh": "选择网络："
     },
     "wlan.ssid_entry": {
-        "en": "Fill in SSID and password:",
-        "en-tts": "Fill in SSID and password:",
-        "fr": "Remplissez le SSID et le mot de passe:",
-        "ja": "SSID とパスワードを入力します:",
-        "zh": "填写SSID和密码："
+        "en": "Fill in SSID and password.\nFor open networks, delete the password placeholder.",
+        "en-tts": "Fill in SSID and password. If connecting to an open network, clear the password placeholder.",
+        "fr": "Remplissez le SSID et le mot de passe.\nSi vous vous connectez à un réseau ouvert, effacez l'espace réservé du mot de passe.*MT*",
+        "ja": "SSID とパスワードを入力します.\nオープン ネットワークに接続する場合は、パスワード プレースホルダーをクリアします。",
+        "zh": "填写SSID和密码.\n如果连接到开放网络，请清除密码占位符。"
     },
     "wlan.ssid_password": {
-        "en": "Please enter the password for {ssid}:",
-        "en-tts": "Please enter the password for {ssid}:",
-        "fr": "Veuillez entrer le mot de passe de {ssid}:",
+        "en": "Please enter the password for {ssid}.\nFor open networks, delete the password placeholder.",
+        "en-tts": "Please enter the password for {ssid}. If connecting to an open network, clear the password placeholder.",
+        "fr": "Veuillez entrer le mot de passe de {ssid}.\nSi vous vous connectez à un réseau ouvert, effacez l'espace réservé du mot de passe.*MT*",
         "ja": "{ssid} のパスワードを入力してください:",
-        "zh": "请输入 {ssid} 的密码："
+        "zh": "请输入 {ssid} 的密码.\n如果连接到开放网络，请清除密码占位符。"
     },
     "wlan.ssid_scanning": {
         "en": "Please wait, scanning...",

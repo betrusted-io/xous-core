@@ -26,6 +26,11 @@ pub const EXIT_THREAD: usize = 0xff80_3000;
 /// This is the address a thread will return to when it finishes handling an exception.
 pub const RETURN_FROM_EXCEPTION_HANDLER: usize = 0xff80_4000;
 
+/// Support processing interrupts, which normally are TID 0. Since
+/// the TID is a NonZeroU8, we must pick a value here that can be
+/// used throughout the rest of the kernel.
+const IRQ_TID_SENTINAL: TID = 255;
+
 // Thread IDs have three possible meaning:
 // Logical Thread ID: What the user sees
 // Thread Context Index: An index into the thread slice
@@ -122,6 +127,14 @@ pub struct Process {
     pid: PID,
 }
 
+fn fixup_irq(tid: TID) -> TID {
+    if tid == IRQ_TID_SENTINAL {
+        0
+    } else {
+        tid
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 /// Everything required to keep track of a single thread of execution.
@@ -202,40 +215,44 @@ impl Process {
     }
 
     pub fn thread_exists(&self, tid: TID) -> bool {
+        let tid = fixup_irq(tid);
         self.thread(tid).sepc != 0
     }
 
     /// Set the current thread number.
-    pub fn set_tid(&mut self, thread: TID) -> Result<(), xous_kernel::Error> {
-        let mut process = unsafe { &mut *PROCESS };
-        klog!("Switching to thread {}", thread);
+    pub fn set_tid(&mut self, tid: TID) -> Result<(), xous_kernel::Error> {
+        let process = unsafe { &mut *PROCESS };
+        let tid = fixup_irq(tid);
+        klog!("Switching to thread {}", tid);
         assert!(
-            thread <= process.threads.len(),
+            tid <= process.threads.len(),
             "attempt to switch to an invalid thread {}",
-            thread
+            tid
         );
-        process.hardware_thread = thread + 1;
+        process.hardware_thread = tid + 1;
         Ok(())
     }
 
-    pub fn thread_mut(&mut self, thread: TID) -> &mut Thread {
+    pub fn thread_mut(&mut self, tid: TID) -> &mut Thread {
         let process = unsafe { &mut *PROCESS };
+        let tid = fixup_irq(tid);
         assert!(
-            thread <= process.threads.len(),
+            tid <= process.threads.len(),
             "attempt to retrieve an invalid thread {}",
-            thread
+            tid
         );
-        &mut process.threads[thread]
+        &mut process.threads[tid]
     }
 
-    pub fn thread(&self, thread: TID) -> &Thread {
+    pub fn thread(&self, tid: TID) -> &Thread {
         let process = unsafe { &mut *PROCESS };
+        let tid = fixup_irq(tid);
         assert!(
-            thread <= process.threads.len(),
+            tid <= process.threads.len(),
             "attempt to retrieve an invalid thread {}",
-            thread
+            tid
         );
-        &process.threads[thread]
+        &process.threads[tid]
     }
 
     #[cfg(feature = "gdb-stub")]
@@ -246,10 +263,14 @@ impl Process {
         let process = unsafe { &mut *PROCESS };
         for (idx, thread) in process.threads.iter_mut().enumerate() {
             // Ignore threads that have no PC, and ignore the ISR thread
-            if thread.sepc == 0 || idx == IRQ_TID {
+            if thread.sepc == 0 {
                 continue;
             }
-            op(idx, thread);
+            if idx == IRQ_TID {
+                op(IRQ_TID_SENTINAL, thread);
+            } else {
+                op(idx, thread);
+            }
         }
     }
 
@@ -282,7 +303,7 @@ impl Process {
 
     pub fn retry_instruction(&mut self, tid: TID) -> Result<(), xous_kernel::Error> {
         let process = unsafe { &mut *PROCESS };
-        let mut thread = &mut process.threads[tid];
+        let thread = &mut process.threads[tid];
         if thread.sepc >= 4 {
             thread.sepc -= 4;
         }
@@ -292,7 +313,7 @@ impl Process {
     /// Initialize this process thread with the given entrypoint and stack
     /// addresses.
     pub fn setup_process(pid: PID, thread_init: ThreadInit) -> Result<(), xous_kernel::Error> {
-        let mut process = unsafe { &mut *PROCESS };
+        let process = unsafe { &mut *PROCESS };
         let tid = INITIAL_TID;
 
         assert_eq!(
@@ -342,7 +363,7 @@ impl Process {
             *thread = Default::default();
         }
 
-        let mut thread = &mut process.threads[tid];
+        let thread = &mut process.threads[tid];
 
         thread.sepc = unsafe { core::mem::transmute::<_, usize>(thread_init.call) };
         thread.registers[1] = thread_init.stack.as_ptr() as usize + thread_init.stack.len();
@@ -503,7 +524,7 @@ impl Process {
     }
 
     pub fn destroy(pid: PID) -> Result<(), xous_kernel::Error> {
-        let mut process_table = unsafe { &mut PROCESS_TABLE };
+        let process_table = unsafe { &mut PROCESS_TABLE };
         let pid_idx = pid.get() as usize - 1;
         if pid_idx >= process_table.table.len() {
             panic!("attempted to destroy PID that exceeds table index: {}", pid);
@@ -598,7 +619,7 @@ impl core::fmt::Display for Thread {
 pub fn set_current_pid(pid: PID) {
     let pid_idx = (pid.get() - 1) as usize;
     unsafe {
-        let mut pt = &mut PROCESS_TABLE;
+        let pt = &mut PROCESS_TABLE;
 
         match pt.table.get(pid_idx) {
             None | Some(false) => panic!("PID {} does not exist", pid),

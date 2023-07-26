@@ -14,7 +14,7 @@ enum TestType {
     Insert = 6,
     End = 7,
 }
-const TEST_STYLE: GlyphStyle = GlyphStyle::Regular;
+const TEST_STYLE: GlyphStyle = GlyphStyle::Tall;
 pub fn tests() {
     let _ = std::thread::spawn({
         move || {

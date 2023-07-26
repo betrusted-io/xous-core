@@ -1,0 +1,24 @@
+[package]
+name = "xous-pl230"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log = "0.4.14"
+utralib = {version = "0.1.21", optional = true, default-features = false }
+bitfield = "0.13.2"
+
+[target.'cfg(target_os = "xous")'.dependencies]
+xous = "0.9.48"
+
+[features]
+cramium-soc = ["utralib/cramium-soc"]
+cramium-fpga = ["utralib/cramium-fpga"]
+precursor = []
+hosted = []
+renode = []
+
+tests = []
+default = ["tests"]

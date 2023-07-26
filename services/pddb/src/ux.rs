@@ -80,7 +80,7 @@ pub(crate) fn password_ux_manager(
             ActionType::TextEntry(password_action.clone()),
             Some(t!("pddb.password", locales::LANG)),
             None,
-            GlyphStyle::Regular,
+            gam::SYSTEM_STYLE,
             8
         );
     pddb_modal.spawn_helper(ux_sid, pddb_modal.sid,

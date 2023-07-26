@@ -16,13 +16,13 @@ ime-plugin-shell = {path = "../ime-plugin-shell"}
 ime-plugin-tts = {path = "../ime-plugin-tts"}
 llio = {path = "../llio"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.41"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.41"}
-xous = "0.9.45"
-xous-ipc = "0.9.45"
-xous-names = {package = "xous-api-names", version = "0.9.43"}
+log-server = {package = "xous-api-log", version = "0.1.44"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.44"}
+xous = "0.9.48"
+xous-ipc = "0.9.48"
+xous-names = {package = "xous-api-names", version = "0.9.46"}
 keyboard = {path = "../keyboard"}
-susres = {package = "xous-api-susres", version = "0.9.41"}
+susres = {package = "xous-api-susres", version = "0.9.44"}
 codec = {path = "../codec"}
 #engine-sha512 = {path="../engine-sha512"}
 sha2 = {path="../engine-sha512"}
@@ -38,7 +38,7 @@ dns = {path="../dns"}
 pddb = {path="../pddb"}
 modals = {path="../modals"}
 usb-device-xous = {path="../usb-device-xous"}
-utralib = {version = "0.1.20", optional = true, default-features = false }
+utralib = {version = "0.1.21", optional = true, default-features = false }
 
 tts-frontend = {path="../tts"}
 locales = {path = "../../locales"}
@@ -75,12 +75,14 @@ tracing = {version = "0.1.35", optional = true}
 tracing-subscriber = {version = "0.3.11", optional = true}
 
 # for rustls testing
-rustls = {version = "0.20.6", optional = true} # note requirement for patch to xous-ring in workspace Cargo.toml
-# rustls = {path="../../../rustls/rustls"}
-webpki-roots = {version = "0.22.4", optional = true}
-ring = {version = "0.16.20", optional = true} # for testing ring math functions  # note requirement for patch to xous-ring in workspace Cargo.toml
-tungstenite = {version = "0.17.3", optional = true, features = ["rustls-tls-webpki-roots"]}
+tls = {path = "../../libs/tls", optional = true}
 url = {version = "2.2.2", optional = true}
+# for testing ring math functions
+# note requirement for patch to xous-ring in workspace Cargo.toml
+ring = {version = "0.16.20", optional = true}   
+
+# for websocket testing
+tungstenite = {version = "0.17.3", optional = true, features = ["rustls-tls-webpki-roots"]}
 
 # for performance testing
 perflib = {path="../../tools/perflib", optional = true}
@@ -124,7 +126,9 @@ dbg-ecupdate = [] # for issuing manual commands to initiate an EC update (vs UX)
 test-rekey = []
 no-codec = []
 nettest = [] # batch network tests
-tls = ["rustls", "webpki-roots", "ring", "tungstenite", "url"]
+tls = ["dep:tls", "ring"]
+rootCA = ["tls/rootCA"]
+websocket = ["tls", "tungstenite", "url"]
 shellperf = ["ring", "perflib", "xous/v2p", "random-pick"] # this also needs the project-wide "perfcounter" feature to be selected. shellchat is the exclusive manager of the performance counter, do not use with e.g. "vaultperf" feature
 extra-tests = []
 mass-storage = []

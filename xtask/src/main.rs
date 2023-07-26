@@ -140,6 +140,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             language_set = true;
         }
     }
+    let kern_features = get_flag("--kernel-feature")?;
+    for feature in kern_features {
+        builder.add_kernel_feature(&feature);
+    }
+
     if !language_set { // the default language is english
         track_language_changes("en")?;
     }
@@ -359,6 +364,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_feature("avalanchetest");
         }
 
+        // ------ Cramium hardware image configs ------
+        Some("cramium-fpga") | Some("cramium-soc") => {
+            let cramium_pkgs = [
+                "xous-log",
+                "xous-names",
+                "xous-ticktimer",
+                "cram-console",
+                // "mbox1",
+                // "mbox2",
+            ].to_vec();
+            match task.as_deref() {
+                Some("cramium-fpga") => builder.target_cramium_fpga(),
+                Some("cramium-soc") => builder.target_cramium_soc(),
+                _ => panic!("should be unreachable"),
+            };
+            builder.add_services(&get_cratespecs());
+            for service in cramium_pkgs {
+                builder.add_service(service, true);
+            }
+        }
+
         // ------ ARM hardware image configs ------
         Some("arm-tiny") => {
             builder.target_arm()
@@ -485,10 +511,6 @@ Note: By default, the `ticktimer` will get rebuilt every time. You can skip this
 }
 
 type DynError = Box<dyn std::error::Error>;
-
-enum MemorySpec {
-    SvdFile(String),
-}
 
 /// [cratespecs] are positional arguments, and is a list of 0 to N tokens that immediately
 /// follow [verb]

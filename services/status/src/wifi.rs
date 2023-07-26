@@ -165,13 +165,7 @@ impl WLANMan {
             )
             .field(
                 Some(t!("wlan.password", locales::LANG).to_string()),
-                Some(|text| {
-                    if text.as_str().is_empty() {
-                        return Some(xous_ipc::String::from_str("Password cannot be empty"));
-                    }
-
-                    None
-                }),
+                None,
             )
             .build()
             .unwrap();
@@ -266,6 +260,15 @@ impl WLANMan {
             self.modals.dynamic_notification_close().ok();
         }
         let mut networks: Vec<&str> = networks.iter().map(|s| s.as_str()).collect();
+        // don't show empty strings
+        networks.retain(|&n| n.len() != 0);
+        // limit the total number displayed so that the "okay" button does not disappear off the bottom
+        let max_entries = match gam::SYSTEM_STYLE {
+            graphics_server::GlyphStyle::Tall => 13,
+            graphics_server::GlyphStyle::Regular => 16,
+            _ => 12,
+        };
+        networks.truncate(max_entries);
 
         if networks.is_empty() {
             self.modals
@@ -296,16 +299,7 @@ impl WLANMan {
             .alert_builder(&t!("wlan.ssid_password", locales::LANG).replace("{ssid}", ssid))
             .field(
                 Some(t!("wlan.password", locales::LANG).to_string()),
-                Some(|text| {
-                    if text.as_str().is_empty() {
-                        return Some(xous_ipc::String::from_str(t!(
-                            "wlan.password_empty",
-                            locales::LANG
-                        )));
-                    }
-
-                    None
-                }),
+                None,
             )
             .build()
             .unwrap();

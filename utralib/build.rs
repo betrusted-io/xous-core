@@ -85,7 +85,7 @@ fn main() {
     // This script retains the use of an explicit "hosted" flag because we want to catch
     // unintentional build system misconfigurations that meant to build for a target other
     // than "hosted", rather than just falling back silently to defaults.
-    allow_single_target_feature!("precursor", "hosted", "renode", "atsama5d27");
+    allow_single_target_feature!("precursor", "hosted", "renode", "atsama5d27", "cramium-soc", "cramium-fpga");
 
     #[cfg(feature = "precursor")]
     allow_single_gitrev_feature!(
@@ -96,29 +96,39 @@ fn main() {
 
     // ----- select an SVD file based on a specific revision -----
     #[cfg(feature = "precursor-perflib")]
-    let svd_filename = "precursor/soc-perf.svd";
+    let svd_filenames = vec!["precursor/soc-perf.svd"];
     #[cfg(feature = "precursor-perflib")]
     let generated_filename = "src/generated/precursor_perf.rs";
 
     #[cfg(feature = "renode")]
-    let svd_filename = "renode/renode.svd";
+    let svd_filenames = vec!["renode/renode.svd"];
     #[cfg(feature = "renode")]
     let generated_filename = "src/generated/renode.rs";
 
     #[cfg(feature = "precursor-dvt")]
-    let svd_filename = "precursor/soc-dvt.svd";
+    let svd_filenames = vec!["precursor/soc-dvt.svd"];
     #[cfg(feature = "precursor-dvt")]
     let generated_filename = "src/generated/precursor_dvt.rs";
 
     #[cfg(feature = "precursor-pvt")]
-    let svd_filename = "precursor/soc-pvt.svd";
+    let svd_filenames = vec!["precursor/soc-pvt.svd"];
     #[cfg(feature = "precursor")]
     let generated_filename = "src/generated/precursor_pvt.rs";
 
     #[cfg(feature = "atsama5d27")]
-    let svd_filename = "atsama5d/ATSAMA5D27.svd";
+    let svd_filenames = vec!["atsama5d/ATSAMA5D27.svd"];
     #[cfg(feature = "atsama5d27")]
     let generated_filename = "src/generated/atsama5d27.rs";
+
+    #[cfg(feature = "cramium-soc")]
+    let svd_filenames = vec!["cramium/core.svd", "cramium/daric.svd"];
+    #[cfg(feature = "cramium-soc")]
+    let generated_filename = "src/generated/cramium_soc.rs";
+
+    #[cfg(feature = "cramium-fpga")]
+    let svd_filenames = vec!["cramium/soc.svd", "cramium/core.svd", "cramium/daric.svd"];
+    #[cfg(feature = "cramium-fpga")]
+    let generated_filename = "src/generated/cramium_fpga.rs";
 
     // ----- control file generation and rebuild sequence -----
     // check and see if the configuration has changed since the last build. This should be
@@ -128,15 +138,18 @@ fn main() {
     //  $env:CARGO_LOG="cargo::core::compiler::fingerprint=info"
     #[cfg(not(feature = "hosted"))]
     {
-        let svd_file_path = std::path::Path::new(&svd_filename);
-        println!(
-            "cargo:rerun-if-changed={}",
-            svd_file_path.canonicalize().unwrap().display()
-        );
-
+        let mut svd_files = Vec::new();
+        for svd in svd_filenames.iter() {
+            let svd_file_path = std::path::Path::new(&svd);
+            println!(
+                "cargo:rerun-if-changed={}",
+                svd_file_path.canonicalize().unwrap().display()
+            );
+            svd_files.push(std::fs::File::open(svd_file_path).unwrap());
+        }
         // Regenerate the utra file in RAM.
         let mut dest_vec = vec![];
-        svd2utra::generate(svd_file_path, &mut dest_vec).unwrap();
+        svd2utra::generate(svd_files, &mut dest_vec).unwrap();
 
         // If the file exists, check to see if it is different from what we just generated.
         // If not, skip writing the new file.
@@ -171,7 +184,9 @@ fn main() {
             .truncate(true)
             .open(svd_path)
             .unwrap();
-        write!(svd_file, "utralib/{}", svd_filename).unwrap();
+        for svd in svd_filenames.iter() {
+            writeln!(svd_file, "utralib/{}", svd).unwrap();
+        }
     }
     #[cfg(feature = "hosted")]
     {

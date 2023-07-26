@@ -36,8 +36,34 @@ func (m Matrix) convertToPattern() []uint32 {
 	bits := 0
 	for y := 0; y < high; y++ {
 		for x := 0; x < wide; x++ {
-			shift := ((y%2)*16) + x
+			shift := ((y % 2) * 16) + x
 			bufWord |= uint32(m[y][x]) << shift
+			bits += 1
+			if bits == 32 {
+				pattern = append(pattern, bufWord)
+				bufWord = 0
+				bits = 0
+			}
+		}
+	}
+	if bits > 0 {
+		finalShift := 32 - bits
+		bufWord <<= finalShift
+		pattern = append(pattern, bufWord)
+	}
+	return pattern
+}
+
+func (m Matrix) convertToPattern32() []uint32 {
+	// Pack trimmed pattern into a byte array
+	wide := len(m[0])
+	high := len(m)
+	pattern := []uint32{}
+	bufWord := uint32(0)
+	bits := 0
+	for y := 0; y < high; y++ {
+		for x := 0; x < wide; x++ {
+			bufWord |= uint32(m[y][x]) << x
 			bits += 1
 			if bits == 32 {
 				pattern = append(pattern, bufWord)
@@ -78,6 +104,28 @@ func (m Matrix) padTo16x16() Matrix {
 	for y := 0; y < 16; y++ {
 		row := MatrixRow{}
 		for x := 0; x < 16; x++ {
+			row = append(row, 0)
+		}
+		dest = append(dest, row)
+	}
+	// Copy pixels from source matrix to top-left of destination matrix
+	wide := len(m[0])
+	high := len(m)
+	for y := 0; y < high; y++ {
+		for x := 0; x < wide; x++ {
+			dest[y][x] = m[y][x]
+		}
+	}
+	return dest
+}
+
+// Pad a matrix to 32x32, adding padding to the right and bottom
+func (m Matrix) padTo32x32() Matrix {
+	// Make an empty 32x32 destination matrix
+	dest := Matrix{}
+	for y := 0; y < 32; y++ {
+		row := MatrixRow{}
+		for x := 0; x < 32; x++ {
 			row = append(row, 0)
 		}
 		dest = append(dest, row)

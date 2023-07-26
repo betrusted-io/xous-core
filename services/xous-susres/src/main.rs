@@ -188,13 +188,14 @@ mod implementation {
             // Set EV_ENABLE, this starts pre-emption
             sr.os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0b1);
 
+            sr
+        }
+        pub fn init(&mut self) {
             xous::claim_interrupt(
                 utra::susres::SUSRES_IRQ,
                 susres_handler,
-                (&mut sr) as *mut SusResHw as *mut usize,
+                self as *mut SusResHw as *mut usize,
             ).expect("couldn't claim IRQ");
-
-            sr
         }
         pub fn ignore_wfi(&mut self) {
             self.csr.wfo(utra::susres::WFI_OVERRIDE, 1);
@@ -453,6 +454,7 @@ mod implementation {
         pub fn new() -> Self {
             SusResHw {}
         }
+        pub fn init(&mut self) {}
         pub fn reboot(&self, _reboot_soc: bool) {}
         pub fn set_reboot_vector(&self, _vector: u32) {}
         pub fn force_power_off(&mut self) {}
@@ -557,7 +559,8 @@ static SHOULD_RESUME: AtomicBool = AtomicBool::new(false);
 fn main() -> ! {
     // Start the OS timer which is responsible for setting up preemption.
     // os_timer::init();
-    let mut susres_hw = implementation::SusResHw::new();
+    let mut susres_hw = Box::new(implementation::SusResHw::new());
+    susres_hw.init();
 
     log_server::init_wait().unwrap();
     // debugging note: it's actually easiest to debug using client-side hooks. Search for

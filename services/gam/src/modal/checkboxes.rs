@@ -45,8 +45,15 @@ impl CheckBoxes {
 impl ActionApi for CheckBoxes {
     fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}
     fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
-        // total items, then +1 for the "Okay" message
-        (self.items.len() as i16 + 1) * glyph_height + margin * 2 + 5 // some slop needed because of the prompt character
+        // account for hard line-breaks in items
+        let line_break_count = self
+            .items
+            .iter()
+            .fold(0, |acc, item| acc + item.as_str().chars().filter(|c| *c == '\n').count());
+        // total items + line-breaks +1 blank line +1 "Okay" message
+        let line_count: i16 = (self.items.len() + line_break_count + 1 + 1) as i16;
+
+        line_count * glyph_height + 2 * margin
     }
     fn redraw(&self, at_height: i16, modal: &Modal) {
         // prime a textview with the correct general style parameters
@@ -68,9 +75,17 @@ impl ActionApi for CheckBoxes {
         let emoji_slop = 2; // tweaked for a non-emoji glyph
 
         let mut cur_line = 0;
+        let mut cur_y = at_height;
+        let mut cur_line_height: i16;
         let mut do_okay = true;
         for item in self.items.iter() {
-            let cur_y = at_height + cur_line * modal.line_height;
+            // account for hard line-breaks
+            let item_line_count: i16 = 1 + item
+                .as_str()
+                .chars()
+                .filter(|c| *c == '\n')
+                .count() as i16;
+            cur_line_height = modal.line_height * item_line_count + item_line_count; // extra pixel between lines
             if cur_line == self.select_index {
                 #[cfg(feature="tts")]
                 {
@@ -80,7 +95,8 @@ impl ActionApi for CheckBoxes {
                 tv.text.clear();
                 tv.bounds_computed = None;
                 tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
-                    Point::new(cursor_x, cur_y - emoji_slop), Point::new(cursor_x + 36, cur_y - emoji_slop + 36)
+                    Point::new(cursor_x, cur_y - emoji_slop),
+                    Point::new(cursor_x + 36, cur_y - emoji_slop + 36),
                 ));
                 write!(tv, "\u{25B6}").unwrap(); // right arrow
                 modal.gam.post_textview(&mut tv).expect("couldn't post tv");
@@ -91,7 +107,8 @@ impl ActionApi for CheckBoxes {
                 tv.text.clear();
                 tv.bounds_computed = None;
                 tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
-                    Point::new(select_x, cur_y - emoji_slop), Point::new(select_x + 36, cur_y + modal.line_height)
+                    Point::new(select_x, cur_y - emoji_slop),
+                    Point::new(select_x + 36, cur_y + cur_line_height),
                 ));
                 write!(tv, "\u{d7}").unwrap(); // multiplication sign
                 modal.gam.post_textview(&mut tv).expect("couldn't post tv");
@@ -100,15 +117,17 @@ impl ActionApi for CheckBoxes {
             tv.text.clear();
             tv.bounds_computed = None;
             tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
-                Point::new(text_x, cur_y), Point::new(modal.canvas_width - modal.margin, cur_y + modal.line_height)
+                Point::new(text_x, cur_y),
+                Point::new(modal.canvas_width - modal.margin, cur_y + cur_line_height),
             ));
             write!(tv, "{}", item.as_str()).unwrap();
             modal.gam.post_textview(&mut tv).expect("couldn't post tv");
 
             cur_line += 1;
+            cur_y += cur_line_height;
         }
-        cur_line += 1;
-        let cur_y = at_height + cur_line * modal.line_height;
+        // blank line above OK
+        cur_y += modal.line_height;
         if do_okay {
             tv.text.clear();
             tv.bounds_computed = None;

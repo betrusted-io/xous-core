@@ -30,6 +30,8 @@ pub struct GlyphSprite {
     pub insert: bool,
     // 2x flag for the back-end rendering (wide/high should be pre-computed to match this)
     pub double: bool,
+    // flag for 32-bit wide glyph sets
+    pub large: bool,
 }
 
 /// A TypesetWord is a Word that has beet turned into sprites and placed at a specific location on the canvas,

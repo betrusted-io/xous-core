@@ -416,6 +416,10 @@ impl ActionApi for TextEntry {
                 }
             }
             if self.is_password {
+                let aesthetic_margin = match crate::SYSTEM_STYLE {
+                    GlyphStyle::Tall => 4,
+                    _ => 0,
+                };
                 let select_index = match self.visibility {
                     TextEntryVisibility::Visible => 0,
                     TextEntryVisibility::LastChars => 1,
@@ -428,7 +432,9 @@ impl ActionApi for TextEntry {
                 let mut tv = TextView::new(
                     modal.canvas,
                     TextBounds::GrowableFromTl(
-                        Point::new(modal.margin, at_height + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin),
+                        Point::new(modal.margin, at_height + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin
+                            + aesthetic_margin
+                        ),
                         lr_margin as u16
                     ));
                 tv.style = GlyphStyle::Large;
@@ -443,7 +449,10 @@ impl ActionApi for TextEntry {
                     let mut tv = TextView::new(
                         modal.canvas,
                         TextBounds::GrowableFromTl(
-                            Point::new(left_edge + i * prompt_width, at_height + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin),
+                            Point::new(left_edge + i * prompt_width, at_height
+                                + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin
+                                + aesthetic_margin
+                            ),
                             prompt_width as u16)
                         );
                     tv.style = GlyphStyle::Monospace;
@@ -469,7 +478,9 @@ impl ActionApi for TextEntry {
                 let mut tv = TextView::new(
                     modal.canvas,
                     TextBounds::GrowableFromTr(
-                        Point::new(modal.canvas_width - modal.margin, at_height + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin),
+                        Point::new(modal.canvas_width - modal.margin, at_height + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin
+                            + aesthetic_margin
+                        ),
                         lr_margin as u16
                     ));
                 tv.style = GlyphStyle::Large;

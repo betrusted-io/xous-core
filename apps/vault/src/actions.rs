@@ -921,7 +921,7 @@ impl<'a> ActionManager<'a> {
 
                                     #[cfg(feature="vaultperf")]
                                     self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
-                                    if let Some(mut prev_entry) = il.get(self.mode_cache, &lookup_key) {
+                                    if let Some(prev_entry) = il.get(self.mode_cache, &lookup_key) {
                                         #[cfg(feature="vaultperf")]
                                         self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 3, std::line!());
                                         prev_entry.dirty = true;

@@ -140,7 +140,7 @@ impl SpinalUsbDevice {
         )
         .expect("couldn't map USB CSR range");
 
-        let mut usbdev = SpinalUsbDevice {
+        SpinalUsbDevice {
             conn: xous::connect(sid).unwrap(),
             csr_addr: csr.as_ptr() as u32,
             csr: AtomicCsr::new(csr.as_mut_ptr() as *mut u32),
@@ -157,23 +157,22 @@ impl SpinalUsbDevice {
             allocs: Arc::new(Mutex::new(BTreeMap::new())),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             address: AtomicUsize::new(0),
-        };
-
+        }
+    }
+    pub fn init(&self) {
         xous::claim_interrupt(
             utra::usbdev::USBDEV_IRQ,
             handle_usb,
-            (&mut usbdev) as *mut SpinalUsbDevice as *mut usize,
+            self as *const SpinalUsbDevice as *mut usize,
         )
         .expect("couldn't claim irq");
-        let p = usbdev.csr.r(utra::usbdev::EV_PENDING);
-        usbdev.csr.wo(utra::usbdev::EV_PENDING, p); // clear in case it's pending for some reason
-        usbdev.csr.wfo(utra::usbdev::EV_ENABLE_USB, 1);
+        let p = self.csr.r(utra::usbdev::EV_PENDING);
+        self.csr.wo(utra::usbdev::EV_PENDING, p); // clear in case it's pending for some reason
+        self.csr.wfo(utra::usbdev::EV_ENABLE_USB, 1);
 
         let mut cfg = UdcConfig(0);
         cfg.set_pullup_on(true); // required for proper operation
-        usbdev.regs.set_config(cfg);
-
-        usbdev
+        self.regs.set_config(cfg);
     }
     pub fn get_iface(&self) -> SpinalUsbMgmt {
         SpinalUsbMgmt {

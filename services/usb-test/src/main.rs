@@ -62,6 +62,7 @@ fn main() -> ! {
     log::trace!("registered with NS -- {:?}", usbdev_sid);
 
     let usbdev = SpinalUsbDevice::new(usbdev_sid);
+    usbdev.init();
     let mut usbmgmt = usbdev.get_iface();
     let mut kbd = kbd::Keyboard::new(usbdev_sid);
     let tt = ticktimer_server::Ticktimer::new().unwrap();

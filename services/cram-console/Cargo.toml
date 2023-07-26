@@ -1,0 +1,24 @@
+[package]
+name = "cram-console"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+utralib = {version = "0.1.21", optional = true, default-features = false }
+xous-api-names = "0.9.46"
+xous-api-ticktimer = "0.9.44"
+xous = "0.9.48"
+log-server = {package = "xous-api-log", version = "0.1.44"}
+log = "0.4.14"
+xous-pio = {path = "../../libs/xous-pio", optional = true}
+xous-pl230 = {path = "../../libs/xous-pl230", optional = true}
+
+[features]
+"cramium-fpga" = ["utralib/cramium-fpga", "xous-pl230/cramium-fpga",]
+"cramium-soc" = ["utralib/cramium-soc", "xous-pl230/cramium-soc",]
+"hwsim" = []
+"pio-test" = ["xous-pio"]
+"pl230-test" = ["xous-pl230"]
+default = []

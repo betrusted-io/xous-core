@@ -121,7 +121,7 @@ impl Llio {
 
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
-        let mut xl = Llio {
+        Llio {
             gpio_csr: CSR::new(gpio_base),
             gpio_susres: RegManager::new(gpio_base),
             info_csr: CSR::new(info_csr.as_mut_ptr() as *mut u32),
@@ -136,54 +136,55 @@ impl Llio {
             activity_period: 24_000_000, // 2 second interval initially
             destruct_armed: false,
             uartmux_cache: BOOT_UART.into(),
-        };
+        }
+    }
 
+    pub(crate) fn init(&mut self) {
         xous::claim_interrupt(
             utra::btevents::BTEVENTS_IRQ,
             handle_event_irq,
-            (&mut xl) as *mut Llio as *mut usize,
+            self as *mut Llio as *mut usize,
         )
         .expect("couldn't claim BtEvents irq");
 
         xous::claim_interrupt(
             utra::gpio::GPIO_IRQ,
             handle_gpio_irq,
-            (&mut xl) as *mut Llio as *mut usize,
+            self as *mut Llio as *mut usize,
         )
         .expect("couldn't claim GPIO irq");
 
         xous::claim_interrupt(
             utra::power::POWER_IRQ,
             handle_power_irq,
-            (&mut xl) as *mut Llio as *mut usize,
+            self as *mut Llio as *mut usize,
         )
         .expect("couldn't claim Power irq");
 
-        xl.gpio_susres.push(RegOrField::Reg(utra::gpio::DRIVE), None);
-        xl.gpio_susres.push(RegOrField::Reg(utra::gpio::OUTPUT), None);
-        xl.gpio_susres.push(RegOrField::Reg(utra::gpio::INTPOL), None);
-        xl.gpio_susres.push(RegOrField::Reg(utra::gpio::INTENA), None);
-        xl.gpio_susres.push_fixed_value(RegOrField::Reg(utra::gpio::EV_PENDING), 0xFFFF_FFFF);
-        xl.gpio_susres.push(RegOrField::Reg(utra::gpio::EV_ENABLE), None);
-        xl.gpio_susres.push(RegOrField::Field(utra::gpio::UARTSEL_UARTSEL), None);
+        self.gpio_susres.push(RegOrField::Reg(utra::gpio::DRIVE), None);
+        self.gpio_susres.push(RegOrField::Reg(utra::gpio::OUTPUT), None);
+        self.gpio_susres.push(RegOrField::Reg(utra::gpio::INTPOL), None);
+        self.gpio_susres.push(RegOrField::Reg(utra::gpio::INTENA), None);
+        self.gpio_susres.push_fixed_value(RegOrField::Reg(utra::gpio::EV_PENDING), 0xFFFF_FFFF);
+        self.gpio_susres.push(RegOrField::Reg(utra::gpio::EV_ENABLE), None);
+        self.gpio_susres.push(RegOrField::Field(utra::gpio::UARTSEL_UARTSEL), None);
 
-        xl.event_susres.push_fixed_value(RegOrField::Reg(utra::btevents::EV_PENDING), 0xFFFF_FFFF);
-        xl.event_susres.push(RegOrField::Reg(utra::btevents::EV_ENABLE), None);
+        self.event_susres.push_fixed_value(RegOrField::Reg(utra::btevents::EV_PENDING), 0xFFFF_FFFF);
+        self.event_susres.push(RegOrField::Reg(utra::btevents::EV_ENABLE), None);
 
-        xl.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 0); // save power on crypto block
-        xl.power_susres.push(RegOrField::Reg(utra::power::POWER), None);
-        xl.power_susres.push(RegOrField::Reg(utra::power::VIBE), None);
+        self.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 0); // save power on crypto block
+        self.power_susres.push(RegOrField::Reg(utra::power::POWER), None);
+        self.power_susres.push(RegOrField::Reg(utra::power::VIBE), None);
 
-        xl.power_csr.wfo(utra::power::SAMPLING_PERIOD_SAMPLE_PERIOD, xl.activity_period); // 2 second sampling intervals
-        xl.power_susres.push(RegOrField::Reg(utra::power::SAMPLING_PERIOD), None);
-        xl.power_csr.wfo(utra::power::EV_PENDING_ACTIVITY_UPDATE, 1);
-        xl.power_csr.rmwf(utra::power::EV_ENABLE_ACTIVITY_UPDATE, 1);
+        self.power_csr.wfo(utra::power::SAMPLING_PERIOD_SAMPLE_PERIOD, self.activity_period); // 2 second sampling intervals
+        self.power_susres.push(RegOrField::Reg(utra::power::SAMPLING_PERIOD), None);
+        self.power_csr.wfo(utra::power::EV_PENDING_ACTIVITY_UPDATE, 1);
+        self.power_csr.rmwf(utra::power::EV_ENABLE_ACTIVITY_UPDATE, 1);
 
-        xl.power_susres.push_fixed_value(RegOrField::Reg(utra::power::EV_PENDING), 0xFFFF_FFFF);
-        xl.power_susres.push(RegOrField::Reg(utra::power::EV_ENABLE), None);
-
-        xl
+        self.power_susres.push_fixed_value(RegOrField::Reg(utra::power::EV_PENDING), 0xFFFF_FFFF);
+        self.power_susres.push(RegOrField::Reg(utra::power::EV_ENABLE), None);
     }
+
     pub(crate) fn get_power_csr_raw(&self) -> *mut u32 {
         self.power_csr_raw
     }
@@ -448,4 +449,3 @@ impl Llio {
         self.power_csr.rmwf(utra::power::EV_ENABLE_USB_ATTACH, value);
     }
 }
-

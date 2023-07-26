@@ -22,7 +22,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: "1.62.1"
+          toolchain: "1.71.0"
           default: true
 
       - name: Checkout sources
@@ -33,10 +33,10 @@ jobs:
       - uses: Swatinem/rust-cache@v1
 
       - name: Install RISC-V toolkit
-        run: cargo xtask install-toolkit --force
+        run: cargo xtask install-toolkit --force --no-verify
 
       - name: Clean out old target directory (in case of libstd change)
         run: rm -rf target/*
 
       - name: Build hosted-ci
-        run: cargo xtask ${{ matrix.task }}
+        run: cargo xtask ${{ matrix.task }} --no-verify
