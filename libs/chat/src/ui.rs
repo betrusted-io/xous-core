@@ -73,7 +73,7 @@ impl Ui {
                 redraw_id: ChatOp::GamRedraw as u32,
                 gotinput_id: Some(ChatOp::GamLine as u32),
                 audioframe_id: None,
-                rawkeys_id: Some(ChatOp::GamRawKeys as u32),
+                rawkeys_id: Some(ChatOp::GamRawkeys as u32),
                 focuschange_id: Some(ChatOp::GamChangeFocus as u32),
             })
             .expect("couldn't register Ux context for chat");

@@ -186,7 +186,7 @@ pub fn server(
                 ui.input = Some(s);
                 user_post = true; // set a flag, instead of calling here, so message can drop and calling server is released
             }
-            Some(ChatOp::GamRawKeys) => {
+            Some(ChatOp::GamRawkeys) => {
                 if let Some(cid) = app_cid {
                     if let Some(opcode) = opcode_rawkeys {
                         msg.forward(cid, opcode)

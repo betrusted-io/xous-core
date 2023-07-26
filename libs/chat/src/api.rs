@@ -14,7 +14,7 @@ pub enum ChatOp {
     /// a line of text has arrived
     GamLine,
     /// receive rawkeys from gam
-    GamRawKeys,
+    GamRawkeys,
     /// redraw our UI
     GamRedraw,
     ListenSet,
