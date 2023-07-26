@@ -56,6 +56,7 @@ pub(crate) struct Ui {
 impl Ui {
     pub(crate) fn new(
         sid: xous::SID,
+        app_name: &str,
         app_cid: Option<xous::CID>,
         opcode_event: Option<usize>,
     ) -> Self {
@@ -64,7 +65,7 @@ impl Ui {
 
         let token = gam
             .register_ux(UxRegistration {
-                app_name: xous_ipc::String::<128>::from_str(SERVER_NAME_CHAT),
+                app_name: xous_ipc::String::<128>::from_str(app_name),
                 ux_type: gam::UxType::Chat,
                 predictor: Some(xous_ipc::String::<64>::from_str(
                     ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL,

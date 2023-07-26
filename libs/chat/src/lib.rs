@@ -18,6 +18,7 @@ pub struct Chat {
 
 impl Chat {
     pub fn new(
+        app_name: &str,
         app_cid: Option<CID>,
         opcode_post: Option<usize>,
         opcode_event: Option<usize>,
@@ -25,6 +26,7 @@ impl Chat {
     ) -> Self {
         let chat_sid = xous::create_server().unwrap();
         let chat_cid = xous::connect(chat_sid).unwrap();
+        let app_name = app_name.to_string();
 
         log::info!("Starting chat UI server",);
         thread::spawn({
@@ -132,6 +134,7 @@ impl Chat {
 
 pub fn server(
     sid: SID,
+    app_name: &str,
     app_cid: Option<CID>,
     opcode_post: Option<usize>,
     opcode_event: Option<usize>,
@@ -146,7 +149,7 @@ pub fn server(
     // let mut opcode_event = opcode_event;
     // let mut opcode_rawkeys = opcode_rawkeys;
 
-    let mut ui = ui::Ui::new(sid, app_cid, opcode_event);
+    let mut ui = ui::Ui::new(sid, app_name, app_cid, opcode_event);
 
     let mut user_post = true;
     let mut allow_redraw = false;
