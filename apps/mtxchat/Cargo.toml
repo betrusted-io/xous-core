@@ -1,0 +1,38 @@
+[package]
+name = "mtxchat"
+version = "0.1.0"
+authors = ["john <john@nhoj.info>"]
+edition = "2018"
+description = "Matrix chat"
+
+# Dependency versions enforced by Cargo.lock.
+[dependencies]
+log = "0.4.14"
+num-derive = { version = "0.3.3", default-features = false}
+num-traits = { version = "0.2.14", default-features = false}
+xous = "0.9.47"
+xous-ipc = "0.9.47"
+log-server = { package = "xous-api-log", version = "0.1.43" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.43" }
+xous-names = { package = "xous-api-names", version = "0.9.45" }
+gam = { path = "../../services/gam" }
+graphics-server = { path = "../../services/graphics-server" }
+trng = { path = "../../services/trng"}
+locales = { path = "../../locales"}
+ime-plugin-api = { path = "../../services/ime-plugin-api"}
+ime-plugin-shell = { path = "../../services/ime-plugin-shell"}
+content-plugin-api = { path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
+codec = { path = "../../services/codec"}
+com = { path = "../../services/com"}
+com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
+llio = { path = "../../services/llio"}
+net = { path = "../../services/net" }
+pddb = { path = "../../services/pddb" }
+status = { path = "../../services/status" }
+# new dependencies for mtxcli
+percent-encoding = "2.2"
+serde = { version = "1.0", features = [ "derive" ] }
+ureq = { version = "2.5", features = ["json"] }
+
+[features]
+default = []

@@ -74,6 +74,7 @@ members = [
   "services/early_settings",
   "apps/ball",
   "apps/hello",
+  "apps/mtxchat",
   "apps/mtxcli",
   "apps/repl",
   "apps/vault",

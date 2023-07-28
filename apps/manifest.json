@@ -35,6 +35,14 @@
             }
         }
     },
+    "mtxchat": {
+        "context_name": "Matrix chat",
+        "menu_name": {
+            "appmenu.mtxchat": {
+                "en": "Matrix chat"
+            }
+        }
+    },
     "repl": {
         "context_name": "repl demo app",
         "menu_name": {
