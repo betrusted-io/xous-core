@@ -24,10 +24,10 @@
         }
     },
     "mtxcli": {
-        "context_name": "Matrix chat",
+        "context_name": "Matrix cli",
         "menu_name": {
             "appmenu.mtxcli": {
-                "en": "Matrix chat",
+                "en": "Matrix cli",
                 "en-tts": "MATRIX demo",
                 "fr": "Matrix messagerie",
                 "ja": "シンプルなMATRIXデモ",
