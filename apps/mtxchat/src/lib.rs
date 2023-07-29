@@ -301,11 +301,7 @@ impl MtxChat {
         if !self.logged_in {
             if web::get_login_type(&self.server) {
                 let user = self.get_default(USER_KEY, USER_KEY);
-                if user.len() == 0 {
-                    self.modals
-                        .show_notification(t!("mtxcli.please.set.user", locales::LANG), None)
-                        .expect("notification failed");
-                }
+                if user.len() == 0 {}
                 let password = self.get_default(PASSWORD_KEY, EMPTY);
                 if password.len() == 0 {
                 } else {
@@ -323,10 +319,8 @@ impl MtxChat {
             }
         }
         if self.logged_in {
-            // self.scalar_async_msg(LOGGED_IN_ID);
             log::info!("logged_in");
         } else {
-            // self.scalar_async_msg(LOGIN_FAILED_ID);
             log::info!("login failed");
         }
         self.logged_in
@@ -334,18 +328,18 @@ impl MtxChat {
 
     pub fn login_modal(&mut self) {
         const HIDE: &str = "*****";
-        let mut builder = self.modals.alert_builder("Matrix login.");
+        let mut builder = self.modals.alert_builder(t!("mtxchat.login.title", locales::LANG));
         let builder = match self.get(SERVER_KEY) {
             Ok(Some(server)) => builder.field_placeholder_persist(Some(server), None),
-            _ => builder.field(Some("server".to_string()), None),
+            _ => builder.field(Some(t!("mtxchat.server", locales::LANG).to_string()), None),
         };
         let builder = match self.get(USERNAME_KEY) {
             Ok(Some(user)) => builder.field_placeholder_persist(Some(user), None),
-            _ => builder.field(Some("username".to_string()), None),
+            _ => builder.field(Some(t!("mtxchat.username", locales::LANG).to_string()), None),
         };
         let builder = match self.get(PASSWORD_KEY) {
             Ok(Some(pwd)) => builder.field_placeholder_persist(Some(HIDE.to_string()), None),
-            _ => builder.field(Some("password".to_string()), None),
+            _ => builder.field(Some(t!("mtxchat.password", locales::LANG).to_string()), None),
         };
         if let Ok(payloads) = builder.build() {
             let mut user = "@".to_string();
