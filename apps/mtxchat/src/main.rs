@@ -6,6 +6,9 @@ use api::*;
 use num_traits::*;
 use xous_ipc::Buffer;
 
+use chat::{Chat, ChatOp, Event};
+use mtxchat::MtxChat;
+
 fn main () -> ! {
     let stack_size = 1024 * 1024;
     std::thread::Builder::new()
@@ -47,6 +50,15 @@ fn wrapped_main() -> ! {
         .expect("can't register server");
     // log::trace!("registered with NS -- {:?}", sid);
 
+    let chat = Chat::new(
+        gam::APP_NAME_MTXCHAT,
+        Some(xous::connect(sid).unwrap()),
+        Some(MtxchatOp::Post as usize),
+        Some(MtxchatOp::Event as usize),
+        Some(MtxchatOp::Rawkeys as usize),
+    );
+
+    let mut mtxchat = MtxChat::new();
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
