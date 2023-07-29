@@ -63,10 +63,12 @@ pub struct MtxChat {
     room_id: String,
     filter: String,
     since: String,
+    modals: Modals,
 }
 impl MtxChat {
     pub fn new() -> MtxChat {
         let xns = xous_names::XousNames::new().unwrap();
+        let modals = Modals::new(&xns).expect("can't connect to Modals server");
         let common = MtxChat {
             user: EMPTY.to_string(),
             username: EMPTY.to_string(),
@@ -76,14 +78,15 @@ impl MtxChat {
             room_id: EMPTY.to_string(),
             filter: EMPTY.to_string(),
             since: EMPTY.to_string(),
+            modals: modals,
         };
         let mut keypath = PathBuf::new();
         keypath.push(MTXCHAT_DICT);
         if std::fs::metadata(&keypath).is_ok() { // keypath exists
-            // log::info!("dict '{}' exists", MTXCHAT_DICT);
+             // log::info!("dict '{}' exists", MTXCHAT_DICT);
         } else {
             log::info!("dict '{}' does NOT exist.. creating it", MTXCHAT_DICT);
-            match std::fs::create_dir_all(&keypath){
+            match std::fs::create_dir_all(&keypath) {
                 Ok(_) => log::info!("created dict: {}", MTXCHAT_DICT),
                 Err(e) => log::warn!("failed to create dict: {:?}", e),
             }
@@ -288,7 +291,6 @@ impl MtxChat {
     }
 
     pub fn login(&mut self) -> bool {
-        // self.scalar_async_msg(LOGGING_IN_ID);
         self.token = self.get_default(TOKEN_KEY, EMPTY);
         self.logged_in = false;
         if self.token.len() > 0 {
@@ -300,14 +302,12 @@ impl MtxChat {
             if web::get_login_type(&self.server) {
                 let user = self.get_default(USER_KEY, USER_KEY);
                 if user.len() == 0 {
-                    // self.scalar_async_msg(SET_USER_ID);
                     self.modals
                         .show_notification(t!("mtxcli.please.set.user", locales::LANG), None)
                         .expect("notification failed");
                 }
                 let password = self.get_default(PASSWORD_KEY, EMPTY);
                 if password.len() == 0 {
-                    // self.scalar_async_msg(SET_PASSWORD_ID);
                 } else {
                     if let Some(new_token) = web::authenticate_user(&self.server, &user, &password)
                     {
@@ -330,6 +330,45 @@ impl MtxChat {
             log::info!("login failed");
         }
         self.logged_in
+    }
+
+    pub fn login_modal(&mut self) {
+        const HIDE: &str = "*****";
+        let mut builder = self.modals.alert_builder("Matrix login.");
+        let builder = match self.get(SERVER_KEY) {
+            Ok(Some(server)) => builder.field_placeholder_persist(Some(server), None),
+            _ => builder.field(Some("server".to_string()), None),
+        };
+        let builder = match self.get(USERNAME_KEY) {
+            Ok(Some(user)) => builder.field_placeholder_persist(Some(user), None),
+            _ => builder.field(Some("username".to_string()), None),
+        };
+        let builder = match self.get(PASSWORD_KEY) {
+            Ok(Some(pwd)) => builder.field_placeholder_persist(Some(HIDE.to_string()), None),
+            _ => builder.field(Some("password".to_string()), None),
+        };
+        if let Ok(payloads) = builder.build() {
+            let mut user = "@".to_string();
+            if let Ok(content) = payloads.content()[1].content.as_str() {
+                self.set(USERNAME_KEY, content)
+                    .expect("failed to save username");
+                user.push_str(content);
+            }
+            user.push_str(":");
+            if let Ok(content) = payloads.content()[0].content.as_str() {
+                self.set(SERVER_KEY, content)
+                    .expect("failed to save server");
+                    user.push_str(content);
+            }
+            self.set(USER_KEY, &user).expect("failed to save user");
+            if let Ok(content) = payloads.content()[2].content.as_str() {
+                if content.ne(HIDE) {
+                    self.set(PASSWORD_KEY, content)
+                        .expect("failed to save password");
+                }
+            }
+
+        }
     }
 }
 

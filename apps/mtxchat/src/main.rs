@@ -3,13 +3,14 @@
 
 mod api;
 use api::*;
-use num_traits::*;
-use xous_ipc::Buffer;
-
 use chat::{Chat, ChatOp, Event};
+use locales::t;
+use modals::Modals;
 use mtxchat::MtxChat;
+use num_traits::*;
 
-fn main () -> ! {
+
+fn main() -> ! {
     let stack_size = 1024 * 1024;
     std::thread::Builder::new()
         .stack_size(stack_size)
@@ -59,11 +60,27 @@ fn wrapped_main() -> ! {
     );
 
     let mut mtxchat = MtxChat::new();
+
+    let modals = Modals::new(&xns).expect("can't connect to Modals server");
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(MtxchatOp::Event) => {
+                log::info!("got Chat UI Event");
+                xous::msg_scalar_unpack!(msg, event_code, _, _, _, {
+                    match FromPrimitive::from_usize(event_code) {
+                        Some(Event::Focus) => {
+                            while !mtxchat.login() {
+                                modals
+                                    .show_notification(t!("mtxcli.login.failed", locales::LANG), None)
+                                    .expect("notification failed");
+                                mtxchat.login_modal();
+                            }
+                        }
+                        _ => (),
+                    }
+                })
             }
             Some(MtxchatOp::Post) => {
                 log::info!("TODO Post to Matrix server");
