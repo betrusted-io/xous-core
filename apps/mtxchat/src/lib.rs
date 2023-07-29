@@ -77,6 +77,17 @@ impl MtxChat {
             filter: EMPTY.to_string(),
             since: EMPTY.to_string(),
         };
+        let mut keypath = PathBuf::new();
+        keypath.push(MTXCHAT_DICT);
+        if std::fs::metadata(&keypath).is_ok() { // keypath exists
+            // log::info!("dict '{}' exists", MTXCHAT_DICT);
+        } else {
+            log::info!("dict '{}' does NOT exist.. creating it", MTXCHAT_DICT);
+            match std::fs::create_dir_all(&keypath){
+                Ok(_) => log::info!("created dict: {}", MTXCHAT_DICT),
+                Err(e) => log::warn!("failed to create dict: {:?}", e),
+            }
+        }
         common
     }
 
@@ -247,18 +258,12 @@ impl MtxChat {
         }
     }
 
-    pub fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
+    pub fn get(&self, key: &str) -> Result<Option<String>, Error> {
         // if key.eq(CURRENT_VERSION_KEY) {
         //     Ok(Some(self.version.clone()))
         // } else {
         let mut keypath = PathBuf::new();
         keypath.push(MTXCHAT_DICT);
-        if std::fs::metadata(&keypath).is_ok() { // keypath exists
-             // log::info!("dict '{}' exists", MTXCHAT_DICT);
-        } else {
-            log::info!("dict '{}' does NOT exist.. creating it", MTXCHAT_DICT);
-            std::fs::create_dir_all(&keypath)?;
-        }
         keypath.push(key);
         if let Ok(mut file) = File::open(keypath) {
             let mut value = String::new();
