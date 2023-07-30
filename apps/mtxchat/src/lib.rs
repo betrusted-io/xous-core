@@ -17,6 +17,7 @@ const MTXCHAT_DICT: &str = "mtxchat";
 const FILTER_KEY: &str = "_filter";
 const PASSWORD_KEY: &str = "password";
 const ROOM_ID_KEY: &str = "_room_id";
+const ROOM_SERVER_KEY: &str = "room_server";
 const ROOM_KEY: &str = "room";
 const SINCE_KEY: &str = "_since";
 const TOKEN_KEY: &str = "_token";
@@ -61,6 +62,7 @@ pub struct MtxChat {
     token: String,
     logged_in: bool,
     room_id: String,
+    room_server: String,
     filter: String,
     since: String,
     modals: Modals,
@@ -76,6 +78,7 @@ impl MtxChat {
             token: EMPTY.to_string(),
             logged_in: false,
             room_id: EMPTY.to_string(),
+            room_server: EMPTY.to_string(),
             filter: EMPTY.to_string(),
             since: EMPTY.to_string(),
             modals: modals,
@@ -126,8 +129,8 @@ impl MtxChat {
                 ROOM_KEY => {
                     self.set_room();
                 }
-                SERVER_KEY => {
-                    self.server = value.to_string();
+                ROOM_SERVER_KEY => {
+                    self.room_server = value.to_string();
                 }
                 SINCE_KEY => {
                     self.since = value.to_string();
@@ -234,6 +237,9 @@ impl MtxChat {
                 }
                 ROOM_ID_KEY => {
                     self.room_id = EMPTY.to_string();
+                }
+                ROOM_SERVER_KEY => {
+                    self.room_server = EMPTY.to_string();
                 }
                 SINCE_KEY => {
                     self.since = EMPTY.to_string();
@@ -365,6 +371,70 @@ impl MtxChat {
                 }
             }
 
+        }
+    }
+
+    // assume logged in, token is valid
+    pub fn get_room_id(&mut self) -> bool {
+        if self.room_id.len() > 0 {
+            true
+        } else {
+            let room = self.get_default(ROOM_KEY, EMPTY);
+            let server = self.get_default(ROOM_SERVER_KEY, EMPTY);
+            if room.len() == 0 {
+                false
+            } else if server.len() == 0 {
+                false
+            } else {
+                let mut room_server = String::new();
+                if ! room.starts_with("#") {
+                    room_server.push_str("#");
+                }
+                room_server.push_str(&room);
+                room_server.push_str(":");
+                let i = match server.find(HTTPS) {
+                    Some(index) => {
+                        index + HTTPS.len()
+                    },
+                    None => {
+                        server.len()
+                    },
+                };
+                if i >= server.len() {
+                    false
+                } else {
+                    room_server.push_str(&server[i..]);
+                    if let Some(new_room_id) = web::get_room_id(&self.room_server, &room_server, &self.token) {
+                        self.set_debug(ROOM_ID_KEY, &new_room_id);
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn room_modal(&mut self){
+        let mut builder = self.modals.alert_builder(t!("mtxchat.room.title", locales::LANG));
+        let builder = match self.get(ROOM_ID_KEY) {
+            Ok(Some(room)) => builder.field_placeholder_persist(Some(room), None),
+            _ => builder.field(Some(t!("mtxchat.room.id", locales::LANG).to_string()), None),
+        };
+        let builder = match self.get(ROOM_SERVER_KEY) {
+            Ok(Some(server)) => builder.field_placeholder_persist(Some(server), None),
+            _ => builder.field(Some(t!("mtxchat.server", locales::LANG).to_string()), None),
+        };
+        if let Ok(payloads) = builder.build() {
+            if let Ok(content) = payloads.content()[0].content.as_str() {
+                self.set(ROOM_ID_KEY, content)
+                    .expect("failed to save server");
+            }
+            if let Ok(content) = payloads.content()[1].content.as_str() {
+                self.set(ROOM_SERVER_KEY, content)
+                    .expect("failed to save server");
+
+            }
         }
     }
 }

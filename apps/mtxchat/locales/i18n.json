@@ -136,13 +136,13 @@
         "ja": "password *EN*",
         "zh": "password *EN*"
     },
-    "mtxchat.please.set.room": {
-        "en": "please /set room #my-room-to-join",
-        "en-tts": "please /set room #my-room-to-join",
-        "fr": "Veuillez /set room #ma-chambre",
-        "ja": "please /set room #my-room-to-join *EN*",
-        "zh": "please /set room #my-room-to-join *EN*"
+    "mtxchat.room.title": {
+        "en": "Matrix /room",
+        "en-tts": "Matrix /room"
     },
+    "mtxchat.room.id": {
+        "en": "room id",
+        "en-tts": "room id"
     },
     "mtxchat.server": {
         "en": "server",

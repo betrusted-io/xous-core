@@ -77,6 +77,12 @@ fn wrapped_main() -> ! {
                                     .expect("notification failed");
                                 mtxchat.login_modal();
                             }
+                            while !mtxchat.get_room_id() {
+                                modals
+                                    .show_notification(t!("mtxchat.roomid.failed", locales::LANG), None)
+                                    .expect("notification failed");
+                                mtxchat.room_modal();
+                            }
                         }
                         _ => (),
                     }
