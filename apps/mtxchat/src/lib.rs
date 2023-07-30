@@ -19,10 +19,10 @@ const PASSWORD_KEY: &str = "password";
 const ROOM_ID_KEY: &str = "_room_id";
 const ROOM_KEY: &str = "room";
 const SINCE_KEY: &str = "_since";
-const SERVER_KEY: &str = "server";
 const TOKEN_KEY: &str = "_token";
 const USER_KEY: &str = "user";
 const USERNAME_KEY: &str = "username";
+const USER_SERVER_KEY: &str = "user_server";
 
 const HTTPS: &str = "https://";
 const SERVER_MATRIX: &str = "https://matrix.org";
@@ -57,7 +57,7 @@ pub const HOSTED_MODE: bool = false;
 pub struct MtxChat {
     user: String,
     username: String,
-    server: String,
+    user_server: String,
     token: String,
     logged_in: bool,
     room_id: String,
@@ -72,7 +72,7 @@ impl MtxChat {
         let common = MtxChat {
             user: EMPTY.to_string(),
             username: EMPTY.to_string(),
-            server: SERVER_MATRIX.to_string(),
+            user_server: SERVER_MATRIX.to_string(),
             token: EMPTY.to_string(),
             logged_in: false,
             room_id: EMPTY.to_string(),
@@ -135,6 +135,9 @@ impl MtxChat {
                 USERNAME_KEY => {
                     self.username = value.to_string();
                 }
+                USER_SERVER_KEY => {
+                    self.user_server = value.to_string();
+                }
                 USER_KEY => {
                     self.set_user(value);
                 }
@@ -167,20 +170,20 @@ impl MtxChat {
         };
         self.username = (&value[i..j]).to_string();
         if j < value.len() {
-            self.server = String::from(HTTPS);
-            self.server.push_str(&value[j + 1..]);
+            self.user_server = String::from(HTTPS);
+            self.user_server.push_str(&value[j + 1..]);
         } else {
-            self.server = SERVER_MATRIX.to_string();
+            self.user_server = SERVER_MATRIX.to_string();
         }
         self.user = value.to_string();
         log::info!(
             "# user = '{}' username = '{}' server = '{}'",
             self.user,
             self.username,
-            self.server
+            self.user_server
         );
         self.set_debug(USERNAME_KEY, &self.username.clone());
-        self.set_debug(SERVER_KEY, &self.server.clone());
+        self.set_debug(USER_SERVER_KEY, &self.user_server.clone());
         self.unset_debug(TOKEN_KEY);
     }
 
@@ -235,8 +238,8 @@ impl MtxChat {
                 SINCE_KEY => {
                     self.since = EMPTY.to_string();
                 }
-                SERVER_KEY => {
-                    self.server = EMPTY.to_string();
+                USER_SERVER_KEY => {
+                    self.user_server = EMPTY.to_string();
                 }
                 USER_KEY => {
                     self.user = EMPTY.to_string();
@@ -294,18 +297,18 @@ impl MtxChat {
         self.token = self.get_default(TOKEN_KEY, EMPTY);
         self.logged_in = false;
         if self.token.len() > 0 {
-            if web::whoami(&self.server, &self.token) {
+            if web::whoami(&self.user_server, &self.token) {
                 self.logged_in = true;
             }
         }
         if !self.logged_in {
-            if web::get_login_type(&self.server) {
+            if web::get_login_type(&self.user_server) {
                 let user = self.get_default(USER_KEY, USER_KEY);
                 if user.len() == 0 {}
                 let password = self.get_default(PASSWORD_KEY, EMPTY);
                 if password.len() == 0 {
                 } else {
-                    if let Some(new_token) = web::authenticate_user(&self.server, &user, &password)
+                    if let Some(new_token) = web::authenticate_user(&self.user_server, &user, &password)
                     {
                         self.set_debug(TOKEN_KEY, &new_token);
                         self.logged_in = true;
@@ -329,7 +332,7 @@ impl MtxChat {
     pub fn login_modal(&mut self) {
         const HIDE: &str = "*****";
         let mut builder = self.modals.alert_builder(t!("mtxchat.login.title", locales::LANG));
-        let builder = match self.get(SERVER_KEY) {
+        let builder = match self.get(USER_SERVER_KEY) {
             Ok(Some(server)) => builder.field_placeholder_persist(Some(server), None),
             _ => builder.field(Some(t!("mtxchat.server", locales::LANG).to_string()), None),
         };
@@ -350,7 +353,7 @@ impl MtxChat {
             }
             user.push_str(":");
             if let Ok(content) = payloads.content()[0].content.as_str() {
-                self.set(SERVER_KEY, content)
+                self.set(USER_SERVER_KEY, content)
                     .expect("failed to save server");
                     user.push_str(content);
             }
