@@ -17,16 +17,16 @@ const MTXCHAT_DICT: &str = "mtxchat";
 const FILTER_KEY: &str = "_filter";
 const PASSWORD_KEY: &str = "password";
 const ROOM_ID_KEY: &str = "_room_id";
+const ROOM_NAME_KEY: &str = "room_name";
 const ROOM_SERVER_KEY: &str = "room_server";
-const ROOM_KEY: &str = "room";
 const SINCE_KEY: &str = "_since";
 const TOKEN_KEY: &str = "_token";
-const USER_KEY: &str = "user";
-const USERNAME_KEY: &str = "username";
+const USER_ID_KEY: &str = "_user_id";
+const USER_NAME_KEY: &str = "user_name";
 const USER_SERVER_KEY: &str = "user_server";
 
 const HTTPS: &str = "https://";
-const SERVER_MATRIX: &str = "https://matrix.org";
+const SERVER_MATRIX: &str = "matrix.org";
 
 const EMPTY: &str = "";
 
@@ -57,7 +57,8 @@ pub const HOSTED_MODE: bool = false;
 //#[derive(Debug)]
 pub struct MtxChat {
     user: String,
-    username: String,
+    user_id: String,
+    user_name: String,
     user_server: String,
     token: String,
     logged_in: bool,
@@ -73,7 +74,8 @@ impl MtxChat {
         let modals = Modals::new(&xns).expect("can't connect to Modals server");
         let common = MtxChat {
             user: EMPTY.to_string(),
-            username: EMPTY.to_string(),
+            user_id: EMPTY.to_string(),
+            user_name: EMPTY.to_string(),
             user_server: SERVER_MATRIX.to_string(),
             token: EMPTY.to_string(),
             logged_in: false,
@@ -126,7 +128,7 @@ impl MtxChat {
                 ROOM_ID_KEY => {
                     self.room_id = value.to_string();
                 }
-                ROOM_KEY => {
+                ROOM_NAME_KEY => {
                     self.set_room();
                 }
                 ROOM_SERVER_KEY => {
@@ -135,13 +137,13 @@ impl MtxChat {
                 SINCE_KEY => {
                     self.since = value.to_string();
                 }
-                USERNAME_KEY => {
-                    self.username = value.to_string();
+                USER_NAME_KEY => {
+                    self.user_name = value.to_string();
                 }
                 USER_SERVER_KEY => {
                     self.user_server = value.to_string();
                 }
-                USER_KEY => {
+                USER_ID_KEY => {
                     self.set_user(value);
                 }
                 _ => {}
@@ -162,7 +164,7 @@ impl MtxChat {
     }
 
     pub fn set_user(&mut self, value: &str) {
-        log::info!("# USER_KEY set '{}' = '{}'", USER_KEY, value);
+        log::info!("# USER_ID_KEY set '{}' = '{}'", USER_ID_KEY, value);
         let i = match value.find('@') {
             Some(index) => index + 1,
             None => 0,
@@ -171,21 +173,21 @@ impl MtxChat {
             Some(index) => index,
             None => value.len(),
         };
-        self.username = (&value[i..j]).to_string();
+        self.user_name = (&value[i..j]).to_string();
         if j < value.len() {
             self.user_server = String::from(HTTPS);
             self.user_server.push_str(&value[j + 1..]);
         } else {
             self.user_server = SERVER_MATRIX.to_string();
         }
-        self.user = value.to_string();
+        self.user_id = value.to_string();
         log::info!(
-            "# user = '{}' username = '{}' server = '{}'",
-            self.user,
-            self.username,
+            "# user = '{}' user_name = '{}' server = '{}'",
+            self.user_id,
+            self.user_name,
             self.user_server
         );
-        self.set_debug(USERNAME_KEY, &self.username.clone());
+        self.set_debug(USER_NAME_KEY, &self.user_name.clone());
         self.set_debug(USER_SERVER_KEY, &self.user_server.clone());
         self.unset_debug(TOKEN_KEY);
     }
@@ -200,8 +202,8 @@ impl MtxChat {
 
     pub fn set_room(&mut self) {
         log::info!(
-            "# ROOM_KEY set '{}' => clearing ROOM_ID_KEY, SINCE_KEY, FILTER_KEY",
-            ROOM_KEY
+            "# ROOM_NAME_KEY set '{}' => clearing ROOM_ID_KEY, SINCE_KEY, FILTER_KEY",
+            ROOM_NAME_KEY
         );
         self.unset_debug(ROOM_ID_KEY);
         self.unset_debug(SINCE_KEY);
@@ -247,11 +249,11 @@ impl MtxChat {
                 USER_SERVER_KEY => {
                     self.user_server = EMPTY.to_string();
                 }
-                USER_KEY => {
-                    self.user = EMPTY.to_string();
+                USER_ID_KEY => {
+                    self.user_id = EMPTY.to_string();
                 }
-                USERNAME_KEY => {
-                    self.username = EMPTY.to_string();
+                USER_NAME_KEY => {
+                    self.user_name = EMPTY.to_string();
                 }
                 _ => {}
             }
@@ -309,7 +311,7 @@ impl MtxChat {
         }
         if !self.logged_in {
             if web::get_login_type(&self.user_server) {
-                let user = self.get_default(USER_KEY, USER_KEY);
+                let user = self.get_default(USER_ID_KEY, USER_ID_KEY);
                 if user.len() == 0 {}
                 let password = self.get_default(PASSWORD_KEY, EMPTY);
                 if password.len() == 0 {
@@ -342,9 +344,9 @@ impl MtxChat {
             Ok(Some(server)) => builder.field_placeholder_persist(Some(server), None),
             _ => builder.field(Some(t!("mtxchat.server", locales::LANG).to_string()), None),
         };
-        let builder = match self.get(USERNAME_KEY) {
+        let builder = match self.get(USER_NAME_KEY) {
             Ok(Some(user)) => builder.field_placeholder_persist(Some(user), None),
-            _ => builder.field(Some(t!("mtxchat.username", locales::LANG).to_string()), None),
+            _ => builder.field(Some(t!("mtxchat.user_name", locales::LANG).to_string()), None),
         };
         let builder = match self.get(PASSWORD_KEY) {
             Ok(Some(pwd)) => builder.field_placeholder_persist(Some(HIDE.to_string()), None),
@@ -353,7 +355,7 @@ impl MtxChat {
         if let Ok(payloads) = builder.build() {
             let mut user = "@".to_string();
             if let Ok(content) = payloads.content()[1].content.as_str() {
-                self.set(USERNAME_KEY, content)
+                self.set(USER_NAME_KEY, content)
                     .expect("failed to save username");
                 user.push_str(content);
             }
@@ -363,14 +365,14 @@ impl MtxChat {
                     .expect("failed to save server");
                     user.push_str(content);
             }
-            self.set(USER_KEY, &user).expect("failed to save user");
+            self.set(USER_ID_KEY, &user).expect("failed to save user");
+            self.user_id = user;
             if let Ok(content) = payloads.content()[2].content.as_str() {
                 if content.ne(HIDE) {
                     self.set(PASSWORD_KEY, content)
                         .expect("failed to save password");
                 }
             }
-
         }
     }
 
@@ -379,7 +381,7 @@ impl MtxChat {
         if self.room_id.len() > 0 {
             true
         } else {
-            let room = self.get_default(ROOM_KEY, EMPTY);
+            let room = self.get_default(ROOM_NAME_KEY, EMPTY);
             let server = self.get_default(ROOM_SERVER_KEY, EMPTY);
             if room.len() == 0 {
                 false
@@ -417,22 +419,31 @@ impl MtxChat {
 
     pub fn room_modal(&mut self){
         let mut builder = self.modals.alert_builder(t!("mtxchat.room.title", locales::LANG));
-        let builder = match self.get(ROOM_ID_KEY) {
+        let builder = match self.get(ROOM_NAME_KEY) {
             Ok(Some(room)) => builder.field_placeholder_persist(Some(room), None),
-            _ => builder.field(Some(t!("mtxchat.room.id", locales::LANG).to_string()), None),
+            _ => builder.field(Some(t!("mtxchat.room.name", locales::LANG).to_string()), None),
         };
         let builder = match self.get(ROOM_SERVER_KEY) {
             Ok(Some(server)) => builder.field_placeholder_persist(Some(server), None),
             _ => builder.field(Some(t!("mtxchat.server", locales::LANG).to_string()), None),
         };
         if let Ok(payloads) = builder.build() {
+            let mut room_id = "#".to_string();
             if let Ok(content) = payloads.content()[0].content.as_str() {
-                self.set(ROOM_ID_KEY, content)
+                self.set(ROOM_NAME_KEY, content)
                     .expect("failed to save server");
+                    room_id.push_str(content);
             }
+            room_id.push_str(":");
             if let Ok(content) = payloads.content()[1].content.as_str() {
                 self.set(ROOM_SERVER_KEY, content)
                     .expect("failed to save server");
+                    room_id.push_str(content);
+
+            }
+            self.set(ROOM_ID_KEY, &room_id).expect("failed to save server");
+        }
+    }
 
             }
         }

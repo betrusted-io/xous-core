@@ -140,15 +140,15 @@
         "en": "Matrix /room",
         "en-tts": "Matrix /room"
     },
-    "mtxchat.room.id": {
-        "en": "room id",
-        "en-tts": "room id"
+    "mtxchat.room.name": {
+        "en": "room name",
+        "en-tts": "room name"
     },
     "mtxchat.server": {
         "en": "server",
         "en-tts": "server"
     },
-    "mtxchat.username": {
+    "mtxchat.user_name": {
         "en": "username",
         "en-tts": "username",
         "fr": "utilisateur",
