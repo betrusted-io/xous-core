@@ -814,6 +814,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "cram-mbox1"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "num-derive",
+ "num-traits",
+ "utralib",
+ "xous 0.9.48 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+]
+
+[[package]]
+name = "cram-mbox2"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "num-derive",
+ "num-traits",
+ "utralib",
+ "xous 0.9.48 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+]
+
+[[package]]
 name = "crc"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
