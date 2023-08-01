@@ -7,6 +7,7 @@ pub use api::*;
 use locales::t;
 use modals::Modals;
 
+use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read, Write as StdWrite};
 use std::path::PathBuf;
@@ -23,10 +24,10 @@ const SINCE_KEY: &str = "_since";
 const TOKEN_KEY: &str = "_token";
 const USER_ID_KEY: &str = "_user_id";
 const USER_NAME_KEY: &str = "user_name";
-const USER_SERVER_KEY: &str = "user_server";
+const USER_DOMAIN_KEY: &str = "user_domain";
 
 const HTTPS: &str = "https://";
-const SERVER_MATRIX: &str = "matrix.org";
+const DOMAIN_MATRIX: &str = "matrix.org";
 
 const EMPTY: &str = "";
 
@@ -59,7 +60,7 @@ pub struct MtxChat {
     user: String,
     user_id: String,
     user_name: String,
-    user_server: String,
+    user_domain: String,
     token: String,
     logged_in: bool,
     room_id: String,
@@ -76,7 +77,7 @@ impl MtxChat {
             user: EMPTY.to_string(),
             user_id: EMPTY.to_string(),
             user_name: EMPTY.to_string(),
-            user_server: SERVER_MATRIX.to_string(),
+            user_domain: DOMAIN_MATRIX.to_string(),
             token: EMPTY.to_string(),
             logged_in: false,
             room_id: EMPTY.to_string(),
@@ -118,34 +119,16 @@ impl MtxChat {
             keypath.push(key);
             File::create(keypath)?.write_all(value.as_bytes())?;
             match key {
-                // special case side effects
-                FILTER_KEY => {
-                    self.filter = value.to_string();
-                }
-                PASSWORD_KEY => {
-                    self.set_password();
-                }
-                ROOM_ID_KEY => {
-                    self.room_id = value.to_string();
-                }
-                ROOM_NAME_KEY => {
-                    self.set_room();
-                }
-                ROOM_SERVER_KEY => {
-                    self.room_server = value.to_string();
-                }
-                SINCE_KEY => {
-                    self.since = value.to_string();
-                }
-                USER_NAME_KEY => {
-                    self.user_name = value.to_string();
-                }
-                USER_SERVER_KEY => {
-                    self.user_server = value.to_string();
-                }
-                USER_ID_KEY => {
-                    self.set_user(value);
-                }
+                // update cached values
+                FILTER_KEY => self.filter = value.to_string(),
+                PASSWORD_KEY => (),
+                ROOM_ID_KEY => self.room_id = value.to_string(),
+                // ROOM_NAME_KEY => self.room_name = value.to_string(),
+                ROOM_SERVER_KEY => self.room_server = value.to_string(),
+                SINCE_KEY => self.since = value.to_string(),
+                USER_NAME_KEY => self.user_name = value.to_string(),
+                USER_DOMAIN_KEY => self.user_domain = value.to_string(),
+                USER_ID_KEY => self.user_id = value.to_string(),
                 _ => {}
             }
             Ok(())
@@ -161,43 +144,6 @@ impl MtxChat {
                 false
             }
         }
-    }
-
-    pub fn set_user(&mut self, value: &str) {
-        log::info!("# USER_ID_KEY set '{}' = '{}'", USER_ID_KEY, value);
-        let i = match value.find('@') {
-            Some(index) => index + 1,
-            None => 0,
-        };
-        let j = match value.find(':') {
-            Some(index) => index,
-            None => value.len(),
-        };
-        self.user_name = (&value[i..j]).to_string();
-        if j < value.len() {
-            self.user_server = String::from(HTTPS);
-            self.user_server.push_str(&value[j + 1..]);
-        } else {
-            self.user_server = SERVER_MATRIX.to_string();
-        }
-        self.user_id = value.to_string();
-        log::info!(
-            "# user = '{}' user_name = '{}' server = '{}'",
-            self.user_id,
-            self.user_name,
-            self.user_server
-        );
-        self.set_debug(USER_NAME_KEY, &self.user_name.clone());
-        self.set_debug(USER_SERVER_KEY, &self.user_server.clone());
-        self.unset_debug(TOKEN_KEY);
-    }
-
-    pub fn set_password(&mut self) {
-        log::info!(
-            "# PASSWORD_KEY set '{}' => clearing TOKEN_KEY",
-            PASSWORD_KEY
-        );
-        self.unset_debug(TOKEN_KEY);
     }
 
     pub fn set_room(&mut self) {
@@ -233,28 +179,14 @@ impl MtxChat {
                 std::fs::remove_file(keypath)?;
             }
             match key {
-                // special case side effects -- update cached values
-                FILTER_KEY => {
-                    self.filter = EMPTY.to_string();
-                }
-                ROOM_ID_KEY => {
-                    self.room_id = EMPTY.to_string();
-                }
-                ROOM_SERVER_KEY => {
-                    self.room_server = EMPTY.to_string();
-                }
-                SINCE_KEY => {
-                    self.since = EMPTY.to_string();
-                }
-                USER_SERVER_KEY => {
-                    self.user_server = EMPTY.to_string();
-                }
-                USER_ID_KEY => {
-                    self.user_id = EMPTY.to_string();
-                }
-                USER_NAME_KEY => {
-                    self.user_name = EMPTY.to_string();
-                }
+                // update cached values
+                FILTER_KEY => self.filter = EMPTY.to_string(),
+                ROOM_ID_KEY => self.room_id = EMPTY.to_string(),
+                ROOM_SERVER_KEY => self.room_server = EMPTY.to_string(),
+                SINCE_KEY => self.since = EMPTY.to_string(),
+                USER_DOMAIN_KEY => self.user_domain = EMPTY.to_string(),
+                USER_ID_KEY => self.user_id = EMPTY.to_string(),
+                USER_NAME_KEY => self.user_name = EMPTY.to_string(),
                 _ => {}
             }
             Ok(())
@@ -305,27 +237,25 @@ impl MtxChat {
         self.token = self.get_default(TOKEN_KEY, EMPTY);
         self.logged_in = false;
         if self.token.len() > 0 {
-            if web::whoami(&self.user_server, &self.token) {
+            if web::whoami(&self.user_domain, &self.token) {
                 self.logged_in = true;
             }
         }
         if !self.logged_in {
-            if web::get_login_type(&self.user_server) {
+            let mut server = String::new();
+            write!(server, "{}{}", HTTPS, &self.get_default(USER_DOMAIN_KEY, DOMAIN_MATRIX));
+            if web::get_login_type(&server) {
                 let user = self.get_default(USER_ID_KEY, USER_ID_KEY);
-                if user.len() == 0 {}
                 let password = self.get_default(PASSWORD_KEY, EMPTY);
-                if password.len() == 0 {
+                if let Some(new_token) = web::authenticate_user(&server, &user, &password)
+                {
+                    self.set_debug(TOKEN_KEY, &new_token);
+                    self.logged_in = true;
                 } else {
-                    if let Some(new_token) = web::authenticate_user(&self.user_server, &user, &password)
-                    {
-                        self.set_debug(TOKEN_KEY, &new_token);
-                        self.logged_in = true;
-                    } else {
-                        log::info!(
-                            "Error: cannnot login with type: {}",
-                            web::MTX_LOGIN_PASSWORD
-                        );
-                    }
+                    log::info!(
+                        "Error: cannnot login with type: {}",
+                        web::MTX_LOGIN_PASSWORD
+                    );
                 }
             }
         }
@@ -340,40 +270,46 @@ impl MtxChat {
     pub fn login_modal(&mut self) {
         const HIDE: &str = "*****";
         let mut builder = self.modals.alert_builder(t!("mtxchat.login.title", locales::LANG));
-        let builder = match self.get(USER_SERVER_KEY) {
-            Ok(Some(server)) => builder.field_placeholder_persist(Some(server), None),
-            _ => builder.field(Some(t!("mtxchat.server", locales::LANG).to_string()), None),
-        };
         let builder = match self.get(USER_NAME_KEY) {
+            // TODO add TextValidationFn
             Ok(Some(user)) => builder.field_placeholder_persist(Some(user), None),
             _ => builder.field(Some(t!("mtxchat.user_name", locales::LANG).to_string()), None),
+        };
+        let builder = match self.get(USER_DOMAIN_KEY) {
+            // TODO add TextValidationFn
+            Ok(Some(server)) => builder.field_placeholder_persist(Some(server), None),
+            _ => builder.field(Some(t!("mtxchat.domain", locales::LANG).to_string()), None),
         };
         let builder = match self.get(PASSWORD_KEY) {
             Ok(Some(pwd)) => builder.field_placeholder_persist(Some(HIDE.to_string()), None),
             _ => builder.field(Some(t!("mtxchat.password", locales::LANG).to_string()), None),
         };
         if let Ok(payloads) = builder.build() {
-            let mut user = "@".to_string();
-            if let Ok(content) = payloads.content()[1].content.as_str() {
+            self.unset_debug(TOKEN_KEY);
+            if let Ok(content) = payloads.content()[0].content.as_str() {
                 self.set(USER_NAME_KEY, content)
                     .expect("failed to save username");
-                user.push_str(content);
             }
-            user.push_str(":");
-            if let Ok(content) = payloads.content()[0].content.as_str() {
-                self.set(USER_SERVER_KEY, content)
+            if let Ok(content) = payloads.content()[1].content.as_str() {
+                self.set(USER_DOMAIN_KEY, content)
                     .expect("failed to save server");
-                    user.push_str(content);
             }
-            self.set(USER_ID_KEY, &user).expect("failed to save user");
-            self.user_id = user;
             if let Ok(content) = payloads.content()[2].content.as_str() {
                 if content.ne(HIDE) {
                     self.set(PASSWORD_KEY, content)
                         .expect("failed to save password");
                 }
             }
+            let mut user_id = String::new();
+            write!(user_id, "@{}:{}", self.user_name, self.user_domain);
+            self.set(USER_ID_KEY, &user_id).expect("failed to save user");
         }
+        log::info!(
+            "# user = '{}' user_name = '{}' server = '{}'",
+            self.user_id,
+            self.user_name,
+            self.user_domain
+        );
     }
 
     // assume logged in, token is valid
@@ -425,7 +361,7 @@ impl MtxChat {
         };
         let builder = match self.get(ROOM_SERVER_KEY) {
             Ok(Some(server)) => builder.field_placeholder_persist(Some(server), None),
-            _ => builder.field(Some(t!("mtxchat.server", locales::LANG).to_string()), None),
+            _ => builder.field(Some(t!("mtxchat.domain", locales::LANG).to_string()), None),
         };
         if let Ok(payloads) = builder.build() {
             let mut room_id = "#".to_string();

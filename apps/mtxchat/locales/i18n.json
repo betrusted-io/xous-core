@@ -144,9 +144,9 @@
         "en": "room name",
         "en-tts": "room name"
     },
-    "mtxchat.server": {
-        "en": "server",
-        "en-tts": "server"
+    "mtxchat.domain": {
+        "en": "domain",
+        "en-tts": "domain"
     },
     "mtxchat.user_name": {
         "en": "username",
