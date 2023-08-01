@@ -1,0 +1,21 @@
+[package]
+name = "cram-mbox2"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+utralib = {version = "0.1.21", optional = true, default-features = false }
+xous-api-names = "0.9.46"
+xous-api-ticktimer = "0.9.44"
+xous = "0.9.48"
+log-server = {package = "xous-api-log", version = "0.1.44"}
+log = "0.4.14"
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
+
+[features]
+"cramium" = []
+"ext" = [] # must match setting in cram-mbox1
+default = ["cramium", "ext"]
