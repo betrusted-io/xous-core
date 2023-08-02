@@ -72,6 +72,8 @@ members = [
   "services/dns",
   "services/modals",
   "services/early_settings",
+  "apps/app-loader",
+  "apps/app-loader/spawn",
   "apps/ball",
   "apps/hello",
   "apps/mtxcli",
@@ -82,7 +84,6 @@ members = [
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
-  "services/app-loader/spawn",
   "services/cram-console",
   #"services/test-spawn",
   #"services/test-spawn/spawn",
@@ -92,7 +93,6 @@ members = [
   "kernel",
   "loader",
   "libs/userprefs",
-  "services/app-loader",
   "libs/tls",
   "libs/xous-pio",
   "libs/xous-pl230",
@@ -115,6 +115,11 @@ exclude = [
   # The "packing" crate is forked and is a separate workspace
   "libs/mass-storage/packing",
 ]
+
+[profile.dev]
+opt-level = 1
+lto = "fat"
+overflow-checks = false
 
 [profile.release]
 codegen-units = 1 # 1 better optimizations
@@ -175,8 +180,8 @@ rev="4296c2e7904898766cf7d8d589759a129794783b" # use the commitref because we're
 path = "./utralib"
 [patch.crates-io.svd2utra]
 path = "./svd2utra"
-# [patch.crates-io.xous]
-# path = "./xous-rs"
+[patch.crates-io.xous]
+path = "./xous-rs"
 # [patch.crates-io.xous-ipc]
 # path = "./xous-ipc"
 # [patch.crates-io.xous-api-names]

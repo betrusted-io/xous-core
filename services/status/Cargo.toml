@@ -47,8 +47,6 @@ com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f
 
 utralib = {version = "0.1.21", optional = true, default-features = false }
 
-app-loader = {path = "../app-loader/", optional = true}
-
 # short circuit the datetime call on hosted mode
 [target.'cfg(any(windows,unix))'.dependencies]
 chrono = "0.4.19"

@@ -11,16 +11,13 @@ xous = "0.9.40"
 xous-ipc = "0.9.40"
 log-server = { package = "xous-api-log", version = "0.1.35" }
 log = "0.4.14"
-xous-names = {package = "xous-api-names", version = "0.9.37"}
-gam = {path = "../gam"}
-graphics-server = {path = "../../services/graphics-server" }
-locales = {path = "../../locales"}
+xous-names = { package = "xous-api-names", version = "0.9.37" }
+gam = { path = "../../services/gam" }
+graphics-server = { path = "../../services/graphics-server" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.44" }
+locales = { path = "../../locales" }
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
-
-[features]
-default = ["app_loader"]
-app_loader = []
