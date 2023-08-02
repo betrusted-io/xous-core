@@ -77,7 +77,7 @@ fn main() -> ! {
 		log::info!("Result of ping: {:?}", result);
 		
 		// load the app from the binary file
-		let bin = include_bytes!("hello");
+		let bin = include_bytes!("../../../target/riscv32imac-unknown-xous-elf/release/hello");
 		let bin_len = bin.len();
 		let bin_loc = bin.as_ptr() as usize;
 		let buf = unsafe { xous::MemoryRange::new(bin_loc & !0xFFF, bin_len + if bin_len & 0xFFF == 0 { 0 } else {0x1000 - (bin_len & 0xFFF)}).expect("Couldn't create a buffer from the segment") };

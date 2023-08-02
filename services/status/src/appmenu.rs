@@ -4,7 +4,7 @@ use num_traits::*;
 
 use crate::{StatusOpcode, app_autogen};
 
-pub fn create_app_menu(status_conn: xous::CID) -> Option<MenuMatic> {
+pub fn create_app_menu(status_conn: xous::CID) {
     let mut menu_items = Vec::<MenuItem>::new();
 
     menu_items.push(MenuItem {
@@ -25,5 +25,5 @@ pub fn create_app_menu(status_conn: xous::CID) -> Option<MenuMatic> {
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
-    menu_matic(menu_items, gam::APP_MENU_NAME, Some(xous::create_server().expect("Couldn't create appmenu server!")))
+    menu_matic(menu_items, gam::APP_MENU_NAME, None);
 }
