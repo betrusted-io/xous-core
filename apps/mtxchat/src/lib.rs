@@ -19,7 +19,7 @@ const FILTER_KEY: &str = "_filter";
 const PASSWORD_KEY: &str = "password";
 const ROOM_ID_KEY: &str = "_room_id";
 const ROOM_NAME_KEY: &str = "room_name";
-const ROOM_SERVER_KEY: &str = "room_server";
+const ROOM_DOMAIN_KEY: &str = "room_domain";
 const SINCE_KEY: &str = "_since";
 const TOKEN_KEY: &str = "_token";
 const USER_ID_KEY: &str = "_user_id";
@@ -64,7 +64,8 @@ pub struct MtxChat {
     token: String,
     logged_in: bool,
     room_id: String,
-    room_server: String,
+    room_name: String,
+    room_domain: String,
     filter: String,
     since: String,
     modals: Modals,
@@ -81,7 +82,8 @@ impl MtxChat {
             token: EMPTY.to_string(),
             logged_in: false,
             room_id: EMPTY.to_string(),
-            room_server: EMPTY.to_string(),
+            room_name: EMPTY.to_string(),
+            room_domain: EMPTY.to_string(),
             filter: EMPTY.to_string(),
             since: EMPTY.to_string(),
             modals: modals,
@@ -123,8 +125,8 @@ impl MtxChat {
                 FILTER_KEY => self.filter = value.to_string(),
                 PASSWORD_KEY => (),
                 ROOM_ID_KEY => self.room_id = value.to_string(),
-                // ROOM_NAME_KEY => self.room_name = value.to_string(),
-                ROOM_SERVER_KEY => self.room_server = value.to_string(),
+                ROOM_NAME_KEY => self.room_name = value.to_string(),
+                ROOM_DOMAIN_KEY => self.room_domain = value.to_string(),
                 SINCE_KEY => self.since = value.to_string(),
                 USER_NAME_KEY => self.user_name = value.to_string(),
                 USER_DOMAIN_KEY => self.user_domain = value.to_string(),
@@ -144,16 +146,6 @@ impl MtxChat {
                 false
             }
         }
-    }
-
-    pub fn set_room(&mut self) {
-        log::info!(
-            "# ROOM_NAME_KEY set '{}' => clearing ROOM_ID_KEY, SINCE_KEY, FILTER_KEY",
-            ROOM_NAME_KEY
-        );
-        self.unset_debug(ROOM_ID_KEY);
-        self.unset_debug(SINCE_KEY);
-        self.unset_debug(FILTER_KEY);
     }
 
     pub fn unset(&mut self, key: &str) -> Result<(), Error> {
@@ -182,7 +174,7 @@ impl MtxChat {
                 // update cached values
                 FILTER_KEY => self.filter = EMPTY.to_string(),
                 ROOM_ID_KEY => self.room_id = EMPTY.to_string(),
-                ROOM_SERVER_KEY => self.room_server = EMPTY.to_string(),
+                ROOM_DOMAIN_KEY => self.room_domain = EMPTY.to_string(),
                 SINCE_KEY => self.since = EMPTY.to_string(),
                 USER_DOMAIN_KEY => self.user_domain = EMPTY.to_string(),
                 USER_ID_KEY => self.user_id = EMPTY.to_string(),
@@ -316,39 +308,23 @@ impl MtxChat {
     pub fn get_room_id(&mut self) -> bool {
         if self.room_id.len() > 0 {
             true
+        } else if self.room_name.len() == 0 {
+            false
+        } else if self.room_domain.len() == 0 {
+            false
         } else {
-            let room = self.get_default(ROOM_NAME_KEY, EMPTY);
-            let server = self.get_default(ROOM_SERVER_KEY, EMPTY);
-            if room.len() == 0 {
-                false
-            } else if server.len() == 0 {
-                false
+            let name = self.get_default(ROOM_NAME_KEY, EMPTY);
+            let domain = self.get_default(ROOM_DOMAIN_KEY, EMPTY);
+            let mut room = String::new();
+            write!(room, "#{}:{}", &name, &self.get_default(ROOM_DOMAIN_KEY, DOMAIN_MATRIX));
+            let mut server = String::new();
+            write!(server, "{}{}", HTTPS, &self.get_default(USER_DOMAIN_KEY, DOMAIN_MATRIX));
+            if let Some(room_id) = web::get_room_id(&server, &room, &self.token) {
+                self.set_debug(ROOM_ID_KEY, &room_id);
+                true
             } else {
-                let mut room_server = String::new();
-                if ! room.starts_with("#") {
-                    room_server.push_str("#");
-                }
-                room_server.push_str(&room);
-                room_server.push_str(":");
-                let i = match server.find(HTTPS) {
-                    Some(index) => {
-                        index + HTTPS.len()
-                    },
-                    None => {
-                        server.len()
-                    },
-                };
-                if i >= server.len() {
-                    false
-                } else {
-                    room_server.push_str(&server[i..]);
-                    if let Some(new_room_id) = web::get_room_id(&self.room_server, &room_server, &self.token) {
-                        self.set_debug(ROOM_ID_KEY, &new_room_id);
-                        true
-                    } else {
-                        false
-                    }
-                }
+                log::warn!("failed to return room_id");
+                false
             }
         }
     }
@@ -356,28 +332,35 @@ impl MtxChat {
     pub fn room_modal(&mut self){
         let mut builder = self.modals.alert_builder(t!("mtxchat.room.title", locales::LANG));
         let builder = match self.get(ROOM_NAME_KEY) {
+            // TODO add TextValidationFn
             Ok(Some(room)) => builder.field_placeholder_persist(Some(room), None),
             _ => builder.field(Some(t!("mtxchat.room.name", locales::LANG).to_string()), None),
         };
-        let builder = match self.get(ROOM_SERVER_KEY) {
+        let builder = match self.get(ROOM_DOMAIN_KEY) {
+            // TODO add TextValidationFn
             Ok(Some(server)) => builder.field_placeholder_persist(Some(server), None),
             _ => builder.field(Some(t!("mtxchat.domain", locales::LANG).to_string()), None),
         };
         if let Ok(payloads) = builder.build() {
-            let mut room_id = "#".to_string();
+            self.unset_debug(ROOM_ID_KEY);
+            self.unset_debug(SINCE_KEY);
+            self.unset_debug(FILTER_KEY);
             if let Ok(content) = payloads.content()[0].content.as_str() {
                 self.set(ROOM_NAME_KEY, content)
                     .expect("failed to save server");
-                    room_id.push_str(content);
             }
-            room_id.push_str(":");
             if let Ok(content) = payloads.content()[1].content.as_str() {
-                self.set(ROOM_SERVER_KEY, content)
+                self.set(ROOM_DOMAIN_KEY, content)
                     .expect("failed to save server");
-                    room_id.push_str(content);
+            }
+        }
+        log::info!(
+            "# ROOM_NAME_KEY set '{}' => clearing ROOM_ID_KEY, SINCE_KEY, FILTER_KEY",
+            ROOM_NAME_KEY
+        );
+    }
 
             }
-            self.set(ROOM_ID_KEY, &room_id).expect("failed to save server");
         }
     }
 
