@@ -3,7 +3,7 @@ mod url;
 mod web;
 
 pub use api::*;
-
+use chat::{Chat, ChatOp};
 use locales::t;
 use modals::Modals;
 
@@ -30,6 +30,7 @@ const HTTPS: &str = "https://";
 const DOMAIN_MATRIX: &str = "matrix.org";
 
 const EMPTY: &str = "";
+const MTX_LONG_TIMEOUT: i32 = 60000; // ms
 
 pub const CLOCK_NOT_SET_ID: usize = 1;
 pub const PDDB_NOT_MOUNTED_ID: usize = 2;
@@ -56,8 +57,8 @@ pub const HOSTED_MODE: bool = true;
 pub const HOSTED_MODE: bool = false;
 
 //#[derive(Debug)]
-pub struct MtxChat {
-    user: String,
+pub struct MtxChat<'a> {
+    chat: &'a Chat,
     user_id: String,
     user_name: String,
     user_domain: String,
@@ -68,14 +69,16 @@ pub struct MtxChat {
     room_domain: String,
     filter: String,
     since: String,
+    wifi_connected: bool,
+    listening: bool,
     modals: Modals,
 }
-impl MtxChat {
-    pub fn new() -> MtxChat {
+impl<'a> MtxChat<'a> {
+    pub fn new(chat: &Chat) -> MtxChat {
         let xns = xous_names::XousNames::new().unwrap();
         let modals = Modals::new(&xns).expect("can't connect to Modals server");
         let common = MtxChat {
-            user: EMPTY.to_string(),
+            chat: chat,
             user_id: EMPTY.to_string(),
             user_name: EMPTY.to_string(),
             user_domain: DOMAIN_MATRIX.to_string(),
@@ -86,6 +89,8 @@ impl MtxChat {
             room_domain: EMPTY.to_string(),
             filter: EMPTY.to_string(),
             since: EMPTY.to_string(),
+            wifi_connected: false,
+            listening: false,
             modals: modals,
         };
         let mut keypath = PathBuf::new();
@@ -229,7 +234,9 @@ impl MtxChat {
         self.token = self.get_default(TOKEN_KEY, EMPTY);
         self.logged_in = false;
         if self.token.len() > 0 {
-            if web::whoami(&self.user_domain, &self.token) {
+            let mut server = String::new();
+            write!(server, "{}{}", HTTPS, &self.get_default(USER_DOMAIN_KEY, DOMAIN_MATRIX));
+            if web::whoami(&server, &self.token) {
                 self.logged_in = true;
             }
         }
@@ -360,10 +367,80 @@ impl MtxChat {
         );
     }
 
+    // assume logged in, token is valid, room_id is valid, user is valid
+    pub fn get_filter(&mut self) -> bool {
+        if self.filter.len() > 0 {
+            true
+        } else {
+            let mut user_server = String::new();
+            write!(user_server, "{}{}", HTTPS, &self.get_default(USER_DOMAIN_KEY, DOMAIN_MATRIX));
+            if let Some(new_filter) = web::get_filter(&self.user_id, &user_server,
+                                                      &self.room_id, &self.token) {
+                self.set_debug(FILTER_KEY, &new_filter);
+                true
+            } else {
+                false
             }
         }
     }
 
+    pub fn listen(&mut self) {
+        if self.listening {
+            log::info!("Already listening");
+            return;
+        }
+        if ! self.logged_in {
+            log::info!("Not logged in");
+            return;
+        }
+        if self.room_id.len() == 0 {
+            if ! self.get_room_id() {
+                return;
+            }
+        }
+        if self.filter.len() == 0 {
+            if ! self.get_filter() {
+                return;
+            }
+        }
+        self.listening = true;
+        log::info!("Started listening");
+        std::thread::spawn({
+
+            let mut server = String::new();
+            write!(server, "{}{}", HTTPS, &self.get_default(ROOM_DOMAIN_KEY, DOMAIN_MATRIX));
+            let filter = self.filter.clone();
+            let since = self.since.clone();
+            let room_id = self.room_id.clone();
+            let token = self.token.clone();
+            // let async_msg_conn = self.async_msg_conn.clone();
+            // let async_msg_callback_id = self.async_msg_callback_id.clone();
+            move || {
+                // log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
+                let mut response = String::new();
+                // response.push(SENTINEL);
+                if let Some((since, messages)) = web::client_sync(&server, &filter, &since, MTX_LONG_TIMEOUT, &room_id, &token) {
+                    response.push_str(&since);
+                    // response.push(SENTINEL);
+                    response.push_str(&messages);
+                    // response.push(SENTINEL);
+                }
+                // let str_buf = StringBuffer::from_str(&response)
+                //     .expect("unable to create string message");
+                // str_buf.send(async_msg_conn, async_msg_callback_id)
+                //     .expect("unable to send string message");
+            }
+        });
+    }
+
+    pub fn listen_over(&mut self, since: &str) {
+        self.listening = false;
+        log::info!("Stopped listening");
+        if since.len() > 0 {
+            self.set_debug(SINCE_KEY, since);
+            // don't re-start listening if there was an error
+            if self.logged_in && (HOSTED_MODE || self.wifi_connected) {
+                self.listen();
             }
         }
     }

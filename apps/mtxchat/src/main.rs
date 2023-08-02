@@ -9,7 +9,6 @@ use modals::Modals;
 use mtxchat::MtxChat;
 use num_traits::*;
 
-
 fn main() -> ! {
     let stack_size = 1024 * 1024;
     std::thread::Builder::new()
@@ -59,7 +58,7 @@ fn wrapped_main() -> ! {
         Some(MtxchatOp::Rawkeys as usize),
     );
 
-    let mut mtxchat = MtxChat::new();
+    let mut mtxchat = MtxChat::new(&chat);
 
     let modals = Modals::new(&xns).expect("can't connect to Modals server");
     loop {
@@ -83,6 +82,7 @@ fn wrapped_main() -> ! {
                                     .expect("notification failed");
                                 mtxchat.room_modal();
                             }
+                            mtxchat.listen();
                         }
                         _ => (),
                     }
