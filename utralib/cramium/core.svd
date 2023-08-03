@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2023-07-29 00:11:05]]></description>
+    <description><![CDATA[Litex SoC 2023-08-01 23:55:57]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -523,7 +523,7 @@ this value (so a value of 255 would match everything from 0 to 255; resulting in
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -546,10 +546,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -699,7 +732,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -869,7 +902,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -1018,7 +1051,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -1033,7 +1066,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -1056,10 +1089,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -1209,7 +1275,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -1379,7 +1445,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -1528,7 +1594,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -1543,7 +1609,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -1566,10 +1632,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -1719,7 +1818,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -1889,7 +1988,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2038,7 +2137,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -2053,7 +2152,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -2076,10 +2175,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2229,7 +2361,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2399,7 +2531,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2548,7 +2680,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -2563,7 +2695,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -2586,10 +2718,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2739,7 +2904,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2909,7 +3074,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -3058,7 +3223,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -3073,7 +3238,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -3096,10 +3261,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -3249,7 +3447,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -3419,7 +3617,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -3568,7 +3766,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -3583,7 +3781,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -3606,10 +3804,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -3759,7 +3990,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -3929,7 +4160,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4078,7 +4309,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -4093,7 +4324,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -4116,10 +4347,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4269,7 +4533,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4439,7 +4703,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4588,7 +4852,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -4603,7 +4867,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -4626,10 +4890,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4779,7 +5076,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4949,7 +5246,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5098,7 +5395,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -5113,7 +5410,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -5136,10 +5433,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5289,7 +5619,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5459,7 +5789,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5608,7 +5938,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -5623,7 +5953,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -5646,10 +5976,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5799,7 +6162,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5969,7 +6332,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6118,7 +6481,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -6133,7 +6496,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -6156,10 +6519,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6309,7 +6705,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6479,7 +6875,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6628,7 +7024,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -6643,7 +7039,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -6666,10 +7062,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6819,7 +7248,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6989,7 +7418,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -7138,7 +7567,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -7153,7 +7582,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -7176,10 +7605,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -7329,7 +7791,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -7499,7 +7961,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -7648,7 +8110,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -7663,7 +8125,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -7686,10 +8148,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -7839,7 +8334,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -8009,7 +8504,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -8158,7 +8653,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -8173,7 +8668,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -8196,10 +8691,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -8349,7 +8877,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -8519,7 +9047,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -8668,7 +9196,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -8683,7 +9211,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -8706,10 +9234,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -8859,7 +9420,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -9029,7 +9590,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -9178,7 +9739,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -9193,7 +9754,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -9216,10 +9777,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -9369,7 +9963,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -9539,7 +10133,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -9688,7 +10282,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -9703,7 +10297,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -9726,10 +10320,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -9879,7 +10506,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -10049,7 +10676,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -10198,7 +10825,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -10213,7 +10840,7 @@ triggering]]></description>
             <registers>
                 <register>
                     <name>EV_SOFT</name>
-                    <description><![CDATA[Software interrupt trigger register.
+                    <description><![CDATA[Software interrupt trigger register. )
 
 Bits set to `1` will trigger an interrupt. Interrupts trigger on write, but the
 value will persist in the register, allowing software to determine if a software
@@ -10236,10 +10863,43 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     </fields>
                 </register>
                 <register>
+                    <name>EV_EDGE_TRIGGERED</name>
+                    <description><![CDATA[If a bit is set to 1, then the hardware trigger is edge-triggered]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_edge</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_POLARITY</name>
+                    <description><![CDATA[If a bit is set to 1, then the polarity is rising edge triggered; 0 is falling
+edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rising</name>
+                            <msb>19</msb>
+                            <bitRange>[19:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[None]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -10389,7 +11049,7 @@ triggering]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -10559,7 +11219,7 @@ triggering]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -10708,7 +11368,7 @@ triggering]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x10</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -10953,10 +11613,26 @@ packet is done loading. There is no need to clear this register after writing.]]
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>LOOPBACK</name>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>loopback</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Writing a `1` to this field indicates that the mailbox should loopback to the
+local client. `0` connects it to the external core.]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x20</size>
+                <size>0x24</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -11000,120 +11676,8 @@ packet is done loading. There is no need to clear this register after writing.]]
                     </fields>
                 </register>
                 <register>
-                    <name>EV_STATUS</name>
-                    <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
-                    <addressOffset>0x0008</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>available</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Level of the ``available`` event]]></description>
-                        </field>
-                        <field>
-                            <name>abort_init</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Level of the ``abort_init`` event]]></description>
-                        </field>
-                        <field>
-                            <name>abort_done</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[Level of the ``abort_done`` event]]></description>
-                        </field>
-                        <field>
-                            <name>error</name>
-                            <msb>3</msb>
-                            <bitRange>[3:3]</bitRange>
-                            <lsb>3</lsb>
-                            <description><![CDATA[Level of the ``error`` event]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_PENDING</name>
-                    <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
-                    <addressOffset>0x000c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>available</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Triggers when the `done` signal was asserted by the corresponding peer]]></description>
-                        </field>
-                        <field>
-                            <name>abort_init</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Triggers when abort is asserted by the peer, and there is currently no abort in
-progress]]></description>
-                        </field>
-                        <field>
-                            <name>abort_done</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[Triggers when a previously initiated abort is acknowledged by peer]]></description>
-                        </field>
-                        <field>
-                            <name>error</name>
-                            <msb>3</msb>
-                            <bitRange>[3:3]</bitRange>
-                            <lsb>3</lsb>
-                            <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_ENABLE</name>
-                    <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
-                    <addressOffset>0x0010</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>available</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``available`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>abort_init</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``abort_init`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>abort_done</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``abort_done`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>error</name>
-                            <msb>3</msb>
-                            <bitRange>[3:3]</bitRange>
-                            <lsb>3</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``error`` Event]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
                     <name>STATUS</name>
-                    <addressOffset>0x0014</addressOffset>
+                    <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -11162,6 +11726,118 @@ ignore the state of this bit if it is intending to initiate a new abort cycle.]]
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
                             <description><![CDATA[Set if the recipient didn't have data available for a read. Cleared on read.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>available</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``available`` event]]></description>
+                        </field>
+                        <field>
+                            <name>abort_init</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``abort_init`` event]]></description>
+                        </field>
+                        <field>
+                            <name>abort_done</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Level of the ``abort_done`` event]]></description>
+                        </field>
+                        <field>
+                            <name>error</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[Level of the ``error`` event]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>available</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Triggers when the `done` signal was asserted by the corresponding peer]]></description>
+                        </field>
+                        <field>
+                            <name>abort_init</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Triggers when abort is asserted by the peer, and there is currently no abort in
+progress]]></description>
+                        </field>
+                        <field>
+                            <name>abort_done</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Triggers when a previously initiated abort is acknowledged by peer]]></description>
+                        </field>
+                        <field>
+                            <name>error</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>available</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``available`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>abort_init</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``abort_init`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>abort_done</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``abort_done`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>error</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``error`` Event]]></description>
                         </field>
                     </fields>
                 </register>

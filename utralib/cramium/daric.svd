@@ -445,6 +445,253 @@
         </register>
       </registers>
     </peripheral>
+
+    <peripheral>
+        <name>MB_EXT</name>
+        <baseAddress>0x50124000</baseAddress>
+        <groupName>MB_EXT</groupName>
+        <registers>
+            <register>
+                <name>STATUS</name>
+                <addressOffset>0x0000</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>rx_avail</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Rx data is available]]></description>
+                    </field>
+                    <field>
+                        <name>tx_free</name>
+                        <msb>1</msb>
+                        <bitRange>[1:1]</bitRange>
+                        <lsb>1</lsb>
+                        <description><![CDATA[Tx register can be written]]></description>
+                    </field>
+                    <field>
+                        <name>abort_in_progress</name>
+                        <msb>2</msb>
+                        <bitRange>[2:2]</bitRange>
+                        <lsb>2</lsb>
+                        <description><![CDATA[This bit is set if an `aborting` event was initiated and is still in progress.]]></description>
+                    </field>
+                    <field>
+                        <name>abort_ack</name>
+                        <msb>3</msb>
+                        <bitRange>[3:3]</bitRange>
+                        <lsb>3</lsb>
+                        <description><![CDATA[This bit is set by the peer that acknowledged the incoming abort (the later of
+the two, in case of an imperfect race condition). The abort response handler
+should check this bit; if it is set, no new acknowledgement shall be issued. The
+bit is cleared when an initiator initiates a new abort. The initiator shall also
+ignore the state of this bit if it is intending to initiate a new abort cycle.]]></description>
+                    </field>
+                    <field>
+                        <name>tx_err</name>
+                        <msb>4</msb>
+                        <bitRange>[4:4]</bitRange>
+                        <lsb>4</lsb>
+                        <description><![CDATA[Set if the recipient was not ready for the data. Cleared on read.]]></description>
+                    </field>
+                    <field>
+                        <name>rx_err</name>
+                        <msb>5</msb>
+                        <bitRange>[5:5]</bitRange>
+                        <lsb>5</lsb>
+                        <description><![CDATA[Set if the recipient didn't have data available for a read. Cleared on read.]]></description>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>EV_STATUS</name>
+                <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                <addressOffset>0x0004</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>available</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Level of the ``available`` event]]></description>
+                    </field>
+                    <field>
+                        <name>abort_init</name>
+                        <msb>1</msb>
+                        <bitRange>[1:1]</bitRange>
+                        <lsb>1</lsb>
+                        <description><![CDATA[Level of the ``abort_init`` event]]></description>
+                    </field>
+                    <field>
+                        <name>abort_done</name>
+                        <msb>2</msb>
+                        <bitRange>[2:2]</bitRange>
+                        <lsb>2</lsb>
+                        <description><![CDATA[Level of the ``abort_done`` event]]></description>
+                    </field>
+                    <field>
+                        <name>error</name>
+                        <msb>3</msb>
+                        <bitRange>[3:3]</bitRange>
+                        <lsb>3</lsb>
+                        <description><![CDATA[Level of the ``error`` event]]></description>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>EV_PENDING</name>
+                <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                <addressOffset>0x0008</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>available</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Triggers when the `done` signal was asserted by the corresponding peer]]></description>
+                    </field>
+                    <field>
+                        <name>abort_init</name>
+                        <msb>1</msb>
+                        <bitRange>[1:1]</bitRange>
+                        <lsb>1</lsb>
+                        <description><![CDATA[Triggers when abort is asserted by the peer, and there is currently no abort in
+progress]]></description>
+                    </field>
+                    <field>
+                        <name>abort_done</name>
+                        <msb>2</msb>
+                        <bitRange>[2:2]</bitRange>
+                        <lsb>2</lsb>
+                        <description><![CDATA[Triggers when a previously initiated abort is acknowledged by peer]]></description>
+                    </field>
+                    <field>
+                        <name>error</name>
+                        <msb>3</msb>
+                        <bitRange>[3:3]</bitRange>
+                        <lsb>3</lsb>
+                        <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>EV_ENABLE</name>
+                <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                <addressOffset>0x000c</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>available</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Write a ``1`` to enable the ``available`` Event]]></description>
+                    </field>
+                    <field>
+                        <name>abort_init</name>
+                        <msb>1</msb>
+                        <bitRange>[1:1]</bitRange>
+                        <lsb>1</lsb>
+                        <description><![CDATA[Write a ``1`` to enable the ``abort_init`` Event]]></description>
+                    </field>
+                    <field>
+                        <name>abort_done</name>
+                        <msb>2</msb>
+                        <bitRange>[2:2]</bitRange>
+                        <lsb>2</lsb>
+                        <description><![CDATA[Write a ``1`` to enable the ``abort_done`` Event]]></description>
+                    </field>
+                    <field>
+                        <name>error</name>
+                        <msb>3</msb>
+                        <bitRange>[3:3]</bitRange>
+                        <lsb>3</lsb>
+                        <description><![CDATA[Write a ``1`` to enable the ``error`` Event]]></description>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>WDATA</name>
+                <description><![CDATA[Write data to outgoing FIFO.]]></description>
+                <addressOffset>0x0010</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>wdata</name>
+                        <msb>31</msb>
+                        <bitRange>[31:0]</bitRange>
+                        <lsb>0</lsb>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>RDATA</name>
+                <description><![CDATA[Read data from incoming FIFO.]]></description>
+                <addressOffset>0x0014</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>rdata</name>
+                        <msb>31</msb>
+                        <bitRange>[31:0]</bitRange>
+                        <lsb>0</lsb>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>CONTROL</name>
+                <addressOffset>0x0018</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>abort</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Write `1` to this field to both initiate and acknowledge an abort. Empties both
+FIFOs, asserts `aborting`, and prevents an interrupt from being generated by an
+incoming abort request. New reads & writes are ignored until `aborted` is
+asserted from the peer.]]></description>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>DONE</name>
+                <addressOffset>0x001c</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>done</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Writing a `1` to this field indicates to the corresponding peer that a full
+packet is done loading. There is no need to clear this register after writing.]]></description>
+                    </field>
+                </fields>
+            </register>
+        </registers>
+        <addressBlock>
+            <offset>0</offset>
+            <size>0x20</size>
+            <usage>registers</usage>
+        </addressBlock>
+        <interrupt>
+            <name>mb_client</name>
+            <value>23</value>
+        </interrupt>
+    </peripheral>
         <peripheral>
             <name>UDMA_CTRL</name>
             <baseAddress>0x50100000</baseAddress>
@@ -14277,6 +14524,253 @@ position to clear the flag]]></description>
         </register>
       </registers>
     </peripheral>
+
+    <peripheral>
+        <name>MB_EXT</name>
+        <baseAddress>0x50124000</baseAddress>
+        <groupName>MB_EXT</groupName>
+        <registers>
+            <register>
+                <name>STATUS</name>
+                <addressOffset>0x0000</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>rx_avail</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Rx data is available]]></description>
+                    </field>
+                    <field>
+                        <name>tx_free</name>
+                        <msb>1</msb>
+                        <bitRange>[1:1]</bitRange>
+                        <lsb>1</lsb>
+                        <description><![CDATA[Tx register can be written]]></description>
+                    </field>
+                    <field>
+                        <name>abort_in_progress</name>
+                        <msb>2</msb>
+                        <bitRange>[2:2]</bitRange>
+                        <lsb>2</lsb>
+                        <description><![CDATA[This bit is set if an `aborting` event was initiated and is still in progress.]]></description>
+                    </field>
+                    <field>
+                        <name>abort_ack</name>
+                        <msb>3</msb>
+                        <bitRange>[3:3]</bitRange>
+                        <lsb>3</lsb>
+                        <description><![CDATA[This bit is set by the peer that acknowledged the incoming abort (the later of
+the two, in case of an imperfect race condition). The abort response handler
+should check this bit; if it is set, no new acknowledgement shall be issued. The
+bit is cleared when an initiator initiates a new abort. The initiator shall also
+ignore the state of this bit if it is intending to initiate a new abort cycle.]]></description>
+                    </field>
+                    <field>
+                        <name>tx_err</name>
+                        <msb>4</msb>
+                        <bitRange>[4:4]</bitRange>
+                        <lsb>4</lsb>
+                        <description><![CDATA[Set if the recipient was not ready for the data. Cleared on read.]]></description>
+                    </field>
+                    <field>
+                        <name>rx_err</name>
+                        <msb>5</msb>
+                        <bitRange>[5:5]</bitRange>
+                        <lsb>5</lsb>
+                        <description><![CDATA[Set if the recipient didn't have data available for a read. Cleared on read.]]></description>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>EV_STATUS</name>
+                <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                <addressOffset>0x0004</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>available</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Level of the ``available`` event]]></description>
+                    </field>
+                    <field>
+                        <name>abort_init</name>
+                        <msb>1</msb>
+                        <bitRange>[1:1]</bitRange>
+                        <lsb>1</lsb>
+                        <description><![CDATA[Level of the ``abort_init`` event]]></description>
+                    </field>
+                    <field>
+                        <name>abort_done</name>
+                        <msb>2</msb>
+                        <bitRange>[2:2]</bitRange>
+                        <lsb>2</lsb>
+                        <description><![CDATA[Level of the ``abort_done`` event]]></description>
+                    </field>
+                    <field>
+                        <name>error</name>
+                        <msb>3</msb>
+                        <bitRange>[3:3]</bitRange>
+                        <lsb>3</lsb>
+                        <description><![CDATA[Level of the ``error`` event]]></description>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>EV_PENDING</name>
+                <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                <addressOffset>0x0008</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>available</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Triggers when the `done` signal was asserted by the corresponding peer]]></description>
+                    </field>
+                    <field>
+                        <name>abort_init</name>
+                        <msb>1</msb>
+                        <bitRange>[1:1]</bitRange>
+                        <lsb>1</lsb>
+                        <description><![CDATA[Triggers when abort is asserted by the peer, and there is currently no abort in
+progress]]></description>
+                    </field>
+                    <field>
+                        <name>abort_done</name>
+                        <msb>2</msb>
+                        <bitRange>[2:2]</bitRange>
+                        <lsb>2</lsb>
+                        <description><![CDATA[Triggers when a previously initiated abort is acknowledged by peer]]></description>
+                    </field>
+                    <field>
+                        <name>error</name>
+                        <msb>3</msb>
+                        <bitRange>[3:3]</bitRange>
+                        <lsb>3</lsb>
+                        <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>EV_ENABLE</name>
+                <description><![CDATA[Triggers if either `tx_err` or `rx_err` are asserted]]></description>
+                <addressOffset>0x000c</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>available</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Write a ``1`` to enable the ``available`` Event]]></description>
+                    </field>
+                    <field>
+                        <name>abort_init</name>
+                        <msb>1</msb>
+                        <bitRange>[1:1]</bitRange>
+                        <lsb>1</lsb>
+                        <description><![CDATA[Write a ``1`` to enable the ``abort_init`` Event]]></description>
+                    </field>
+                    <field>
+                        <name>abort_done</name>
+                        <msb>2</msb>
+                        <bitRange>[2:2]</bitRange>
+                        <lsb>2</lsb>
+                        <description><![CDATA[Write a ``1`` to enable the ``abort_done`` Event]]></description>
+                    </field>
+                    <field>
+                        <name>error</name>
+                        <msb>3</msb>
+                        <bitRange>[3:3]</bitRange>
+                        <lsb>3</lsb>
+                        <description><![CDATA[Write a ``1`` to enable the ``error`` Event]]></description>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>WDATA</name>
+                <description><![CDATA[Write data to outgoing FIFO.]]></description>
+                <addressOffset>0x0010</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>wdata</name>
+                        <msb>31</msb>
+                        <bitRange>[31:0]</bitRange>
+                        <lsb>0</lsb>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>RDATA</name>
+                <description><![CDATA[Read data from incoming FIFO.]]></description>
+                <addressOffset>0x0014</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>rdata</name>
+                        <msb>31</msb>
+                        <bitRange>[31:0]</bitRange>
+                        <lsb>0</lsb>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>CONTROL</name>
+                <addressOffset>0x0018</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>abort</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Write `1` to this field to both initiate and acknowledge an abort. Empties both
+FIFOs, asserts `aborting`, and prevents an interrupt from being generated by an
+incoming abort request. New reads & writes are ignored until `aborted` is
+asserted from the peer.]]></description>
+                    </field>
+                </fields>
+            </register>
+            <register>
+                <name>DONE</name>
+                <addressOffset>0x001c</addressOffset>
+                <resetValue>0x00</resetValue>
+                <size>32</size>
+                <fields>
+                    <field>
+                        <name>done</name>
+                        <msb>0</msb>
+                        <bitRange>[0:0]</bitRange>
+                        <lsb>0</lsb>
+                        <description><![CDATA[Writing a `1` to this field indicates to the corresponding peer that a full
+packet is done loading. There is no need to clear this register after writing.]]></description>
+                    </field>
+                </fields>
+            </register>
+        </registers>
+        <addressBlock>
+            <offset>0</offset>
+            <size>0x20</size>
+            <usage>registers</usage>
+        </addressBlock>
+        <interrupt>
+            <name>mb_client</name>
+            <value>23</value>
+        </interrupt>
+    </peripheral>
     <vendorExtensions>
         <memoryRegions>
             <memoryRegion>
@@ -14448,6 +14942,21 @@ position to clear the flag]]></description>
                 <name>XIP</name>
                 <baseAddress>0x70000000</baseAddress>
                 <size>0x08000000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>MDMA</name>
+                <baseAddress>0x40011000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>MDMAREQ</name>
+                <baseAddress>0x40012000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>MBOX_EXT</name>
+                <baseAddress>0x50124000</baseAddress>
+                <size>0x00001000</size>
             </memoryRegion>
         </memoryRegions>
         <constants>

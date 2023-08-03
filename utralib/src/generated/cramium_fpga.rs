@@ -319,6 +319,12 @@ pub const HW_RERAM_X_MEM:     usize = 0x60000000;
 pub const HW_RERAM_X_MEM_LEN: usize = 4194304;
 pub const HW_XIP_X_MEM:     usize = 0x70000000;
 pub const HW_XIP_X_MEM_LEN: usize = 134217728;
+pub const HW_MDMA_MEM:     usize = 0x40011000;
+pub const HW_MDMA_MEM_LEN: usize = 4096;
+pub const HW_MDMAREQ_MEM:     usize = 0x40012000;
+pub const HW_MDMAREQ_MEM_LEN: usize = 4096;
+pub const HW_MBOX_EXT_MEM:     usize = 0x50124000;
+pub const HW_MBOX_EXT_MEM_LEN: usize = 4096;
 
 // Physical base addresses of registers
 pub const HW_GPIO_BASE :   usize = 0x40080000;
@@ -356,6 +362,7 @@ pub const HW_MB_CLIENT_BASE :   usize = 0xe0019000;
 pub const HW_RESETVALUE_BASE :   usize = 0xe001a000;
 pub const HW_TICKTIMER_BASE :   usize = 0xe001b000;
 pub const HW_PL230_BASE :   usize = 0x40011000;
+pub const HW_MB_EXT_BASE :   usize = 0x50124000;
 pub const HW_UDMA_CTRL_BASE :   usize = 0x50100000;
 pub const HW_UDMA_UART_0_BASE :   usize = 0x50101000;
 pub const HW_UDMA_UART_1_BASE :   usize = 0x50102000;
@@ -661,12 +668,18 @@ pub mod utra {
     }
 
     pub mod irqarray0 {
-        pub const IRQARRAY0_NUMREGS: usize = 4;
+        pub const IRQARRAY0_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -688,7 +701,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -710,7 +723,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -737,12 +750,18 @@ pub mod utra {
     }
 
     pub mod irqarray1 {
-        pub const IRQARRAY1_NUMREGS: usize = 4;
+        pub const IRQARRAY1_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -764,7 +783,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -786,7 +805,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -813,12 +832,18 @@ pub mod utra {
     }
 
     pub mod irqarray10 {
-        pub const IRQARRAY10_NUMREGS: usize = 4;
+        pub const IRQARRAY10_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -840,7 +865,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -862,7 +887,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -889,12 +914,18 @@ pub mod utra {
     }
 
     pub mod irqarray11 {
-        pub const IRQARRAY11_NUMREGS: usize = 4;
+        pub const IRQARRAY11_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -916,7 +947,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -938,7 +969,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -965,12 +996,18 @@ pub mod utra {
     }
 
     pub mod irqarray12 {
-        pub const IRQARRAY12_NUMREGS: usize = 4;
+        pub const IRQARRAY12_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -992,7 +1029,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1014,7 +1051,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1041,12 +1078,18 @@ pub mod utra {
     }
 
     pub mod irqarray13 {
-        pub const IRQARRAY13_NUMREGS: usize = 4;
+        pub const IRQARRAY13_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1068,7 +1111,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1090,7 +1133,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1117,12 +1160,18 @@ pub mod utra {
     }
 
     pub mod irqarray14 {
-        pub const IRQARRAY14_NUMREGS: usize = 4;
+        pub const IRQARRAY14_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1144,7 +1193,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1166,7 +1215,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1193,12 +1242,18 @@ pub mod utra {
     }
 
     pub mod irqarray15 {
-        pub const IRQARRAY15_NUMREGS: usize = 4;
+        pub const IRQARRAY15_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1220,7 +1275,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1242,7 +1297,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1269,12 +1324,18 @@ pub mod utra {
     }
 
     pub mod irqarray16 {
-        pub const IRQARRAY16_NUMREGS: usize = 4;
+        pub const IRQARRAY16_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1296,7 +1357,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1318,7 +1379,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1345,12 +1406,18 @@ pub mod utra {
     }
 
     pub mod irqarray17 {
-        pub const IRQARRAY17_NUMREGS: usize = 4;
+        pub const IRQARRAY17_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1372,7 +1439,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1394,7 +1461,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1421,12 +1488,18 @@ pub mod utra {
     }
 
     pub mod irqarray18 {
-        pub const IRQARRAY18_NUMREGS: usize = 4;
+        pub const IRQARRAY18_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1448,7 +1521,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1470,7 +1543,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1497,12 +1570,18 @@ pub mod utra {
     }
 
     pub mod irqarray19 {
-        pub const IRQARRAY19_NUMREGS: usize = 4;
+        pub const IRQARRAY19_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1524,7 +1603,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1546,7 +1625,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1573,12 +1652,18 @@ pub mod utra {
     }
 
     pub mod irqarray2 {
-        pub const IRQARRAY2_NUMREGS: usize = 4;
+        pub const IRQARRAY2_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1600,7 +1685,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1622,7 +1707,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1649,12 +1734,18 @@ pub mod utra {
     }
 
     pub mod irqarray3 {
-        pub const IRQARRAY3_NUMREGS: usize = 4;
+        pub const IRQARRAY3_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1676,7 +1767,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1698,7 +1789,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1725,12 +1816,18 @@ pub mod utra {
     }
 
     pub mod irqarray4 {
-        pub const IRQARRAY4_NUMREGS: usize = 4;
+        pub const IRQARRAY4_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1752,7 +1849,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1774,7 +1871,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1801,12 +1898,18 @@ pub mod utra {
     }
 
     pub mod irqarray5 {
-        pub const IRQARRAY5_NUMREGS: usize = 4;
+        pub const IRQARRAY5_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1828,7 +1931,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1850,7 +1953,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1877,12 +1980,18 @@ pub mod utra {
     }
 
     pub mod irqarray6 {
-        pub const IRQARRAY6_NUMREGS: usize = 4;
+        pub const IRQARRAY6_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1904,7 +2013,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1926,7 +2035,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1953,12 +2062,18 @@ pub mod utra {
     }
 
     pub mod irqarray7 {
-        pub const IRQARRAY7_NUMREGS: usize = 4;
+        pub const IRQARRAY7_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1980,7 +2095,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -2002,7 +2117,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -2029,12 +2144,18 @@ pub mod utra {
     }
 
     pub mod irqarray8 {
-        pub const IRQARRAY8_NUMREGS: usize = 4;
+        pub const IRQARRAY8_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -2056,7 +2177,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -2078,7 +2199,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -2105,12 +2226,18 @@ pub mod utra {
     }
 
     pub mod irqarray9 {
-        pub const IRQARRAY9_NUMREGS: usize = 4;
+        pub const IRQARRAY9_NUMREGS: usize = 6;
 
         pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
         pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(20, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(20, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xfffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -2132,7 +2259,7 @@ pub mod utra {
         pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
         pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xfffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -2154,7 +2281,7 @@ pub mod utra {
         pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
         pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xfffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -2181,7 +2308,7 @@ pub mod utra {
     }
 
     pub mod mailbox {
-        pub const MAILBOX_NUMREGS: usize = 8;
+        pub const MAILBOX_NUMREGS: usize = 9;
 
         pub const WDATA: crate::Register = crate::Register::new(0, 0xffffffff);
         pub const WDATA_WDATA: crate::Field = crate::Field::new(32, 0, WDATA);
@@ -2221,6 +2348,9 @@ pub mod utra {
         pub const DONE: crate::Register = crate::Register::new(7, 0x1);
         pub const DONE_DONE: crate::Field = crate::Field::new(1, 0, DONE);
 
+        pub const LOOPBACK: crate::Register = crate::Register::new(8, 0x1);
+        pub const LOOPBACK_LOOPBACK: crate::Field = crate::Field::new(1, 0, LOOPBACK);
+
         pub const MAILBOX_IRQ: usize = 22;
         pub const HW_MAILBOX_BASE: usize = 0xe0018000;
     }
@@ -2234,31 +2364,31 @@ pub mod utra {
         pub const RDATA: crate::Register = crate::Register::new(1, 0xffffffff);
         pub const RDATA_RDATA: crate::Field = crate::Field::new(32, 0, RDATA);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(2, 0xf);
-        pub const EV_STATUS_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_STATUS);
-        pub const EV_STATUS_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_STATUS);
-        pub const EV_STATUS_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_STATUS);
-        pub const EV_STATUS_ERROR: crate::Field = crate::Field::new(1, 3, EV_STATUS);
-
-        pub const EV_PENDING: crate::Register = crate::Register::new(3, 0xf);
-        pub const EV_PENDING_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_PENDING);
-        pub const EV_PENDING_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_PENDING);
-        pub const EV_PENDING_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_PENDING);
-        pub const EV_PENDING_ERROR: crate::Field = crate::Field::new(1, 3, EV_PENDING);
-
-        pub const EV_ENABLE: crate::Register = crate::Register::new(4, 0xf);
-        pub const EV_ENABLE_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
-        pub const EV_ENABLE_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
-        pub const EV_ENABLE_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
-        pub const EV_ENABLE_ERROR: crate::Field = crate::Field::new(1, 3, EV_ENABLE);
-
-        pub const STATUS: crate::Register = crate::Register::new(5, 0x3f);
+        pub const STATUS: crate::Register = crate::Register::new(2, 0x3f);
         pub const STATUS_RX_AVAIL: crate::Field = crate::Field::new(1, 0, STATUS);
         pub const STATUS_TX_FREE: crate::Field = crate::Field::new(1, 1, STATUS);
         pub const STATUS_ABORT_IN_PROGRESS: crate::Field = crate::Field::new(1, 2, STATUS);
         pub const STATUS_ABORT_ACK: crate::Field = crate::Field::new(1, 3, STATUS);
         pub const STATUS_TX_ERR: crate::Field = crate::Field::new(1, 4, STATUS);
         pub const STATUS_RX_ERR: crate::Field = crate::Field::new(1, 5, STATUS);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xf);
+        pub const EV_STATUS_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_STATUS);
+        pub const EV_STATUS_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_STATUS);
+        pub const EV_STATUS_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_STATUS);
+        pub const EV_STATUS_ERROR: crate::Field = crate::Field::new(1, 3, EV_STATUS);
+
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xf);
+        pub const EV_PENDING_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_PENDING);
+        pub const EV_PENDING_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_PENDING);
+        pub const EV_PENDING_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_PENDING);
+        pub const EV_PENDING_ERROR: crate::Field = crate::Field::new(1, 3, EV_PENDING);
+
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xf);
+        pub const EV_ENABLE_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
+        pub const EV_ENABLE_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
+        pub const EV_ENABLE_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
+        pub const EV_ENABLE_ERROR: crate::Field = crate::Field::new(1, 3, EV_ENABLE);
 
         pub const CONTROL: crate::Register = crate::Register::new(6, 0x1);
         pub const CONTROL_ABORT: crate::Field = crate::Field::new(1, 0, CONTROL);
@@ -2384,6 +2514,51 @@ pub mod utra {
         pub const PERIPH_ID_2_REVISION: crate::Field = crate::Field::new(4, 4, PERIPH_ID_2);
 
         pub const HW_PL230_BASE: usize = 0x40011000;
+    }
+
+    pub mod mb_ext {
+        pub const MB_EXT_NUMREGS: usize = 8;
+
+        pub const STATUS: crate::Register = crate::Register::new(0, 0x3f);
+        pub const STATUS_RX_AVAIL: crate::Field = crate::Field::new(1, 0, STATUS);
+        pub const STATUS_TX_FREE: crate::Field = crate::Field::new(1, 1, STATUS);
+        pub const STATUS_ABORT_IN_PROGRESS: crate::Field = crate::Field::new(1, 2, STATUS);
+        pub const STATUS_ABORT_ACK: crate::Field = crate::Field::new(1, 3, STATUS);
+        pub const STATUS_TX_ERR: crate::Field = crate::Field::new(1, 4, STATUS);
+        pub const STATUS_RX_ERR: crate::Field = crate::Field::new(1, 5, STATUS);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xf);
+        pub const EV_STATUS_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_STATUS);
+        pub const EV_STATUS_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_STATUS);
+        pub const EV_STATUS_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_STATUS);
+        pub const EV_STATUS_ERROR: crate::Field = crate::Field::new(1, 3, EV_STATUS);
+
+        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xf);
+        pub const EV_PENDING_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_PENDING);
+        pub const EV_PENDING_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_PENDING);
+        pub const EV_PENDING_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_PENDING);
+        pub const EV_PENDING_ERROR: crate::Field = crate::Field::new(1, 3, EV_PENDING);
+
+        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xf);
+        pub const EV_ENABLE_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
+        pub const EV_ENABLE_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
+        pub const EV_ENABLE_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
+        pub const EV_ENABLE_ERROR: crate::Field = crate::Field::new(1, 3, EV_ENABLE);
+
+        pub const WDATA: crate::Register = crate::Register::new(4, 0xffffffff);
+        pub const WDATA_WDATA: crate::Field = crate::Field::new(32, 0, WDATA);
+
+        pub const RDATA: crate::Register = crate::Register::new(5, 0xffffffff);
+        pub const RDATA_RDATA: crate::Field = crate::Field::new(32, 0, RDATA);
+
+        pub const CONTROL: crate::Register = crate::Register::new(6, 0x1);
+        pub const CONTROL_ABORT: crate::Field = crate::Field::new(1, 0, CONTROL);
+
+        pub const DONE: crate::Register = crate::Register::new(7, 0x1);
+        pub const DONE_DONE: crate::Field = crate::Field::new(1, 0, DONE);
+
+        pub const MB_CLIENT_IRQ: usize = 23;
+        pub const HW_MB_EXT_BASE: usize = 0x50124000;
     }
 
     pub mod udma_ctrl {
@@ -5764,6 +5939,22 @@ mod tests {
         baz |= irqarray0_csr.ms(utra::irqarray0::EV_SOFT_TRIGGER, 1);
         irqarray0_csr.wfo(utra::irqarray0::EV_SOFT_TRIGGER, baz);
 
+        let foo = irqarray0_csr.r(utra::irqarray0::EV_EDGE_TRIGGERED);
+        irqarray0_csr.wo(utra::irqarray0::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray0_csr.rf(utra::irqarray0::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray0_csr.rmwf(utra::irqarray0::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray0_csr.ms(utra::irqarray0::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray0_csr.wfo(utra::irqarray0::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray0_csr.r(utra::irqarray0::EV_POLARITY);
+        irqarray0_csr.wo(utra::irqarray0::EV_POLARITY, foo);
+        let bar = irqarray0_csr.rf(utra::irqarray0::EV_POLARITY_RISING);
+        irqarray0_csr.rmwf(utra::irqarray0::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_POLARITY_RISING, bar);
+        baz |= irqarray0_csr.ms(utra::irqarray0::EV_POLARITY_RISING, 1);
+        irqarray0_csr.wfo(utra::irqarray0::EV_POLARITY_RISING, baz);
+
         let foo = irqarray0_csr.r(utra::irqarray0::EV_STATUS);
         irqarray0_csr.wo(utra::irqarray0::EV_STATUS, foo);
         let bar = irqarray0_csr.rf(utra::irqarray0::EV_STATUS_SOURCE0);
@@ -6087,6 +6278,22 @@ mod tests {
         let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_SOFT_TRIGGER, bar);
         baz |= irqarray1_csr.ms(utra::irqarray1::EV_SOFT_TRIGGER, 1);
         irqarray1_csr.wfo(utra::irqarray1::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray1_csr.r(utra::irqarray1::EV_EDGE_TRIGGERED);
+        irqarray1_csr.wo(utra::irqarray1::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray1_csr.rf(utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray1_csr.rmwf(utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray1_csr.ms(utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray1_csr.wfo(utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray1_csr.r(utra::irqarray1::EV_POLARITY);
+        irqarray1_csr.wo(utra::irqarray1::EV_POLARITY, foo);
+        let bar = irqarray1_csr.rf(utra::irqarray1::EV_POLARITY_RISING);
+        irqarray1_csr.rmwf(utra::irqarray1::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_POLARITY_RISING, bar);
+        baz |= irqarray1_csr.ms(utra::irqarray1::EV_POLARITY_RISING, 1);
+        irqarray1_csr.wfo(utra::irqarray1::EV_POLARITY_RISING, baz);
 
         let foo = irqarray1_csr.r(utra::irqarray1::EV_STATUS);
         irqarray1_csr.wo(utra::irqarray1::EV_STATUS, foo);
@@ -6412,6 +6619,22 @@ mod tests {
         baz |= irqarray10_csr.ms(utra::irqarray10::EV_SOFT_TRIGGER, 1);
         irqarray10_csr.wfo(utra::irqarray10::EV_SOFT_TRIGGER, baz);
 
+        let foo = irqarray10_csr.r(utra::irqarray10::EV_EDGE_TRIGGERED);
+        irqarray10_csr.wo(utra::irqarray10::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray10_csr.rf(utra::irqarray10::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray10_csr.rmwf(utra::irqarray10::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray10_csr.ms(utra::irqarray10::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray10_csr.wfo(utra::irqarray10::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray10_csr.r(utra::irqarray10::EV_POLARITY);
+        irqarray10_csr.wo(utra::irqarray10::EV_POLARITY, foo);
+        let bar = irqarray10_csr.rf(utra::irqarray10::EV_POLARITY_RISING);
+        irqarray10_csr.rmwf(utra::irqarray10::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_POLARITY_RISING, bar);
+        baz |= irqarray10_csr.ms(utra::irqarray10::EV_POLARITY_RISING, 1);
+        irqarray10_csr.wfo(utra::irqarray10::EV_POLARITY_RISING, baz);
+
         let foo = irqarray10_csr.r(utra::irqarray10::EV_STATUS);
         irqarray10_csr.wo(utra::irqarray10::EV_STATUS, foo);
         let bar = irqarray10_csr.rf(utra::irqarray10::EV_STATUS_SOURCE0);
@@ -6735,6 +6958,22 @@ mod tests {
         let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_SOFT_TRIGGER, bar);
         baz |= irqarray11_csr.ms(utra::irqarray11::EV_SOFT_TRIGGER, 1);
         irqarray11_csr.wfo(utra::irqarray11::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray11_csr.r(utra::irqarray11::EV_EDGE_TRIGGERED);
+        irqarray11_csr.wo(utra::irqarray11::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray11_csr.rf(utra::irqarray11::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray11_csr.rmwf(utra::irqarray11::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray11_csr.ms(utra::irqarray11::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray11_csr.wfo(utra::irqarray11::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray11_csr.r(utra::irqarray11::EV_POLARITY);
+        irqarray11_csr.wo(utra::irqarray11::EV_POLARITY, foo);
+        let bar = irqarray11_csr.rf(utra::irqarray11::EV_POLARITY_RISING);
+        irqarray11_csr.rmwf(utra::irqarray11::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_POLARITY_RISING, bar);
+        baz |= irqarray11_csr.ms(utra::irqarray11::EV_POLARITY_RISING, 1);
+        irqarray11_csr.wfo(utra::irqarray11::EV_POLARITY_RISING, baz);
 
         let foo = irqarray11_csr.r(utra::irqarray11::EV_STATUS);
         irqarray11_csr.wo(utra::irqarray11::EV_STATUS, foo);
@@ -7060,6 +7299,22 @@ mod tests {
         baz |= irqarray12_csr.ms(utra::irqarray12::EV_SOFT_TRIGGER, 1);
         irqarray12_csr.wfo(utra::irqarray12::EV_SOFT_TRIGGER, baz);
 
+        let foo = irqarray12_csr.r(utra::irqarray12::EV_EDGE_TRIGGERED);
+        irqarray12_csr.wo(utra::irqarray12::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray12_csr.rf(utra::irqarray12::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray12_csr.rmwf(utra::irqarray12::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray12_csr.ms(utra::irqarray12::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray12_csr.wfo(utra::irqarray12::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray12_csr.r(utra::irqarray12::EV_POLARITY);
+        irqarray12_csr.wo(utra::irqarray12::EV_POLARITY, foo);
+        let bar = irqarray12_csr.rf(utra::irqarray12::EV_POLARITY_RISING);
+        irqarray12_csr.rmwf(utra::irqarray12::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_POLARITY_RISING, bar);
+        baz |= irqarray12_csr.ms(utra::irqarray12::EV_POLARITY_RISING, 1);
+        irqarray12_csr.wfo(utra::irqarray12::EV_POLARITY_RISING, baz);
+
         let foo = irqarray12_csr.r(utra::irqarray12::EV_STATUS);
         irqarray12_csr.wo(utra::irqarray12::EV_STATUS, foo);
         let bar = irqarray12_csr.rf(utra::irqarray12::EV_STATUS_SOURCE0);
@@ -7383,6 +7638,22 @@ mod tests {
         let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_SOFT_TRIGGER, bar);
         baz |= irqarray13_csr.ms(utra::irqarray13::EV_SOFT_TRIGGER, 1);
         irqarray13_csr.wfo(utra::irqarray13::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray13_csr.r(utra::irqarray13::EV_EDGE_TRIGGERED);
+        irqarray13_csr.wo(utra::irqarray13::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray13_csr.rf(utra::irqarray13::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray13_csr.rmwf(utra::irqarray13::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray13_csr.ms(utra::irqarray13::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray13_csr.wfo(utra::irqarray13::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray13_csr.r(utra::irqarray13::EV_POLARITY);
+        irqarray13_csr.wo(utra::irqarray13::EV_POLARITY, foo);
+        let bar = irqarray13_csr.rf(utra::irqarray13::EV_POLARITY_RISING);
+        irqarray13_csr.rmwf(utra::irqarray13::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_POLARITY_RISING, bar);
+        baz |= irqarray13_csr.ms(utra::irqarray13::EV_POLARITY_RISING, 1);
+        irqarray13_csr.wfo(utra::irqarray13::EV_POLARITY_RISING, baz);
 
         let foo = irqarray13_csr.r(utra::irqarray13::EV_STATUS);
         irqarray13_csr.wo(utra::irqarray13::EV_STATUS, foo);
@@ -7708,6 +7979,22 @@ mod tests {
         baz |= irqarray14_csr.ms(utra::irqarray14::EV_SOFT_TRIGGER, 1);
         irqarray14_csr.wfo(utra::irqarray14::EV_SOFT_TRIGGER, baz);
 
+        let foo = irqarray14_csr.r(utra::irqarray14::EV_EDGE_TRIGGERED);
+        irqarray14_csr.wo(utra::irqarray14::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray14_csr.rf(utra::irqarray14::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray14_csr.rmwf(utra::irqarray14::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray14_csr.ms(utra::irqarray14::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray14_csr.wfo(utra::irqarray14::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray14_csr.r(utra::irqarray14::EV_POLARITY);
+        irqarray14_csr.wo(utra::irqarray14::EV_POLARITY, foo);
+        let bar = irqarray14_csr.rf(utra::irqarray14::EV_POLARITY_RISING);
+        irqarray14_csr.rmwf(utra::irqarray14::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_POLARITY_RISING, bar);
+        baz |= irqarray14_csr.ms(utra::irqarray14::EV_POLARITY_RISING, 1);
+        irqarray14_csr.wfo(utra::irqarray14::EV_POLARITY_RISING, baz);
+
         let foo = irqarray14_csr.r(utra::irqarray14::EV_STATUS);
         irqarray14_csr.wo(utra::irqarray14::EV_STATUS, foo);
         let bar = irqarray14_csr.rf(utra::irqarray14::EV_STATUS_SOURCE0);
@@ -8031,6 +8318,22 @@ mod tests {
         let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_SOFT_TRIGGER, bar);
         baz |= irqarray15_csr.ms(utra::irqarray15::EV_SOFT_TRIGGER, 1);
         irqarray15_csr.wfo(utra::irqarray15::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray15_csr.r(utra::irqarray15::EV_EDGE_TRIGGERED);
+        irqarray15_csr.wo(utra::irqarray15::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray15_csr.rf(utra::irqarray15::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray15_csr.rmwf(utra::irqarray15::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray15_csr.ms(utra::irqarray15::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray15_csr.wfo(utra::irqarray15::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray15_csr.r(utra::irqarray15::EV_POLARITY);
+        irqarray15_csr.wo(utra::irqarray15::EV_POLARITY, foo);
+        let bar = irqarray15_csr.rf(utra::irqarray15::EV_POLARITY_RISING);
+        irqarray15_csr.rmwf(utra::irqarray15::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_POLARITY_RISING, bar);
+        baz |= irqarray15_csr.ms(utra::irqarray15::EV_POLARITY_RISING, 1);
+        irqarray15_csr.wfo(utra::irqarray15::EV_POLARITY_RISING, baz);
 
         let foo = irqarray15_csr.r(utra::irqarray15::EV_STATUS);
         irqarray15_csr.wo(utra::irqarray15::EV_STATUS, foo);
@@ -8356,6 +8659,22 @@ mod tests {
         baz |= irqarray16_csr.ms(utra::irqarray16::EV_SOFT_TRIGGER, 1);
         irqarray16_csr.wfo(utra::irqarray16::EV_SOFT_TRIGGER, baz);
 
+        let foo = irqarray16_csr.r(utra::irqarray16::EV_EDGE_TRIGGERED);
+        irqarray16_csr.wo(utra::irqarray16::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray16_csr.rf(utra::irqarray16::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray16_csr.rmwf(utra::irqarray16::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray16_csr.ms(utra::irqarray16::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray16_csr.wfo(utra::irqarray16::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray16_csr.r(utra::irqarray16::EV_POLARITY);
+        irqarray16_csr.wo(utra::irqarray16::EV_POLARITY, foo);
+        let bar = irqarray16_csr.rf(utra::irqarray16::EV_POLARITY_RISING);
+        irqarray16_csr.rmwf(utra::irqarray16::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_POLARITY_RISING, bar);
+        baz |= irqarray16_csr.ms(utra::irqarray16::EV_POLARITY_RISING, 1);
+        irqarray16_csr.wfo(utra::irqarray16::EV_POLARITY_RISING, baz);
+
         let foo = irqarray16_csr.r(utra::irqarray16::EV_STATUS);
         irqarray16_csr.wo(utra::irqarray16::EV_STATUS, foo);
         let bar = irqarray16_csr.rf(utra::irqarray16::EV_STATUS_SOURCE0);
@@ -8679,6 +8998,22 @@ mod tests {
         let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_SOFT_TRIGGER, bar);
         baz |= irqarray17_csr.ms(utra::irqarray17::EV_SOFT_TRIGGER, 1);
         irqarray17_csr.wfo(utra::irqarray17::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray17_csr.r(utra::irqarray17::EV_EDGE_TRIGGERED);
+        irqarray17_csr.wo(utra::irqarray17::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray17_csr.rf(utra::irqarray17::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray17_csr.rmwf(utra::irqarray17::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray17_csr.ms(utra::irqarray17::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray17_csr.wfo(utra::irqarray17::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray17_csr.r(utra::irqarray17::EV_POLARITY);
+        irqarray17_csr.wo(utra::irqarray17::EV_POLARITY, foo);
+        let bar = irqarray17_csr.rf(utra::irqarray17::EV_POLARITY_RISING);
+        irqarray17_csr.rmwf(utra::irqarray17::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_POLARITY_RISING, bar);
+        baz |= irqarray17_csr.ms(utra::irqarray17::EV_POLARITY_RISING, 1);
+        irqarray17_csr.wfo(utra::irqarray17::EV_POLARITY_RISING, baz);
 
         let foo = irqarray17_csr.r(utra::irqarray17::EV_STATUS);
         irqarray17_csr.wo(utra::irqarray17::EV_STATUS, foo);
@@ -9004,6 +9339,22 @@ mod tests {
         baz |= irqarray18_csr.ms(utra::irqarray18::EV_SOFT_TRIGGER, 1);
         irqarray18_csr.wfo(utra::irqarray18::EV_SOFT_TRIGGER, baz);
 
+        let foo = irqarray18_csr.r(utra::irqarray18::EV_EDGE_TRIGGERED);
+        irqarray18_csr.wo(utra::irqarray18::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray18_csr.rf(utra::irqarray18::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray18_csr.rmwf(utra::irqarray18::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray18_csr.ms(utra::irqarray18::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray18_csr.wfo(utra::irqarray18::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray18_csr.r(utra::irqarray18::EV_POLARITY);
+        irqarray18_csr.wo(utra::irqarray18::EV_POLARITY, foo);
+        let bar = irqarray18_csr.rf(utra::irqarray18::EV_POLARITY_RISING);
+        irqarray18_csr.rmwf(utra::irqarray18::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_POLARITY_RISING, bar);
+        baz |= irqarray18_csr.ms(utra::irqarray18::EV_POLARITY_RISING, 1);
+        irqarray18_csr.wfo(utra::irqarray18::EV_POLARITY_RISING, baz);
+
         let foo = irqarray18_csr.r(utra::irqarray18::EV_STATUS);
         irqarray18_csr.wo(utra::irqarray18::EV_STATUS, foo);
         let bar = irqarray18_csr.rf(utra::irqarray18::EV_STATUS_SOURCE0);
@@ -9327,6 +9678,22 @@ mod tests {
         let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_SOFT_TRIGGER, bar);
         baz |= irqarray19_csr.ms(utra::irqarray19::EV_SOFT_TRIGGER, 1);
         irqarray19_csr.wfo(utra::irqarray19::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray19_csr.r(utra::irqarray19::EV_EDGE_TRIGGERED);
+        irqarray19_csr.wo(utra::irqarray19::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray19_csr.rf(utra::irqarray19::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray19_csr.rmwf(utra::irqarray19::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray19_csr.ms(utra::irqarray19::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray19_csr.wfo(utra::irqarray19::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray19_csr.r(utra::irqarray19::EV_POLARITY);
+        irqarray19_csr.wo(utra::irqarray19::EV_POLARITY, foo);
+        let bar = irqarray19_csr.rf(utra::irqarray19::EV_POLARITY_RISING);
+        irqarray19_csr.rmwf(utra::irqarray19::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_POLARITY_RISING, bar);
+        baz |= irqarray19_csr.ms(utra::irqarray19::EV_POLARITY_RISING, 1);
+        irqarray19_csr.wfo(utra::irqarray19::EV_POLARITY_RISING, baz);
 
         let foo = irqarray19_csr.r(utra::irqarray19::EV_STATUS);
         irqarray19_csr.wo(utra::irqarray19::EV_STATUS, foo);
@@ -9652,6 +10019,22 @@ mod tests {
         baz |= irqarray2_csr.ms(utra::irqarray2::EV_SOFT_TRIGGER, 1);
         irqarray2_csr.wfo(utra::irqarray2::EV_SOFT_TRIGGER, baz);
 
+        let foo = irqarray2_csr.r(utra::irqarray2::EV_EDGE_TRIGGERED);
+        irqarray2_csr.wo(utra::irqarray2::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray2_csr.rf(utra::irqarray2::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray2_csr.rmwf(utra::irqarray2::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray2_csr.ms(utra::irqarray2::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray2_csr.wfo(utra::irqarray2::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray2_csr.r(utra::irqarray2::EV_POLARITY);
+        irqarray2_csr.wo(utra::irqarray2::EV_POLARITY, foo);
+        let bar = irqarray2_csr.rf(utra::irqarray2::EV_POLARITY_RISING);
+        irqarray2_csr.rmwf(utra::irqarray2::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_POLARITY_RISING, bar);
+        baz |= irqarray2_csr.ms(utra::irqarray2::EV_POLARITY_RISING, 1);
+        irqarray2_csr.wfo(utra::irqarray2::EV_POLARITY_RISING, baz);
+
         let foo = irqarray2_csr.r(utra::irqarray2::EV_STATUS);
         irqarray2_csr.wo(utra::irqarray2::EV_STATUS, foo);
         let bar = irqarray2_csr.rf(utra::irqarray2::EV_STATUS_SOURCE0);
@@ -9975,6 +10358,22 @@ mod tests {
         let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_SOFT_TRIGGER, bar);
         baz |= irqarray3_csr.ms(utra::irqarray3::EV_SOFT_TRIGGER, 1);
         irqarray3_csr.wfo(utra::irqarray3::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray3_csr.r(utra::irqarray3::EV_EDGE_TRIGGERED);
+        irqarray3_csr.wo(utra::irqarray3::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray3_csr.rf(utra::irqarray3::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray3_csr.rmwf(utra::irqarray3::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray3_csr.ms(utra::irqarray3::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray3_csr.wfo(utra::irqarray3::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray3_csr.r(utra::irqarray3::EV_POLARITY);
+        irqarray3_csr.wo(utra::irqarray3::EV_POLARITY, foo);
+        let bar = irqarray3_csr.rf(utra::irqarray3::EV_POLARITY_RISING);
+        irqarray3_csr.rmwf(utra::irqarray3::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_POLARITY_RISING, bar);
+        baz |= irqarray3_csr.ms(utra::irqarray3::EV_POLARITY_RISING, 1);
+        irqarray3_csr.wfo(utra::irqarray3::EV_POLARITY_RISING, baz);
 
         let foo = irqarray3_csr.r(utra::irqarray3::EV_STATUS);
         irqarray3_csr.wo(utra::irqarray3::EV_STATUS, foo);
@@ -10300,6 +10699,22 @@ mod tests {
         baz |= irqarray4_csr.ms(utra::irqarray4::EV_SOFT_TRIGGER, 1);
         irqarray4_csr.wfo(utra::irqarray4::EV_SOFT_TRIGGER, baz);
 
+        let foo = irqarray4_csr.r(utra::irqarray4::EV_EDGE_TRIGGERED);
+        irqarray4_csr.wo(utra::irqarray4::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray4_csr.rf(utra::irqarray4::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray4_csr.rmwf(utra::irqarray4::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray4_csr.ms(utra::irqarray4::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray4_csr.wfo(utra::irqarray4::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray4_csr.r(utra::irqarray4::EV_POLARITY);
+        irqarray4_csr.wo(utra::irqarray4::EV_POLARITY, foo);
+        let bar = irqarray4_csr.rf(utra::irqarray4::EV_POLARITY_RISING);
+        irqarray4_csr.rmwf(utra::irqarray4::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_POLARITY_RISING, bar);
+        baz |= irqarray4_csr.ms(utra::irqarray4::EV_POLARITY_RISING, 1);
+        irqarray4_csr.wfo(utra::irqarray4::EV_POLARITY_RISING, baz);
+
         let foo = irqarray4_csr.r(utra::irqarray4::EV_STATUS);
         irqarray4_csr.wo(utra::irqarray4::EV_STATUS, foo);
         let bar = irqarray4_csr.rf(utra::irqarray4::EV_STATUS_SOURCE0);
@@ -10623,6 +11038,22 @@ mod tests {
         let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_SOFT_TRIGGER, bar);
         baz |= irqarray5_csr.ms(utra::irqarray5::EV_SOFT_TRIGGER, 1);
         irqarray5_csr.wfo(utra::irqarray5::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray5_csr.r(utra::irqarray5::EV_EDGE_TRIGGERED);
+        irqarray5_csr.wo(utra::irqarray5::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray5_csr.rf(utra::irqarray5::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray5_csr.rmwf(utra::irqarray5::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray5_csr.ms(utra::irqarray5::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray5_csr.wfo(utra::irqarray5::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray5_csr.r(utra::irqarray5::EV_POLARITY);
+        irqarray5_csr.wo(utra::irqarray5::EV_POLARITY, foo);
+        let bar = irqarray5_csr.rf(utra::irqarray5::EV_POLARITY_RISING);
+        irqarray5_csr.rmwf(utra::irqarray5::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_POLARITY_RISING, bar);
+        baz |= irqarray5_csr.ms(utra::irqarray5::EV_POLARITY_RISING, 1);
+        irqarray5_csr.wfo(utra::irqarray5::EV_POLARITY_RISING, baz);
 
         let foo = irqarray5_csr.r(utra::irqarray5::EV_STATUS);
         irqarray5_csr.wo(utra::irqarray5::EV_STATUS, foo);
@@ -10948,6 +11379,22 @@ mod tests {
         baz |= irqarray6_csr.ms(utra::irqarray6::EV_SOFT_TRIGGER, 1);
         irqarray6_csr.wfo(utra::irqarray6::EV_SOFT_TRIGGER, baz);
 
+        let foo = irqarray6_csr.r(utra::irqarray6::EV_EDGE_TRIGGERED);
+        irqarray6_csr.wo(utra::irqarray6::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray6_csr.rf(utra::irqarray6::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray6_csr.rmwf(utra::irqarray6::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray6_csr.ms(utra::irqarray6::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray6_csr.wfo(utra::irqarray6::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray6_csr.r(utra::irqarray6::EV_POLARITY);
+        irqarray6_csr.wo(utra::irqarray6::EV_POLARITY, foo);
+        let bar = irqarray6_csr.rf(utra::irqarray6::EV_POLARITY_RISING);
+        irqarray6_csr.rmwf(utra::irqarray6::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_POLARITY_RISING, bar);
+        baz |= irqarray6_csr.ms(utra::irqarray6::EV_POLARITY_RISING, 1);
+        irqarray6_csr.wfo(utra::irqarray6::EV_POLARITY_RISING, baz);
+
         let foo = irqarray6_csr.r(utra::irqarray6::EV_STATUS);
         irqarray6_csr.wo(utra::irqarray6::EV_STATUS, foo);
         let bar = irqarray6_csr.rf(utra::irqarray6::EV_STATUS_SOURCE0);
@@ -11271,6 +11718,22 @@ mod tests {
         let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_SOFT_TRIGGER, bar);
         baz |= irqarray7_csr.ms(utra::irqarray7::EV_SOFT_TRIGGER, 1);
         irqarray7_csr.wfo(utra::irqarray7::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray7_csr.r(utra::irqarray7::EV_EDGE_TRIGGERED);
+        irqarray7_csr.wo(utra::irqarray7::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray7_csr.rf(utra::irqarray7::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray7_csr.rmwf(utra::irqarray7::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray7_csr.ms(utra::irqarray7::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray7_csr.wfo(utra::irqarray7::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray7_csr.r(utra::irqarray7::EV_POLARITY);
+        irqarray7_csr.wo(utra::irqarray7::EV_POLARITY, foo);
+        let bar = irqarray7_csr.rf(utra::irqarray7::EV_POLARITY_RISING);
+        irqarray7_csr.rmwf(utra::irqarray7::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_POLARITY_RISING, bar);
+        baz |= irqarray7_csr.ms(utra::irqarray7::EV_POLARITY_RISING, 1);
+        irqarray7_csr.wfo(utra::irqarray7::EV_POLARITY_RISING, baz);
 
         let foo = irqarray7_csr.r(utra::irqarray7::EV_STATUS);
         irqarray7_csr.wo(utra::irqarray7::EV_STATUS, foo);
@@ -11596,6 +12059,22 @@ mod tests {
         baz |= irqarray8_csr.ms(utra::irqarray8::EV_SOFT_TRIGGER, 1);
         irqarray8_csr.wfo(utra::irqarray8::EV_SOFT_TRIGGER, baz);
 
+        let foo = irqarray8_csr.r(utra::irqarray8::EV_EDGE_TRIGGERED);
+        irqarray8_csr.wo(utra::irqarray8::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray8_csr.rf(utra::irqarray8::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray8_csr.rmwf(utra::irqarray8::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray8_csr.ms(utra::irqarray8::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray8_csr.wfo(utra::irqarray8::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray8_csr.r(utra::irqarray8::EV_POLARITY);
+        irqarray8_csr.wo(utra::irqarray8::EV_POLARITY, foo);
+        let bar = irqarray8_csr.rf(utra::irqarray8::EV_POLARITY_RISING);
+        irqarray8_csr.rmwf(utra::irqarray8::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_POLARITY_RISING, bar);
+        baz |= irqarray8_csr.ms(utra::irqarray8::EV_POLARITY_RISING, 1);
+        irqarray8_csr.wfo(utra::irqarray8::EV_POLARITY_RISING, baz);
+
         let foo = irqarray8_csr.r(utra::irqarray8::EV_STATUS);
         irqarray8_csr.wo(utra::irqarray8::EV_STATUS, foo);
         let bar = irqarray8_csr.rf(utra::irqarray8::EV_STATUS_SOURCE0);
@@ -11919,6 +12398,22 @@ mod tests {
         let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_SOFT_TRIGGER, bar);
         baz |= irqarray9_csr.ms(utra::irqarray9::EV_SOFT_TRIGGER, 1);
         irqarray9_csr.wfo(utra::irqarray9::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray9_csr.r(utra::irqarray9::EV_EDGE_TRIGGERED);
+        irqarray9_csr.wo(utra::irqarray9::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray9_csr.rf(utra::irqarray9::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray9_csr.rmwf(utra::irqarray9::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray9_csr.ms(utra::irqarray9::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray9_csr.wfo(utra::irqarray9::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray9_csr.r(utra::irqarray9::EV_POLARITY);
+        irqarray9_csr.wo(utra::irqarray9::EV_POLARITY, foo);
+        let bar = irqarray9_csr.rf(utra::irqarray9::EV_POLARITY_RISING);
+        irqarray9_csr.rmwf(utra::irqarray9::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_POLARITY_RISING, bar);
+        baz |= irqarray9_csr.ms(utra::irqarray9::EV_POLARITY_RISING, 1);
+        irqarray9_csr.wfo(utra::irqarray9::EV_POLARITY_RISING, baz);
 
         let foo = irqarray9_csr.r(utra::irqarray9::EV_STATUS);
         irqarray9_csr.wo(utra::irqarray9::EV_STATUS, foo);
@@ -12369,6 +12864,14 @@ mod tests {
         let mut baz = mailbox_csr.zf(utra::mailbox::DONE_DONE, bar);
         baz |= mailbox_csr.ms(utra::mailbox::DONE_DONE, 1);
         mailbox_csr.wfo(utra::mailbox::DONE_DONE, baz);
+
+        let foo = mailbox_csr.r(utra::mailbox::LOOPBACK);
+        mailbox_csr.wo(utra::mailbox::LOOPBACK, foo);
+        let bar = mailbox_csr.rf(utra::mailbox::LOOPBACK_LOOPBACK);
+        mailbox_csr.rmwf(utra::mailbox::LOOPBACK_LOOPBACK, bar);
+        let mut baz = mailbox_csr.zf(utra::mailbox::LOOPBACK_LOOPBACK, bar);
+        baz |= mailbox_csr.ms(utra::mailbox::LOOPBACK_LOOPBACK, 1);
+        mailbox_csr.wfo(utra::mailbox::LOOPBACK_LOOPBACK, baz);
   }
 
     #[test]
@@ -12392,6 +12895,39 @@ mod tests {
         let mut baz = mb_client_csr.zf(utra::mb_client::RDATA_RDATA, bar);
         baz |= mb_client_csr.ms(utra::mb_client::RDATA_RDATA, 1);
         mb_client_csr.wfo(utra::mb_client::RDATA_RDATA, baz);
+
+        let foo = mb_client_csr.r(utra::mb_client::STATUS);
+        mb_client_csr.wo(utra::mb_client::STATUS, foo);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_RX_AVAIL);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_RX_AVAIL, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_RX_AVAIL, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_RX_AVAIL, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_RX_AVAIL, baz);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_TX_FREE);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_TX_FREE, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_TX_FREE, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_TX_FREE, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_TX_FREE, baz);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_ABORT_IN_PROGRESS);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_ABORT_IN_PROGRESS, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_ABORT_IN_PROGRESS, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_ABORT_IN_PROGRESS, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_ABORT_IN_PROGRESS, baz);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_ABORT_ACK);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_ABORT_ACK, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_ABORT_ACK, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_ABORT_ACK, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_ABORT_ACK, baz);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_TX_ERR);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_TX_ERR, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_TX_ERR, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_TX_ERR, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_TX_ERR, baz);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_RX_ERR);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_RX_ERR, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_RX_ERR, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_RX_ERR, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_RX_ERR, baz);
 
         let foo = mb_client_csr.r(utra::mb_client::EV_STATUS);
         mb_client_csr.wo(utra::mb_client::EV_STATUS, foo);
@@ -12461,39 +12997,6 @@ mod tests {
         let mut baz = mb_client_csr.zf(utra::mb_client::EV_ENABLE_ERROR, bar);
         baz |= mb_client_csr.ms(utra::mb_client::EV_ENABLE_ERROR, 1);
         mb_client_csr.wfo(utra::mb_client::EV_ENABLE_ERROR, baz);
-
-        let foo = mb_client_csr.r(utra::mb_client::STATUS);
-        mb_client_csr.wo(utra::mb_client::STATUS, foo);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_RX_AVAIL);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_RX_AVAIL, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_RX_AVAIL, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_RX_AVAIL, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_RX_AVAIL, baz);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_TX_FREE);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_TX_FREE, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_TX_FREE, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_TX_FREE, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_TX_FREE, baz);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_ABORT_IN_PROGRESS);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_ABORT_IN_PROGRESS, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_ABORT_IN_PROGRESS, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_ABORT_IN_PROGRESS, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_ABORT_IN_PROGRESS, baz);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_ABORT_ACK);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_ABORT_ACK, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_ABORT_ACK, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_ABORT_ACK, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_ABORT_ACK, baz);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_TX_ERR);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_TX_ERR, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_TX_ERR, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_TX_ERR, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_TX_ERR, baz);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_RX_ERR);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_RX_ERR, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_RX_ERR, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_RX_ERR, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_RX_ERR, baz);
 
         let foo = mb_client_csr.r(utra::mb_client::CONTROL);
         mb_client_csr.wo(utra::mb_client::CONTROL, foo);
@@ -12806,6 +13309,147 @@ mod tests {
         let mut baz = pl230_csr.zf(utra::pl230::PERIPH_ID_2_REVISION, bar);
         baz |= pl230_csr.ms(utra::pl230::PERIPH_ID_2_REVISION, 1);
         pl230_csr.wfo(utra::pl230::PERIPH_ID_2_REVISION, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_mb_ext_csr() {
+        use super::*;
+        let mut mb_ext_csr = CSR::new(HW_MB_EXT_BASE as *mut u32);
+
+        let foo = mb_ext_csr.r(utra::mb_ext::STATUS);
+        mb_ext_csr.wo(utra::mb_ext::STATUS, foo);
+        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_RX_AVAIL);
+        mb_ext_csr.rmwf(utra::mb_ext::STATUS_RX_AVAIL, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_RX_AVAIL, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_RX_AVAIL, 1);
+        mb_ext_csr.wfo(utra::mb_ext::STATUS_RX_AVAIL, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_TX_FREE);
+        mb_ext_csr.rmwf(utra::mb_ext::STATUS_TX_FREE, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_TX_FREE, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_TX_FREE, 1);
+        mb_ext_csr.wfo(utra::mb_ext::STATUS_TX_FREE, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_ABORT_IN_PROGRESS);
+        mb_ext_csr.rmwf(utra::mb_ext::STATUS_ABORT_IN_PROGRESS, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_ABORT_IN_PROGRESS, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_ABORT_IN_PROGRESS, 1);
+        mb_ext_csr.wfo(utra::mb_ext::STATUS_ABORT_IN_PROGRESS, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_ABORT_ACK);
+        mb_ext_csr.rmwf(utra::mb_ext::STATUS_ABORT_ACK, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_ABORT_ACK, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_ABORT_ACK, 1);
+        mb_ext_csr.wfo(utra::mb_ext::STATUS_ABORT_ACK, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_TX_ERR);
+        mb_ext_csr.rmwf(utra::mb_ext::STATUS_TX_ERR, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_TX_ERR, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_TX_ERR, 1);
+        mb_ext_csr.wfo(utra::mb_ext::STATUS_TX_ERR, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_RX_ERR);
+        mb_ext_csr.rmwf(utra::mb_ext::STATUS_RX_ERR, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_RX_ERR, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_RX_ERR, 1);
+        mb_ext_csr.wfo(utra::mb_ext::STATUS_RX_ERR, baz);
+
+        let foo = mb_ext_csr.r(utra::mb_ext::EV_STATUS);
+        mb_ext_csr.wo(utra::mb_ext::EV_STATUS, foo);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_STATUS_AVAILABLE);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_STATUS_AVAILABLE, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_STATUS_AVAILABLE, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_STATUS_AVAILABLE, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_STATUS_AVAILABLE, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_STATUS_ABORT_INIT);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_STATUS_ABORT_INIT, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_STATUS_ABORT_INIT, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_STATUS_ABORT_INIT, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_STATUS_ABORT_INIT, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_STATUS_ABORT_DONE);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_STATUS_ABORT_DONE, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_STATUS_ABORT_DONE, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_STATUS_ABORT_DONE, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_STATUS_ABORT_DONE, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_STATUS_ERROR);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_STATUS_ERROR, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_STATUS_ERROR, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_STATUS_ERROR, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_STATUS_ERROR, baz);
+
+        let foo = mb_ext_csr.r(utra::mb_ext::EV_PENDING);
+        mb_ext_csr.wo(utra::mb_ext::EV_PENDING, foo);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_PENDING_AVAILABLE);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_PENDING_AVAILABLE, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_PENDING_AVAILABLE, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_PENDING_AVAILABLE, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_PENDING_AVAILABLE, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_PENDING_ABORT_INIT);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_PENDING_ABORT_INIT, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_PENDING_ABORT_INIT, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_PENDING_ABORT_INIT, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_PENDING_ABORT_INIT, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_PENDING_ABORT_DONE);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_PENDING_ABORT_DONE, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_PENDING_ABORT_DONE, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_PENDING_ABORT_DONE, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_PENDING_ABORT_DONE, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_PENDING_ERROR);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_PENDING_ERROR, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_PENDING_ERROR, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_PENDING_ERROR, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_PENDING_ERROR, baz);
+
+        let foo = mb_ext_csr.r(utra::mb_ext::EV_ENABLE);
+        mb_ext_csr.wo(utra::mb_ext::EV_ENABLE, foo);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_ENABLE_AVAILABLE);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_ENABLE_AVAILABLE, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_ENABLE_AVAILABLE, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_ENABLE_AVAILABLE, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_ENABLE_AVAILABLE, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_ENABLE_ABORT_INIT);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_ENABLE_ABORT_INIT, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_ENABLE_ABORT_INIT, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_ENABLE_ABORT_INIT, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_ENABLE_ABORT_INIT, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_ENABLE_ABORT_DONE);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_ENABLE_ABORT_DONE, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_ENABLE_ABORT_DONE, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_ENABLE_ABORT_DONE, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_ENABLE_ABORT_DONE, baz);
+        let bar = mb_ext_csr.rf(utra::mb_ext::EV_ENABLE_ERROR);
+        mb_ext_csr.rmwf(utra::mb_ext::EV_ENABLE_ERROR, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_ENABLE_ERROR, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::EV_ENABLE_ERROR, 1);
+        mb_ext_csr.wfo(utra::mb_ext::EV_ENABLE_ERROR, baz);
+
+        let foo = mb_ext_csr.r(utra::mb_ext::WDATA);
+        mb_ext_csr.wo(utra::mb_ext::WDATA, foo);
+        let bar = mb_ext_csr.rf(utra::mb_ext::WDATA_WDATA);
+        mb_ext_csr.rmwf(utra::mb_ext::WDATA_WDATA, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::WDATA_WDATA, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::WDATA_WDATA, 1);
+        mb_ext_csr.wfo(utra::mb_ext::WDATA_WDATA, baz);
+
+        let foo = mb_ext_csr.r(utra::mb_ext::RDATA);
+        mb_ext_csr.wo(utra::mb_ext::RDATA, foo);
+        let bar = mb_ext_csr.rf(utra::mb_ext::RDATA_RDATA);
+        mb_ext_csr.rmwf(utra::mb_ext::RDATA_RDATA, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::RDATA_RDATA, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::RDATA_RDATA, 1);
+        mb_ext_csr.wfo(utra::mb_ext::RDATA_RDATA, baz);
+
+        let foo = mb_ext_csr.r(utra::mb_ext::CONTROL);
+        mb_ext_csr.wo(utra::mb_ext::CONTROL, foo);
+        let bar = mb_ext_csr.rf(utra::mb_ext::CONTROL_ABORT);
+        mb_ext_csr.rmwf(utra::mb_ext::CONTROL_ABORT, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::CONTROL_ABORT, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::CONTROL_ABORT, 1);
+        mb_ext_csr.wfo(utra::mb_ext::CONTROL_ABORT, baz);
+
+        let foo = mb_ext_csr.r(utra::mb_ext::DONE);
+        mb_ext_csr.wo(utra::mb_ext::DONE, foo);
+        let bar = mb_ext_csr.rf(utra::mb_ext::DONE_DONE);
+        mb_ext_csr.rmwf(utra::mb_ext::DONE_DONE, bar);
+        let mut baz = mb_ext_csr.zf(utra::mb_ext::DONE_DONE, bar);
+        baz |= mb_ext_csr.ms(utra::mb_ext::DONE_DONE, 1);
+        mb_ext_csr.wfo(utra::mb_ext::DONE_DONE, baz);
   }
 
     #[test]
