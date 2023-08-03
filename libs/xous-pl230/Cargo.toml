@@ -9,6 +9,9 @@ edition = "2021"
 log = "0.4.14"
 utralib = {version = "0.1.22", optional = true, default-features = false }
 bitfield = "0.13.2"
+xous-pio = {path="../xous-pio", optional = true, default-features = false}
+pio-proc = "0.2.2"
+pio = "0.2.1"
 
 [target.'cfg(target_os = "xous")'.dependencies]
 xous = "0.9.49"
@@ -19,6 +22,7 @@ cramium-fpga = ["utralib/cramium-fpga"]
 precursor = []
 hosted = []
 renode = []
+pio = ["xous-pio"]
 
-tests = []
-default = ["tests"]
+tests = ["pio"]
+default = ["tests", "pio"]

@@ -27,6 +27,7 @@ struct ControlChannels {
 
 pub struct Pl230 {
     pub csr: CSR<u32>,
+    pub mdma: CSR<u32>,
 }
 
 impl Pl230 {
@@ -34,14 +35,11 @@ impl Pl230 {
     pub fn new() -> Self {
         Pl230 {
             csr: CSR::new(utralib::HW_PL230_BASE as *mut u32),
+            mdma: CSR::new(utralib::HW_MDMA_BASE as *mut u32),
         }
     }
     #[cfg(target_os="xous")]
     pub fn new() -> Self {
-        // Note: this requires a memory region window to be manually specified in create-image
-        // so that the loader maps the pages for the PIO block. This is because the PIO block is
-        // an IP block that is created *outside* of the normal LiteX ecosystem. Specifically look in
-        // xtask/src/builder.rs for a "--extra-svd" argument that refers to precursors/pio.svd.
         let csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utralib::HW_PL230_BASE),
             None,
@@ -49,9 +47,17 @@ impl Pl230 {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .unwrap();
+    let mdma = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utralib::HW_MDMA_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .unwrap();
 
         Pl230 {
             csr: CSR::new(csr.as_mut_ptr() as *mut u32),
+            mdma: CSR::new(mdma.as_mut_ptr() as *mut u32),
         }
     }
 }

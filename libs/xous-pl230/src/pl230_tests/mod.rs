@@ -14,4 +14,6 @@ pub fn report_api(desc: &str, d: u32) {
 pub fn pl230_tests() {
     let mut pl230 = crate::Pl230::new();
     units::basic_tests(&mut pl230);
+    #[cfg(feature="pio")]
+    units::pio_test(&mut pl230);
 }
