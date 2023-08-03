@@ -8,7 +8,7 @@ description = "Initial kernel loader for Xous"
 [dependencies]
 ed25519-dalek-loader = { path = "ed25519-dalek-loader", default-features = false, optional = true }
 curve25519-dalek-loader = { path = "curve25519-dalek-loader", default-features = false, features = ["u32e_backend"], optional = true }
-utralib = { version = "0.1.21", optional = true, default-features = false }
+utralib = { version = "0.1.22", optional = true, default-features = false }
 armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", optional = true }
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
 
