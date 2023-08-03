@@ -219,7 +219,7 @@ impl<'a> MtxChat<'a> {
         // }
     }
 
-    pub fn get_default(&mut self, key: &str, default: &str) -> String {
+    pub fn get_or(&mut self, key: &str, default: &str) -> String {
         match self.get(key) {
             Ok(None) => default.to_string(),
             Ok(Some(value)) => value.to_string(),
@@ -231,21 +231,26 @@ impl<'a> MtxChat<'a> {
     }
 
     pub fn login(&mut self) -> bool {
-        self.token = self.get_default(TOKEN_KEY, EMPTY);
+        self.token = self.get_or(TOKEN_KEY, EMPTY);
         self.logged_in = false;
+        let mut server = String::new();
+        write!(
+            server,
+            "{}{}",
+            HTTPS,
+            &self.get_or(USER_DOMAIN_KEY, DOMAIN_MATRIX)
+        )
+        .expect("failed to write server");
         if self.token.len() > 0 {
-            let mut server = String::new();
-            write!(server, "{}{}", HTTPS, &self.get_default(USER_DOMAIN_KEY, DOMAIN_MATRIX));
-            if web::whoami(&server, &self.token) {
+            if let Some(user_id) = web::whoami(&server, &self.token) {
+                self.user_id = user_id;
                 self.logged_in = true;
             }
         }
         if !self.logged_in {
-            let mut server = String::new();
-            write!(server, "{}{}", HTTPS, &self.get_default(USER_DOMAIN_KEY, DOMAIN_MATRIX));
             if web::get_login_type(&server) {
-                let user = self.get_default(USER_ID_KEY, USER_ID_KEY);
-                let password = self.get_default(PASSWORD_KEY, EMPTY);
+                let user_id = self.get_or(USER_ID_KEY, USER_ID_KEY);
+                let password = self.get_or(PASSWORD_KEY, EMPTY);
                 if let Some(new_token) = web::authenticate_user(&server, &user, &password)
                 {
                     self.set_debug(TOKEN_KEY, &new_token);
@@ -320,12 +325,24 @@ impl<'a> MtxChat<'a> {
         } else if self.room_domain.len() == 0 {
             false
         } else {
-            let name = self.get_default(ROOM_NAME_KEY, EMPTY);
-            let domain = self.get_default(ROOM_DOMAIN_KEY, EMPTY);
+            let name = self.get_or(ROOM_NAME_KEY, EMPTY);
+            let domain = self.get_or(ROOM_DOMAIN_KEY, EMPTY);
             let mut room = String::new();
-            write!(room, "#{}:{}", &name, &self.get_default(ROOM_DOMAIN_KEY, DOMAIN_MATRIX));
+            write!(
+                room,
+                "#{}:{}",
+                &name,
+                &self.get_or(ROOM_DOMAIN_KEY, DOMAIN_MATRIX)
+            )
+            .expect("failed to write room");
             let mut server = String::new();
-            write!(server, "{}{}", HTTPS, &self.get_default(USER_DOMAIN_KEY, DOMAIN_MATRIX));
+            write!(
+                server,
+                "{}{}",
+                HTTPS,
+                &self.get_or(USER_DOMAIN_KEY, DOMAIN_MATRIX)
+            )
+            .expect("failed to write server");
             if let Some(room_id) = web::get_room_id(&server, &room, &self.token) {
                 self.set_debug(ROOM_ID_KEY, &room_id);
                 true
@@ -373,9 +390,13 @@ impl<'a> MtxChat<'a> {
             true
         } else {
             let mut user_server = String::new();
-            write!(user_server, "{}{}", HTTPS, &self.get_default(USER_DOMAIN_KEY, DOMAIN_MATRIX));
-            if let Some(new_filter) = web::get_filter(&self.user_id, &user_server,
-                                                      &self.room_id, &self.token) {
+            write!(
+                user_server,
+                "{}{}",
+                HTTPS,
+                &self.get_or(USER_DOMAIN_KEY, DOMAIN_MATRIX)
+            )
+            .expect("failed to write server");
                 self.set_debug(FILTER_KEY, &new_filter);
                 true
             } else {
@@ -408,7 +429,13 @@ impl<'a> MtxChat<'a> {
         std::thread::spawn({
 
             let mut server = String::new();
-            write!(server, "{}{}", HTTPS, &self.get_default(ROOM_DOMAIN_KEY, DOMAIN_MATRIX));
+            write!(
+                server,
+                "{}{}",
+                HTTPS,
+                &self.get_or(ROOM_DOMAIN_KEY, DOMAIN_MATRIX)
+            )
+            .expect("failed to write server");
             let filter = self.filter.clone();
             let since = self.since.clone();
             let room_id = self.room_id.clone();
