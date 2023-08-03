@@ -251,9 +251,9 @@ impl<'a> MtxChat<'a> {
             if web::get_login_type(&server) {
                 let user_id = self.get_or(USER_ID_KEY, USER_ID_KEY);
                 let password = self.get_or(PASSWORD_KEY, EMPTY);
-                if let Some(new_token) = web::authenticate_user(&server, &user, &password)
-                {
+                if let Some(new_token) = web::authenticate_user(&server, &user_id, &password) {
                     self.set_debug(TOKEN_KEY, &new_token);
+                    self.user_id = user_id;
                     self.logged_in = true;
                 } else {
                     log::info!(
@@ -306,7 +306,8 @@ impl<'a> MtxChat<'a> {
             }
             let mut user_id = String::new();
             write!(user_id, "@{}:{}", self.user_name, self.user_domain);
-            self.set(USER_ID_KEY, &user_id).expect("failed to save user");
+            self.set(USER_ID_KEY, &user_id)
+                .expect("failed to save user");
         }
         log::info!(
             "# user = '{}' user_name = '{}' server = '{}'",
