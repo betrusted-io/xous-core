@@ -21,7 +21,7 @@ pub struct Dialogue {
     posts: Vec<Post>,
     authors: HashMap<u16, Author>,
     author_lookup: HashMap<String, u16>,
-    last_timestamp: u32,
+    last_timestamp: u64,
     last_author_id: u16,
 }
 
@@ -48,7 +48,7 @@ impl Dialogue {
     pub fn post_add(
         &mut self,
         author: &str,
-        timestamp: u32,
+        timestamp: u64,
         text: &str,
         _attach_url: Option<&str>,
     ) -> Result<(), Error> {
@@ -82,7 +82,7 @@ impl Dialogue {
         }
     }
 
-    pub fn post_find(&self, author: &str, timestamp: u32) -> Option<usize> {
+    pub fn post_find(&self, author: &str, timestamp: u64) -> Option<usize> {
         if let Some(author_id) = self.author_lookup.get(author) {
             match self
                 .posts

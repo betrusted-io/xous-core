@@ -62,7 +62,7 @@ impl Chat {
     pub fn post_add(
         &self,
         author: &str,
-        timestamp: u32,
+        timestamp: u64,
         text: &str,
         attach_url: Option<&str>,
     ) -> Result<(), Error> {
@@ -90,7 +90,7 @@ impl Chat {
     }
 
     // get a Post from the current Dialogue
-    pub fn post_find(&self, author: &str, timestamp: u32) -> Result<Option<usize>, Error> {
+    pub fn post_find(&self, author: &str, timestamp: u64) -> Result<Option<usize>, Error> {
         let mut find = Find {
             author: xous_ipc::String::new(),
             timestamp: timestamp,
@@ -266,7 +266,7 @@ pub fn server(
     xous::terminate_process(0)
 }
 
-pub fn now() -> u32 {
+pub fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()

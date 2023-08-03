@@ -7,7 +7,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct Post {
     author_id: u16,
-    timestamp: u32,
+    timestamp: u64,
     text: String,
     attach: Option<Attach>,
     pub flags: u16,
@@ -15,7 +15,7 @@ pub struct Post {
 
 #[allow(dead_code)]
 impl Post {
-    pub fn new(author_id: u16, timestamp: u32, text: &str, attach: Option<Attach>) -> Self {
+    pub fn new(author_id: u16, timestamp: u64, text: &str, attach: Option<Attach>) -> Self {
         Self {
             author_id: author_id,
             timestamp: timestamp,
@@ -45,7 +45,7 @@ impl Post {
         self.text.as_str()
     }
 
-    pub fn timestamp(&self) -> u32 {
+    pub fn timestamp(&self) -> u64 {
         self.timestamp
     }
 }

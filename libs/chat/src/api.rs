@@ -35,7 +35,7 @@ pub const POST_TEXT_MAX: usize = 3072;
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct Find {
     pub author: xous_ipc::String<128>,
-    pub timestamp: u32,
+    pub timestamp: u64,
     pub key: Option<usize>, // the return post key if found.
 }
 
@@ -48,7 +48,7 @@ pub struct Dialogue {
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct Post {
     pub author: xous_ipc::String<128>,
-    pub timestamp: u32,
+    pub timestamp: u64,
     pub text: xous_ipc::String<POST_TEXT_MAX>,
     pub attach_url: Option<xous_ipc::String<128>>,
 }

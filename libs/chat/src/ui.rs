@@ -238,7 +238,7 @@ impl Ui {
     pub fn post_add(
         &mut self,
         author: &str,
-        timestamp: u32,
+        timestamp: u64,
         text: &str,
         attach_url: Option<&str>,
     ) -> Result<(), Error> {
@@ -264,7 +264,7 @@ impl Ui {
     }
 
     // get a Post from the current Dialogue
-    pub fn post_find(&self, author: &str, timestamp: u32) -> Option<usize> {
+    pub fn post_find(&self, author: &str, timestamp: u64) -> Option<usize> {
         match &self.dialogue {
             Some(dialogue) => dialogue.post_find(author, timestamp),
             None => None,
