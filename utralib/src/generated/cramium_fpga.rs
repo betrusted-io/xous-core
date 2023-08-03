@@ -257,7 +257,7 @@ pub const HW_SYSCTRL_MEM:     usize = 0x40040000;
 pub const HW_SYSCTRL_MEM_LEN: usize = 65536;
 pub const HW_IFSUB_MEM:     usize = 0x50120000;
 pub const HW_IFSUB_MEM_LEN: usize = 65536;
-pub const HW_CORESUB_MEM:     usize = 0x40000000;
+pub const HW_CORESUB_MEM:     usize = 0x40010000;
 pub const HW_CORESUB_MEM_LEN: usize = 65536;
 pub const HW_SECSUB_MEM:     usize = 0x40050000;
 pub const HW_SECSUB_MEM_LEN: usize = 65536;
@@ -319,12 +319,10 @@ pub const HW_RERAM_X_MEM:     usize = 0x60000000;
 pub const HW_RERAM_X_MEM_LEN: usize = 4194304;
 pub const HW_XIP_X_MEM:     usize = 0x70000000;
 pub const HW_XIP_X_MEM_LEN: usize = 134217728;
-pub const HW_MDMA_MEM:     usize = 0x40011000;
+pub const HW_PL230_PLACEHOLDER_MEM:     usize = 0x40011000;
+pub const HW_PL230_PLACEHOLDER_MEM_LEN: usize = 4096;
+pub const HW_MDMA_MEM:     usize = 0x40012000;
 pub const HW_MDMA_MEM_LEN: usize = 4096;
-pub const HW_MDMAREQ_MEM:     usize = 0x40012000;
-pub const HW_MDMAREQ_MEM_LEN: usize = 4096;
-pub const HW_MBOX_EXT_MEM:     usize = 0x50124000;
-pub const HW_MBOX_EXT_MEM_LEN: usize = 4096;
 
 // Physical base addresses of registers
 pub const HW_GPIO_BASE :   usize = 0x40080000;
@@ -361,8 +359,7 @@ pub const HW_MAILBOX_BASE :   usize = 0xe0018000;
 pub const HW_MB_CLIENT_BASE :   usize = 0xe0019000;
 pub const HW_RESETVALUE_BASE :   usize = 0xe001a000;
 pub const HW_TICKTIMER_BASE :   usize = 0xe001b000;
-pub const HW_PL230_BASE :   usize = 0x40011000;
-pub const HW_MB_EXT_BASE :   usize = 0x50124000;
+pub const HW_PL230_BASE :   usize = 0x40021000;
 pub const HW_UDMA_CTRL_BASE :   usize = 0x50100000;
 pub const HW_UDMA_UART_0_BASE :   usize = 0x50101000;
 pub const HW_UDMA_UART_1_BASE :   usize = 0x50102000;
@@ -400,9 +397,9 @@ pub const HW_IOX_BASE :   usize = 0x5012f000;
 pub const HW_PWM_BASE :   usize = 0x50120000;
 pub const HW_SDDC_BASE :   usize = 0x50121000;
 pub const HW_RP_PIO_BASE :   usize = 0x50123000;
-pub const HW_MDMA_BASE :   usize = 0x40002000;
-pub const HW_QFC_BASE :   usize = 0x40000000;
-pub const HW_PL230_PLACEHOLDER_BASE :   usize = 0x40011000;
+pub const HW_MDMA_BASE :   usize = 0x40012000;
+pub const HW_QFC_BASE :   usize = 0x40010000;
+pub const HW_PL230_PLACEHOLDER_BASE :   usize = 0x40021000;
 pub const HW_GLUECHAIN_BASE :   usize = 0x40054000;
 pub const HW_MESH_BASE :   usize = 0x40052000;
 pub const HW_SENSORC_BASE :   usize = 0x40053000;
@@ -2513,52 +2510,7 @@ pub mod utra {
         pub const PERIPH_ID_2_JEDEC_USED: crate::Field = crate::Field::new(1, 3, PERIPH_ID_2);
         pub const PERIPH_ID_2_REVISION: crate::Field = crate::Field::new(4, 4, PERIPH_ID_2);
 
-        pub const HW_PL230_BASE: usize = 0x40011000;
-    }
-
-    pub mod mb_ext {
-        pub const MB_EXT_NUMREGS: usize = 8;
-
-        pub const STATUS: crate::Register = crate::Register::new(0, 0x3f);
-        pub const STATUS_RX_AVAIL: crate::Field = crate::Field::new(1, 0, STATUS);
-        pub const STATUS_TX_FREE: crate::Field = crate::Field::new(1, 1, STATUS);
-        pub const STATUS_ABORT_IN_PROGRESS: crate::Field = crate::Field::new(1, 2, STATUS);
-        pub const STATUS_ABORT_ACK: crate::Field = crate::Field::new(1, 3, STATUS);
-        pub const STATUS_TX_ERR: crate::Field = crate::Field::new(1, 4, STATUS);
-        pub const STATUS_RX_ERR: crate::Field = crate::Field::new(1, 5, STATUS);
-
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xf);
-        pub const EV_STATUS_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_STATUS);
-        pub const EV_STATUS_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_STATUS);
-        pub const EV_STATUS_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_STATUS);
-        pub const EV_STATUS_ERROR: crate::Field = crate::Field::new(1, 3, EV_STATUS);
-
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xf);
-        pub const EV_PENDING_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_PENDING);
-        pub const EV_PENDING_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_PENDING);
-        pub const EV_PENDING_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_PENDING);
-        pub const EV_PENDING_ERROR: crate::Field = crate::Field::new(1, 3, EV_PENDING);
-
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xf);
-        pub const EV_ENABLE_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
-        pub const EV_ENABLE_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
-        pub const EV_ENABLE_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
-        pub const EV_ENABLE_ERROR: crate::Field = crate::Field::new(1, 3, EV_ENABLE);
-
-        pub const WDATA: crate::Register = crate::Register::new(4, 0xffffffff);
-        pub const WDATA_WDATA: crate::Field = crate::Field::new(32, 0, WDATA);
-
-        pub const RDATA: crate::Register = crate::Register::new(5, 0xffffffff);
-        pub const RDATA_RDATA: crate::Field = crate::Field::new(32, 0, RDATA);
-
-        pub const CONTROL: crate::Register = crate::Register::new(6, 0x1);
-        pub const CONTROL_ABORT: crate::Field = crate::Field::new(1, 0, CONTROL);
-
-        pub const DONE: crate::Register = crate::Register::new(7, 0x1);
-        pub const DONE_DONE: crate::Field = crate::Field::new(1, 0, DONE);
-
-        pub const MB_CLIENT_IRQ: usize = 23;
-        pub const HW_MB_EXT_BASE: usize = 0x50124000;
+        pub const HW_PL230_BASE: usize = 0x40021000;
     }
 
     pub mod udma_ctrl {
@@ -5084,7 +5036,7 @@ pub mod utra {
         pub const SFR_SR_SR_MDMAREQ7: crate::Register = crate::Register::new(23, 0x1f);
         pub const SFR_SR_SR_MDMAREQ7_SR_MDMAREQ7: crate::Field = crate::Field::new(5, 0, SFR_SR_SR_MDMAREQ7);
 
-        pub const HW_MDMA_BASE: usize = 0x40002000;
+        pub const HW_MDMA_BASE: usize = 0x40012000;
     }
 
     pub mod qfc {
@@ -5132,13 +5084,13 @@ pub mod utra {
         pub const CR_AESENA: crate::Register = crate::Register::new(20, 0x1);
         pub const CR_AESENA_CR_AESENA: crate::Field = crate::Field::new(1, 0, CR_AESENA);
 
-        pub const HW_QFC_BASE: usize = 0x40000000;
+        pub const HW_QFC_BASE: usize = 0x40010000;
     }
 
     pub mod pl230_placeholder {
         pub const PL230_PLACEHOLDER_NUMREGS: usize = 0;
 
-        pub const HW_PL230_PLACEHOLDER_BASE: usize = 0x40011000;
+        pub const HW_PL230_PLACEHOLDER_BASE: usize = 0x40021000;
     }
 
     pub mod gluechain {
@@ -13309,147 +13261,6 @@ mod tests {
         let mut baz = pl230_csr.zf(utra::pl230::PERIPH_ID_2_REVISION, bar);
         baz |= pl230_csr.ms(utra::pl230::PERIPH_ID_2_REVISION, 1);
         pl230_csr.wfo(utra::pl230::PERIPH_ID_2_REVISION, baz);
-  }
-
-    #[test]
-    #[ignore]
-    fn compile_check_mb_ext_csr() {
-        use super::*;
-        let mut mb_ext_csr = CSR::new(HW_MB_EXT_BASE as *mut u32);
-
-        let foo = mb_ext_csr.r(utra::mb_ext::STATUS);
-        mb_ext_csr.wo(utra::mb_ext::STATUS, foo);
-        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_RX_AVAIL);
-        mb_ext_csr.rmwf(utra::mb_ext::STATUS_RX_AVAIL, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_RX_AVAIL, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_RX_AVAIL, 1);
-        mb_ext_csr.wfo(utra::mb_ext::STATUS_RX_AVAIL, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_TX_FREE);
-        mb_ext_csr.rmwf(utra::mb_ext::STATUS_TX_FREE, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_TX_FREE, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_TX_FREE, 1);
-        mb_ext_csr.wfo(utra::mb_ext::STATUS_TX_FREE, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_ABORT_IN_PROGRESS);
-        mb_ext_csr.rmwf(utra::mb_ext::STATUS_ABORT_IN_PROGRESS, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_ABORT_IN_PROGRESS, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_ABORT_IN_PROGRESS, 1);
-        mb_ext_csr.wfo(utra::mb_ext::STATUS_ABORT_IN_PROGRESS, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_ABORT_ACK);
-        mb_ext_csr.rmwf(utra::mb_ext::STATUS_ABORT_ACK, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_ABORT_ACK, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_ABORT_ACK, 1);
-        mb_ext_csr.wfo(utra::mb_ext::STATUS_ABORT_ACK, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_TX_ERR);
-        mb_ext_csr.rmwf(utra::mb_ext::STATUS_TX_ERR, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_TX_ERR, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_TX_ERR, 1);
-        mb_ext_csr.wfo(utra::mb_ext::STATUS_TX_ERR, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::STATUS_RX_ERR);
-        mb_ext_csr.rmwf(utra::mb_ext::STATUS_RX_ERR, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::STATUS_RX_ERR, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::STATUS_RX_ERR, 1);
-        mb_ext_csr.wfo(utra::mb_ext::STATUS_RX_ERR, baz);
-
-        let foo = mb_ext_csr.r(utra::mb_ext::EV_STATUS);
-        mb_ext_csr.wo(utra::mb_ext::EV_STATUS, foo);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_STATUS_AVAILABLE);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_STATUS_AVAILABLE, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_STATUS_AVAILABLE, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_STATUS_AVAILABLE, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_STATUS_AVAILABLE, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_STATUS_ABORT_INIT);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_STATUS_ABORT_INIT, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_STATUS_ABORT_INIT, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_STATUS_ABORT_INIT, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_STATUS_ABORT_INIT, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_STATUS_ABORT_DONE);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_STATUS_ABORT_DONE, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_STATUS_ABORT_DONE, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_STATUS_ABORT_DONE, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_STATUS_ABORT_DONE, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_STATUS_ERROR);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_STATUS_ERROR, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_STATUS_ERROR, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_STATUS_ERROR, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_STATUS_ERROR, baz);
-
-        let foo = mb_ext_csr.r(utra::mb_ext::EV_PENDING);
-        mb_ext_csr.wo(utra::mb_ext::EV_PENDING, foo);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_PENDING_AVAILABLE);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_PENDING_AVAILABLE, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_PENDING_AVAILABLE, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_PENDING_AVAILABLE, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_PENDING_AVAILABLE, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_PENDING_ABORT_INIT);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_PENDING_ABORT_INIT, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_PENDING_ABORT_INIT, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_PENDING_ABORT_INIT, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_PENDING_ABORT_INIT, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_PENDING_ABORT_DONE);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_PENDING_ABORT_DONE, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_PENDING_ABORT_DONE, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_PENDING_ABORT_DONE, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_PENDING_ABORT_DONE, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_PENDING_ERROR);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_PENDING_ERROR, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_PENDING_ERROR, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_PENDING_ERROR, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_PENDING_ERROR, baz);
-
-        let foo = mb_ext_csr.r(utra::mb_ext::EV_ENABLE);
-        mb_ext_csr.wo(utra::mb_ext::EV_ENABLE, foo);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_ENABLE_AVAILABLE);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_ENABLE_AVAILABLE, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_ENABLE_AVAILABLE, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_ENABLE_AVAILABLE, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_ENABLE_AVAILABLE, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_ENABLE_ABORT_INIT);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_ENABLE_ABORT_INIT, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_ENABLE_ABORT_INIT, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_ENABLE_ABORT_INIT, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_ENABLE_ABORT_INIT, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_ENABLE_ABORT_DONE);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_ENABLE_ABORT_DONE, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_ENABLE_ABORT_DONE, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_ENABLE_ABORT_DONE, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_ENABLE_ABORT_DONE, baz);
-        let bar = mb_ext_csr.rf(utra::mb_ext::EV_ENABLE_ERROR);
-        mb_ext_csr.rmwf(utra::mb_ext::EV_ENABLE_ERROR, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::EV_ENABLE_ERROR, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::EV_ENABLE_ERROR, 1);
-        mb_ext_csr.wfo(utra::mb_ext::EV_ENABLE_ERROR, baz);
-
-        let foo = mb_ext_csr.r(utra::mb_ext::WDATA);
-        mb_ext_csr.wo(utra::mb_ext::WDATA, foo);
-        let bar = mb_ext_csr.rf(utra::mb_ext::WDATA_WDATA);
-        mb_ext_csr.rmwf(utra::mb_ext::WDATA_WDATA, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::WDATA_WDATA, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::WDATA_WDATA, 1);
-        mb_ext_csr.wfo(utra::mb_ext::WDATA_WDATA, baz);
-
-        let foo = mb_ext_csr.r(utra::mb_ext::RDATA);
-        mb_ext_csr.wo(utra::mb_ext::RDATA, foo);
-        let bar = mb_ext_csr.rf(utra::mb_ext::RDATA_RDATA);
-        mb_ext_csr.rmwf(utra::mb_ext::RDATA_RDATA, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::RDATA_RDATA, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::RDATA_RDATA, 1);
-        mb_ext_csr.wfo(utra::mb_ext::RDATA_RDATA, baz);
-
-        let foo = mb_ext_csr.r(utra::mb_ext::CONTROL);
-        mb_ext_csr.wo(utra::mb_ext::CONTROL, foo);
-        let bar = mb_ext_csr.rf(utra::mb_ext::CONTROL_ABORT);
-        mb_ext_csr.rmwf(utra::mb_ext::CONTROL_ABORT, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::CONTROL_ABORT, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::CONTROL_ABORT, 1);
-        mb_ext_csr.wfo(utra::mb_ext::CONTROL_ABORT, baz);
-
-        let foo = mb_ext_csr.r(utra::mb_ext::DONE);
-        mb_ext_csr.wo(utra::mb_ext::DONE, foo);
-        let bar = mb_ext_csr.rf(utra::mb_ext::DONE_DONE);
-        mb_ext_csr.rmwf(utra::mb_ext::DONE_DONE, bar);
-        let mut baz = mb_ext_csr.zf(utra::mb_ext::DONE_DONE, bar);
-        baz |= mb_ext_csr.ms(utra::mb_ext::DONE_DONE, 1);
-        mb_ext_csr.wfo(utra::mb_ext::DONE_DONE, baz);
   }
 
     #[test]
