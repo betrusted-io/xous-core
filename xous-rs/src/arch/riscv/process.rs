@@ -83,6 +83,7 @@ impl TryFrom<[usize; 7]> for ProcessInit {
 }
 
 /// When a new process is created, this platform-specific structure is returned.
+#[repr(C)]
 #[derive(Debug, PartialEq)]
 pub struct ProcessStartup {
     /// The process ID of the new process
