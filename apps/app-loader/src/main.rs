@@ -32,7 +32,7 @@ fn main() -> ! {
 
     // the ticktimer
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
-    
+
     let gam = Gam::new(&xns).expect("can't connect to GAM");
     let auth = gam.register_ux(UxRegistration {
 	app_name: xous_ipc::String::from_str(APP_NAME_APP_LOADER),
@@ -45,7 +45,7 @@ fn main() -> ! {
 	focuschange_id: None,
 	rawkeys_id: None
     }).expect("Couldn't register").expect("Didn't get an auth token");
-    
+
     let menu = menu_matic(Vec::new(), APP_MENU_0_APP_LOADER, Some(xous::create_server().unwrap())).expect("Couldn't create menu");
 
     let mut apps = Vec::new();
@@ -61,7 +61,7 @@ fn main() -> ! {
 	    Opcode::LoadApp => {
 		let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
 		let load_app_req = buffer.to_original::<LoadAppRequest, _>().unwrap();
-		
+
 		// create the spawn process
 		let stub = include_bytes!("../../../target/riscv32imac-unknown-xous-elf/debug/spawn.bin");
 		let args = xous::ProcessArgs::new(stub, xous::MemoryAddress::new(0x2050_1000).unwrap(), xous::MemoryAddress::new(0x2050_1000).unwrap());
@@ -75,9 +75,9 @@ fn main() -> ! {
 		)
 		    .unwrap();
 		log::info!("Result of ping: {:?}", result);
-		
+
 		// load the app from the binary file
-		let bin = include_bytes!("../../../target/riscv32imac-unknown-xous-elf/release/hello");
+		let bin = include_bytes!("../../../target/riscv32imac-unknown-xous-elf/debug/hello");
 		let bin_len = bin.len();
 		let bin_loc = bin.as_ptr() as usize;
 		let buf = unsafe { xous::MemoryRange::new(bin_loc & !0xFFF, bin_len + if bin_len & 0xFFF == 0 { 0 } else {0x1000 - (bin_len & 0xFFF)}).expect("Couldn't create a buffer from the segment") };
@@ -105,7 +105,7 @@ fn main() -> ! {
 		// for anyone who needs this I found this in Menu::key_event
 		gam.relinquish_focus().unwrap();
 		xous::yield_slice();
-		
+
 		ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
 
 		// open the submenu

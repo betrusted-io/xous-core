@@ -28,18 +28,21 @@ pub extern "C" fn init(server1: u32, server2: u32, server3: u32, server4: u32) -
     let server = xous::SID::from_u32(server1, server2, server3, server4);
 
     // recreate the extra sections that were cut out of the stub
-    let mut memory = xous::map_memory(
-	None,
-	core::num::NonZeroUsize::new(0x40000000),
-	0x1000,
-	xous::MemoryFlags::R | xous::MemoryFlags::W
-    ).unwrap();
-    let connection = core::sync::atomic::AtomicU32::new(0);
-    let slice = unsafe { core::slice::from_raw_parts(&connection as *const _ as *const u8, core::mem::size_of::<core::sync::atomic::AtomicU32>()) };
-    for (dest, src) in memory.as_slice_mut::<u8>().iter_mut().skip(8).zip(slice) {
-	*dest = *src;
+    {
+	let mut memory = xous::map_memory(
+	    None,
+	    core::num::NonZeroUsize::new(0x40000000),
+	    0x1000,
+	    xous::MemoryFlags::R | xous::MemoryFlags::W
+	).unwrap();
+	let connection = core::sync::atomic::AtomicU32::new(0);
+	let slice = unsafe { core::slice::from_raw_parts(&connection as *const _ as *const u8, core::mem::size_of::<core::sync::atomic::AtomicU32>()) };
+	for (dest, src) in memory.as_slice_mut::<u8>().iter_mut().skip(8).zip(slice) {
+	    *dest = *src;
+	}
+	// everything should drop now
     }
-    
+
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -75,7 +78,7 @@ fn read_elf(memory: Option<&xous::MemoryMessage>) -> usize {
         Some(s) => s,
         None => panic!(),
     };
-    
+
     // get the elf binary from the message
     let mut bin = memory.buf.as_slice::<u8>();
 
@@ -84,7 +87,7 @@ fn read_elf(memory: Option<&xous::MemoryMessage>) -> usize {
     while !(bin[0] == 0x7F && bin[1] == 0x45 && bin[2] == 0x4c && bin[3] == 0x46) {
 	bin = &bin[1..];
     }
-    
+
     let max = bin.len();
 
     // make sure that this is a 32 bit
@@ -119,6 +122,7 @@ fn read_elf(memory: Option<&xous::MemoryMessage>) -> usize {
 	    let src_addr = to_usize(start+0x04, 4);
 	    let vaddr = to_usize(start+0x08, 4);
 	    let padding = if vaddr & 0xFFF == 0 { 0 } else { vaddr & 0xFFF };
+	    let file_size = to_usize(start+0x10, 4);
 	    let mem_size = to_usize(start+0x14, 4);
 	    let mem_size = mem_size + padding;
 	    let mem_size = mem_size + if mem_size & 0xFFF == 0 { 0 } else { 0x1000 - (mem_size & 0xFFF) };
@@ -136,9 +140,14 @@ fn read_elf(memory: Option<&xous::MemoryMessage>) -> usize {
 		.unwrap();
 
 	    for (dest, src) in target_memory.as_slice_mut().iter_mut().skip(padding)
-		.zip(bin[src_addr..core::cmp::min(max, src_addr+mem_size-padding)].iter())
+		.zip(bin[src_addr..core::cmp::min(max, src_addr+file_size)].iter())
 	    {
 		*dest = *src;
+	    }
+	    for dest in target_memory.as_slice_mut().iter_mut().skip(padding+file_size)
+		.take(mem_size-file_size-padding)
+	    {
+		*dest = 0;
 	    }
 	}
     }
