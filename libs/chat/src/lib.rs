@@ -38,6 +38,10 @@ impl Chat {
         Chat { cid: chat_cid }
     }
 
+    pub fn cid(&self) -> CID {
+        self.cid
+    }
+
     pub fn read_only(pddb_dict: &str, pddb_key: &str) -> Self {
         let chat = Chat::new(None, None, None, None);
         chat.dialogue_set(pddb_dict, pddb_key).unwrap();
@@ -111,6 +115,15 @@ impl Chat {
     pub fn post_flag(&self, _key: &str) -> Result<(), Error> {
         log::warn!("not implemented");
         Err(xous::Error::InternalError)
+    }
+
+    pub fn redraw(&self) {
+        xous::send_message(
+            self.cid,
+            xous::Message::new_scalar(ChatOp::GamRedraw as usize, 0, 0, 0, 0),
+        )
+        .map(|_| ())
+        .expect("failed to Redraw Chat UI");
     }
 
     // set the text displayed on each of the Precursor Fn buttons

@@ -14,4 +14,10 @@ pub enum MtxchatOp {
     Quit,
 }
 
+pub struct Msg {
+    pub type_: String,
+    pub body: Option<String>,
+    pub sender: Option<String>,
+    pub ts: Option<u64>,
+}
 

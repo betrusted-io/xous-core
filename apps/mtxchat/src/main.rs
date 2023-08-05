@@ -82,6 +82,7 @@ fn wrapped_main() -> ! {
                                     .expect("notification failed");
                                 mtxchat.room_modal();
                             }
+                            mtxchat.redraw();
                             mtxchat.listen();
                         }
                         _ => (),

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use ureq;
 use ureq::serde_json::{Map, Value};
 
-use crate::url;
+use crate::{url, Msg};
 
 const ACCEPT: &str = "Accept";
 const ACCEPT_JSON: &str = "application/json";
@@ -292,6 +292,7 @@ impl FilterRequest {
         event_fields.push("type".to_string());
         event_fields.push("sender".to_string());
         event_fields.push("content.body".to_string());
+        event_fields.push("origin_server_ts".to_string());
         let presence = EventFilter::new(0);
         let room = RoomFilter::new(room_id);
         FilterRequest {
@@ -335,36 +336,31 @@ pub fn get_filter(user: &str, server: &str, room_id: &str, token: &str) -> Optio
     }
 }
 
-fn get_messages(body: Map<String, Value>, room_id: &str) -> String {
+fn get_messages(body: Map<String, Value>, room_id: &str) -> Vec<Msg> {
     log::info!("heap usage: {}", crate::heap_usage());
-    let mut messages = String::new();
+    let mut msgs = Vec::<Msg>::new();
     if let Some(Value::Object(rooms)) = body.get("rooms") {
         if let Some(Value::Object(join)) = rooms.get("join") {
             if let Some(Value::Object(room)) = join.get(room_id) {
                 if let Some(Value::Object(timeline)) = room.get("timeline") {
                     if let Some(Value::Array(events)) = timeline.get("events") {
                         for event in events.iter() {
+                            log::info!("{:?}", event);
                             if let Some(Value::String(type_)) = event.get("type") {
                                 if type_.eq("m.room.message") {
-                                    if messages.len() > 0 {
-                                        messages.push_str("\n");
-                                    }
-                                    if let Some(Value::String(sender)) = event.get("sender") {
-                                        messages.push_str(&get_username(sender));
-                                    } else {
-                                        messages.push_str("unknown");
-                                    }
-                                    messages.push_str("> ");
-                                    if let Some(Value::Object(content)) = event.get("content") {
-                                        if let Some(Value::String(body)) = content.get("body") {
-                                            messages.push_str(body);
-                                        } else {
-                                            messages.push_str("....");
-                                        }
-                                    } else {
-                                        messages.push_str("...");
-                                    }
-                                } // m.room.message
+                                    msgs.push(Msg {
+                                        type_: type_.to_string(),
+                                        body: event
+                                            .get("content")
+                                            .map(|c| c.get("body").map(|b| b.to_string()))
+                                            .flatten(),
+                                        sender: event.get("sender").map(|s| s.to_string()),
+                                        ts: event
+                                            .get("origin_server_ts")
+                                            .map(|t| t.as_u64())
+                                            .flatten(),
+                                    });
+                                }
                             }
                         } // event
                     }
@@ -372,7 +368,7 @@ fn get_messages(body: Map<String, Value>, room_id: &str) -> String {
             }
         }
     }
-    messages
+    msgs
 }
 
 pub fn client_sync(
@@ -382,7 +378,7 @@ pub fn client_sync(
     timeout: i32,
     room_id: &str,
     token: &str,
-) -> Option<(String, String)> {
+) -> Option<(String, Vec<Msg>)> {
     log::info!("heap usage: {}", crate::heap_usage());
     let mut url = String::from(server);
     url.push_str("/_matrix/client/r0/sync?filter=");

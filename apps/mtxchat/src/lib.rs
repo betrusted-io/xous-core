@@ -2,6 +2,7 @@ pub mod api;
 mod url;
 mod web;
 
+use crate::web::get_username;
 pub use api::*;
 use chat::{Chat, ChatOp};
 use locales::t;
@@ -11,6 +12,7 @@ use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read, Write as StdWrite};
 use std::path::PathBuf;
+use xous_ipc::Buffer;
 
 /// PDDB Dict for mtxchat keys
 const MTXCHAT_DICT: &str = "mtxchat";
@@ -346,6 +348,7 @@ impl<'a> MtxChat<'a> {
             .expect("failed to write server");
             if let Some(room_id) = web::get_room_id(&server, &room, &self.token) {
                 self.set_debug(ROOM_ID_KEY, &room_id);
+                self.chat.dialogue_set(MTXCHAT_DICT, &room);
                 true
             } else {
                 log::warn!("failed to return room_id");
@@ -354,8 +357,9 @@ impl<'a> MtxChat<'a> {
         }
     }
 
-    pub fn room_modal(&mut self){
-        let mut builder = self.modals.alert_builder(t!("mtxchat.room.title", locales::LANG));
+    pub fn redraw(&self) {
+        self.chat.redraw();
+    }
         let builder = match self.get(ROOM_NAME_KEY) {
             // TODO add TextValidationFn
             Ok(Some(room)) => builder.field_placeholder_persist(Some(room), None),
@@ -398,6 +402,9 @@ impl<'a> MtxChat<'a> {
                 &self.get_or(USER_DOMAIN_KEY, DOMAIN_MATRIX)
             )
             .expect("failed to write server");
+            if let Some(new_filter) =
+                web::get_filter(&self.user_id, &user_server, &self.room_id, &self.token)
+            {
                 self.set_debug(FILTER_KEY, &new_filter);
                 true
             } else {
@@ -411,24 +418,23 @@ impl<'a> MtxChat<'a> {
             log::info!("Already listening");
             return;
         }
-        if ! self.logged_in {
+        if !self.logged_in {
             log::info!("Not logged in");
             return;
         }
         if self.room_id.len() == 0 {
-            if ! self.get_room_id() {
+            if !self.get_room_id() {
                 return;
             }
         }
         if self.filter.len() == 0 {
-            if ! self.get_filter() {
+            if !self.get_filter() {
                 return;
             }
         }
         self.listening = true;
         log::info!("Started listening");
         std::thread::spawn({
-
             let mut server = String::new();
             write!(
                 server,
@@ -441,22 +447,29 @@ impl<'a> MtxChat<'a> {
             let since = self.since.clone();
             let room_id = self.room_id.clone();
             let token = self.token.clone();
-            // let async_msg_conn = self.async_msg_conn.clone();
-            // let async_msg_callback_id = self.async_msg_callback_id.clone();
+            let chat_cid = self.chat.cid();
             move || {
                 // log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
-                let mut response = String::new();
-                // response.push(SENTINEL);
-                if let Some((since, messages)) = web::client_sync(&server, &filter, &since, MTX_LONG_TIMEOUT, &room_id, &token) {
-                    response.push_str(&since);
-                    // response.push(SENTINEL);
-                    response.push_str(&messages);
-                    // response.push(SENTINEL);
+                if let Some((since, events)) =
+                    web::client_sync(&server, &filter, &since, MTX_LONG_TIMEOUT, &room_id, &token)
+                {
+                    // TODO send "since" to mtxchat server
+                    for event in events {
+                        let sender = event.sender.unwrap_or("anon".to_string());
+                        let body = event.body.unwrap_or("...".to_string());
+                        let post = chat::Post {
+                            author: xous_ipc::String::from_str(&get_username(&sender)),
+                            timestamp: event.ts.unwrap_or(0),
+                            text: xous_ipc::String::from_str(&body),
+                            attach_url: None,
+                        };
+                        match Buffer::into_buf(post) {
+                            Ok(buf) => buf.send(chat_cid, ChatOp::PostAdd as u32).map(|_| ()),
+                            Err(_) => Err(xous::Error::InternalError),
+                        }
+                        .expect("failed to convert post into buffer");
+                    }
                 }
-                // let str_buf = StringBuffer::from_str(&response)
-                //     .expect("unable to create string message");
-                // str_buf.send(async_msg_conn, async_msg_callback_id)
-                //     .expect("unable to send string message");
             }
         });
     }
