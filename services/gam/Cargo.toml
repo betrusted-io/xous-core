@@ -52,4 +52,3 @@ tts = []
 # default = ["debugprint"] # "debugprint"
 default = []
 ditherpunk = []
-app_loader = []

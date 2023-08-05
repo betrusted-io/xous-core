@@ -1,4 +1,3 @@
-#[cfg(not(feature = "app_loader"))]
 use gam::{EXPECTED_BOOT_CONTEXTS, EXPECTED_APP_CONTEXTS};
 
 /*
@@ -19,21 +18,20 @@ pub(crate) struct NamedToken {
 }
 pub(crate) struct TokenManager {
     tokens: Vec::<NamedToken>,
+    extra_names: Vec<String>,
     trng: trng::Trng,
 }
 impl<'a> TokenManager {
     pub(crate) fn new(xns: &xous_names::XousNames) -> TokenManager {
         TokenManager {
             tokens: Vec::new(),
+	    extra_names: Vec::new(),
             trng: trng::Trng::new(&xns).unwrap(),
         }
     }
     /// checks to see if all the slots have been occupied. We can't allow untrusted code to run until all slots have checked in
     pub(crate) fn allow_untrusted_code(&self) -> bool {
-	#[cfg(feature = "app_loader")]
-	return true;
-	#[cfg(not(feature = "app_loader"))]
-        if self.tokens.len() == (EXPECTED_BOOT_CONTEXTS.len() + EXPECTED_APP_CONTEXTS.len()) {
+        if self.tokens.len() == (EXPECTED_BOOT_CONTEXTS.len() + EXPECTED_APP_CONTEXTS.len() + self.extra_names.len()) {
             true
         } else {
             // throw a bone to the dev who has to debug this error. This typically only triggers after a major
@@ -47,21 +45,21 @@ impl<'a> TokenManager {
     }
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
         log::trace!("claiming token {}", name);
-        // first check if the name is valid if the app loader isn't enabled
-	#[cfg(not(feature = "app_loader"))]
-	{
-            let mut found = false;
-            if EXPECTED_BOOT_CONTEXTS.iter().find(|&&context| context == name).is_some() {
-		found = true;
-            }
-            if EXPECTED_APP_CONTEXTS.iter().find(|&&context| context == name).is_some() {
-		found = true;
-            }
-            if !found {
-		log::error!("Server {} is not pre-registered in gam/lib.rs/EXPECTED_BOOT_CONTEXTS or apps.rs/EXPECTED_APP_CONTEXTS. Did you forget to register it?", name);
-		return None
-            }
+        // first check if the name is valid
+        let mut found = false;
+        if EXPECTED_BOOT_CONTEXTS.iter().find(|&&context| context == name).is_some() {
+            found = true;
+        }
+        if EXPECTED_APP_CONTEXTS.iter().find(|&&context| context == name).is_some() {
+            found = true;
+        }
+	if self.extra_names.iter().find(|&context| context == name).is_some() {
+	    found = true;
 	}
+        if !found {
+            log::error!("Server {} is not pre-registered in gam/lib.rs/EXPECTED_BOOT_CONTEXTS or apps.rs/EXPECTED_APP_CONTEXTS. Did you forget to register it?", name);
+            return None
+        }
         // now check if it hasn't already been registered
         if self.tokens.iter().find(|&namedtoken| namedtoken.name == name).is_some() {
             log::error!("Attempt to re-register a UX context: {}", name);
@@ -96,5 +94,17 @@ impl<'a> TokenManager {
             }
         }
         None
+    }
+    /// Register a new name that can then claim a token. Note that only pre-registered applications are allowed to do this.
+    pub(crate) fn register_name(&mut self, name: &str, auth_token: &[u32; 4]) {
+	if let Some(registrant) = self.lookup_name(auth_token) {
+	    if EXPECTED_BOOT_CONTEXTS.iter().find(|&&context| context == registrant).is_some() || EXPECTED_APP_CONTEXTS.iter().find(|&&context| context == registrant).is_some() {
+		self.extra_names.push(name.to_string());
+	    } else {
+		log::error!("`{}' does not have permission to register a new name because it is not pre-registered", registrant);
+	    }
+	} else {
+	    log::error!("Token {:?} does not correspond with a name", auth_token);
+	}
     }
 }

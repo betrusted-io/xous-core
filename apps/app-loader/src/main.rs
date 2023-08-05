@@ -51,7 +51,7 @@ fn main() -> ! {
     let mut apps = Vec::new();
 
     // start off by adding hello world
-    let buf = Buffer::into_buf(LoadAppRequest { name: xous_ipc::String::from_str("hello") }).expect("Couldn't create buffer");
+    let buf = Buffer::into_buf(LoadAppRequest { name: xous_ipc::String::from_str("Hello") }).expect("Couldn't create buffer");
     buf.send(self_conn,
 	     Opcode::LoadApp.to_u32().unwrap()).expect("Couldn't send message");
 
@@ -75,6 +75,9 @@ fn main() -> ! {
 		)
 		    .unwrap();
 		log::info!("Result of ping: {:?}", result);
+
+		// add its name to GAM
+		gam.register_name(load_app_req.name.to_str(), auth).expect("Couldn't register name");
 
 		// load the app from the binary file
 		let bin = include_bytes!("../../../target/riscv32imac-unknown-xous-elf/debug/hello");

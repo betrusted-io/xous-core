@@ -668,6 +668,11 @@ fn wrapped_main() -> ! {
                 context_mgr.allow_mainmenu();
                 xous::return_scalar(msg.sender, 0).ok();
             }
+	    Some(Opcode::RegisterName) => {
+		let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+		let registration = buffer.to_original::<NameRegistration, _>().unwrap();
+		context_mgr.register_name(registration.name.to_str(), &registration.auth_token);
+	    }
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }
