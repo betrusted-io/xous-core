@@ -565,7 +565,7 @@ fn wrapped_main() -> ! {
                         // set before the leaving state due to interior-mutability issues (see the block under the debug statement
                         // titled "resolving visibility rules"). The fix is to simply not issue a context switch if it's the same app.
                         // It saves CPU thrashing and also works around this problem. (see issue #145)
-                        let authorized_switchers = vec![MAIN_MENU_NAME, ROOTKEY_MODAL_NAME, gam::STATUS_BAR_NAME];
+                        let authorized_switchers = [&[MAIN_MENU_NAME, ROOTKEY_MODAL_NAME, gam::STATUS_BAR_NAME], gam::EXPECTED_APP_CONTEXTS].concat().to_vec();
                         for switchers in authorized_switchers {
                             if let Some(auth_token) = context_mgr.find_app_token_by_name(switchers) {
                                 if auth_token == switchapp.token {

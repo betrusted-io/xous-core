@@ -87,7 +87,7 @@ fn main() -> ! {
 		xous::send_message(spawn.cid, xous::Message::new_lend(1, buf, None, None)).expect("Couldn't send a message to spawn");
 
 		menu.add_item(MenuItem { name: load_app_req.name,
-					 action_conn: Some(self_conn),
+ 					 action_conn: Some(self_conn),
 					 action_opcode: Opcode::DispatchApp.to_u32().unwrap(),
 					 action_payload: gam::MenuPayload::Scalar([apps.len().try_into().unwrap(), 0, 0, 0]),
 					 close_on_select: true });
@@ -98,6 +98,7 @@ fn main() -> ! {
 		let index = msg.body.scalar_message().expect("Not a scalar").arg1;
 		if index < apps.len() {
 		    let name: xous_ipc::String<64> = apps[index];
+		    log::info!("Switching to app `{}'", name);
 		    gam.switch_to_app(name.as_ref(), auth).expect(&format!("Could not dispatch app `{}'", name));
 		} else {
 		    panic!("Unrecognized app index");
