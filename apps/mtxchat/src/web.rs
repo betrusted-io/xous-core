@@ -105,7 +105,7 @@ pub fn put_string_auth(
 
 // --------------------------------
 
-pub fn whoami(server: &str, token: &str) -> bool {
+pub fn whoami(server: &str, token: &str) -> Option<String> {
     let mut url = String::from(server);
     url.push_str("/_matrix/client/r0/account/whoami");
     if let Some(value) = handle_response(get_json_auth(&url, token)) {
@@ -115,12 +115,11 @@ pub fn whoami(server: &str, token: &str) -> bool {
             }
             if let Some(Value::String(user_id)) = body.get("user_id") {
                 log::info!("user_id = {}", user_id);
+                return Some(user_id.to_string());
             }
         }
-        true
-    } else {
-        false
     }
+    None
 }
 
 pub fn get_login_type(server: &str) -> bool {

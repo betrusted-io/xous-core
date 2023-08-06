@@ -72,9 +72,11 @@ fn wrapped_main() -> ! {
                         Some(Event::Focus) => {
                             while !mtxchat.login() {
                                 modals
-                                    .show_notification(t!("mtxchat.login.failed", locales::LANG), None)
+                                    .show_notification(
+                                        t!("mtxchat.login.failed", locales::LANG),
+                                        None,
+                                    )
                                     .expect("notification failed");
-                                mtxchat.login_modal();
                             }
                             while !mtxchat.get_room_id() {
                                 modals

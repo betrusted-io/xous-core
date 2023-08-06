@@ -245,17 +245,29 @@ impl<'a> MtxChat<'a> {
         .expect("failed to write server");
         if self.token.len() > 0 {
             if let Some(user_id) = web::whoami(&server, &self.token) {
-                self.user_id = user_id;
+                let i = match user_id.find('@') {
+                    Some(index) => { index + 1 },
+                    None => { 0 },
+                };
+                let j = match user_id.find(':') {
+                    Some(index) => { index },
+                    None => { user_id.len() },
+                };
+                self.set(USER_ID_KEY, &user_id)
+                    .expect("failed to save user id");
+                self.set(USER_NAME_KEY, &user_id[i..j])
+                    .expect("failed to save user name");
+                self.set(USER_DOMAIN_KEY, &user_id[j+1..])
+                    .expect("failed to save user domain");
                 self.logged_in = true;
             }
         }
         if !self.logged_in {
             if web::get_login_type(&server) {
-                let user_id = self.get_or(USER_ID_KEY, USER_ID_KEY);
+                self.login_modal();
                 let password = self.get_or(PASSWORD_KEY, EMPTY);
-                if let Some(new_token) = web::authenticate_user(&server, &user_id, &password) {
+                if let Some(new_token) = web::authenticate_user(&server, &self.user_id, &password) {
                     self.set_debug(TOKEN_KEY, &new_token);
-                    self.user_id = user_id;
                     self.logged_in = true;
                 } else {
                     log::info!(
@@ -275,11 +287,16 @@ impl<'a> MtxChat<'a> {
 
     pub fn login_modal(&mut self) {
         const HIDE: &str = "*****";
-        let mut builder = self.modals.alert_builder(t!("mtxchat.login.title", locales::LANG));
+        let mut builder = self
+            .modals
+            .alert_builder(t!("mtxchat.login.title", locales::LANG));
         let builder = match self.get(USER_NAME_KEY) {
             // TODO add TextValidationFn
             Ok(Some(user)) => builder.field_placeholder_persist(Some(user), None),
-            _ => builder.field(Some(t!("mtxchat.user_name", locales::LANG).to_string()), None),
+            _ => builder.field(
+                Some(t!("mtxchat.user_name", locales::LANG).to_string()),
+                None,
+            ),
         };
         let builder = match self.get(USER_DOMAIN_KEY) {
             // TODO add TextValidationFn
@@ -288,7 +305,10 @@ impl<'a> MtxChat<'a> {
         };
         let builder = match self.get(PASSWORD_KEY) {
             Ok(Some(pwd)) => builder.field_placeholder_persist(Some(HIDE.to_string()), None),
-            _ => builder.field(Some(t!("mtxchat.password", locales::LANG).to_string()), None),
+            _ => builder.field(
+                Some(t!("mtxchat.password", locales::LANG).to_string()),
+                None,
+            ),
         };
         if let Ok(payloads) = builder.build() {
             self.unset_debug(TOKEN_KEY);
@@ -307,7 +327,8 @@ impl<'a> MtxChat<'a> {
                 }
             }
             let mut user_id = String::new();
-            write!(user_id, "@{}:{}", self.user_name, self.user_domain);
+            write!(user_id, "@{}:{}", self.user_name, self.user_domain)
+                .expect("failed to write user_id");
             self.set(USER_ID_KEY, &user_id)
                 .expect("failed to save user");
         }

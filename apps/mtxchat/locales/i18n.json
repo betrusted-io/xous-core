@@ -126,8 +126,8 @@
         "zh": "WARNING: pddb not mounted *EN*"
     },
     "mtxchat.login.title": {
-        "en": "Matrix /login",
-        "en-tts": "Matrix /login"
+        "en": "Matrix login",
+        "en-tts": "Matrix login"
     },
     "mtxchat.password": {
         "en": "password",
