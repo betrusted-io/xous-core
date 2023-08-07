@@ -662,6 +662,10 @@ def main():
         print("Precursor device not found. Please check the USB cable and ensure that `usb debug` was run in Shellchat")
         exit(1)
 
+    if args.config:
+        print("--config selected, quitting.")
+        exit(0)
+
     # now try to download all the artifacts and check their versions
     # this list should visit kernels in order from newest to oldest.
     URL_STABLE = 'https://ci.betrusted.io/releases/latest/'
