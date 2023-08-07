@@ -136,9 +136,13 @@
         "ja": "password *EN*",
         "zh": "password *EN*"
     },
+    "mtxchat.room": {
+        "en": "room",
+        "en-tts": "room"
+    },
     "mtxchat.room.title": {
-        "en": "Matrix /room",
-        "en-tts": "Matrix /room"
+        "en": "Matrix room",
+        "en-tts": "Matrix room"
     },
     "mtxchat.room.name": {
         "en": "room name",

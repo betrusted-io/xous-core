@@ -80,9 +80,11 @@ fn wrapped_main() -> ! {
                             }
                             while !mtxchat.get_room_id() {
                                 modals
-                                    .show_notification(t!("mtxchat.roomid.failed", locales::LANG), None)
+                                    .show_notification(
+                                        t!("mtxchat.roomid.failed", locales::LANG),
+                                        None,
+                                    )
                                     .expect("notification failed");
-                                mtxchat.room_modal();
                             }
                             mtxchat.redraw();
                             mtxchat.listen();
@@ -91,6 +93,7 @@ fn wrapped_main() -> ! {
                     }
                 })
             }
+            Some(MtxchatOp::Menu) => {
             Some(MtxchatOp::Post) => {
                 log::info!("TODO Post to Matrix server");
             }

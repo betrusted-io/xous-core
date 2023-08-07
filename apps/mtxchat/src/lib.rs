@@ -344,28 +344,13 @@ impl<'a> MtxChat<'a> {
     pub fn get_room_id(&mut self) -> bool {
         if self.room_id.len() > 0 {
             true
-        } else if self.room_name.len() == 0 {
-            false
-        } else if self.room_domain.len() == 0 {
-            false
         } else {
-            let name = self.get_or(ROOM_NAME_KEY, EMPTY);
-            let domain = self.get_or(ROOM_DOMAIN_KEY, EMPTY);
+            self.room_modal();
             let mut room = String::new();
-            write!(
-                room,
-                "#{}:{}",
-                &name,
-                &self.get_or(ROOM_DOMAIN_KEY, DOMAIN_MATRIX)
-            )
+            write!(room, "#{}:{}", &self.room_name, &self.room_domain)
             .expect("failed to write room");
             let mut server = String::new();
-            write!(
-                server,
-                "{}{}",
-                HTTPS,
-                &self.get_or(USER_DOMAIN_KEY, DOMAIN_MATRIX)
-            )
+            write!(server, "{}{}", HTTPS, &self.user_domain)
             .expect("failed to write server");
             if let Some(room_id) = web::get_room_id(&server, &room, &self.token) {
                 self.set_debug(ROOM_ID_KEY, &room_id);
@@ -381,10 +366,18 @@ impl<'a> MtxChat<'a> {
     pub fn redraw(&self) {
         self.chat.redraw();
     }
+
+    pub fn room_modal(&mut self) {
+        let mut builder = self
+            .modals
+            .alert_builder(t!("mtxchat.room.title", locales::LANG));
         let builder = match self.get(ROOM_NAME_KEY) {
             // TODO add TextValidationFn
             Ok(Some(room)) => builder.field_placeholder_persist(Some(room), None),
-            _ => builder.field(Some(t!("mtxchat.room.name", locales::LANG).to_string()), None),
+            _ => builder.field(
+                Some(t!("mtxchat.room.name", locales::LANG).to_string()),
+                None,
+            ),
         };
         let builder = match self.get(ROOM_DOMAIN_KEY) {
             // TODO add TextValidationFn
