@@ -1096,6 +1096,7 @@ fn wrapped_main() -> ! {
                         if let Err(e) = result {
                             xous::return_scalar(msg.sender, e as usize)
                         } else {
+                            fd_mapping.remove(&msg.sender.pid());
                             xous::return_scalar2(msg.sender, 0, 0)
                         }.ok();
                     }

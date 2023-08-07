@@ -517,7 +517,6 @@ pub(crate) fn close_key(
             return Err(crate::PddbRetcode::UnexpectedEof);
         }
     };
-    core::mem::drop(file);
 
     // If this SID is unused, close the connection.
     if let Some(cid) = conn {
