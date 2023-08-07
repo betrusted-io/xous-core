@@ -252,11 +252,18 @@
         "zh": "添加新项目"
     },
     "vault.menu_autotype": {
-        "en": "Autotype",
-        "en-tts": "Autotype",
-        "fr": "Autotype",
-        "ja": "自動的に入力",
-        "zh": "自动输入"
+        "en": "Autotype password",
+        "en-tts": "Autotype password",
+        "fr": "Autotype mot de passe",
+        "ja": "パスワードの自動入力",
+        "zh": "自动输入密码"
+    },
+    "vault.menu_autotype_username": {
+        "en": "Autotype username",
+        "en-tts": "Autotype username",
+        "fr": "Autotype nom d'utilisateur",
+        "ja": "ユーザー名を自動的に入力",
+        "zh": "自动输入用户名"
     },
     "vault.menu_change_font": {
         "en": "Change list font",
