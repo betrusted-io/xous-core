@@ -12,7 +12,7 @@ pub struct MailboxClient {
 }
 
 impl MailboxClient {
-    pub fn send(&mut self, data: &[u32]) {
+    pub fn send(&mut self, data: &[u32], force_overflow: bool) {
         // defer aborts until this interaction is done
         self.csr_irq.wo(utra::mb_client::EV_ENABLE,
             self.csr_irq.r(utra::mb_client::EV_ENABLE) &
@@ -24,6 +24,18 @@ impl MailboxClient {
                 // busy-wait
             }
             self.csr.wfo(utra::mb_client::WDATA_WDATA, d);
+        }
+        if data.len() == 1024 && force_overflow {
+            // check that the free slot indicator stays low on a max-sized transfer
+            // you have to shove *two* extra pieces of data in because the first word falls through to the
+            // read register, effectively expanding the FIFO size by 1, and the last word hangs out in
+            // the pending write register.
+            self.csr.wfo(utra::mb_client::WDATA_WDATA, 0xfeed_face);
+            self.csr.wfo(utra::mb_client::WDATA_WDATA, 0xdead_beef);
+            log::info!("max-length write overflow test result: {}", self.csr.rf(utra::mb_client::STATUS_TX_FREE));
+        } else {
+            // this should indicate free at this point
+            assert!(self.csr.rf(utra::mb_client::STATUS_TX_FREE) == 1);
         }
         self.csr.wfo(utra::mb_client::DONE_DONE, 1);
         // re-enable aborts
@@ -85,9 +97,13 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
     let mb_client = unsafe { &mut *(arg as *mut MailboxClient) };
 
     let pending = mb_client.csr_irq.r(utra::mb_client::EV_PENDING);
+    mb_client.csr_irq
+        .wo(utra::mb_client::EV_PENDING, mb_client.csr_irq.r(utra::mb_client::EV_PENDING));
+
     if pending & mb_client.csr_irq.ms(utra::mb_client::EV_PENDING_ERROR, 1) != 0 {
+        let status = mb_client.csr.r(utra::mb_client::STATUS); // this clears the error
         xous::try_send_message(mb_client.cid, xous::Message::new_scalar(
-            Opcode::ProtocolError.to_usize().unwrap(), pending as usize, 0, 0, 0)
+            Opcode::ProtocolError.to_usize().unwrap(), pending as usize, status as usize, 0, 0)
         ).ok();
     }
     if pending & mb_client.csr_irq.ms(utra::mb_client::EV_PENDING_ABORT_INIT, 1) != 0 {
@@ -106,9 +122,6 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
             Opcode::Incoming.to_usize().unwrap(), pending as usize, 0, 0, 0)
         ).ok();
     }
-
-    mb_client.csr_irq
-        .wo(utra::mb_client::EV_PENDING, mb_client.csr_irq.r(utra::mb_client::EV_PENDING));
 }
 
 fn main() {
@@ -123,7 +136,7 @@ fn main() {
         #[cfg(not(feature="ext"))]
         xous::MemoryAddress::new(utra::mb_client::HW_MB_CLIENT_BASE),
         #[cfg(feature="ext")]
-        xous::MemoryAddress::new(utra::mb_ext::HW_MB_EXT_BASE),
+        xous::MemoryAddress::new(utralib::HW_MBOX_EXT_MEM), // replace with utra::mb_ext::HW_MB_EXT_BASE after final integration
         None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -167,6 +180,7 @@ fn main() {
     let mut msg_opt = None;
     let mut return_type = 0;
     let mut test_data = [0u32; 1024];
+    let mut expect_error = false;
 
     loop {
         xous::reply_and_receive_next_legacy(client_sid, &mut msg_opt, &mut return_type)
@@ -193,7 +207,13 @@ fn main() {
                     if test_seq == 8 { // abort on case #8
                         mb_client.abort();
                     } else {
-                        mb_client.send(&test_data[..len]);
+                        if test_seq == 4 {
+                            // on case #4 force an overflow to check overflow mechanisms are working
+                            expect_error = true;
+                            mb_client.send(&test_data[..len], true);
+                        } else {
+                            mb_client.send(&test_data[..len], false);
+                        }
                     }
                 } else {
                     log::error!("Wrong message type for RunTest");
@@ -210,8 +230,12 @@ fn main() {
             }
             Opcode::ProtocolError => {
                 if let Some(scalar) = msg.body.scalar_message() {
-                    log::error!("Protocol error received: {:x}, aborting test", scalar.arg1);
-                    break;
+                    if !expect_error {
+                        log::error!("Protocol error received: {:x}, {:x}, aborting test", scalar.arg1, scalar.arg2);
+                        break;
+                    } else {
+                        log::info!("Expected protocol error received: {:x}, {:x}", scalar.arg1, scalar.arg2);
+                    }
                 } else {
                     log::error!("Wrong message type for ProtocolError; aborting test");
                     break;

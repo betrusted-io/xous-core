@@ -60,7 +60,7 @@ impl Mailbox {
             *r = self.csr.rf(utra::mailbox::RDATA_RDATA);
         }
         // throw away any excess words to avoid breaking the protocol
-        for _ in 0..(rx_words_checked - rx_words as usize) {
+        for _ in 0..(rx_words as usize - rx_words_checked) {
             let _ = self.csr.rf(utra::mailbox::RDATA_RDATA);
         }
         // re-enable aborts
@@ -91,9 +91,13 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
     let mbox = unsafe { &mut *(arg as *mut Mailbox) };
 
     let pending = mbox.csr.r(utra::mailbox::EV_PENDING);
+    mbox.csr
+        .wo(utra::mailbox::EV_PENDING, pending);
+
     if pending & mbox.csr.ms(utra::mailbox::EV_PENDING_ERROR, 1) != 0 {
+        let status = mbox.csr.r(utra::mb_client::STATUS); // this clears the error
         xous::try_send_message(mbox.cid, xous::Message::new_scalar(
-            Opcode::ProtocolError.to_usize().unwrap(), pending as usize, 0, 0, 0)
+            Opcode::ProtocolError.to_usize().unwrap(), pending as usize, status as usize, 0, 0)
         ).ok();
     }
     if pending & mbox.csr.ms(utra::mailbox::EV_PENDING_ABORT_INIT, 1) != 0 {
@@ -112,9 +116,6 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
             Opcode::Incoming.to_usize().unwrap(), pending as usize, 0, 0, 0)
         ).ok();
     }
-
-    mbox.csr
-        .wo(utra::mailbox::EV_PENDING, pending);
 }
 
 fn main() {
@@ -174,7 +175,7 @@ fn main() {
     // 8. write 4 words, transmit. receiver should abort
     // 9. 3-word test
 
-    core_csr.wfo(utra::main::REPORT_REPORT, 0x600d_c0de);
+    log::info!("starting mbox test");
     let mut msg_opt = None;
     let mut return_type = 0;
     xous::send_message(mailbox.cid, xous::Message::new_scalar(
@@ -186,6 +187,7 @@ fn main() {
     let mut generator: u32 = 0x1317_0000;
     let mut abort_init_seen = false;
     let mut abort_done_seen = false;
+    let mut expect_error = false; // when testing overflows explicitly
     loop {
         xous::reply_and_receive_next_legacy(mbox_sid, &mut msg_opt, &mut return_type)
             .unwrap();
@@ -195,7 +197,8 @@ fn main() {
         {
             Opcode::RunTest => {
                 if let Some(scalar) = msg.body.scalar_message() {
-                    core_csr.wfo(utra::main::REPORT_REPORT, scalar.arg1 as u32); // indicate the test start
+                    // core_csr.wfo(utra::main::REPORT_REPORT, scalar.arg1 as u32); // indicate the test start
+                    log::info!("test case {}", scalar.arg1);
                     match scalar.arg1 {
                         1 => {
                             // format of test is:
@@ -222,9 +225,11 @@ fn main() {
                                 *t = generator;
                                 generator += 1;
                             }
+                            expect_error = true;
                             unsafe{mailbox.send_unguarded(&test_array[0..1024])};
                         }
                         5 => {
+                            expect_error = false;
                             test_array[0] = 0x1_0005; // 1 word sent, test sequence 5
                             unsafe{mailbox.send_unguarded(&test_array[0..1])};
                         }
@@ -277,6 +282,13 @@ fn main() {
                             unsafe{mailbox.send_unguarded(&test_array[0..3])};
                         }
                         10 => {
+                            for (i, d) in test_array.iter_mut().enumerate() {
+                                *d = i as u32;
+                            }
+                            test_array[0] = 0x0400_000A; // 1024 words sent, test sequence 10
+                            unsafe{mailbox.send_unguarded(&test_array)};
+                        }
+                        11 => {
                             log::info!("Last test done");
                             core_csr.wfo(utra::main::REPORT_REPORT, 0x600d_000a);
                             break;
@@ -299,6 +311,7 @@ fn main() {
                     let count = mailbox.get(&mut ret_array);
                     if check_results(&mut core_csr, &test_array, &ret_array, count) {
                         let last_seq_no = test_array[0] & 0xffff;
+                        log::info!("Test {} passed", last_seq_no);
                         xous::send_message(mailbox.cid, xous::Message::new_scalar(
                             Opcode::RunTest.to_usize().unwrap(), last_seq_no as usize + 1, 0, 0, 0)
                         ).ok();
@@ -333,8 +346,12 @@ fn main() {
             }
             Opcode::ProtocolError => {
                 if let Some(scalar) = msg.body.scalar_message() {
-                    log::error!("Protocol error received: {:x}, aborting test", scalar.arg1);
-                    break;
+                    if !expect_error {
+                        log::error!("Protocol error received: {:x}, {:x}, aborting test", scalar.arg1, scalar.arg2);
+                        break;
+                    } else {
+                        log::info!("Expected protocol error received: {:x}, {:x}", scalar.arg1, scalar.arg2);
+                    }
                 } else {
                     log::error!("Wrong message type for ProtocolError; aborting test");
                     break;
@@ -354,11 +371,11 @@ fn main() {
 }
 
 
-fn check_results(core_csr: &mut CSR::<u32>, test_array: &[u32], ret_array: &[u32], count: usize) -> bool {
+fn check_results(_core_csr: &mut CSR::<u32>, test_array: &[u32], ret_array: &[u32], count: usize) -> bool {
     let test_len = (test_array[0] >> 16) as usize;
     if test_len > test_array.len() || test_len > ret_array.len() || test_len != count {
         log::error!("Test length is incorrect: expected {:x}, got {:x}", test_len, count);
-        core_csr.wfo(utra::main::REPORT_REPORT, 0xdead_c0de);
+        // core_csr.wfo(utra::main::REPORT_REPORT, 0xdead_c0de);
         return false;
     }
     let mut errcnt = 0;
@@ -371,10 +388,12 @@ fn check_results(core_csr: &mut CSR::<u32>, test_array: &[u32], ret_array: &[u32
         }
     }
     if errcnt == 0 {
-        core_csr.wfo(utra::main::REPORT_REPORT, 0x600d_0000 | test_len as u32);
+        // core_csr.wfo(utra::main::REPORT_REPORT, 0x600d_0000 | test_len as u32);
+        log::info!("Test passed with length {}", test_len);
         true
     } else {
-        core_csr.wfo(utra::main::REPORT_REPORT, 0xdead_0000 | test_len as u32);
+        // core_csr.wfo(utra::main::REPORT_REPORT, 0xdead_0000 | test_len as u32);
+        log::error!("Test failed with length {}", test_len);
         false
     }
 }
