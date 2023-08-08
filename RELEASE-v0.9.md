@@ -400,7 +400,13 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Issue #341 closed (support open wifi networks) - requires EC update.
 - Rust 1.71.0 support - @xobs discovered that Rust 1.71.0 now shifts the address around of hardware management structures such that when we bind them to interrupt handlers, the final address of the interrupt handler is different from the address we see inside the `new()` function. It's actually allowed to do this. @xobs has created the "deferred-init + Box" pattern to harden against this. Deferred-init refers to binding the address of the hardware structure to the interrupt handler *after* `new()` has returned. This ensures that at least all the optimization that may happen inside `new()` are finalized. Additionally, wrapping the result of `new()` inside `Box()` ensures that the resulting structure is put on the heap. Because `Box` also implements `Pin`, the compiler won't muck with the address any further and should prevent future incompatibilities with Rust. The only place this pattern could not be applied is in the USB stack, because the USB crate we use expects to have an un-Box'd hardware management structure. However, deferred-init alone seems to be good enough, at least for now, to allow this to work.
 - Fix (hopefully for real this time?) a bug in the "flush cache" instruction for Vex that affected specifically virtual memory configurations like ours. This will require a firmware update.
-- More cramium SoC target integration and libraries
+- More cramium SoC target integration and libraries; support multi-SVD targets in `utralib`
+- Add menu option in `vault` to type usernames (in addition to passwords)
+- Fix minor issue in precursorupdater where `--config` argument would not quit and run an update instead
+- Fix issue in `ProcessStartup` where `repr(C)` was missing, thanks to @vihaanjim for finding that subtle bug!
+
+## New in v0.9.15
+
 
 ## Roadmap
 - Lots of testing and bug fixes
