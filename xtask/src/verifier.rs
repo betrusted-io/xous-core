@@ -24,8 +24,8 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     // publish the packages, rather than something nefarious has happened.
     let warn_pkgs = [
         // this set is only updated if the utralib changes
-        "utralib@0.1.22",
-        "svd2utra@0.1.20",
+        "utralib@0.1.23",
+        "svd2utra@0.1.21",
     ];
     for pkg in check_pkgs {
         verify(pkg.into(), true)?;
