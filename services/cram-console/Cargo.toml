@@ -6,11 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-utralib = {version = "0.1.22", optional = true, default-features = false }
-xous-api-names = "0.9.47"
-xous-api-ticktimer = "0.9.45"
-xous = "0.9.49"
-log-server = {package = "xous-api-log", version = "0.1.45"}
+utralib = {version = "0.1.23", optional = true, default-features = false }
+xous-api-names = "0.9.48"
+xous-api-ticktimer = "0.9.46"
+xous = "0.9.50"
+log-server = {package = "xous-api-log", version = "0.1.46"}
 log = "0.4.14"
 xous-pio = {path = "../../libs/xous-pio", optional = true}
 xous-pl230 = {path = "../../libs/xous-pl230", optional = true}

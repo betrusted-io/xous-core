@@ -7,16 +7,16 @@ description = "Curve25519 Engine"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.49"
-log-server = { package = "xous-api-log", version = "0.1.45" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.45" }
-xous-names = { package = "xous-api-names", version = "0.9.47" }
+xous = "0.9.50"
+log-server = { package = "xous-api-log", version = "0.1.46" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.46" }
+xous-names = { package = "xous-api-names", version = "0.9.48" }
 log = "0.4.14"
-susres = {package = "xous-api-susres", version = "0.9.45"}
+susres = {package = "xous-api-susres", version = "0.9.46"}
 llio =  {path = "../llio"} # temporary for testing some power stuff
-utralib = { version = "0.1.22", optional = true, default-features = false }
+utralib = { version = "0.1.23", optional = true, default-features = false }
 
-xous-ipc = "0.9.49"
+xous-ipc = "0.9.50"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
