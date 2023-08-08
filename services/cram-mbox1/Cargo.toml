@@ -17,6 +17,8 @@ num-traits = {version = "0.2.14", default-features = false}
 
 [features]
 "cramium" = []
+"cramium-soc" = []
+"cramium-fpga" = []
 "hwsim" = []
 "ext" = [] # must match setting in cram-mbox2
 default = ["cramium", "ext"]

@@ -126,6 +126,7 @@ fn main() {
     let mbox_sid = xns.register_name("_mbox_", None).expect("can't register server");
     let mbox_cid = xous::connect(mbox_sid).unwrap();
 
+    #[cfg(feature="cramium-fpga")]
     let csr = xous::syscall::map_memory(
         xous::MemoryAddress::new(utra::main::HW_MAIN_BASE),
         None,
@@ -133,8 +134,10 @@ fn main() {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map Core Control CSR range");
+    #[cfg(feature="cramium-fpga")]
     let mut core_csr = CSR::new(csr.as_mut_ptr() as *mut u32);
 
+    #[cfg(feature="cramium-fpga")]
     core_csr.wfo(utra::main::REPORT_REPORT, 0x600d_0000);
 
     let mbox_csr = xous::syscall::map_memory(
@@ -245,6 +248,7 @@ fn main() {
                         7 => {
                             if !abort_done_seen {
                                 log::error!("We did not see an abort ack");
+                                #[cfg(feature="cramium-fpga")]
                                 core_csr.wfo(utra::main::REPORT_REPORT, 0xdead_0007);
                                 break;
                             }
@@ -290,6 +294,7 @@ fn main() {
                         }
                         11 => {
                             log::info!("Last test done");
+                            #[cfg(feature="cramium-fpga")]
                             core_csr.wfo(utra::main::REPORT_REPORT, 0x600d_000a);
                             break;
                         }
@@ -309,7 +314,7 @@ fn main() {
                 }
                 if let Some(_scalar) = msg.body.scalar_message() {
                     let count = mailbox.get(&mut ret_array);
-                    if check_results(&mut core_csr, &test_array, &ret_array, count) {
+                    if check_results(&test_array, &ret_array, count) {
                         let last_seq_no = test_array[0] & 0xffff;
                         log::info!("Test {} passed", last_seq_no);
                         xous::send_message(mailbox.cid, xous::Message::new_scalar(
@@ -366,16 +371,17 @@ fn main() {
         }
     }
 
+    #[cfg(feature="cramium-fpga")]
     core_csr.wfo(utra::main::SUCCESS_SUCCESS, 1);
+    #[cfg(feature="cramium-fpga")]
     core_csr.wfo(utra::main::DONE_DONE, 1); // this should stop the simulation
 }
 
 
-fn check_results(_core_csr: &mut CSR::<u32>, test_array: &[u32], ret_array: &[u32], count: usize) -> bool {
+fn check_results(test_array: &[u32], ret_array: &[u32], count: usize) -> bool {
     let test_len = (test_array[0] >> 16) as usize;
     if test_len > test_array.len() || test_len > ret_array.len() || test_len != count {
         log::error!("Test length is incorrect: expected {:x}, got {:x}", test_len, count);
-        // core_csr.wfo(utra::main::REPORT_REPORT, 0xdead_c0de);
         return false;
     }
     let mut errcnt = 0;
@@ -388,11 +394,9 @@ fn check_results(_core_csr: &mut CSR::<u32>, test_array: &[u32], ret_array: &[u3
         }
     }
     if errcnt == 0 {
-        // core_csr.wfo(utra::main::REPORT_REPORT, 0x600d_0000 | test_len as u32);
         log::info!("Test passed with length {}", test_len);
         true
     } else {
-        // core_csr.wfo(utra::main::REPORT_REPORT, 0xdead_0000 | test_len as u32);
         log::error!("Test failed with length {}", test_len);
         false
     }
