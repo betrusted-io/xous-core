@@ -5484,6 +5484,18 @@
             </addressBlock>
         </peripheral>
         <peripheral>
+            <name>UDMA_ADC</name>
+            <baseAddress>0x50114000</baseAddress>
+            <groupName>UDMA_ADC</groupName>
+            <registers>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x4</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
             <name>AES</name>
             <baseAddress>0x4002D000</baseAddress>
             <groupName>AES</groupName>
@@ -5815,6 +5827,21 @@ bit position to clear the flag]]></description>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
                             <description><![CDATA[cr_opt.ifstart read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_OPT3</name>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_opt3</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_opt3 read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
@@ -6704,229 +6731,84 @@ position to clear the flag]]></description>
             <groupName>TRNG</groupName>
             <registers>
                 <register>
-                    <name>SFR_CRFUNC</name>
+                    <name>SFR_CRSRC</name>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>cr_func</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
+                            <name>sfr_crsrc</name>
+                            <msb>11</msb>
+                            <bitRange>[11:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[cr_func read/write control register]]></description>
+                            <description><![CDATA[sfr_crsrc read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_AR</name>
+                    <name>SFR_AR_STOP</name>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>start</name>
+                            <name>sfr_ar_stop</name>
                             <msb>31</msb>
                             <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[start performs action on write of value: 0x5a]]></description>
+                            <description><![CDATA[sfr_ar_stop performs action on write of value: 0xa5]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_SRMFSM</name>
+                    <name>SFR_PP</name>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>mfsm</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
+                            <name>sfr_pp</name>
+                            <msb>16</msb>
+                            <bitRange>[16:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[mfsm read only status register]]></description>
-                        </field>
-                        <field>
-                            <name>modinvready</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[modinvready read only status register]]></description>
+                            <description><![CDATA[sfr_pp read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_FR</name>
+                    <name>SFR_OPT</name>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>mfsm_done</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
+                            <name>sfr_opt</name>
+                            <msb>16</msb>
+                            <bitRange>[16:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[mfsm_done flag register. `1` means event happened, write back `1` in respective
-bit position to clear the flag]]></description>
-                        </field>
-                        <field>
-                            <name>pcore_done</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[pcore_done flag register. `1` means event happened, write back `1` in respective
-bit position to clear the flag]]></description>
-                        </field>
-                        <field>
-                            <name>chnlo_done</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[chnlo_done flag register. `1` means event happened, write back `1` in respective
-bit position to clear the flag]]></description>
-                        </field>
-                        <field>
-                            <name>chnli_done</name>
-                            <msb>3</msb>
-                            <bitRange>[3:3]</bitRange>
-                            <lsb>3</lsb>
-                            <description><![CDATA[chnli_done flag register. `1` means event happened, write back `1` in respective
-bit position to clear the flag]]></description>
-                        </field>
-                        <field>
-                            <name>chnlx_done</name>
-                            <msb>4</msb>
-                            <bitRange>[4:4]</bitRange>
-                            <lsb>4</lsb>
-                            <description><![CDATA[chnlx_done flag register. `1` means event happened, write back `1` in respective
-bit position to clear the flag]]></description>
+                            <description><![CDATA[sfr_opt read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_OPTNW</name>
+                    <name>SFR_SR</name>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>opt_nw</name>
-                            <msb>12</msb>
-                            <bitRange>[12:0]</bitRange>
+                            <name>sr_rng</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[opt_nw read/write control register]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_OPTEW</name>
-                    <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>opt_ew</name>
-                            <msb>12</msb>
-                            <bitRange>[12:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[opt_ew read/write control register]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_OPTMASK</name>
-                    <addressOffset>0x0020</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>opt_mask</name>
-                            <msb>15</msb>
-                            <bitRange>[15:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[opt_mask read/write control register]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_SEGPTR_CR_SEGPTRSTART0</name>
-                    <addressOffset>0x0030</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>cr_segptrstart0</name>
-                            <msb>11</msb>
-                            <bitRange>[11:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[cr_segptrstart read/write control register]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_SEGPTR_CR_SEGPTRSTART1</name>
-                    <addressOffset>0x0034</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>cr_segptrstart1</name>
-                            <msb>11</msb>
-                            <bitRange>[11:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[cr_segptrstart read/write control register]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_SEGPTR_CR_SEGPTRSTART2</name>
-                    <addressOffset>0x0038</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>cr_segptrstart2</name>
-                            <msb>11</msb>
-                            <bitRange>[11:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[cr_segptrstart read/write control register]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_SEGPTR_CR_SEGPTRSTART3</name>
-                    <addressOffset>0x003c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>cr_segptrstart3</name>
-                            <msb>11</msb>
-                            <bitRange>[11:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[cr_segptrstart read/write control register]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_SEGPTR_CR_SEGPTRSTART4</name>
-                    <addressOffset>0x0040</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>cr_segptrstart4</name>
-                            <msb>11</msb>
-                            <bitRange>[11:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[cr_segptrstart read/write control register]]></description>
+                            <description><![CDATA[sr_rng read only status register]]></description>
                         </field>
                     </fields>
                 </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x44</size>
+                <size>0x14</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -14445,6 +14327,11 @@ position to clear the flag]]></description>
             <memoryRegion>
                 <name>MDMA</name>
                 <baseAddress>0x40012000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>MBOX_EXT</name>
+                <baseAddress>0x50124000</baseAddress>
                 <size>0x00001000</size>
             </memoryRegion>
         </memoryRegions>
