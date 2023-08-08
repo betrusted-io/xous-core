@@ -13259,6 +13259,128 @@ position to clear the flag]]></description>
             </addressBlock>
         </peripheral>
         <peripheral>
+            <name>MBOX_APB</name>
+            <baseAddress>0x40013000</baseAddress>
+            <groupName>MBOX_APB</groupName>
+            <registers>
+                <register>
+                    <name>SFR_WDATA</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_wdata</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_wdata read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RDATA</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_rdata</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_rdata read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_STATUS</name>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rx_avail</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[rx_avail read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>tx_free</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[tx_free read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>abort_in_progress</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[abort_in_progress read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>abort_ack</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[abort_ack read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>tx_err</name>
+                            <msb>4</msb>
+                            <bitRange>[4:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[tx_err read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>rx_err</name>
+                            <msb>5</msb>
+                            <bitRange>[5:5]</bitRange>
+                            <lsb>5</lsb>
+                            <description><![CDATA[rx_err read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_ABORT</name>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_abort</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_abort performs action on write of value: 0x1]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DONE</name>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_done</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_done performs action on write of value: 0x1]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x20</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
             <name>GLUECHAIN</name>
             <baseAddress>0x40054000</baseAddress>
             <groupName>GLUECHAIN</groupName>
@@ -14330,8 +14452,8 @@ position to clear the flag]]></description>
                 <size>0x00001000</size>
             </memoryRegion>
             <memoryRegion>
-                <name>MBOX_EXT</name>
-                <baseAddress>0x50124000</baseAddress>
+                <name>MBOX_APB</name>
+                <baseAddress>0x40013000</baseAddress>
                 <size>0x00001000</size>
             </memoryRegion>
         </memoryRegions>

@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2023-08-08 18:17:57]]></description>
+    <description><![CDATA[Litex SoC 2023-08-09 03:07:32]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -538,8 +538,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -554,8 +554,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -571,8 +571,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -580,7 +580,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -698,39 +698,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -864,43 +836,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -1017,34 +957,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1081,8 +993,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -1097,8 +1009,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -1114,8 +1026,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -1123,7 +1035,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -1241,39 +1153,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -1407,43 +1291,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -1560,34 +1412,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1624,8 +1448,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -1640,8 +1464,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -1657,8 +1481,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -1666,7 +1490,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -1784,39 +1608,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -1950,43 +1746,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -2103,34 +1867,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -2167,8 +1903,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -2183,8 +1919,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -2200,8 +1936,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -2209,7 +1945,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -2327,39 +2063,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -2493,43 +2201,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -2646,34 +2322,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -2710,8 +2358,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -2726,8 +2374,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -2743,8 +2391,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -2752,7 +2400,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -2870,39 +2518,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -3036,43 +2656,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -3189,34 +2777,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -3253,8 +2813,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -3269,8 +2829,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -3286,8 +2846,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -3295,7 +2855,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -3413,39 +2973,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -3579,43 +3111,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -3732,34 +3232,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -3796,8 +3268,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -3812,8 +3284,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -3829,8 +3301,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -3838,7 +3310,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -3956,39 +3428,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -4122,43 +3566,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -4275,34 +3687,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4339,8 +3723,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -4355,8 +3739,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -4372,8 +3756,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -4381,7 +3765,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -4499,39 +3883,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -4665,43 +4021,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -4818,34 +4142,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4882,8 +4178,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -4898,8 +4194,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -4915,8 +4211,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -4924,7 +4220,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -5042,39 +4338,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -5208,43 +4476,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -5361,34 +4597,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -5425,8 +4633,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -5441,8 +4649,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -5458,8 +4666,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -5467,7 +4675,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -5585,39 +4793,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -5751,43 +4931,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -5904,34 +5052,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -5968,8 +5088,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -5984,8 +5104,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -6001,8 +5121,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -6010,7 +5130,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -6128,39 +5248,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -6294,43 +5386,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -6447,34 +5507,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -6511,8 +5543,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -6527,8 +5559,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -6544,8 +5576,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -6553,7 +5585,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -6671,39 +5703,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -6837,43 +5841,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -6990,34 +5962,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -7054,8 +5998,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -7070,8 +6014,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -7087,8 +6031,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -7096,7 +6040,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -7214,39 +6158,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -7380,43 +6296,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -7533,34 +6417,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -7597,8 +6453,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -7613,8 +6469,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -7630,8 +6486,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -7639,7 +6495,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -7757,39 +6613,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -7923,43 +6751,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -8076,34 +6872,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -8140,8 +6908,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -8156,8 +6924,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -8173,8 +6941,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -8182,7 +6950,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -8300,39 +7068,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -8466,43 +7206,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -8619,34 +7327,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -8683,8 +7363,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -8699,8 +7379,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -8716,8 +7396,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -8725,7 +7405,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -8843,39 +7523,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -9009,43 +7661,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -9162,34 +7782,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -9226,8 +7818,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -9242,8 +7834,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -9259,8 +7851,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -9268,7 +7860,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -9386,39 +7978,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -9552,43 +8116,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -9705,34 +8237,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -9769,8 +8273,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -9785,8 +8289,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -9802,8 +8306,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -9811,7 +8315,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -9929,39 +8433,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -10095,43 +8571,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -10248,34 +8692,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -10312,8 +8728,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -10328,8 +8744,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -10345,8 +8761,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -10354,7 +8770,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -10472,39 +8888,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -10638,43 +9026,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -10791,34 +9147,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -10855,8 +9183,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>trigger</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -10871,8 +9199,8 @@ Repeated `1` writes without clearing will still trigger an interrupt.]]></descri
                     <fields>
                         <field>
                             <name>use_edge</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -10888,8 +9216,8 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                     <fields>
                         <field>
                             <name>rising</name>
-                            <msb>19</msb>
-                            <bitRange>[19:0]</bitRange>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[None]]></description>
                         </field>
@@ -10897,7 +9225,7 @@ edge triggered. Bit is ignored if `edge_triggered` is 0.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -11015,39 +9343,11 @@ triggering]]></description>
                             <lsb>15</lsb>
                             <description><![CDATA[Level of the ``source15`` event]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Level of the ``source16`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Level of the ``source17`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Level of the ``source18`` event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Level of the ``source19`` event]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -11181,43 +9481,11 @@ triggering]]></description>
                             <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[`1` when a source16 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[`1` when a source17 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[`1` when a source18 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
-                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[`1` when a source19 event occurs. This event uses an `EventSourceFlex` form of
+                    <description><![CDATA[`1` when a source15 event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -11334,34 +9602,6 @@ triggering]]></description>
                             <bitRange>[15:15]</bitRange>
                             <lsb>15</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``source15`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source16</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source16`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source17</name>
-                            <msb>17</msb>
-                            <bitRange>[17:17]</bitRange>
-                            <lsb>17</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source17`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source18</name>
-                            <msb>18</msb>
-                            <bitRange>[18:18]</bitRange>
-                            <lsb>18</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source18`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>source19</name>
-                            <msb>19</msb>
-                            <bitRange>[19:19]</bitRange>
-                            <lsb>19</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``source19`` Event]]></description>
                         </field>
                     </fields>
                 </register>

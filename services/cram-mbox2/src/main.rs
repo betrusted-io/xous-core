@@ -136,7 +136,7 @@ fn main() {
         #[cfg(not(feature="ext"))]
         xous::MemoryAddress::new(utra::mb_client::HW_MB_CLIENT_BASE),
         #[cfg(feature="ext")]
-        xous::MemoryAddress::new(utralib::HW_MBOX_EXT_MEM), // replace with utra::mb_ext::HW_MB_EXT_BASE after final integration
+        xous::MemoryAddress::new(utra::mbox_apb::HW_MBOX_APB_BASE),
         None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -145,7 +145,7 @@ fn main() {
     let mb_client = CSR::new(mb_client_csr.as_mut_ptr() as *mut u32);
     #[cfg(feature="ext")]
     let mb_client_irq_csr = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utra::irqarray3::HW_IRQARRAY3_BASE),
+        xous::MemoryAddress::new(utra::irqarray19::HW_IRQARRAY19_BASE),
         None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -165,15 +165,15 @@ fn main() {
         #[cfg(not(feature="ext"))]
         utra::mb_client::MB_CLIENT_IRQ,
         #[cfg(feature="ext")]
-        utra::irqarray3::IRQARRAY3_IRQ,
+        utra::irqarray19::IRQARRAY19_IRQ,
         handle_irq,
         (&mut mb_client) as *mut MailboxClient as *mut usize,
     )
     .expect("couldn't claim irq");
     #[cfg(feature="ext")]
-    mb_client.csr_irq.wo(utra::irqarray3::EV_EDGE_TRIGGERED, 0b1110); // filter for rising edges on these bits
+    mb_client.csr_irq.wo(utra::irqarray19::EV_EDGE_TRIGGERED, 0b1110); // filter for rising edges on these bits
     #[cfg(feature="ext")]
-    mb_client.csr_irq.wo(utra::irqarray3::EV_POLARITY, 0b1110); // rising edge
+    mb_client.csr_irq.wo(utra::irqarray19::EV_POLARITY, 0b1110); // rising edge
 
     mb_client.csr_irq.wo(utra::mb_client::EV_ENABLE, 0b1111); // enable everything
 
