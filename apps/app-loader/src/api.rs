@@ -3,6 +3,7 @@ use gam::{Gam, MenuItem, UxRegistration, menu_matic, APP_NAME_APP_LOADER, APP_ME
 use modals::Modals;
 use xous::MemoryRange;
 use num_traits::ToPrimitive;
+use locales::t;
 use crate::SERVER_NAME_APP_LOADER;
 
 pub(crate) struct AppLoader {
@@ -44,7 +45,7 @@ impl AppLoader {
 	let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
 	// the menu
-	let set_server_item = MenuItem{ name: xous_ipc::String::from_str("Set Server"),
+	let set_server_item = MenuItem{ name: xous_ipc::String::from_str(t!("apploader.menu.setserver", locales::LANG)),
 					action_conn: Some(conn),
 					action_opcode: Opcode::SetServer.to_u32().unwrap(),
 					action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -57,13 +58,13 @@ impl AppLoader {
     pub(crate) fn add_app(&mut self, index: usize) {
 	let name = self.possible_apps[index];
 
-	self.modals.start_progress("Loading app...", 0, 3, 0).expect("Couldn't set up progress bar");
+	self.modals.start_progress(t!("apploader.addapp.loading", locales::LANG), 0, 3, 0).expect("Couldn't set up progress bar");
 
 	// load the app from the server
 	let response = match ureq::get(&format!("{}/{}", self.server.as_ref().expect("AddApp was somehow called without a server!"), name)).call() {
 	    Ok(response) => response,
 	    Err(e) => {
-		self.modals.show_notification(&format!("Could not connect to server: {}", e), None).expect("Couldn't show modal");
+		self.modals.show_notification(&format!("{}{}", t!("apploader.addapp.server_error", locales::LANG), e), None).expect("Couldn't show modal");
 		return;
 	    }
 	};
@@ -71,7 +72,7 @@ impl AppLoader {
 	let len = match response.header("Content-Length") {
 	    Some(len) => len.parse::<usize>().expect("Couldn't parse Content-Length header"),
 	    None => {
-		self.modals.show_notification("No Content-Length header in server response", None).expect("Couldn't show modal");
+		self.modals.show_notification(t!("apploader.addapp.content_length_error", locales::LANG), None).expect("Couldn't show modal");
 		return;
 	    }
 	};
@@ -117,7 +118,7 @@ impl AppLoader {
 	    xous::Result::MemoryReturned(None, _) => self.modals.update_progress(3).expect("Couldn't update progress"),
 	    _ => {
 		self.modals.finish_progress().expect("Couldn't close progressbar");
-		self.modals.show_notification("Binary could not be loaded :(", None).expect("Couldn't show modal");
+		self.modals.show_notification(t!("apploader.addapp.error", locales::LANG), None).expect("Couldn't show modal");
 		return;
 	    }
 	}
@@ -147,13 +148,13 @@ impl AppLoader {
 	let payload = self.modals.alert_builder("Server Address")
 	    .field(Some("e.g. http://ip:port".to_string()), Some(|payload: TextEntryPayload| match url::Url::parse(payload.as_str()) {
 		Ok(_) => None,
-		Err(e) => Some(xous_ipc::String::from_str(&format!("Invalid URL: {}", e))),
+		Err(e) => Some(xous_ipc::String::from_str(&format!("{}{}", t!("apploader.setserver.error", locales::LANG), e))),
 	    }))
 	    .build()
 	    .ok();
 
 	if self.server.is_none() && payload.is_some() {
-	    self.menu.insert_item(MenuItem { name: xous_ipc::String::from_str("Reload App List"),
+	    self.menu.insert_item(MenuItem { name: xous_ipc::String::from_str(t!("apploader.menu.reloadapplist", locales::LANG)),
 					     action_conn: Some(self.conn),
 					     action_opcode: Opcode::ReloadAppList.to_u32().unwrap(),
 					     action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -166,14 +167,14 @@ impl AppLoader {
 
     pub(crate) fn reload_app_list(&mut self) {
 	// without a path, the server responds with a JSON list of strings representing the list of app names
-	self.modals.start_progress("Loading App List", 0, 3, 0).expect("Couldn't start progressbar");
+	self.modals.start_progress(t!("apploader.reloadapplist.loading", locales::LANG), 0, 3, 0).expect("Couldn't start progressbar");
 
 	// this... disgusting error handling is so that if there is an error on the server side there isn't a panic
 	self.possible_apps = match
 	    match ureq::get(&self.server.as_ref().expect("ReloadAppList was somehow called without a server!")).call() {
 		Ok(c) => { self.modals.update_progress(1).expect("Couldn't update progress"); c },
 		Err(e) => {
-		    self.modals.show_notification(&format!("Could not connect to server: {}", e), None).expect("Couldn't show modal");
+		    self.modals.show_notification(&format!("{}{}", t!("apploader.reloadapplist.connection_error", locales::LANG), e), None).expect("Couldn't show modal");
 		    return;
 		}
 	    }
@@ -181,7 +182,7 @@ impl AppLoader {
 	 {
 	    Ok(json) => { self.modals.update_progress(2).expect("Couldn't update progress"); json },
 	    Err(e) => {
-		self.modals.show_notification(&format!("Could not convert to JSON: {}", e), None).expect("Couldn't show modal");
+		self.modals.show_notification(&format!("{}{}", t!("apploader.reloadapplist.json_error", locales::LANG), e), None).expect("Couldn't show modal");
 		return;
 	    }
 	}
@@ -190,7 +191,7 @@ impl AppLoader {
 	    .collect();
 
 	for (i, app) in self.possible_apps.iter().enumerate() {
-	    self.menu.insert_item(MenuItem { name: xous_ipc::String::from_str("Add ".to_owned()+app.to_str()),
+	    self.menu.insert_item(MenuItem { name: xous_ipc::String::from_str(t!("apploader.menu.addapp", locales::LANG).to_owned()+app.to_str()),
 					     action_conn: Some(self.conn),
 					     action_opcode: Opcode::AddApp.to_u32().unwrap(),
 					     action_payload: gam::MenuPayload::Scalar([i.try_into().unwrap(), 0, 0, 0]),
