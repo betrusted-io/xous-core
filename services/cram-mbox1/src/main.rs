@@ -261,6 +261,7 @@ fn main() {
                             unsafe{mailbox.send_unguarded(&test_array[0..2])};
                         }
                         8 => {
+                            abort_init_seen = false;
                             test_array[0] = 0x4_0008; // 4 words sent, test sequence 8
                             for t in test_array[1..4].iter_mut() {
                                 *t = generator;
@@ -272,11 +273,7 @@ fn main() {
                             if !abort_init_seen {
                                 log::error!("We did not see the other side initiate an abort");
                             }
-                            if !abort_done_seen {
-                                log::error!("We didn't ack the abort");
-                            }
                             abort_init_seen = false;
-                            abort_done_seen = false;
 
                             test_array[0] = 0x3_0009; // 3 words sent, test sequence 9
                             for t in test_array[1..3].iter_mut() {
@@ -332,6 +329,7 @@ fn main() {
                 abort_init_seen = true;
                 mailbox.abort_pending = false;
                 log::info!("test peer initiated abort!");
+                // acknowledge the abort
                 mailbox.csr.wfo(utra::mailbox::CONTROL_ABORT, 1);
                 // initiate the next test in the sequence
                 let last_seq_no = test_array[0] & 0xffff;
