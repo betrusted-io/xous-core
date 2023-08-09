@@ -47,12 +47,12 @@ pub extern "C" fn init(server1: u32, server2: u32, server3: u32, server4: u32) -
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
     loop {
-        if let Ok(xous::Result::MessageEnvelope(envelope)) =
+        if let Ok(xous::Result::MessageEnvelope(mut envelope)) =
             xous::rsyscall(xous::SysCall::ReceiveMessage(server))
         {
             match envelope.id().into() {
                 StartupCommand::LoadElf => {
-		    let entry_point = read_elf(envelope.body.memory_message());
+		    let entry_point = read_elf(envelope.body.memory_message_mut());
 		    drop(envelope); // we have to get rid of all messages to destroy the server
 		    // destroy the server
 		    xous::destroy_server(server).expect("Couldn't destroy spawn server");
@@ -73,7 +73,7 @@ fn ping_response(envelope: xous::MessageEnvelope) {
     }
 }
 
-fn read_elf(memory: Option<&xous::MemoryMessage>) -> usize {
+fn read_elf(memory: Option<&mut xous::MemoryMessage>) -> usize {
     let memory = match memory {
         Some(s) => s,
         None => panic!(),
@@ -82,11 +82,8 @@ fn read_elf(memory: Option<&xous::MemoryMessage>) -> usize {
     // get the elf binary from the message
     let mut bin = memory.buf.as_slice::<u8>();
 
-    // go to the beginning of the ELF file. The chance of us accidentally finding a false
-    // beginning is very small.
-    while !(bin[0] == 0x7F && bin[1] == 0x45 && bin[2] == 0x4c && bin[3] == 0x46) {
-	bin = &bin[1..];
-    }
+    // go to the beginning of the ELF file using the provided offset
+    bin = &bin[memory.offset.and_then(|n| Some(n.get())).unwrap_or(0)..];
 
     let max = bin.len();
 
@@ -151,6 +148,8 @@ fn read_elf(memory: Option<&xous::MemoryMessage>) -> usize {
 	    }
 	}
     }
+
+    memory.offset = None;
     log::info!("Finished writing");
     return entry_point;
 }

@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::{io::Read, num::NonZeroUsize};
 use gam::{Gam, MenuItem, UxRegistration, menu_matic, APP_NAME_APP_LOADER, APP_MENU_0_APP_LOADER, MenuMatic, TextEntryPayload};
 use modals::Modals;
 use xous::MemoryRange;
@@ -57,21 +57,40 @@ impl AppLoader {
     pub(crate) fn add_app(&mut self, index: usize) {
 	let name = self.possible_apps[index];
 
-	// load the app from the server
-	let response = ureq::get(&format!("{}/{}", self.server.as_ref().expect("AddApp was somehow called without a server!"), name))
-	    .call().expect("Couldn't make request");
+	self.modals.start_progress("Loading app...", 0, 3, 0).expect("Couldn't set up progress bar");
 
-	let len = response.header("Content-Length").expect("No Content-Length header")
-	    .parse::<usize>().expect("Couldn't parse Content-Length header");
+	// load the app from the server
+	let response = match ureq::get(&format!("{}/{}", self.server.as_ref().expect("AddApp was somehow called without a server!"), name)).call() {
+	    Ok(response) => response,
+	    Err(e) => {
+		self.modals.show_notification(&format!("Could not connect to server: {}", e), None).expect("Couldn't show modal");
+		return;
+	    }
+	};
+
+	let len = match response.header("Content-Length") {
+	    Some(len) => len.parse::<usize>().expect("Couldn't parse Content-Length header"),
+	    None => {
+		self.modals.show_notification("No Content-Length header in server response", None).expect("Couldn't show modal");
+		return;
+	    }
+	};
+
+	self.modals.update_progress(1).expect("Couldn't update progress");
 
 	let mut app_file = Vec::with_capacity(len);
 	response.into_reader()
 	    .read_to_end(&mut app_file).expect("Couldn't read");
 	let app_file_slice = app_file.as_slice();
+	let (address, offset) = {
+	    let address = app_file_slice.as_ptr() as usize;
+	    (address & !0xFFF, address & 0xFFF)
+	};
 
-	let memory = unsafe { MemoryRange::new((app_file_slice.as_ptr() as usize) & !0xFFF,
+	let memory = unsafe { MemoryRange::new(address,
 					       len + if len & 0xFFF == 0 { 0 } else { 0x1000 - (len & 0xFFF) }).unwrap() };
 
+	self.modals.update_progress(2).expect("Couldn't update progress");
 	//////////////////////
 	// The loading part //
 	//////////////////////
@@ -91,7 +110,17 @@ impl AppLoader {
 	assert_eq!(xous::Result::Scalar1(2), result);
 
 	// load the app from the binary file
-	xous::send_message(spawn.cid, xous::Message::new_lend(1, memory, None, None)).expect("Couldn't send a message to spawn");
+	let res = xous::send_message(spawn.cid, xous::Message::new_lend_mut(1, memory, if offset == 0 { None } else { Some(NonZeroUsize::new(offset).unwrap()) }, None)).expect("Couldn't send a message to spawn");
+	// we are just going to do some very basic error handling: if the "offset" is None, we are good, otherwise there was a problem
+	// TODO: make this better. Perhaps Buffer::from_raw_parts?
+	match res {
+	    xous::Result::MemoryReturned(None, _) => self.modals.update_progress(3).expect("Couldn't update progress"),
+	    _ => {
+		self.modals.finish_progress().expect("Couldn't close progressbar");
+		self.modals.show_notification("Binary could not be loaded :(", None).expect("Couldn't show modal");
+		return;
+	    }
+	}
 
 	//////////////////////
 	// back to graphics //
@@ -110,13 +139,16 @@ impl AppLoader {
 
 	log::info!("Added app `{}'!", name);
 
-	self.redraw();
+	self.modals.finish_progress().expect("Couldn't close progressbar");
+	let _ = self.gam.redraw(); // try to switch back to the menu
     }
 
     pub(crate) fn set_server(&mut self) {
-	let payload = self.modals.alert_builder("Server IP Address:Port")
-	// .field(None, Some(|payload: TextEntryPayload| if payload.as_str().trim_start_matches("https://").trim_start_matches("http://").chars().filter(|c| *c == ':').count() == 1 { None } else { Some(xous_ipc::String::from_str("Port is not specified")) }))
-	    .field(None, None)
+	let payload = self.modals.alert_builder("Server Address")
+	    .field(Some("e.g. http://ip:port".to_string()), Some(|payload: TextEntryPayload| match url::Url::parse(payload.as_str()) {
+		Ok(_) => None,
+		Err(e) => Some(xous_ipc::String::from_str(&format!("Invalid URL: {}", e))),
+	    }))
 	    .build()
 	    .ok();
 
@@ -129,13 +161,28 @@ impl AppLoader {
 	}
 
 	self.server = payload.and_then(|p| Some(p.first().as_str().to_string()));
+	let _ = self.gam.redraw(); // try to switch back to the menu
     }
 
     pub(crate) fn reload_app_list(&mut self) {
 	// without a path, the server responds with a JSON list of strings representing the list of app names
-	self.possible_apps = ureq::get(&self.server.as_ref().expect("ReloadAppList was somehow called without a server!"))
-	    .call().expect("Couldn't make request")
-	    .into_json::<Vec<String>>().expect("Couldn't convert into JSON")
+	// this... disgusting error handling is so that if there is an error on the server side there isn't a panic
+	self.possible_apps = match
+	    match ureq::get(&self.server.as_ref().expect("ReloadAppList was somehow called without a server!")).call() {
+		Ok(c) => c,
+		Err(e) => {
+		    self.modals.show_notification(&format!("Could not connect to server: {}", e), None).expect("Couldn't show modal");
+		    return;
+		}
+	    }
+	    .into_json::<Vec<String>>()
+	 {
+	    Ok(json) => json,
+	    Err(e) => {
+		self.modals.show_notification(&format!("Could not convert to JSON: {}", e), None).expect("Couldn't show modal");
+		return;
+	    }
+	}
 	    .iter()
 	    .map(|s| xous_ipc::String::<64>::from_str(&s))
 	    .collect();
@@ -147,6 +194,7 @@ impl AppLoader {
 					     action_payload: gam::MenuPayload::Scalar([i.try_into().unwrap(), 0, 0, 0]),
 					     close_on_select: true }, 0);
 	}
+	let _ = self.gam.redraw(); // try to switch back to the menu
     }
 
     pub(crate) fn dispatch_app(&self, index: usize) {
@@ -167,8 +215,8 @@ impl AppLoader {
 
 	self.ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
 
-	// open the submenu
-	self.gam.raise_menu(APP_MENU_0_APP_LOADER).expect("Couldn't raise menu");
+	// open the submenu if possible
+	let _ = self.gam.raise_menu(APP_MENU_0_APP_LOADER);
     }
 }
 

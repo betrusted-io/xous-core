@@ -24,3 +24,4 @@ num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 
 ureq = { version = "2.5.0", features = ["json"] }
+url = "2.4"
