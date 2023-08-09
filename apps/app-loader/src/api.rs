@@ -140,7 +140,7 @@ impl AppLoader {
 	log::info!("Added app `{}'!", name);
 
 	self.modals.finish_progress().expect("Couldn't close progressbar");
-	let _ = self.gam.redraw(); // try to switch back to the menu
+	let _ = self.gam.switch_to_app(APP_NAME_APP_LOADER, self.auth); // try to switch back to the menu
     }
 
     pub(crate) fn set_server(&mut self) {
@@ -161,15 +161,17 @@ impl AppLoader {
 	}
 
 	self.server = payload.and_then(|p| Some(p.first().as_str().to_string()));
-	let _ = self.gam.redraw(); // try to switch back to the menu
+	self.reload_app_list();
     }
 
     pub(crate) fn reload_app_list(&mut self) {
 	// without a path, the server responds with a JSON list of strings representing the list of app names
+	self.modals.start_progress("Loading App List", 0, 3, 0).expect("Couldn't start progressbar");
+
 	// this... disgusting error handling is so that if there is an error on the server side there isn't a panic
 	self.possible_apps = match
 	    match ureq::get(&self.server.as_ref().expect("ReloadAppList was somehow called without a server!")).call() {
-		Ok(c) => c,
+		Ok(c) => { self.modals.update_progress(1).expect("Couldn't update progress"); c },
 		Err(e) => {
 		    self.modals.show_notification(&format!("Could not connect to server: {}", e), None).expect("Couldn't show modal");
 		    return;
@@ -177,7 +179,7 @@ impl AppLoader {
 	    }
 	    .into_json::<Vec<String>>()
 	 {
-	    Ok(json) => json,
+	    Ok(json) => { self.modals.update_progress(2).expect("Couldn't update progress"); json },
 	    Err(e) => {
 		self.modals.show_notification(&format!("Could not convert to JSON: {}", e), None).expect("Couldn't show modal");
 		return;
@@ -194,7 +196,9 @@ impl AppLoader {
 					     action_payload: gam::MenuPayload::Scalar([i.try_into().unwrap(), 0, 0, 0]),
 					     close_on_select: true }, 0);
 	}
-	let _ = self.gam.redraw(); // try to switch back to the menu
+	self.modals.finish_progress().expect("Couldn't close progress bar");
+
+	let _ = self.gam.switch_to_app(APP_NAME_APP_LOADER, self.auth); // try to switch back to the menu
     }
 
     pub(crate) fn dispatch_app(&self, index: usize) {
