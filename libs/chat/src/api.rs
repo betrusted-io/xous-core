@@ -5,10 +5,8 @@ pub(crate) const SERVER_NAME_CHAT: &str = "Chat UI";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ChatOp {
-    /// change focus
-    ChangeFocus,
     ///
-    DialogueSet,
+    DialogueSet = 128,
     ///
     GamChangeFocus,
     /// a line of text has arrived
@@ -42,7 +40,7 @@ pub struct Find {
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct Dialogue {
     pub dict: xous_ipc::String<128>,
-    pub key: xous_ipc::String<128>,
+    pub key: Option<xous_ipc::String<128>>,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug)]

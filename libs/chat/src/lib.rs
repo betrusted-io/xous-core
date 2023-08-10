@@ -42,20 +42,18 @@ impl Chat {
         self.cid
     }
 
-    pub fn read_only(pddb_dict: &str, pddb_key: &str) -> Self {
-        let chat = Chat::new(None, None, None, None);
+    pub fn read_only(pddb_dict: &str, pddb_key: Option<&str>) -> Self {
+        let chat = Chat::new("_Chat Read_", "unused", None, None, None, None);
         chat.dialogue_set(pddb_dict, pddb_key).unwrap();
         chat
     }
 
     // set the current Dialogue
-    pub fn dialogue_set(&self, pddb_dict: &str, pddb_key: &str) -> Result<(), Error> {
-        let mut dialogue = api::Dialogue {
-            dict: xous_ipc::String::new(),
-            key: xous_ipc::String::new(),
+    pub fn dialogue_set(&self, pddb_dict: &str, pddb_key: Option<&str>) -> Result<(), Error> {
+        let dialogue = api::Dialogue {
+            dict: xous_ipc::String::from_str(pddb_dict),
+            key: pddb_key.map(|key| xous_ipc::String::from_str(key)),
         };
-        dialogue.dict.append(pddb_dict).unwrap();
-        dialogue.key.append(pddb_key).unwrap();
         match Buffer::into_buf(dialogue) {
             Ok(buf) => buf.send(self.cid, ChatOp::DialogueSet as u32).map(|_| ()),
             Err(_) => Err(xous::Error::InternalError),
@@ -171,13 +169,15 @@ pub fn server(
         log::debug!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ChatOp::DialogueSet) => {
+                log::info!("ChatOp::DialogueSet");
                 let buffer =
                     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dialogue = buffer.to_original::<Dialogue, _>().unwrap();
-                ui.dialogue_set(
-                    dialogue.dict.as_str().unwrap(),
-                    dialogue.key.as_str().unwrap(),
-                );
+                let dialogue_key = match dialogue.key {
+                    Some(key) => Some(key.to_string()),
+                    None => None,
+                };
+                ui.dialogue_set(dialogue.dict.as_str().unwrap(), dialogue_key.as_deref());
             }
             Some(ChatOp::GamChangeFocus) => {
                 xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {

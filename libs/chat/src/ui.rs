@@ -207,17 +207,27 @@ impl Ui {
     }
 
     // set the current Dialogue
-    pub fn dialogue_set(&mut self, pddb_dict: &str, pddb_key: &str) {
+    pub fn dialogue_set(&mut self, pddb_dict: &str, pddb_key: Option<&str>) {
         self.pddb_dict = Some(pddb_dict.to_string());
-        self.pddb_key = Some(pddb_key.to_string());
-        log::info!("Dialogue set to {}:{}", pddb_dict, pddb_key);
+        self.pddb_key = pddb_key.map(|key| key.to_string());
+        if self.pddb_key.is_none() {
+            self.dialogue_modal();
+        }
+        log::info!("Dialogue set to {:?}:{:?}", self.pddb_dict, self.pddb_key);
         match self.dialogue_read() {
-            Ok(_) => (),
+            Ok(_) => {
+                log::info!("read dialogue {:?}:{:?}", self.pddb_dict, self.pddb_key);
+                self.redraw().expect("couldn't redraw screen");
+            }
             Err(_) => {
-                self.dialogue = Some(Dialogue::new(pddb_key));
-                match self.dialogue_save() {
-                    Ok(_) => log::info!("Dialogue created {}:{}", pddb_dict, pddb_key),
-                    Err(e) => log::warn!("Failed to create Dialogue {}:{}", pddb_dict, pddb_key),
+                if let Some(key) = &self.pddb_key {
+                    self.dialogue = Some(Dialogue::new(&key));
+                    match self.dialogue_save() {
+                        Ok(_) => log::info!("Dialogue created {}:{}", pddb_dict, key),
+                        Err(e) => {
+                            log::warn!("Failed to create Dialogue {}:{} : {e}", pddb_dict, key)
+                        }
+                    }
                 }
             }
         }
