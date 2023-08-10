@@ -39,6 +39,7 @@ pub(crate) struct Ui {
 
     canvas: Gid,
     gam: gam::Gam,
+    modals: Modals,
 
     // variables that define our graphical attributes
     screensize: Point,
@@ -78,7 +79,8 @@ impl Ui {
                 focuschange_id: Some(ChatOp::GamChangeFocus as u32),
             })
             .expect("couldn't register Ux context for chat");
-
+        let xns = XousNames::new().unwrap();
+        let modals = Modals::new(&xns).unwrap();
         let canvas = gam
             .request_content_canvas(token.unwrap())
             .expect("couldn't get content canvas");
@@ -98,6 +100,7 @@ impl Ui {
             opcode_event,
             canvas,
             gam,
+            modals,
             screensize,
             bubble_width: ((screensize.x / 5) * 4) as u16, // 80% width for the text bubbles
             margin: Point::new(4, 4),
@@ -216,6 +219,30 @@ impl Ui {
                     Ok(_) => log::info!("Dialogue created {}:{}", pddb_dict, pddb_key),
                     Err(e) => log::warn!("Failed to create Dialogue {}:{}", pddb_dict, pddb_key),
                 }
+            }
+        }
+    }
+
+    pub fn dialogue_modal(&mut self) {
+        if let Some(dict) = &self.pddb_dict {
+            match self.pddb.list_keys(&dict, None) {
+                Ok(keys) => {
+                    if keys.len() > 0 {
+                        self.modals
+                            .add_list(keys.iter().map(|s| s.as_str()).collect())
+                            .expect("failed modal add_list");
+                        self.pddb_key = self
+                            .modals
+                            .get_radiobutton(t!("chat.dialogue_title", locales::LANG))
+                            .ok();
+                        log::info!("selected dialogue {}:{:?}", dict, self.pddb_key);
+                    } else {
+                        self.modals
+                            .show_notification(t!("chat.dict_empty", locales::LANG), None)
+                            .expect("notification failed");
+                    }
+                }
+                Err(e) => log::warn!("failed to list pddb keys: {e}"),
             }
         }
     }

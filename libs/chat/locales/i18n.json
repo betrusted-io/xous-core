@@ -10,5 +10,13 @@
     "chat.test_cmd": {
         "en": "test chat library UI",
         "en-tts": "test chat library UI"
+    },
+    "chat.dialogue_title": {
+        "en": "read exiting dialogue",
+        "en-tts": "read exiting dialogue"
+    },
+    "chat.dict_empty": {
+        "en": "no dialogues available to read",
+        "en-tts": "no dialogues available to read"
     }
 }
