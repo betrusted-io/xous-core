@@ -7,7 +7,7 @@
 		"en-tts": "App Loader"
 	    }
 	},
-	"submenu": 1
+	"submenu": 2
     },
     "ball": {
         "context_name": "ball demo app",

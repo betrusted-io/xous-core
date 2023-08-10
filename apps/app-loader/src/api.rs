@@ -1,7 +1,6 @@
-use std::{io::Read, num::NonZeroUsize};
+use std::io::Read;
 use gam::{Gam, MenuItem, UxRegistration, menu_matic, APP_NAME_APP_LOADER, APP_MENU_0_APP_LOADER, APP_MENU_1_APP_LOADER, MenuMatic, TextEntryPayload};
 use modals::Modals;
-use xous::MemoryRange;
 use num_traits::ToPrimitive;
 use locales::t;
 use crate::SERVER_NAME_APP_LOADER;
@@ -68,7 +67,9 @@ impl AppLoader {
 
 	self.modals.start_progress(t!("apploader.addapp.loading", locales::LANG), 0, 3, 0).expect("Couldn't set up progress bar");
 
-	// load the app from the server
+	//////////////////////////
+	// The downloading part //
+	//////////////////////////
 	let response = match ureq::get(&format!("{}/{}", self.server.as_ref().expect("AddApp was somehow called without a server!"), name)).call() {
 	    Ok(response) => response,
 	    Err(e) => {
@@ -85,21 +86,11 @@ impl AppLoader {
 	    }
 	};
 
+
+	let mut memory = xous::map_memory(None, None, len + if len & 0xFFF == 0 { 0 } else { 0x1000 - (len & 0xFFF) }, xous::MemoryFlags::R | xous::MemoryFlags::W).expect("Couldn't map memory");
+	response.into_reader().read_exact(&mut memory.as_slice_mut()[..len]).expect("Couldn't read");
+
 	self.modals.update_progress(1).expect("Couldn't update progress");
-
-	let mut app_file = Vec::with_capacity(len);
-	response.into_reader()
-	    .read_to_end(&mut app_file).expect("Couldn't read");
-	let app_file_slice = app_file.as_slice();
-	let (address, offset) = {
-	    let address = app_file_slice.as_ptr() as usize;
-	    (address & !0xFFF, address & 0xFFF)
-	};
-
-	let memory = unsafe { MemoryRange::new(address,
-					       len + if len & 0xFFF == 0 { 0 } else { 0x1000 - (len & 0xFFF) }).unwrap() };
-
-	self.modals.update_progress(2).expect("Couldn't update progress");
 	//////////////////////
 	// The loading part //
 	//////////////////////
@@ -118,8 +109,10 @@ impl AppLoader {
 	    .unwrap();
 	assert_eq!(xous::Result::Scalar1(2), result);
 
+	self.modals.update_progress(2).expect("Couldn't update progress");
+
 	// load the app from the binary file
-	let res = xous::send_message(spawn.cid, xous::Message::new_lend_mut(1, memory, if offset == 0 { None } else { Some(NonZeroUsize::new(offset).unwrap()) }, None)).expect("Couldn't send a message to spawn");
+	let res = xous::send_message(spawn.cid, xous::Message::new_lend_mut(1, memory, None, None)).expect("Couldn't send a message to spawn");
 	// we are just going to do some very basic error handling: if the "offset" is None, we are good, otherwise there was a problem
 	// TODO: make this better. Perhaps Buffer::from_raw_parts?
 	match res {
