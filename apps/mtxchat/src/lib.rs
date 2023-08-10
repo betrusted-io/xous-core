@@ -61,6 +61,7 @@ pub const HOSTED_MODE: bool = false;
 //#[derive(Debug)]
 pub struct MtxChat<'a> {
     chat: &'a Chat,
+    netmgr: net::NetManager,
     user_id: String,
     user_name: String,
     user_domain: String,
@@ -81,6 +82,7 @@ impl<'a> MtxChat<'a> {
         let modals = Modals::new(&xns).expect("can't connect to Modals server");
         let common = MtxChat {
             chat: chat,
+            netmgr: net::NetManager::new(),
             user_id: EMPTY.to_string(),
             user_name: EMPTY.to_string(),
             user_domain: DOMAIN_MATRIX.to_string(),
@@ -232,6 +234,33 @@ impl<'a> MtxChat<'a> {
         }
     }
 
+    pub fn connect(&mut self) -> bool {
+        log::info!("Attempting connect to Matrix server");
+        if self.wifi_connected() {
+            if self.login() {
+                if let Some(room) = self.get_room_id() {
+                    self.dialogue_set(Some(room.as_str()));
+                    self.listen();
+                    return true;
+                } else {
+                    self.modals
+                        .show_notification(t!("mtxchat.roomid.failed", locales::LANG), None)
+                        .expect("notification failed");
+                }
+            } else {
+                self.modals
+                    .show_notification(t!("mtxchat.login.failed", locales::LANG), None)
+                    .expect("notification failed");
+            }
+        } else {
+            self.modals
+                .show_notification(t!("mtxchat.wifi.warning", locales::LANG), None)
+                .expect("notification failed");
+        }
+        self.dialogue_set(None);
+        false
+    }
+
     pub fn login(&mut self) -> bool {
         self.token = self.get_or(TOKEN_KEY, EMPTY);
         self.logged_in = false;
@@ -341,24 +370,24 @@ impl<'a> MtxChat<'a> {
     }
 
     // assume logged in, token is valid
-    pub fn get_room_id(&mut self) -> bool {
+    pub fn get_room_id(&mut self) -> Option<String> {
+        let mut room = String::new();
         if self.room_id.len() > 0 {
-            true
+            write!(room, "#{}:{}", &self.room_name, &self.room_domain)
+                .expect("failed to write room");
+            Some(room)
         } else {
             self.room_modal();
-            let mut room = String::new();
             write!(room, "#{}:{}", &self.room_name, &self.room_domain)
-            .expect("failed to write room");
+                .expect("failed to write room");
             let mut server = String::new();
-            write!(server, "{}{}", HTTPS, &self.user_domain)
-            .expect("failed to write server");
+            write!(server, "{}{}", HTTPS, &self.user_domain).expect("failed to write server");
             if let Some(room_id) = web::get_room_id(&server, &room, &self.token) {
                 self.set_debug(ROOM_ID_KEY, &room_id);
-                self.chat.dialogue_set(MTXCHAT_DICT, &room);
-                true
+                Some(room)
             } else {
                 log::warn!("failed to return room_id");
-                false
+                None
             }
         }
     }
@@ -403,6 +432,12 @@ impl<'a> MtxChat<'a> {
         );
     }
 
+    pub fn dialogue_set(&self, room: Option<&str>) {
+        self.chat
+            .dialogue_set(MTXCHAT_DICT, room)
+            .expect("failed to set dialogue");
+    }
+
     // assume logged in, token is valid, room_id is valid, user is valid
     pub fn get_filter(&mut self) -> bool {
         if self.filter.len() > 0 {
@@ -437,7 +472,7 @@ impl<'a> MtxChat<'a> {
             return;
         }
         if self.room_id.len() == 0 {
-            if !self.get_room_id() {
+            if self.get_room_id().is_none() {
                 return;
             }
         }
@@ -497,6 +532,13 @@ impl<'a> MtxChat<'a> {
             if self.logged_in && (HOSTED_MODE || self.wifi_connected) {
                 self.listen();
             }
+        }
+    }
+
+    pub fn wifi_connected(&self) -> bool {
+        match self.netmgr.get_ipv4_config() {
+            Some(conf) => conf.dhcp == com_rs::DhcpState::Bound,
+            None => false,
         }
     }
 }

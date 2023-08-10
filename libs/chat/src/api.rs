@@ -53,6 +53,7 @@ pub struct Post {
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum Event {
+    Focus,
     F1,     // F1 button click
     F2,     // F2 button click
     F3,     // you get the idea

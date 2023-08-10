@@ -61,6 +61,7 @@ fn wrapped_main() -> ! {
     let mut mtxchat = MtxChat::new(&chat);
 
     let modals = Modals::new(&xns).expect("can't connect to Modals server");
+    let mut first_focus = true;
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
@@ -70,28 +71,15 @@ fn wrapped_main() -> ! {
                 xous::msg_scalar_unpack!(msg, event_code, _, _, _, {
                     match FromPrimitive::from_usize(event_code) {
                         Some(Event::Focus) => {
-                            while !mtxchat.login() {
-                                modals
-                                    .show_notification(
-                                        t!("mtxchat.login.failed", locales::LANG),
-                                        None,
-                                    )
-                                    .expect("notification failed");
-                            }
-                            while !mtxchat.get_room_id() {
-                                modals
-                                    .show_notification(
-                                        t!("mtxchat.roomid.failed", locales::LANG),
-                                        None,
-                                    )
-                                    .expect("notification failed");
+                            if first_focus {
+                                first_focus = false;
+                                mtxchat.connect();
                             }
                             mtxchat.redraw();
-                            mtxchat.listen();
                         }
                         _ => (),
                     }
-                })
+                });
             }
             Some(MtxchatOp::Menu) => {
             Some(MtxchatOp::Post) => {
