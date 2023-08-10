@@ -1,4 +1,8 @@
 {
+    "apploader.close": {
+	"en": "Close",
+	"en-tts": "Close"
+    },
     "apploader.menu.setserver": {
 	"en": "Set Server",
 	"en-tts": "Set Server"
@@ -24,8 +28,8 @@
 	"en-tts": "Could not convert to JSON: "
     },
     "apploader.menu.addapp": {
-	"en": "Add ",
-	"en-tts": "Add "
+	"en": "Add App",
+	"en-tts": "Add App"
     },
     "apploader.addapp.loading": {
 	"en": "Loading app...",

@@ -1,5 +1,5 @@
 use std::{io::Read, num::NonZeroUsize};
-use gam::{Gam, MenuItem, UxRegistration, menu_matic, APP_NAME_APP_LOADER, APP_MENU_0_APP_LOADER, MenuMatic, TextEntryPayload};
+use gam::{Gam, MenuItem, UxRegistration, menu_matic, APP_NAME_APP_LOADER, APP_MENU_0_APP_LOADER, APP_MENU_1_APP_LOADER, MenuMatic, TextEntryPayload};
 use modals::Modals;
 use xous::MemoryRange;
 use num_traits::ToPrimitive;
@@ -12,10 +12,12 @@ pub(crate) struct AppLoader {
     auth: [u32; 4],
     ticktimer: ticktimer_server::Ticktimer,
     menu: MenuMatic,
+    load_menu: MenuMatic,
     conn: xous::CID,
     apps: Vec<xous_ipc::String<64>>,
     possible_apps: Vec<xous_ipc::String<64>>,
     server: Option<String>,
+    current_menu: String,
 }
 
 impl AppLoader {
@@ -50,9 +52,15 @@ impl AppLoader {
 					action_opcode: Opcode::SetServer.to_u32().unwrap(),
 					action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
 					close_on_select: true };
-	let menu = menu_matic(vec![set_server_item], APP_MENU_0_APP_LOADER, Some(xous::create_server().unwrap())).expect("Couldn't create menu");
+	let close_item = MenuItem{ name: xous_ipc::String::from_str(t!("apploader.close", locales::LANG)),
+				   action_conn: None,
+				   action_opcode: 0,
+				   action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+				   close_on_select: true };
+	let menu = menu_matic(vec![set_server_item, close_item.clone()], APP_MENU_0_APP_LOADER, Some(xous::create_server().unwrap())).expect("Couldn't create menu");
+	let load_menu = menu_matic(vec![close_item.clone()], APP_MENU_1_APP_LOADER, Some(xous::create_server().unwrap())).expect("Couldn't create menu");
 
-	AppLoader{ gam, modals, auth, conn, ticktimer, menu, apps: Vec::new(), possible_apps: Vec::new(), server: None }
+	AppLoader{ gam, modals, auth, conn, ticktimer, menu, load_menu, apps: Vec::new(), possible_apps: Vec::new(), server: None, current_menu: APP_MENU_0_APP_LOADER.to_string() }
     }
 
     pub(crate) fn add_app(&mut self, index: usize) {
@@ -159,15 +167,27 @@ impl AppLoader {
 					     action_opcode: Opcode::ReloadAppList.to_u32().unwrap(),
 					     action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
 					     close_on_select: true }, 0);
+	    self.menu.insert_item(MenuItem { name: xous_ipc::String::from_str(t!("apploader.menu.addapp", locales::LANG)),
+					     action_conn: Some(self.conn),
+					     action_opcode: Opcode::AddAppMenu.to_u32().unwrap(),
+					     action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+					     close_on_select: true }, 0);
 	}
 
 	self.server = payload.and_then(|p| Some(p.first().as_str().to_string()));
 	self.reload_app_list();
     }
 
+    pub(crate) fn open_load_menu(&mut self) {
+	self.current_menu = APP_MENU_1_APP_LOADER.to_string();
+	let _ = self.gam.switch_to_app(APP_NAME_APP_LOADER, self.auth);
+    }
+
     pub(crate) fn reload_app_list(&mut self) {
 	// without a path, the server responds with a JSON list of strings representing the list of app names
 	self.modals.start_progress(t!("apploader.reloadapplist.loading", locales::LANG), 0, 3, 0).expect("Couldn't start progressbar");
+
+	let old = self.possible_apps.clone();
 
 	// this... disgusting error handling is so that if there is an error on the server side there isn't a panic
 	self.possible_apps = match
@@ -190,12 +210,16 @@ impl AppLoader {
 	    .map(|s| xous_ipc::String::<64>::from_str(&s))
 	    .collect();
 
+	for old_name in old {
+	    self.load_menu.delete_item(old_name.as_str().unwrap());
+	}
+
 	for (i, app) in self.possible_apps.iter().enumerate() {
-	    self.menu.insert_item(MenuItem { name: xous_ipc::String::from_str(t!("apploader.menu.addapp", locales::LANG).to_owned()+app.to_str()),
-					     action_conn: Some(self.conn),
-					     action_opcode: Opcode::AddApp.to_u32().unwrap(),
-					     action_payload: gam::MenuPayload::Scalar([i.try_into().unwrap(), 0, 0, 0]),
-					     close_on_select: true }, 0);
+	    self.load_menu.insert_item(MenuItem { name: xous_ipc::String::from_str(app.to_str()),
+						  action_conn: Some(self.conn),
+						  action_opcode: Opcode::AddApp.to_u32().unwrap(),
+						  action_payload: gam::MenuPayload::Scalar([i.try_into().unwrap(), 0, 0, 0]),
+						  close_on_select: true }, 0);
 	}
 	self.modals.finish_progress().expect("Couldn't close progress bar");
 
@@ -212,7 +236,7 @@ impl AppLoader {
 	}
     }
 
-    pub(crate) fn redraw(&self) {
+    pub(crate) fn redraw(&mut self) {
 	// Properly close the app menu
 	// for anyone who needs this I found this in Menu::key_event
 	self.gam.relinquish_focus().unwrap();
@@ -221,7 +245,9 @@ impl AppLoader {
 	self.ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
 
 	// open the submenu if possible
-	let _ = self.gam.raise_menu(APP_MENU_0_APP_LOADER);
+	let _ = self.gam.raise_menu(&self.current_menu);
+	// we only ever need the other menu for one thing
+	self.current_menu = APP_MENU_0_APP_LOADER.to_string();
     }
 }
 
@@ -232,6 +258,9 @@ pub(crate) enum Opcode {
 
     /// get a list of apps from the server
     ReloadAppList,
+
+    /// open the menu for adding apps
+    AddAppMenu,
 
     /// load an app and add it to the menu
     AddApp,

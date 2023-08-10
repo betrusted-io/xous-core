@@ -24,6 +24,9 @@ fn main() -> ! {
 	    Opcode::ReloadAppList => {
 		app_loader.reload_app_list();
 	    },
+	    Opcode::AddAppMenu => {
+		app_loader.open_load_menu();
+	    },
 	    Opcode::AddApp => {
 		let index = msg.body.scalar_message().expect("Not a scalar").arg1;
 		app_loader.add_app(index);
