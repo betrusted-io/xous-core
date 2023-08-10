@@ -43,7 +43,7 @@ impl Dialogue {
 
     // add a new post to the dialog
     // note: posts are sorted by timestamp, so:
-    // - add post at beginning or end is fast (middle triggers a sort)
+    // - add post at beginning or end is fast (middle triggers a binary partition)
     // - if adding multiple posts then add oldest/newest last!
     pub fn post_add(
         &mut self,
@@ -54,27 +54,38 @@ impl Dialogue {
     ) -> Result<(), Error> {
         match self.author_id(author) {
             Some(author_id) => {
-                let post = Post::new(
+                let new = Post::new(
                     author_id, timestamp, text, None, // TODO implement
                 );
                 if self.posts.len() == 0 {
-                    self.posts.push(post);
+                    self.posts.push(new);
                     return Ok(());
                 }
-                let post_ts = post.timestamp();
-                let first_ts = self.posts.first().map_or(0, |post| post.timestamp());
-                let last_ts = self.posts.last().map_or(0, |post| post.timestamp());
-                if post_ts >= last_ts {
-                    self.posts.push(post);
-                } else if post_ts < first_ts {
-                    self.posts.insert(0, post);
+                let new_ts = new.timestamp();
+                let first_ts = self.posts.first().map_or(0, |p| p.timestamp());
+                let last_ts = self.posts.last().map_or(0, |p| p.timestamp());
+                if new_ts >= last_ts {
+                    self.posts.push(new);
+                } else if new_ts < first_ts {
+                    self.posts.insert(0, new);
                 } else {
-                    if (last_ts - post_ts) < (post_ts - first_ts) {
-                        self.posts.push(post);
-                    } else {
-                        self.posts.insert(0, post);
+                    let i = self.posts.partition_point(|p| p.timestamp() < new_ts);
+                    let last = self.posts.len()-1;
+                    for n in i..last {
+                        if let Some(old) = self.posts.get(n) {
+                            if old.timestamp() == new_ts {
+                                if old.author_id() == author_id {
+                                    // replace matching post
+                                    self.posts[i] = new;
+                                    break;
+                                } 
+                            } else {
+                                // insert new post
+                                self.posts.insert(n, new);
+                                break;
+                            }
+                        }
                     }
-                    self.posts.sort_by(|a, b| a.timestamp().cmp(&b.timestamp()));
                 }
                 Ok(())
             }
