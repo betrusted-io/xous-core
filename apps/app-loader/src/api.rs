@@ -14,7 +14,7 @@ pub(crate) struct AppLoader {
     load_menu: MenuMatic,
     conn: xous::CID,
     apps: Vec<xous_ipc::String<64>>,
-    possible_apps: Vec<xous_ipc::String<64>>,
+    possible_apps: Vec<(xous_ipc::String<64>, usize)>,
     server: Option<String>,
     current_menu: String,
 }
@@ -63,7 +63,7 @@ impl AppLoader {
     }
 
     pub(crate) fn add_app(&mut self, index: usize) {
-	let name = self.possible_apps[index];
+	let (name, menus) = self.possible_apps[index];
 
 	self.modals.start_progress(t!("apploader.addapp.loading", locales::LANG), 0, 3, 0).expect("Couldn't set up progress bar");
 
@@ -130,6 +130,9 @@ impl AppLoader {
 
 	// add its name to GAM
 	self.gam.register_name(name.to_str(), self.auth).expect("Couldn't register name");
+	for menu in 0..menus {
+	    self.gam.register_name(&format!("{} Submenu {}", name, menu), self.auth).expect("Couldn't register name");
+	}
 
 	// add it to the menu
 	self.menu.insert_item(MenuItem { name,
@@ -191,7 +194,7 @@ impl AppLoader {
 		    return;
 		}
 	    }
-	    .into_json::<Vec<String>>()
+	    .into_json::<Vec<(String, usize)>>()
 	 {
 	    Ok(json) => { self.modals.update_progress(2).expect("Couldn't update progress"); json },
 	    Err(e) => {
@@ -200,14 +203,14 @@ impl AppLoader {
 	    }
 	}
 	    .iter()
-	    .map(|s| xous_ipc::String::<64>::from_str(&s))
+	    .map(|(name, menus)| (xous_ipc::String::<64>::from_str(&name), *menus))
 	    .collect();
 
-	for old_name in old {
+	for (old_name, _) in old {
 	    self.load_menu.delete_item(old_name.as_str().unwrap());
 	}
 
-	for (i, app) in self.possible_apps.iter().enumerate() {
+	for (i, (app, _)) in self.possible_apps.iter().enumerate() {
 	    self.load_menu.insert_item(MenuItem { name: xous_ipc::String::from_str(app.to_str()),
 						  action_conn: Some(self.conn),
 						  action_opcode: Opcode::AddApp.to_u32().unwrap(),

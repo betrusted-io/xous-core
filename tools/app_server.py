@@ -6,10 +6,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote
 
 class XousAppServer(BaseHTTPRequestHandler):
-    def __init__(self, profile, target, context_to_app, *args):
+    def __init__(self, profile, target, context_to_app, context_to_menus, *args):
         self.profile = profile
         self.target = target
         self.context_to_app = context_to_app
+        self.context_to_menus = context_to_menus
         BaseHTTPRequestHandler.__init__(self, *args)
 
     def do_GET(self):
@@ -20,7 +21,7 @@ class XousAppServer(BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
 
-            l = json.dumps(list(self.context_to_app.keys()))
+            l = json.dumps(list(self.context_to_menus.items()))
 
             self.wfile.write(l.encode())
         else:
@@ -52,12 +53,17 @@ def main():
         manifest = json.loads(f.read())
 
     context_to_app = {}
+    context_to_menus = {}
 
     for app in args.apps:
         context_name = manifest[app]['context_name']
         context_to_app[context_name] = app
+        if 'submenu' in manifest[app]:
+            context_to_menus[context_name] = manifest[app]['submenu']
+        else:
+            context_to_menus[context_name] = 0
 
-    server = HTTPServer(('0.0.0.0', args.port), lambda *server_args: XousAppServer(args.profile, args.target, context_to_app, *server_args))
+    server = HTTPServer(('0.0.0.0', args.port), lambda *server_args: XousAppServer(args.profile, args.target, context_to_app, context_to_menus, *server_args))
     server.serve_forever()
 
 if __name__ == "__main__":
