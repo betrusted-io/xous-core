@@ -64,23 +64,26 @@ impl Dialogue {
                 let new_ts = new.timestamp();
                 let first_ts = self.posts.first().map_or(0, |p| p.timestamp());
                 let last_ts = self.posts.last().map_or(0, |p| p.timestamp());
-                if new_ts >= last_ts {
+                if new_ts > last_ts {
+                    log::info!("insert new post at end");
                     self.posts.push(new);
                 } else if new_ts < first_ts {
+                    log::info!("insert new post at start");
                     self.posts.insert(0, new);
                 } else {
+                    log::info!("{:?}", new);
                     let i = self.posts.partition_point(|p| p.timestamp() < new_ts);
                     let last = self.posts.len()-1;
                     for n in i..last {
                         if let Some(old) = self.posts.get(n) {
                             if old.timestamp() == new_ts {
                                 if old.author_id() == author_id {
-                                    // replace matching post
+                                    log::info!("replace matching post at {n}");
                                     self.posts[i] = new;
                                     break;
                                 } 
                             } else {
-                                // insert new post
+                                log::info!("insert new post at {n}");
                                 self.posts.insert(n, new);
                                 break;
                             }
