@@ -193,20 +193,11 @@ pub fn server(
                 })
             }
             Some(ChatOp::GamLine) => {
-                let buffer =
-                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer
-                    .to_original::<xous_ipc::String<{ POST_TEXT_MAX }>, _>()
-                    .unwrap();
-                //log::trace!("ui got input line: {}", s.as_str());
-                ui.input = Some(s);
-                user_post = true; // set a flag, instead of calling here, so message can drop and calling server is released
-            }
-            Some(ChatOp::GamRawkeys) => {
+                log::info!("got ChatOp::GamLine");
                 if let Some(cid) = app_cid {
-                    if let Some(opcode) = opcode_rawkeys {
-                        msg.forward(cid, opcode)
-                            .unwrap_or(log::warn!("failed to forward RawKeys msg"));
+                    if let Some(opcode) = opcode_post {
+                        log::info!("Forwarding msg to Chat App: {:?}", msg);
+                        msg.forward(cid, opcode).expect("failed to fwd msg");
                     }
                 }
             }
@@ -265,10 +256,6 @@ pub fn server(
                 break;
             }
             _ => log::warn!("got unknown message"),
-        }
-        if user_post {
-            log::warn!("TODO relay new user post to Chat App");
-            user_post = false;
         }
         log::trace!("reached bottom of main loop");
     }

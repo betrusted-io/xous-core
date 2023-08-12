@@ -12,6 +12,8 @@ use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read, Write as StdWrite};
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
+use trng::*;
 use xous_ipc::Buffer;
 
 /// PDDB Dict for mtxchat keys
@@ -61,6 +63,7 @@ pub const HOSTED_MODE: bool = false;
 //#[derive(Debug)]
 pub struct MtxChat<'a> {
     chat: &'a Chat,
+    trng: Trng,
     netmgr: net::NetManager,
     user_id: String,
     user_name: String,
@@ -80,8 +83,10 @@ impl<'a> MtxChat<'a> {
     pub fn new(chat: &Chat) -> MtxChat {
         let xns = xous_names::XousNames::new().unwrap();
         let modals = Modals::new(&xns).expect("can't connect to Modals server");
+        let trng = Trng::new(&xns).unwrap();
         let common = MtxChat {
             chat: chat,
+            trng: trng,
             netmgr: net::NetManager::new(),
             user_id: EMPTY.to_string(),
             user_name: EMPTY.to_string(),
@@ -535,6 +540,37 @@ impl<'a> MtxChat<'a> {
         }
     }
 
+    pub fn gen_txn_id(&mut self) -> String {
+        let mut txn_id = self.trng.get_u32().expect("unable to generate random u32");
+        log::info!("trng.get_u32() = {}", txn_id);
+        txn_id += SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .subsec_nanos();
+        txn_id.to_string()
+    }
+
+    pub fn post(&mut self, text: &str) {
+        if !self.logged_in {
+            if !self.login() {
+                return;
+            }
+        }
+        if self.room_id.len() == 0 {
+            if self.get_room_id().is_none() {
+                return;
+            }
+        }
+        let txn_id = self.gen_txn_id();
+        log::info!("txn_id = {}", txn_id);
+        let mut server = String::new();
+        write!(server, "{}{}", HTTPS, &self.user_domain).expect("failed to write server");
+        if web::send_message(&server, &self.room_id, &text, &txn_id, &self.token) {
+            log::info!("SENT: {}", text);
+        } else {
+            log::info!("FAILED TO SEND");
+        }
+    }
     pub fn wifi_connected(&self) -> bool {
         match self.netmgr.get_ipv4_config() {
             Some(conf) => conf.dhcp == com_rs::DhcpState::Bound,

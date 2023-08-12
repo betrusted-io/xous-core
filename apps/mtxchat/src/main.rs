@@ -3,11 +3,12 @@
 
 mod api;
 use api::*;
-use chat::{Chat, ChatOp, Event};
+use chat::{Chat, Event, POST_TEXT_MAX};
 use locales::t;
 use modals::Modals;
 use mtxchat::MtxChat;
 use num_traits::*;
+use xous_ipc::Buffer;
 
 fn main() -> ! {
     let stack_size = 1024 * 1024;
@@ -62,6 +63,7 @@ fn wrapped_main() -> ! {
 
     let modals = Modals::new(&xns).expect("can't connect to Modals server");
     let mut first_focus = true;
+    let mut user_post: Option<String> = None;
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
@@ -83,7 +85,15 @@ fn wrapped_main() -> ! {
             }
             Some(MtxchatOp::Menu) => {
             Some(MtxchatOp::Post) => {
-                log::info!("TODO Post to Matrix server");
+                let buffer =
+                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let s = buffer
+                    .to_original::<xous_ipc::String<{ POST_TEXT_MAX }>, _>()
+                    .unwrap();
+                if s.len() > 0 {
+                    // capture input instead of calling here, so message can drop and calling server is released
+                    user_post = Some(s.to_string());
+                }
             }
             Some(MtxchatOp::Rawkeys) => {}
             Some(MtxchatOp::Quit) => {
@@ -92,6 +102,10 @@ fn wrapped_main() -> ! {
                 break;
             }
             _ => (),
+        }
+        if let Some(post) = user_post {
+            mtxchat.post(&post);
+            user_post = None;
         }
     }
     // clean up our program
