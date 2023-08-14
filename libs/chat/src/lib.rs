@@ -4,12 +4,13 @@ pub mod dialogue;
 pub mod ui;
 
 pub use api::*;
+use gam::MenuItem;
 use num_traits::FromPrimitive;
 use std::convert::TryInto;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use xous::{Error, CID, SID};
+use xous::{Error, MessageEnvelope, CID, SID};
 use xous_ipc::Buffer;
 
 pub struct Chat {
@@ -18,7 +19,8 @@ pub struct Chat {
 
 impl Chat {
     pub fn new(
-        app_name: &str,
+        app_name: &'static str,
+        app_menu: &'static str,
         app_cid: Option<CID>,
         opcode_post: Option<usize>,
         opcode_event: Option<usize>,
@@ -26,12 +28,19 @@ impl Chat {
     ) -> Self {
         let chat_sid = xous::create_server().unwrap();
         let chat_cid = xous::connect(chat_sid).unwrap();
-        let app_name = app_name.to_string();
 
         log::info!("Starting chat UI server",);
         thread::spawn({
             move || {
-                server(chat_sid, app_cid, opcode_post, opcode_event, opcode_rawkeys);
+                server(
+                    chat_sid,
+                    app_name,
+                    app_menu,
+                    app_cid,
+                    opcode_post,
+                    opcode_event,
+                    opcode_rawkeys,
+                );
             }
         });
 
@@ -56,6 +65,13 @@ impl Chat {
         };
         match Buffer::into_buf(dialogue) {
             Ok(buf) => buf.send(self.cid, ChatOp::DialogueSet as u32).map(|_| ()),
+            Err(_) => Err(xous::Error::InternalError),
+        }
+    }
+
+    pub fn menu_add(&self, item: MenuItem) -> Result<(), Error> {
+        match Buffer::into_buf(item) {
+            Ok(buf) => buf.send(self.cid, ChatOp::MenuAdd as u32).map(|_| ()),
             Err(_) => Err(xous::Error::InternalError),
         }
     }
@@ -145,7 +161,8 @@ impl Chat {
 
 pub fn server(
     sid: SID,
-    app_name: &str,
+    app_name: &'static str,
+    app_menu: &'static str,
     app_cid: Option<CID>,
     opcode_post: Option<usize>,
     opcode_event: Option<usize>,
@@ -160,7 +177,7 @@ pub fn server(
     // let mut opcode_event = opcode_event;
     // let mut opcode_rawkeys = opcode_rawkeys;
 
-    let mut ui = ui::Ui::new(sid, app_name, app_cid, opcode_event);
+    let mut ui = ui::Ui::new(sid, app_name, app_menu, app_cid, opcode_event);
 
     let mut user_post = true;
     let mut allow_redraw = false;
@@ -236,14 +253,15 @@ pub fn server(
             Some(ChatOp::PostFlag) => {
                 log::warn!("ChatOp::PostFlag not implemented");
             }
-            Some(ChatOp::ListenSet) => {
-                // set listener sid and opcodes to receive UI-event msgs & user posts
-                // pub fn listen_set(&self, cid: xous::CID, opcode_post: Option<u32>, opcode_event: Option<u32>, opcode_rawkeys: Option<u32>) {
-                //     self.listener = cid;
-                //     self.opcode_post = opcode_post;
-                //     self.opcode_event = opcode_event;
-                //     self.opcode_rawkeys = opcode_rawkeys;
-                // }
+            Some(ChatOp::MenuAdd) => {
+                log::warn!("ChatOp::MenuAdd not implemented");
+                let buffer =
+                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                if let Ok(menu_item) = buffer.to_original::<MenuItem, _>() {
+                    ui.menu_add(menu_item);
+                } else {
+                    log::warn!("failed to deserialize MenuItem");
+                }
             }
             Some(ChatOp::UiButton) => {
                 log::warn!("ChatOp::UiButton not implemented");

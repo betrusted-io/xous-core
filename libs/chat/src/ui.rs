@@ -1,7 +1,7 @@
 use super::*;
 //use crate::{ChatOp, Dialogue, Event, Post, CHAT_SERVER_NAME};
 use dialogue::{author::Author, post::Post, Dialogue};
-use gam::UxRegistration;
+use gam::{menu_matic, MenuMatic, MenuPayload, UxRegistration};
 use graphics_server::api::GlyphStyle;
 use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
 use locales::t;
@@ -49,6 +49,10 @@ pub(crate) struct Ui {
     bubble_radius: u16,
     bubble_space: i16, // spacing between text bubbles
 
+    // variables that define a menu
+    app_menu: String,
+    menu_mgr: MenuMatic,
+
     // our security token for making changes to our record on the GAM
     token: [u32; 4],
 }
@@ -57,7 +61,8 @@ pub(crate) struct Ui {
 impl Ui {
     pub(crate) fn new(
         sid: xous::SID,
-        app_name: &str,
+        app_name: &'static str,
+        app_menu: &'static str,
         app_cid: Option<xous::CID>,
         opcode_event: Option<usize>,
     ) -> Self {
@@ -89,6 +94,12 @@ impl Ui {
             .expect("couldn't get dimensions of content canvas");
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
+        let menu_mgr = menu_matic(
+            Vec::<MenuItem>::new(),
+            app_menu,
+            Some(xous::create_server().unwrap()),
+        )
+        .expect("couldn't create MenuMatic manager");
         Ui {
             input: None,
             msg: None,
@@ -107,7 +118,9 @@ impl Ui {
             bubble_margin: Point::new(4, 4),
             bubble_radius: 4,
             bubble_space: 4,
-            token: token.unwrap(),
+            app_menu: app_menu.to_owned(),
+            menu_mgr: menu_mgr,
+            token: token,
         }
     }
 
@@ -257,19 +270,9 @@ impl Ui {
         }
     }
 
-    // set listener sid and opcodes to receive UI-event msgs & user posts
-    // pub fn listen_set(
-    //     &self,
-    //     cid: xous::CID,
-    //     opcode_post: Option<u32>,
-    //     opcode_event: Option<u32>,
-    //     opcode_rawkeys: Option<u32>,
-    // ) {
-    //     self.listener = cid;
-    //     self.opcode_post = opcode_post;
-    //     self.opcode_event = opcode_event;
-    //     self.opcode_rawkeys = opcode_rawkeys;
-    // }
+    pub fn menu_add(&self, item: MenuItem) {
+        self.menu_mgr.add_item(item);
+    }
 
     // add a new Post to the current Dialogue
     pub fn post_add(
@@ -343,9 +346,18 @@ impl Ui {
     }
 
     // send a xous scalar message with an Event to the Chat App cid/opcode
-    fn event(&self, _event: Event) {
-        log::warn!("not implemented");
-        // Err(Error::new(ErrorKind::Other, "not implemented"))
+    pub fn event(&self, event: Event) {
+        log::info!("Event {:?}", event);
+        match (self.app_cid, self.opcode_event) {
+            (Some(cid), Some(opcode)) => match xous::send_message(
+                cid,
+                xous::Message::new_scalar(opcode as usize, event as usize, 0, 0, 0),
+            ) {
+                Ok(_) => log::info!("sent event msg"),
+                Err(e) => log::warn!("failed to send event msg: {:?}", e),
+            },
+            _ => log::warn!("missing cid or event opcode"),
+        }
     }
 
     fn bubble(&self, post: &Post, author: &Author, baseline: i16) -> TextView {
@@ -393,12 +405,19 @@ impl Ui {
             .expect("can't clear canvas area");
     }
 
+    pub(crate) fn raise_menu(&mut self) {
+        // self.title_dirty = true;
+        self.gam
+            .raise_menu(&self.app_menu)
+            .expect("couldn't raise our submenu");
+        log::info!("raised menu");
+    }
+
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
         self.clear_area();
 
         // this defines the bottom border of the text bubbles as they stack up wards
         let mut bubble_baseline = self.screensize.y - self.margin.y;
-
         if let Some(dialogue) = &self.dialogue {
             for post in dialogue.posts().rev() {
                 if let Some(author) = dialogue.author(post.author_id()) {

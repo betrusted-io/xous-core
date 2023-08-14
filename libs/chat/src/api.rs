@@ -16,6 +16,7 @@ pub enum ChatOp {
     /// redraw our UI
     GamRedraw,
     ListenSet,
+    MenuAdd,
     PostAdd,
     PostDel,
     PostFind,
@@ -66,6 +67,7 @@ pub enum Event {
     Bottom, // Bottom of post list reached
     Key,    // keystroke
     Post,   // new user Post committed
+    Menu,   // menu item clicked
 }
 
 #[derive(
