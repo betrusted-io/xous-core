@@ -280,18 +280,18 @@ impl<'a> MtxChat<'a> {
         if self.token.len() > 0 {
             if let Some(user_id) = web::whoami(&server, &self.token) {
                 let i = match user_id.find('@') {
-                    Some(index) => { index + 1 },
-                    None => { 0 },
+                    Some(index) => index + 1,
+                    None => 0,
                 };
                 let j = match user_id.find(':') {
-                    Some(index) => { index },
-                    None => { user_id.len() },
+                    Some(index) => index,
+                    None => user_id.len(),
                 };
                 self.set(USER_ID_KEY, &user_id)
                     .expect("failed to save user id");
                 self.set(USER_NAME_KEY, &user_id[i..j])
                     .expect("failed to save user name");
-                self.set(USER_DOMAIN_KEY, &user_id[j+1..])
+                self.set(USER_DOMAIN_KEY, &user_id[j + 1..])
                     .expect("failed to save user domain");
                 self.logged_in = true;
             }
@@ -372,6 +372,11 @@ impl<'a> MtxChat<'a> {
             self.user_name,
             self.user_domain
         );
+    }
+
+    pub fn logout(&mut self){
+        self.unset_debug(TOKEN_KEY);
+        // TODO logout with server
     }
 
     // assume logged in, token is valid

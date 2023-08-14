@@ -4,8 +4,8 @@
 mod api;
 use api::*;
 use chat::{Chat, Event, POST_TEXT_MAX};
+use gam::{MenuItem, MenuPayload};
 use locales::t;
-use modals::Modals;
 use mtxchat::MtxChat;
 use num_traits::*;
 use xous_ipc::Buffer;
@@ -53,15 +53,48 @@ fn wrapped_main() -> ! {
 
     let chat = Chat::new(
         gam::APP_NAME_MTXCHAT,
+        gam::APP_MENU_0_MTXCHAT,
         Some(xous::connect(sid).unwrap()),
         Some(MtxchatOp::Post as usize),
         Some(MtxchatOp::Event as usize),
         Some(MtxchatOp::Rawkeys as usize),
     );
 
-    let mut mtxchat = MtxChat::new(&chat);
+    let cid = xous::connect(sid).unwrap();
+    chat.menu_add(MenuItem {
+        name: xous_ipc::String::from_str(t!("mtxchat.room.item", locales::LANG)),
+        action_conn: Some(cid),
+        action_opcode: MtxchatOp::Menu as u32,
+        action_payload: MenuPayload::Scalar([MenuOp::Room as u32, 0, 0, 0]),
+        close_on_select: true,
+    })
+    .expect("failed add menu");
+    chat.menu_add(MenuItem {
+        name: xous_ipc::String::from_str(t!("mtxchat.login.item", locales::LANG)),
+        action_conn: Some(cid),
+        action_opcode: MtxchatOp::Menu as u32,
+        action_payload: MenuPayload::Scalar([MenuOp::Login as u32, 0, 0, 0]),
+        close_on_select: true,
+    })
+    .expect("failed add menu");
+    chat.menu_add(MenuItem {
+        name: xous_ipc::String::from_str(t!("mtxchat.logout.item", locales::LANG)),
+        action_conn: Some(cid),
+        action_opcode: MtxchatOp::Menu as u32,
+        action_payload: MenuPayload::Scalar([MenuOp::Logout as u32, 0, 0, 0]),
+        close_on_select: true,
+    })
+    .expect("failed add menu");
+    chat.menu_add(MenuItem {
+        name: xous_ipc::String::from_str(t!("mtxchat.close.item", locales::LANG)),
+        action_conn: Some(cid),
+        action_opcode: MtxchatOp::Menu as u32,
+        action_payload: MenuPayload::Scalar([MenuOp::Noop as u32, 0, 0, 0]),
+        close_on_select: true,
+    })
+    .expect("failed add menu");
 
-    let modals = Modals::new(&xns).expect("can't connect to Modals server");
+    let mut mtxchat = MtxChat::new(&chat);
     let mut first_focus = true;
     let mut user_post: Option<String> = None;
     loop {
@@ -84,6 +117,24 @@ fn wrapped_main() -> ! {
                 });
             }
             Some(MtxchatOp::Menu) => {
+                log::info!("got Chat Menu Click");
+                xous::msg_scalar_unpack!(msg, menu_code, _, _, _, {
+                    match FromPrimitive::from_usize(menu_code) {
+                        Some(MenuOp::Login) => {
+                            mtxchat.connect();
+                        }
+                        Some(MenuOp::Logout) => {
+                            mtxchat.logout();
+                            mtxchat.connect();
+                        }
+                        Some(MenuOp::Noop) => {}
+                        Some(MenuOp::Room) => {
+                            mtxchat.room_modal();
+                        }
+                        _ => (),
+                    }
+                });
+            }
             Some(MtxchatOp::Post) => {
                 let buffer =
                     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };

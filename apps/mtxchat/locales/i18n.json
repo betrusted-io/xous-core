@@ -55,12 +55,11 @@
         "ja": "MTXCHAT ready *EN*",
         "zh": "MTXCHAT ready *EN*"
     },
-    "mtxchat.logged.in": {
-        "en": "logged in",
-        "en-tts": "logged in",
-        "fr": "connecté",
-        "ja": "logged in *EN*",
-        "zh": "logged in *EN*"
+    "mtxchat.login.item": {
+        "en": "Login",
+        "en-tts": "Login",
+        "ja": "Login *EN*",
+        "zh": "Login *EN*"
     },
     "mtxchat.logged.out": {
         "en": "logged out",
@@ -90,12 +89,12 @@
         "ja": "/login *EN*",
         "zh": "/login *EN*"
     },
-    "mtxchat.logout.help": {
-        "en": "/logout",
-        "en-tts": "logout",
-        "fr": "/logout (déconnexion)",
-        "ja": "/logout *EN*",
-        "zh": "/logout *EN*"
+    "mtxchat.logout.item": {
+        "en": "Logout",
+        "en-tts": "Logout",
+        "fr": "Logout (déconnexion)",
+        "ja": "Logout *EN*",
+        "zh": "Logout *EN*"
     },
     "mtxchat.migration.completed": {
         "en": "migration completed",
@@ -143,6 +142,10 @@
     "mtxchat.room.title": {
         "en": "Matrix room",
         "en-tts": "Matrix room"
+    },
+    "mtxchat.room.item": {
+        "en": "Room",
+        "en-tts": "Room"
     },
     "mtxchat.room.name": {
         "en": "room name",
@@ -221,5 +224,9 @@
         "fr": "AVERTISSEMENT: WiFi pas connecté",
         "ja": "WARNING: WiFi not connected *EN*",
         "zh": "WARNING: WiFi not connected *EN*"
+    },
+    "mtxchat.close.item": {
+        "en": "Close menu",
+        "en-tts": "Close menu"
     }
 }

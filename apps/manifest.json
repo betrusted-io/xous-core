@@ -41,7 +41,8 @@
             "appmenu.mtxchat": {
                 "en": "Matrix chat"
             }
-        }
+        },
+        "submenu": 1
     },
     "repl": {
         "context_name": "repl demo app",
