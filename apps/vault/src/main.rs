@@ -691,6 +691,10 @@ fn main() -> ! {
                 modals.dynamic_notification(Some(t!("vault.readout_switchover", locales::LANG)), None).ok();
                 vaultux.readout_mode(false);
                 modals.dynamic_notification_close().ok();
+
+                xous::send_message(conn,
+                    xous::Message::new_scalar(VaultOp::ReloadDbAndFullRedraw.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
             }
             Some(VaultOp::MenuAutotypeRate) => {
                 let cv = {
