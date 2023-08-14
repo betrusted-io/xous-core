@@ -406,7 +406,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Fix issue in `ProcessStartup` where `repr(C)` was missing, thanks to @vihaanjim for finding that subtle bug!
 
 ## New in v0.9.15
-
+- refresh item cache after leaving vault host readout mode
 
 ## Roadmap
 - Lots of testing and bug fixes
