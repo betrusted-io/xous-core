@@ -73,7 +73,7 @@ impl Dialogue {
                 } else {
                     log::info!("{:?}", new);
                     let i = self.posts.partition_point(|p| p.timestamp() < new_ts);
-                    let last = self.posts.len()-1;
+                    let last = self.posts.len() - 1;
                     for n in i..last {
                         if let Some(old) = self.posts.get(n) {
                             if old.timestamp() == new_ts {
@@ -81,7 +81,7 @@ impl Dialogue {
                                     log::info!("replace matching post at {n}");
                                     self.posts[i] = new;
                                     break;
-                                } 
+                                }
                             } else {
                                 log::info!("insert new post at {n}");
                                 self.posts.insert(n, new);
@@ -99,13 +99,13 @@ impl Dialogue {
     pub fn post_find(&self, author: &str, timestamp: u64) -> Option<usize> {
         if let Some(author_id) = self.author_lookup.get(author) {
             let i = self.posts.partition_point(|p| p.timestamp() < timestamp);
-            let last = self.posts.len()-1;
+            let last = self.posts.len() - 1;
             for n in i..last {
                 if let Some(post) = self.posts.get(n) {
                     if post.timestamp() == timestamp {
                         if post.author_id() == *author_id {
                             return Some(n);
-                        } 
+                        }
                     } else {
                         break;
                     }

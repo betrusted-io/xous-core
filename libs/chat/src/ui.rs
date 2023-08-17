@@ -289,8 +289,9 @@ impl Ui {
                     .unwrap();
                 match self.dialogue_save() {
                     Ok(_) => log::info!("Dialogue saved"),
-                    Err(e) => log::warn!("Failed to save Dialogue"),
+                    Err(e) => log::warn!("Failed to save Dialogue: {e}"),
                 }
+                self.redraw().expect("failed chat ui redraw");
             }
             None => log::warn!("no Dialogue available to add Post"),
         }

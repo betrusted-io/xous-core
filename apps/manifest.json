@@ -36,10 +36,10 @@
         }
     },
     "mtxchat": {
-        "context_name": "Matrix chat",
+        "context_name": "[matrix]",
         "menu_name": {
             "appmenu.mtxchat": {
-                "en": "Matrix chat"
+                "en": "[matrix]"
             }
         },
         "submenu": 1

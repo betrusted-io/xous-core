@@ -2,8 +2,8 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use crate::server;
 use api::*;
+use std::thread;
 
 use xous::{Error, CID, SID};
 
@@ -20,7 +20,8 @@ pub fn main() -> ! {
     log::info!("Starting chat server",);
     thread::spawn({
         move || {
-            server(chat_sid, None, None, None, None);
+            server(chat_sid, None, None);
         }
     });
+    xous::terminate_process(0)
 }

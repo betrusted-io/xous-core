@@ -49,7 +49,7 @@ fn wrapped_main() -> ! {
     let sid = xns
         .register_name(SERVER_NAME_MTXCHAT, None)
         .expect("can't register server");
-    // log::trace!("registered with NS -- {:?}", sid);
+    log::trace!("registered with NS -- {:?}", sid);
 
     let chat = Chat::new(
         gam::APP_NAME_MTXCHAT,
@@ -146,7 +146,7 @@ fn wrapped_main() -> ! {
                     user_post = Some(s.to_string());
                 }
             }
-            Some(MtxchatOp::Rawkeys) => {}
+            Some(MtxchatOp::Rawkeys) => log::info!("got mtxchat rawkeys"),
             Some(MtxchatOp::Quit) => {
                 log::error!("got Quit");
                 chat.forward(msg);

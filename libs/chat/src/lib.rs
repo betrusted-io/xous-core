@@ -116,11 +116,13 @@ impl Chat {
         };
         find.author.append(author).unwrap();
         match Buffer::into_buf(find) {
-            Ok(mut buf) => {
-                buf.lend_mut(self.cid, ChatOp::PostFind as u32).map(|_| ());
-                find = buf.to_original::<api::Find, _>().unwrap();
-                Ok(find.key)
-            }
+            Ok(mut buf) => match buf.lend_mut(self.cid, ChatOp::PostFind as u32) {
+                Ok(..) => {
+                    find = buf.to_original::<api::Find, _>().unwrap();
+                    Ok(find.key)
+                }
+                Err(_) => Err(xous::Error::InternalError),
+            },
             Err(_) => Err(xous::Error::InternalError),
         }
     }
@@ -172,14 +174,8 @@ pub fn server(
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
-    // let mut app_cid = app_cid;
-    // let mut opcode_post = opcode_post;
-    // let mut opcode_event = opcode_event;
-    // let mut opcode_rawkeys = opcode_rawkeys;
-
     let mut ui = ui::Ui::new(sid, app_name, app_menu, app_cid, opcode_event);
 
-    let mut user_post = true;
     let mut allow_redraw = false;
     loop {
         let msg = xous::receive_message(sid).unwrap();
@@ -197,6 +193,7 @@ pub fn server(
                 ui.dialogue_set(dialogue.dict.as_str().unwrap(), dialogue_key.as_deref());
             }
             Some(ChatOp::GamChangeFocus) => {
+                log::info!("ChatOp::GamChangeFocus");
                 xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
                     let new_state = gam::FocusState::convert_focus_change(new_state_code);
                     match new_state {
@@ -205,6 +202,7 @@ pub fn server(
                         }
                         gam::FocusState::Foreground => {
                             allow_redraw = true;
+                            ui.event(Event::Focus);
                         }
                     }
                 })
@@ -219,6 +217,7 @@ pub fn server(
                 }
             }
             Some(ChatOp::GamRedraw) => {
+                log::info!("ChatOp::GamRedraw");
                 if allow_redraw {
                     ui.redraw().expect("CHAT couldn't redraw");
                 }

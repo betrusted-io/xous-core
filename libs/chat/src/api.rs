@@ -1,12 +1,12 @@
 use enumset::EnumSetType;
 use rkyv::{Archive, Deserialize, Serialize};
 
-pub(crate) const SERVER_NAME_CHAT: &str = "Chat UI";
+
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ChatOp {
     ///
-    DialogueSet = 128,
+    DialogueSet = 0,
     ///
     GamChangeFocus,
     /// a line of text has arrived
@@ -27,7 +27,7 @@ pub enum ChatOp {
     Quit,
 }
 
-const POST_TEXT_MAX: usize = 3072;
+
 
 pub const POST_TEXT_MAX: usize = 3072;
 
@@ -86,8 +86,6 @@ pub enum PostFlag {
 }
 
 
-#[derive(Archive, Serialize, Deserialize, Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, EnumSetType)]
-pub enum AuthorFlags {
 
 #[derive(
     Archive,
