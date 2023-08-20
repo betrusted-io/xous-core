@@ -3,6 +3,9 @@ use utralib::generated::*;
 
 pub struct Output {}
 
+#[cfg(feature="cramium-soc")]
+pub static mut UART_DMA_BUF: *mut u8 = 0x0000_0000 as *mut u8;
+
 pub fn init() -> Output {
     #[cfg(feature="cramium-fpga")]
     let uart = xous::syscall::map_memory(
@@ -15,7 +18,7 @@ pub fn init() -> Output {
     // TODO: migrate this to a "proper" UART that is available on SoC hardware, but for now all we have access to is the DUART.
     #[cfg(feature="cramium-soc")]
     let uart = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utra::duart::HW_DUART_BASE),
+        xous::MemoryAddress::new(utra::udma_uart_0::HW_UDMA_UART_0_BASE),
         None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -24,6 +27,60 @@ pub fn init() -> Output {
     unsafe { crate::platform::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _ };
     println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
     println!("Process: map success!");
+
+    #[cfg(feature="cramium-soc")]
+    {
+        // TODO: need to write an allocator for the UDMA memory region as well
+        let tx_buf = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utralib::HW_IFRAM0_MEM),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map UDMA buffer");
+        unsafe { UART_DMA_BUF = tx_buf.as_mut_ptr() as *mut u8 };
+
+        // TODO: migrate this to an allocator that can handle all IOs
+        let iox_buf = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::iox::HW_IOX_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map iox buffer");
+
+        let udma_ctrl = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map UDMA control");
+
+        let iox_csr = iox_buf.as_mut_ptr() as *mut u32;
+        unsafe {
+            iox_csr.add(0).write_volatile(0x0140);  // PAL
+            iox_csr.add(0x1c / core::mem::size_of::<u32>()).write_volatile(0x1400); // PDH
+            iox_csr.add(0x148 / core::mem::size_of::<u32>()).write_volatile(0xff); // PA
+            iox_csr.add(0x148 / core::mem::size_of::<u32>() + 3).write_volatile(0xffff); // PD
+            iox_csr.add(0x160 / core::mem::size_of::<u32>()).write_volatile(0xffff); // pullups for port A
+        }
+
+        let mut udma_ctrl = CSR::new(udma_ctrl.as_mut_ptr() as _);
+        // ungate the clock for the UART. TODO: send this to a power management common server...
+        // probably should be in the same server that allocates UDMA buffers.
+        udma_ctrl.wo(utra::udma_ctrl::REG_CG, 1);
+
+        // setup the baud rate
+        let mut uart_csr = CSR::new(uart.as_mut_ptr() as *mut u32);
+        //let baudrate: u32 = 115200;
+        //let freq: u32 = 32_000_000;
+        //let clk_counter: u32 = (freq + baudrate / 2) / baudrate;
+        let clk_counter: u32 = 2174; // empirically determined for the FPGA target
+        uart_csr.wo(utra::udma_uart_0::REG_UART_SETUP,
+            0x0306 | (clk_counter << 16)
+        );
+    }
 
     #[cfg(feature="inject")]
     {
@@ -117,14 +174,20 @@ impl OutputWriter {
         #[cfg(feature="cramium-soc")]
         {
             let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
-
-            while uart_csr.r(utra::duart::SFR_SR) != 0 {}
-            uart_csr.wo(utra::duart::SFR_TXD, c as u32);
-
-            // there's a race condition in the handler, if a new character comes in while handling the interrupt,
-            // the pending bit never clears. If the console seems to freeze, uncomment this line.
-            // This kind of works around that, at the expense of maybe losing some Rx characters.
-            // uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
+            // enqueue our character to send via DMA
+            unsafe {
+                if UART_DMA_BUF as usize != 0 {
+                    UART_DMA_BUF.write_volatile(c); // write to the virtual memory address
+                }
+            }
+            // configure the DMA
+            uart_csr.wo(utra::udma_uart_0::REG_TX_SADDR, utralib::HW_IFRAM0_MEM as u32); // source is the physical address
+            uart_csr.wo(utra::udma_uart_0::REG_TX_SIZE, 1);
+            // send it
+            uart_csr.wo(utra::udma_uart_0::REG_TX_CFG, 0x10); // EN
+            // wait for it all to be done
+            while uart_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {   }
+            while (uart_csr.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {  }
         }
     }
 
