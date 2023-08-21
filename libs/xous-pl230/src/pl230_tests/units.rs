@@ -106,6 +106,17 @@ pub fn basic_tests (pl230: &mut Pl230) -> bool {
 pub fn pio_test(pl230: &mut Pl230) -> bool {
     use xous_pio::*;
 
+    let iox_csr = utra::iox::HW_IOX_BASE as *mut u32;
+    unsafe {
+        iox_csr.add(0).write_volatile(0x0140);  // PAL
+        iox_csr.add(8 / core::mem::size_of::<u32>()).write_volatile(0x0140);  // PBL
+        iox_csr.add(0x1c / core::mem::size_of::<u32>()).write_volatile(0x1400); // PDH
+        iox_csr.add(0x148 / core::mem::size_of::<u32>()).write_volatile(0xff); // PA
+        iox_csr.add(0x148 / core::mem::size_of::<u32>() + 3).write_volatile(0xffff); // PD
+        iox_csr.add(0x160 / core::mem::size_of::<u32>()).write_volatile(0xffff); // pullups for port A
+        iox_csr.add(0x200 / core::mem::size_of::<u32>()).write_volatile(0x10); // select PA4 as PIO output
+    }
+
     // setup PIO block as DMA target -- just take the data coming into the TX
     // FIFO and send it to the GPIO pins.
     let mut pio_ss = PioSharedState::new();
@@ -122,6 +133,7 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
     sm_a.config_set_out_pins(0, 32);
     sm_a.config_set_clkdiv(133.0); // have it run slow so this test operates in the background
     sm_a.config_set_out_shift(false, true, 32);
+    sm_a.sm_set_pindirs_with_mask(0x10, 0x10);
     sm_a.sm_init(a_prog.entry());
     sm_a.sm_clear_fifos(); // ensure the fifos are cleared for this test
 
