@@ -1,6 +1,7 @@
 pub mod api;
 pub mod cmd;
 pub mod dialogue;
+pub mod icontray;
 pub mod ui;
 
 pub use api::*;
@@ -10,7 +11,7 @@ use std::convert::TryInto;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use xous::{Error, MessageEnvelope, CID, SID};
+use xous::{Error, CID, SID};
 use xous_ipc::Buffer;
 
 pub struct Chat {
@@ -209,10 +210,51 @@ pub fn server(
             }
             Some(ChatOp::GamLine) => {
                 log::info!("got ChatOp::GamLine");
-                if let Some(cid) = app_cid {
-                    if let Some(opcode) = opcode_post {
-                        log::info!("Forwarding msg to Chat App: {:?}", msg);
-                        msg.forward(cid, opcode).expect("failed to fwd msg");
+                let buffer =
+                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
+                match s.as_str() {
+                    "\u{0011}" => {
+                        log::info!("click F1 : raise app menu");
+                        ui.event(Event::F1);
+                        ui.raise_menu();
+                    }
+                    "\u{0012}" => {
+                        log::info!("click F2 : noop : suggestions welcome!");
+                        ui.event(Event::F2);
+                    }
+                    "\u{0013}" => {
+                        log::info!("click F3: noop : suggestions welcome!");
+                        ui.event(Event::F3);
+                    }
+                    "\u{0014}" => {
+                        log::info!("click F4 : raise msg menu : pull request welcome!");
+                        ui.event(Event::F4);
+                    }
+                    "↑" => {
+                        log::info!("click ↑ : previous msg : pull request welcome!");
+                        ui.event(Event::Up);
+                    }
+                    "↓" => {
+                        log::info!("click ↓ : next msg : pull request welcome!");
+                        ui.event(Event::Down);
+                    }
+                    "←" => {
+                        log::info!("click ← : noop : suggestions welcome!");
+                        ui.event(Event::Left);
+                    }
+                    "→" => {
+                        log::info!("click → : noop : suggestions welcome!");
+                        ui.event(Event::Right);
+                    }
+                    _ => {
+                        drop(buffer);
+                        if let Some(cid) = app_cid {
+                            if let Some(opcode) = opcode_post {
+                                log::info!("Forwarding msg to Chat App: {:?}", msg);
+                                msg.forward(cid, opcode).expect("failed to fwd msg");
+                            }
+                        }
                     }
                 }
             }

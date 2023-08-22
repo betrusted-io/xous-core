@@ -1,7 +1,8 @@
 use super::*;
 //use crate::{ChatOp, Dialogue, Event, Post, CHAT_SERVER_NAME};
+use crate::icontray::Icontray;
 use dialogue::{author::Author, post::Post, Dialogue};
-use gam::{menu_matic, MenuMatic, MenuPayload, UxRegistration};
+use gam::{menu_matic, MenuMatic, UxRegistration};
 use graphics_server::api::GlyphStyle;
 use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
 use locales::t;
@@ -74,7 +75,7 @@ impl Ui {
                 app_name: xous_ipc::String::<128>::from_str(app_name),
                 ux_type: gam::UxType::Chat,
                 predictor: Some(xous_ipc::String::<64>::from_str(
-                    ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL,
+                    crate::icontray::SERVER_NAME_ICONTRAY,
                 )),
                 listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!
                 redraw_id: ChatOp::GamRedraw as u32,
@@ -83,15 +84,23 @@ impl Ui {
                 rawkeys_id: Some(ChatOp::GamRawkeys as u32),
                 focuschange_id: Some(ChatOp::GamChangeFocus as u32),
             })
-            .expect("couldn't register Ux context for chat");
+            .expect("couldn't register Ux context for chat")
+            .unwrap();
+        gam.toggle_menu_mode(token)
+            .expect("couldnt't toggle menu mode");
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
         let canvas = gam
-            .request_content_canvas(token.unwrap())
+            .request_content_canvas(token)
             .expect("couldn't get content canvas");
         let screensize = gam
             .get_canvas_bounds(canvas)
             .expect("couldn't get dimensions of content canvas");
+        let _icontray = Icontray::new(
+            Some(xous::connect(sid).unwrap()),
+            [app_name, "F2", "F3", "F4"],
+        );
+
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
         let menu_mgr = menu_matic(

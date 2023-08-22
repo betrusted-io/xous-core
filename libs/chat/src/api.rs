@@ -15,7 +15,7 @@ pub enum ChatOp {
     GamRawkeys,
     /// redraw our UI
     GamRedraw,
-    ListenSet,
+    Icontray,
     MenuAdd,
     PostAdd,
     PostDel,
@@ -27,7 +27,13 @@ pub enum ChatOp {
     Quit,
 }
 
-
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum IconOp {
+    PostMenu = 0,
+    F2Op,
+    F3Op,
+    AppMenu,
+}
 
 pub const POST_TEXT_MAX: usize = 3072;
 
