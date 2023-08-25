@@ -93,13 +93,15 @@ pub(crate) struct ComposedType {
     words: Vec::<TypesetWord>,
     bounding_box: ClipRect,
     cursor: Cursor,
+    overflow: bool,
 }
 impl ComposedType {
-    pub fn new(words: Vec::<TypesetWord>, bounds: ClipRect, cursor: Cursor) -> Self {
+    pub fn new(words: Vec::<TypesetWord>, bounds: ClipRect, cursor: Cursor, overflow: bool) -> Self {
         ComposedType {
             words,
             bounding_box: bounds,
             cursor,
+            overflow,
         }
     }
     pub fn bb_width(&self) -> i16 {
@@ -176,6 +178,9 @@ impl ComposedType {
     }
     pub fn final_cursor(&self) -> Cursor {
         self.cursor
+    }
+    pub fn final_overflow(&self) -> bool {
+        self.overflow
     }
 }
 /// Typesetter takes a string and attempts to lay it out within a region defined by
@@ -267,7 +272,8 @@ impl Typesetter {
             log::error!("Words cannot be typset because the width of the typset region is too narrow.");
             return ComposedType::new(composition,
                 ClipRect::new(self.bb.min.x, self.bb.min.y, self.bb.min.x, self.bb.min.y),
-                self.cursor
+                self.cursor,
+                true,
             );
         }
         // algorithm:
@@ -422,7 +428,8 @@ impl Typesetter {
                 self.bb.min.x, self.bb.min.y,
                 self.max_width as i16, self.cursor.pt.y + self.last_line_height as i16,
             ),
-            self.cursor
+            self.cursor,
+            self.overflow,
         );
         // cleanup any state based on the overflow strategy
         match strat {

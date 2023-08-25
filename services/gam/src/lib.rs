@@ -151,6 +151,7 @@ impl Gam {
             api::Return::RenderReturn(tvr) => {
                 tv.bounds_computed = tvr.bounds_computed;
                 tv.cursor = tvr.cursor;
+                tv.overflow = tvr.overflow;
             }
             api::Return::NotCurrentlyDrawable => {
                 tv.bounds_computed = None;
@@ -172,6 +173,7 @@ impl Gam {
             api::Return::RenderReturn(tvr) => {
                 tv.bounds_computed = tvr.bounds_computed;
                 tv.cursor = tvr.cursor;
+                tv.overflow = tvr.overflow;
             }
             _ => panic!("GAM_API: bounds_compute_textview got a return value from the server that isn't expected or handled")
         }
