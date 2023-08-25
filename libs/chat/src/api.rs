@@ -3,6 +3,11 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 
 
+// these are used to increment and decrement the selected post
+pub const POST_SELECTED_NEXT: usize = usize::MAX - 0;
+pub const POST_SELECTED_PREV: usize = usize::MAX - 1;
+
+
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ChatOp {
     ///

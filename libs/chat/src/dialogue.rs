@@ -115,6 +115,20 @@ impl Dialogue {
         None
     }
 
+    // return an arbitrary post in the dialogue by index
+    pub fn post_get(&self, index: usize) -> Option<&Post> {
+        self.posts.get(index)
+    }
+
+    // return the index of the most recent post in the dialogue
+    pub fn post_last(&self) -> Option<usize> {
+        if self.posts.len() == 0 {
+            None
+        } else {
+            Some(self.posts.len() - 1)
+        }
+    }
+
     pub fn posts(&self) -> Iter<Post> {
         return self.posts.iter();
     }

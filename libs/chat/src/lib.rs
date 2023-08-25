@@ -232,12 +232,14 @@ pub fn server(
                         ui.event(Event::F4);
                     }
                     "↑" => {
-                        log::info!("click ↑ : previous msg : pull request welcome!");
                         ui.event(Event::Up);
+                        ui.post_select(POST_SELECTED_PREV);
+                        ui.redraw().expect("failed to redraw chat");
                     }
                     "↓" => {
-                        log::info!("click ↓ : next msg : pull request welcome!");
                         ui.event(Event::Down);
+                        ui.post_select(POST_SELECTED_NEXT);
+                        ui.redraw().expect("failed to redraw chat");
                     }
                     "←" => {
                         log::info!("click ← : noop : suggestions welcome!");
