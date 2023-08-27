@@ -1,31 +1,24 @@
-# Spawn a process
+# Spawn a process & Read an ELF File
 
-This crate represents an initial program that will run when a process
-starts up. It will listen on a Server and take orders from the parent
-process to finish setting itself up.
-
-## Initialization
-
-The process starts with a stack and a text section but no heap, BSS,
-or data section. The entrypoint looks like this:
-
-```rust
-pub extern "C" init(a1: u32, a2: u32, a3: u32, a4: u32) -> ! {
-    let sid = xous::SID::from_u32(a1, a2, a3, a4);
-    loop {}
-}
-```
-
-This process is responsible for performing its own bootstrapping (i.e. allocating/initializing
-.data and .bss), after which it should accept messages on the connection and copy data as necessary.
+This crate is based on the one in services/test_spawn. The main
+difference is that this one has the ability to read, load, and
+execute an ELF file through the opcode `LoadElf`.
 
 ## API
 
 The following messages are supported:
 
-| Mnemonic         | Opcode | Type | Description                                                                                              |
-| ---------------- | ------ | ---- | -------------------------------------------------------------------------------------------------------- |
-| WriteMemory      | 1      | M    | Write memory into an area of memory. The `Offset` field is used to determine where the block will start. |
-| WriteArgs        | 2      | M    | Reserved                                                                                                 |
-| WriteEnvironment | 3      | M    | Reserved                                                                                                 |
-| FinishSetup      | 255    | *    | Terminate the loop, shutdown the server, and start the program.                                          |
+| Mnemonic     | Opcode | Type | Description                                                                                              |
+|--------------|--------|------|----------------------------------------------------------------------------------------------------------|
+| LoadElf      | 1      | M    | Reads and loads an ELF file sent as a MemoryMessage. `Offset` is used to determine where the file starts |
+| PingResponse | 2      | S    | Returns the scalar sent except that arg1 += 1                                                            |
+
+## A Note on Building
+
+In case you need to recompile this program for use in `app-loader`,
+use the following commands:
+```
+$ cargo build --package spawn --target riscv32imac-unknown-xous-elf --release
+$ cargo run --package tools --bin copy-object target/riscv32imac-unknown-xous-elf/release/spawn
+$ cp target/riscv32imac-unknown-xous-elf/release/spawn.bin apps/app-loader/src
+```
