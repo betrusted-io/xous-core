@@ -382,23 +382,17 @@ impl<'a> MtxChat<'a> {
     // assume logged in, token is valid
     pub fn get_room_id(&mut self) -> Option<String> {
         let mut room = String::new();
-        if self.room_id.len() > 0 {
-            write!(room, "#{}:{}", &self.room_name, &self.room_domain)
-                .expect("failed to write room");
+        self.room_modal();
+        write!(room, "#{}:{}", &self.room_name, &self.room_domain)
+            .expect("failed to write room");
+        let mut server = String::new();
+        write!(server, "{}{}", HTTPS, &self.user_domain).expect("failed to write server");
+        if let Some(room_id) = web::get_room_id(&server, &room, &self.token) {
+            self.set_debug(ROOM_ID_KEY, &room_id);
             Some(room)
         } else {
-            self.room_modal();
-            write!(room, "#{}:{}", &self.room_name, &self.room_domain)
-                .expect("failed to write room");
-            let mut server = String::new();
-            write!(server, "{}{}", HTTPS, &self.user_domain).expect("failed to write server");
-            if let Some(room_id) = web::get_room_id(&server, &room, &self.token) {
-                self.set_debug(ROOM_ID_KEY, &room_id);
-                Some(room)
-            } else {
-                log::warn!("failed to return room_id");
-                None
-            }
+            log::warn!("failed to return room_id");
+            None
         }
     }
 
@@ -483,9 +477,8 @@ impl<'a> MtxChat<'a> {
             return;
         }
         if self.room_id.len() == 0 {
-            if self.get_room_id().is_none() {
-                return;
-            }
+            log::info!("No room id set");
+            return;
         }
         if self.filter.len() == 0 {
             if !self.get_filter() {
@@ -568,9 +561,8 @@ impl<'a> MtxChat<'a> {
             }
         }
         if self.room_id.len() == 0 {
-            if self.get_room_id().is_none() {
-                return;
-            }
+            log::info!("No room id set");
+            return;
         }
         let txn_id = self.gen_txn_id();
         log::info!("txn_id = {}", txn_id);

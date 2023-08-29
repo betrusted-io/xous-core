@@ -129,7 +129,11 @@ fn wrapped_main() -> ! {
                         }
                         Some(MenuOp::Noop) => {}
                         Some(MenuOp::Room) => {
-                            mtxchat.room_modal();
+                            if let Some(room) = mtxchat.get_room_id() {
+                                mtxchat.listen_over("");
+                                mtxchat.dialogue_set(Some(room.as_str()));
+                                mtxchat.listen();
+                            }
                         }
                         _ => (),
                     }
@@ -149,7 +153,7 @@ fn wrapped_main() -> ! {
             Some(MtxchatOp::Rawkeys) => log::info!("got mtxchat rawkeys"),
             Some(MtxchatOp::Quit) => {
                 log::error!("got Quit");
-                chat.forward(msg);
+                mtxchat.listen_over("");
                 break;
             }
             _ => (),
