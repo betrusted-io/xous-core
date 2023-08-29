@@ -145,7 +145,7 @@ impl Ui {
         }
     }
 
-    fn dialogue_read(&mut self) -> Result<(), Error> {
+    pub fn dialogue_read(&mut self) -> Result<(), Error> {
         match (&self.pddb_dict, &self.pddb_key) {
             (Some(dict), Some(key)) => {
                 match self
@@ -200,7 +200,7 @@ impl Ui {
         }
     }
 
-    fn dialogue_save(&self) -> Result<(), Error> {
+    pub fn dialogue_save(&self) -> Result<(), Error> {
         match (&self.dialogue, &self.pddb_dict, &self.pddb_key) {
             (Some(dialogue), Some(dict), Some(key)) => {
                 let hint = Some(dialogue::MAX_BYTES + 2);
@@ -314,11 +314,6 @@ impl Ui {
                 dialogue
                     .post_add(author, timestamp, text, attach_url)
                     .unwrap();
-                match self.dialogue_save() {
-                    Ok(_) => log::info!("Dialogue saved"),
-                    Err(e) => log::warn!("Failed to save Dialogue: {e}"),
-                }
-                self.redraw().expect("failed chat ui redraw");
             }
             None => log::warn!("no Dialogue available to add Post"),
         }
@@ -517,7 +512,6 @@ impl Ui {
     // error:  if Dialogue == None
     fn layout(&mut self) -> Result<bool, Error> {
         self.clear_area();
-        match (&self.dialogue, &self.post_anchor) {
         match (&self.dialogue, &self.post_anchor ) {
             (Some(dialogue), Some(post_anchor)) => {
                 log::info!("redrawing dialogue: {}", dialogue.title);

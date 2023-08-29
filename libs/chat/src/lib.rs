@@ -182,6 +182,14 @@ pub fn server(
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(ChatOp::DialogueSave) => {
+                log::warn!("ChatOp::DialogueSave");
+                ui.dialogue_save().expect("failed to save Dialogue");
+                ui.dialogue_read().expect("failed to read Dialogue");
+                if allow_redraw {
+                    ui.redraw().expect("CHAT couldn't redraw");
+                }
+            }
             Some(ChatOp::DialogueSet) => {
                 log::info!("ChatOp::DialogueSet");
                 let buffer =

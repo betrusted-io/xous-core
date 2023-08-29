@@ -10,8 +10,10 @@ pub const POST_SELECTED_PREV: usize = usize::MAX - 1;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ChatOp {
+    // Sve the Dialogue to pddb (ie after PostAdd, PostDelete)
+    DialogueSave = 0,
     ///
-    DialogueSet = 0,
+    DialogueSet,
     ///
     GamChangeFocus,
     /// a line of text has arrived

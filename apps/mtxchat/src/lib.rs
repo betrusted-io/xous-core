@@ -530,6 +530,11 @@ impl<'a> MtxChat<'a> {
                         .expect("failed to convert post into buffer");
                     }
                 }
+                // trigger the chat ui to save the dialogue to the pddb
+                xous::send_message(
+                    chat_cid,
+                    xous::Message::new_scalar(ChatOp::DialogueSave as usize, 0, 0, 0, 0),
+                )
             }
         });
     }
