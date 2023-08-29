@@ -187,6 +187,7 @@ impl VaultUx {
     pub fn swap_submenu(&mut self) {
         // always call delete on the potential optional items, to return us to a known state
         self.menu_mgr.delete_item(t!("vault.menu_autotype", locales::LANG));
+        self.menu_mgr.delete_item(t!("vault.menu_autotype_username", locales::LANG));
         self.menu_mgr.delete_item(t!("vault.menu_addnew", locales::LANG));
         match *self.mode.lock().unwrap() {
             VaultMode::Fido => (),
@@ -197,6 +198,16 @@ impl VaultUx {
                         action_conn: Some(self.actions_conn),
                         action_opcode: ActionOp::MenuAddnew.to_u32().unwrap(),
                         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+                        close_on_select: true,
+                    },
+                    0
+                );
+                self.menu_mgr.insert_item(
+                    MenuItem {
+                        name: xous_ipc::String::from_str(t!("vault.menu_autotype_username", locales::LANG)),
+                        action_conn: Some(self.main_conn),
+                        action_opcode: VaultOp::MenuAutotype.to_u32().unwrap(),
+                        action_payload: MenuPayload::Scalar([1, 0, 0, 0]),
                         close_on_select: true,
                     },
                     0
@@ -555,7 +566,7 @@ impl VaultUx {
     pub(crate) fn set_autotype_delay_ms(&self, rate: usize) {
         self.usb_dev.set_autotype_delay_ms(rate);
     }
-    pub(crate) fn autotype(&mut self) -> Result<(), xous::Error> {
+    pub(crate) fn autotype(&mut self, type_username: bool) -> Result<(), xous::Error> {
         let mode_cache = (*self.mode.lock().unwrap()).clone();
         match mode_cache {
             VaultMode::Password => {
@@ -574,14 +585,19 @@ impl VaultUx {
                         match record.read_to_end(&mut data) {
                             Ok(_len) => {
                                 if let Some(mut pw) = crate::storage::PasswordRecord::try_from(data).ok() {
-                                    match self.usb_dev.send_str(&pw.password) {
+                                    let to_type = if type_username {
+                                        &pw.username
+                                    } else {
+                                        &pw.password
+                                    };
+                                    match self.usb_dev.send_str(to_type) {
                                         Ok(_) => {
                                             pw.count += 1;
                                             pw.atime = atime;
                                             pw
                                         },
                                         Err(e) => {
-                                            log::error!("couldn't autotype password: {:?}", e);
+                                            log::error!("couldn't autotype: {:?}", e);
                                             return Err(xous::Error::UseBeforeInit);
                                         }
                                     }

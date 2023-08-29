@@ -73,6 +73,12 @@ The output format is JSON.
 
 When the `totp_entry` object's `hotp` field is `true`, the `step_seconds` field is re-purposed as the HOTP count.
 
+## **Important note 1**
+This tool ONLY backs up entries in mounted bases, so if you are wanting to make a backup of some secrets but not others, make sure you unlock all the secret bases you want backed up, and UNMOUNT any you don't want backed up.
+
+## **Important note 2**
+This tool ALWAYS restores to the most recently unlocked basis, so if you desire to have the entries spread across multiple secret bases, you'll want to split the JSON file into separate files before attempting to import/restore the secrets so you can import only the necessary secrets for each mount. Once you've made a backup or a few (one for just the System "less secret" entries and one with additional secret bases unlocked), you will notice that the System entries show up in EVERY backup. If you want to quickly strip those out, you can use the handy python package `jsondiff` for this. `pip install jsondiff` and then `jdiff system-backup.json secretbase1.json -p -i 2` will output only the unique entries from the second file, so you could redirect this to a new file with a name that reminds you of the basis it should get imported to.
+
 ## Importing other password manager's exports
 
 `vaultbackup-rs` supports importing other password manager's export data in Vault, but to do so, you have to format it to Vault's format first.

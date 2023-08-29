@@ -375,8 +375,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "xous-names",
                 "xous-ticktimer",
                 "cram-console",
-                // "mbox1",
-                // "mbox2",
             ].to_vec();
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),

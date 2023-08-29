@@ -79,7 +79,9 @@ impl SmConfig {
 
 pub fn get_id() -> u32 {
     let pio_ss = PioSharedState::new();
+    #[cfg(feature="tests")]
     pio_tests::report_api(rp_pio::SFR_DBG_CFGINFO.offset() as u32);
+    #[cfg(feature="tests")]
     pio_tests::report_api(rp_pio::HW_RP_PIO_BASE as u32);
     pio_ss.pio.r(rp_pio::SFR_DBG_CFGINFO)
 }

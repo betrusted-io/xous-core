@@ -28,7 +28,7 @@ use crate::vendor_commands::VendorSession;
 
 use ux::framework::{VaultUx, DEFAULT_FONT, FONT_LIST, name_to_style};
 use xous_ipc::Buffer;
-use xous::{send_message, Message, msg_blocking_scalar_unpack};
+use xous::{send_message, Message, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use usbd_human_interface_device::device::fido::*;
 use num_traits::*;
 
@@ -612,10 +612,10 @@ fn main() -> ! {
                 allow_totp_rendering.store(true, Ordering::SeqCst);
                 vaultux.update_mode();
             }
-            Some(VaultOp::MenuAutotype) => {
+            Some(VaultOp::MenuAutotype) => msg_scalar_unpack!(msg, select_username, _, _, _, {
                 allow_totp_rendering.store(false, Ordering::SeqCst);
                 modals.dynamic_notification(Some(t!("vault.autotyping", locales::LANG)), None).ok();
-                match vaultux.autotype() {
+                match vaultux.autotype(select_username == 1) {
                     Err(xous::Error::UseBeforeInit) => { // USB not plugged in
                         modals.dynamic_notification_update(Some(t!("vault.error.usb_error", locales::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
@@ -651,7 +651,7 @@ fn main() -> ! {
                     let buf = Buffer::into_buf(entry).expect("IPC error");
                     buf.send(actions_conn, ActionOp::UpdateOneItem.to_u32().unwrap()).expect("messaging error");
                 }
-            }
+            }),
             Some(VaultOp::MenuDeleteStage1) => {
                 // stage 1 happens here because the filtered list and selection entry are in the responsive UX section.
                 if let Some(entry) = vaultux.selected_entry() {
@@ -691,6 +691,10 @@ fn main() -> ! {
                 modals.dynamic_notification(Some(t!("vault.readout_switchover", locales::LANG)), None).ok();
                 vaultux.readout_mode(false);
                 modals.dynamic_notification_close().ok();
+
+                xous::send_message(conn,
+                    xous::Message::new_scalar(VaultOp::ReloadDbAndFullRedraw.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
             }
             Some(VaultOp::MenuAutotypeRate) => {
                 let cv = {

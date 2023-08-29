@@ -9,13 +9,13 @@ version = "0.1.0"
 [dependencies]
 com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.44"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.44"}
-susres = {package = "xous-api-susres", version = "0.9.44"}
+log-server = {package = "xous-api-log", version = "0.1.46"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.46"}
+susres = {package = "xous-api-susres", version = "0.9.46"}
 typenum = "1.12"
-xous = "0.9.48"
-xous-ipc = "0.9.48"
-xous-names = {package = "xous-api-names", version = "0.9.46"}
+xous = "0.9.50"
+xous-ipc = "0.9.50"
+xous-names = {package = "xous-api-names", version = "0.9.48"}
 trng = {path = "../trng"}
 llio = {path = "../llio"}
 
@@ -25,7 +25,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 
 xous-semver = "0.1.2"
 
-utralib = {version = "0.1.21", optional = true, default-features = false }
+utralib = {version = "0.1.23", optional = true, default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 

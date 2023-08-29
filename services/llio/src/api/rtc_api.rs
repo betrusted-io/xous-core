@@ -220,7 +220,7 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     const YEARS: usize = 7;
     if ((settings[CTL3] & 0xE0) != crate::RTC_PWR_MODE) // power switchover setting should be initialized
     || (settings[SECS] & 0x80 != 0) { // clock integrity should be guaranteed
-        log::error!("RTC is in an uninitialized state!, {:?}", settings);
+        log::error!("RTC is in an uninitialized state!, {:x?}", settings);
         return None;
     }
     // this is a secondary check -- I have seen RTC return nonsense time results before

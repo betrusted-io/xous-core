@@ -98,8 +98,8 @@
         "zh": "出了点问题，从备份中恢复..."
     },
     "rootkeys.bbram.finished": {
-        "en": "BBRAM helper should have rebooted the device. There was a problem with the procedure!",
-        "en-tts": "BBRAM helper should have rebooted the device, you should not get this message!",
+        "en": "BBRAM helper should have rebooted the device. If not, please reset the device by inserting a pin into the hard reset hole.",
+        "en-tts": "BBRAM helper should have rebooted the device. If not, please reset the device by inserting a pin into the hard reset hole.",
         "fr": "BBRAM helper aurait dû redémarrer l’appareil. Il y avait un problème avec la procédure!",
         "ja": "BBRAMヘルパーはデバイスをリブートしたはずです。手順に問題がありました!",
         "zh": "BBRAM 助手应该已经重启了设备。 程序有问题！"

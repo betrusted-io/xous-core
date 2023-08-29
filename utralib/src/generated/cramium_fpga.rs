@@ -257,7 +257,7 @@ pub const HW_SYSCTRL_MEM:     usize = 0x40040000;
 pub const HW_SYSCTRL_MEM_LEN: usize = 65536;
 pub const HW_IFSUB_MEM:     usize = 0x50120000;
 pub const HW_IFSUB_MEM_LEN: usize = 65536;
-pub const HW_CORESUB_MEM:     usize = 0x40000000;
+pub const HW_CORESUB_MEM:     usize = 0x40010000;
 pub const HW_CORESUB_MEM_LEN: usize = 65536;
 pub const HW_SECSUB_MEM:     usize = 0x40050000;
 pub const HW_SECSUB_MEM_LEN: usize = 65536;
@@ -319,6 +319,12 @@ pub const HW_RERAM_X_MEM:     usize = 0x60000000;
 pub const HW_RERAM_X_MEM_LEN: usize = 4194304;
 pub const HW_XIP_X_MEM:     usize = 0x70000000;
 pub const HW_XIP_X_MEM_LEN: usize = 134217728;
+pub const HW_PL230_MEM:     usize = 0x40011000;
+pub const HW_PL230_MEM_LEN: usize = 4096;
+pub const HW_MDMA_MEM:     usize = 0x40012000;
+pub const HW_MDMA_MEM_LEN: usize = 4096;
+pub const HW_MBOX_APB_MEM:     usize = 0x40013000;
+pub const HW_MBOX_APB_MEM_LEN: usize = 4096;
 
 // Physical base addresses of registers
 pub const HW_GPIO_BASE :   usize = 0x40080000;
@@ -356,6 +362,27 @@ pub const HW_MB_CLIENT_BASE :   usize = 0xe0019000;
 pub const HW_RESETVALUE_BASE :   usize = 0xe001a000;
 pub const HW_TICKTIMER_BASE :   usize = 0xe001b000;
 pub const HW_PL230_BASE :   usize = 0x40011000;
+pub const HW_UDMA_CTRL_BASE :   usize = 0x50100000;
+pub const HW_UDMA_UART_0_BASE :   usize = 0x50101000;
+pub const HW_UDMA_UART_1_BASE :   usize = 0x50102000;
+pub const HW_UDMA_UART_2_BASE :   usize = 0x50103000;
+pub const HW_UDMA_UART_3_BASE :   usize = 0x50104000;
+pub const HW_UDMA_SPIM_0_BASE :   usize = 0x50105000;
+pub const HW_UDMA_SPIM_1_BASE :   usize = 0x50106000;
+pub const HW_UDMA_SPIM_2_BASE :   usize = 0x50107000;
+pub const HW_UDMA_SPIM_3_BASE :   usize = 0x50108000;
+pub const HW_UDMA_I2C_0_BASE :   usize = 0x50109000;
+pub const HW_UDMA_I2C_1_BASE :   usize = 0x5010a000;
+pub const HW_UDMA_I2C_2_BASE :   usize = 0x5010b000;
+pub const HW_UDMA_I2C_3_BASE :   usize = 0x5010c000;
+pub const HW_UDMA_SDIO_BASE :   usize = 0x5010d000;
+pub const HW_UDMA_I2S_BASE :   usize = 0x5010e000;
+pub const HW_UDMA_CAMERA_BASE :   usize = 0x5010f000;
+pub const HW_UDMA_FILTER_BASE :   usize = 0x50110000;
+pub const HW_UDMA_SCIF_BASE :   usize = 0x50111000;
+pub const HW_UDMA_SPIS_0_BASE :   usize = 0x50112000;
+pub const HW_UDMA_SPIS_1_BASE :   usize = 0x50113000;
+pub const HW_UDMA_ADC_BASE :   usize = 0x50114000;
 pub const HW_AES_BASE :   usize = 0x4002d000;
 pub const HW_COMBOHASH_BASE :   usize = 0x4002b000;
 pub const HW_PKE_BASE :   usize = 0x4002c000;
@@ -373,9 +400,9 @@ pub const HW_IOX_BASE :   usize = 0x5012f000;
 pub const HW_PWM_BASE :   usize = 0x50120000;
 pub const HW_SDDC_BASE :   usize = 0x50121000;
 pub const HW_RP_PIO_BASE :   usize = 0x50123000;
-pub const HW_MDMA_BASE :   usize = 0x40002000;
-pub const HW_QFC_BASE :   usize = 0x40000000;
-pub const HW_PL230_PLACEHOLDER_BASE :   usize = 0x40011000;
+pub const HW_MDMA_BASE :   usize = 0x40012000;
+pub const HW_QFC_BASE :   usize = 0x40010000;
+pub const HW_MBOX_APB_BASE :   usize = 0x40013000;
 pub const HW_GLUECHAIN_BASE :   usize = 0x40054000;
 pub const HW_MESH_BASE :   usize = 0x40052000;
 pub const HW_SENSORC_BASE :   usize = 0x40053000;
@@ -504,7 +531,7 @@ pub mod utra {
     }
 
     pub mod main {
-        pub const MAIN_NUMREGS: usize = 8;
+        pub const MAIN_NUMREGS: usize = 7;
 
         pub const REPORT: crate::Register = crate::Register::new(0, 0xffffffff);
         pub const REPORT_REPORT: crate::Field = crate::Field::new(32, 0, REPORT);
@@ -524,11 +551,8 @@ pub mod utra {
         pub const RINC: crate::Register = crate::Register::new(5, 0xffffffff);
         pub const RINC_RINC: crate::Field = crate::Field::new(32, 0, RINC);
 
-        pub const IRQTEST0: crate::Register = crate::Register::new(6, 0xfffff);
-        pub const IRQTEST0_TRIGGER: crate::Field = crate::Field::new(20, 0, IRQTEST0);
-
-        pub const IRQTEST1: crate::Register = crate::Register::new(7, 0xfffff);
-        pub const IRQTEST1_TRIGGER: crate::Field = crate::Field::new(20, 0, IRQTEST1);
+        pub const IRQTEST0: crate::Register = crate::Register::new(6, 0xffff);
+        pub const IRQTEST0_TRIGGER: crate::Field = crate::Field::new(16, 0, IRQTEST0);
 
         pub const HW_MAIN_BASE: usize = 0x40088000;
     }
@@ -641,12 +665,18 @@ pub mod utra {
     }
 
     pub mod irqarray0 {
-        pub const IRQARRAY0_NUMREGS: usize = 4;
+        pub const IRQARRAY0_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -663,12 +693,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -685,12 +711,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -707,22 +729,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY0_IRQ: usize = 0;
         pub const HW_IRQARRAY0_BASE: usize = 0xe0004000;
     }
 
     pub mod irqarray1 {
-        pub const IRQARRAY1_NUMREGS: usize = 4;
+        pub const IRQARRAY1_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -739,12 +763,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -761,12 +781,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -783,22 +799,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY1_IRQ: usize = 1;
         pub const HW_IRQARRAY1_BASE: usize = 0xe0005000;
     }
 
     pub mod irqarray10 {
-        pub const IRQARRAY10_NUMREGS: usize = 4;
+        pub const IRQARRAY10_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -815,12 +833,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -837,12 +851,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -859,22 +869,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY10_IRQ: usize = 10;
         pub const HW_IRQARRAY10_BASE: usize = 0xe0006000;
     }
 
     pub mod irqarray11 {
-        pub const IRQARRAY11_NUMREGS: usize = 4;
+        pub const IRQARRAY11_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -891,12 +903,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -913,12 +921,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -935,22 +939,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY11_IRQ: usize = 11;
         pub const HW_IRQARRAY11_BASE: usize = 0xe0007000;
     }
 
     pub mod irqarray12 {
-        pub const IRQARRAY12_NUMREGS: usize = 4;
+        pub const IRQARRAY12_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -967,12 +973,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -989,12 +991,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1011,22 +1009,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY12_IRQ: usize = 12;
         pub const HW_IRQARRAY12_BASE: usize = 0xe0008000;
     }
 
     pub mod irqarray13 {
-        pub const IRQARRAY13_NUMREGS: usize = 4;
+        pub const IRQARRAY13_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1043,12 +1043,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1065,12 +1061,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1087,22 +1079,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY13_IRQ: usize = 13;
         pub const HW_IRQARRAY13_BASE: usize = 0xe0009000;
     }
 
     pub mod irqarray14 {
-        pub const IRQARRAY14_NUMREGS: usize = 4;
+        pub const IRQARRAY14_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1119,12 +1113,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1141,12 +1131,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1163,22 +1149,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY14_IRQ: usize = 14;
         pub const HW_IRQARRAY14_BASE: usize = 0xe000a000;
     }
 
     pub mod irqarray15 {
-        pub const IRQARRAY15_NUMREGS: usize = 4;
+        pub const IRQARRAY15_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1195,12 +1183,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1217,12 +1201,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1239,22 +1219,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY15_IRQ: usize = 15;
         pub const HW_IRQARRAY15_BASE: usize = 0xe000b000;
     }
 
     pub mod irqarray16 {
-        pub const IRQARRAY16_NUMREGS: usize = 4;
+        pub const IRQARRAY16_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1271,12 +1253,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1293,12 +1271,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1315,22 +1289,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY16_IRQ: usize = 16;
         pub const HW_IRQARRAY16_BASE: usize = 0xe000c000;
     }
 
     pub mod irqarray17 {
-        pub const IRQARRAY17_NUMREGS: usize = 4;
+        pub const IRQARRAY17_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1347,12 +1323,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1369,12 +1341,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1391,22 +1359,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY17_IRQ: usize = 17;
         pub const HW_IRQARRAY17_BASE: usize = 0xe000d000;
     }
 
     pub mod irqarray18 {
-        pub const IRQARRAY18_NUMREGS: usize = 4;
+        pub const IRQARRAY18_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1423,12 +1393,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1445,12 +1411,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1467,22 +1429,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY18_IRQ: usize = 18;
         pub const HW_IRQARRAY18_BASE: usize = 0xe000e000;
     }
 
     pub mod irqarray19 {
-        pub const IRQARRAY19_NUMREGS: usize = 4;
+        pub const IRQARRAY19_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1499,12 +1463,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1521,12 +1481,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1543,22 +1499,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY19_IRQ: usize = 19;
         pub const HW_IRQARRAY19_BASE: usize = 0xe000f000;
     }
 
     pub mod irqarray2 {
-        pub const IRQARRAY2_NUMREGS: usize = 4;
+        pub const IRQARRAY2_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1575,12 +1533,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1597,12 +1551,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1619,22 +1569,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY2_IRQ: usize = 2;
         pub const HW_IRQARRAY2_BASE: usize = 0xe0010000;
     }
 
     pub mod irqarray3 {
-        pub const IRQARRAY3_NUMREGS: usize = 4;
+        pub const IRQARRAY3_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1651,12 +1603,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1673,12 +1621,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1695,22 +1639,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY3_IRQ: usize = 3;
         pub const HW_IRQARRAY3_BASE: usize = 0xe0011000;
     }
 
     pub mod irqarray4 {
-        pub const IRQARRAY4_NUMREGS: usize = 4;
+        pub const IRQARRAY4_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1727,12 +1673,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1749,12 +1691,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1771,22 +1709,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY4_IRQ: usize = 4;
         pub const HW_IRQARRAY4_BASE: usize = 0xe0012000;
     }
 
     pub mod irqarray5 {
-        pub const IRQARRAY5_NUMREGS: usize = 4;
+        pub const IRQARRAY5_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1803,12 +1743,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1825,12 +1761,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1847,22 +1779,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY5_IRQ: usize = 5;
         pub const HW_IRQARRAY5_BASE: usize = 0xe0013000;
     }
 
     pub mod irqarray6 {
-        pub const IRQARRAY6_NUMREGS: usize = 4;
+        pub const IRQARRAY6_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1879,12 +1813,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1901,12 +1831,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1923,22 +1849,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY6_IRQ: usize = 6;
         pub const HW_IRQARRAY6_BASE: usize = 0xe0014000;
     }
 
     pub mod irqarray7 {
-        pub const IRQARRAY7_NUMREGS: usize = 4;
+        pub const IRQARRAY7_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -1955,12 +1883,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -1977,12 +1901,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -1999,22 +1919,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY7_IRQ: usize = 7;
         pub const HW_IRQARRAY7_BASE: usize = 0xe0015000;
     }
 
     pub mod irqarray8 {
-        pub const IRQARRAY8_NUMREGS: usize = 4;
+        pub const IRQARRAY8_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -2031,12 +1953,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -2053,12 +1971,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -2075,22 +1989,24 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY8_IRQ: usize = 8;
         pub const HW_IRQARRAY8_BASE: usize = 0xe0016000;
     }
 
     pub mod irqarray9 {
-        pub const IRQARRAY9_NUMREGS: usize = 4;
+        pub const IRQARRAY9_NUMREGS: usize = 6;
 
-        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xfffff);
-        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(20, 0, EV_SOFT);
+        pub const EV_SOFT: crate::Register = crate::Register::new(0, 0xffff);
+        pub const EV_SOFT_TRIGGER: crate::Field = crate::Field::new(16, 0, EV_SOFT);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(1, 0xfffff);
+        pub const EV_EDGE_TRIGGERED: crate::Register = crate::Register::new(1, 0xffff);
+        pub const EV_EDGE_TRIGGERED_USE_EDGE: crate::Field = crate::Field::new(16, 0, EV_EDGE_TRIGGERED);
+
+        pub const EV_POLARITY: crate::Register = crate::Register::new(2, 0xffff);
+        pub const EV_POLARITY_RISING: crate::Field = crate::Field::new(16, 0, EV_POLARITY);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xffff);
         pub const EV_STATUS_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_STATUS);
         pub const EV_STATUS_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_STATUS);
         pub const EV_STATUS_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_STATUS);
@@ -2107,12 +2023,8 @@ pub mod utra {
         pub const EV_STATUS_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_STATUS);
         pub const EV_STATUS_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_STATUS);
         pub const EV_STATUS_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_STATUS);
-        pub const EV_STATUS_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_STATUS);
-        pub const EV_STATUS_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_STATUS);
-        pub const EV_STATUS_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_STATUS);
-        pub const EV_STATUS_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_STATUS);
 
-        pub const EV_PENDING: crate::Register = crate::Register::new(2, 0xfffff);
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xffff);
         pub const EV_PENDING_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_PENDING);
         pub const EV_PENDING_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_PENDING);
         pub const EV_PENDING_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_PENDING);
@@ -2129,12 +2041,8 @@ pub mod utra {
         pub const EV_PENDING_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_PENDING);
         pub const EV_PENDING_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_PENDING);
         pub const EV_PENDING_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_PENDING);
-        pub const EV_PENDING_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_PENDING);
-        pub const EV_PENDING_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_PENDING);
-        pub const EV_PENDING_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_PENDING);
-        pub const EV_PENDING_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_PENDING);
 
-        pub const EV_ENABLE: crate::Register = crate::Register::new(3, 0xfffff);
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xffff);
         pub const EV_ENABLE_SOURCE0: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
         pub const EV_ENABLE_SOURCE1: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
         pub const EV_ENABLE_SOURCE2: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
@@ -2151,17 +2059,13 @@ pub mod utra {
         pub const EV_ENABLE_SOURCE13: crate::Field = crate::Field::new(1, 13, EV_ENABLE);
         pub const EV_ENABLE_SOURCE14: crate::Field = crate::Field::new(1, 14, EV_ENABLE);
         pub const EV_ENABLE_SOURCE15: crate::Field = crate::Field::new(1, 15, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE16: crate::Field = crate::Field::new(1, 16, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE17: crate::Field = crate::Field::new(1, 17, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE18: crate::Field = crate::Field::new(1, 18, EV_ENABLE);
-        pub const EV_ENABLE_SOURCE19: crate::Field = crate::Field::new(1, 19, EV_ENABLE);
 
         pub const IRQARRAY9_IRQ: usize = 9;
         pub const HW_IRQARRAY9_BASE: usize = 0xe0017000;
     }
 
     pub mod mailbox {
-        pub const MAILBOX_NUMREGS: usize = 8;
+        pub const MAILBOX_NUMREGS: usize = 9;
 
         pub const WDATA: crate::Register = crate::Register::new(0, 0xffffffff);
         pub const WDATA_WDATA: crate::Field = crate::Field::new(32, 0, WDATA);
@@ -2201,6 +2105,9 @@ pub mod utra {
         pub const DONE: crate::Register = crate::Register::new(7, 0x1);
         pub const DONE_DONE: crate::Field = crate::Field::new(1, 0, DONE);
 
+        pub const LOOPBACK: crate::Register = crate::Register::new(8, 0x1);
+        pub const LOOPBACK_LOOPBACK: crate::Field = crate::Field::new(1, 0, LOOPBACK);
+
         pub const MAILBOX_IRQ: usize = 22;
         pub const HW_MAILBOX_BASE: usize = 0xe0018000;
     }
@@ -2214,31 +2121,31 @@ pub mod utra {
         pub const RDATA: crate::Register = crate::Register::new(1, 0xffffffff);
         pub const RDATA_RDATA: crate::Field = crate::Field::new(32, 0, RDATA);
 
-        pub const EV_STATUS: crate::Register = crate::Register::new(2, 0xf);
-        pub const EV_STATUS_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_STATUS);
-        pub const EV_STATUS_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_STATUS);
-        pub const EV_STATUS_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_STATUS);
-        pub const EV_STATUS_ERROR: crate::Field = crate::Field::new(1, 3, EV_STATUS);
-
-        pub const EV_PENDING: crate::Register = crate::Register::new(3, 0xf);
-        pub const EV_PENDING_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_PENDING);
-        pub const EV_PENDING_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_PENDING);
-        pub const EV_PENDING_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_PENDING);
-        pub const EV_PENDING_ERROR: crate::Field = crate::Field::new(1, 3, EV_PENDING);
-
-        pub const EV_ENABLE: crate::Register = crate::Register::new(4, 0xf);
-        pub const EV_ENABLE_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
-        pub const EV_ENABLE_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
-        pub const EV_ENABLE_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
-        pub const EV_ENABLE_ERROR: crate::Field = crate::Field::new(1, 3, EV_ENABLE);
-
-        pub const STATUS: crate::Register = crate::Register::new(5, 0x3f);
+        pub const STATUS: crate::Register = crate::Register::new(2, 0x3f);
         pub const STATUS_RX_AVAIL: crate::Field = crate::Field::new(1, 0, STATUS);
         pub const STATUS_TX_FREE: crate::Field = crate::Field::new(1, 1, STATUS);
         pub const STATUS_ABORT_IN_PROGRESS: crate::Field = crate::Field::new(1, 2, STATUS);
         pub const STATUS_ABORT_ACK: crate::Field = crate::Field::new(1, 3, STATUS);
         pub const STATUS_TX_ERR: crate::Field = crate::Field::new(1, 4, STATUS);
         pub const STATUS_RX_ERR: crate::Field = crate::Field::new(1, 5, STATUS);
+
+        pub const EV_STATUS: crate::Register = crate::Register::new(3, 0xf);
+        pub const EV_STATUS_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_STATUS);
+        pub const EV_STATUS_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_STATUS);
+        pub const EV_STATUS_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_STATUS);
+        pub const EV_STATUS_ERROR: crate::Field = crate::Field::new(1, 3, EV_STATUS);
+
+        pub const EV_PENDING: crate::Register = crate::Register::new(4, 0xf);
+        pub const EV_PENDING_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_PENDING);
+        pub const EV_PENDING_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_PENDING);
+        pub const EV_PENDING_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_PENDING);
+        pub const EV_PENDING_ERROR: crate::Field = crate::Field::new(1, 3, EV_PENDING);
+
+        pub const EV_ENABLE: crate::Register = crate::Register::new(5, 0xf);
+        pub const EV_ENABLE_AVAILABLE: crate::Field = crate::Field::new(1, 0, EV_ENABLE);
+        pub const EV_ENABLE_ABORT_INIT: crate::Field = crate::Field::new(1, 1, EV_ENABLE);
+        pub const EV_ENABLE_ABORT_DONE: crate::Field = crate::Field::new(1, 2, EV_ENABLE);
+        pub const EV_ENABLE_ERROR: crate::Field = crate::Field::new(1, 3, EV_ENABLE);
 
         pub const CONTROL: crate::Register = crate::Register::new(6, 0x1);
         pub const CONTROL_ABORT: crate::Field = crate::Field::new(1, 0, CONTROL);
@@ -2366,6 +2273,1018 @@ pub mod utra {
         pub const HW_PL230_BASE: usize = 0x40011000;
     }
 
+    pub mod udma_ctrl {
+        pub const UDMA_CTRL_NUMREGS: usize = 3;
+
+        pub const REG_CG: crate::Register = crate::Register::new(0, 0x3f);
+        pub const REG_CG_R_CG: crate::Field = crate::Field::new(6, 0, REG_CG);
+
+        pub const REG_CFG_EVT: crate::Register = crate::Register::new(1, 0xffffffff);
+        pub const REG_CFG_EVT_R_CMP_EVT_0: crate::Field = crate::Field::new(8, 0, REG_CFG_EVT);
+        pub const REG_CFG_EVT_R_CMP_EVT_1: crate::Field = crate::Field::new(8, 8, REG_CFG_EVT);
+        pub const REG_CFG_EVT_R_CMP_EVT_2: crate::Field = crate::Field::new(8, 16, REG_CFG_EVT);
+        pub const REG_CFG_EVT_R_CMP_EVT_3: crate::Field = crate::Field::new(8, 24, REG_CFG_EVT);
+
+        pub const REG_RST: crate::Register = crate::Register::new(2, 0x3f);
+        pub const REG_RST_R_RST: crate::Field = crate::Field::new(6, 0, REG_RST);
+
+        pub const HW_UDMA_CTRL_BASE: usize = 0x50100000;
+    }
+
+    pub mod udma_uart_0 {
+        pub const UDMA_UART_0_NUMREGS: usize = 12;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(8, 0x1);
+        pub const REG_STATUS_STATUS_I: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+
+        pub const REG_UART_SETUP: crate::Register = crate::Register::new(9, 0xffff033f);
+        pub const REG_UART_SETUP_R_UART_PARITY_EN: crate::Field = crate::Field::new(1, 0, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_BITS: crate::Field = crate::Field::new(2, 1, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_STOP_BITS: crate::Field = crate::Field::new(1, 3, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_RX_POLLING_EN: crate::Field = crate::Field::new(1, 4, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_RX_CLEAN_FIFO: crate::Field = crate::Field::new(1, 5, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_EN_TX: crate::Field = crate::Field::new(1, 8, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_EN_RX: crate::Field = crate::Field::new(1, 9, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_DIV: crate::Field = crate::Field::new(16, 16, REG_UART_SETUP);
+
+        pub const REG_ERROR: crate::Register = crate::Register::new(10, 0x3);
+        pub const REG_ERROR_R_ERR_OVERFLOW: crate::Field = crate::Field::new(1, 0, REG_ERROR);
+        pub const REG_ERROR_R_ERR_PARITY: crate::Field = crate::Field::new(1, 1, REG_ERROR);
+
+        pub const REG_IRQ_EN: crate::Register = crate::Register::new(11, 0x3);
+        pub const REG_IRQ_EN_R_UART_RX_IRQ_EN: crate::Field = crate::Field::new(1, 0, REG_IRQ_EN);
+        pub const REG_IRQ_EN_R_UART_ERR_IRQ_EN: crate::Field = crate::Field::new(1, 1, REG_IRQ_EN);
+
+        pub const REG_VALID: crate::Register = crate::Register::new(12, 0x1);
+        pub const REG_VALID_R_UART_RX_DATA_VALID: crate::Field = crate::Field::new(1, 0, REG_VALID);
+
+        pub const REG_DATA: crate::Register = crate::Register::new(13, 0xff);
+        pub const REG_DATA_R_UART_RX_DATA: crate::Field = crate::Field::new(8, 0, REG_DATA);
+
+        pub const HW_UDMA_UART_0_BASE: usize = 0x50101000;
+    }
+
+    pub mod udma_uart_1 {
+        pub const UDMA_UART_1_NUMREGS: usize = 12;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(8, 0x1);
+        pub const REG_STATUS_STATUS_I: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+
+        pub const REG_UART_SETUP: crate::Register = crate::Register::new(9, 0xffff033f);
+        pub const REG_UART_SETUP_R_UART_PARITY_EN: crate::Field = crate::Field::new(1, 0, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_BITS: crate::Field = crate::Field::new(2, 1, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_STOP_BITS: crate::Field = crate::Field::new(1, 3, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_RX_POLLING_EN: crate::Field = crate::Field::new(1, 4, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_RX_CLEAN_FIFO: crate::Field = crate::Field::new(1, 5, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_EN_TX: crate::Field = crate::Field::new(1, 8, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_EN_RX: crate::Field = crate::Field::new(1, 9, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_DIV: crate::Field = crate::Field::new(16, 16, REG_UART_SETUP);
+
+        pub const REG_ERROR: crate::Register = crate::Register::new(10, 0x3);
+        pub const REG_ERROR_R_ERR_OVERFLOW: crate::Field = crate::Field::new(1, 0, REG_ERROR);
+        pub const REG_ERROR_R_ERR_PARITY: crate::Field = crate::Field::new(1, 1, REG_ERROR);
+
+        pub const REG_IRQ_EN: crate::Register = crate::Register::new(11, 0x3);
+        pub const REG_IRQ_EN_R_UART_RX_IRQ_EN: crate::Field = crate::Field::new(1, 0, REG_IRQ_EN);
+        pub const REG_IRQ_EN_R_UART_ERR_IRQ_EN: crate::Field = crate::Field::new(1, 1, REG_IRQ_EN);
+
+        pub const REG_VALID: crate::Register = crate::Register::new(12, 0x1);
+        pub const REG_VALID_R_UART_RX_DATA_VALID: crate::Field = crate::Field::new(1, 0, REG_VALID);
+
+        pub const REG_DATA: crate::Register = crate::Register::new(13, 0xff);
+        pub const REG_DATA_R_UART_RX_DATA: crate::Field = crate::Field::new(8, 0, REG_DATA);
+
+        pub const HW_UDMA_UART_1_BASE: usize = 0x50102000;
+    }
+
+    pub mod udma_uart_2 {
+        pub const UDMA_UART_2_NUMREGS: usize = 12;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(8, 0x1);
+        pub const REG_STATUS_STATUS_I: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+
+        pub const REG_UART_SETUP: crate::Register = crate::Register::new(9, 0xffff033f);
+        pub const REG_UART_SETUP_R_UART_PARITY_EN: crate::Field = crate::Field::new(1, 0, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_BITS: crate::Field = crate::Field::new(2, 1, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_STOP_BITS: crate::Field = crate::Field::new(1, 3, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_RX_POLLING_EN: crate::Field = crate::Field::new(1, 4, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_RX_CLEAN_FIFO: crate::Field = crate::Field::new(1, 5, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_EN_TX: crate::Field = crate::Field::new(1, 8, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_EN_RX: crate::Field = crate::Field::new(1, 9, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_DIV: crate::Field = crate::Field::new(16, 16, REG_UART_SETUP);
+
+        pub const REG_ERROR: crate::Register = crate::Register::new(10, 0x3);
+        pub const REG_ERROR_R_ERR_OVERFLOW: crate::Field = crate::Field::new(1, 0, REG_ERROR);
+        pub const REG_ERROR_R_ERR_PARITY: crate::Field = crate::Field::new(1, 1, REG_ERROR);
+
+        pub const REG_IRQ_EN: crate::Register = crate::Register::new(11, 0x3);
+        pub const REG_IRQ_EN_R_UART_RX_IRQ_EN: crate::Field = crate::Field::new(1, 0, REG_IRQ_EN);
+        pub const REG_IRQ_EN_R_UART_ERR_IRQ_EN: crate::Field = crate::Field::new(1, 1, REG_IRQ_EN);
+
+        pub const REG_VALID: crate::Register = crate::Register::new(12, 0x1);
+        pub const REG_VALID_R_UART_RX_DATA_VALID: crate::Field = crate::Field::new(1, 0, REG_VALID);
+
+        pub const REG_DATA: crate::Register = crate::Register::new(13, 0xff);
+        pub const REG_DATA_R_UART_RX_DATA: crate::Field = crate::Field::new(8, 0, REG_DATA);
+
+        pub const HW_UDMA_UART_2_BASE: usize = 0x50103000;
+    }
+
+    pub mod udma_uart_3 {
+        pub const UDMA_UART_3_NUMREGS: usize = 12;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(8, 0x1);
+        pub const REG_STATUS_STATUS_I: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+
+        pub const REG_UART_SETUP: crate::Register = crate::Register::new(9, 0xffff033f);
+        pub const REG_UART_SETUP_R_UART_PARITY_EN: crate::Field = crate::Field::new(1, 0, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_BITS: crate::Field = crate::Field::new(2, 1, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_STOP_BITS: crate::Field = crate::Field::new(1, 3, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_RX_POLLING_EN: crate::Field = crate::Field::new(1, 4, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_RX_CLEAN_FIFO: crate::Field = crate::Field::new(1, 5, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_EN_TX: crate::Field = crate::Field::new(1, 8, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_EN_RX: crate::Field = crate::Field::new(1, 9, REG_UART_SETUP);
+        pub const REG_UART_SETUP_R_UART_DIV: crate::Field = crate::Field::new(16, 16, REG_UART_SETUP);
+
+        pub const REG_ERROR: crate::Register = crate::Register::new(10, 0x3);
+        pub const REG_ERROR_R_ERR_OVERFLOW: crate::Field = crate::Field::new(1, 0, REG_ERROR);
+        pub const REG_ERROR_R_ERR_PARITY: crate::Field = crate::Field::new(1, 1, REG_ERROR);
+
+        pub const REG_IRQ_EN: crate::Register = crate::Register::new(11, 0x3);
+        pub const REG_IRQ_EN_R_UART_RX_IRQ_EN: crate::Field = crate::Field::new(1, 0, REG_IRQ_EN);
+        pub const REG_IRQ_EN_R_UART_ERR_IRQ_EN: crate::Field = crate::Field::new(1, 1, REG_IRQ_EN);
+
+        pub const REG_VALID: crate::Register = crate::Register::new(12, 0x1);
+        pub const REG_VALID_R_UART_RX_DATA_VALID: crate::Field = crate::Field::new(1, 0, REG_VALID);
+
+        pub const REG_DATA: crate::Register = crate::Register::new(13, 0xff);
+        pub const REG_DATA_R_UART_RX_DATA: crate::Field = crate::Field::new(8, 0, REG_DATA);
+
+        pub const HW_UDMA_UART_3_BASE: usize = 0x50104000;
+    }
+
+    pub mod udma_spim_0 {
+        pub const UDMA_SPIM_0_NUMREGS: usize = 10;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x57);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_DATASIZE: crate::Field = crate::Field::new(2, 1, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x57);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_DATASIZE: crate::Field = crate::Field::new(2, 1, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
+        pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
+
+        pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
+        pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
+
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x1);
+        pub const REG_STATUS_STATUS_I: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+
+        pub const HW_UDMA_SPIM_0_BASE: usize = 0x50105000;
+    }
+
+    pub mod udma_spim_1 {
+        pub const UDMA_SPIM_1_NUMREGS: usize = 10;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x57);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_DATASIZE: crate::Field = crate::Field::new(2, 1, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x57);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_DATASIZE: crate::Field = crate::Field::new(2, 1, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
+        pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
+
+        pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
+        pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
+
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x1);
+        pub const REG_STATUS_STATUS_I: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+
+        pub const HW_UDMA_SPIM_1_BASE: usize = 0x50106000;
+    }
+
+    pub mod udma_spim_2 {
+        pub const UDMA_SPIM_2_NUMREGS: usize = 10;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x57);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_DATASIZE: crate::Field = crate::Field::new(2, 1, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x57);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_DATASIZE: crate::Field = crate::Field::new(2, 1, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
+        pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
+
+        pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
+        pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
+
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x1);
+        pub const REG_STATUS_STATUS_I: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+
+        pub const HW_UDMA_SPIM_2_BASE: usize = 0x50107000;
+    }
+
+    pub mod udma_spim_3 {
+        pub const UDMA_SPIM_3_NUMREGS: usize = 10;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x57);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_DATASIZE: crate::Field = crate::Field::new(2, 1, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x57);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_DATASIZE: crate::Field = crate::Field::new(2, 1, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
+        pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
+
+        pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
+        pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
+
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x1);
+        pub const REG_STATUS_STATUS_I: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+
+        pub const HW_UDMA_SPIM_3_BASE: usize = 0x50108000;
+    }
+
+    pub mod udma_i2c_0 {
+        pub const UDMA_I2C_0_NUMREGS: usize = 12;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
+        pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
+
+        pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
+        pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
+
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x3);
+        pub const REG_STATUS_R_BUSY: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+        pub const REG_STATUS_R_AL: crate::Field = crate::Field::new(1, 1, REG_STATUS);
+
+        pub const REG_SETUP: crate::Register = crate::Register::new(13, 0x1);
+        pub const REG_SETUP_R_DO_RST: crate::Field = crate::Field::new(1, 0, REG_SETUP);
+
+        pub const REG_ACK: crate::Register = crate::Register::new(14, 0x1);
+        pub const REG_ACK_R_NACK: crate::Field = crate::Field::new(1, 0, REG_ACK);
+
+        pub const HW_UDMA_I2C_0_BASE: usize = 0x50109000;
+    }
+
+    pub mod udma_i2c_1 {
+        pub const UDMA_I2C_1_NUMREGS: usize = 12;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
+        pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
+
+        pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
+        pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
+
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x3);
+        pub const REG_STATUS_R_BUSY: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+        pub const REG_STATUS_R_AL: crate::Field = crate::Field::new(1, 1, REG_STATUS);
+
+        pub const REG_SETUP: crate::Register = crate::Register::new(13, 0x1);
+        pub const REG_SETUP_R_DO_RST: crate::Field = crate::Field::new(1, 0, REG_SETUP);
+
+        pub const REG_ACK: crate::Register = crate::Register::new(14, 0x1);
+        pub const REG_ACK_R_NACK: crate::Field = crate::Field::new(1, 0, REG_ACK);
+
+        pub const HW_UDMA_I2C_1_BASE: usize = 0x5010a000;
+    }
+
+    pub mod udma_i2c_2 {
+        pub const UDMA_I2C_2_NUMREGS: usize = 12;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
+        pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
+
+        pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
+        pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
+
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x3);
+        pub const REG_STATUS_R_BUSY: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+        pub const REG_STATUS_R_AL: crate::Field = crate::Field::new(1, 1, REG_STATUS);
+
+        pub const REG_SETUP: crate::Register = crate::Register::new(13, 0x1);
+        pub const REG_SETUP_R_DO_RST: crate::Field = crate::Field::new(1, 0, REG_SETUP);
+
+        pub const REG_ACK: crate::Register = crate::Register::new(14, 0x1);
+        pub const REG_ACK_R_NACK: crate::Field = crate::Field::new(1, 0, REG_ACK);
+
+        pub const HW_UDMA_I2C_2_BASE: usize = 0x5010b000;
+    }
+
+    pub mod udma_i2c_3 {
+        pub const UDMA_I2C_3_NUMREGS: usize = 12;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_CMD_SADDR: crate::Register = crate::Register::new(8, 0xfff);
+        pub const REG_CMD_SADDR_R_CMD_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_CMD_SADDR);
+
+        pub const REG_CMD_SIZE: crate::Register = crate::Register::new(9, 0xffff);
+        pub const REG_CMD_SIZE_R_CMD_SIZE: crate::Field = crate::Field::new(16, 0, REG_CMD_SIZE);
+
+        pub const REG_CMD_CFG: crate::Register = crate::Register::new(10, 0x51);
+        pub const REG_CMD_CFG_R_CMD_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_EN: crate::Field = crate::Field::new(1, 4, REG_CMD_CFG);
+        pub const REG_CMD_CFG_R_CMD_CLR: crate::Field = crate::Field::new(1, 6, REG_CMD_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(12, 0x3);
+        pub const REG_STATUS_R_BUSY: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+        pub const REG_STATUS_R_AL: crate::Field = crate::Field::new(1, 1, REG_STATUS);
+
+        pub const REG_SETUP: crate::Register = crate::Register::new(13, 0x1);
+        pub const REG_SETUP_R_DO_RST: crate::Field = crate::Field::new(1, 0, REG_SETUP);
+
+        pub const REG_ACK: crate::Register = crate::Register::new(14, 0x1);
+        pub const REG_ACK_R_NACK: crate::Field = crate::Field::new(1, 0, REG_ACK);
+
+        pub const HW_UDMA_I2C_3_BASE: usize = 0x5010c000;
+    }
+
+    pub mod udma_sdio {
+        pub const UDMA_SDIO_NUMREGS: usize = 15;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x31);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 5, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x31);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 5, REG_TX_CFG);
+
+        pub const REG_CMD_OP: crate::Register = crate::Register::new(8, 0x3f07);
+        pub const REG_CMD_OP_R_CMD_RSP_TYPE: crate::Field = crate::Field::new(3, 0, REG_CMD_OP);
+        pub const REG_CMD_OP_R_CMD_OP: crate::Field = crate::Field::new(6, 8, REG_CMD_OP);
+
+        pub const REG_DATA_SETUP: crate::Register = crate::Register::new(10, 0x3ffff07);
+        pub const REG_DATA_SETUP_R_DATA_EN: crate::Field = crate::Field::new(1, 0, REG_DATA_SETUP);
+        pub const REG_DATA_SETUP_R_DATA_RWN: crate::Field = crate::Field::new(1, 1, REG_DATA_SETUP);
+        pub const REG_DATA_SETUP_R_DATA_QUAD: crate::Field = crate::Field::new(1, 2, REG_DATA_SETUP);
+        pub const REG_DATA_SETUP_R_DATA_BLOCK_NUM: crate::Field = crate::Field::new(8, 8, REG_DATA_SETUP);
+        pub const REG_DATA_SETUP_R_DATA_BLOCK_SIZE: crate::Field = crate::Field::new(10, 16, REG_DATA_SETUP);
+
+        pub const REG_START: crate::Register = crate::Register::new(11, 0x1);
+        pub const REG_START_R_SDIO_START: crate::Field = crate::Field::new(1, 0, REG_START);
+
+        pub const REG_RSP0: crate::Register = crate::Register::new(12, 0xffffffff);
+        pub const REG_RSP0_CFG_RSP_DATA_I_31_0: crate::Field = crate::Field::new(32, 0, REG_RSP0);
+
+        pub const REG_RSP1: crate::Register = crate::Register::new(13, 0xffffffff);
+        pub const REG_RSP1_CFG_RSP_DATA_I_63_32: crate::Field = crate::Field::new(32, 0, REG_RSP1);
+
+        pub const REG_RSP2: crate::Register = crate::Register::new(14, 0xffffffff);
+        pub const REG_RSP2_CFG_RSP_DATA_I_95_64: crate::Field = crate::Field::new(32, 0, REG_RSP2);
+
+        pub const REG_RSP3: crate::Register = crate::Register::new(15, 0xffffffff);
+        pub const REG_RSP3_CFG_RSP_DATA_I_127_96: crate::Field = crate::Field::new(32, 0, REG_RSP3);
+
+        pub const REG_CLK_DIV: crate::Register = crate::Register::new(16, 0x1ff);
+        pub const REG_CLK_DIV_R_CLK_DIV_DATA: crate::Field = crate::Field::new(8, 0, REG_CLK_DIV);
+        pub const REG_CLK_DIV_R_CLK_DIV_VALID: crate::Field = crate::Field::new(1, 8, REG_CLK_DIV);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(17, 0x3);
+        pub const REG_STATUS_R_EOT: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+        pub const REG_STATUS_R_ERR: crate::Field = crate::Field::new(1, 1, REG_STATUS);
+
+        pub const HW_UDMA_SDIO_BASE: usize = 0x5010d000;
+    }
+
+    pub mod udma_i2s {
+        pub const UDMA_I2S_NUMREGS: usize = 10;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x37);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_DATASIZE: crate::Field = crate::Field::new(2, 1, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 5, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x37);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_DATASIZE: crate::Field = crate::Field::new(2, 1, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 5, REG_TX_CFG);
+
+        pub const REG_I2S_CLKCFG_SETUP: crate::Register = crate::Register::new(8, 0xf7ffffff);
+        pub const REG_I2S_CLKCFG_SETUP_R_MASTER_GEN_CLK_DIV: crate::Field = crate::Field::new(8, 0, REG_I2S_CLKCFG_SETUP);
+        pub const REG_I2S_CLKCFG_SETUP_R_SLAVE_GEN_CLK_DIV: crate::Field = crate::Field::new(8, 8, REG_I2S_CLKCFG_SETUP);
+        pub const REG_I2S_CLKCFG_SETUP_R_COMMON_GEN_CLK_DIV: crate::Field = crate::Field::new(8, 16, REG_I2S_CLKCFG_SETUP);
+        pub const REG_I2S_CLKCFG_SETUP_R_SLAVE_CLK_EN: crate::Field = crate::Field::new(1, 24, REG_I2S_CLKCFG_SETUP);
+        pub const REG_I2S_CLKCFG_SETUP_R_MASTER_CLK_EN: crate::Field = crate::Field::new(1, 25, REG_I2S_CLKCFG_SETUP);
+        pub const REG_I2S_CLKCFG_SETUP_R_PDM_CLK_EN: crate::Field = crate::Field::new(1, 26, REG_I2S_CLKCFG_SETUP);
+        pub const REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_EXT: crate::Field = crate::Field::new(1, 28, REG_I2S_CLKCFG_SETUP);
+        pub const REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_NUM: crate::Field = crate::Field::new(1, 29, REG_I2S_CLKCFG_SETUP);
+        pub const REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_EXT: crate::Field = crate::Field::new(1, 30, REG_I2S_CLKCFG_SETUP);
+        pub const REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_NUM: crate::Field = crate::Field::new(1, 31, REG_I2S_CLKCFG_SETUP);
+
+        pub const REG_I2S_SLV_SETUP: crate::Register = crate::Register::new(9, 0x80031f07);
+        pub const REG_I2S_SLV_SETUP_R_SLAVE_I2S_WORDS: crate::Field = crate::Field::new(3, 0, REG_I2S_SLV_SETUP);
+        pub const REG_I2S_SLV_SETUP_R_SLAVE_I2S_BITS_WORD: crate::Field = crate::Field::new(5, 8, REG_I2S_SLV_SETUP);
+        pub const REG_I2S_SLV_SETUP_R_SLAVE_I2S_LSB_FIRST: crate::Field = crate::Field::new(1, 16, REG_I2S_SLV_SETUP);
+        pub const REG_I2S_SLV_SETUP_R_SLAVE_I2S_2CH: crate::Field = crate::Field::new(1, 17, REG_I2S_SLV_SETUP);
+        pub const REG_I2S_SLV_SETUP_R_SLAVE_I2S_EN: crate::Field = crate::Field::new(1, 31, REG_I2S_SLV_SETUP);
+
+        pub const REG_I2S_MST_SETUP: crate::Register = crate::Register::new(10, 0x80031f07);
+        pub const REG_I2S_MST_SETUP_R_MASTER_I2S_WORDS: crate::Field = crate::Field::new(3, 0, REG_I2S_MST_SETUP);
+        pub const REG_I2S_MST_SETUP_R_MASTER_I2S_BITS_WORD: crate::Field = crate::Field::new(5, 8, REG_I2S_MST_SETUP);
+        pub const REG_I2S_MST_SETUP_R_MASTER_I2S_LSB_FIRST: crate::Field = crate::Field::new(1, 16, REG_I2S_MST_SETUP);
+        pub const REG_I2S_MST_SETUP_R_MASTER_I2S_2CH: crate::Field = crate::Field::new(1, 17, REG_I2S_MST_SETUP);
+        pub const REG_I2S_MST_SETUP_R_MASTER_I2S_EN: crate::Field = crate::Field::new(1, 31, REG_I2S_MST_SETUP);
+
+        pub const REG_I2S_PDM_SETUP: crate::Register = crate::Register::new(11, 0x80007fff);
+        pub const REG_I2S_PDM_SETUP_R_SLAVE_PDM_SHIFT: crate::Field = crate::Field::new(3, 0, REG_I2S_PDM_SETUP);
+        pub const REG_I2S_PDM_SETUP_R_SLAVE_PDM_DECIMATION: crate::Field = crate::Field::new(10, 3, REG_I2S_PDM_SETUP);
+        pub const REG_I2S_PDM_SETUP_R_SLAVE_PDM_MODE: crate::Field = crate::Field::new(2, 13, REG_I2S_PDM_SETUP);
+        pub const REG_I2S_PDM_SETUP_R_SLAVE_PDM_EN: crate::Field = crate::Field::new(1, 31, REG_I2S_PDM_SETUP);
+
+        pub const HW_UDMA_I2S_BASE: usize = 0x5010e000;
+    }
+
+    pub mod udma_camera {
+        pub const UDMA_CAMERA_NUMREGS: usize = 9;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x57);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_DATASIZE: crate::Field = crate::Field::new(2, 1, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_CAM_CFG_GLOB: crate::Register = crate::Register::new(8, 0x7fffffff);
+        pub const REG_CAM_CFG_GLOB_R_CAM_CFG: crate::Field = crate::Field::new(30, 0, REG_CAM_CFG_GLOB);
+        pub const REG_CAM_CFG_GLOB_CFG_CAM_IP_EN_I: crate::Field = crate::Field::new(1, 30, REG_CAM_CFG_GLOB);
+
+        pub const REG_CAM_CFG_LL: crate::Register = crate::Register::new(9, 0xffffffff);
+        pub const REG_CAM_CFG_LL_R_CAM_CFG_LL: crate::Field = crate::Field::new(32, 0, REG_CAM_CFG_LL);
+
+        pub const REG_CAM_CFG_UR: crate::Register = crate::Register::new(10, 0xffffffff);
+        pub const REG_CAM_CFG_UR_R_CAM_CFG_UR: crate::Field = crate::Field::new(32, 0, REG_CAM_CFG_UR);
+
+        pub const REG_CAM_CFG_SIZE: crate::Register = crate::Register::new(11, 0xffffffff);
+        pub const REG_CAM_CFG_SIZE_R_CAM_CFG_SIZE: crate::Field = crate::Field::new(32, 0, REG_CAM_CFG_SIZE);
+
+        pub const REG_CAM_CFG_FILTER: crate::Register = crate::Register::new(12, 0xffffffff);
+        pub const REG_CAM_CFG_FILTER_R_CAM_CFG_FILTER: crate::Field = crate::Field::new(32, 0, REG_CAM_CFG_FILTER);
+
+        pub const REG_CAM_VSYNC_POLARITY: crate::Register = crate::Register::new(13, 0x3);
+        pub const REG_CAM_VSYNC_POLARITY_R_CAM_VSYNC_POLARITY: crate::Field = crate::Field::new(1, 0, REG_CAM_VSYNC_POLARITY);
+        pub const REG_CAM_VSYNC_POLARITY_R_CAM_HSYNC_POLARITY: crate::Field = crate::Field::new(1, 1, REG_CAM_VSYNC_POLARITY);
+
+        pub const HW_UDMA_CAMERA_BASE: usize = 0x5010f000;
+    }
+
+    pub mod udma_filter {
+        pub const UDMA_FILTER_NUMREGS: usize = 24;
+
+        pub const REG_TX_CH0_ADD: crate::Register = crate::Register::new(0, 0x7fff);
+        pub const REG_TX_CH0_ADD_R_FILTER_TX_START_ADDR_0: crate::Field = crate::Field::new(15, 0, REG_TX_CH0_ADD);
+
+        pub const REG_TX_CH0_CFG: crate::Register = crate::Register::new(1, 0x303);
+        pub const REG_TX_CH0_CFG_R_FILTER_TX_DATASIZE_0: crate::Field = crate::Field::new(2, 0, REG_TX_CH0_CFG);
+        pub const REG_TX_CH0_CFG_R_FILTER_TX_MODE_0: crate::Field = crate::Field::new(2, 8, REG_TX_CH0_CFG);
+
+        pub const REG_TX_CH0_LEN0: crate::Register = crate::Register::new(2, 0x7fff);
+        pub const REG_TX_CH0_LEN0_R_FILTER_TX_LEN0_0: crate::Field = crate::Field::new(15, 0, REG_TX_CH0_LEN0);
+
+        pub const REG_TX_CH0_LEN1: crate::Register = crate::Register::new(3, 0x7fff);
+        pub const REG_TX_CH0_LEN1_R_FILTER_TX_LEN1_0: crate::Field = crate::Field::new(15, 0, REG_TX_CH0_LEN1);
+
+        pub const REG_TX_CH0_LEN2: crate::Register = crate::Register::new(4, 0x7fff);
+        pub const REG_TX_CH0_LEN2_R_FILTER_TX_LEN2_0: crate::Field = crate::Field::new(15, 0, REG_TX_CH0_LEN2);
+
+        pub const REG_TX_CH1_ADD: crate::Register = crate::Register::new(5, 0x7fff);
+        pub const REG_TX_CH1_ADD_R_FILTER_TX_START_ADDR_1: crate::Field = crate::Field::new(15, 0, REG_TX_CH1_ADD);
+
+        pub const REG_TX_CH1_CFG: crate::Register = crate::Register::new(6, 0x303);
+        pub const REG_TX_CH1_CFG_R_FILTER_TX_DATASIZE_1: crate::Field = crate::Field::new(2, 0, REG_TX_CH1_CFG);
+        pub const REG_TX_CH1_CFG_R_FILTER_TX_MODE_1: crate::Field = crate::Field::new(2, 8, REG_TX_CH1_CFG);
+
+        pub const REG_TX_CH1_LEN0: crate::Register = crate::Register::new(7, 0x7fff);
+        pub const REG_TX_CH1_LEN0_R_FILTER_TX_LEN0_1: crate::Field = crate::Field::new(15, 0, REG_TX_CH1_LEN0);
+
+        pub const REG_TX_CH1_LEN1: crate::Register = crate::Register::new(8, 0x7fff);
+        pub const REG_TX_CH1_LEN1_R_FILTER_TX_LEN1_1: crate::Field = crate::Field::new(15, 0, REG_TX_CH1_LEN1);
+
+        pub const REG_TX_CH1_LEN2: crate::Register = crate::Register::new(9, 0x7fff);
+        pub const REG_TX_CH1_LEN2_R_FILTER_TX_LEN2_1: crate::Field = crate::Field::new(15, 0, REG_TX_CH1_LEN2);
+
+        pub const REG_RX_CH_ADD: crate::Register = crate::Register::new(10, 0x7fff);
+        pub const REG_RX_CH_ADD_R_FILTER_RX_START_ADDR: crate::Field = crate::Field::new(15, 0, REG_RX_CH_ADD);
+
+        pub const REG_RX_CH_CFG: crate::Register = crate::Register::new(11, 0x303);
+        pub const REG_RX_CH_CFG_R_FILTER_RX_DATASIZE: crate::Field = crate::Field::new(2, 0, REG_RX_CH_CFG);
+        pub const REG_RX_CH_CFG_R_FILTER_RX_MODE: crate::Field = crate::Field::new(2, 8, REG_RX_CH_CFG);
+
+        pub const REG_RX_CH_LEN0: crate::Register = crate::Register::new(12, 0xffff);
+        pub const REG_RX_CH_LEN0_R_FILTER_RX_LEN0: crate::Field = crate::Field::new(16, 0, REG_RX_CH_LEN0);
+
+        pub const REG_RX_CH_LEN1: crate::Register = crate::Register::new(13, 0xffff);
+        pub const REG_RX_CH_LEN1_R_FILTER_RX_LEN1: crate::Field = crate::Field::new(16, 0, REG_RX_CH_LEN1);
+
+        pub const REG_RX_CH_LEN2: crate::Register = crate::Register::new(14, 0xffff);
+        pub const REG_RX_CH_LEN2_R_FILTER_RX_LEN2: crate::Field = crate::Field::new(16, 0, REG_RX_CH_LEN2);
+
+        pub const REG_AU_CFG: crate::Register = crate::Register::new(15, 0x1f0f03);
+        pub const REG_AU_CFG_R_AU_USE_SIGNED: crate::Field = crate::Field::new(1, 0, REG_AU_CFG);
+        pub const REG_AU_CFG_R_AU_BYPASS: crate::Field = crate::Field::new(1, 1, REG_AU_CFG);
+        pub const REG_AU_CFG_R_AU_MODE: crate::Field = crate::Field::new(4, 8, REG_AU_CFG);
+        pub const REG_AU_CFG_R_AU_SHIFT: crate::Field = crate::Field::new(5, 16, REG_AU_CFG);
+
+        pub const REG_AU_REG0: crate::Register = crate::Register::new(16, 0xffffffff);
+        pub const REG_AU_REG0_R_COMMIT_AU_REG0: crate::Field = crate::Field::new(32, 0, REG_AU_REG0);
+
+        pub const REG_AU_REG1: crate::Register = crate::Register::new(17, 0xffffffff);
+        pub const REG_AU_REG1_R_COMMIT_AU_REG1: crate::Field = crate::Field::new(32, 0, REG_AU_REG1);
+
+        pub const REG_BINCU_TH: crate::Register = crate::Register::new(18, 0xffffffff);
+        pub const REG_BINCU_TH_R_COMMIT_BINCU_THRESHOLD: crate::Field = crate::Field::new(32, 0, REG_BINCU_TH);
+
+        pub const REG_BINCU_CNT: crate::Register = crate::Register::new(19, 0x80007fff);
+        pub const REG_BINCU_CNT_R_BINCU_COUNTER: crate::Field = crate::Field::new(15, 0, REG_BINCU_CNT);
+        pub const REG_BINCU_CNT_R_BINCU_EN_COUNTER: crate::Field = crate::Field::new(1, 31, REG_BINCU_CNT);
+
+        pub const REG_BINCU_SETUP: crate::Register = crate::Register::new(20, 0x3);
+        pub const REG_BINCU_SETUP_R_BINCU_DATASIZE: crate::Field = crate::Field::new(2, 0, REG_BINCU_SETUP);
+
+        pub const REG_BINCU_VAL: crate::Register = crate::Register::new(21, 0x7fff);
+        pub const REG_BINCU_VAL_BINCU_COUNTER_I: crate::Field = crate::Field::new(15, 0, REG_BINCU_VAL);
+
+        pub const REG_FILT: crate::Register = crate::Register::new(22, 0xf);
+        pub const REG_FILT_R_FILTER_MODE: crate::Field = crate::Field::new(4, 0, REG_FILT);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(24, 0x1);
+        pub const REG_STATUS_R_FILTER_DONE: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+
+        pub const HW_UDMA_FILTER_BASE: usize = 0x50110000;
+    }
+
+    pub mod udma_scif {
+        pub const UDMA_SCIF_NUMREGS: usize = 13;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x1);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x1);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+
+        pub const REG_STATUS: crate::Register = crate::Register::new(8, 0x1);
+        pub const REG_STATUS_STATUS_I: crate::Field = crate::Field::new(1, 0, REG_STATUS);
+
+        pub const REG_SCIF_SETUP: crate::Register = crate::Register::new(9, 0xffffc33f);
+        pub const REG_SCIF_SETUP_R_SCIF_PARITY_EN: crate::Field = crate::Field::new(1, 0, REG_SCIF_SETUP);
+        pub const REG_SCIF_SETUP_R_SCIF_BITS: crate::Field = crate::Field::new(2, 1, REG_SCIF_SETUP);
+        pub const REG_SCIF_SETUP_R_SCIF_STOP_BITS: crate::Field = crate::Field::new(1, 3, REG_SCIF_SETUP);
+        pub const REG_SCIF_SETUP_R_SCIF_RX_POLLING_EN: crate::Field = crate::Field::new(1, 4, REG_SCIF_SETUP);
+        pub const REG_SCIF_SETUP_R_SCIF_RX_CLEAN_FIFO: crate::Field = crate::Field::new(1, 5, REG_SCIF_SETUP);
+        pub const REG_SCIF_SETUP_R_SCIF_EN_TX: crate::Field = crate::Field::new(1, 8, REG_SCIF_SETUP);
+        pub const REG_SCIF_SETUP_R_SCIF_EN_RX: crate::Field = crate::Field::new(1, 9, REG_SCIF_SETUP);
+        pub const REG_SCIF_SETUP_R_SCIF_CLKSEL: crate::Field = crate::Field::new(2, 14, REG_SCIF_SETUP);
+        pub const REG_SCIF_SETUP_R_SCIF_DIV: crate::Field = crate::Field::new(16, 16, REG_SCIF_SETUP);
+
+        pub const REG_ERROR: crate::Register = crate::Register::new(10, 0x3);
+        pub const REG_ERROR_R_ERR_OVERFLOW: crate::Field = crate::Field::new(1, 0, REG_ERROR);
+        pub const REG_ERROR_R_ERR_PARITY: crate::Field = crate::Field::new(1, 1, REG_ERROR);
+
+        pub const REG_IRQ_EN: crate::Register = crate::Register::new(11, 0x3);
+        pub const REG_IRQ_EN_R_SCIF_RX_IRQ_EN: crate::Field = crate::Field::new(1, 0, REG_IRQ_EN);
+        pub const REG_IRQ_EN_R_SCIF_ERR_IRQ_EN: crate::Field = crate::Field::new(1, 1, REG_IRQ_EN);
+
+        pub const REG_VALID: crate::Register = crate::Register::new(12, 0x1);
+        pub const REG_VALID_R_SCIF_RX_DATA_VALID: crate::Field = crate::Field::new(1, 0, REG_VALID);
+
+        pub const REG_DATA: crate::Register = crate::Register::new(13, 0xff);
+        pub const REG_DATA_R_SCIF_RX_DATA: crate::Field = crate::Field::new(8, 0, REG_DATA);
+
+        pub const REG_SCIF_ETU: crate::Register = crate::Register::new(14, 0xffff);
+        pub const REG_SCIF_ETU_R_SCIF_ETU: crate::Field = crate::Field::new(16, 0, REG_SCIF_ETU);
+
+        pub const HW_UDMA_SCIF_BASE: usize = 0x50111000;
+    }
+
+    pub mod udma_spis_0 {
+        pub const UDMA_SPIS_0_NUMREGS: usize = 12;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_SPIS_SETUP: crate::Register = crate::Register::new(8, 0x3);
+        pub const REG_SPIS_SETUP_CFGCPOL: crate::Field = crate::Field::new(1, 0, REG_SPIS_SETUP);
+        pub const REG_SPIS_SETUP_CFGCPHA: crate::Field = crate::Field::new(1, 1, REG_SPIS_SETUP);
+
+        pub const REG_SEOT_CNT: crate::Register = crate::Register::new(9, 0xffff);
+        pub const REG_SEOT_CNT_SR_SEOT_CNT: crate::Field = crate::Field::new(16, 0, REG_SEOT_CNT);
+
+        pub const REG_SPIS_IRQ_EN: crate::Register = crate::Register::new(10, 0x1);
+        pub const REG_SPIS_IRQ_EN_SEOT_IRQ_EN: crate::Field = crate::Field::new(1, 0, REG_SPIS_IRQ_EN);
+
+        pub const REG_SPIS_RXCNT: crate::Register = crate::Register::new(11, 0xffff);
+        pub const REG_SPIS_RXCNT_CFGRXCNT: crate::Field = crate::Field::new(16, 0, REG_SPIS_RXCNT);
+
+        pub const REG_SPIS_TXCNT: crate::Register = crate::Register::new(12, 0xffff);
+        pub const REG_SPIS_TXCNT_CFGTXCNT: crate::Field = crate::Field::new(16, 0, REG_SPIS_TXCNT);
+
+        pub const REG_SPIS_DMCNT: crate::Register = crate::Register::new(13, 0xffff);
+        pub const REG_SPIS_DMCNT_CFGDMCNT: crate::Field = crate::Field::new(16, 0, REG_SPIS_DMCNT);
+
+        pub const HW_UDMA_SPIS_0_BASE: usize = 0x50112000;
+    }
+
+    pub mod udma_spis_1 {
+        pub const UDMA_SPIS_1_NUMREGS: usize = 12;
+
+        pub const REG_RX_SADDR: crate::Register = crate::Register::new(0, 0xfff);
+        pub const REG_RX_SADDR_R_RX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_RX_SADDR);
+
+        pub const REG_RX_SIZE: crate::Register = crate::Register::new(1, 0xffff);
+        pub const REG_RX_SIZE_R_RX_SIZE: crate::Field = crate::Field::new(16, 0, REG_RX_SIZE);
+
+        pub const REG_RX_CFG: crate::Register = crate::Register::new(2, 0x51);
+        pub const REG_RX_CFG_R_RX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_EN: crate::Field = crate::Field::new(1, 4, REG_RX_CFG);
+        pub const REG_RX_CFG_R_RX_CLR: crate::Field = crate::Field::new(1, 6, REG_RX_CFG);
+
+        pub const REG_TX_SADDR: crate::Register = crate::Register::new(4, 0xfff);
+        pub const REG_TX_SADDR_R_TX_STARTADDR: crate::Field = crate::Field::new(12, 0, REG_TX_SADDR);
+
+        pub const REG_TX_SIZE: crate::Register = crate::Register::new(5, 0xffff);
+        pub const REG_TX_SIZE_R_TX_SIZE: crate::Field = crate::Field::new(16, 0, REG_TX_SIZE);
+
+        pub const REG_TX_CFG: crate::Register = crate::Register::new(6, 0x51);
+        pub const REG_TX_CFG_R_TX_CONTINUOUS: crate::Field = crate::Field::new(1, 0, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
+        pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 6, REG_TX_CFG);
+
+        pub const REG_SPIS_SETUP: crate::Register = crate::Register::new(8, 0x3);
+        pub const REG_SPIS_SETUP_CFGCPOL: crate::Field = crate::Field::new(1, 0, REG_SPIS_SETUP);
+        pub const REG_SPIS_SETUP_CFGCPHA: crate::Field = crate::Field::new(1, 1, REG_SPIS_SETUP);
+
+        pub const REG_SEOT_CNT: crate::Register = crate::Register::new(9, 0xffff);
+        pub const REG_SEOT_CNT_SR_SEOT_CNT: crate::Field = crate::Field::new(16, 0, REG_SEOT_CNT);
+
+        pub const REG_SPIS_IRQ_EN: crate::Register = crate::Register::new(10, 0x1);
+        pub const REG_SPIS_IRQ_EN_SEOT_IRQ_EN: crate::Field = crate::Field::new(1, 0, REG_SPIS_IRQ_EN);
+
+        pub const REG_SPIS_RXCNT: crate::Register = crate::Register::new(11, 0xffff);
+        pub const REG_SPIS_RXCNT_CFGRXCNT: crate::Field = crate::Field::new(16, 0, REG_SPIS_RXCNT);
+
+        pub const REG_SPIS_TXCNT: crate::Register = crate::Register::new(12, 0xffff);
+        pub const REG_SPIS_TXCNT_CFGTXCNT: crate::Field = crate::Field::new(16, 0, REG_SPIS_TXCNT);
+
+        pub const REG_SPIS_DMCNT: crate::Register = crate::Register::new(13, 0xffff);
+        pub const REG_SPIS_DMCNT_CFGDMCNT: crate::Field = crate::Field::new(16, 0, REG_SPIS_DMCNT);
+
+        pub const HW_UDMA_SPIS_1_BASE: usize = 0x50113000;
+    }
+
+    pub mod udma_adc {
+        pub const UDMA_ADC_NUMREGS: usize = 0;
+
+        pub const HW_UDMA_ADC_BASE: usize = 0x50114000;
+    }
+
     pub mod aes {
         pub const AES_NUMREGS: usize = 10;
 
@@ -2408,7 +3327,7 @@ pub mod utra {
     }
 
     pub mod combohash {
-        pub const COMBOHASH_NUMREGS: usize = 12;
+        pub const COMBOHASH_NUMREGS: usize = 13;
 
         pub const SFR_CRFUNC: crate::Register = crate::Register::new(0, 0xff);
         pub const SFR_CRFUNC_CR_FUNC: crate::Field = crate::Field::new(8, 0, SFR_CRFUNC);
@@ -2432,6 +3351,9 @@ pub mod utra {
         pub const SFR_OPT2_CR_OPT_SCRTCHK: crate::Field = crate::Field::new(1, 0, SFR_OPT2);
         pub const SFR_OPT2_CR_OPT_IFSOB: crate::Field = crate::Field::new(1, 1, SFR_OPT2);
         pub const SFR_OPT2_CR_OPT_IFSTART: crate::Field = crate::Field::new(1, 2, SFR_OPT2);
+
+        pub const SFR_OPT3: crate::Register = crate::Register::new(6, 0xff);
+        pub const SFR_OPT3_SFR_OPT3: crate::Field = crate::Field::new(8, 0, SFR_OPT3);
 
         pub const SFR_SEGPTR_SEGID_LKEY: crate::Register = crate::Register::new(8, 0xfff);
         pub const SFR_SEGPTR_SEGID_LKEY_SEGID_LKEY: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_SEGID_LKEY);
@@ -2619,48 +3541,22 @@ pub mod utra {
     }
 
     pub mod trng {
-        pub const TRNG_NUMREGS: usize = 12;
+        pub const TRNG_NUMREGS: usize = 5;
 
-        pub const SFR_CRFUNC: crate::Register = crate::Register::new(0, 0xff);
-        pub const SFR_CRFUNC_CR_FUNC: crate::Field = crate::Field::new(8, 0, SFR_CRFUNC);
+        pub const SFR_CRSRC: crate::Register = crate::Register::new(0, 0xfff);
+        pub const SFR_CRSRC_SFR_CRSRC: crate::Field = crate::Field::new(12, 0, SFR_CRSRC);
 
-        pub const SFR_AR: crate::Register = crate::Register::new(1, 0xffffffff);
-        pub const SFR_AR_START: crate::Field = crate::Field::new(32, 0, SFR_AR);
+        pub const SFR_AR_STOP: crate::Register = crate::Register::new(1, 0xffffffff);
+        pub const SFR_AR_STOP_SFR_AR_STOP: crate::Field = crate::Field::new(32, 0, SFR_AR_STOP);
 
-        pub const SFR_SRMFSM: crate::Register = crate::Register::new(2, 0x3);
-        pub const SFR_SRMFSM_MFSM: crate::Field = crate::Field::new(1, 0, SFR_SRMFSM);
-        pub const SFR_SRMFSM_MODINVREADY: crate::Field = crate::Field::new(1, 1, SFR_SRMFSM);
+        pub const SFR_PP: crate::Register = crate::Register::new(2, 0x1ffff);
+        pub const SFR_PP_SFR_PP: crate::Field = crate::Field::new(17, 0, SFR_PP);
 
-        pub const SFR_FR: crate::Register = crate::Register::new(3, 0x1f);
-        pub const SFR_FR_MFSM_DONE: crate::Field = crate::Field::new(1, 0, SFR_FR);
-        pub const SFR_FR_PCORE_DONE: crate::Field = crate::Field::new(1, 1, SFR_FR);
-        pub const SFR_FR_CHNLO_DONE: crate::Field = crate::Field::new(1, 2, SFR_FR);
-        pub const SFR_FR_CHNLI_DONE: crate::Field = crate::Field::new(1, 3, SFR_FR);
-        pub const SFR_FR_CHNLX_DONE: crate::Field = crate::Field::new(1, 4, SFR_FR);
+        pub const SFR_OPT: crate::Register = crate::Register::new(3, 0x1ffff);
+        pub const SFR_OPT_SFR_OPT: crate::Field = crate::Field::new(17, 0, SFR_OPT);
 
-        pub const SFR_OPTNW: crate::Register = crate::Register::new(4, 0x1fff);
-        pub const SFR_OPTNW_OPT_NW: crate::Field = crate::Field::new(13, 0, SFR_OPTNW);
-
-        pub const SFR_OPTEW: crate::Register = crate::Register::new(5, 0x1fff);
-        pub const SFR_OPTEW_OPT_EW: crate::Field = crate::Field::new(13, 0, SFR_OPTEW);
-
-        pub const SFR_OPTMASK: crate::Register = crate::Register::new(8, 0xffff);
-        pub const SFR_OPTMASK_OPT_MASK: crate::Field = crate::Field::new(16, 0, SFR_OPTMASK);
-
-        pub const SFR_SEGPTR_CR_SEGPTRSTART0: crate::Register = crate::Register::new(12, 0xfff);
-        pub const SFR_SEGPTR_CR_SEGPTRSTART0_CR_SEGPTRSTART0: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_CR_SEGPTRSTART0);
-
-        pub const SFR_SEGPTR_CR_SEGPTRSTART1: crate::Register = crate::Register::new(13, 0xfff);
-        pub const SFR_SEGPTR_CR_SEGPTRSTART1_CR_SEGPTRSTART1: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_CR_SEGPTRSTART1);
-
-        pub const SFR_SEGPTR_CR_SEGPTRSTART2: crate::Register = crate::Register::new(14, 0xfff);
-        pub const SFR_SEGPTR_CR_SEGPTRSTART2_CR_SEGPTRSTART2: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_CR_SEGPTRSTART2);
-
-        pub const SFR_SEGPTR_CR_SEGPTRSTART3: crate::Register = crate::Register::new(15, 0xfff);
-        pub const SFR_SEGPTR_CR_SEGPTRSTART3_CR_SEGPTRSTART3: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_CR_SEGPTRSTART3);
-
-        pub const SFR_SEGPTR_CR_SEGPTRSTART4: crate::Register = crate::Register::new(16, 0xfff);
-        pub const SFR_SEGPTR_CR_SEGPTRSTART4_CR_SEGPTRSTART4: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_CR_SEGPTRSTART4);
+        pub const SFR_SR: crate::Register = crate::Register::new(4, 0xffffffff);
+        pub const SFR_SR_SR_RNG: crate::Field = crate::Field::new(32, 0, SFR_SR);
 
         pub const HW_TRNG_BASE: usize = 0x4002e000;
     }
@@ -3883,7 +4779,7 @@ pub mod utra {
         pub const SFR_SR_SR_MDMAREQ7: crate::Register = crate::Register::new(23, 0x1f);
         pub const SFR_SR_SR_MDMAREQ7_SR_MDMAREQ7: crate::Field = crate::Field::new(5, 0, SFR_SR_SR_MDMAREQ7);
 
-        pub const HW_MDMA_BASE: usize = 0x40002000;
+        pub const HW_MDMA_BASE: usize = 0x40012000;
     }
 
     pub mod qfc {
@@ -3931,13 +4827,33 @@ pub mod utra {
         pub const CR_AESENA: crate::Register = crate::Register::new(20, 0x1);
         pub const CR_AESENA_CR_AESENA: crate::Field = crate::Field::new(1, 0, CR_AESENA);
 
-        pub const HW_QFC_BASE: usize = 0x40000000;
+        pub const HW_QFC_BASE: usize = 0x40010000;
     }
 
-    pub mod pl230_placeholder {
-        pub const PL230_PLACEHOLDER_NUMREGS: usize = 0;
+    pub mod mbox_apb {
+        pub const MBOX_APB_NUMREGS: usize = 5;
 
-        pub const HW_PL230_PLACEHOLDER_BASE: usize = 0x40011000;
+        pub const SFR_WDATA: crate::Register = crate::Register::new(0, 0xffffffff);
+        pub const SFR_WDATA_SFR_WDATA: crate::Field = crate::Field::new(32, 0, SFR_WDATA);
+
+        pub const SFR_RDATA: crate::Register = crate::Register::new(1, 0xffffffff);
+        pub const SFR_RDATA_SFR_RDATA: crate::Field = crate::Field::new(32, 0, SFR_RDATA);
+
+        pub const SFR_STATUS: crate::Register = crate::Register::new(2, 0x3f);
+        pub const SFR_STATUS_RX_AVAIL: crate::Field = crate::Field::new(1, 0, SFR_STATUS);
+        pub const SFR_STATUS_TX_FREE: crate::Field = crate::Field::new(1, 1, SFR_STATUS);
+        pub const SFR_STATUS_ABORT_IN_PROGRESS: crate::Field = crate::Field::new(1, 2, SFR_STATUS);
+        pub const SFR_STATUS_ABORT_ACK: crate::Field = crate::Field::new(1, 3, SFR_STATUS);
+        pub const SFR_STATUS_TX_ERR: crate::Field = crate::Field::new(1, 4, SFR_STATUS);
+        pub const SFR_STATUS_RX_ERR: crate::Field = crate::Field::new(1, 5, SFR_STATUS);
+
+        pub const SFR_ABORT: crate::Register = crate::Register::new(6, 0xffffffff);
+        pub const SFR_ABORT_SFR_ABORT: crate::Field = crate::Field::new(32, 0, SFR_ABORT);
+
+        pub const SFR_DONE: crate::Register = crate::Register::new(7, 0xffffffff);
+        pub const SFR_DONE_SFR_DONE: crate::Field = crate::Field::new(32, 0, SFR_DONE);
+
+        pub const HW_MBOX_APB_BASE: usize = 0x40013000;
     }
 
     pub mod gluechain {
@@ -4451,14 +5367,6 @@ mod tests {
         let mut baz = main_csr.zf(utra::main::IRQTEST0_TRIGGER, bar);
         baz |= main_csr.ms(utra::main::IRQTEST0_TRIGGER, 1);
         main_csr.wfo(utra::main::IRQTEST0_TRIGGER, baz);
-
-        let foo = main_csr.r(utra::main::IRQTEST1);
-        main_csr.wo(utra::main::IRQTEST1, foo);
-        let bar = main_csr.rf(utra::main::IRQTEST1_TRIGGER);
-        main_csr.rmwf(utra::main::IRQTEST1_TRIGGER, bar);
-        let mut baz = main_csr.zf(utra::main::IRQTEST1_TRIGGER, bar);
-        baz |= main_csr.ms(utra::main::IRQTEST1_TRIGGER, 1);
-        main_csr.wfo(utra::main::IRQTEST1_TRIGGER, baz);
   }
 
     #[test]
@@ -4738,6 +5646,22 @@ mod tests {
         baz |= irqarray0_csr.ms(utra::irqarray0::EV_SOFT_TRIGGER, 1);
         irqarray0_csr.wfo(utra::irqarray0::EV_SOFT_TRIGGER, baz);
 
+        let foo = irqarray0_csr.r(utra::irqarray0::EV_EDGE_TRIGGERED);
+        irqarray0_csr.wo(utra::irqarray0::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray0_csr.rf(utra::irqarray0::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray0_csr.rmwf(utra::irqarray0::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray0_csr.ms(utra::irqarray0::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray0_csr.wfo(utra::irqarray0::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray0_csr.r(utra::irqarray0::EV_POLARITY);
+        irqarray0_csr.wo(utra::irqarray0::EV_POLARITY, foo);
+        let bar = irqarray0_csr.rf(utra::irqarray0::EV_POLARITY_RISING);
+        irqarray0_csr.rmwf(utra::irqarray0::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_POLARITY_RISING, bar);
+        baz |= irqarray0_csr.ms(utra::irqarray0::EV_POLARITY_RISING, 1);
+        irqarray0_csr.wfo(utra::irqarray0::EV_POLARITY_RISING, baz);
+
         let foo = irqarray0_csr.r(utra::irqarray0::EV_STATUS);
         irqarray0_csr.wo(utra::irqarray0::EV_STATUS, foo);
         let bar = irqarray0_csr.rf(utra::irqarray0::EV_STATUS_SOURCE0);
@@ -4820,26 +5744,6 @@ mod tests {
         let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_STATUS_SOURCE15, bar);
         baz |= irqarray0_csr.ms(utra::irqarray0::EV_STATUS_SOURCE15, 1);
         irqarray0_csr.wfo(utra::irqarray0::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_STATUS_SOURCE16);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_STATUS_SOURCE16, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_STATUS_SOURCE17);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_STATUS_SOURCE17, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_STATUS_SOURCE18);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_STATUS_SOURCE18, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_STATUS_SOURCE19);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_STATUS_SOURCE19, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray0_csr.r(utra::irqarray0::EV_PENDING);
         irqarray0_csr.wo(utra::irqarray0::EV_PENDING, foo);
@@ -4923,26 +5827,6 @@ mod tests {
         let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_PENDING_SOURCE15, bar);
         baz |= irqarray0_csr.ms(utra::irqarray0::EV_PENDING_SOURCE15, 1);
         irqarray0_csr.wfo(utra::irqarray0::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_PENDING_SOURCE16);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_PENDING_SOURCE16, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_PENDING_SOURCE17);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_PENDING_SOURCE17, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_PENDING_SOURCE18);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_PENDING_SOURCE18, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_PENDING_SOURCE19);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_PENDING_SOURCE19, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray0_csr.r(utra::irqarray0::EV_ENABLE);
         irqarray0_csr.wo(utra::irqarray0::EV_ENABLE, foo);
@@ -5026,26 +5910,6 @@ mod tests {
         let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray0_csr.ms(utra::irqarray0::EV_ENABLE_SOURCE15, 1);
         irqarray0_csr.wfo(utra::irqarray0::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_ENABLE_SOURCE16);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_ENABLE_SOURCE16, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_ENABLE_SOURCE17);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_ENABLE_SOURCE17, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_ENABLE_SOURCE18);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_ENABLE_SOURCE18, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray0_csr.rf(utra::irqarray0::EV_ENABLE_SOURCE19);
-        irqarray0_csr.rmwf(utra::irqarray0::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray0_csr.zf(utra::irqarray0::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray0_csr.ms(utra::irqarray0::EV_ENABLE_SOURCE19, 1);
-        irqarray0_csr.wfo(utra::irqarray0::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -5061,6 +5925,22 @@ mod tests {
         let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_SOFT_TRIGGER, bar);
         baz |= irqarray1_csr.ms(utra::irqarray1::EV_SOFT_TRIGGER, 1);
         irqarray1_csr.wfo(utra::irqarray1::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray1_csr.r(utra::irqarray1::EV_EDGE_TRIGGERED);
+        irqarray1_csr.wo(utra::irqarray1::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray1_csr.rf(utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray1_csr.rmwf(utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray1_csr.ms(utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray1_csr.wfo(utra::irqarray1::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray1_csr.r(utra::irqarray1::EV_POLARITY);
+        irqarray1_csr.wo(utra::irqarray1::EV_POLARITY, foo);
+        let bar = irqarray1_csr.rf(utra::irqarray1::EV_POLARITY_RISING);
+        irqarray1_csr.rmwf(utra::irqarray1::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_POLARITY_RISING, bar);
+        baz |= irqarray1_csr.ms(utra::irqarray1::EV_POLARITY_RISING, 1);
+        irqarray1_csr.wfo(utra::irqarray1::EV_POLARITY_RISING, baz);
 
         let foo = irqarray1_csr.r(utra::irqarray1::EV_STATUS);
         irqarray1_csr.wo(utra::irqarray1::EV_STATUS, foo);
@@ -5144,26 +6024,6 @@ mod tests {
         let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_STATUS_SOURCE15, bar);
         baz |= irqarray1_csr.ms(utra::irqarray1::EV_STATUS_SOURCE15, 1);
         irqarray1_csr.wfo(utra::irqarray1::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_STATUS_SOURCE16);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_STATUS_SOURCE16, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_STATUS_SOURCE17);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_STATUS_SOURCE17, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_STATUS_SOURCE18);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_STATUS_SOURCE18, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_STATUS_SOURCE19);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_STATUS_SOURCE19, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray1_csr.r(utra::irqarray1::EV_PENDING);
         irqarray1_csr.wo(utra::irqarray1::EV_PENDING, foo);
@@ -5247,26 +6107,6 @@ mod tests {
         let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_PENDING_SOURCE15, bar);
         baz |= irqarray1_csr.ms(utra::irqarray1::EV_PENDING_SOURCE15, 1);
         irqarray1_csr.wfo(utra::irqarray1::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_PENDING_SOURCE16);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_PENDING_SOURCE16, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_PENDING_SOURCE17);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_PENDING_SOURCE17, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_PENDING_SOURCE18);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_PENDING_SOURCE18, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_PENDING_SOURCE19);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_PENDING_SOURCE19, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray1_csr.r(utra::irqarray1::EV_ENABLE);
         irqarray1_csr.wo(utra::irqarray1::EV_ENABLE, foo);
@@ -5350,26 +6190,6 @@ mod tests {
         let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray1_csr.ms(utra::irqarray1::EV_ENABLE_SOURCE15, 1);
         irqarray1_csr.wfo(utra::irqarray1::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_ENABLE_SOURCE16);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_ENABLE_SOURCE16, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_ENABLE_SOURCE17);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_ENABLE_SOURCE17, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_ENABLE_SOURCE18);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_ENABLE_SOURCE18, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray1_csr.rf(utra::irqarray1::EV_ENABLE_SOURCE19);
-        irqarray1_csr.rmwf(utra::irqarray1::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray1_csr.zf(utra::irqarray1::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray1_csr.ms(utra::irqarray1::EV_ENABLE_SOURCE19, 1);
-        irqarray1_csr.wfo(utra::irqarray1::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -5385,6 +6205,22 @@ mod tests {
         let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_SOFT_TRIGGER, bar);
         baz |= irqarray10_csr.ms(utra::irqarray10::EV_SOFT_TRIGGER, 1);
         irqarray10_csr.wfo(utra::irqarray10::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray10_csr.r(utra::irqarray10::EV_EDGE_TRIGGERED);
+        irqarray10_csr.wo(utra::irqarray10::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray10_csr.rf(utra::irqarray10::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray10_csr.rmwf(utra::irqarray10::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray10_csr.ms(utra::irqarray10::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray10_csr.wfo(utra::irqarray10::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray10_csr.r(utra::irqarray10::EV_POLARITY);
+        irqarray10_csr.wo(utra::irqarray10::EV_POLARITY, foo);
+        let bar = irqarray10_csr.rf(utra::irqarray10::EV_POLARITY_RISING);
+        irqarray10_csr.rmwf(utra::irqarray10::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_POLARITY_RISING, bar);
+        baz |= irqarray10_csr.ms(utra::irqarray10::EV_POLARITY_RISING, 1);
+        irqarray10_csr.wfo(utra::irqarray10::EV_POLARITY_RISING, baz);
 
         let foo = irqarray10_csr.r(utra::irqarray10::EV_STATUS);
         irqarray10_csr.wo(utra::irqarray10::EV_STATUS, foo);
@@ -5468,26 +6304,6 @@ mod tests {
         let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_STATUS_SOURCE15, bar);
         baz |= irqarray10_csr.ms(utra::irqarray10::EV_STATUS_SOURCE15, 1);
         irqarray10_csr.wfo(utra::irqarray10::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_STATUS_SOURCE16);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_STATUS_SOURCE16, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_STATUS_SOURCE17);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_STATUS_SOURCE17, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_STATUS_SOURCE18);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_STATUS_SOURCE18, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_STATUS_SOURCE19);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_STATUS_SOURCE19, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray10_csr.r(utra::irqarray10::EV_PENDING);
         irqarray10_csr.wo(utra::irqarray10::EV_PENDING, foo);
@@ -5571,26 +6387,6 @@ mod tests {
         let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_PENDING_SOURCE15, bar);
         baz |= irqarray10_csr.ms(utra::irqarray10::EV_PENDING_SOURCE15, 1);
         irqarray10_csr.wfo(utra::irqarray10::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_PENDING_SOURCE16);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_PENDING_SOURCE16, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_PENDING_SOURCE17);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_PENDING_SOURCE17, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_PENDING_SOURCE18);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_PENDING_SOURCE18, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_PENDING_SOURCE19);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_PENDING_SOURCE19, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray10_csr.r(utra::irqarray10::EV_ENABLE);
         irqarray10_csr.wo(utra::irqarray10::EV_ENABLE, foo);
@@ -5674,26 +6470,6 @@ mod tests {
         let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray10_csr.ms(utra::irqarray10::EV_ENABLE_SOURCE15, 1);
         irqarray10_csr.wfo(utra::irqarray10::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_ENABLE_SOURCE16);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_ENABLE_SOURCE16, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_ENABLE_SOURCE17);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_ENABLE_SOURCE17, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_ENABLE_SOURCE18);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_ENABLE_SOURCE18, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray10_csr.rf(utra::irqarray10::EV_ENABLE_SOURCE19);
-        irqarray10_csr.rmwf(utra::irqarray10::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray10_csr.zf(utra::irqarray10::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray10_csr.ms(utra::irqarray10::EV_ENABLE_SOURCE19, 1);
-        irqarray10_csr.wfo(utra::irqarray10::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -5709,6 +6485,22 @@ mod tests {
         let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_SOFT_TRIGGER, bar);
         baz |= irqarray11_csr.ms(utra::irqarray11::EV_SOFT_TRIGGER, 1);
         irqarray11_csr.wfo(utra::irqarray11::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray11_csr.r(utra::irqarray11::EV_EDGE_TRIGGERED);
+        irqarray11_csr.wo(utra::irqarray11::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray11_csr.rf(utra::irqarray11::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray11_csr.rmwf(utra::irqarray11::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray11_csr.ms(utra::irqarray11::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray11_csr.wfo(utra::irqarray11::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray11_csr.r(utra::irqarray11::EV_POLARITY);
+        irqarray11_csr.wo(utra::irqarray11::EV_POLARITY, foo);
+        let bar = irqarray11_csr.rf(utra::irqarray11::EV_POLARITY_RISING);
+        irqarray11_csr.rmwf(utra::irqarray11::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_POLARITY_RISING, bar);
+        baz |= irqarray11_csr.ms(utra::irqarray11::EV_POLARITY_RISING, 1);
+        irqarray11_csr.wfo(utra::irqarray11::EV_POLARITY_RISING, baz);
 
         let foo = irqarray11_csr.r(utra::irqarray11::EV_STATUS);
         irqarray11_csr.wo(utra::irqarray11::EV_STATUS, foo);
@@ -5792,26 +6584,6 @@ mod tests {
         let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_STATUS_SOURCE15, bar);
         baz |= irqarray11_csr.ms(utra::irqarray11::EV_STATUS_SOURCE15, 1);
         irqarray11_csr.wfo(utra::irqarray11::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_STATUS_SOURCE16);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_STATUS_SOURCE16, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_STATUS_SOURCE17);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_STATUS_SOURCE17, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_STATUS_SOURCE18);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_STATUS_SOURCE18, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_STATUS_SOURCE19);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_STATUS_SOURCE19, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray11_csr.r(utra::irqarray11::EV_PENDING);
         irqarray11_csr.wo(utra::irqarray11::EV_PENDING, foo);
@@ -5895,26 +6667,6 @@ mod tests {
         let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_PENDING_SOURCE15, bar);
         baz |= irqarray11_csr.ms(utra::irqarray11::EV_PENDING_SOURCE15, 1);
         irqarray11_csr.wfo(utra::irqarray11::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_PENDING_SOURCE16);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_PENDING_SOURCE16, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_PENDING_SOURCE17);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_PENDING_SOURCE17, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_PENDING_SOURCE18);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_PENDING_SOURCE18, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_PENDING_SOURCE19);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_PENDING_SOURCE19, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray11_csr.r(utra::irqarray11::EV_ENABLE);
         irqarray11_csr.wo(utra::irqarray11::EV_ENABLE, foo);
@@ -5998,26 +6750,6 @@ mod tests {
         let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray11_csr.ms(utra::irqarray11::EV_ENABLE_SOURCE15, 1);
         irqarray11_csr.wfo(utra::irqarray11::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_ENABLE_SOURCE16);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_ENABLE_SOURCE16, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_ENABLE_SOURCE17);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_ENABLE_SOURCE17, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_ENABLE_SOURCE18);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_ENABLE_SOURCE18, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray11_csr.rf(utra::irqarray11::EV_ENABLE_SOURCE19);
-        irqarray11_csr.rmwf(utra::irqarray11::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray11_csr.zf(utra::irqarray11::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray11_csr.ms(utra::irqarray11::EV_ENABLE_SOURCE19, 1);
-        irqarray11_csr.wfo(utra::irqarray11::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -6033,6 +6765,22 @@ mod tests {
         let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_SOFT_TRIGGER, bar);
         baz |= irqarray12_csr.ms(utra::irqarray12::EV_SOFT_TRIGGER, 1);
         irqarray12_csr.wfo(utra::irqarray12::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray12_csr.r(utra::irqarray12::EV_EDGE_TRIGGERED);
+        irqarray12_csr.wo(utra::irqarray12::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray12_csr.rf(utra::irqarray12::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray12_csr.rmwf(utra::irqarray12::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray12_csr.ms(utra::irqarray12::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray12_csr.wfo(utra::irqarray12::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray12_csr.r(utra::irqarray12::EV_POLARITY);
+        irqarray12_csr.wo(utra::irqarray12::EV_POLARITY, foo);
+        let bar = irqarray12_csr.rf(utra::irqarray12::EV_POLARITY_RISING);
+        irqarray12_csr.rmwf(utra::irqarray12::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_POLARITY_RISING, bar);
+        baz |= irqarray12_csr.ms(utra::irqarray12::EV_POLARITY_RISING, 1);
+        irqarray12_csr.wfo(utra::irqarray12::EV_POLARITY_RISING, baz);
 
         let foo = irqarray12_csr.r(utra::irqarray12::EV_STATUS);
         irqarray12_csr.wo(utra::irqarray12::EV_STATUS, foo);
@@ -6116,26 +6864,6 @@ mod tests {
         let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_STATUS_SOURCE15, bar);
         baz |= irqarray12_csr.ms(utra::irqarray12::EV_STATUS_SOURCE15, 1);
         irqarray12_csr.wfo(utra::irqarray12::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_STATUS_SOURCE16);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_STATUS_SOURCE16, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_STATUS_SOURCE17);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_STATUS_SOURCE17, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_STATUS_SOURCE18);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_STATUS_SOURCE18, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_STATUS_SOURCE19);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_STATUS_SOURCE19, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray12_csr.r(utra::irqarray12::EV_PENDING);
         irqarray12_csr.wo(utra::irqarray12::EV_PENDING, foo);
@@ -6219,26 +6947,6 @@ mod tests {
         let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_PENDING_SOURCE15, bar);
         baz |= irqarray12_csr.ms(utra::irqarray12::EV_PENDING_SOURCE15, 1);
         irqarray12_csr.wfo(utra::irqarray12::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_PENDING_SOURCE16);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_PENDING_SOURCE16, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_PENDING_SOURCE17);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_PENDING_SOURCE17, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_PENDING_SOURCE18);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_PENDING_SOURCE18, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_PENDING_SOURCE19);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_PENDING_SOURCE19, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray12_csr.r(utra::irqarray12::EV_ENABLE);
         irqarray12_csr.wo(utra::irqarray12::EV_ENABLE, foo);
@@ -6322,26 +7030,6 @@ mod tests {
         let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray12_csr.ms(utra::irqarray12::EV_ENABLE_SOURCE15, 1);
         irqarray12_csr.wfo(utra::irqarray12::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_ENABLE_SOURCE16);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_ENABLE_SOURCE16, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_ENABLE_SOURCE17);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_ENABLE_SOURCE17, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_ENABLE_SOURCE18);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_ENABLE_SOURCE18, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray12_csr.rf(utra::irqarray12::EV_ENABLE_SOURCE19);
-        irqarray12_csr.rmwf(utra::irqarray12::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray12_csr.zf(utra::irqarray12::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray12_csr.ms(utra::irqarray12::EV_ENABLE_SOURCE19, 1);
-        irqarray12_csr.wfo(utra::irqarray12::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -6357,6 +7045,22 @@ mod tests {
         let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_SOFT_TRIGGER, bar);
         baz |= irqarray13_csr.ms(utra::irqarray13::EV_SOFT_TRIGGER, 1);
         irqarray13_csr.wfo(utra::irqarray13::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray13_csr.r(utra::irqarray13::EV_EDGE_TRIGGERED);
+        irqarray13_csr.wo(utra::irqarray13::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray13_csr.rf(utra::irqarray13::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray13_csr.rmwf(utra::irqarray13::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray13_csr.ms(utra::irqarray13::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray13_csr.wfo(utra::irqarray13::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray13_csr.r(utra::irqarray13::EV_POLARITY);
+        irqarray13_csr.wo(utra::irqarray13::EV_POLARITY, foo);
+        let bar = irqarray13_csr.rf(utra::irqarray13::EV_POLARITY_RISING);
+        irqarray13_csr.rmwf(utra::irqarray13::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_POLARITY_RISING, bar);
+        baz |= irqarray13_csr.ms(utra::irqarray13::EV_POLARITY_RISING, 1);
+        irqarray13_csr.wfo(utra::irqarray13::EV_POLARITY_RISING, baz);
 
         let foo = irqarray13_csr.r(utra::irqarray13::EV_STATUS);
         irqarray13_csr.wo(utra::irqarray13::EV_STATUS, foo);
@@ -6440,26 +7144,6 @@ mod tests {
         let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_STATUS_SOURCE15, bar);
         baz |= irqarray13_csr.ms(utra::irqarray13::EV_STATUS_SOURCE15, 1);
         irqarray13_csr.wfo(utra::irqarray13::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_STATUS_SOURCE16);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_STATUS_SOURCE16, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_STATUS_SOURCE17);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_STATUS_SOURCE17, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_STATUS_SOURCE18);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_STATUS_SOURCE18, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_STATUS_SOURCE19);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_STATUS_SOURCE19, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray13_csr.r(utra::irqarray13::EV_PENDING);
         irqarray13_csr.wo(utra::irqarray13::EV_PENDING, foo);
@@ -6543,26 +7227,6 @@ mod tests {
         let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_PENDING_SOURCE15, bar);
         baz |= irqarray13_csr.ms(utra::irqarray13::EV_PENDING_SOURCE15, 1);
         irqarray13_csr.wfo(utra::irqarray13::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_PENDING_SOURCE16);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_PENDING_SOURCE16, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_PENDING_SOURCE17);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_PENDING_SOURCE17, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_PENDING_SOURCE18);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_PENDING_SOURCE18, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_PENDING_SOURCE19);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_PENDING_SOURCE19, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray13_csr.r(utra::irqarray13::EV_ENABLE);
         irqarray13_csr.wo(utra::irqarray13::EV_ENABLE, foo);
@@ -6646,26 +7310,6 @@ mod tests {
         let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray13_csr.ms(utra::irqarray13::EV_ENABLE_SOURCE15, 1);
         irqarray13_csr.wfo(utra::irqarray13::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_ENABLE_SOURCE16);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_ENABLE_SOURCE16, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_ENABLE_SOURCE17);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_ENABLE_SOURCE17, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_ENABLE_SOURCE18);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_ENABLE_SOURCE18, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray13_csr.rf(utra::irqarray13::EV_ENABLE_SOURCE19);
-        irqarray13_csr.rmwf(utra::irqarray13::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray13_csr.zf(utra::irqarray13::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray13_csr.ms(utra::irqarray13::EV_ENABLE_SOURCE19, 1);
-        irqarray13_csr.wfo(utra::irqarray13::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -6681,6 +7325,22 @@ mod tests {
         let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_SOFT_TRIGGER, bar);
         baz |= irqarray14_csr.ms(utra::irqarray14::EV_SOFT_TRIGGER, 1);
         irqarray14_csr.wfo(utra::irqarray14::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray14_csr.r(utra::irqarray14::EV_EDGE_TRIGGERED);
+        irqarray14_csr.wo(utra::irqarray14::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray14_csr.rf(utra::irqarray14::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray14_csr.rmwf(utra::irqarray14::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray14_csr.ms(utra::irqarray14::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray14_csr.wfo(utra::irqarray14::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray14_csr.r(utra::irqarray14::EV_POLARITY);
+        irqarray14_csr.wo(utra::irqarray14::EV_POLARITY, foo);
+        let bar = irqarray14_csr.rf(utra::irqarray14::EV_POLARITY_RISING);
+        irqarray14_csr.rmwf(utra::irqarray14::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_POLARITY_RISING, bar);
+        baz |= irqarray14_csr.ms(utra::irqarray14::EV_POLARITY_RISING, 1);
+        irqarray14_csr.wfo(utra::irqarray14::EV_POLARITY_RISING, baz);
 
         let foo = irqarray14_csr.r(utra::irqarray14::EV_STATUS);
         irqarray14_csr.wo(utra::irqarray14::EV_STATUS, foo);
@@ -6764,26 +7424,6 @@ mod tests {
         let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_STATUS_SOURCE15, bar);
         baz |= irqarray14_csr.ms(utra::irqarray14::EV_STATUS_SOURCE15, 1);
         irqarray14_csr.wfo(utra::irqarray14::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_STATUS_SOURCE16);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_STATUS_SOURCE16, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_STATUS_SOURCE17);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_STATUS_SOURCE17, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_STATUS_SOURCE18);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_STATUS_SOURCE18, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_STATUS_SOURCE19);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_STATUS_SOURCE19, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray14_csr.r(utra::irqarray14::EV_PENDING);
         irqarray14_csr.wo(utra::irqarray14::EV_PENDING, foo);
@@ -6867,26 +7507,6 @@ mod tests {
         let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_PENDING_SOURCE15, bar);
         baz |= irqarray14_csr.ms(utra::irqarray14::EV_PENDING_SOURCE15, 1);
         irqarray14_csr.wfo(utra::irqarray14::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_PENDING_SOURCE16);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_PENDING_SOURCE16, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_PENDING_SOURCE17);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_PENDING_SOURCE17, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_PENDING_SOURCE18);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_PENDING_SOURCE18, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_PENDING_SOURCE19);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_PENDING_SOURCE19, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray14_csr.r(utra::irqarray14::EV_ENABLE);
         irqarray14_csr.wo(utra::irqarray14::EV_ENABLE, foo);
@@ -6970,26 +7590,6 @@ mod tests {
         let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray14_csr.ms(utra::irqarray14::EV_ENABLE_SOURCE15, 1);
         irqarray14_csr.wfo(utra::irqarray14::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_ENABLE_SOURCE16);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_ENABLE_SOURCE16, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_ENABLE_SOURCE17);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_ENABLE_SOURCE17, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_ENABLE_SOURCE18);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_ENABLE_SOURCE18, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray14_csr.rf(utra::irqarray14::EV_ENABLE_SOURCE19);
-        irqarray14_csr.rmwf(utra::irqarray14::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray14_csr.zf(utra::irqarray14::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray14_csr.ms(utra::irqarray14::EV_ENABLE_SOURCE19, 1);
-        irqarray14_csr.wfo(utra::irqarray14::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -7005,6 +7605,22 @@ mod tests {
         let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_SOFT_TRIGGER, bar);
         baz |= irqarray15_csr.ms(utra::irqarray15::EV_SOFT_TRIGGER, 1);
         irqarray15_csr.wfo(utra::irqarray15::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray15_csr.r(utra::irqarray15::EV_EDGE_TRIGGERED);
+        irqarray15_csr.wo(utra::irqarray15::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray15_csr.rf(utra::irqarray15::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray15_csr.rmwf(utra::irqarray15::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray15_csr.ms(utra::irqarray15::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray15_csr.wfo(utra::irqarray15::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray15_csr.r(utra::irqarray15::EV_POLARITY);
+        irqarray15_csr.wo(utra::irqarray15::EV_POLARITY, foo);
+        let bar = irqarray15_csr.rf(utra::irqarray15::EV_POLARITY_RISING);
+        irqarray15_csr.rmwf(utra::irqarray15::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_POLARITY_RISING, bar);
+        baz |= irqarray15_csr.ms(utra::irqarray15::EV_POLARITY_RISING, 1);
+        irqarray15_csr.wfo(utra::irqarray15::EV_POLARITY_RISING, baz);
 
         let foo = irqarray15_csr.r(utra::irqarray15::EV_STATUS);
         irqarray15_csr.wo(utra::irqarray15::EV_STATUS, foo);
@@ -7088,26 +7704,6 @@ mod tests {
         let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_STATUS_SOURCE15, bar);
         baz |= irqarray15_csr.ms(utra::irqarray15::EV_STATUS_SOURCE15, 1);
         irqarray15_csr.wfo(utra::irqarray15::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_STATUS_SOURCE16);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_STATUS_SOURCE16, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_STATUS_SOURCE17);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_STATUS_SOURCE17, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_STATUS_SOURCE18);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_STATUS_SOURCE18, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_STATUS_SOURCE19);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_STATUS_SOURCE19, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray15_csr.r(utra::irqarray15::EV_PENDING);
         irqarray15_csr.wo(utra::irqarray15::EV_PENDING, foo);
@@ -7191,26 +7787,6 @@ mod tests {
         let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_PENDING_SOURCE15, bar);
         baz |= irqarray15_csr.ms(utra::irqarray15::EV_PENDING_SOURCE15, 1);
         irqarray15_csr.wfo(utra::irqarray15::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_PENDING_SOURCE16);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_PENDING_SOURCE16, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_PENDING_SOURCE17);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_PENDING_SOURCE17, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_PENDING_SOURCE18);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_PENDING_SOURCE18, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_PENDING_SOURCE19);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_PENDING_SOURCE19, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray15_csr.r(utra::irqarray15::EV_ENABLE);
         irqarray15_csr.wo(utra::irqarray15::EV_ENABLE, foo);
@@ -7294,26 +7870,6 @@ mod tests {
         let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray15_csr.ms(utra::irqarray15::EV_ENABLE_SOURCE15, 1);
         irqarray15_csr.wfo(utra::irqarray15::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_ENABLE_SOURCE16);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_ENABLE_SOURCE16, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_ENABLE_SOURCE17);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_ENABLE_SOURCE17, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_ENABLE_SOURCE18);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_ENABLE_SOURCE18, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray15_csr.rf(utra::irqarray15::EV_ENABLE_SOURCE19);
-        irqarray15_csr.rmwf(utra::irqarray15::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray15_csr.zf(utra::irqarray15::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray15_csr.ms(utra::irqarray15::EV_ENABLE_SOURCE19, 1);
-        irqarray15_csr.wfo(utra::irqarray15::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -7329,6 +7885,22 @@ mod tests {
         let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_SOFT_TRIGGER, bar);
         baz |= irqarray16_csr.ms(utra::irqarray16::EV_SOFT_TRIGGER, 1);
         irqarray16_csr.wfo(utra::irqarray16::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray16_csr.r(utra::irqarray16::EV_EDGE_TRIGGERED);
+        irqarray16_csr.wo(utra::irqarray16::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray16_csr.rf(utra::irqarray16::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray16_csr.rmwf(utra::irqarray16::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray16_csr.ms(utra::irqarray16::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray16_csr.wfo(utra::irqarray16::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray16_csr.r(utra::irqarray16::EV_POLARITY);
+        irqarray16_csr.wo(utra::irqarray16::EV_POLARITY, foo);
+        let bar = irqarray16_csr.rf(utra::irqarray16::EV_POLARITY_RISING);
+        irqarray16_csr.rmwf(utra::irqarray16::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_POLARITY_RISING, bar);
+        baz |= irqarray16_csr.ms(utra::irqarray16::EV_POLARITY_RISING, 1);
+        irqarray16_csr.wfo(utra::irqarray16::EV_POLARITY_RISING, baz);
 
         let foo = irqarray16_csr.r(utra::irqarray16::EV_STATUS);
         irqarray16_csr.wo(utra::irqarray16::EV_STATUS, foo);
@@ -7412,26 +7984,6 @@ mod tests {
         let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_STATUS_SOURCE15, bar);
         baz |= irqarray16_csr.ms(utra::irqarray16::EV_STATUS_SOURCE15, 1);
         irqarray16_csr.wfo(utra::irqarray16::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_STATUS_SOURCE16);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_STATUS_SOURCE16, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_STATUS_SOURCE17);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_STATUS_SOURCE17, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_STATUS_SOURCE18);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_STATUS_SOURCE18, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_STATUS_SOURCE19);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_STATUS_SOURCE19, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray16_csr.r(utra::irqarray16::EV_PENDING);
         irqarray16_csr.wo(utra::irqarray16::EV_PENDING, foo);
@@ -7515,26 +8067,6 @@ mod tests {
         let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_PENDING_SOURCE15, bar);
         baz |= irqarray16_csr.ms(utra::irqarray16::EV_PENDING_SOURCE15, 1);
         irqarray16_csr.wfo(utra::irqarray16::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_PENDING_SOURCE16);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_PENDING_SOURCE16, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_PENDING_SOURCE17);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_PENDING_SOURCE17, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_PENDING_SOURCE18);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_PENDING_SOURCE18, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_PENDING_SOURCE19);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_PENDING_SOURCE19, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray16_csr.r(utra::irqarray16::EV_ENABLE);
         irqarray16_csr.wo(utra::irqarray16::EV_ENABLE, foo);
@@ -7618,26 +8150,6 @@ mod tests {
         let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray16_csr.ms(utra::irqarray16::EV_ENABLE_SOURCE15, 1);
         irqarray16_csr.wfo(utra::irqarray16::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_ENABLE_SOURCE16);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_ENABLE_SOURCE16, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_ENABLE_SOURCE17);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_ENABLE_SOURCE17, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_ENABLE_SOURCE18);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_ENABLE_SOURCE18, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray16_csr.rf(utra::irqarray16::EV_ENABLE_SOURCE19);
-        irqarray16_csr.rmwf(utra::irqarray16::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray16_csr.zf(utra::irqarray16::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray16_csr.ms(utra::irqarray16::EV_ENABLE_SOURCE19, 1);
-        irqarray16_csr.wfo(utra::irqarray16::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -7653,6 +8165,22 @@ mod tests {
         let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_SOFT_TRIGGER, bar);
         baz |= irqarray17_csr.ms(utra::irqarray17::EV_SOFT_TRIGGER, 1);
         irqarray17_csr.wfo(utra::irqarray17::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray17_csr.r(utra::irqarray17::EV_EDGE_TRIGGERED);
+        irqarray17_csr.wo(utra::irqarray17::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray17_csr.rf(utra::irqarray17::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray17_csr.rmwf(utra::irqarray17::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray17_csr.ms(utra::irqarray17::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray17_csr.wfo(utra::irqarray17::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray17_csr.r(utra::irqarray17::EV_POLARITY);
+        irqarray17_csr.wo(utra::irqarray17::EV_POLARITY, foo);
+        let bar = irqarray17_csr.rf(utra::irqarray17::EV_POLARITY_RISING);
+        irqarray17_csr.rmwf(utra::irqarray17::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_POLARITY_RISING, bar);
+        baz |= irqarray17_csr.ms(utra::irqarray17::EV_POLARITY_RISING, 1);
+        irqarray17_csr.wfo(utra::irqarray17::EV_POLARITY_RISING, baz);
 
         let foo = irqarray17_csr.r(utra::irqarray17::EV_STATUS);
         irqarray17_csr.wo(utra::irqarray17::EV_STATUS, foo);
@@ -7736,26 +8264,6 @@ mod tests {
         let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_STATUS_SOURCE15, bar);
         baz |= irqarray17_csr.ms(utra::irqarray17::EV_STATUS_SOURCE15, 1);
         irqarray17_csr.wfo(utra::irqarray17::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_STATUS_SOURCE16);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_STATUS_SOURCE16, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_STATUS_SOURCE17);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_STATUS_SOURCE17, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_STATUS_SOURCE18);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_STATUS_SOURCE18, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_STATUS_SOURCE19);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_STATUS_SOURCE19, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray17_csr.r(utra::irqarray17::EV_PENDING);
         irqarray17_csr.wo(utra::irqarray17::EV_PENDING, foo);
@@ -7839,26 +8347,6 @@ mod tests {
         let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_PENDING_SOURCE15, bar);
         baz |= irqarray17_csr.ms(utra::irqarray17::EV_PENDING_SOURCE15, 1);
         irqarray17_csr.wfo(utra::irqarray17::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_PENDING_SOURCE16);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_PENDING_SOURCE16, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_PENDING_SOURCE17);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_PENDING_SOURCE17, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_PENDING_SOURCE18);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_PENDING_SOURCE18, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_PENDING_SOURCE19);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_PENDING_SOURCE19, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray17_csr.r(utra::irqarray17::EV_ENABLE);
         irqarray17_csr.wo(utra::irqarray17::EV_ENABLE, foo);
@@ -7942,26 +8430,6 @@ mod tests {
         let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray17_csr.ms(utra::irqarray17::EV_ENABLE_SOURCE15, 1);
         irqarray17_csr.wfo(utra::irqarray17::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_ENABLE_SOURCE16);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_ENABLE_SOURCE16, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_ENABLE_SOURCE17);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_ENABLE_SOURCE17, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_ENABLE_SOURCE18);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_ENABLE_SOURCE18, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray17_csr.rf(utra::irqarray17::EV_ENABLE_SOURCE19);
-        irqarray17_csr.rmwf(utra::irqarray17::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray17_csr.zf(utra::irqarray17::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray17_csr.ms(utra::irqarray17::EV_ENABLE_SOURCE19, 1);
-        irqarray17_csr.wfo(utra::irqarray17::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -7977,6 +8445,22 @@ mod tests {
         let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_SOFT_TRIGGER, bar);
         baz |= irqarray18_csr.ms(utra::irqarray18::EV_SOFT_TRIGGER, 1);
         irqarray18_csr.wfo(utra::irqarray18::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray18_csr.r(utra::irqarray18::EV_EDGE_TRIGGERED);
+        irqarray18_csr.wo(utra::irqarray18::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray18_csr.rf(utra::irqarray18::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray18_csr.rmwf(utra::irqarray18::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray18_csr.ms(utra::irqarray18::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray18_csr.wfo(utra::irqarray18::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray18_csr.r(utra::irqarray18::EV_POLARITY);
+        irqarray18_csr.wo(utra::irqarray18::EV_POLARITY, foo);
+        let bar = irqarray18_csr.rf(utra::irqarray18::EV_POLARITY_RISING);
+        irqarray18_csr.rmwf(utra::irqarray18::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_POLARITY_RISING, bar);
+        baz |= irqarray18_csr.ms(utra::irqarray18::EV_POLARITY_RISING, 1);
+        irqarray18_csr.wfo(utra::irqarray18::EV_POLARITY_RISING, baz);
 
         let foo = irqarray18_csr.r(utra::irqarray18::EV_STATUS);
         irqarray18_csr.wo(utra::irqarray18::EV_STATUS, foo);
@@ -8060,26 +8544,6 @@ mod tests {
         let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_STATUS_SOURCE15, bar);
         baz |= irqarray18_csr.ms(utra::irqarray18::EV_STATUS_SOURCE15, 1);
         irqarray18_csr.wfo(utra::irqarray18::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_STATUS_SOURCE16);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_STATUS_SOURCE16, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_STATUS_SOURCE17);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_STATUS_SOURCE17, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_STATUS_SOURCE18);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_STATUS_SOURCE18, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_STATUS_SOURCE19);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_STATUS_SOURCE19, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray18_csr.r(utra::irqarray18::EV_PENDING);
         irqarray18_csr.wo(utra::irqarray18::EV_PENDING, foo);
@@ -8163,26 +8627,6 @@ mod tests {
         let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_PENDING_SOURCE15, bar);
         baz |= irqarray18_csr.ms(utra::irqarray18::EV_PENDING_SOURCE15, 1);
         irqarray18_csr.wfo(utra::irqarray18::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_PENDING_SOURCE16);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_PENDING_SOURCE16, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_PENDING_SOURCE17);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_PENDING_SOURCE17, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_PENDING_SOURCE18);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_PENDING_SOURCE18, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_PENDING_SOURCE19);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_PENDING_SOURCE19, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray18_csr.r(utra::irqarray18::EV_ENABLE);
         irqarray18_csr.wo(utra::irqarray18::EV_ENABLE, foo);
@@ -8266,26 +8710,6 @@ mod tests {
         let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray18_csr.ms(utra::irqarray18::EV_ENABLE_SOURCE15, 1);
         irqarray18_csr.wfo(utra::irqarray18::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_ENABLE_SOURCE16);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_ENABLE_SOURCE16, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_ENABLE_SOURCE17);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_ENABLE_SOURCE17, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_ENABLE_SOURCE18);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_ENABLE_SOURCE18, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray18_csr.rf(utra::irqarray18::EV_ENABLE_SOURCE19);
-        irqarray18_csr.rmwf(utra::irqarray18::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray18_csr.zf(utra::irqarray18::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray18_csr.ms(utra::irqarray18::EV_ENABLE_SOURCE19, 1);
-        irqarray18_csr.wfo(utra::irqarray18::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -8301,6 +8725,22 @@ mod tests {
         let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_SOFT_TRIGGER, bar);
         baz |= irqarray19_csr.ms(utra::irqarray19::EV_SOFT_TRIGGER, 1);
         irqarray19_csr.wfo(utra::irqarray19::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray19_csr.r(utra::irqarray19::EV_EDGE_TRIGGERED);
+        irqarray19_csr.wo(utra::irqarray19::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray19_csr.rf(utra::irqarray19::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray19_csr.rmwf(utra::irqarray19::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray19_csr.ms(utra::irqarray19::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray19_csr.wfo(utra::irqarray19::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray19_csr.r(utra::irqarray19::EV_POLARITY);
+        irqarray19_csr.wo(utra::irqarray19::EV_POLARITY, foo);
+        let bar = irqarray19_csr.rf(utra::irqarray19::EV_POLARITY_RISING);
+        irqarray19_csr.rmwf(utra::irqarray19::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_POLARITY_RISING, bar);
+        baz |= irqarray19_csr.ms(utra::irqarray19::EV_POLARITY_RISING, 1);
+        irqarray19_csr.wfo(utra::irqarray19::EV_POLARITY_RISING, baz);
 
         let foo = irqarray19_csr.r(utra::irqarray19::EV_STATUS);
         irqarray19_csr.wo(utra::irqarray19::EV_STATUS, foo);
@@ -8384,26 +8824,6 @@ mod tests {
         let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_STATUS_SOURCE15, bar);
         baz |= irqarray19_csr.ms(utra::irqarray19::EV_STATUS_SOURCE15, 1);
         irqarray19_csr.wfo(utra::irqarray19::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_STATUS_SOURCE16);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_STATUS_SOURCE16, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_STATUS_SOURCE17);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_STATUS_SOURCE17, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_STATUS_SOURCE18);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_STATUS_SOURCE18, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_STATUS_SOURCE19);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_STATUS_SOURCE19, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray19_csr.r(utra::irqarray19::EV_PENDING);
         irqarray19_csr.wo(utra::irqarray19::EV_PENDING, foo);
@@ -8487,26 +8907,6 @@ mod tests {
         let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_PENDING_SOURCE15, bar);
         baz |= irqarray19_csr.ms(utra::irqarray19::EV_PENDING_SOURCE15, 1);
         irqarray19_csr.wfo(utra::irqarray19::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_PENDING_SOURCE16);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_PENDING_SOURCE16, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_PENDING_SOURCE17);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_PENDING_SOURCE17, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_PENDING_SOURCE18);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_PENDING_SOURCE18, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_PENDING_SOURCE19);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_PENDING_SOURCE19, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray19_csr.r(utra::irqarray19::EV_ENABLE);
         irqarray19_csr.wo(utra::irqarray19::EV_ENABLE, foo);
@@ -8590,26 +8990,6 @@ mod tests {
         let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray19_csr.ms(utra::irqarray19::EV_ENABLE_SOURCE15, 1);
         irqarray19_csr.wfo(utra::irqarray19::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_ENABLE_SOURCE16);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_ENABLE_SOURCE16, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_ENABLE_SOURCE17);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_ENABLE_SOURCE17, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_ENABLE_SOURCE18);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_ENABLE_SOURCE18, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray19_csr.rf(utra::irqarray19::EV_ENABLE_SOURCE19);
-        irqarray19_csr.rmwf(utra::irqarray19::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray19_csr.zf(utra::irqarray19::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray19_csr.ms(utra::irqarray19::EV_ENABLE_SOURCE19, 1);
-        irqarray19_csr.wfo(utra::irqarray19::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -8625,6 +9005,22 @@ mod tests {
         let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_SOFT_TRIGGER, bar);
         baz |= irqarray2_csr.ms(utra::irqarray2::EV_SOFT_TRIGGER, 1);
         irqarray2_csr.wfo(utra::irqarray2::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray2_csr.r(utra::irqarray2::EV_EDGE_TRIGGERED);
+        irqarray2_csr.wo(utra::irqarray2::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray2_csr.rf(utra::irqarray2::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray2_csr.rmwf(utra::irqarray2::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray2_csr.ms(utra::irqarray2::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray2_csr.wfo(utra::irqarray2::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray2_csr.r(utra::irqarray2::EV_POLARITY);
+        irqarray2_csr.wo(utra::irqarray2::EV_POLARITY, foo);
+        let bar = irqarray2_csr.rf(utra::irqarray2::EV_POLARITY_RISING);
+        irqarray2_csr.rmwf(utra::irqarray2::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_POLARITY_RISING, bar);
+        baz |= irqarray2_csr.ms(utra::irqarray2::EV_POLARITY_RISING, 1);
+        irqarray2_csr.wfo(utra::irqarray2::EV_POLARITY_RISING, baz);
 
         let foo = irqarray2_csr.r(utra::irqarray2::EV_STATUS);
         irqarray2_csr.wo(utra::irqarray2::EV_STATUS, foo);
@@ -8708,26 +9104,6 @@ mod tests {
         let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_STATUS_SOURCE15, bar);
         baz |= irqarray2_csr.ms(utra::irqarray2::EV_STATUS_SOURCE15, 1);
         irqarray2_csr.wfo(utra::irqarray2::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_STATUS_SOURCE16);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_STATUS_SOURCE16, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_STATUS_SOURCE17);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_STATUS_SOURCE17, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_STATUS_SOURCE18);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_STATUS_SOURCE18, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_STATUS_SOURCE19);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_STATUS_SOURCE19, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray2_csr.r(utra::irqarray2::EV_PENDING);
         irqarray2_csr.wo(utra::irqarray2::EV_PENDING, foo);
@@ -8811,26 +9187,6 @@ mod tests {
         let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_PENDING_SOURCE15, bar);
         baz |= irqarray2_csr.ms(utra::irqarray2::EV_PENDING_SOURCE15, 1);
         irqarray2_csr.wfo(utra::irqarray2::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_PENDING_SOURCE16);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_PENDING_SOURCE16, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_PENDING_SOURCE17);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_PENDING_SOURCE17, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_PENDING_SOURCE18);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_PENDING_SOURCE18, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_PENDING_SOURCE19);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_PENDING_SOURCE19, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray2_csr.r(utra::irqarray2::EV_ENABLE);
         irqarray2_csr.wo(utra::irqarray2::EV_ENABLE, foo);
@@ -8914,26 +9270,6 @@ mod tests {
         let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray2_csr.ms(utra::irqarray2::EV_ENABLE_SOURCE15, 1);
         irqarray2_csr.wfo(utra::irqarray2::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_ENABLE_SOURCE16);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_ENABLE_SOURCE16, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_ENABLE_SOURCE17);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_ENABLE_SOURCE17, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_ENABLE_SOURCE18);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_ENABLE_SOURCE18, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray2_csr.rf(utra::irqarray2::EV_ENABLE_SOURCE19);
-        irqarray2_csr.rmwf(utra::irqarray2::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray2_csr.zf(utra::irqarray2::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray2_csr.ms(utra::irqarray2::EV_ENABLE_SOURCE19, 1);
-        irqarray2_csr.wfo(utra::irqarray2::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -8949,6 +9285,22 @@ mod tests {
         let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_SOFT_TRIGGER, bar);
         baz |= irqarray3_csr.ms(utra::irqarray3::EV_SOFT_TRIGGER, 1);
         irqarray3_csr.wfo(utra::irqarray3::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray3_csr.r(utra::irqarray3::EV_EDGE_TRIGGERED);
+        irqarray3_csr.wo(utra::irqarray3::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray3_csr.rf(utra::irqarray3::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray3_csr.rmwf(utra::irqarray3::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray3_csr.ms(utra::irqarray3::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray3_csr.wfo(utra::irqarray3::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray3_csr.r(utra::irqarray3::EV_POLARITY);
+        irqarray3_csr.wo(utra::irqarray3::EV_POLARITY, foo);
+        let bar = irqarray3_csr.rf(utra::irqarray3::EV_POLARITY_RISING);
+        irqarray3_csr.rmwf(utra::irqarray3::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_POLARITY_RISING, bar);
+        baz |= irqarray3_csr.ms(utra::irqarray3::EV_POLARITY_RISING, 1);
+        irqarray3_csr.wfo(utra::irqarray3::EV_POLARITY_RISING, baz);
 
         let foo = irqarray3_csr.r(utra::irqarray3::EV_STATUS);
         irqarray3_csr.wo(utra::irqarray3::EV_STATUS, foo);
@@ -9032,26 +9384,6 @@ mod tests {
         let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_STATUS_SOURCE15, bar);
         baz |= irqarray3_csr.ms(utra::irqarray3::EV_STATUS_SOURCE15, 1);
         irqarray3_csr.wfo(utra::irqarray3::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_STATUS_SOURCE16);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_STATUS_SOURCE16, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_STATUS_SOURCE17);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_STATUS_SOURCE17, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_STATUS_SOURCE18);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_STATUS_SOURCE18, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_STATUS_SOURCE19);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_STATUS_SOURCE19, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray3_csr.r(utra::irqarray3::EV_PENDING);
         irqarray3_csr.wo(utra::irqarray3::EV_PENDING, foo);
@@ -9135,26 +9467,6 @@ mod tests {
         let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_PENDING_SOURCE15, bar);
         baz |= irqarray3_csr.ms(utra::irqarray3::EV_PENDING_SOURCE15, 1);
         irqarray3_csr.wfo(utra::irqarray3::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_PENDING_SOURCE16);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_PENDING_SOURCE16, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_PENDING_SOURCE17);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_PENDING_SOURCE17, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_PENDING_SOURCE18);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_PENDING_SOURCE18, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_PENDING_SOURCE19);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_PENDING_SOURCE19, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray3_csr.r(utra::irqarray3::EV_ENABLE);
         irqarray3_csr.wo(utra::irqarray3::EV_ENABLE, foo);
@@ -9238,26 +9550,6 @@ mod tests {
         let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray3_csr.ms(utra::irqarray3::EV_ENABLE_SOURCE15, 1);
         irqarray3_csr.wfo(utra::irqarray3::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_ENABLE_SOURCE16);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_ENABLE_SOURCE16, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_ENABLE_SOURCE17);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_ENABLE_SOURCE17, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_ENABLE_SOURCE18);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_ENABLE_SOURCE18, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray3_csr.rf(utra::irqarray3::EV_ENABLE_SOURCE19);
-        irqarray3_csr.rmwf(utra::irqarray3::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray3_csr.zf(utra::irqarray3::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray3_csr.ms(utra::irqarray3::EV_ENABLE_SOURCE19, 1);
-        irqarray3_csr.wfo(utra::irqarray3::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -9273,6 +9565,22 @@ mod tests {
         let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_SOFT_TRIGGER, bar);
         baz |= irqarray4_csr.ms(utra::irqarray4::EV_SOFT_TRIGGER, 1);
         irqarray4_csr.wfo(utra::irqarray4::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray4_csr.r(utra::irqarray4::EV_EDGE_TRIGGERED);
+        irqarray4_csr.wo(utra::irqarray4::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray4_csr.rf(utra::irqarray4::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray4_csr.rmwf(utra::irqarray4::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray4_csr.ms(utra::irqarray4::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray4_csr.wfo(utra::irqarray4::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray4_csr.r(utra::irqarray4::EV_POLARITY);
+        irqarray4_csr.wo(utra::irqarray4::EV_POLARITY, foo);
+        let bar = irqarray4_csr.rf(utra::irqarray4::EV_POLARITY_RISING);
+        irqarray4_csr.rmwf(utra::irqarray4::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_POLARITY_RISING, bar);
+        baz |= irqarray4_csr.ms(utra::irqarray4::EV_POLARITY_RISING, 1);
+        irqarray4_csr.wfo(utra::irqarray4::EV_POLARITY_RISING, baz);
 
         let foo = irqarray4_csr.r(utra::irqarray4::EV_STATUS);
         irqarray4_csr.wo(utra::irqarray4::EV_STATUS, foo);
@@ -9356,26 +9664,6 @@ mod tests {
         let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_STATUS_SOURCE15, bar);
         baz |= irqarray4_csr.ms(utra::irqarray4::EV_STATUS_SOURCE15, 1);
         irqarray4_csr.wfo(utra::irqarray4::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_STATUS_SOURCE16);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_STATUS_SOURCE16, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_STATUS_SOURCE17);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_STATUS_SOURCE17, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_STATUS_SOURCE18);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_STATUS_SOURCE18, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_STATUS_SOURCE19);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_STATUS_SOURCE19, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray4_csr.r(utra::irqarray4::EV_PENDING);
         irqarray4_csr.wo(utra::irqarray4::EV_PENDING, foo);
@@ -9459,26 +9747,6 @@ mod tests {
         let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_PENDING_SOURCE15, bar);
         baz |= irqarray4_csr.ms(utra::irqarray4::EV_PENDING_SOURCE15, 1);
         irqarray4_csr.wfo(utra::irqarray4::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_PENDING_SOURCE16);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_PENDING_SOURCE16, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_PENDING_SOURCE17);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_PENDING_SOURCE17, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_PENDING_SOURCE18);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_PENDING_SOURCE18, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_PENDING_SOURCE19);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_PENDING_SOURCE19, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray4_csr.r(utra::irqarray4::EV_ENABLE);
         irqarray4_csr.wo(utra::irqarray4::EV_ENABLE, foo);
@@ -9562,26 +9830,6 @@ mod tests {
         let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray4_csr.ms(utra::irqarray4::EV_ENABLE_SOURCE15, 1);
         irqarray4_csr.wfo(utra::irqarray4::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_ENABLE_SOURCE16);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_ENABLE_SOURCE16, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_ENABLE_SOURCE17);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_ENABLE_SOURCE17, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_ENABLE_SOURCE18);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_ENABLE_SOURCE18, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray4_csr.rf(utra::irqarray4::EV_ENABLE_SOURCE19);
-        irqarray4_csr.rmwf(utra::irqarray4::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray4_csr.zf(utra::irqarray4::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray4_csr.ms(utra::irqarray4::EV_ENABLE_SOURCE19, 1);
-        irqarray4_csr.wfo(utra::irqarray4::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -9597,6 +9845,22 @@ mod tests {
         let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_SOFT_TRIGGER, bar);
         baz |= irqarray5_csr.ms(utra::irqarray5::EV_SOFT_TRIGGER, 1);
         irqarray5_csr.wfo(utra::irqarray5::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray5_csr.r(utra::irqarray5::EV_EDGE_TRIGGERED);
+        irqarray5_csr.wo(utra::irqarray5::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray5_csr.rf(utra::irqarray5::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray5_csr.rmwf(utra::irqarray5::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray5_csr.ms(utra::irqarray5::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray5_csr.wfo(utra::irqarray5::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray5_csr.r(utra::irqarray5::EV_POLARITY);
+        irqarray5_csr.wo(utra::irqarray5::EV_POLARITY, foo);
+        let bar = irqarray5_csr.rf(utra::irqarray5::EV_POLARITY_RISING);
+        irqarray5_csr.rmwf(utra::irqarray5::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_POLARITY_RISING, bar);
+        baz |= irqarray5_csr.ms(utra::irqarray5::EV_POLARITY_RISING, 1);
+        irqarray5_csr.wfo(utra::irqarray5::EV_POLARITY_RISING, baz);
 
         let foo = irqarray5_csr.r(utra::irqarray5::EV_STATUS);
         irqarray5_csr.wo(utra::irqarray5::EV_STATUS, foo);
@@ -9680,26 +9944,6 @@ mod tests {
         let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_STATUS_SOURCE15, bar);
         baz |= irqarray5_csr.ms(utra::irqarray5::EV_STATUS_SOURCE15, 1);
         irqarray5_csr.wfo(utra::irqarray5::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_STATUS_SOURCE16);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_STATUS_SOURCE16, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_STATUS_SOURCE17);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_STATUS_SOURCE17, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_STATUS_SOURCE18);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_STATUS_SOURCE18, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_STATUS_SOURCE19);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_STATUS_SOURCE19, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray5_csr.r(utra::irqarray5::EV_PENDING);
         irqarray5_csr.wo(utra::irqarray5::EV_PENDING, foo);
@@ -9783,26 +10027,6 @@ mod tests {
         let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_PENDING_SOURCE15, bar);
         baz |= irqarray5_csr.ms(utra::irqarray5::EV_PENDING_SOURCE15, 1);
         irqarray5_csr.wfo(utra::irqarray5::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_PENDING_SOURCE16);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_PENDING_SOURCE16, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_PENDING_SOURCE17);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_PENDING_SOURCE17, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_PENDING_SOURCE18);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_PENDING_SOURCE18, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_PENDING_SOURCE19);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_PENDING_SOURCE19, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray5_csr.r(utra::irqarray5::EV_ENABLE);
         irqarray5_csr.wo(utra::irqarray5::EV_ENABLE, foo);
@@ -9886,26 +10110,6 @@ mod tests {
         let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray5_csr.ms(utra::irqarray5::EV_ENABLE_SOURCE15, 1);
         irqarray5_csr.wfo(utra::irqarray5::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_ENABLE_SOURCE16);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_ENABLE_SOURCE16, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_ENABLE_SOURCE17);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_ENABLE_SOURCE17, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_ENABLE_SOURCE18);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_ENABLE_SOURCE18, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray5_csr.rf(utra::irqarray5::EV_ENABLE_SOURCE19);
-        irqarray5_csr.rmwf(utra::irqarray5::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray5_csr.zf(utra::irqarray5::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray5_csr.ms(utra::irqarray5::EV_ENABLE_SOURCE19, 1);
-        irqarray5_csr.wfo(utra::irqarray5::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -9921,6 +10125,22 @@ mod tests {
         let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_SOFT_TRIGGER, bar);
         baz |= irqarray6_csr.ms(utra::irqarray6::EV_SOFT_TRIGGER, 1);
         irqarray6_csr.wfo(utra::irqarray6::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray6_csr.r(utra::irqarray6::EV_EDGE_TRIGGERED);
+        irqarray6_csr.wo(utra::irqarray6::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray6_csr.rf(utra::irqarray6::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray6_csr.rmwf(utra::irqarray6::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray6_csr.ms(utra::irqarray6::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray6_csr.wfo(utra::irqarray6::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray6_csr.r(utra::irqarray6::EV_POLARITY);
+        irqarray6_csr.wo(utra::irqarray6::EV_POLARITY, foo);
+        let bar = irqarray6_csr.rf(utra::irqarray6::EV_POLARITY_RISING);
+        irqarray6_csr.rmwf(utra::irqarray6::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_POLARITY_RISING, bar);
+        baz |= irqarray6_csr.ms(utra::irqarray6::EV_POLARITY_RISING, 1);
+        irqarray6_csr.wfo(utra::irqarray6::EV_POLARITY_RISING, baz);
 
         let foo = irqarray6_csr.r(utra::irqarray6::EV_STATUS);
         irqarray6_csr.wo(utra::irqarray6::EV_STATUS, foo);
@@ -10004,26 +10224,6 @@ mod tests {
         let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_STATUS_SOURCE15, bar);
         baz |= irqarray6_csr.ms(utra::irqarray6::EV_STATUS_SOURCE15, 1);
         irqarray6_csr.wfo(utra::irqarray6::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_STATUS_SOURCE16);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_STATUS_SOURCE16, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_STATUS_SOURCE17);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_STATUS_SOURCE17, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_STATUS_SOURCE18);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_STATUS_SOURCE18, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_STATUS_SOURCE19);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_STATUS_SOURCE19, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray6_csr.r(utra::irqarray6::EV_PENDING);
         irqarray6_csr.wo(utra::irqarray6::EV_PENDING, foo);
@@ -10107,26 +10307,6 @@ mod tests {
         let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_PENDING_SOURCE15, bar);
         baz |= irqarray6_csr.ms(utra::irqarray6::EV_PENDING_SOURCE15, 1);
         irqarray6_csr.wfo(utra::irqarray6::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_PENDING_SOURCE16);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_PENDING_SOURCE16, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_PENDING_SOURCE17);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_PENDING_SOURCE17, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_PENDING_SOURCE18);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_PENDING_SOURCE18, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_PENDING_SOURCE19);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_PENDING_SOURCE19, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray6_csr.r(utra::irqarray6::EV_ENABLE);
         irqarray6_csr.wo(utra::irqarray6::EV_ENABLE, foo);
@@ -10210,26 +10390,6 @@ mod tests {
         let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray6_csr.ms(utra::irqarray6::EV_ENABLE_SOURCE15, 1);
         irqarray6_csr.wfo(utra::irqarray6::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_ENABLE_SOURCE16);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_ENABLE_SOURCE16, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_ENABLE_SOURCE17);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_ENABLE_SOURCE17, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_ENABLE_SOURCE18);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_ENABLE_SOURCE18, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray6_csr.rf(utra::irqarray6::EV_ENABLE_SOURCE19);
-        irqarray6_csr.rmwf(utra::irqarray6::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray6_csr.zf(utra::irqarray6::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray6_csr.ms(utra::irqarray6::EV_ENABLE_SOURCE19, 1);
-        irqarray6_csr.wfo(utra::irqarray6::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -10245,6 +10405,22 @@ mod tests {
         let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_SOFT_TRIGGER, bar);
         baz |= irqarray7_csr.ms(utra::irqarray7::EV_SOFT_TRIGGER, 1);
         irqarray7_csr.wfo(utra::irqarray7::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray7_csr.r(utra::irqarray7::EV_EDGE_TRIGGERED);
+        irqarray7_csr.wo(utra::irqarray7::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray7_csr.rf(utra::irqarray7::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray7_csr.rmwf(utra::irqarray7::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray7_csr.ms(utra::irqarray7::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray7_csr.wfo(utra::irqarray7::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray7_csr.r(utra::irqarray7::EV_POLARITY);
+        irqarray7_csr.wo(utra::irqarray7::EV_POLARITY, foo);
+        let bar = irqarray7_csr.rf(utra::irqarray7::EV_POLARITY_RISING);
+        irqarray7_csr.rmwf(utra::irqarray7::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_POLARITY_RISING, bar);
+        baz |= irqarray7_csr.ms(utra::irqarray7::EV_POLARITY_RISING, 1);
+        irqarray7_csr.wfo(utra::irqarray7::EV_POLARITY_RISING, baz);
 
         let foo = irqarray7_csr.r(utra::irqarray7::EV_STATUS);
         irqarray7_csr.wo(utra::irqarray7::EV_STATUS, foo);
@@ -10328,26 +10504,6 @@ mod tests {
         let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_STATUS_SOURCE15, bar);
         baz |= irqarray7_csr.ms(utra::irqarray7::EV_STATUS_SOURCE15, 1);
         irqarray7_csr.wfo(utra::irqarray7::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_STATUS_SOURCE16);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_STATUS_SOURCE16, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_STATUS_SOURCE17);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_STATUS_SOURCE17, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_STATUS_SOURCE18);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_STATUS_SOURCE18, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_STATUS_SOURCE19);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_STATUS_SOURCE19, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray7_csr.r(utra::irqarray7::EV_PENDING);
         irqarray7_csr.wo(utra::irqarray7::EV_PENDING, foo);
@@ -10431,26 +10587,6 @@ mod tests {
         let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_PENDING_SOURCE15, bar);
         baz |= irqarray7_csr.ms(utra::irqarray7::EV_PENDING_SOURCE15, 1);
         irqarray7_csr.wfo(utra::irqarray7::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_PENDING_SOURCE16);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_PENDING_SOURCE16, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_PENDING_SOURCE17);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_PENDING_SOURCE17, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_PENDING_SOURCE18);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_PENDING_SOURCE18, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_PENDING_SOURCE19);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_PENDING_SOURCE19, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray7_csr.r(utra::irqarray7::EV_ENABLE);
         irqarray7_csr.wo(utra::irqarray7::EV_ENABLE, foo);
@@ -10534,26 +10670,6 @@ mod tests {
         let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray7_csr.ms(utra::irqarray7::EV_ENABLE_SOURCE15, 1);
         irqarray7_csr.wfo(utra::irqarray7::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_ENABLE_SOURCE16);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_ENABLE_SOURCE16, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_ENABLE_SOURCE17);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_ENABLE_SOURCE17, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_ENABLE_SOURCE18);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_ENABLE_SOURCE18, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray7_csr.rf(utra::irqarray7::EV_ENABLE_SOURCE19);
-        irqarray7_csr.rmwf(utra::irqarray7::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray7_csr.zf(utra::irqarray7::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray7_csr.ms(utra::irqarray7::EV_ENABLE_SOURCE19, 1);
-        irqarray7_csr.wfo(utra::irqarray7::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -10569,6 +10685,22 @@ mod tests {
         let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_SOFT_TRIGGER, bar);
         baz |= irqarray8_csr.ms(utra::irqarray8::EV_SOFT_TRIGGER, 1);
         irqarray8_csr.wfo(utra::irqarray8::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray8_csr.r(utra::irqarray8::EV_EDGE_TRIGGERED);
+        irqarray8_csr.wo(utra::irqarray8::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray8_csr.rf(utra::irqarray8::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray8_csr.rmwf(utra::irqarray8::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray8_csr.ms(utra::irqarray8::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray8_csr.wfo(utra::irqarray8::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray8_csr.r(utra::irqarray8::EV_POLARITY);
+        irqarray8_csr.wo(utra::irqarray8::EV_POLARITY, foo);
+        let bar = irqarray8_csr.rf(utra::irqarray8::EV_POLARITY_RISING);
+        irqarray8_csr.rmwf(utra::irqarray8::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_POLARITY_RISING, bar);
+        baz |= irqarray8_csr.ms(utra::irqarray8::EV_POLARITY_RISING, 1);
+        irqarray8_csr.wfo(utra::irqarray8::EV_POLARITY_RISING, baz);
 
         let foo = irqarray8_csr.r(utra::irqarray8::EV_STATUS);
         irqarray8_csr.wo(utra::irqarray8::EV_STATUS, foo);
@@ -10652,26 +10784,6 @@ mod tests {
         let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_STATUS_SOURCE15, bar);
         baz |= irqarray8_csr.ms(utra::irqarray8::EV_STATUS_SOURCE15, 1);
         irqarray8_csr.wfo(utra::irqarray8::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_STATUS_SOURCE16);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_STATUS_SOURCE16, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_STATUS_SOURCE17);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_STATUS_SOURCE17, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_STATUS_SOURCE18);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_STATUS_SOURCE18, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_STATUS_SOURCE19);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_STATUS_SOURCE19, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray8_csr.r(utra::irqarray8::EV_PENDING);
         irqarray8_csr.wo(utra::irqarray8::EV_PENDING, foo);
@@ -10755,26 +10867,6 @@ mod tests {
         let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_PENDING_SOURCE15, bar);
         baz |= irqarray8_csr.ms(utra::irqarray8::EV_PENDING_SOURCE15, 1);
         irqarray8_csr.wfo(utra::irqarray8::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_PENDING_SOURCE16);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_PENDING_SOURCE16, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_PENDING_SOURCE17);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_PENDING_SOURCE17, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_PENDING_SOURCE18);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_PENDING_SOURCE18, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_PENDING_SOURCE19);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_PENDING_SOURCE19, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray8_csr.r(utra::irqarray8::EV_ENABLE);
         irqarray8_csr.wo(utra::irqarray8::EV_ENABLE, foo);
@@ -10858,26 +10950,6 @@ mod tests {
         let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray8_csr.ms(utra::irqarray8::EV_ENABLE_SOURCE15, 1);
         irqarray8_csr.wfo(utra::irqarray8::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_ENABLE_SOURCE16);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_ENABLE_SOURCE16, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_ENABLE_SOURCE17);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_ENABLE_SOURCE17, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_ENABLE_SOURCE18);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_ENABLE_SOURCE18, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray8_csr.rf(utra::irqarray8::EV_ENABLE_SOURCE19);
-        irqarray8_csr.rmwf(utra::irqarray8::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray8_csr.zf(utra::irqarray8::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray8_csr.ms(utra::irqarray8::EV_ENABLE_SOURCE19, 1);
-        irqarray8_csr.wfo(utra::irqarray8::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -10893,6 +10965,22 @@ mod tests {
         let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_SOFT_TRIGGER, bar);
         baz |= irqarray9_csr.ms(utra::irqarray9::EV_SOFT_TRIGGER, 1);
         irqarray9_csr.wfo(utra::irqarray9::EV_SOFT_TRIGGER, baz);
+
+        let foo = irqarray9_csr.r(utra::irqarray9::EV_EDGE_TRIGGERED);
+        irqarray9_csr.wo(utra::irqarray9::EV_EDGE_TRIGGERED, foo);
+        let bar = irqarray9_csr.rf(utra::irqarray9::EV_EDGE_TRIGGERED_USE_EDGE);
+        irqarray9_csr.rmwf(utra::irqarray9::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_EDGE_TRIGGERED_USE_EDGE, bar);
+        baz |= irqarray9_csr.ms(utra::irqarray9::EV_EDGE_TRIGGERED_USE_EDGE, 1);
+        irqarray9_csr.wfo(utra::irqarray9::EV_EDGE_TRIGGERED_USE_EDGE, baz);
+
+        let foo = irqarray9_csr.r(utra::irqarray9::EV_POLARITY);
+        irqarray9_csr.wo(utra::irqarray9::EV_POLARITY, foo);
+        let bar = irqarray9_csr.rf(utra::irqarray9::EV_POLARITY_RISING);
+        irqarray9_csr.rmwf(utra::irqarray9::EV_POLARITY_RISING, bar);
+        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_POLARITY_RISING, bar);
+        baz |= irqarray9_csr.ms(utra::irqarray9::EV_POLARITY_RISING, 1);
+        irqarray9_csr.wfo(utra::irqarray9::EV_POLARITY_RISING, baz);
 
         let foo = irqarray9_csr.r(utra::irqarray9::EV_STATUS);
         irqarray9_csr.wo(utra::irqarray9::EV_STATUS, foo);
@@ -10976,26 +11064,6 @@ mod tests {
         let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_STATUS_SOURCE15, bar);
         baz |= irqarray9_csr.ms(utra::irqarray9::EV_STATUS_SOURCE15, 1);
         irqarray9_csr.wfo(utra::irqarray9::EV_STATUS_SOURCE15, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_STATUS_SOURCE16);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_STATUS_SOURCE16, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_STATUS_SOURCE16, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_STATUS_SOURCE16, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_STATUS_SOURCE16, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_STATUS_SOURCE17);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_STATUS_SOURCE17, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_STATUS_SOURCE17, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_STATUS_SOURCE17, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_STATUS_SOURCE17, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_STATUS_SOURCE18);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_STATUS_SOURCE18, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_STATUS_SOURCE18, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_STATUS_SOURCE18, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_STATUS_SOURCE18, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_STATUS_SOURCE19);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_STATUS_SOURCE19, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_STATUS_SOURCE19, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_STATUS_SOURCE19, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_STATUS_SOURCE19, baz);
 
         let foo = irqarray9_csr.r(utra::irqarray9::EV_PENDING);
         irqarray9_csr.wo(utra::irqarray9::EV_PENDING, foo);
@@ -11079,26 +11147,6 @@ mod tests {
         let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_PENDING_SOURCE15, bar);
         baz |= irqarray9_csr.ms(utra::irqarray9::EV_PENDING_SOURCE15, 1);
         irqarray9_csr.wfo(utra::irqarray9::EV_PENDING_SOURCE15, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_PENDING_SOURCE16);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_PENDING_SOURCE16, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_PENDING_SOURCE16, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_PENDING_SOURCE16, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_PENDING_SOURCE16, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_PENDING_SOURCE17);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_PENDING_SOURCE17, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_PENDING_SOURCE17, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_PENDING_SOURCE17, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_PENDING_SOURCE17, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_PENDING_SOURCE18);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_PENDING_SOURCE18, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_PENDING_SOURCE18, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_PENDING_SOURCE18, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_PENDING_SOURCE18, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_PENDING_SOURCE19);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_PENDING_SOURCE19, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_PENDING_SOURCE19, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_PENDING_SOURCE19, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_PENDING_SOURCE19, baz);
 
         let foo = irqarray9_csr.r(utra::irqarray9::EV_ENABLE);
         irqarray9_csr.wo(utra::irqarray9::EV_ENABLE, foo);
@@ -11182,26 +11230,6 @@ mod tests {
         let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_ENABLE_SOURCE15, bar);
         baz |= irqarray9_csr.ms(utra::irqarray9::EV_ENABLE_SOURCE15, 1);
         irqarray9_csr.wfo(utra::irqarray9::EV_ENABLE_SOURCE15, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_ENABLE_SOURCE16);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_ENABLE_SOURCE16, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_ENABLE_SOURCE16, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_ENABLE_SOURCE16, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_ENABLE_SOURCE16, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_ENABLE_SOURCE17);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_ENABLE_SOURCE17, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_ENABLE_SOURCE17, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_ENABLE_SOURCE17, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_ENABLE_SOURCE17, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_ENABLE_SOURCE18);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_ENABLE_SOURCE18, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_ENABLE_SOURCE18, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_ENABLE_SOURCE18, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_ENABLE_SOURCE18, baz);
-        let bar = irqarray9_csr.rf(utra::irqarray9::EV_ENABLE_SOURCE19);
-        irqarray9_csr.rmwf(utra::irqarray9::EV_ENABLE_SOURCE19, bar);
-        let mut baz = irqarray9_csr.zf(utra::irqarray9::EV_ENABLE_SOURCE19, bar);
-        baz |= irqarray9_csr.ms(utra::irqarray9::EV_ENABLE_SOURCE19, 1);
-        irqarray9_csr.wfo(utra::irqarray9::EV_ENABLE_SOURCE19, baz);
   }
 
     #[test]
@@ -11343,6 +11371,14 @@ mod tests {
         let mut baz = mailbox_csr.zf(utra::mailbox::DONE_DONE, bar);
         baz |= mailbox_csr.ms(utra::mailbox::DONE_DONE, 1);
         mailbox_csr.wfo(utra::mailbox::DONE_DONE, baz);
+
+        let foo = mailbox_csr.r(utra::mailbox::LOOPBACK);
+        mailbox_csr.wo(utra::mailbox::LOOPBACK, foo);
+        let bar = mailbox_csr.rf(utra::mailbox::LOOPBACK_LOOPBACK);
+        mailbox_csr.rmwf(utra::mailbox::LOOPBACK_LOOPBACK, bar);
+        let mut baz = mailbox_csr.zf(utra::mailbox::LOOPBACK_LOOPBACK, bar);
+        baz |= mailbox_csr.ms(utra::mailbox::LOOPBACK_LOOPBACK, 1);
+        mailbox_csr.wfo(utra::mailbox::LOOPBACK_LOOPBACK, baz);
   }
 
     #[test]
@@ -11366,6 +11402,39 @@ mod tests {
         let mut baz = mb_client_csr.zf(utra::mb_client::RDATA_RDATA, bar);
         baz |= mb_client_csr.ms(utra::mb_client::RDATA_RDATA, 1);
         mb_client_csr.wfo(utra::mb_client::RDATA_RDATA, baz);
+
+        let foo = mb_client_csr.r(utra::mb_client::STATUS);
+        mb_client_csr.wo(utra::mb_client::STATUS, foo);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_RX_AVAIL);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_RX_AVAIL, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_RX_AVAIL, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_RX_AVAIL, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_RX_AVAIL, baz);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_TX_FREE);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_TX_FREE, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_TX_FREE, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_TX_FREE, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_TX_FREE, baz);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_ABORT_IN_PROGRESS);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_ABORT_IN_PROGRESS, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_ABORT_IN_PROGRESS, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_ABORT_IN_PROGRESS, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_ABORT_IN_PROGRESS, baz);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_ABORT_ACK);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_ABORT_ACK, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_ABORT_ACK, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_ABORT_ACK, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_ABORT_ACK, baz);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_TX_ERR);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_TX_ERR, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_TX_ERR, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_TX_ERR, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_TX_ERR, baz);
+        let bar = mb_client_csr.rf(utra::mb_client::STATUS_RX_ERR);
+        mb_client_csr.rmwf(utra::mb_client::STATUS_RX_ERR, bar);
+        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_RX_ERR, bar);
+        baz |= mb_client_csr.ms(utra::mb_client::STATUS_RX_ERR, 1);
+        mb_client_csr.wfo(utra::mb_client::STATUS_RX_ERR, baz);
 
         let foo = mb_client_csr.r(utra::mb_client::EV_STATUS);
         mb_client_csr.wo(utra::mb_client::EV_STATUS, foo);
@@ -11435,39 +11504,6 @@ mod tests {
         let mut baz = mb_client_csr.zf(utra::mb_client::EV_ENABLE_ERROR, bar);
         baz |= mb_client_csr.ms(utra::mb_client::EV_ENABLE_ERROR, 1);
         mb_client_csr.wfo(utra::mb_client::EV_ENABLE_ERROR, baz);
-
-        let foo = mb_client_csr.r(utra::mb_client::STATUS);
-        mb_client_csr.wo(utra::mb_client::STATUS, foo);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_RX_AVAIL);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_RX_AVAIL, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_RX_AVAIL, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_RX_AVAIL, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_RX_AVAIL, baz);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_TX_FREE);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_TX_FREE, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_TX_FREE, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_TX_FREE, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_TX_FREE, baz);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_ABORT_IN_PROGRESS);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_ABORT_IN_PROGRESS, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_ABORT_IN_PROGRESS, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_ABORT_IN_PROGRESS, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_ABORT_IN_PROGRESS, baz);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_ABORT_ACK);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_ABORT_ACK, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_ABORT_ACK, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_ABORT_ACK, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_ABORT_ACK, baz);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_TX_ERR);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_TX_ERR, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_TX_ERR, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_TX_ERR, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_TX_ERR, baz);
-        let bar = mb_client_csr.rf(utra::mb_client::STATUS_RX_ERR);
-        mb_client_csr.rmwf(utra::mb_client::STATUS_RX_ERR, bar);
-        let mut baz = mb_client_csr.zf(utra::mb_client::STATUS_RX_ERR, bar);
-        baz |= mb_client_csr.ms(utra::mb_client::STATUS_RX_ERR, 1);
-        mb_client_csr.wfo(utra::mb_client::STATUS_RX_ERR, baz);
 
         let foo = mb_client_csr.r(utra::mb_client::CONTROL);
         mb_client_csr.wo(utra::mb_client::CONTROL, foo);
@@ -11784,6 +11820,2945 @@ mod tests {
 
     #[test]
     #[ignore]
+    fn compile_check_udma_ctrl_csr() {
+        use super::*;
+        let mut udma_ctrl_csr = CSR::new(HW_UDMA_CTRL_BASE as *mut u32);
+
+        let foo = udma_ctrl_csr.r(utra::udma_ctrl::REG_CG);
+        udma_ctrl_csr.wo(utra::udma_ctrl::REG_CG, foo);
+        let bar = udma_ctrl_csr.rf(utra::udma_ctrl::REG_CG_R_CG);
+        udma_ctrl_csr.rmwf(utra::udma_ctrl::REG_CG_R_CG, bar);
+        let mut baz = udma_ctrl_csr.zf(utra::udma_ctrl::REG_CG_R_CG, bar);
+        baz |= udma_ctrl_csr.ms(utra::udma_ctrl::REG_CG_R_CG, 1);
+        udma_ctrl_csr.wfo(utra::udma_ctrl::REG_CG_R_CG, baz);
+
+        let foo = udma_ctrl_csr.r(utra::udma_ctrl::REG_CFG_EVT);
+        udma_ctrl_csr.wo(utra::udma_ctrl::REG_CFG_EVT, foo);
+        let bar = udma_ctrl_csr.rf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_0);
+        udma_ctrl_csr.rmwf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_0, bar);
+        let mut baz = udma_ctrl_csr.zf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_0, bar);
+        baz |= udma_ctrl_csr.ms(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_0, 1);
+        udma_ctrl_csr.wfo(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_0, baz);
+        let bar = udma_ctrl_csr.rf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_1);
+        udma_ctrl_csr.rmwf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_1, bar);
+        let mut baz = udma_ctrl_csr.zf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_1, bar);
+        baz |= udma_ctrl_csr.ms(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_1, 1);
+        udma_ctrl_csr.wfo(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_1, baz);
+        let bar = udma_ctrl_csr.rf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_2);
+        udma_ctrl_csr.rmwf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_2, bar);
+        let mut baz = udma_ctrl_csr.zf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_2, bar);
+        baz |= udma_ctrl_csr.ms(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_2, 1);
+        udma_ctrl_csr.wfo(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_2, baz);
+        let bar = udma_ctrl_csr.rf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_3);
+        udma_ctrl_csr.rmwf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_3, bar);
+        let mut baz = udma_ctrl_csr.zf(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_3, bar);
+        baz |= udma_ctrl_csr.ms(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_3, 1);
+        udma_ctrl_csr.wfo(utra::udma_ctrl::REG_CFG_EVT_R_CMP_EVT_3, baz);
+
+        let foo = udma_ctrl_csr.r(utra::udma_ctrl::REG_RST);
+        udma_ctrl_csr.wo(utra::udma_ctrl::REG_RST, foo);
+        let bar = udma_ctrl_csr.rf(utra::udma_ctrl::REG_RST_R_RST);
+        udma_ctrl_csr.rmwf(utra::udma_ctrl::REG_RST_R_RST, bar);
+        let mut baz = udma_ctrl_csr.zf(utra::udma_ctrl::REG_RST_R_RST, bar);
+        baz |= udma_ctrl_csr.ms(utra::udma_ctrl::REG_RST_R_RST, 1);
+        udma_ctrl_csr.wfo(utra::udma_ctrl::REG_RST_R_RST, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_uart_0_csr() {
+        use super::*;
+        let mut udma_uart_0_csr = CSR::new(HW_UDMA_UART_0_BASE as *mut u32);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_RX_SADDR);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_RX_SADDR, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_RX_SIZE);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_RX_SIZE, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_RX_SIZE_R_RX_SIZE);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_RX_CFG);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_RX_CFG, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_RX_CFG_R_RX_EN);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_RX_CFG_R_RX_EN, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_RX_CFG_R_RX_CLR);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_RX_CFG_R_RX_CLR, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_TX_SADDR);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_TX_SADDR, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_TX_SIZE);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_TX_SIZE, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_TX_SIZE_R_TX_SIZE);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_TX_CFG);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_TX_CFG, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_TX_CFG_R_TX_EN, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_CLR);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_TX_CFG_R_TX_CLR, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_STATUS);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_STATUS, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_STATUS_STATUS_I);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_STATUS_STATUS_I, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_STATUS_STATUS_I, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_STATUS_STATUS_I, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_STATUS_STATUS_I, baz);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_UART_SETUP);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_UART_SETUP, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_UART_SETUP_R_UART_PARITY_EN);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_UART_SETUP_R_UART_PARITY_EN, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_UART_SETUP_R_UART_PARITY_EN, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_UART_SETUP_R_UART_PARITY_EN, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_UART_SETUP_R_UART_PARITY_EN, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_UART_SETUP_R_UART_BITS);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_UART_SETUP_R_UART_BITS, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_UART_SETUP_R_UART_BITS, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_UART_SETUP_R_UART_BITS, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_UART_SETUP_R_UART_BITS, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_UART_SETUP_R_UART_STOP_BITS);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_UART_SETUP_R_UART_STOP_BITS, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_UART_SETUP_R_UART_STOP_BITS, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_UART_SETUP_R_UART_STOP_BITS, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_UART_SETUP_R_UART_STOP_BITS, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_UART_SETUP_R_UART_RX_POLLING_EN);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_UART_SETUP_R_UART_RX_POLLING_EN, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_UART_SETUP_R_UART_RX_POLLING_EN, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_UART_SETUP_R_UART_RX_POLLING_EN, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_UART_SETUP_R_UART_RX_POLLING_EN, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_UART_SETUP_R_UART_EN_TX);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_UART_SETUP_R_UART_EN_TX, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_UART_SETUP_R_UART_EN_TX, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_UART_SETUP_R_UART_EN_TX, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_UART_SETUP_R_UART_EN_TX, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_UART_SETUP_R_UART_EN_RX);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_UART_SETUP_R_UART_EN_RX, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_UART_SETUP_R_UART_EN_RX, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_UART_SETUP_R_UART_EN_RX, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_UART_SETUP_R_UART_EN_RX, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_UART_SETUP_R_UART_DIV);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_UART_SETUP_R_UART_DIV, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_UART_SETUP_R_UART_DIV, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_UART_SETUP_R_UART_DIV, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_UART_SETUP_R_UART_DIV, baz);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_ERROR);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_ERROR, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_ERROR_R_ERR_OVERFLOW);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_ERROR_R_ERR_OVERFLOW, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_ERROR_R_ERR_OVERFLOW, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_ERROR_R_ERR_OVERFLOW, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_ERROR_R_ERR_OVERFLOW, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_ERROR_R_ERR_PARITY);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_ERROR_R_ERR_PARITY, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_ERROR_R_ERR_PARITY, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_ERROR_R_ERR_PARITY, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_ERROR_R_ERR_PARITY, baz);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_IRQ_EN);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_IRQ_EN, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_IRQ_EN_R_UART_RX_IRQ_EN);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_IRQ_EN_R_UART_RX_IRQ_EN, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_IRQ_EN_R_UART_RX_IRQ_EN, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_IRQ_EN_R_UART_RX_IRQ_EN, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_IRQ_EN_R_UART_RX_IRQ_EN, baz);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_IRQ_EN_R_UART_ERR_IRQ_EN);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_IRQ_EN_R_UART_ERR_IRQ_EN, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_IRQ_EN_R_UART_ERR_IRQ_EN, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_IRQ_EN_R_UART_ERR_IRQ_EN, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_IRQ_EN_R_UART_ERR_IRQ_EN, baz);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_VALID);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_VALID, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_VALID_R_UART_RX_DATA_VALID);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_VALID_R_UART_RX_DATA_VALID, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_VALID_R_UART_RX_DATA_VALID, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_VALID_R_UART_RX_DATA_VALID, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_VALID_R_UART_RX_DATA_VALID, baz);
+
+        let foo = udma_uart_0_csr.r(utra::udma_uart_0::REG_DATA);
+        udma_uart_0_csr.wo(utra::udma_uart_0::REG_DATA, foo);
+        let bar = udma_uart_0_csr.rf(utra::udma_uart_0::REG_DATA_R_UART_RX_DATA);
+        udma_uart_0_csr.rmwf(utra::udma_uart_0::REG_DATA_R_UART_RX_DATA, bar);
+        let mut baz = udma_uart_0_csr.zf(utra::udma_uart_0::REG_DATA_R_UART_RX_DATA, bar);
+        baz |= udma_uart_0_csr.ms(utra::udma_uart_0::REG_DATA_R_UART_RX_DATA, 1);
+        udma_uart_0_csr.wfo(utra::udma_uart_0::REG_DATA_R_UART_RX_DATA, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_uart_1_csr() {
+        use super::*;
+        let mut udma_uart_1_csr = CSR::new(HW_UDMA_UART_1_BASE as *mut u32);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_RX_SADDR);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_RX_SADDR, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_RX_SIZE);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_RX_SIZE, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_RX_SIZE_R_RX_SIZE);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_RX_CFG);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_RX_CFG, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_RX_CFG_R_RX_EN);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_RX_CFG_R_RX_EN, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_RX_CFG_R_RX_CLR);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_RX_CFG_R_RX_CLR, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_TX_SADDR);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_TX_SADDR, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_TX_SIZE);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_TX_SIZE, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_TX_SIZE_R_TX_SIZE);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_TX_CFG);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_TX_CFG, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_TX_CFG_R_TX_EN);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_TX_CFG_R_TX_EN, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_TX_CFG_R_TX_CLR);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_TX_CFG_R_TX_CLR, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_STATUS);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_STATUS, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_STATUS_STATUS_I);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_STATUS_STATUS_I, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_STATUS_STATUS_I, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_STATUS_STATUS_I, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_STATUS_STATUS_I, baz);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_UART_SETUP);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_UART_SETUP, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_UART_SETUP_R_UART_PARITY_EN);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_UART_SETUP_R_UART_PARITY_EN, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_UART_SETUP_R_UART_PARITY_EN, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_UART_SETUP_R_UART_PARITY_EN, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_UART_SETUP_R_UART_PARITY_EN, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_UART_SETUP_R_UART_BITS);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_UART_SETUP_R_UART_BITS, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_UART_SETUP_R_UART_BITS, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_UART_SETUP_R_UART_BITS, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_UART_SETUP_R_UART_BITS, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_UART_SETUP_R_UART_STOP_BITS);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_UART_SETUP_R_UART_STOP_BITS, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_UART_SETUP_R_UART_STOP_BITS, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_UART_SETUP_R_UART_STOP_BITS, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_UART_SETUP_R_UART_STOP_BITS, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_UART_SETUP_R_UART_RX_POLLING_EN);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_UART_SETUP_R_UART_RX_POLLING_EN, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_UART_SETUP_R_UART_RX_POLLING_EN, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_UART_SETUP_R_UART_RX_POLLING_EN, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_UART_SETUP_R_UART_RX_POLLING_EN, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_UART_SETUP_R_UART_EN_TX);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_UART_SETUP_R_UART_EN_TX, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_UART_SETUP_R_UART_EN_TX, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_UART_SETUP_R_UART_EN_TX, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_UART_SETUP_R_UART_EN_TX, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_UART_SETUP_R_UART_EN_RX);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_UART_SETUP_R_UART_EN_RX, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_UART_SETUP_R_UART_EN_RX, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_UART_SETUP_R_UART_EN_RX, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_UART_SETUP_R_UART_EN_RX, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_UART_SETUP_R_UART_DIV);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_UART_SETUP_R_UART_DIV, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_UART_SETUP_R_UART_DIV, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_UART_SETUP_R_UART_DIV, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_UART_SETUP_R_UART_DIV, baz);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_ERROR);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_ERROR, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_ERROR_R_ERR_OVERFLOW);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_ERROR_R_ERR_OVERFLOW, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_ERROR_R_ERR_OVERFLOW, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_ERROR_R_ERR_OVERFLOW, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_ERROR_R_ERR_OVERFLOW, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_ERROR_R_ERR_PARITY);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_ERROR_R_ERR_PARITY, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_ERROR_R_ERR_PARITY, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_ERROR_R_ERR_PARITY, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_ERROR_R_ERR_PARITY, baz);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_IRQ_EN);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_IRQ_EN, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_IRQ_EN_R_UART_RX_IRQ_EN);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_IRQ_EN_R_UART_RX_IRQ_EN, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_IRQ_EN_R_UART_RX_IRQ_EN, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_IRQ_EN_R_UART_RX_IRQ_EN, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_IRQ_EN_R_UART_RX_IRQ_EN, baz);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_IRQ_EN_R_UART_ERR_IRQ_EN);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_IRQ_EN_R_UART_ERR_IRQ_EN, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_IRQ_EN_R_UART_ERR_IRQ_EN, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_IRQ_EN_R_UART_ERR_IRQ_EN, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_IRQ_EN_R_UART_ERR_IRQ_EN, baz);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_VALID);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_VALID, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_VALID_R_UART_RX_DATA_VALID);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_VALID_R_UART_RX_DATA_VALID, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_VALID_R_UART_RX_DATA_VALID, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_VALID_R_UART_RX_DATA_VALID, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_VALID_R_UART_RX_DATA_VALID, baz);
+
+        let foo = udma_uart_1_csr.r(utra::udma_uart_1::REG_DATA);
+        udma_uart_1_csr.wo(utra::udma_uart_1::REG_DATA, foo);
+        let bar = udma_uart_1_csr.rf(utra::udma_uart_1::REG_DATA_R_UART_RX_DATA);
+        udma_uart_1_csr.rmwf(utra::udma_uart_1::REG_DATA_R_UART_RX_DATA, bar);
+        let mut baz = udma_uart_1_csr.zf(utra::udma_uart_1::REG_DATA_R_UART_RX_DATA, bar);
+        baz |= udma_uart_1_csr.ms(utra::udma_uart_1::REG_DATA_R_UART_RX_DATA, 1);
+        udma_uart_1_csr.wfo(utra::udma_uart_1::REG_DATA_R_UART_RX_DATA, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_uart_2_csr() {
+        use super::*;
+        let mut udma_uart_2_csr = CSR::new(HW_UDMA_UART_2_BASE as *mut u32);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_RX_SADDR);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_RX_SADDR, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_RX_SIZE);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_RX_SIZE, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_RX_SIZE_R_RX_SIZE);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_RX_CFG);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_RX_CFG, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_RX_CFG_R_RX_EN);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_RX_CFG_R_RX_EN, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_RX_CFG_R_RX_CLR);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_RX_CFG_R_RX_CLR, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_TX_SADDR);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_TX_SADDR, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_TX_SIZE);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_TX_SIZE, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_TX_SIZE_R_TX_SIZE);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_TX_CFG);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_TX_CFG, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_TX_CFG_R_TX_EN);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_TX_CFG_R_TX_EN, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_TX_CFG_R_TX_CLR);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_TX_CFG_R_TX_CLR, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_STATUS);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_STATUS, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_STATUS_STATUS_I);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_STATUS_STATUS_I, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_STATUS_STATUS_I, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_STATUS_STATUS_I, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_STATUS_STATUS_I, baz);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_UART_SETUP);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_UART_SETUP, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_UART_SETUP_R_UART_PARITY_EN);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_UART_SETUP_R_UART_PARITY_EN, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_UART_SETUP_R_UART_PARITY_EN, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_UART_SETUP_R_UART_PARITY_EN, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_UART_SETUP_R_UART_PARITY_EN, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_UART_SETUP_R_UART_BITS);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_UART_SETUP_R_UART_BITS, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_UART_SETUP_R_UART_BITS, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_UART_SETUP_R_UART_BITS, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_UART_SETUP_R_UART_BITS, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_UART_SETUP_R_UART_STOP_BITS);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_UART_SETUP_R_UART_STOP_BITS, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_UART_SETUP_R_UART_STOP_BITS, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_UART_SETUP_R_UART_STOP_BITS, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_UART_SETUP_R_UART_STOP_BITS, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_UART_SETUP_R_UART_RX_POLLING_EN);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_UART_SETUP_R_UART_RX_POLLING_EN, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_UART_SETUP_R_UART_RX_POLLING_EN, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_UART_SETUP_R_UART_RX_POLLING_EN, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_UART_SETUP_R_UART_RX_POLLING_EN, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_UART_SETUP_R_UART_EN_TX);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_UART_SETUP_R_UART_EN_TX, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_UART_SETUP_R_UART_EN_TX, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_UART_SETUP_R_UART_EN_TX, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_UART_SETUP_R_UART_EN_TX, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_UART_SETUP_R_UART_EN_RX);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_UART_SETUP_R_UART_EN_RX, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_UART_SETUP_R_UART_EN_RX, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_UART_SETUP_R_UART_EN_RX, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_UART_SETUP_R_UART_EN_RX, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_UART_SETUP_R_UART_DIV);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_UART_SETUP_R_UART_DIV, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_UART_SETUP_R_UART_DIV, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_UART_SETUP_R_UART_DIV, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_UART_SETUP_R_UART_DIV, baz);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_ERROR);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_ERROR, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_ERROR_R_ERR_OVERFLOW);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_ERROR_R_ERR_OVERFLOW, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_ERROR_R_ERR_OVERFLOW, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_ERROR_R_ERR_OVERFLOW, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_ERROR_R_ERR_OVERFLOW, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_ERROR_R_ERR_PARITY);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_ERROR_R_ERR_PARITY, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_ERROR_R_ERR_PARITY, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_ERROR_R_ERR_PARITY, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_ERROR_R_ERR_PARITY, baz);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_IRQ_EN);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_IRQ_EN, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_IRQ_EN_R_UART_RX_IRQ_EN);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_IRQ_EN_R_UART_RX_IRQ_EN, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_IRQ_EN_R_UART_RX_IRQ_EN, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_IRQ_EN_R_UART_RX_IRQ_EN, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_IRQ_EN_R_UART_RX_IRQ_EN, baz);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_IRQ_EN_R_UART_ERR_IRQ_EN);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_IRQ_EN_R_UART_ERR_IRQ_EN, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_IRQ_EN_R_UART_ERR_IRQ_EN, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_IRQ_EN_R_UART_ERR_IRQ_EN, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_IRQ_EN_R_UART_ERR_IRQ_EN, baz);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_VALID);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_VALID, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_VALID_R_UART_RX_DATA_VALID);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_VALID_R_UART_RX_DATA_VALID, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_VALID_R_UART_RX_DATA_VALID, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_VALID_R_UART_RX_DATA_VALID, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_VALID_R_UART_RX_DATA_VALID, baz);
+
+        let foo = udma_uart_2_csr.r(utra::udma_uart_2::REG_DATA);
+        udma_uart_2_csr.wo(utra::udma_uart_2::REG_DATA, foo);
+        let bar = udma_uart_2_csr.rf(utra::udma_uart_2::REG_DATA_R_UART_RX_DATA);
+        udma_uart_2_csr.rmwf(utra::udma_uart_2::REG_DATA_R_UART_RX_DATA, bar);
+        let mut baz = udma_uart_2_csr.zf(utra::udma_uart_2::REG_DATA_R_UART_RX_DATA, bar);
+        baz |= udma_uart_2_csr.ms(utra::udma_uart_2::REG_DATA_R_UART_RX_DATA, 1);
+        udma_uart_2_csr.wfo(utra::udma_uart_2::REG_DATA_R_UART_RX_DATA, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_uart_3_csr() {
+        use super::*;
+        let mut udma_uart_3_csr = CSR::new(HW_UDMA_UART_3_BASE as *mut u32);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_RX_SADDR);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_RX_SADDR, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_RX_SIZE);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_RX_SIZE, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_RX_SIZE_R_RX_SIZE);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_RX_CFG);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_RX_CFG, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_RX_CFG_R_RX_EN);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_RX_CFG_R_RX_EN, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_RX_CFG_R_RX_CLR);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_RX_CFG_R_RX_CLR, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_TX_SADDR);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_TX_SADDR, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_TX_SIZE);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_TX_SIZE, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_TX_SIZE_R_TX_SIZE);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_TX_CFG);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_TX_CFG, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_TX_CFG_R_TX_EN);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_TX_CFG_R_TX_EN, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_TX_CFG_R_TX_CLR);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_TX_CFG_R_TX_CLR, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_STATUS);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_STATUS, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_STATUS_STATUS_I);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_STATUS_STATUS_I, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_STATUS_STATUS_I, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_STATUS_STATUS_I, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_STATUS_STATUS_I, baz);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_UART_SETUP);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_UART_SETUP, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_UART_SETUP_R_UART_PARITY_EN);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_UART_SETUP_R_UART_PARITY_EN, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_UART_SETUP_R_UART_PARITY_EN, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_UART_SETUP_R_UART_PARITY_EN, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_UART_SETUP_R_UART_PARITY_EN, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_UART_SETUP_R_UART_BITS);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_UART_SETUP_R_UART_BITS, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_UART_SETUP_R_UART_BITS, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_UART_SETUP_R_UART_BITS, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_UART_SETUP_R_UART_BITS, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_UART_SETUP_R_UART_STOP_BITS);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_UART_SETUP_R_UART_STOP_BITS, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_UART_SETUP_R_UART_STOP_BITS, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_UART_SETUP_R_UART_STOP_BITS, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_UART_SETUP_R_UART_STOP_BITS, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_UART_SETUP_R_UART_RX_POLLING_EN);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_UART_SETUP_R_UART_RX_POLLING_EN, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_UART_SETUP_R_UART_RX_POLLING_EN, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_UART_SETUP_R_UART_RX_POLLING_EN, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_UART_SETUP_R_UART_RX_POLLING_EN, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_UART_SETUP_R_UART_RX_CLEAN_FIFO, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_UART_SETUP_R_UART_EN_TX);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_UART_SETUP_R_UART_EN_TX, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_UART_SETUP_R_UART_EN_TX, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_UART_SETUP_R_UART_EN_TX, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_UART_SETUP_R_UART_EN_TX, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_UART_SETUP_R_UART_EN_RX);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_UART_SETUP_R_UART_EN_RX, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_UART_SETUP_R_UART_EN_RX, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_UART_SETUP_R_UART_EN_RX, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_UART_SETUP_R_UART_EN_RX, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_UART_SETUP_R_UART_DIV);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_UART_SETUP_R_UART_DIV, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_UART_SETUP_R_UART_DIV, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_UART_SETUP_R_UART_DIV, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_UART_SETUP_R_UART_DIV, baz);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_ERROR);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_ERROR, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_ERROR_R_ERR_OVERFLOW);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_ERROR_R_ERR_OVERFLOW, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_ERROR_R_ERR_OVERFLOW, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_ERROR_R_ERR_OVERFLOW, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_ERROR_R_ERR_OVERFLOW, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_ERROR_R_ERR_PARITY);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_ERROR_R_ERR_PARITY, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_ERROR_R_ERR_PARITY, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_ERROR_R_ERR_PARITY, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_ERROR_R_ERR_PARITY, baz);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_IRQ_EN);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_IRQ_EN, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_IRQ_EN_R_UART_RX_IRQ_EN);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_IRQ_EN_R_UART_RX_IRQ_EN, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_IRQ_EN_R_UART_RX_IRQ_EN, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_IRQ_EN_R_UART_RX_IRQ_EN, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_IRQ_EN_R_UART_RX_IRQ_EN, baz);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_IRQ_EN_R_UART_ERR_IRQ_EN);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_IRQ_EN_R_UART_ERR_IRQ_EN, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_IRQ_EN_R_UART_ERR_IRQ_EN, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_IRQ_EN_R_UART_ERR_IRQ_EN, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_IRQ_EN_R_UART_ERR_IRQ_EN, baz);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_VALID);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_VALID, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_VALID_R_UART_RX_DATA_VALID);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_VALID_R_UART_RX_DATA_VALID, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_VALID_R_UART_RX_DATA_VALID, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_VALID_R_UART_RX_DATA_VALID, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_VALID_R_UART_RX_DATA_VALID, baz);
+
+        let foo = udma_uart_3_csr.r(utra::udma_uart_3::REG_DATA);
+        udma_uart_3_csr.wo(utra::udma_uart_3::REG_DATA, foo);
+        let bar = udma_uart_3_csr.rf(utra::udma_uart_3::REG_DATA_R_UART_RX_DATA);
+        udma_uart_3_csr.rmwf(utra::udma_uart_3::REG_DATA_R_UART_RX_DATA, bar);
+        let mut baz = udma_uart_3_csr.zf(utra::udma_uart_3::REG_DATA_R_UART_RX_DATA, bar);
+        baz |= udma_uart_3_csr.ms(utra::udma_uart_3::REG_DATA_R_UART_RX_DATA, 1);
+        udma_uart_3_csr.wfo(utra::udma_uart_3::REG_DATA_R_UART_RX_DATA, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_spim_0_csr() {
+        use super::*;
+        let mut udma_spim_0_csr = CSR::new(HW_UDMA_SPIM_0_BASE as *mut u32);
+
+        let foo = udma_spim_0_csr.r(utra::udma_spim_0::REG_RX_SADDR);
+        udma_spim_0_csr.wo(utra::udma_spim_0::REG_RX_SADDR, foo);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_spim_0_csr.r(utra::udma_spim_0::REG_RX_SIZE);
+        udma_spim_0_csr.wo(utra::udma_spim_0::REG_RX_SIZE, foo);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_RX_SIZE_R_RX_SIZE);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_spim_0_csr.r(utra::udma_spim_0::REG_RX_CFG);
+        udma_spim_0_csr.wo(utra::udma_spim_0::REG_RX_CFG, foo);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_RX_CFG_R_RX_DATASIZE);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_RX_CFG_R_RX_DATASIZE, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_RX_CFG_R_RX_DATASIZE, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_RX_CFG_R_RX_DATASIZE, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_RX_CFG_R_RX_DATASIZE, baz);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_RX_CFG_R_RX_EN);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_RX_CFG_R_RX_EN, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_RX_CFG_R_RX_CLR);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_RX_CFG_R_RX_CLR, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_spim_0_csr.r(utra::udma_spim_0::REG_TX_SADDR);
+        udma_spim_0_csr.wo(utra::udma_spim_0::REG_TX_SADDR, foo);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_spim_0_csr.r(utra::udma_spim_0::REG_TX_SIZE);
+        udma_spim_0_csr.wo(utra::udma_spim_0::REG_TX_SIZE, foo);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_TX_SIZE_R_TX_SIZE);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_spim_0_csr.r(utra::udma_spim_0::REG_TX_CFG);
+        udma_spim_0_csr.wo(utra::udma_spim_0::REG_TX_CFG, foo);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_TX_CFG_R_TX_DATASIZE);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_TX_CFG_R_TX_DATASIZE, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_TX_CFG_R_TX_DATASIZE, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_TX_CFG_R_TX_DATASIZE, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_TX_CFG_R_TX_DATASIZE, baz);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_TX_CFG_R_TX_EN);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_TX_CFG_R_TX_EN, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_TX_CFG_R_TX_CLR);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_TX_CFG_R_TX_CLR, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_spim_0_csr.r(utra::udma_spim_0::REG_CMD_SADDR);
+        udma_spim_0_csr.wo(utra::udma_spim_0::REG_CMD_SADDR, foo);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_CMD_SADDR_R_CMD_STARTADDR);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_CMD_SADDR_R_CMD_STARTADDR, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_CMD_SADDR_R_CMD_STARTADDR, baz);
+
+        let foo = udma_spim_0_csr.r(utra::udma_spim_0::REG_CMD_SIZE);
+        udma_spim_0_csr.wo(utra::udma_spim_0::REG_CMD_SIZE, foo);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_CMD_SIZE_R_CMD_SIZE);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_CMD_SIZE_R_CMD_SIZE, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_CMD_SIZE_R_CMD_SIZE, baz);
+
+        let foo = udma_spim_0_csr.r(utra::udma_spim_0::REG_CMD_CFG);
+        udma_spim_0_csr.wo(utra::udma_spim_0::REG_CMD_CFG, foo);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_CMD_CFG_R_CMD_CONTINUOUS);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_CMD_CFG_R_CMD_CONTINUOUS, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_CMD_CFG_R_CMD_CONTINUOUS, baz);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_CMD_CFG_R_CMD_EN);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_CMD_CFG_R_CMD_EN, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_CMD_CFG_R_CMD_EN, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_CMD_CFG_R_CMD_EN, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_CMD_CFG_R_CMD_EN, baz);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_CMD_CFG_R_CMD_CLR);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_CMD_CFG_R_CMD_CLR, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_CMD_CFG_R_CMD_CLR, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_CMD_CFG_R_CMD_CLR, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_CMD_CFG_R_CMD_CLR, baz);
+
+        let foo = udma_spim_0_csr.r(utra::udma_spim_0::REG_STATUS);
+        udma_spim_0_csr.wo(utra::udma_spim_0::REG_STATUS, foo);
+        let bar = udma_spim_0_csr.rf(utra::udma_spim_0::REG_STATUS_STATUS_I);
+        udma_spim_0_csr.rmwf(utra::udma_spim_0::REG_STATUS_STATUS_I, bar);
+        let mut baz = udma_spim_0_csr.zf(utra::udma_spim_0::REG_STATUS_STATUS_I, bar);
+        baz |= udma_spim_0_csr.ms(utra::udma_spim_0::REG_STATUS_STATUS_I, 1);
+        udma_spim_0_csr.wfo(utra::udma_spim_0::REG_STATUS_STATUS_I, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_spim_1_csr() {
+        use super::*;
+        let mut udma_spim_1_csr = CSR::new(HW_UDMA_SPIM_1_BASE as *mut u32);
+
+        let foo = udma_spim_1_csr.r(utra::udma_spim_1::REG_RX_SADDR);
+        udma_spim_1_csr.wo(utra::udma_spim_1::REG_RX_SADDR, foo);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_spim_1_csr.r(utra::udma_spim_1::REG_RX_SIZE);
+        udma_spim_1_csr.wo(utra::udma_spim_1::REG_RX_SIZE, foo);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_RX_SIZE_R_RX_SIZE);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_spim_1_csr.r(utra::udma_spim_1::REG_RX_CFG);
+        udma_spim_1_csr.wo(utra::udma_spim_1::REG_RX_CFG, foo);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_RX_CFG_R_RX_DATASIZE);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_RX_CFG_R_RX_DATASIZE, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_RX_CFG_R_RX_DATASIZE, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_RX_CFG_R_RX_DATASIZE, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_RX_CFG_R_RX_DATASIZE, baz);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_RX_CFG_R_RX_EN);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_RX_CFG_R_RX_EN, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_RX_CFG_R_RX_CLR);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_RX_CFG_R_RX_CLR, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_spim_1_csr.r(utra::udma_spim_1::REG_TX_SADDR);
+        udma_spim_1_csr.wo(utra::udma_spim_1::REG_TX_SADDR, foo);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_spim_1_csr.r(utra::udma_spim_1::REG_TX_SIZE);
+        udma_spim_1_csr.wo(utra::udma_spim_1::REG_TX_SIZE, foo);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_TX_SIZE_R_TX_SIZE);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_spim_1_csr.r(utra::udma_spim_1::REG_TX_CFG);
+        udma_spim_1_csr.wo(utra::udma_spim_1::REG_TX_CFG, foo);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_TX_CFG_R_TX_DATASIZE);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_TX_CFG_R_TX_DATASIZE, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_TX_CFG_R_TX_DATASIZE, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_TX_CFG_R_TX_DATASIZE, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_TX_CFG_R_TX_DATASIZE, baz);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_TX_CFG_R_TX_EN);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_TX_CFG_R_TX_EN, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_TX_CFG_R_TX_CLR);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_TX_CFG_R_TX_CLR, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_spim_1_csr.r(utra::udma_spim_1::REG_CMD_SADDR);
+        udma_spim_1_csr.wo(utra::udma_spim_1::REG_CMD_SADDR, foo);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_CMD_SADDR_R_CMD_STARTADDR);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_CMD_SADDR_R_CMD_STARTADDR, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_CMD_SADDR_R_CMD_STARTADDR, baz);
+
+        let foo = udma_spim_1_csr.r(utra::udma_spim_1::REG_CMD_SIZE);
+        udma_spim_1_csr.wo(utra::udma_spim_1::REG_CMD_SIZE, foo);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_CMD_SIZE_R_CMD_SIZE);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_CMD_SIZE_R_CMD_SIZE, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_CMD_SIZE_R_CMD_SIZE, baz);
+
+        let foo = udma_spim_1_csr.r(utra::udma_spim_1::REG_CMD_CFG);
+        udma_spim_1_csr.wo(utra::udma_spim_1::REG_CMD_CFG, foo);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_CMD_CFG_R_CMD_CONTINUOUS);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_CMD_CFG_R_CMD_CONTINUOUS, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_CMD_CFG_R_CMD_CONTINUOUS, baz);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_CMD_CFG_R_CMD_EN);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_CMD_CFG_R_CMD_EN, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_CMD_CFG_R_CMD_EN, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_CMD_CFG_R_CMD_EN, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_CMD_CFG_R_CMD_EN, baz);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_CMD_CFG_R_CMD_CLR);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_CMD_CFG_R_CMD_CLR, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_CMD_CFG_R_CMD_CLR, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_CMD_CFG_R_CMD_CLR, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_CMD_CFG_R_CMD_CLR, baz);
+
+        let foo = udma_spim_1_csr.r(utra::udma_spim_1::REG_STATUS);
+        udma_spim_1_csr.wo(utra::udma_spim_1::REG_STATUS, foo);
+        let bar = udma_spim_1_csr.rf(utra::udma_spim_1::REG_STATUS_STATUS_I);
+        udma_spim_1_csr.rmwf(utra::udma_spim_1::REG_STATUS_STATUS_I, bar);
+        let mut baz = udma_spim_1_csr.zf(utra::udma_spim_1::REG_STATUS_STATUS_I, bar);
+        baz |= udma_spim_1_csr.ms(utra::udma_spim_1::REG_STATUS_STATUS_I, 1);
+        udma_spim_1_csr.wfo(utra::udma_spim_1::REG_STATUS_STATUS_I, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_spim_2_csr() {
+        use super::*;
+        let mut udma_spim_2_csr = CSR::new(HW_UDMA_SPIM_2_BASE as *mut u32);
+
+        let foo = udma_spim_2_csr.r(utra::udma_spim_2::REG_RX_SADDR);
+        udma_spim_2_csr.wo(utra::udma_spim_2::REG_RX_SADDR, foo);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_spim_2_csr.r(utra::udma_spim_2::REG_RX_SIZE);
+        udma_spim_2_csr.wo(utra::udma_spim_2::REG_RX_SIZE, foo);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_RX_SIZE_R_RX_SIZE);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_spim_2_csr.r(utra::udma_spim_2::REG_RX_CFG);
+        udma_spim_2_csr.wo(utra::udma_spim_2::REG_RX_CFG, foo);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_RX_CFG_R_RX_DATASIZE);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_RX_CFG_R_RX_DATASIZE, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_RX_CFG_R_RX_DATASIZE, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_RX_CFG_R_RX_DATASIZE, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_RX_CFG_R_RX_DATASIZE, baz);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_RX_CFG_R_RX_EN);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_RX_CFG_R_RX_EN, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_RX_CFG_R_RX_CLR);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_RX_CFG_R_RX_CLR, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_spim_2_csr.r(utra::udma_spim_2::REG_TX_SADDR);
+        udma_spim_2_csr.wo(utra::udma_spim_2::REG_TX_SADDR, foo);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_spim_2_csr.r(utra::udma_spim_2::REG_TX_SIZE);
+        udma_spim_2_csr.wo(utra::udma_spim_2::REG_TX_SIZE, foo);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_TX_SIZE_R_TX_SIZE);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_spim_2_csr.r(utra::udma_spim_2::REG_TX_CFG);
+        udma_spim_2_csr.wo(utra::udma_spim_2::REG_TX_CFG, foo);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_TX_CFG_R_TX_DATASIZE);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_TX_CFG_R_TX_DATASIZE, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_TX_CFG_R_TX_DATASIZE, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_TX_CFG_R_TX_DATASIZE, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_TX_CFG_R_TX_DATASIZE, baz);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_TX_CFG_R_TX_EN);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_TX_CFG_R_TX_EN, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_TX_CFG_R_TX_CLR);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_TX_CFG_R_TX_CLR, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_spim_2_csr.r(utra::udma_spim_2::REG_CMD_SADDR);
+        udma_spim_2_csr.wo(utra::udma_spim_2::REG_CMD_SADDR, foo);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_CMD_SADDR_R_CMD_STARTADDR);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_CMD_SADDR_R_CMD_STARTADDR, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_CMD_SADDR_R_CMD_STARTADDR, baz);
+
+        let foo = udma_spim_2_csr.r(utra::udma_spim_2::REG_CMD_SIZE);
+        udma_spim_2_csr.wo(utra::udma_spim_2::REG_CMD_SIZE, foo);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_CMD_SIZE_R_CMD_SIZE);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_CMD_SIZE_R_CMD_SIZE, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_CMD_SIZE_R_CMD_SIZE, baz);
+
+        let foo = udma_spim_2_csr.r(utra::udma_spim_2::REG_CMD_CFG);
+        udma_spim_2_csr.wo(utra::udma_spim_2::REG_CMD_CFG, foo);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_CMD_CFG_R_CMD_CONTINUOUS);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_CMD_CFG_R_CMD_CONTINUOUS, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_CMD_CFG_R_CMD_CONTINUOUS, baz);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_CMD_CFG_R_CMD_EN);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_CMD_CFG_R_CMD_EN, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_CMD_CFG_R_CMD_EN, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_CMD_CFG_R_CMD_EN, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_CMD_CFG_R_CMD_EN, baz);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_CMD_CFG_R_CMD_CLR);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_CMD_CFG_R_CMD_CLR, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_CMD_CFG_R_CMD_CLR, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_CMD_CFG_R_CMD_CLR, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_CMD_CFG_R_CMD_CLR, baz);
+
+        let foo = udma_spim_2_csr.r(utra::udma_spim_2::REG_STATUS);
+        udma_spim_2_csr.wo(utra::udma_spim_2::REG_STATUS, foo);
+        let bar = udma_spim_2_csr.rf(utra::udma_spim_2::REG_STATUS_STATUS_I);
+        udma_spim_2_csr.rmwf(utra::udma_spim_2::REG_STATUS_STATUS_I, bar);
+        let mut baz = udma_spim_2_csr.zf(utra::udma_spim_2::REG_STATUS_STATUS_I, bar);
+        baz |= udma_spim_2_csr.ms(utra::udma_spim_2::REG_STATUS_STATUS_I, 1);
+        udma_spim_2_csr.wfo(utra::udma_spim_2::REG_STATUS_STATUS_I, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_spim_3_csr() {
+        use super::*;
+        let mut udma_spim_3_csr = CSR::new(HW_UDMA_SPIM_3_BASE as *mut u32);
+
+        let foo = udma_spim_3_csr.r(utra::udma_spim_3::REG_RX_SADDR);
+        udma_spim_3_csr.wo(utra::udma_spim_3::REG_RX_SADDR, foo);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_spim_3_csr.r(utra::udma_spim_3::REG_RX_SIZE);
+        udma_spim_3_csr.wo(utra::udma_spim_3::REG_RX_SIZE, foo);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_RX_SIZE_R_RX_SIZE);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_spim_3_csr.r(utra::udma_spim_3::REG_RX_CFG);
+        udma_spim_3_csr.wo(utra::udma_spim_3::REG_RX_CFG, foo);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_RX_CFG_R_RX_DATASIZE);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_RX_CFG_R_RX_DATASIZE, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_RX_CFG_R_RX_DATASIZE, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_RX_CFG_R_RX_DATASIZE, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_RX_CFG_R_RX_DATASIZE, baz);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_RX_CFG_R_RX_EN);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_RX_CFG_R_RX_EN, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_RX_CFG_R_RX_CLR);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_RX_CFG_R_RX_CLR, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_spim_3_csr.r(utra::udma_spim_3::REG_TX_SADDR);
+        udma_spim_3_csr.wo(utra::udma_spim_3::REG_TX_SADDR, foo);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_spim_3_csr.r(utra::udma_spim_3::REG_TX_SIZE);
+        udma_spim_3_csr.wo(utra::udma_spim_3::REG_TX_SIZE, foo);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_TX_SIZE_R_TX_SIZE);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_spim_3_csr.r(utra::udma_spim_3::REG_TX_CFG);
+        udma_spim_3_csr.wo(utra::udma_spim_3::REG_TX_CFG, foo);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_TX_CFG_R_TX_DATASIZE);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_TX_CFG_R_TX_DATASIZE, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_TX_CFG_R_TX_DATASIZE, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_TX_CFG_R_TX_DATASIZE, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_TX_CFG_R_TX_DATASIZE, baz);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_TX_CFG_R_TX_EN);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_TX_CFG_R_TX_EN, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_TX_CFG_R_TX_CLR);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_TX_CFG_R_TX_CLR, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_spim_3_csr.r(utra::udma_spim_3::REG_CMD_SADDR);
+        udma_spim_3_csr.wo(utra::udma_spim_3::REG_CMD_SADDR, foo);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_CMD_SADDR_R_CMD_STARTADDR);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_CMD_SADDR_R_CMD_STARTADDR, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_CMD_SADDR_R_CMD_STARTADDR, baz);
+
+        let foo = udma_spim_3_csr.r(utra::udma_spim_3::REG_CMD_SIZE);
+        udma_spim_3_csr.wo(utra::udma_spim_3::REG_CMD_SIZE, foo);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_CMD_SIZE_R_CMD_SIZE);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_CMD_SIZE_R_CMD_SIZE, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_CMD_SIZE_R_CMD_SIZE, baz);
+
+        let foo = udma_spim_3_csr.r(utra::udma_spim_3::REG_CMD_CFG);
+        udma_spim_3_csr.wo(utra::udma_spim_3::REG_CMD_CFG, foo);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_CMD_CFG_R_CMD_CONTINUOUS);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_CMD_CFG_R_CMD_CONTINUOUS, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_CMD_CFG_R_CMD_CONTINUOUS, baz);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_CMD_CFG_R_CMD_EN);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_CMD_CFG_R_CMD_EN, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_CMD_CFG_R_CMD_EN, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_CMD_CFG_R_CMD_EN, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_CMD_CFG_R_CMD_EN, baz);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_CMD_CFG_R_CMD_CLR);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_CMD_CFG_R_CMD_CLR, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_CMD_CFG_R_CMD_CLR, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_CMD_CFG_R_CMD_CLR, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_CMD_CFG_R_CMD_CLR, baz);
+
+        let foo = udma_spim_3_csr.r(utra::udma_spim_3::REG_STATUS);
+        udma_spim_3_csr.wo(utra::udma_spim_3::REG_STATUS, foo);
+        let bar = udma_spim_3_csr.rf(utra::udma_spim_3::REG_STATUS_STATUS_I);
+        udma_spim_3_csr.rmwf(utra::udma_spim_3::REG_STATUS_STATUS_I, bar);
+        let mut baz = udma_spim_3_csr.zf(utra::udma_spim_3::REG_STATUS_STATUS_I, bar);
+        baz |= udma_spim_3_csr.ms(utra::udma_spim_3::REG_STATUS_STATUS_I, 1);
+        udma_spim_3_csr.wfo(utra::udma_spim_3::REG_STATUS_STATUS_I, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_i2c_0_csr() {
+        use super::*;
+        let mut udma_i2c_0_csr = CSR::new(HW_UDMA_I2C_0_BASE as *mut u32);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_RX_SADDR);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_RX_SADDR, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_RX_SIZE);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_RX_SIZE, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_RX_SIZE_R_RX_SIZE);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_RX_CFG);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_RX_CFG, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_RX_CFG_R_RX_EN);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_RX_CFG_R_RX_EN, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_RX_CFG_R_RX_CLR);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_RX_CFG_R_RX_CLR, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_TX_SADDR);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_TX_SADDR, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_TX_SIZE);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_TX_SIZE, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_TX_SIZE_R_TX_SIZE);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_TX_CFG);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_TX_CFG, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_TX_CFG_R_TX_EN);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_TX_CFG_R_TX_EN, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_TX_CFG_R_TX_CLR);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_TX_CFG_R_TX_CLR, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_CMD_SADDR);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_CMD_SADDR, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_CMD_SADDR_R_CMD_STARTADDR);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_CMD_SADDR_R_CMD_STARTADDR, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_CMD_SADDR_R_CMD_STARTADDR, baz);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_CMD_SIZE);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_CMD_SIZE, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_CMD_SIZE_R_CMD_SIZE);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_CMD_SIZE_R_CMD_SIZE, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_CMD_SIZE_R_CMD_SIZE, baz);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_CMD_CFG);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_CMD_CFG, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CONTINUOUS);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CONTINUOUS, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CONTINUOUS, baz);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_EN);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_EN, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_EN, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_EN, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_EN, baz);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CLR);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CLR, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CLR, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CLR, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_CMD_CFG_R_CMD_CLR, baz);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_STATUS);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_STATUS, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_STATUS_R_BUSY);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_STATUS_R_BUSY, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_STATUS_R_BUSY, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_STATUS_R_BUSY, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_STATUS_R_BUSY, baz);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_STATUS_R_AL);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_STATUS_R_AL, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_STATUS_R_AL, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_STATUS_R_AL, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_STATUS_R_AL, baz);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_SETUP);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_SETUP, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_SETUP_R_DO_RST);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_SETUP_R_DO_RST, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_SETUP_R_DO_RST, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_SETUP_R_DO_RST, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_SETUP_R_DO_RST, baz);
+
+        let foo = udma_i2c_0_csr.r(utra::udma_i2c_0::REG_ACK);
+        udma_i2c_0_csr.wo(utra::udma_i2c_0::REG_ACK, foo);
+        let bar = udma_i2c_0_csr.rf(utra::udma_i2c_0::REG_ACK_R_NACK);
+        udma_i2c_0_csr.rmwf(utra::udma_i2c_0::REG_ACK_R_NACK, bar);
+        let mut baz = udma_i2c_0_csr.zf(utra::udma_i2c_0::REG_ACK_R_NACK, bar);
+        baz |= udma_i2c_0_csr.ms(utra::udma_i2c_0::REG_ACK_R_NACK, 1);
+        udma_i2c_0_csr.wfo(utra::udma_i2c_0::REG_ACK_R_NACK, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_i2c_1_csr() {
+        use super::*;
+        let mut udma_i2c_1_csr = CSR::new(HW_UDMA_I2C_1_BASE as *mut u32);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_RX_SADDR);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_RX_SADDR, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_RX_SIZE);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_RX_SIZE, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_RX_SIZE_R_RX_SIZE);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_RX_CFG);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_RX_CFG, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_RX_CFG_R_RX_EN);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_RX_CFG_R_RX_EN, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_RX_CFG_R_RX_CLR);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_RX_CFG_R_RX_CLR, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_TX_SADDR);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_TX_SADDR, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_TX_SIZE);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_TX_SIZE, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_TX_SIZE_R_TX_SIZE);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_TX_CFG);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_TX_CFG, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_TX_CFG_R_TX_EN);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_TX_CFG_R_TX_EN, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_TX_CFG_R_TX_CLR);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_TX_CFG_R_TX_CLR, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_CMD_SADDR);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_CMD_SADDR, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_CMD_SADDR_R_CMD_STARTADDR);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_CMD_SADDR_R_CMD_STARTADDR, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_CMD_SADDR_R_CMD_STARTADDR, baz);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_CMD_SIZE);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_CMD_SIZE, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_CMD_SIZE_R_CMD_SIZE);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_CMD_SIZE_R_CMD_SIZE, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_CMD_SIZE_R_CMD_SIZE, baz);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_CMD_CFG);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_CMD_CFG, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CONTINUOUS);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CONTINUOUS, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CONTINUOUS, baz);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_EN);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_EN, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_EN, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_EN, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_EN, baz);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CLR);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CLR, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CLR, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CLR, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_CMD_CFG_R_CMD_CLR, baz);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_STATUS);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_STATUS, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_STATUS_R_BUSY);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_STATUS_R_BUSY, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_STATUS_R_BUSY, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_STATUS_R_BUSY, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_STATUS_R_BUSY, baz);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_STATUS_R_AL);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_STATUS_R_AL, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_STATUS_R_AL, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_STATUS_R_AL, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_STATUS_R_AL, baz);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_SETUP);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_SETUP, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_SETUP_R_DO_RST);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_SETUP_R_DO_RST, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_SETUP_R_DO_RST, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_SETUP_R_DO_RST, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_SETUP_R_DO_RST, baz);
+
+        let foo = udma_i2c_1_csr.r(utra::udma_i2c_1::REG_ACK);
+        udma_i2c_1_csr.wo(utra::udma_i2c_1::REG_ACK, foo);
+        let bar = udma_i2c_1_csr.rf(utra::udma_i2c_1::REG_ACK_R_NACK);
+        udma_i2c_1_csr.rmwf(utra::udma_i2c_1::REG_ACK_R_NACK, bar);
+        let mut baz = udma_i2c_1_csr.zf(utra::udma_i2c_1::REG_ACK_R_NACK, bar);
+        baz |= udma_i2c_1_csr.ms(utra::udma_i2c_1::REG_ACK_R_NACK, 1);
+        udma_i2c_1_csr.wfo(utra::udma_i2c_1::REG_ACK_R_NACK, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_i2c_2_csr() {
+        use super::*;
+        let mut udma_i2c_2_csr = CSR::new(HW_UDMA_I2C_2_BASE as *mut u32);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_RX_SADDR);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_RX_SADDR, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_RX_SIZE);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_RX_SIZE, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_RX_SIZE_R_RX_SIZE);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_RX_CFG);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_RX_CFG, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_RX_CFG_R_RX_EN);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_RX_CFG_R_RX_EN, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_RX_CFG_R_RX_CLR);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_RX_CFG_R_RX_CLR, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_TX_SADDR);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_TX_SADDR, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_TX_SIZE);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_TX_SIZE, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_TX_SIZE_R_TX_SIZE);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_TX_CFG);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_TX_CFG, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_TX_CFG_R_TX_EN);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_TX_CFG_R_TX_EN, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_TX_CFG_R_TX_CLR);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_TX_CFG_R_TX_CLR, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_CMD_SADDR);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_CMD_SADDR, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_CMD_SADDR_R_CMD_STARTADDR);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_CMD_SADDR_R_CMD_STARTADDR, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_CMD_SADDR_R_CMD_STARTADDR, baz);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_CMD_SIZE);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_CMD_SIZE, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_CMD_SIZE_R_CMD_SIZE);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_CMD_SIZE_R_CMD_SIZE, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_CMD_SIZE_R_CMD_SIZE, baz);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_CMD_CFG);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_CMD_CFG, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CONTINUOUS);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CONTINUOUS, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CONTINUOUS, baz);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_EN);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_EN, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_EN, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_EN, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_EN, baz);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CLR);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CLR, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CLR, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CLR, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_CMD_CFG_R_CMD_CLR, baz);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_STATUS);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_STATUS, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_STATUS_R_BUSY);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_STATUS_R_BUSY, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_STATUS_R_BUSY, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_STATUS_R_BUSY, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_STATUS_R_BUSY, baz);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_STATUS_R_AL);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_STATUS_R_AL, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_STATUS_R_AL, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_STATUS_R_AL, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_STATUS_R_AL, baz);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_SETUP);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_SETUP, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_SETUP_R_DO_RST);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_SETUP_R_DO_RST, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_SETUP_R_DO_RST, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_SETUP_R_DO_RST, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_SETUP_R_DO_RST, baz);
+
+        let foo = udma_i2c_2_csr.r(utra::udma_i2c_2::REG_ACK);
+        udma_i2c_2_csr.wo(utra::udma_i2c_2::REG_ACK, foo);
+        let bar = udma_i2c_2_csr.rf(utra::udma_i2c_2::REG_ACK_R_NACK);
+        udma_i2c_2_csr.rmwf(utra::udma_i2c_2::REG_ACK_R_NACK, bar);
+        let mut baz = udma_i2c_2_csr.zf(utra::udma_i2c_2::REG_ACK_R_NACK, bar);
+        baz |= udma_i2c_2_csr.ms(utra::udma_i2c_2::REG_ACK_R_NACK, 1);
+        udma_i2c_2_csr.wfo(utra::udma_i2c_2::REG_ACK_R_NACK, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_i2c_3_csr() {
+        use super::*;
+        let mut udma_i2c_3_csr = CSR::new(HW_UDMA_I2C_3_BASE as *mut u32);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_RX_SADDR);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_RX_SADDR, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_RX_SIZE);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_RX_SIZE, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_RX_SIZE_R_RX_SIZE);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_RX_CFG);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_RX_CFG, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_RX_CFG_R_RX_EN);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_RX_CFG_R_RX_EN, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_RX_CFG_R_RX_CLR);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_RX_CFG_R_RX_CLR, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_TX_SADDR);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_TX_SADDR, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_TX_SIZE);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_TX_SIZE, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_TX_SIZE_R_TX_SIZE);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_TX_CFG);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_TX_CFG, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_TX_CFG_R_TX_EN);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_TX_CFG_R_TX_EN, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_TX_CFG_R_TX_CLR);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_TX_CFG_R_TX_CLR, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_CMD_SADDR);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_CMD_SADDR, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_CMD_SADDR_R_CMD_STARTADDR);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_CMD_SADDR_R_CMD_STARTADDR, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_CMD_SADDR_R_CMD_STARTADDR, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_CMD_SADDR_R_CMD_STARTADDR, baz);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_CMD_SIZE);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_CMD_SIZE, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_CMD_SIZE_R_CMD_SIZE);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_CMD_SIZE_R_CMD_SIZE, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_CMD_SIZE_R_CMD_SIZE, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_CMD_SIZE_R_CMD_SIZE, baz);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_CMD_CFG);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_CMD_CFG, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CONTINUOUS);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CONTINUOUS, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CONTINUOUS, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CONTINUOUS, baz);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_EN);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_EN, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_EN, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_EN, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_EN, baz);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CLR);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CLR, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CLR, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CLR, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_CMD_CFG_R_CMD_CLR, baz);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_STATUS);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_STATUS, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_STATUS_R_BUSY);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_STATUS_R_BUSY, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_STATUS_R_BUSY, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_STATUS_R_BUSY, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_STATUS_R_BUSY, baz);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_STATUS_R_AL);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_STATUS_R_AL, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_STATUS_R_AL, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_STATUS_R_AL, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_STATUS_R_AL, baz);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_SETUP);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_SETUP, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_SETUP_R_DO_RST);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_SETUP_R_DO_RST, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_SETUP_R_DO_RST, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_SETUP_R_DO_RST, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_SETUP_R_DO_RST, baz);
+
+        let foo = udma_i2c_3_csr.r(utra::udma_i2c_3::REG_ACK);
+        udma_i2c_3_csr.wo(utra::udma_i2c_3::REG_ACK, foo);
+        let bar = udma_i2c_3_csr.rf(utra::udma_i2c_3::REG_ACK_R_NACK);
+        udma_i2c_3_csr.rmwf(utra::udma_i2c_3::REG_ACK_R_NACK, bar);
+        let mut baz = udma_i2c_3_csr.zf(utra::udma_i2c_3::REG_ACK_R_NACK, bar);
+        baz |= udma_i2c_3_csr.ms(utra::udma_i2c_3::REG_ACK_R_NACK, 1);
+        udma_i2c_3_csr.wfo(utra::udma_i2c_3::REG_ACK_R_NACK, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_sdio_csr() {
+        use super::*;
+        let mut udma_sdio_csr = CSR::new(HW_UDMA_SDIO_BASE as *mut u32);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_RX_SADDR);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_RX_SADDR, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_RX_SIZE);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_RX_SIZE, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_RX_SIZE_R_RX_SIZE);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_RX_CFG);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_RX_CFG, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_RX_CFG_R_RX_EN);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_RX_CFG_R_RX_EN, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_RX_CFG_R_RX_CLR);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_RX_CFG_R_RX_CLR, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_TX_SADDR);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_TX_SADDR, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_TX_SIZE);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_TX_SIZE, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_TX_SIZE_R_TX_SIZE);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_TX_CFG);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_TX_CFG, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_TX_CFG_R_TX_EN);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_TX_CFG_R_TX_EN, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_TX_CFG_R_TX_CLR);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_TX_CFG_R_TX_CLR, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_CMD_OP);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_CMD_OP, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_CMD_OP_R_CMD_RSP_TYPE);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_CMD_OP_R_CMD_RSP_TYPE, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_CMD_OP_R_CMD_RSP_TYPE, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_CMD_OP_R_CMD_RSP_TYPE, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_CMD_OP_R_CMD_RSP_TYPE, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_CMD_OP_R_CMD_OP);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_CMD_OP_R_CMD_OP, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_CMD_OP_R_CMD_OP, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_CMD_OP_R_CMD_OP, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_CMD_OP_R_CMD_OP, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_DATA_SETUP);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_DATA_SETUP, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_EN);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_EN, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_EN, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_DATA_SETUP_R_DATA_EN, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_DATA_SETUP_R_DATA_EN, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_RWN);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_RWN, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_RWN, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_DATA_SETUP_R_DATA_RWN, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_DATA_SETUP_R_DATA_RWN, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_QUAD);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_QUAD, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_QUAD, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_DATA_SETUP_R_DATA_QUAD, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_DATA_SETUP_R_DATA_QUAD, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_BLOCK_NUM);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_BLOCK_NUM, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_BLOCK_NUM, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_DATA_SETUP_R_DATA_BLOCK_NUM, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_DATA_SETUP_R_DATA_BLOCK_NUM, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_BLOCK_SIZE);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_BLOCK_SIZE, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_DATA_SETUP_R_DATA_BLOCK_SIZE, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_DATA_SETUP_R_DATA_BLOCK_SIZE, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_DATA_SETUP_R_DATA_BLOCK_SIZE, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_START);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_START, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_START_R_SDIO_START);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_START_R_SDIO_START, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_START_R_SDIO_START, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_START_R_SDIO_START, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_START_R_SDIO_START, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_RSP0);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_RSP0, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_RSP0_CFG_RSP_DATA_I_31_0);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_RSP0_CFG_RSP_DATA_I_31_0, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_RSP0_CFG_RSP_DATA_I_31_0, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_RSP0_CFG_RSP_DATA_I_31_0, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_RSP0_CFG_RSP_DATA_I_31_0, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_RSP1);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_RSP1, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_RSP1_CFG_RSP_DATA_I_63_32);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_RSP1_CFG_RSP_DATA_I_63_32, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_RSP1_CFG_RSP_DATA_I_63_32, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_RSP1_CFG_RSP_DATA_I_63_32, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_RSP1_CFG_RSP_DATA_I_63_32, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_RSP2);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_RSP2, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_RSP2_CFG_RSP_DATA_I_95_64);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_RSP2_CFG_RSP_DATA_I_95_64, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_RSP2_CFG_RSP_DATA_I_95_64, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_RSP2_CFG_RSP_DATA_I_95_64, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_RSP2_CFG_RSP_DATA_I_95_64, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_RSP3);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_RSP3, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_RSP3_CFG_RSP_DATA_I_127_96);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_RSP3_CFG_RSP_DATA_I_127_96, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_RSP3_CFG_RSP_DATA_I_127_96, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_RSP3_CFG_RSP_DATA_I_127_96, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_RSP3_CFG_RSP_DATA_I_127_96, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_CLK_DIV);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_CLK_DIV, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_CLK_DIV_R_CLK_DIV_DATA);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_CLK_DIV_R_CLK_DIV_DATA, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_CLK_DIV_R_CLK_DIV_DATA, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_CLK_DIV_R_CLK_DIV_DATA, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_CLK_DIV_R_CLK_DIV_DATA, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_CLK_DIV_R_CLK_DIV_VALID);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_CLK_DIV_R_CLK_DIV_VALID, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_CLK_DIV_R_CLK_DIV_VALID, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_CLK_DIV_R_CLK_DIV_VALID, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_CLK_DIV_R_CLK_DIV_VALID, baz);
+
+        let foo = udma_sdio_csr.r(utra::udma_sdio::REG_STATUS);
+        udma_sdio_csr.wo(utra::udma_sdio::REG_STATUS, foo);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_STATUS_R_EOT);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_STATUS_R_EOT, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_STATUS_R_EOT, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_STATUS_R_EOT, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_STATUS_R_EOT, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_STATUS_R_ERR);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_STATUS_R_ERR, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_STATUS_R_ERR, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_STATUS_R_ERR, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_STATUS_R_ERR, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_i2s_csr() {
+        use super::*;
+        let mut udma_i2s_csr = CSR::new(HW_UDMA_I2S_BASE as *mut u32);
+
+        let foo = udma_i2s_csr.r(utra::udma_i2s::REG_RX_SADDR);
+        udma_i2s_csr.wo(utra::udma_i2s::REG_RX_SADDR, foo);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_i2s_csr.r(utra::udma_i2s::REG_RX_SIZE);
+        udma_i2s_csr.wo(utra::udma_i2s::REG_RX_SIZE, foo);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_RX_SIZE_R_RX_SIZE);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_i2s_csr.r(utra::udma_i2s::REG_RX_CFG);
+        udma_i2s_csr.wo(utra::udma_i2s::REG_RX_CFG, foo);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_RX_CFG_R_RX_DATASIZE);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_RX_CFG_R_RX_DATASIZE, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_RX_CFG_R_RX_DATASIZE, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_RX_CFG_R_RX_DATASIZE, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_RX_CFG_R_RX_DATASIZE, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_RX_CFG_R_RX_EN);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_RX_CFG_R_RX_EN, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_RX_CFG_R_RX_CLR);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_RX_CFG_R_RX_CLR, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_i2s_csr.r(utra::udma_i2s::REG_TX_SADDR);
+        udma_i2s_csr.wo(utra::udma_i2s::REG_TX_SADDR, foo);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_i2s_csr.r(utra::udma_i2s::REG_TX_SIZE);
+        udma_i2s_csr.wo(utra::udma_i2s::REG_TX_SIZE, foo);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_TX_SIZE_R_TX_SIZE);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_i2s_csr.r(utra::udma_i2s::REG_TX_CFG);
+        udma_i2s_csr.wo(utra::udma_i2s::REG_TX_CFG, foo);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_TX_CFG_R_TX_DATASIZE);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_TX_CFG_R_TX_DATASIZE, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_TX_CFG_R_TX_DATASIZE, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_TX_CFG_R_TX_DATASIZE, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_TX_CFG_R_TX_DATASIZE, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_TX_CFG_R_TX_EN);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_TX_CFG_R_TX_EN, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_TX_CFG_R_TX_CLR);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_TX_CFG_R_TX_CLR, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_i2s_csr.r(utra::udma_i2s::REG_I2S_CLKCFG_SETUP);
+        udma_i2s_csr.wo(utra::udma_i2s::REG_I2S_CLKCFG_SETUP, foo);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_GEN_CLK_DIV);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_GEN_CLK_DIV, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_GEN_CLK_DIV, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_GEN_CLK_DIV, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_GEN_CLK_DIV, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_GEN_CLK_DIV);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_GEN_CLK_DIV, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_GEN_CLK_DIV, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_GEN_CLK_DIV, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_GEN_CLK_DIV, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_COMMON_GEN_CLK_DIV);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_COMMON_GEN_CLK_DIV, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_COMMON_GEN_CLK_DIV, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_COMMON_GEN_CLK_DIV, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_COMMON_GEN_CLK_DIV, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_CLK_EN);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_CLK_EN, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_CLK_EN, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_CLK_EN, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_CLK_EN, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_CLK_EN);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_CLK_EN, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_CLK_EN, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_CLK_EN, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_CLK_EN, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_PDM_CLK_EN);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_PDM_CLK_EN, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_PDM_CLK_EN, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_PDM_CLK_EN, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_PDM_CLK_EN, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_EXT);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_EXT, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_EXT, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_EXT, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_EXT, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_NUM);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_NUM, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_NUM, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_NUM, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_SLAVE_SEL_NUM, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_EXT);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_EXT, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_EXT, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_EXT, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_EXT, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_NUM);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_NUM, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_NUM, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_NUM, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_CLKCFG_SETUP_R_MASTER_SEL_NUM, baz);
+
+        let foo = udma_i2s_csr.r(utra::udma_i2s::REG_I2S_SLV_SETUP);
+        udma_i2s_csr.wo(utra::udma_i2s::REG_I2S_SLV_SETUP, foo);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_WORDS);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_WORDS, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_WORDS, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_WORDS, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_WORDS, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_BITS_WORD);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_BITS_WORD, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_BITS_WORD, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_BITS_WORD, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_BITS_WORD, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_LSB_FIRST);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_LSB_FIRST, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_LSB_FIRST, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_LSB_FIRST, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_LSB_FIRST, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_2CH);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_2CH, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_2CH, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_2CH, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_2CH, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_EN);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_EN, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_EN, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_EN, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_SLV_SETUP_R_SLAVE_I2S_EN, baz);
+
+        let foo = udma_i2s_csr.r(utra::udma_i2s::REG_I2S_MST_SETUP);
+        udma_i2s_csr.wo(utra::udma_i2s::REG_I2S_MST_SETUP, foo);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_WORDS);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_WORDS, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_WORDS, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_WORDS, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_WORDS, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_BITS_WORD);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_BITS_WORD, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_BITS_WORD, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_BITS_WORD, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_BITS_WORD, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_LSB_FIRST);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_LSB_FIRST, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_LSB_FIRST, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_LSB_FIRST, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_LSB_FIRST, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_2CH);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_2CH, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_2CH, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_2CH, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_2CH, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_EN);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_EN, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_EN, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_EN, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_MST_SETUP_R_MASTER_I2S_EN, baz);
+
+        let foo = udma_i2s_csr.r(utra::udma_i2s::REG_I2S_PDM_SETUP);
+        udma_i2s_csr.wo(utra::udma_i2s::REG_I2S_PDM_SETUP, foo);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_SHIFT);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_SHIFT, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_SHIFT, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_SHIFT, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_SHIFT, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_DECIMATION);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_DECIMATION, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_DECIMATION, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_DECIMATION, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_DECIMATION, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_MODE);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_MODE, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_MODE, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_MODE, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_MODE, baz);
+        let bar = udma_i2s_csr.rf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_EN);
+        udma_i2s_csr.rmwf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_EN, bar);
+        let mut baz = udma_i2s_csr.zf(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_EN, bar);
+        baz |= udma_i2s_csr.ms(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_EN, 1);
+        udma_i2s_csr.wfo(utra::udma_i2s::REG_I2S_PDM_SETUP_R_SLAVE_PDM_EN, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_camera_csr() {
+        use super::*;
+        let mut udma_camera_csr = CSR::new(HW_UDMA_CAMERA_BASE as *mut u32);
+
+        let foo = udma_camera_csr.r(utra::udma_camera::REG_RX_SADDR);
+        udma_camera_csr.wo(utra::udma_camera::REG_RX_SADDR, foo);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_camera_csr.r(utra::udma_camera::REG_RX_SIZE);
+        udma_camera_csr.wo(utra::udma_camera::REG_RX_SIZE, foo);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_RX_SIZE_R_RX_SIZE);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_camera_csr.r(utra::udma_camera::REG_RX_CFG);
+        udma_camera_csr.wo(utra::udma_camera::REG_RX_CFG, foo);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_RX_CFG_R_RX_DATASIZE);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_RX_CFG_R_RX_DATASIZE, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_RX_CFG_R_RX_DATASIZE, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_RX_CFG_R_RX_DATASIZE, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_RX_CFG_R_RX_DATASIZE, baz);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_RX_CFG_R_RX_EN);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_RX_CFG_R_RX_EN, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_RX_CFG_R_RX_CLR);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_RX_CFG_R_RX_CLR, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_camera_csr.r(utra::udma_camera::REG_CAM_CFG_GLOB);
+        udma_camera_csr.wo(utra::udma_camera::REG_CAM_CFG_GLOB, foo);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_CAM_CFG_GLOB_R_CAM_CFG);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_CAM_CFG_GLOB_R_CAM_CFG, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_CAM_CFG_GLOB_R_CAM_CFG, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_CAM_CFG_GLOB_R_CAM_CFG, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_CAM_CFG_GLOB_R_CAM_CFG, baz);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_CAM_CFG_GLOB_CFG_CAM_IP_EN_I);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_CAM_CFG_GLOB_CFG_CAM_IP_EN_I, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_CAM_CFG_GLOB_CFG_CAM_IP_EN_I, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_CAM_CFG_GLOB_CFG_CAM_IP_EN_I, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_CAM_CFG_GLOB_CFG_CAM_IP_EN_I, baz);
+
+        let foo = udma_camera_csr.r(utra::udma_camera::REG_CAM_CFG_LL);
+        udma_camera_csr.wo(utra::udma_camera::REG_CAM_CFG_LL, foo);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_CAM_CFG_LL_R_CAM_CFG_LL);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_CAM_CFG_LL_R_CAM_CFG_LL, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_CAM_CFG_LL_R_CAM_CFG_LL, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_CAM_CFG_LL_R_CAM_CFG_LL, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_CAM_CFG_LL_R_CAM_CFG_LL, baz);
+
+        let foo = udma_camera_csr.r(utra::udma_camera::REG_CAM_CFG_UR);
+        udma_camera_csr.wo(utra::udma_camera::REG_CAM_CFG_UR, foo);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_CAM_CFG_UR_R_CAM_CFG_UR);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_CAM_CFG_UR_R_CAM_CFG_UR, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_CAM_CFG_UR_R_CAM_CFG_UR, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_CAM_CFG_UR_R_CAM_CFG_UR, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_CAM_CFG_UR_R_CAM_CFG_UR, baz);
+
+        let foo = udma_camera_csr.r(utra::udma_camera::REG_CAM_CFG_SIZE);
+        udma_camera_csr.wo(utra::udma_camera::REG_CAM_CFG_SIZE, foo);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_CAM_CFG_SIZE_R_CAM_CFG_SIZE);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_CAM_CFG_SIZE_R_CAM_CFG_SIZE, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_CAM_CFG_SIZE_R_CAM_CFG_SIZE, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_CAM_CFG_SIZE_R_CAM_CFG_SIZE, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_CAM_CFG_SIZE_R_CAM_CFG_SIZE, baz);
+
+        let foo = udma_camera_csr.r(utra::udma_camera::REG_CAM_CFG_FILTER);
+        udma_camera_csr.wo(utra::udma_camera::REG_CAM_CFG_FILTER, foo);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_CAM_CFG_FILTER_R_CAM_CFG_FILTER);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_CAM_CFG_FILTER_R_CAM_CFG_FILTER, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_CAM_CFG_FILTER_R_CAM_CFG_FILTER, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_CAM_CFG_FILTER_R_CAM_CFG_FILTER, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_CAM_CFG_FILTER_R_CAM_CFG_FILTER, baz);
+
+        let foo = udma_camera_csr.r(utra::udma_camera::REG_CAM_VSYNC_POLARITY);
+        udma_camera_csr.wo(utra::udma_camera::REG_CAM_VSYNC_POLARITY, foo);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_CAM_VSYNC_POLARITY_R_CAM_VSYNC_POLARITY);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_CAM_VSYNC_POLARITY_R_CAM_VSYNC_POLARITY, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_CAM_VSYNC_POLARITY_R_CAM_VSYNC_POLARITY, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_CAM_VSYNC_POLARITY_R_CAM_VSYNC_POLARITY, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_CAM_VSYNC_POLARITY_R_CAM_VSYNC_POLARITY, baz);
+        let bar = udma_camera_csr.rf(utra::udma_camera::REG_CAM_VSYNC_POLARITY_R_CAM_HSYNC_POLARITY);
+        udma_camera_csr.rmwf(utra::udma_camera::REG_CAM_VSYNC_POLARITY_R_CAM_HSYNC_POLARITY, bar);
+        let mut baz = udma_camera_csr.zf(utra::udma_camera::REG_CAM_VSYNC_POLARITY_R_CAM_HSYNC_POLARITY, bar);
+        baz |= udma_camera_csr.ms(utra::udma_camera::REG_CAM_VSYNC_POLARITY_R_CAM_HSYNC_POLARITY, 1);
+        udma_camera_csr.wfo(utra::udma_camera::REG_CAM_VSYNC_POLARITY_R_CAM_HSYNC_POLARITY, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_filter_csr() {
+        use super::*;
+        let mut udma_filter_csr = CSR::new(HW_UDMA_FILTER_BASE as *mut u32);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_TX_CH0_ADD);
+        udma_filter_csr.wo(utra::udma_filter::REG_TX_CH0_ADD, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH0_ADD_R_FILTER_TX_START_ADDR_0);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH0_ADD_R_FILTER_TX_START_ADDR_0, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH0_ADD_R_FILTER_TX_START_ADDR_0, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH0_ADD_R_FILTER_TX_START_ADDR_0, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH0_ADD_R_FILTER_TX_START_ADDR_0, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_TX_CH0_CFG);
+        udma_filter_csr.wo(utra::udma_filter::REG_TX_CH0_CFG, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH0_CFG_R_FILTER_TX_DATASIZE_0);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH0_CFG_R_FILTER_TX_DATASIZE_0, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH0_CFG_R_FILTER_TX_DATASIZE_0, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH0_CFG_R_FILTER_TX_DATASIZE_0, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH0_CFG_R_FILTER_TX_DATASIZE_0, baz);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH0_CFG_R_FILTER_TX_MODE_0);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH0_CFG_R_FILTER_TX_MODE_0, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH0_CFG_R_FILTER_TX_MODE_0, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH0_CFG_R_FILTER_TX_MODE_0, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH0_CFG_R_FILTER_TX_MODE_0, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_TX_CH0_LEN0);
+        udma_filter_csr.wo(utra::udma_filter::REG_TX_CH0_LEN0, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH0_LEN0_R_FILTER_TX_LEN0_0);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH0_LEN0_R_FILTER_TX_LEN0_0, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH0_LEN0_R_FILTER_TX_LEN0_0, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH0_LEN0_R_FILTER_TX_LEN0_0, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH0_LEN0_R_FILTER_TX_LEN0_0, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_TX_CH0_LEN1);
+        udma_filter_csr.wo(utra::udma_filter::REG_TX_CH0_LEN1, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH0_LEN1_R_FILTER_TX_LEN1_0);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH0_LEN1_R_FILTER_TX_LEN1_0, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH0_LEN1_R_FILTER_TX_LEN1_0, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH0_LEN1_R_FILTER_TX_LEN1_0, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH0_LEN1_R_FILTER_TX_LEN1_0, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_TX_CH0_LEN2);
+        udma_filter_csr.wo(utra::udma_filter::REG_TX_CH0_LEN2, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH0_LEN2_R_FILTER_TX_LEN2_0);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH0_LEN2_R_FILTER_TX_LEN2_0, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH0_LEN2_R_FILTER_TX_LEN2_0, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH0_LEN2_R_FILTER_TX_LEN2_0, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH0_LEN2_R_FILTER_TX_LEN2_0, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_TX_CH1_ADD);
+        udma_filter_csr.wo(utra::udma_filter::REG_TX_CH1_ADD, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH1_ADD_R_FILTER_TX_START_ADDR_1);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH1_ADD_R_FILTER_TX_START_ADDR_1, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH1_ADD_R_FILTER_TX_START_ADDR_1, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH1_ADD_R_FILTER_TX_START_ADDR_1, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH1_ADD_R_FILTER_TX_START_ADDR_1, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_TX_CH1_CFG);
+        udma_filter_csr.wo(utra::udma_filter::REG_TX_CH1_CFG, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH1_CFG_R_FILTER_TX_DATASIZE_1);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH1_CFG_R_FILTER_TX_DATASIZE_1, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH1_CFG_R_FILTER_TX_DATASIZE_1, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH1_CFG_R_FILTER_TX_DATASIZE_1, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH1_CFG_R_FILTER_TX_DATASIZE_1, baz);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH1_CFG_R_FILTER_TX_MODE_1);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH1_CFG_R_FILTER_TX_MODE_1, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH1_CFG_R_FILTER_TX_MODE_1, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH1_CFG_R_FILTER_TX_MODE_1, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH1_CFG_R_FILTER_TX_MODE_1, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_TX_CH1_LEN0);
+        udma_filter_csr.wo(utra::udma_filter::REG_TX_CH1_LEN0, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH1_LEN0_R_FILTER_TX_LEN0_1);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH1_LEN0_R_FILTER_TX_LEN0_1, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH1_LEN0_R_FILTER_TX_LEN0_1, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH1_LEN0_R_FILTER_TX_LEN0_1, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH1_LEN0_R_FILTER_TX_LEN0_1, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_TX_CH1_LEN1);
+        udma_filter_csr.wo(utra::udma_filter::REG_TX_CH1_LEN1, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH1_LEN1_R_FILTER_TX_LEN1_1);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH1_LEN1_R_FILTER_TX_LEN1_1, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH1_LEN1_R_FILTER_TX_LEN1_1, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH1_LEN1_R_FILTER_TX_LEN1_1, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH1_LEN1_R_FILTER_TX_LEN1_1, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_TX_CH1_LEN2);
+        udma_filter_csr.wo(utra::udma_filter::REG_TX_CH1_LEN2, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_TX_CH1_LEN2_R_FILTER_TX_LEN2_1);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_TX_CH1_LEN2_R_FILTER_TX_LEN2_1, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_TX_CH1_LEN2_R_FILTER_TX_LEN2_1, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_TX_CH1_LEN2_R_FILTER_TX_LEN2_1, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_TX_CH1_LEN2_R_FILTER_TX_LEN2_1, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_RX_CH_ADD);
+        udma_filter_csr.wo(utra::udma_filter::REG_RX_CH_ADD, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_RX_CH_ADD_R_FILTER_RX_START_ADDR);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_RX_CH_ADD_R_FILTER_RX_START_ADDR, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_RX_CH_ADD_R_FILTER_RX_START_ADDR, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_RX_CH_ADD_R_FILTER_RX_START_ADDR, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_RX_CH_ADD_R_FILTER_RX_START_ADDR, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_RX_CH_CFG);
+        udma_filter_csr.wo(utra::udma_filter::REG_RX_CH_CFG, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_RX_CH_CFG_R_FILTER_RX_DATASIZE);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_RX_CH_CFG_R_FILTER_RX_DATASIZE, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_RX_CH_CFG_R_FILTER_RX_DATASIZE, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_RX_CH_CFG_R_FILTER_RX_DATASIZE, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_RX_CH_CFG_R_FILTER_RX_DATASIZE, baz);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_RX_CH_CFG_R_FILTER_RX_MODE);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_RX_CH_CFG_R_FILTER_RX_MODE, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_RX_CH_CFG_R_FILTER_RX_MODE, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_RX_CH_CFG_R_FILTER_RX_MODE, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_RX_CH_CFG_R_FILTER_RX_MODE, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_RX_CH_LEN0);
+        udma_filter_csr.wo(utra::udma_filter::REG_RX_CH_LEN0, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_RX_CH_LEN0_R_FILTER_RX_LEN0);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_RX_CH_LEN0_R_FILTER_RX_LEN0, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_RX_CH_LEN0_R_FILTER_RX_LEN0, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_RX_CH_LEN0_R_FILTER_RX_LEN0, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_RX_CH_LEN0_R_FILTER_RX_LEN0, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_RX_CH_LEN1);
+        udma_filter_csr.wo(utra::udma_filter::REG_RX_CH_LEN1, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_RX_CH_LEN1_R_FILTER_RX_LEN1);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_RX_CH_LEN1_R_FILTER_RX_LEN1, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_RX_CH_LEN1_R_FILTER_RX_LEN1, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_RX_CH_LEN1_R_FILTER_RX_LEN1, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_RX_CH_LEN1_R_FILTER_RX_LEN1, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_RX_CH_LEN2);
+        udma_filter_csr.wo(utra::udma_filter::REG_RX_CH_LEN2, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_RX_CH_LEN2_R_FILTER_RX_LEN2);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_RX_CH_LEN2_R_FILTER_RX_LEN2, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_RX_CH_LEN2_R_FILTER_RX_LEN2, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_RX_CH_LEN2_R_FILTER_RX_LEN2, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_RX_CH_LEN2_R_FILTER_RX_LEN2, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_AU_CFG);
+        udma_filter_csr.wo(utra::udma_filter::REG_AU_CFG, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_AU_CFG_R_AU_USE_SIGNED);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_AU_CFG_R_AU_USE_SIGNED, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_AU_CFG_R_AU_USE_SIGNED, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_AU_CFG_R_AU_USE_SIGNED, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_AU_CFG_R_AU_USE_SIGNED, baz);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_AU_CFG_R_AU_BYPASS);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_AU_CFG_R_AU_BYPASS, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_AU_CFG_R_AU_BYPASS, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_AU_CFG_R_AU_BYPASS, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_AU_CFG_R_AU_BYPASS, baz);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_AU_CFG_R_AU_MODE);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_AU_CFG_R_AU_MODE, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_AU_CFG_R_AU_MODE, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_AU_CFG_R_AU_MODE, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_AU_CFG_R_AU_MODE, baz);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_AU_CFG_R_AU_SHIFT);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_AU_CFG_R_AU_SHIFT, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_AU_CFG_R_AU_SHIFT, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_AU_CFG_R_AU_SHIFT, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_AU_CFG_R_AU_SHIFT, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_AU_REG0);
+        udma_filter_csr.wo(utra::udma_filter::REG_AU_REG0, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_AU_REG0_R_COMMIT_AU_REG0);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_AU_REG0_R_COMMIT_AU_REG0, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_AU_REG0_R_COMMIT_AU_REG0, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_AU_REG0_R_COMMIT_AU_REG0, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_AU_REG0_R_COMMIT_AU_REG0, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_AU_REG1);
+        udma_filter_csr.wo(utra::udma_filter::REG_AU_REG1, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_AU_REG1_R_COMMIT_AU_REG1);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_AU_REG1_R_COMMIT_AU_REG1, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_AU_REG1_R_COMMIT_AU_REG1, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_AU_REG1_R_COMMIT_AU_REG1, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_AU_REG1_R_COMMIT_AU_REG1, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_BINCU_TH);
+        udma_filter_csr.wo(utra::udma_filter::REG_BINCU_TH, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_BINCU_TH_R_COMMIT_BINCU_THRESHOLD);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_BINCU_TH_R_COMMIT_BINCU_THRESHOLD, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_BINCU_TH_R_COMMIT_BINCU_THRESHOLD, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_BINCU_TH_R_COMMIT_BINCU_THRESHOLD, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_BINCU_TH_R_COMMIT_BINCU_THRESHOLD, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_BINCU_CNT);
+        udma_filter_csr.wo(utra::udma_filter::REG_BINCU_CNT, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_BINCU_CNT_R_BINCU_COUNTER);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_BINCU_CNT_R_BINCU_COUNTER, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_BINCU_CNT_R_BINCU_COUNTER, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_BINCU_CNT_R_BINCU_COUNTER, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_BINCU_CNT_R_BINCU_COUNTER, baz);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_BINCU_CNT_R_BINCU_EN_COUNTER);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_BINCU_CNT_R_BINCU_EN_COUNTER, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_BINCU_CNT_R_BINCU_EN_COUNTER, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_BINCU_CNT_R_BINCU_EN_COUNTER, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_BINCU_CNT_R_BINCU_EN_COUNTER, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_BINCU_SETUP);
+        udma_filter_csr.wo(utra::udma_filter::REG_BINCU_SETUP, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_BINCU_SETUP_R_BINCU_DATASIZE);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_BINCU_SETUP_R_BINCU_DATASIZE, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_BINCU_SETUP_R_BINCU_DATASIZE, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_BINCU_SETUP_R_BINCU_DATASIZE, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_BINCU_SETUP_R_BINCU_DATASIZE, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_BINCU_VAL);
+        udma_filter_csr.wo(utra::udma_filter::REG_BINCU_VAL, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_BINCU_VAL_BINCU_COUNTER_I);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_BINCU_VAL_BINCU_COUNTER_I, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_BINCU_VAL_BINCU_COUNTER_I, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_BINCU_VAL_BINCU_COUNTER_I, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_BINCU_VAL_BINCU_COUNTER_I, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_FILT);
+        udma_filter_csr.wo(utra::udma_filter::REG_FILT, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_FILT_R_FILTER_MODE);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_FILT_R_FILTER_MODE, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_FILT_R_FILTER_MODE, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_FILT_R_FILTER_MODE, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_FILT_R_FILTER_MODE, baz);
+
+        let foo = udma_filter_csr.r(utra::udma_filter::REG_STATUS);
+        udma_filter_csr.wo(utra::udma_filter::REG_STATUS, foo);
+        let bar = udma_filter_csr.rf(utra::udma_filter::REG_STATUS_R_FILTER_DONE);
+        udma_filter_csr.rmwf(utra::udma_filter::REG_STATUS_R_FILTER_DONE, bar);
+        let mut baz = udma_filter_csr.zf(utra::udma_filter::REG_STATUS_R_FILTER_DONE, bar);
+        baz |= udma_filter_csr.ms(utra::udma_filter::REG_STATUS_R_FILTER_DONE, 1);
+        udma_filter_csr.wfo(utra::udma_filter::REG_STATUS_R_FILTER_DONE, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_scif_csr() {
+        use super::*;
+        let mut udma_scif_csr = CSR::new(HW_UDMA_SCIF_BASE as *mut u32);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_RX_SADDR);
+        udma_scif_csr.wo(utra::udma_scif::REG_RX_SADDR, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_RX_SIZE);
+        udma_scif_csr.wo(utra::udma_scif::REG_RX_SIZE, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_RX_SIZE_R_RX_SIZE);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_RX_CFG);
+        udma_scif_csr.wo(utra::udma_scif::REG_RX_CFG, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_TX_SADDR);
+        udma_scif_csr.wo(utra::udma_scif::REG_TX_SADDR, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_TX_SIZE);
+        udma_scif_csr.wo(utra::udma_scif::REG_TX_SIZE, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_TX_SIZE_R_TX_SIZE);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_TX_CFG);
+        udma_scif_csr.wo(utra::udma_scif::REG_TX_CFG, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_STATUS);
+        udma_scif_csr.wo(utra::udma_scif::REG_STATUS, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_STATUS_STATUS_I);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_STATUS_STATUS_I, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_STATUS_STATUS_I, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_STATUS_STATUS_I, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_STATUS_STATUS_I, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_SCIF_SETUP);
+        udma_scif_csr.wo(utra::udma_scif::REG_SCIF_SETUP, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_PARITY_EN);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_PARITY_EN, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_PARITY_EN, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_PARITY_EN, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_PARITY_EN, baz);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_BITS);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_BITS, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_BITS, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_BITS, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_BITS, baz);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_STOP_BITS);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_STOP_BITS, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_STOP_BITS, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_STOP_BITS, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_STOP_BITS, baz);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_RX_POLLING_EN);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_RX_POLLING_EN, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_RX_POLLING_EN, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_RX_POLLING_EN, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_RX_POLLING_EN, baz);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_RX_CLEAN_FIFO);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_RX_CLEAN_FIFO, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_RX_CLEAN_FIFO, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_RX_CLEAN_FIFO, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_RX_CLEAN_FIFO, baz);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_EN_TX);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_EN_TX, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_EN_TX, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_EN_TX, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_EN_TX, baz);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_EN_RX);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_EN_RX, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_EN_RX, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_EN_RX, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_EN_RX, baz);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_CLKSEL);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_CLKSEL, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_CLKSEL, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_CLKSEL, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_CLKSEL, baz);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_DIV);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_DIV, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_DIV, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_DIV, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_SCIF_SETUP_R_SCIF_DIV, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_ERROR);
+        udma_scif_csr.wo(utra::udma_scif::REG_ERROR, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_ERROR_R_ERR_OVERFLOW);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_ERROR_R_ERR_OVERFLOW, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_ERROR_R_ERR_OVERFLOW, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_ERROR_R_ERR_OVERFLOW, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_ERROR_R_ERR_OVERFLOW, baz);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_ERROR_R_ERR_PARITY);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_ERROR_R_ERR_PARITY, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_ERROR_R_ERR_PARITY, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_ERROR_R_ERR_PARITY, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_ERROR_R_ERR_PARITY, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_IRQ_EN);
+        udma_scif_csr.wo(utra::udma_scif::REG_IRQ_EN, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_IRQ_EN_R_SCIF_RX_IRQ_EN);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_IRQ_EN_R_SCIF_RX_IRQ_EN, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_IRQ_EN_R_SCIF_RX_IRQ_EN, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_IRQ_EN_R_SCIF_RX_IRQ_EN, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_IRQ_EN_R_SCIF_RX_IRQ_EN, baz);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_IRQ_EN_R_SCIF_ERR_IRQ_EN);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_IRQ_EN_R_SCIF_ERR_IRQ_EN, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_IRQ_EN_R_SCIF_ERR_IRQ_EN, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_IRQ_EN_R_SCIF_ERR_IRQ_EN, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_IRQ_EN_R_SCIF_ERR_IRQ_EN, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_VALID);
+        udma_scif_csr.wo(utra::udma_scif::REG_VALID, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_VALID_R_SCIF_RX_DATA_VALID);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_VALID_R_SCIF_RX_DATA_VALID, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_VALID_R_SCIF_RX_DATA_VALID, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_VALID_R_SCIF_RX_DATA_VALID, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_VALID_R_SCIF_RX_DATA_VALID, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_DATA);
+        udma_scif_csr.wo(utra::udma_scif::REG_DATA, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_DATA_R_SCIF_RX_DATA);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_DATA_R_SCIF_RX_DATA, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_DATA_R_SCIF_RX_DATA, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_DATA_R_SCIF_RX_DATA, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_DATA_R_SCIF_RX_DATA, baz);
+
+        let foo = udma_scif_csr.r(utra::udma_scif::REG_SCIF_ETU);
+        udma_scif_csr.wo(utra::udma_scif::REG_SCIF_ETU, foo);
+        let bar = udma_scif_csr.rf(utra::udma_scif::REG_SCIF_ETU_R_SCIF_ETU);
+        udma_scif_csr.rmwf(utra::udma_scif::REG_SCIF_ETU_R_SCIF_ETU, bar);
+        let mut baz = udma_scif_csr.zf(utra::udma_scif::REG_SCIF_ETU_R_SCIF_ETU, bar);
+        baz |= udma_scif_csr.ms(utra::udma_scif::REG_SCIF_ETU_R_SCIF_ETU, 1);
+        udma_scif_csr.wfo(utra::udma_scif::REG_SCIF_ETU_R_SCIF_ETU, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_spis_0_csr() {
+        use super::*;
+        let mut udma_spis_0_csr = CSR::new(HW_UDMA_SPIS_0_BASE as *mut u32);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_RX_SADDR);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_RX_SADDR, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_RX_SIZE);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_RX_SIZE, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_RX_SIZE_R_RX_SIZE);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_RX_CFG);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_RX_CFG, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_RX_CFG_R_RX_EN);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_RX_CFG_R_RX_EN, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_RX_CFG_R_RX_CLR);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_RX_CFG_R_RX_CLR, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_TX_SADDR);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_TX_SADDR, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_TX_SIZE);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_TX_SIZE, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_TX_SIZE_R_TX_SIZE);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_TX_CFG);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_TX_CFG, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_TX_CFG_R_TX_EN);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_TX_CFG_R_TX_EN, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_TX_CFG_R_TX_CLR);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_TX_CFG_R_TX_CLR, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_SPIS_SETUP);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_SPIS_SETUP, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_SPIS_SETUP_CFGCPOL);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_SPIS_SETUP_CFGCPOL, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_SPIS_SETUP_CFGCPOL, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_SPIS_SETUP_CFGCPOL, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_SPIS_SETUP_CFGCPOL, baz);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_SPIS_SETUP_CFGCPHA);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_SPIS_SETUP_CFGCPHA, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_SPIS_SETUP_CFGCPHA, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_SPIS_SETUP_CFGCPHA, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_SPIS_SETUP_CFGCPHA, baz);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_SEOT_CNT);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_SEOT_CNT, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_SEOT_CNT_SR_SEOT_CNT);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_SEOT_CNT_SR_SEOT_CNT, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_SEOT_CNT_SR_SEOT_CNT, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_SEOT_CNT_SR_SEOT_CNT, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_SEOT_CNT_SR_SEOT_CNT, baz);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_SPIS_IRQ_EN);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_SPIS_IRQ_EN, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_SPIS_IRQ_EN_SEOT_IRQ_EN);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_SPIS_IRQ_EN_SEOT_IRQ_EN, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_SPIS_IRQ_EN_SEOT_IRQ_EN, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_SPIS_IRQ_EN_SEOT_IRQ_EN, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_SPIS_IRQ_EN_SEOT_IRQ_EN, baz);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_SPIS_RXCNT);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_SPIS_RXCNT, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_SPIS_RXCNT_CFGRXCNT);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_SPIS_RXCNT_CFGRXCNT, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_SPIS_RXCNT_CFGRXCNT, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_SPIS_RXCNT_CFGRXCNT, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_SPIS_RXCNT_CFGRXCNT, baz);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_SPIS_TXCNT);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_SPIS_TXCNT, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_SPIS_TXCNT_CFGTXCNT);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_SPIS_TXCNT_CFGTXCNT, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_SPIS_TXCNT_CFGTXCNT, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_SPIS_TXCNT_CFGTXCNT, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_SPIS_TXCNT_CFGTXCNT, baz);
+
+        let foo = udma_spis_0_csr.r(utra::udma_spis_0::REG_SPIS_DMCNT);
+        udma_spis_0_csr.wo(utra::udma_spis_0::REG_SPIS_DMCNT, foo);
+        let bar = udma_spis_0_csr.rf(utra::udma_spis_0::REG_SPIS_DMCNT_CFGDMCNT);
+        udma_spis_0_csr.rmwf(utra::udma_spis_0::REG_SPIS_DMCNT_CFGDMCNT, bar);
+        let mut baz = udma_spis_0_csr.zf(utra::udma_spis_0::REG_SPIS_DMCNT_CFGDMCNT, bar);
+        baz |= udma_spis_0_csr.ms(utra::udma_spis_0::REG_SPIS_DMCNT_CFGDMCNT, 1);
+        udma_spis_0_csr.wfo(utra::udma_spis_0::REG_SPIS_DMCNT_CFGDMCNT, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_spis_1_csr() {
+        use super::*;
+        let mut udma_spis_1_csr = CSR::new(HW_UDMA_SPIS_1_BASE as *mut u32);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_RX_SADDR);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_RX_SADDR, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_RX_SADDR_R_RX_STARTADDR);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_RX_SADDR_R_RX_STARTADDR, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_RX_SADDR_R_RX_STARTADDR, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_RX_SADDR_R_RX_STARTADDR, baz);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_RX_SIZE);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_RX_SIZE, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_RX_SIZE_R_RX_SIZE);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_RX_SIZE_R_RX_SIZE, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_RX_SIZE_R_RX_SIZE, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_RX_SIZE_R_RX_SIZE, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_RX_SIZE_R_RX_SIZE, baz);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_RX_CFG);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_RX_CFG, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_RX_CFG_R_RX_CONTINUOUS);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_RX_CFG_R_RX_CONTINUOUS, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_RX_CFG_R_RX_CONTINUOUS, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_RX_CFG_R_RX_CONTINUOUS, baz);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_RX_CFG_R_RX_EN);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_RX_CFG_R_RX_EN, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_RX_CFG_R_RX_EN, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_RX_CFG_R_RX_EN, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_RX_CFG_R_RX_EN, baz);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_RX_CFG_R_RX_CLR);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_RX_CFG_R_RX_CLR, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_RX_CFG_R_RX_CLR, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_RX_CFG_R_RX_CLR, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_RX_CFG_R_RX_CLR, baz);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_TX_SADDR);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_TX_SADDR, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_TX_SADDR_R_TX_STARTADDR);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_TX_SADDR_R_TX_STARTADDR, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_TX_SADDR_R_TX_STARTADDR, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_TX_SADDR_R_TX_STARTADDR, baz);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_TX_SIZE);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_TX_SIZE, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_TX_SIZE_R_TX_SIZE);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_TX_SIZE_R_TX_SIZE, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_TX_SIZE_R_TX_SIZE, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_TX_SIZE_R_TX_SIZE, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_TX_SIZE_R_TX_SIZE, baz);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_TX_CFG);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_TX_CFG, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_TX_CFG_R_TX_CONTINUOUS);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_TX_CFG_R_TX_CONTINUOUS, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_TX_CFG_R_TX_CONTINUOUS, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_TX_CFG_R_TX_CONTINUOUS, baz);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_TX_CFG_R_TX_EN);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_TX_CFG_R_TX_EN, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_TX_CFG_R_TX_EN, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_TX_CFG_R_TX_EN, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_TX_CFG_R_TX_EN, baz);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_TX_CFG_R_TX_CLR);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_TX_CFG_R_TX_CLR, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_TX_CFG_R_TX_CLR, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_TX_CFG_R_TX_CLR, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_TX_CFG_R_TX_CLR, baz);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_SPIS_SETUP);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_SPIS_SETUP, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_SPIS_SETUP_CFGCPOL);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_SPIS_SETUP_CFGCPOL, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_SPIS_SETUP_CFGCPOL, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_SPIS_SETUP_CFGCPOL, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_SPIS_SETUP_CFGCPOL, baz);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_SPIS_SETUP_CFGCPHA);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_SPIS_SETUP_CFGCPHA, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_SPIS_SETUP_CFGCPHA, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_SPIS_SETUP_CFGCPHA, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_SPIS_SETUP_CFGCPHA, baz);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_SEOT_CNT);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_SEOT_CNT, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_SEOT_CNT_SR_SEOT_CNT);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_SEOT_CNT_SR_SEOT_CNT, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_SEOT_CNT_SR_SEOT_CNT, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_SEOT_CNT_SR_SEOT_CNT, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_SEOT_CNT_SR_SEOT_CNT, baz);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_SPIS_IRQ_EN);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_SPIS_IRQ_EN, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_SPIS_IRQ_EN_SEOT_IRQ_EN);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_SPIS_IRQ_EN_SEOT_IRQ_EN, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_SPIS_IRQ_EN_SEOT_IRQ_EN, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_SPIS_IRQ_EN_SEOT_IRQ_EN, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_SPIS_IRQ_EN_SEOT_IRQ_EN, baz);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_SPIS_RXCNT);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_SPIS_RXCNT, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_SPIS_RXCNT_CFGRXCNT);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_SPIS_RXCNT_CFGRXCNT, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_SPIS_RXCNT_CFGRXCNT, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_SPIS_RXCNT_CFGRXCNT, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_SPIS_RXCNT_CFGRXCNT, baz);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_SPIS_TXCNT);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_SPIS_TXCNT, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_SPIS_TXCNT_CFGTXCNT);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_SPIS_TXCNT_CFGTXCNT, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_SPIS_TXCNT_CFGTXCNT, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_SPIS_TXCNT_CFGTXCNT, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_SPIS_TXCNT_CFGTXCNT, baz);
+
+        let foo = udma_spis_1_csr.r(utra::udma_spis_1::REG_SPIS_DMCNT);
+        udma_spis_1_csr.wo(utra::udma_spis_1::REG_SPIS_DMCNT, foo);
+        let bar = udma_spis_1_csr.rf(utra::udma_spis_1::REG_SPIS_DMCNT_CFGDMCNT);
+        udma_spis_1_csr.rmwf(utra::udma_spis_1::REG_SPIS_DMCNT_CFGDMCNT, bar);
+        let mut baz = udma_spis_1_csr.zf(utra::udma_spis_1::REG_SPIS_DMCNT_CFGDMCNT, bar);
+        baz |= udma_spis_1_csr.ms(utra::udma_spis_1::REG_SPIS_DMCNT_CFGDMCNT, 1);
+        udma_spis_1_csr.wfo(utra::udma_spis_1::REG_SPIS_DMCNT_CFGDMCNT, baz);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_udma_adc_csr() {
+        use super::*;
+        let mut udma_adc_csr = CSR::new(HW_UDMA_ADC_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
     fn compile_check_aes_csr() {
         use super::*;
         let mut aes_csr = CSR::new(HW_AES_BASE as *mut u32);
@@ -11972,6 +14947,14 @@ mod tests {
         let mut baz = combohash_csr.zf(utra::combohash::SFR_OPT2_CR_OPT_IFSTART, bar);
         baz |= combohash_csr.ms(utra::combohash::SFR_OPT2_CR_OPT_IFSTART, 1);
         combohash_csr.wfo(utra::combohash::SFR_OPT2_CR_OPT_IFSTART, baz);
+
+        let foo = combohash_csr.r(utra::combohash::SFR_OPT3);
+        combohash_csr.wo(utra::combohash::SFR_OPT3, foo);
+        let bar = combohash_csr.rf(utra::combohash::SFR_OPT3_SFR_OPT3);
+        combohash_csr.rmwf(utra::combohash::SFR_OPT3_SFR_OPT3, bar);
+        let mut baz = combohash_csr.zf(utra::combohash::SFR_OPT3_SFR_OPT3, bar);
+        baz |= combohash_csr.ms(utra::combohash::SFR_OPT3_SFR_OPT3, 1);
+        combohash_csr.wfo(utra::combohash::SFR_OPT3_SFR_OPT3, baz);
 
         let foo = combohash_csr.r(utra::combohash::SFR_SEGPTR_SEGID_LKEY);
         combohash_csr.wo(utra::combohash::SFR_SEGPTR_SEGID_LKEY, foo);
@@ -12450,126 +15433,45 @@ mod tests {
         use super::*;
         let mut trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
 
-        let foo = trng_csr.r(utra::trng::SFR_CRFUNC);
-        trng_csr.wo(utra::trng::SFR_CRFUNC, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_CRFUNC_CR_FUNC);
-        trng_csr.rmwf(utra::trng::SFR_CRFUNC_CR_FUNC, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_CRFUNC_CR_FUNC, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_CRFUNC_CR_FUNC, 1);
-        trng_csr.wfo(utra::trng::SFR_CRFUNC_CR_FUNC, baz);
+        let foo = trng_csr.r(utra::trng::SFR_CRSRC);
+        trng_csr.wo(utra::trng::SFR_CRSRC, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_CRSRC_SFR_CRSRC);
+        trng_csr.rmwf(utra::trng::SFR_CRSRC_SFR_CRSRC, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_CRSRC_SFR_CRSRC, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_CRSRC_SFR_CRSRC, 1);
+        trng_csr.wfo(utra::trng::SFR_CRSRC_SFR_CRSRC, baz);
 
-        let foo = trng_csr.r(utra::trng::SFR_AR);
-        trng_csr.wo(utra::trng::SFR_AR, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_AR_START);
-        trng_csr.rmwf(utra::trng::SFR_AR_START, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_AR_START, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_AR_START, 1);
-        trng_csr.wfo(utra::trng::SFR_AR_START, baz);
+        let foo = trng_csr.r(utra::trng::SFR_AR_STOP);
+        trng_csr.wo(utra::trng::SFR_AR_STOP, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_AR_STOP_SFR_AR_STOP);
+        trng_csr.rmwf(utra::trng::SFR_AR_STOP_SFR_AR_STOP, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_AR_STOP_SFR_AR_STOP, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_AR_STOP_SFR_AR_STOP, 1);
+        trng_csr.wfo(utra::trng::SFR_AR_STOP_SFR_AR_STOP, baz);
 
-        let foo = trng_csr.r(utra::trng::SFR_SRMFSM);
-        trng_csr.wo(utra::trng::SFR_SRMFSM, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_SRMFSM_MFSM);
-        trng_csr.rmwf(utra::trng::SFR_SRMFSM_MFSM, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_SRMFSM_MFSM, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_SRMFSM_MFSM, 1);
-        trng_csr.wfo(utra::trng::SFR_SRMFSM_MFSM, baz);
-        let bar = trng_csr.rf(utra::trng::SFR_SRMFSM_MODINVREADY);
-        trng_csr.rmwf(utra::trng::SFR_SRMFSM_MODINVREADY, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_SRMFSM_MODINVREADY, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_SRMFSM_MODINVREADY, 1);
-        trng_csr.wfo(utra::trng::SFR_SRMFSM_MODINVREADY, baz);
+        let foo = trng_csr.r(utra::trng::SFR_PP);
+        trng_csr.wo(utra::trng::SFR_PP, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_PP_SFR_PP);
+        trng_csr.rmwf(utra::trng::SFR_PP_SFR_PP, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_PP_SFR_PP, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_PP_SFR_PP, 1);
+        trng_csr.wfo(utra::trng::SFR_PP_SFR_PP, baz);
 
-        let foo = trng_csr.r(utra::trng::SFR_FR);
-        trng_csr.wo(utra::trng::SFR_FR, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_FR_MFSM_DONE);
-        trng_csr.rmwf(utra::trng::SFR_FR_MFSM_DONE, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_FR_MFSM_DONE, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_FR_MFSM_DONE, 1);
-        trng_csr.wfo(utra::trng::SFR_FR_MFSM_DONE, baz);
-        let bar = trng_csr.rf(utra::trng::SFR_FR_PCORE_DONE);
-        trng_csr.rmwf(utra::trng::SFR_FR_PCORE_DONE, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_FR_PCORE_DONE, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_FR_PCORE_DONE, 1);
-        trng_csr.wfo(utra::trng::SFR_FR_PCORE_DONE, baz);
-        let bar = trng_csr.rf(utra::trng::SFR_FR_CHNLO_DONE);
-        trng_csr.rmwf(utra::trng::SFR_FR_CHNLO_DONE, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_FR_CHNLO_DONE, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_FR_CHNLO_DONE, 1);
-        trng_csr.wfo(utra::trng::SFR_FR_CHNLO_DONE, baz);
-        let bar = trng_csr.rf(utra::trng::SFR_FR_CHNLI_DONE);
-        trng_csr.rmwf(utra::trng::SFR_FR_CHNLI_DONE, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_FR_CHNLI_DONE, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_FR_CHNLI_DONE, 1);
-        trng_csr.wfo(utra::trng::SFR_FR_CHNLI_DONE, baz);
-        let bar = trng_csr.rf(utra::trng::SFR_FR_CHNLX_DONE);
-        trng_csr.rmwf(utra::trng::SFR_FR_CHNLX_DONE, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_FR_CHNLX_DONE, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_FR_CHNLX_DONE, 1);
-        trng_csr.wfo(utra::trng::SFR_FR_CHNLX_DONE, baz);
+        let foo = trng_csr.r(utra::trng::SFR_OPT);
+        trng_csr.wo(utra::trng::SFR_OPT, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_OPT_SFR_OPT);
+        trng_csr.rmwf(utra::trng::SFR_OPT_SFR_OPT, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_OPT_SFR_OPT, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_OPT_SFR_OPT, 1);
+        trng_csr.wfo(utra::trng::SFR_OPT_SFR_OPT, baz);
 
-        let foo = trng_csr.r(utra::trng::SFR_OPTNW);
-        trng_csr.wo(utra::trng::SFR_OPTNW, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_OPTNW_OPT_NW);
-        trng_csr.rmwf(utra::trng::SFR_OPTNW_OPT_NW, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_OPTNW_OPT_NW, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_OPTNW_OPT_NW, 1);
-        trng_csr.wfo(utra::trng::SFR_OPTNW_OPT_NW, baz);
-
-        let foo = trng_csr.r(utra::trng::SFR_OPTEW);
-        trng_csr.wo(utra::trng::SFR_OPTEW, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_OPTEW_OPT_EW);
-        trng_csr.rmwf(utra::trng::SFR_OPTEW_OPT_EW, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_OPTEW_OPT_EW, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_OPTEW_OPT_EW, 1);
-        trng_csr.wfo(utra::trng::SFR_OPTEW_OPT_EW, baz);
-
-        let foo = trng_csr.r(utra::trng::SFR_OPTMASK);
-        trng_csr.wo(utra::trng::SFR_OPTMASK, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_OPTMASK_OPT_MASK);
-        trng_csr.rmwf(utra::trng::SFR_OPTMASK_OPT_MASK, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_OPTMASK_OPT_MASK, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_OPTMASK_OPT_MASK, 1);
-        trng_csr.wfo(utra::trng::SFR_OPTMASK_OPT_MASK, baz);
-
-        let foo = trng_csr.r(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART0);
-        trng_csr.wo(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART0, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART0_CR_SEGPTRSTART0);
-        trng_csr.rmwf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART0_CR_SEGPTRSTART0, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART0_CR_SEGPTRSTART0, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART0_CR_SEGPTRSTART0, 1);
-        trng_csr.wfo(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART0_CR_SEGPTRSTART0, baz);
-
-        let foo = trng_csr.r(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART1);
-        trng_csr.wo(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART1, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART1_CR_SEGPTRSTART1);
-        trng_csr.rmwf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART1_CR_SEGPTRSTART1, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART1_CR_SEGPTRSTART1, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART1_CR_SEGPTRSTART1, 1);
-        trng_csr.wfo(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART1_CR_SEGPTRSTART1, baz);
-
-        let foo = trng_csr.r(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART2);
-        trng_csr.wo(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART2, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART2_CR_SEGPTRSTART2);
-        trng_csr.rmwf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART2_CR_SEGPTRSTART2, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART2_CR_SEGPTRSTART2, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART2_CR_SEGPTRSTART2, 1);
-        trng_csr.wfo(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART2_CR_SEGPTRSTART2, baz);
-
-        let foo = trng_csr.r(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART3);
-        trng_csr.wo(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART3, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART3_CR_SEGPTRSTART3);
-        trng_csr.rmwf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART3_CR_SEGPTRSTART3, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART3_CR_SEGPTRSTART3, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART3_CR_SEGPTRSTART3, 1);
-        trng_csr.wfo(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART3_CR_SEGPTRSTART3, baz);
-
-        let foo = trng_csr.r(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART4);
-        trng_csr.wo(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART4, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART4_CR_SEGPTRSTART4);
-        trng_csr.rmwf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART4_CR_SEGPTRSTART4, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART4_CR_SEGPTRSTART4, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART4_CR_SEGPTRSTART4, 1);
-        trng_csr.wfo(utra::trng::SFR_SEGPTR_CR_SEGPTRSTART4_CR_SEGPTRSTART4, baz);
+        let foo = trng_csr.r(utra::trng::SFR_SR);
+        trng_csr.wo(utra::trng::SFR_SR, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_SR_SR_RNG);
+        trng_csr.rmwf(utra::trng::SFR_SR_SR_RNG, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_SR_SR_RNG, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_SR_SR_RNG, 1);
+        trng_csr.wfo(utra::trng::SFR_SR_SR_RNG, baz);
   }
 
     #[test]
@@ -16226,9 +19128,74 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn compile_check_pl230_placeholder_csr() {
+    fn compile_check_mbox_apb_csr() {
         use super::*;
-        let mut pl230_placeholder_csr = CSR::new(HW_PL230_PLACEHOLDER_BASE as *mut u32);
+        let mut mbox_apb_csr = CSR::new(HW_MBOX_APB_BASE as *mut u32);
+
+        let foo = mbox_apb_csr.r(utra::mbox_apb::SFR_WDATA);
+        mbox_apb_csr.wo(utra::mbox_apb::SFR_WDATA, foo);
+        let bar = mbox_apb_csr.rf(utra::mbox_apb::SFR_WDATA_SFR_WDATA);
+        mbox_apb_csr.rmwf(utra::mbox_apb::SFR_WDATA_SFR_WDATA, bar);
+        let mut baz = mbox_apb_csr.zf(utra::mbox_apb::SFR_WDATA_SFR_WDATA, bar);
+        baz |= mbox_apb_csr.ms(utra::mbox_apb::SFR_WDATA_SFR_WDATA, 1);
+        mbox_apb_csr.wfo(utra::mbox_apb::SFR_WDATA_SFR_WDATA, baz);
+
+        let foo = mbox_apb_csr.r(utra::mbox_apb::SFR_RDATA);
+        mbox_apb_csr.wo(utra::mbox_apb::SFR_RDATA, foo);
+        let bar = mbox_apb_csr.rf(utra::mbox_apb::SFR_RDATA_SFR_RDATA);
+        mbox_apb_csr.rmwf(utra::mbox_apb::SFR_RDATA_SFR_RDATA, bar);
+        let mut baz = mbox_apb_csr.zf(utra::mbox_apb::SFR_RDATA_SFR_RDATA, bar);
+        baz |= mbox_apb_csr.ms(utra::mbox_apb::SFR_RDATA_SFR_RDATA, 1);
+        mbox_apb_csr.wfo(utra::mbox_apb::SFR_RDATA_SFR_RDATA, baz);
+
+        let foo = mbox_apb_csr.r(utra::mbox_apb::SFR_STATUS);
+        mbox_apb_csr.wo(utra::mbox_apb::SFR_STATUS, foo);
+        let bar = mbox_apb_csr.rf(utra::mbox_apb::SFR_STATUS_RX_AVAIL);
+        mbox_apb_csr.rmwf(utra::mbox_apb::SFR_STATUS_RX_AVAIL, bar);
+        let mut baz = mbox_apb_csr.zf(utra::mbox_apb::SFR_STATUS_RX_AVAIL, bar);
+        baz |= mbox_apb_csr.ms(utra::mbox_apb::SFR_STATUS_RX_AVAIL, 1);
+        mbox_apb_csr.wfo(utra::mbox_apb::SFR_STATUS_RX_AVAIL, baz);
+        let bar = mbox_apb_csr.rf(utra::mbox_apb::SFR_STATUS_TX_FREE);
+        mbox_apb_csr.rmwf(utra::mbox_apb::SFR_STATUS_TX_FREE, bar);
+        let mut baz = mbox_apb_csr.zf(utra::mbox_apb::SFR_STATUS_TX_FREE, bar);
+        baz |= mbox_apb_csr.ms(utra::mbox_apb::SFR_STATUS_TX_FREE, 1);
+        mbox_apb_csr.wfo(utra::mbox_apb::SFR_STATUS_TX_FREE, baz);
+        let bar = mbox_apb_csr.rf(utra::mbox_apb::SFR_STATUS_ABORT_IN_PROGRESS);
+        mbox_apb_csr.rmwf(utra::mbox_apb::SFR_STATUS_ABORT_IN_PROGRESS, bar);
+        let mut baz = mbox_apb_csr.zf(utra::mbox_apb::SFR_STATUS_ABORT_IN_PROGRESS, bar);
+        baz |= mbox_apb_csr.ms(utra::mbox_apb::SFR_STATUS_ABORT_IN_PROGRESS, 1);
+        mbox_apb_csr.wfo(utra::mbox_apb::SFR_STATUS_ABORT_IN_PROGRESS, baz);
+        let bar = mbox_apb_csr.rf(utra::mbox_apb::SFR_STATUS_ABORT_ACK);
+        mbox_apb_csr.rmwf(utra::mbox_apb::SFR_STATUS_ABORT_ACK, bar);
+        let mut baz = mbox_apb_csr.zf(utra::mbox_apb::SFR_STATUS_ABORT_ACK, bar);
+        baz |= mbox_apb_csr.ms(utra::mbox_apb::SFR_STATUS_ABORT_ACK, 1);
+        mbox_apb_csr.wfo(utra::mbox_apb::SFR_STATUS_ABORT_ACK, baz);
+        let bar = mbox_apb_csr.rf(utra::mbox_apb::SFR_STATUS_TX_ERR);
+        mbox_apb_csr.rmwf(utra::mbox_apb::SFR_STATUS_TX_ERR, bar);
+        let mut baz = mbox_apb_csr.zf(utra::mbox_apb::SFR_STATUS_TX_ERR, bar);
+        baz |= mbox_apb_csr.ms(utra::mbox_apb::SFR_STATUS_TX_ERR, 1);
+        mbox_apb_csr.wfo(utra::mbox_apb::SFR_STATUS_TX_ERR, baz);
+        let bar = mbox_apb_csr.rf(utra::mbox_apb::SFR_STATUS_RX_ERR);
+        mbox_apb_csr.rmwf(utra::mbox_apb::SFR_STATUS_RX_ERR, bar);
+        let mut baz = mbox_apb_csr.zf(utra::mbox_apb::SFR_STATUS_RX_ERR, bar);
+        baz |= mbox_apb_csr.ms(utra::mbox_apb::SFR_STATUS_RX_ERR, 1);
+        mbox_apb_csr.wfo(utra::mbox_apb::SFR_STATUS_RX_ERR, baz);
+
+        let foo = mbox_apb_csr.r(utra::mbox_apb::SFR_ABORT);
+        mbox_apb_csr.wo(utra::mbox_apb::SFR_ABORT, foo);
+        let bar = mbox_apb_csr.rf(utra::mbox_apb::SFR_ABORT_SFR_ABORT);
+        mbox_apb_csr.rmwf(utra::mbox_apb::SFR_ABORT_SFR_ABORT, bar);
+        let mut baz = mbox_apb_csr.zf(utra::mbox_apb::SFR_ABORT_SFR_ABORT, bar);
+        baz |= mbox_apb_csr.ms(utra::mbox_apb::SFR_ABORT_SFR_ABORT, 1);
+        mbox_apb_csr.wfo(utra::mbox_apb::SFR_ABORT_SFR_ABORT, baz);
+
+        let foo = mbox_apb_csr.r(utra::mbox_apb::SFR_DONE);
+        mbox_apb_csr.wo(utra::mbox_apb::SFR_DONE, foo);
+        let bar = mbox_apb_csr.rf(utra::mbox_apb::SFR_DONE_SFR_DONE);
+        mbox_apb_csr.rmwf(utra::mbox_apb::SFR_DONE_SFR_DONE, bar);
+        let mut baz = mbox_apb_csr.zf(utra::mbox_apb::SFR_DONE_SFR_DONE, bar);
+        baz |= mbox_apb_csr.ms(utra::mbox_apb::SFR_DONE_SFR_DONE, 1);
+        mbox_apb_csr.wfo(utra::mbox_apb::SFR_DONE_SFR_DONE, baz);
   }
 
     #[test]
