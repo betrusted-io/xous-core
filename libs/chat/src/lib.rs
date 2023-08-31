@@ -19,6 +19,18 @@ pub struct Chat {
 }
 
 impl Chat {
+
+    /// Create a new Chat UI
+    ///
+    /// # Arguments
+    ///
+    /// * `app_name` - registered with GAM
+    /// * `app_menu` - with menu items handled by the Chat App rather than the Chat UI
+    /// * `app_cid` - to accept messages from the Chat UI (see below)
+    /// * `post_opcode` - to handle a `MemoryMessage` containing a new outbound user Post
+    /// * `event_opcode` - to handle `ScalarMessage` representing a UI Event, such as F1 click, Left click, Top Post, etc.
+    /// * `rawkeys_opcode` - to handle a raw-keystroke.
+    ///
     pub fn new(
         app_name: &'static str,
         app_menu: &'static str,
@@ -48,17 +60,34 @@ impl Chat {
         Chat { cid: chat_cid }
     }
 
+    /// Return the Chat App CID
+    ///
+    /// This cid allows the Chat App to contact this Chat UI server
+    ///
     pub fn cid(&self) -> CID {
         self.cid
     }
 
+    /// Create an offline/read-only Chat UI over and existing Dialogue in pddb
+    ///
+    /// # Arguments
+    ///
+    /// * `pddb_dict` - the pddb dict holding all Dialogues for this Chat App
+    /// * `pddb_key` - the pddb key holding a Dialogue
+    ///
     pub fn read_only(pddb_dict: &str, pddb_key: Option<&str>) -> Self {
         let chat = Chat::new("_Chat Read_", "unused", None, None, None, None);
         chat.dialogue_set(pddb_dict, pddb_key).unwrap();
         chat
     }
 
-    // set the current Dialogue
+    /// Set the current Dialogue
+    ///
+    /// # Arguments
+    ///
+    /// * `pddb_dict` - the pddb dict holding all Dialogues for this Chat App
+    /// * `pddb_key` - the pddb key holding a Dialogue
+    ///
     pub fn dialogue_set(&self, pddb_dict: &str, pddb_key: Option<&str>) -> Result<(), Error> {
         let dialogue = api::Dialogue {
             dict: xous_ipc::String::from_str(pddb_dict),
@@ -70,6 +99,12 @@ impl Chat {
         }
     }
 
+    /// Add a new MenuItem to the App menu
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - an item action not handled by the Chat UI
+    ///
     pub fn menu_add(&self, item: MenuItem) -> Result<(), Error> {
         match Buffer::into_buf(item) {
             Ok(buf) => buf.send(self.cid, ChatOp::MenuAdd as u32).map(|_| ()),
@@ -77,7 +112,19 @@ impl Chat {
         }
     }
 
-    // add a new Post to the current Dialogue
+    /// Add a new Post to the current Dialogue
+    ///
+    /// note: posts are sorted by timestamp, so:
+    /// - `post_add` at beginning or end is fast (middle triggers a binary partition)
+    /// - if adding multiple posts then add oldest/newest last!
+    ///
+    /// # Arguments
+    ///
+    /// * `author` - the name of the Author of the Post
+    /// * `timestamp` - the timestamp of the Post
+    /// * `text` - the text content of the Post
+    /// * `attach_url` - a url of an attachment (image for example)
+    ///
     pub fn post_add(
         &self,
         author: &str,
@@ -102,13 +149,31 @@ impl Chat {
         }
     }
 
-    // delete a Post from the current Dialogue
-    pub fn post_del(&self, _key: u32) -> Result<(), Error> {
-        log::warn!("not implemented");
-        Err(xous::Error::InternalError)
+    /// Delete a Post from the current Dialogue
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - the index of the Post to delete.
+    ///
+    pub fn post_del(&self, index: usize) -> Result<(), Error> {
+        xous::send_message(
+            self.cid,
+            xous::Message::new_scalar(ChatOp::PostDel as usize, index, 0, 0, 0),
+        )
+        .map(|_| ())
+        .expect("failed to delete Pose {index}");
+        Ok(())
     }
 
-    // get a Post from the current Dialogue
+    /// Returns Some(index) of a matching Post by Author and Timestamp, or None
+    ///
+    /// # Arguments
+    ///
+    /// * `timestamp` - the Post timestamp criteria
+    /// * `author` - the Post Author criteria
+    ///
+    /// Error if unable to send the msg to the Chat UI server
+    /// 
     pub fn post_find(&self, author: &str, timestamp: u64) -> Result<Option<usize>, Error> {
         let mut find = Find {
             author: xous_ipc::String::new(),
@@ -128,12 +193,17 @@ impl Chat {
         }
     }
 
-    // set various status flags on a Post in the current Dialogue
+    /// Set various status flags on a Post in the current Dialogue
+    ///
+    /// TODO: not implemented
+    ///
     pub fn post_flag(&self, _key: &str) -> Result<(), Error> {
         log::warn!("not implemented");
         Err(xous::Error::InternalError)
     }
 
+    /// Redraw our Chat UI.
+    ///
     pub fn redraw(&self) {
         xous::send_message(
             self.cid,
@@ -162,6 +232,20 @@ impl Chat {
     }
 }
 
+
+/// The Chat UI server a manages a Chat UI to read a display and navigate a
+/// series of Posts in a Dialogue stored in the pddb - and to Author a new
+/// Post.
+///
+/// # Arguments
+///
+/// * `app_name` - registered with GAM
+/// * `app_menu` - with menu items handled by the Chat App rather than the Chat UI
+/// * `app_cid` - to accept messages from the Chat UI (see below)
+/// * `post_opcode` - to handle a `MemoryMessage` containing a new outbound user Post
+/// * `event_opcode` - to handle `ScalarMessage` representing a UI Event, such as F1 click, Left click, Top Post, etc.
+/// * `rawkeys_opcode` - to handle a raw-keystroke.
+///
 pub fn server(
     sid: SID,
     app_name: &'static str,

@@ -10,22 +10,25 @@ pub const POST_SELECTED_PREV: usize = usize::MAX - 1;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ChatOp {
-    // Sve the Dialogue to pddb (ie after PostAdd, PostDelete)
+    // Save the Dialogue to pddb (ie after PostAdd, PostDelete)
     DialogueSave = 0,
-    ///
+    /// Set the current Dialogue to be displayed
     DialogueSet,
-    ///
+    /// change the Chat UI in/out of focus
     GamChangeFocus,
     /// a line of text has arrived
     GamLine,
     /// receive rawkeys from gam
     GamRawkeys,
-    /// redraw our UI
+    /// redraw our Chat UI
     GamRedraw,
-    Icontray,
+    /// Add a new MenuItem to the App menu
     MenuAdd,
+    /// Add a new Post to the Dialogue
     PostAdd,
+    /// Delete a Post from the Dialogue
     PostDel,
+    /// Find a Post by timestamp and Author
     PostFind,
     PostFlag,
     UiButton,
@@ -65,6 +68,7 @@ pub struct Post {
     pub attach_url: Option<xous_ipc::String<128>>,
 }
 
+/// Events are sent to the Chat App when key things occur in the Chat UI
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum Event {
     Focus,

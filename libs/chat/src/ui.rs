@@ -145,6 +145,9 @@ impl Ui {
         }
     }
 
+
+    /// Read the current Dialogue from pddb
+    ///
     pub fn dialogue_read(&mut self) -> Result<(), Error> {
         match (&self.pddb_dict, &self.pddb_key) {
             (Some(dict), Some(key)) => {
@@ -200,6 +203,9 @@ impl Ui {
         }
     }
 
+
+    /// Save the current Dialogue to pddb
+    ///
     pub fn dialogue_save(&self) -> Result<(), Error> {
         match (&self.dialogue, &self.pddb_dict, &self.pddb_key) {
             (Some(dialogue), Some(dict), Some(key)) => {
@@ -246,7 +252,13 @@ impl Ui {
         }
     }
 
-    // set the current Dialogue
+    /// Set the current Dialogue
+    ///
+    /// # Arguments
+    ///
+    /// * `pddb_dict` - the pddb dict holding all Dialogues for this Chat App
+    /// * `pddb_key` - the pddb key holding a Dialogue
+    ///
     pub fn dialogue_set(&mut self, pddb_dict: &str, pddb_key: Option<&str>) {
         self.pddb_dict = Some(pddb_dict.to_string());
         self.pddb_key = pddb_key.map(|key| key.to_string());
@@ -273,6 +285,12 @@ impl Ui {
         }
     }
 
+    /// Present a Modal to select Dialogue from pddb
+    ///
+    /// typically called in offline mode
+    ///
+    /// TODO move non-dialogue keys elsewhere
+    ///
     pub fn dialogue_modal(&mut self) {
         if let Some(dict) = &self.pddb_dict {
             match self.pddb.list_keys(&dict, None) {
@@ -297,11 +315,31 @@ impl Ui {
         }
     }
 
+    /// Add a new MenuItem to the App menu
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - an item action not handled by the Chat UI
+    ///
     pub fn menu_add(&self, item: MenuItem) {
         self.menu_mgr.add_item(item);
     }
 
-    // add a new Post to the current Dialogue
+    /// Add a new Post to the current Dialogue
+    ///
+    /// TODO posts are truncated to mask a critical error on some posts (long with replies????)
+    ///
+    /// note: posts are sorted by timestamp, so:
+    /// - `post_add` at beginning or end is fast (middle triggers a binary partition)
+    /// - if adding multiple posts then add oldest/newest last!
+    ///
+    /// # Arguments
+    ///
+    /// * `author` - the name of the Author of the Post
+    /// * `timestamp` - the timestamp of the Post
+    /// * `text` - the text content of the Post
+    /// * `attach_url` - a url of an attachment (image for example)
+    ///
     pub fn post_add(
         &mut self,
         author: &str,
@@ -320,13 +358,23 @@ impl Ui {
         Ok(())
     }
 
-    // delete a Post from the current Dialogue
+    /// Delete a Post from the current Dialogue
     pub fn post_del(&self, _key: u32) -> Result<(), Error> {
+
+    ///
+    /// TODO: implement post_delete()
+    ///
         log::warn!("not implemented");
         Err(Error::new(ErrorKind::Other, "not implemented"))
     }
 
-    // get a Post from the current Dialogue
+    /// Returns Some(index) of a matching Post by Author and Timestamp, or None
+    ///
+    /// # Arguments
+    ///
+    /// * `timestamp` - the Post timestamp criteria
+    /// * `author` - the Post Author criteria
+    ///
     pub fn post_find(&self, author: &str, timestamp: u64) -> Option<usize> {
         match &self.dialogue {
             Some(dialogue) => dialogue.post_find(author, timestamp),
@@ -334,22 +382,33 @@ impl Ui {
         }
     }
 
-    // get a Post from the current Dialogue
-    pub fn post_get(&self, key: usize) -> Option<&Post> {
+    /// Return Some<Post> from the current Dialogue, or None
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - index of the Post to retrieve
+    ///
+    pub fn post_get(&self, index: usize) -> Option<&Post> {
         match &self.dialogue {
-            Some(dialogue) => dialogue.post_get(key),
+            Some(dialogue) => dialogue.post_get(index),
             None => None,
         }
     }
 
-    // set various status flags on a Post in the current Dialogue
+    /// Set various status flags on a Post in the current Dialogue
+    ///
+    /// TODO: not implemented
+    ///
     pub fn post_flag(&self, _key: u32) -> Result<(), Error> {
         log::warn!("not implemented");
         Err(Error::new(ErrorKind::Other, "not implemented"))
     }
 
-    // set the index of the selected post to an arbitrary index
-    // or select adjacent post with POST_SELECT_NEXT or POST_SELECT_PREV
+    /// Set the Selected Post to an arbitrary index
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - POST_SELECT_NEXT or POST_SELECT_PREV or an arbitraty index
     pub fn post_select(&mut self, index: usize) {
         self.post_selected = match &self.dialogue {
             Some(dialogue) => {
@@ -404,7 +463,22 @@ impl Ui {
         self.app_cid
     }
 
-    // send a xous scalar message with an Event to the Chat App cid/opcode
+
+
+
+
+
+
+
+
+    /// Send a xous scalar message with an Event to the Chat App cid/opcode
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - the type of event to send
+    ///
+    /// Error when `app_cid` == None or `opcode_event` == None
+    ///
     pub fn event(&self, event: Event) {
         log::info!("Event {:?}", event);
         match (self.app_cid, self.opcode_event) {
@@ -419,12 +493,15 @@ impl Ui {
         }
     }
 
-    // Create a bubble representing a Dialogue Post 
-    // return: a TextView bubble representing a Post
-    // post:     the post to represent in a TextView bubble
-    // dialogue: containing the Post for context info
-    // hilite:   hilite this Post on the screen (thicker border)
-    // anchor_y: the vertical position on screen to draw TextView bubble
+    /// Return a TextView bubble representing a Dialogue Post 
+    ///
+    /// # Arguments
+    ///
+    /// * `post` - the post to represent in a TextView bubble
+    /// * `dialogue` - containing the Post for context info
+    /// * `hilite` - hilite this Post on the screen (thicker border)
+    /// * `anchor_y` - the vertical position on screen to draw TextView bubble
+    ///
     fn bubble(&self, post: &Post, dialogue: &Dialogue, hilite: bool, anchor_y: i16) -> TextView {
         // set alignment of bubble left/right
         let mut align_right = false;
@@ -466,6 +543,8 @@ impl Ui {
         bubble_tv
     }
 
+    // Clear the screen area
+    //
     fn clear_area(&self) {
         self.gam
             .draw_rectangle(
@@ -483,15 +562,21 @@ impl Ui {
             .expect("can't clear canvas area");
     }
 
-    pub(crate) fn raise_menu(&mut self) {
-        // self.title_dirty = true;
+    /// Show the App Menu (← key)
+    ///
+    pub(crate) fn raise_app_menu(&mut self) {
         self.gam
             .raise_menu(&self.app_menu)
             .expect("couldn't raise our submenu");
-        log::info!("raised menu");
+        log::info!("raised app menu");
     }
 
-    // redraw posts on the screen ensuring the selected post is fully visible
+    /// Redraw posts on the screen.
+    ///
+    /// Up to three attempts are made to layout the Posts:
+    /// * ensuring the selected post is fully visible, and
+    /// * best use of the screen is achieved
+    ///
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
         if self.dialogue.is_some() {
             let mut attempt = 0;
@@ -507,9 +592,21 @@ impl Ui {
         Ok(())
     }
 
-    // Layout the post bubbles on the screen from top-down or bottom-up
-    // return: true if the selected post is fully visible
-    // error:  if Dialogue == None
+    /// Layout the post bubbles on the screen.
+    ///
+    /// The layout proceeds from top-down or bottom-up (starting with the
+    /// `post_anchor`), drawing a bubble for each Post, until the available space
+    /// is exhausted.
+    /// * If the `post_selected` is fully displayed, then `Ok(true)` is Returned.
+    /// * If the `post_selected` is NOT fully displayed, then the `post_anchor`
+    /// is set as the `post_anchor`, and `Ok(false)` is Returned - signalling that
+    /// a re-layout is in order.
+    /// * If the first/last Post is fully displayed, then the `post_topdown` is
+    /// toggled, the `post_anchor` is set to the first/last Post, and `Ok(false)`
+    /// is Returned - signalling that a re-layout is in order.
+    /// 
+    /// Error if there if Dialogue is None
+    ///
     fn layout(&mut self) -> Result<bool, Error> {
         self.clear_area();
         match (&self.dialogue, &self.post_anchor ) {
