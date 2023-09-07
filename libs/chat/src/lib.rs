@@ -306,41 +306,14 @@ pub fn server(
                     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
                 match s.as_str() {
-                    "\u{0011}" => {
-                        log::info!("click F1 : raise app menu");
-                        ui.event(Event::F1);
-                        ui.raise_menu();
-                    }
-                    "\u{0012}" => {
-                        log::info!("click F2 : noop : suggestions welcome!");
-                        ui.event(Event::F2);
-                    }
-                    "\u{0013}" => {
-                        log::info!("click F3: noop : suggestions welcome!");
-                        ui.event(Event::F3);
-                    }
-                    "\u{0014}" => {
-                        log::info!("click F4 : raise msg menu : pull request welcome!");
-                        ui.event(Event::F4);
-                    }
-                    "↑" => {
-                        ui.event(Event::Up);
-                        ui.post_select(POST_SELECTED_PREV);
-                        ui.redraw().expect("failed to redraw chat");
-                    }
-                    "↓" => {
-                        ui.event(Event::Down);
-                        ui.post_select(POST_SELECTED_NEXT);
-                        ui.redraw().expect("failed to redraw chat");
-                    }
-                    "←" => {
-                        log::info!("click ← : noop : suggestions welcome!");
-                        ui.event(Event::Left);
-                    }
-                    "→" => {
-                        log::info!("click → : noop : suggestions welcome!");
-                        ui.event(Event::Right);
-                    }
+                    "\u{0011}" => {}
+                    "\u{0012}" => {}
+                    "\u{0013}" => {}
+                    "\u{0014}" => {}
+                    "↑" => {}
+                    "↓" => {}
+                    "←" => {}
+                    "→" => {}
                     _ => {
                         drop(buffer);
                         if let Some(cid) = app_cid {
@@ -349,6 +322,66 @@ pub fn server(
                                 msg.forward(cid, opcode).expect("failed to fwd msg");
                             }
                         }
+                    }
+                }
+            }
+            Some(ChatOp::GamRawkeys) => {
+                log::info!("got ChatOp::GamRawkeys");
+                xous::msg_scalar_unpack!(msg, k1, k2, k3, k4, {
+                    log::info!("got Chat UI RawKey :{}:{}:{}:{}:", k1, k2, k3, k4);
+                    match core::char::from_u32(k1 as u32).unwrap_or('\u{0000}') {
+                        F1 => {
+                            log::info!("click F1 : pull request welcome!");
+                            ui.event(Event::F1);
+                        }
+                        F2 => {
+                            log::info!("click F2 : pull request welcome!");
+                            ui.event(Event::F2);
+                        }
+                        F3 => {
+                            log::info!("click F3 : pull request welcome!");
+                            ui.event(Event::F3);
+                        }
+                        F4 => {
+                            log::info!("click F4 : pull request welcome!");
+                            ui.event(Event::F4);
+                        }
+                        '↑' => {
+                            log::info!("click ↑ : previous post");
+                            ui.set_menu_mode(true);  // ← & → activate menus
+                            ui.post_select(POST_SELECTED_PREV);
+                            ui.redraw().expect("failed to redraw chat");
+                            ui.event(Event::Up);
+                            },
+                        '↓' => {
+                            log::info!("click ↓ : next post");
+                            ui.post_select(POST_SELECTED_NEXT);
+                            ui.redraw().expect("failed to redraw chat");
+                            ui.event(Event::Down);
+                            }
+                        '←' => {
+                            log::info!("click ← : raise app menu");
+                            if ui.get_menu_mode() {
+                                ui.raise_app_menu();
+                            }
+                            ui.event(Event::Left);
+                        }
+                        '→' => {
+                            log::info!("click → : raise msg menu : pull request welcome!");              
+                            if ui.get_menu_mode() {
+                                ui.raise_msg_menu();
+                            }
+                            ui.event(Event::Right);
+                        }
+                        _ => {
+                            ui.set_menu_mode(false);  // ← & → move input cursor
+                        }
+                    }
+                });
+                if let Some(cid) = app_cid {
+                    if let Some(opcode) = opcode_rawkeys {
+                        log::info!("Forwarding msg to Chat App: {:?}", msg);
+                        msg.forward(cid, opcode).expect("failed to fwd rawkey");
                     }
                 }
             }

@@ -1,6 +1,11 @@
 use enumset::EnumSetType;
 use rkyv::{Archive, Deserialize, Serialize};
 
+// shorthand for the function keys F1 - F4
+pub const F1: char = '\u{0011}';
+pub const F2: char = '\u{0012}';
+pub const F3: char = '\u{0013}';
+pub const F4: char = '\u{0014}';
 
 
 // these are used to increment and decrement the selected post

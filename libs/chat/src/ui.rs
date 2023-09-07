@@ -60,6 +60,7 @@ pub(crate) struct Ui {
     bubble_space: i16, // spacing between text bubbles
 
     // variables that define a menu
+    menu_mode: bool,
     app_menu: String,
     menu_mgr: MenuMatic,
 
@@ -95,8 +96,6 @@ impl Ui {
             })
             .expect("couldn't register Ux context for chat")
             .unwrap();
-        gam.toggle_menu_mode(token)
-            .expect("couldnt't toggle menu mode");
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
         let canvas = gam
@@ -105,11 +104,11 @@ impl Ui {
         let screensize = gam
             .get_canvas_bounds(canvas)
             .expect("couldn't get dimensions of content canvas");
+        // TODO this is a stub - implement F1-4 actions and autocompletes
         let _icontray = Icontray::new(
             Some(xous::connect(sid).unwrap()),
-            [app_name, "F2", "F3", "F4"],
+            ["F1", "F2", "F3", "F4"],
         );
-
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
         let menu_mgr = menu_matic(
@@ -139,6 +138,7 @@ impl Ui {
             bubble_margin: Point::new(4, 4),
             bubble_radius: 4,
             bubble_space: 4,
+            menu_mode: true,
             app_menu: app_menu.to_owned(),
             menu_mgr: menu_mgr,
             token: token,
@@ -465,7 +465,13 @@ impl Ui {
 
 
 
+    pub fn get_menu_mode(&self) -> bool {
+        self.menu_mode
+    }
 
+    pub fn set_menu_mode(&mut self, menu_mode: bool) {
+        self.menu_mode = menu_mode;
+    }
 
 
 
@@ -569,6 +575,12 @@ impl Ui {
             .raise_menu(&self.app_menu)
             .expect("couldn't raise our submenu");
         log::info!("raised app menu");
+    }
+
+    /// Show the Msg Menu (→ key)
+    ///
+    pub(crate) fn raise_msg_menu(&mut self) {
+        log::warn!("msg menu not implemented - pull-requests welcome");
     }
 
     /// Redraw posts on the screen.
