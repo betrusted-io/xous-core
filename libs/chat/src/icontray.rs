@@ -8,6 +8,7 @@ use xous_ipc::Buffer;
 
 pub(crate) const SERVER_NAME_ICONTRAY: &'static str = "_chat icon tray plugin_";
 
+#[allow(dead_code)]
 pub struct Icontray {
     cid: Option<CID>,
 }

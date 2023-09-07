@@ -75,7 +75,6 @@ pub struct MtxChat<'a> {
     room_domain: String,
     filter: String,
     since: String,
-    wifi_connected: bool,
     listening: bool,
     modals: Modals,
 }
@@ -98,19 +97,29 @@ impl<'a> MtxChat<'a> {
             room_domain: EMPTY.to_string(),
             filter: EMPTY.to_string(),
             since: EMPTY.to_string(),
-            wifi_connected: false,
             listening: false,
             modals: modals,
         };
         let mut keypath = PathBuf::new();
         keypath.push(MTXCHAT_DICT);
-        if std::fs::metadata(&keypath).is_ok() { // keypath exists
-             // log::info!("dict '{}' exists", MTXCHAT_DICT);
-        } else {
+        if !std::fs::metadata(&keypath).is_ok() {
+            common.modals
+                .show_notification("mtxchat dict DOES NOT exist", None)
+                .expect("notification failed");
             log::info!("dict '{}' does NOT exist.. creating it", MTXCHAT_DICT);
             match std::fs::create_dir_all(&keypath) {
-                Ok(_) => log::info!("created dict: {}", MTXCHAT_DICT),
-                Err(e) => log::warn!("failed to create dict: {:?}", e),
+                Ok(_) => {
+                    common.modals
+                        .show_notification("created mtxchat dict", None)
+                        .expect("notification failed");
+                    log::info!("created dict: {}", MTXCHAT_DICT);
+                }
+                Err(e) => {
+                    common.modals
+                        .show_notification("failed to creat mtxchat dict", None)
+                        .expect("notification failed");
+                    log::warn!("failed to create dict: {:?}", e);
+                }
             }
         }
         common
@@ -126,12 +135,6 @@ impl<'a> MtxChat<'a> {
             log::info!("set '{}' = '{}'", key, value);
             let mut keypath = PathBuf::new();
             keypath.push(MTXCHAT_DICT);
-            if std::fs::metadata(&keypath).is_ok() { // keypath exists
-                 // log::info!("dict '{}' exists", MTXCHAT_DICT);
-            } else {
-                log::info!("dict '{}' does NOT exist.. creating it", MTXCHAT_DICT);
-                std::fs::create_dir_all(&keypath)?;
-            }
             keypath.push(key);
             File::create(keypath)?.write_all(value.as_bytes())?;
             match key {
@@ -338,7 +341,7 @@ impl<'a> MtxChat<'a> {
             _ => builder.field(Some(t!("mtxchat.domain", locales::LANG).to_string()), None),
         };
         let builder = match self.get(PASSWORD_KEY) {
-            Ok(Some(pwd)) => builder.field_placeholder_persist(Some(HIDE.to_string()), None),
+            Ok(Some(_pwd)) => builder.field_placeholder_persist(Some(HIDE.to_string()), None),
             _ => builder.field(
                 Some(t!("mtxchat.password", locales::LANG).to_string()),
                 None,
@@ -383,8 +386,7 @@ impl<'a> MtxChat<'a> {
     pub fn get_room_id(&mut self) -> Option<String> {
         let mut room = String::new();
         self.room_modal();
-        write!(room, "#{}:{}", &self.room_name, &self.room_domain)
-            .expect("failed to write room");
+        write!(room, "#{}:{}", &self.room_name, &self.room_domain).expect("failed to write room");
         let mut server = String::new();
         write!(server, "{}{}", HTTPS, &self.user_domain).expect("failed to write server");
         if let Some(room_id) = web::get_room_id(&server, &room, &self.token) {
@@ -503,10 +505,11 @@ impl<'a> MtxChat<'a> {
             let chat_cid = self.chat.cid();
             move || {
                 // log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
-                if let Some((since, events)) =
+                if let Some((_since, events)) =
                     web::client_sync(&server, &filter, &since, MTX_LONG_TIMEOUT, &room_id, &token)
                 {
                     // TODO send "since" to mtxchat server
+                    // and you probably want to have a look at Dialogue::MAX_BYTES
                     for event in events {
                         let sender = event.sender.unwrap_or("anon".to_string());
                         let body = event.body.unwrap_or("...".to_string());
@@ -538,7 +541,7 @@ impl<'a> MtxChat<'a> {
         if since.len() > 0 {
             self.set_debug(SINCE_KEY, since);
             // don't re-start listening if there was an error
-            if self.logged_in && (HOSTED_MODE || self.wifi_connected) {
+            if self.logged_in && self.wifi_connected() {
                 self.listen();
             }
         }
@@ -576,9 +579,13 @@ impl<'a> MtxChat<'a> {
     }
 
     pub fn wifi_connected(&self) -> bool {
-        match self.netmgr.get_ipv4_config() {
-            Some(conf) => conf.dhcp == com_rs::DhcpState::Bound,
-            None => false,
+        if HOSTED_MODE {
+            true
+        } else {
+            match self.netmgr.get_ipv4_config() {
+                Some(conf) => conf.dhcp == com_rs::DhcpState::Bound,
+                None => false,
+            }
         }
     }
 }

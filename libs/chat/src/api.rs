@@ -7,11 +7,9 @@ pub const F2: char = '\u{0012}';
 pub const F3: char = '\u{0013}';
 pub const F4: char = '\u{0014}';
 
-
 // these are used to increment and decrement the selected post
 pub const POST_SELECTED_NEXT: usize = usize::MAX - 0;
 pub const POST_SELECTED_PREV: usize = usize::MAX - 1;
-
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ChatOp {
@@ -36,8 +34,6 @@ pub enum ChatOp {
     /// Find a Post by timestamp and Author
     PostFind,
     PostFlag,
-    UiButton,
-    UiMenu,
     /// exit the application
     Quit,
 }

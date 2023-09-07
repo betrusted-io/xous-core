@@ -105,10 +105,7 @@ impl Ui {
             .get_canvas_bounds(canvas)
             .expect("couldn't get dimensions of content canvas");
         // TODO this is a stub - implement F1-4 actions and autocompletes
-        let _icontray = Icontray::new(
-            Some(xous::connect(sid).unwrap()),
-            ["F1", "F2", "F3", "F4"],
-        );
+        let _icontray = Icontray::new(Some(xous::connect(sid).unwrap()), ["F1", "F2", "F3", "F4"]);
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
         let menu_mgr = menu_matic(
@@ -144,7 +141,6 @@ impl Ui {
             token: token,
         }
     }
-
 
     /// Read the current Dialogue from pddb
     ///
@@ -202,7 +198,6 @@ impl Ui {
             }
         }
     }
-
 
     /// Save the current Dialogue to pddb
     ///
@@ -327,8 +322,6 @@ impl Ui {
 
     /// Add a new Post to the current Dialogue
     ///
-    /// TODO posts are truncated to mask a critical error on some posts (long with replies????)
-    ///
     /// note: posts are sorted by timestamp, so:
     /// - `post_add` at beginning or end is fast (middle triggers a binary partition)
     /// - if adding multiple posts then add oldest/newest last!
@@ -359,11 +352,11 @@ impl Ui {
     }
 
     /// Delete a Post from the current Dialogue
-    pub fn post_del(&self, _key: u32) -> Result<(), Error> {
-
     ///
     /// TODO: implement post_delete()
     ///
+
+    pub fn post_del(&self, _index: usize) -> Result<(), Error> {
         log::warn!("not implemented");
         Err(Error::new(ErrorKind::Other, "not implemented"))
     }
@@ -422,7 +415,7 @@ impl Ui {
                                 } else {
                                     Some(selected + 1)
                                 }
-                            },
+                            }
                             (POST_SELECTED_PREV, Some(selected)) => {
                                 if selected == 0 {
                                     self.event(Event::Top);
@@ -430,40 +423,16 @@ impl Ui {
                                 } else {
                                     Some(selected - 1)
                                 }
-                            },
+                            }
                             (index, _) => Some(min(index, last_post)), // arbitrary post
                         }
-                    },
+                    }
                     None => None,
                 }
             }
             None => None,
         }
     }
-
-    // set the text displayed on each of the Precursor Fn buttons
-    pub fn ui_button(
-        &self,
-        _f1: Option<&str>,
-        _f2: Option<&str>,
-        _f3: Option<&str>,
-        _f4: Option<&str>,
-    ) -> Result<(), Error> {
-        log::warn!("not implemented");
-        Err(Error::new(ErrorKind::Other, "not implemented"))
-    }
-
-    // request the Chat object to display a menu with options to the user
-    pub fn ui_menu(&self, _options: Vec<&str>) -> Result<Vec<u32>, Error> {
-        log::warn!("not implemented");
-        Err(Error::new(ErrorKind::Other, "not implemented"))
-    }
-
-    fn app_cid(&self) -> Option<CID> {
-        self.app_cid
-    }
-
-
 
     pub fn get_menu_mode(&self) -> bool {
         self.menu_mode
@@ -472,10 +441,6 @@ impl Ui {
     pub fn set_menu_mode(&mut self, menu_mode: bool) {
         self.menu_mode = menu_mode;
     }
-
-
-
-
 
     /// Send a xous scalar message with an Event to the Chat App cid/opcode
     ///
@@ -499,7 +464,7 @@ impl Ui {
         }
     }
 
-    /// Return a TextView bubble representing a Dialogue Post 
+    /// Return a TextView bubble representing a Dialogue Post
     ///
     /// # Arguments
     ///
@@ -592,8 +557,7 @@ impl Ui {
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
         if self.dialogue.is_some() {
             let mut attempt = 0;
-            while !self.layout().unwrap_or(true) && attempt < 3
-            {
+            while !self.layout().unwrap_or(true) && attempt < 3 {
                 attempt += 1;
             }
         } else {
@@ -616,12 +580,12 @@ impl Ui {
     /// * If the first/last Post is fully displayed, then the `post_topdown` is
     /// toggled, the `post_anchor` is set to the first/last Post, and `Ok(false)`
     /// is Returned - signalling that a re-layout is in order.
-    /// 
+    ///
     /// Error if there if Dialogue is None
     ///
     fn layout(&mut self) -> Result<bool, Error> {
         self.clear_area();
-        match (&self.dialogue, &self.post_anchor ) {
+        match (&self.dialogue, &self.post_anchor) {
             (Some(dialogue), Some(post_anchor)) => {
                 log::info!("redrawing dialogue: {}", dialogue.title);
                 let mut post_selected_visible = false;
@@ -639,7 +603,7 @@ impl Ui {
                 let mut is_selected = false;
                 while post_is_fully_visible {
                     log::trace!("redrawing post: {post_index}");
-                    match (dialogue.post_get(post_index), &self.post_selected){
+                    match (dialogue.post_get(post_index), &self.post_selected) {
                         (Some(post), Some(post_selected)) => {
                             is_selected = post_index == *post_selected;
 
@@ -655,7 +619,9 @@ impl Ui {
                                 match bubble_tv.bounds_computed {
                                     Some(bounds) => match self.post_topdown {
                                         true => {
-                                            if post_index >= dialogue.post_last().unwrap_or(usize::MAX) {
+                                            if post_index
+                                                >= dialogue.post_last().unwrap_or(usize::MAX)
+                                            {
                                                 log::info!("trigger a re-layout from bottom-up");
                                                 self.post_topdown = false;
                                                 self.post_anchor = dialogue.post_last();
@@ -667,7 +633,7 @@ impl Ui {
                                                 + self.bubble_margin.y;
                                         }
                                         false => {
-                                            if post_index == 0 { 
+                                            if post_index == 0 {
                                                 log::info!("trigger a re-layout from top-down");
                                                 self.post_topdown = true;
                                                 self.post_anchor = Some(0);
@@ -688,15 +654,15 @@ impl Ui {
                                 // check if the selected post is fully visible
                                 post_selected_visible = post_selected_visible || is_selected;
                             }
-                        },
+                        }
                         (None, _) => {
                             log::trace!("not enough post bubbles to fill the screen");
-                            return Ok(true)
-                        },
-                        (_,_) => return Ok(true), // get me outa-here
+                            return Ok(true);
+                        }
+                        (_, _) => return Ok(true), // get me outa-here
                     }
                 }
-                if post_selected_visible || (bubble_count == 1 && is_selected){
+                if post_selected_visible || (bubble_count == 1 && is_selected) {
                     Ok(true)
                 } else {
                     log::info!("trigger a re-layout with selected post visible");
@@ -704,12 +670,12 @@ impl Ui {
                     self.post_anchor = self.post_selected;
                     Ok(false)
                 }
-            },
+            }
             (Some(_dialogue), None) => {
                 log::info!("no posts to display");
                 // TODO show dialogue info as a default?
                 Ok(true)
-            }, 
+            }
             (None, _) => Err(Error::new(ErrorKind::InvalidData, "missing dialogue")),
         }
     }

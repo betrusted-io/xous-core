@@ -1,5 +1,4 @@
 pub mod api;
-pub mod cmd;
 pub mod dialogue;
 pub mod icontray;
 pub mod ui;
@@ -19,7 +18,6 @@ pub struct Chat {
 }
 
 impl Chat {
-
     /// Create a new Chat UI
     ///
     /// # Arguments
@@ -173,7 +171,7 @@ impl Chat {
     /// * `author` - the Post Author criteria
     ///
     /// Error if unable to send the msg to the Chat UI server
-    /// 
+    ///
     pub fn post_find(&self, author: &str, timestamp: u64) -> Result<Option<usize>, Error> {
         let mut find = Find {
             author: xous_ipc::String::new(),
@@ -212,26 +210,7 @@ impl Chat {
         .map(|_| ())
         .expect("failed to Redraw Chat UI");
     }
-
-    // set the text displayed on each of the Precursor Fn buttons
-    pub fn ui_button(
-        &self,
-        _f1: Option<&str>,
-        _f2: Option<&str>,
-        _f3: Option<&str>,
-        _f4: Option<&str>,
-    ) -> Result<(), Error> {
-        log::warn!("not implemented");
-        Err(xous::Error::InternalError)
-    }
-
-    // request the Chat object to display a menu with options to the user
-    pub fn ui_menu(&self, _options: Vec<&str>) -> Result<(), Error> {
-        log::warn!("not implemented");
-        Err(xous::Error::InternalError)
-    }
 }
-
 
 /// The Chat UI server a manages a Chat UI to read a display and navigate a
 /// series of Posts in a Dialogue stored in the pddb - and to Author a new
@@ -267,7 +246,7 @@ pub fn server(
         log::debug!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ChatOp::DialogueSave) => {
-                log::warn!("ChatOp::DialogueSave");
+                log::info!("ChatOp::DialogueSave");
                 ui.dialogue_save().expect("failed to save Dialogue");
                 ui.dialogue_read().expect("failed to read Dialogue");
                 if allow_redraw {
@@ -348,17 +327,17 @@ pub fn server(
                         }
                         '↑' => {
                             log::info!("click ↑ : previous post");
-                            ui.set_menu_mode(true);  // ← & → activate menus
+                            ui.set_menu_mode(true); // ← & → activate menus
                             ui.post_select(POST_SELECTED_PREV);
                             ui.redraw().expect("failed to redraw chat");
                             ui.event(Event::Up);
-                            },
+                        }
                         '↓' => {
                             log::info!("click ↓ : next post");
                             ui.post_select(POST_SELECTED_NEXT);
                             ui.redraw().expect("failed to redraw chat");
                             ui.event(Event::Down);
-                            }
+                        }
                         '←' => {
                             log::info!("click ← : raise app menu");
                             if ui.get_menu_mode() {
@@ -367,14 +346,14 @@ pub fn server(
                             ui.event(Event::Left);
                         }
                         '→' => {
-                            log::info!("click → : raise msg menu : pull request welcome!");              
+                            log::info!("click → : raise msg menu : pull request welcome!");
                             if ui.get_menu_mode() {
                                 ui.raise_msg_menu();
                             }
                             ui.event(Event::Right);
                         }
                         _ => {
-                            ui.set_menu_mode(false);  // ← & → move input cursor
+                            ui.set_menu_mode(false); // ← & → move input cursor
                         }
                     }
                 });
@@ -407,6 +386,12 @@ pub fn server(
                     Err(e) => log::warn!("failed to deserialize Post: {:?}", e),
                 }
             }
+            Some(ChatOp::PostDel) => {
+                xous::msg_scalar_unpack!(msg, index, _, _, _, {
+                    log::info!("ChatOp::PostDel {index}");
+                    ui.post_del(index).expect("failed to delete post {index}");
+                });
+            }
             Some(ChatOp::PostFind) => {
                 log::info!("ChatOp::PostAdd");
                 let mut buffer =
@@ -430,12 +415,6 @@ pub fn server(
                 } else {
                     log::warn!("failed to deserialize MenuItem");
                 }
-            }
-            Some(ChatOp::UiButton) => {
-                log::warn!("ChatOp::UiButton not implemented");
-            }
-            Some(ChatOp::UiMenu) => {
-                log::warn!("ChatOp::UiMenu not implemented");
             }
             Some(ChatOp::Quit) => {
                 log::error!("got Quit");

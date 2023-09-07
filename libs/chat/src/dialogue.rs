@@ -7,13 +7,13 @@ use crate::now;
 use author::Author;
 use core::slice::Iter;
 use post::Post;
-//use crate::dialogue::{attach, author, post};
 use rkyv::{Archive, Deserialize, Serialize};
 use std::collections::HashMap;
 
 use std::io::{Error, ErrorKind};
 
-pub const MAX_BYTES: usize = 4000;
+// TODO do better than just allocate lots!
+pub const MAX_BYTES: usize = 65536;
 
 /// A Dialogue is a generic representation of a series of Posts
 /// This might represent a room, group, or direct-message conversation
@@ -34,7 +34,6 @@ pub struct Dialogue {
 }
 
 impl Dialogue {
-
     /// Creates a new Dialogue with a single Author.
     /// Author id=0 is assigned to the user of this Chat App.
     pub fn new(title: &str) -> Self {
@@ -53,6 +52,8 @@ impl Dialogue {
     }
 
     /// Add a new Post to the Dialogue
+    ///
+    /// TODO protect against Dialogue::MAX_BYTES overflow
     ///
     /// note: posts are sorted by timestamp, so:
     /// - `post_add` at beginning or end is fast (middle triggers a binary partition)
@@ -84,6 +85,7 @@ impl Dialogue {
                 let new_ts = new.timestamp();
                 let first_ts = self.posts.first().map_or(0, |p| p.timestamp());
                 let last_ts = self.posts.last().map_or(0, |p| p.timestamp());
+                log::trace!("{:?}", new);
                 if new_ts > last_ts {
                     log::info!("insert new post at end");
                     self.posts.push(new);
@@ -91,9 +93,8 @@ impl Dialogue {
                     log::info!("insert new post at start");
                     self.posts.insert(0, new);
                 } else {
-                    log::info!("{:?}", new);
                     // insert a new post in the correct position
-                    // OR replace an existing post with matching timestamp & author 
+                    // OR replace an existing post with matching timestamp & author
                     let i = self.posts.partition_point(|p| p.timestamp() < new_ts);
                     let last = self.posts.len() - 1;
                     for n in i..last {
@@ -179,7 +180,6 @@ impl Dialogue {
     pub fn author(&self, id: u16) -> Option<&Author> {
         self.authors.get(&id)
     }
-
 
     /// Return Some<author_id> by Author name, or None.
     ///

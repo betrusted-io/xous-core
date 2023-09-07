@@ -344,7 +344,7 @@ fn get_messages(body: Map<String, Value>, room_id: &str) -> Vec<Msg> {
                 if let Some(Value::Object(timeline)) = room.get("timeline") {
                     if let Some(Value::Array(events)) = timeline.get("events") {
                         for event in events.iter() {
-                            log::info!("{:?}", event);
+                            log::trace!("{:?}", event);
                             if let Some(Value::String(type_)) = event.get("type") {
                                 if type_.eq("m.room.message") {
                                     msgs.push(Msg {
