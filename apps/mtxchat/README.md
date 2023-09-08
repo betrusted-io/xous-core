@@ -26,10 +26,6 @@ Use another device such as a mobile or PC to:
   * https://spec.matrix.org/latest/#room-structure
 * Join the room
 
-Before switching to mtxchat app on Precursor, ensure that:
-* the PDDB is mounted
-* WiFi is connected.
-
 
 ## Functionality
 
@@ -62,17 +58,8 @@ The `mtxchat` servers is set to receive:
 
 ## Troubleshooting
 
-Prequisites: it is essential that the PDDB is mounted and WiFi is
-connected before running mtxcli. You can verify these in Shellchat
-with `net ping 1.1.1.1`.
+If you see the message `WARNING: clock not set` that is likely because the Precursor real time clock needs to be set (e.g. if the battery has been completely discharged). Please go to the menu **Preferences | Set Timezone** to set the time zone (and update the time via NTP).
 
-If you see the message `WARNING: clock not set` that is likely because
-the Precursor real time clock needs to be set (e.g. if the battery
-has been completely discharged). Please go to the menu
-**Preferences | Set Timezone** to set the time zone
-(and update the time via NTP).
-
-If you see the message `authentication failed` it might be because
-the `user` and `password` variables are not set properly.
+If you see the message `authentication failed` it might be because the `user` and `password` variables are not set properly.
 Alternatively it could be because TLS certificate validation
 has failed because the clock has not been set (see above).

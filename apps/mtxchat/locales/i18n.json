@@ -219,11 +219,11 @@
         "zh": "WiFi connected *EN*"
     },
     "mtxchat.wifi.warning": {
-        "en": "WARNING: WiFi not connected",
-        "en-tts": "WARNING: WiFi not connected",
-        "fr": "AVERTISSEMENT: WiFi pas connecté",
-        "ja": "WARNING: WiFi not connected *EN*",
-        "zh": "WARNING: WiFi not connected *EN*"
+        "en": "WiFi not connected. Entering read-only mode",
+        "en-tts": "WiFi not connected Entering read-only mode",
+        "fr": "WiFi pas connecté",
+        "ja": "WiFi not connected.  Entering read-only mode *EN*",
+        "zh": "WiFi not connected.  Entering read-only mode *EN*"
     },
     "mtxchat.close.item": {
         "en": "Close menu",

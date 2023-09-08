@@ -35,6 +35,7 @@ const DOMAIN_MATRIX: &str = "matrix.org";
 
 const EMPTY: &str = "";
 const MTX_LONG_TIMEOUT: i32 = 60000; // ms
+const WIFI_TIMEOUT: u32 = 10; // seconds
 
 pub const CLOCK_NOT_SET_ID: usize = 1;
 pub const PDDB_NOT_MOUNTED_ID: usize = 2;
@@ -230,7 +231,7 @@ impl<'a> MtxChat<'a> {
 
     pub fn connect(&mut self) -> bool {
         log::info!("Attempting connect to Matrix server");
-        if self.wifi_connected() {
+        if self.wifi() {
             if self.login() {
                 if let Some(room) = self.get_room_id() {
                     self.dialogue_set(Some(room.as_str()));
@@ -527,7 +528,7 @@ impl<'a> MtxChat<'a> {
         if since.len() > 0 {
             self.set_debug(SINCE_KEY, since);
             // don't re-start listening if there was an error
-            if self.logged_in && self.wifi_connected() {
+            if self.logged_in && self.wifi() {
                 self.listen();
             }
         }
@@ -564,14 +565,53 @@ impl<'a> MtxChat<'a> {
         }
     }
 
-    pub fn wifi_connected(&self) -> bool {
+    // returns true is wifi is connected
+    //
+    // If wifi is not connected then a modal offers to "Connect to wifi?"
+    // and tries for 10 seconds before representing.
+    //
+    pub fn wifi(&self) -> bool {
         if HOSTED_MODE {
-            true
-        } else {
-            match self.netmgr.get_ipv4_config() {
-                Some(conf) => conf.dhcp == com_rs::DhcpState::Bound,
-                None => false,
+            return true;
+        }
+
+        if let Some(conf) = self.netmgr.get_ipv4_config() {
+            if conf.dhcp == com_rs::DhcpState::Bound {
+                return true;
             }
+        }
+
+        while self.wifi_try_modal() {
+            self.netmgr.connection_manager_wifi_on_and_run().unwrap();
+            self.modals
+                .start_progress("Connecting ...", 0, 10, 0)
+                .expect("no progress bar");
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            for wait in 0..WIFI_TIMEOUT {
+                tt.sleep_ms(1000).unwrap();
+                self.modals
+                    .update_progress(wait)
+                    .expect("no progress update");
+                if let Some(conf) = self.netmgr.get_ipv4_config() {
+                    if conf.dhcp == com_rs::DhcpState::Bound {
+                        self.modals.finish_progress().expect("failed progress finish");
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    // returns true if "Connect to WiFi?" yes option is chosen
+    //
+    fn wifi_try_modal (&self) -> bool {        
+        self.modals.add_list_item("yes").expect("failed radio yes");
+        self.modals.add_list_item("no").expect("failed radio no");
+        self.modals.get_radiobutton("Connect to WiFi?").expect("failed radiobutton modal");
+        match self.modals.get_radio_index() {
+            Ok(button) => button == 0,
+            _ => false,
         }
     }
 }
