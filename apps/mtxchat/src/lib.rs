@@ -7,11 +7,9 @@ pub use api::*;
 use chat::{Chat, ChatOp};
 use locales::t;
 use modals::Modals;
-
+use pddb::Pddb;
 use std::fmt::Write as _;
-use std::fs::File;
 use std::io::{Error, ErrorKind, Read, Write as StdWrite};
-use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use trng::*;
 use xous_ipc::Buffer;
@@ -66,6 +64,7 @@ pub const HOSTED_MODE: bool = false;
 pub struct MtxChat<'a> {
     chat: &'a Chat,
     trng: Trng,
+    pddb: Pddb,
     netmgr: net::NetManager,
     user_id: String,
     user_name: String,
@@ -84,10 +83,13 @@ impl<'a> MtxChat<'a> {
     pub fn new(chat: &Chat) -> MtxChat {
         let xns = xous_names::XousNames::new().unwrap();
         let modals = Modals::new(&xns).expect("can't connect to Modals server");
-        let trng = Trng::new(&xns).unwrap();
-        let common = MtxChat {
+        let trng = Trng::new(&xns).unwrap(); 
+        let pddb = pddb::Pddb::new();
+        pddb.try_mount();
+        MtxChat {
             chat: chat,
             trng: trng,
+            pddb: pddb,
             netmgr: net::NetManager::new(),
             user_id: EMPTY.to_string(),
             user_name: EMPTY.to_string(),
@@ -101,16 +103,7 @@ impl<'a> MtxChat<'a> {
             since: EMPTY.to_string(),
             listening: false,
             modals: modals,
-        };
-
-        // create the mtxchat dict if it does not exist
-        let pddb = pddb::Pddb::new();
-        pddb.try_mount();
-        match pddb.get(MTXCHAT_STATE, USER_DOMAIN_KEY, None, true, false, None, None::<fn()>) {
-            Ok(_) => {}
-            Err(e) => log::warn!("failed to create dict: {:?}", e),
         }
-        common
     }
 
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), Error> {
@@ -121,10 +114,21 @@ impl<'a> MtxChat<'a> {
             ))
         } else {
             log::info!("set '{}' = '{}'", key, value);
-            let mut keypath = PathBuf::new();
-            keypath.push(MTXCHAT_STATE);
-            keypath.push(key);
-            File::create(keypath)?.write_all(value.as_bytes())?;
+            match self
+                .pddb
+                .get(MTXCHAT_STATE, key, None, true, true, None, None::<fn()>)
+            {
+                Ok(mut pddb_key) => match pddb_key.write(&value.as_bytes()) {
+                    Ok(len) => {
+                        self.pddb.sync().ok();
+                        log::trace!("Wrote {} bytes to {}:{}", len, MTXCHAT_STATE, key);
+                    }
+                    Err(e) => {
+                        log::warn!("Error writing {}:{} {:?}", MTXCHAT_STATE, key, e);
+                    }
+                },
+                Err(e) => log::warn!("failed to set pddb {}:{}  {:?}", MTXCHAT_STATE, key, e),
+            };
             match key {
                 // update cached values
                 FILTER_KEY => self.filter = value.to_string(),
@@ -161,19 +165,12 @@ impl<'a> MtxChat<'a> {
             ))
         } else {
             log::info!("unset '{}'", key);
-            let mut keypath = PathBuf::new();
-            keypath.push(MTXCHAT_STATE);
-            if std::fs::metadata(&keypath).is_ok() { // keypath exists
-                 // log::info!("dict '{}' exists", MTXCHAT_STATE);
-            } else {
-                log::info!("dict '{}' does NOT exist.. creating it", MTXCHAT_STATE);
-                std::fs::create_dir_all(&keypath)?;
-            }
-            keypath.push(key);
-            if std::fs::metadata(&keypath).is_ok() {
-                // keypath exists
-                log::info!("dict:key = '{}:{}' exists.. deleting it", MTXCHAT_STATE, key);
-                std::fs::remove_file(keypath)?;
+            match self.pddb.delete_key(MTXCHAT_STATE, key, None) {
+                Ok(_) => log::info!("pddb key deleted: {key}"),
+                Err(e) => match e.kind() {
+                    ErrorKind::NotFound => (), // ignore, nothing to do
+                    _ => log::warn!("failed to delete pddb key: {key}: {:?}", e),
+                },
             }
             match key {
                 // update cached values
@@ -202,21 +199,30 @@ impl<'a> MtxChat<'a> {
     }
 
     pub fn get(&self, key: &str) -> Result<Option<String>, Error> {
-        // if key.eq(CURRENT_VERSION_KEY) {
-        //     Ok(Some(self.version.clone()))
-        // } else {
-        let mut keypath = PathBuf::new();
-        keypath.push(MTXCHAT_STATE);
-        keypath.push(key);
-        if let Ok(mut file) = File::open(keypath) {
-            let mut value = String::new();
-            file.read_to_string(&mut value)?;
-            log::info!("get '{}' = '{}'", key, value);
-            Ok(Some(value))
-        } else {
-            Ok(None)
-        }
-        // }
+        let value = match self
+            .pddb
+            .get(MTXCHAT_STATE, key, None, true, false, None, None::<fn()>)
+        {
+            Ok(mut pddb_key) => {
+                let mut buffer = [0; 256];
+                match pddb_key.read(&mut buffer) {
+                    Ok(len) => match String::from_utf8(buffer[..len].to_vec()) {
+                        Ok(s) => Some(s),
+                        Err(e) => {
+                            log::warn!("failed to String: {:?}", e);
+                            None
+                        }
+                    },
+                    Err(e) => {
+                        log::warn!("failed pddb_key read: {:?}", e);
+                        None
+                    }
+                }
+            }
+            Err(_) => None,
+        };
+        log::info!("get '{}' = '{:?}'", key, value);
+        Ok(value)
     }
 
     pub fn get_or(&mut self, key: &str, default: &str) -> String {
