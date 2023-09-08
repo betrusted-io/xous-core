@@ -17,7 +17,8 @@ use trng::*;
 use xous_ipc::Buffer;
 
 /// PDDB Dict for mtxchat keys
-const MTXCHAT_DICT: &str = "mtxchat";
+const MTXCHAT_STATE: &str = "mtxchat.state";
+const MTXCHAT_DIALOGUE: &str = "mtxchat.dialogue";
 
 const FILTER_KEY: &str = "_filter";
 const PASSWORD_KEY: &str = "password";
@@ -105,7 +106,7 @@ impl<'a> MtxChat<'a> {
         // create the mtxchat dict if it does not exist
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
-        match pddb.get(MTXCHAT_DICT, USER_DOMAIN_KEY, None, true, false, None, None::<fn()>) {
+        match pddb.get(MTXCHAT_STATE, USER_DOMAIN_KEY, None, true, false, None, None::<fn()>) {
             Ok(_) => {}
             Err(e) => log::warn!("failed to create dict: {:?}", e),
         }
@@ -121,7 +122,7 @@ impl<'a> MtxChat<'a> {
         } else {
             log::info!("set '{}' = '{}'", key, value);
             let mut keypath = PathBuf::new();
-            keypath.push(MTXCHAT_DICT);
+            keypath.push(MTXCHAT_STATE);
             keypath.push(key);
             File::create(keypath)?.write_all(value.as_bytes())?;
             match key {
@@ -161,17 +162,17 @@ impl<'a> MtxChat<'a> {
         } else {
             log::info!("unset '{}'", key);
             let mut keypath = PathBuf::new();
-            keypath.push(MTXCHAT_DICT);
+            keypath.push(MTXCHAT_STATE);
             if std::fs::metadata(&keypath).is_ok() { // keypath exists
-                 // log::info!("dict '{}' exists", MTXCHAT_DICT);
+                 // log::info!("dict '{}' exists", MTXCHAT_STATE);
             } else {
-                log::info!("dict '{}' does NOT exist.. creating it", MTXCHAT_DICT);
+                log::info!("dict '{}' does NOT exist.. creating it", MTXCHAT_STATE);
                 std::fs::create_dir_all(&keypath)?;
             }
             keypath.push(key);
             if std::fs::metadata(&keypath).is_ok() {
                 // keypath exists
-                log::info!("dict:key = '{}:{}' exists.. deleting it", MTXCHAT_DICT, key);
+                log::info!("dict:key = '{}:{}' exists.. deleting it", MTXCHAT_STATE, key);
                 std::fs::remove_file(keypath)?;
             }
             match key {
@@ -205,7 +206,7 @@ impl<'a> MtxChat<'a> {
         //     Ok(Some(self.version.clone()))
         // } else {
         let mut keypath = PathBuf::new();
-        keypath.push(MTXCHAT_DICT);
+        keypath.push(MTXCHAT_STATE);
         keypath.push(key);
         if let Ok(mut file) = File::open(keypath) {
             let mut value = String::new();
@@ -427,7 +428,7 @@ impl<'a> MtxChat<'a> {
 
     pub fn dialogue_set(&self, room: Option<&str>) {
         self.chat
-            .dialogue_set(MTXCHAT_DICT, room)
+            .dialogue_set(MTXCHAT_DIALOGUE, room)
             .expect("failed to set dialogue");
     }
 
