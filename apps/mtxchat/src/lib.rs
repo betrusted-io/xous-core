@@ -100,27 +100,13 @@ impl<'a> MtxChat<'a> {
             listening: false,
             modals: modals,
         };
-        let mut keypath = PathBuf::new();
-        keypath.push(MTXCHAT_DICT);
-        if !std::fs::metadata(&keypath).is_ok() {
-            common.modals
-                .show_notification("mtxchat dict DOES NOT exist", None)
-                .expect("notification failed");
-            log::info!("dict '{}' does NOT exist.. creating it", MTXCHAT_DICT);
-            match std::fs::create_dir_all(&keypath) {
-                Ok(_) => {
-                    common.modals
-                        .show_notification("created mtxchat dict", None)
-                        .expect("notification failed");
-                    log::info!("created dict: {}", MTXCHAT_DICT);
-                }
-                Err(e) => {
-                    common.modals
-                        .show_notification("failed to creat mtxchat dict", None)
-                        .expect("notification failed");
-                    log::warn!("failed to create dict: {:?}", e);
-                }
-            }
+
+        // create the mtxchat dict if it does not exist
+        let pddb = pddb::Pddb::new();
+        pddb.try_mount();
+        match pddb.get(MTXCHAT_DICT, USER_DOMAIN_KEY, None, true, false, None, None::<fn()>) {
+            Ok(_) => {}
+            Err(e) => log::warn!("failed to create dict: {:?}", e),
         }
         common
     }
