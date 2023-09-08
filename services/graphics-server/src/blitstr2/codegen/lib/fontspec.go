@@ -20,7 +20,7 @@ type FontSpec struct {
 
 // Look up trim limits based on row & column in glyph grid
 func (f FontSpec) TrimLimits(row int, col int) [4]int {
-	if f.Name == "Bold" || f.Name == "Regular" || f.Name == "Small" {
+	if f.Name == "Bold" || f.Name == "Regular" || f.Name == "Small" || f.Name == "Tall" {
 		// Space gets 4px width and 2px height
 		if col == 2 && row == 0 {
 			lr := (f.Size / 2) - 2

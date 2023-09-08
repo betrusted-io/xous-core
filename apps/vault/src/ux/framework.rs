@@ -70,13 +70,14 @@ pub struct VaultUx {
 }
 
 pub const DEFAULT_FONT: GlyphStyle = GlyphStyle::Regular;
-pub const FONT_LIST: [&'static str; 6] = [
-    "regular", "mono", "cjk",
+pub const FONT_LIST: [&'static str; 7] = [
+    "regular", "tall", "mono", "cjk",
     "bold", "large", "small"
 ];
 pub fn name_to_style(name: &str) -> Option<GlyphStyle> {
     match name {
         "regular" => Some(GlyphStyle::Regular),
+        "tall" => Some(GlyphStyle::Tall),
         "mono" => Some(GlyphStyle::Monospace),
         "cjk" => Some(GlyphStyle::Cjk),
         "bold" => Some(GlyphStyle::Bold),
@@ -93,6 +94,7 @@ fn style_to_name(style: &GlyphStyle) -> String {
         GlyphStyle::Bold => "bold".to_string(),
         GlyphStyle::Large => "large".to_string(),
         GlyphStyle::Small => "small".to_string(),
+        GlyphStyle::Tall => "tall".to_string(),
         _ => "regular".to_string(),
     }
 }

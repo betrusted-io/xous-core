@@ -8,6 +8,7 @@ pub enum GlyphStyle {
     Cjk = 4,
     Large = 5,
     ExtraLarge = 6,
+    Tall = 7,
 }
 
 /// Convert number to style for use with register-based message passing sytems
@@ -22,6 +23,7 @@ impl From<usize> for GlyphStyle {
             4 => GlyphStyle::Cjk,
             5 => GlyphStyle::Large,
             6 => GlyphStyle::ExtraLarge,
+            7 => GlyphStyle::Tall,
             _ => GlyphStyle::Regular,
         }
     }
@@ -39,6 +41,7 @@ impl From<GlyphStyle> for usize {
             GlyphStyle::Cjk => 4,
             GlyphStyle::Large => 5,
             GlyphStyle::ExtraLarge => 6,
+            GlyphStyle::Tall => 7,
         }
     }
 }
@@ -57,5 +60,6 @@ pub fn glyph_to_height_hint(g: GlyphStyle) -> usize {
         GlyphStyle::Cjk => 16, // crate::blistr2::fonts::emoji::MAX_HEIGHT as usize,
         GlyphStyle::Large => 24, // 2x of small
         GlyphStyle::ExtraLarge => 30, // 2x of regular
+        GlyphStyle::Tall => 19,
     }
 }

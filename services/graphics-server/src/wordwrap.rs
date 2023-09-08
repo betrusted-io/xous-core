@@ -143,7 +143,15 @@ impl ComposedType {
                         clip_rect.tl().x, clip_rect.tl().y,
                         clip_rect.br().x, clip_rect.br().y
                     );
-                    if !glyph.double {
+                    if glyph.large {
+                        blitstr2::xor_glyph_large(
+                            frbuf,
+                            &Point::new(maybe_x, maybe_y),
+                            *glyph,
+                            glyph.invert ^ invert,
+                            cr
+                        );
+                    } else if !glyph.double {
                         blitstr2::xor_glyph(
                             frbuf,
                             &Point::new(maybe_x, maybe_y),
@@ -266,7 +274,7 @@ impl Typesetter {
         // going out of scope at the end of the call.
         let mut composition = Vec::<TypesetWord>::new();
 
-        if self.bb.max.x - self.bb.min.y < glyph_to_height_hint(GlyphStyle::Regular) as i16 {
+        if self.bb.max.x - self.bb.min.x < glyph_to_height_hint(GlyphStyle::Regular) as i16 {
             // we flag this because the typesetter algorithm may never converge if it can't set any characters
             // because the region is just too narrow.
             log::error!("Words cannot be typset because the width of the typset region is too narrow.");

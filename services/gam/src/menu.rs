@@ -9,7 +9,7 @@ pub use graphics_server::*;
 use xous_ipc::{String, Buffer};
 use num_traits::*;
 
-use graphics_server::api::{PixelColor, TextBounds, DrawStyle, GlyphStyle};
+use graphics_server::api::{PixelColor, TextBounds, DrawStyle};
 
 #[cfg(feature = "tts")]
 use tts_frontend::*;
@@ -60,7 +60,7 @@ impl<'a> Menu<'a> {
         assert!(authtoken.is_some(), "Couldn't register menu. Did you remember to add the app_name to the tokens.rs expected boot contexts list?");
         log::debug!("requesting content canvas for menu");
         let canvas = gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
-        let line_height = gam.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height hint") as i16 + 2;
+        let line_height = gam.glyph_height_hint(crate::SYSTEM_STYLE).expect("couldn't get glyph height hint") as i16 + 2;
         #[cfg(feature="tts")]
         let tts = TtsFrontend::new(&xns).unwrap();
         Menu {
@@ -210,7 +210,7 @@ impl<'a> Menu<'a> {
         }
         write!(item_tv.text, "{}", item.name.as_str().unwrap()).unwrap();
         item_tv.draw_border = false;
-        item_tv.style = GlyphStyle::Regular;
+        item_tv.style = crate::SYSTEM_STYLE;
         item_tv.margin = Point::new(0, 0);
         item_tv.ellipsis = true;
 

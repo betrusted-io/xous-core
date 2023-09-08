@@ -61,7 +61,7 @@ enum RendererState {
     RunImage(ManagedImage),
 }
 
-const DEFAULT_STYLE: GlyphStyle = GlyphStyle::Regular;
+const DEFAULT_STYLE: GlyphStyle = gam::SYSTEM_STYLE;
 
 fn main () -> ! {
     #[cfg(not(feature="ditherpunk"))]
