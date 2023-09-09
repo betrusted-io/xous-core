@@ -316,11 +316,13 @@ impl<'a> MtxChat<'a> {
                     self.set_debug(TOKEN_KEY, &new_token);
                     self.logged_in = true;
                 } else {
-                    log::info!(
+                    log::warn!(
                         "Error: cannnot login with type: {}",
                         web::MTX_LOGIN_PASSWORD
                     );
                 }
+            } else {
+                log::warn!("failed to web::get_login_type()");
             }
         }
         if self.logged_in {
@@ -654,10 +656,12 @@ impl<'a> MtxChat<'a> {
 
     // returns true if "Connect to WiFi?" yes option is chosen
     //
-    fn wifi_try_modal (&self) -> bool {        
+    fn wifi_try_modal(&self) -> bool {
         self.modals.add_list_item("yes").expect("failed radio yes");
         self.modals.add_list_item("no").expect("failed radio no");
-        self.modals.get_radiobutton("Connect to WiFi?").expect("failed radiobutton modal");
+        self.modals
+            .get_radiobutton("Connect to WiFi?")
+            .expect("failed radiobutton modal");
         match self.modals.get_radio_index() {
             Ok(button) => button == 0,
             _ => false,

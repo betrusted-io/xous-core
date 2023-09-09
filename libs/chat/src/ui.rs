@@ -149,7 +149,7 @@ impl Ui {
             (Some(dict), Some(key)) => {
                 match self
                     .pddb
-                    .get(&dict, &key, None, false, false, None, None::<fn()>)
+                    .get(&dict, &key, None, true, false, None, None::<fn()>)
                 {
                     Ok(mut pddb_key) => {
                         let mut bytes = [0u8; dialogue::MAX_BYTES + 2];

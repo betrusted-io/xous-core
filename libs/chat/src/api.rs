@@ -25,6 +25,8 @@ pub enum ChatOp {
     GamRawkeys,
     /// redraw our Chat UI
     GamRedraw,
+    /// Show some user help
+    Help,
     /// Add a new MenuItem to the App menu
     MenuAdd,
     /// Add a new Post to the Dialogue

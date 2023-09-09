@@ -40,9 +40,9 @@ mtxchat provides the following basic functionality:
 
 The `mtxchat` code is primarily concerned with the [matrix] specific protocols, while the Chat library handles the UI and pddb storage.
 
-Much of the code in `main.rs` & `lib.rs` has been adapted from `mtxcli`, while `url.rs` and `web.rs` are simple copies.
+Much of the code in `main.rs` `lib.rs` `web.rs` & `url.rs` has been adapted from `mtxcli`.
 
-The Chat library provides the UI to display a series of matrix events (Posts) in a matrix room (Dialogue) stored in the pddb. Each Dialogue is stored in the `pddb:dict` `mtxchat` under a descriptive `pddb:key` (ie `#xous-apps:matrix.org`).
+The Chat library provides the UI to display a series of matrix events (Posts) in a matrix room (Dialogue) stored in the pddb. Each Dialogue is stored in the `pddb:dict` `mtxchat.dialogue` under a descriptive `pddb:key` (ie `#xous-apps:matrix.org`).
 
 `mtxchat` passes a menu to the Chat UI:
 * `room` to type a [matrix] room/server
