@@ -78,6 +78,7 @@ pub struct MtxChat<'a> {
     since: String,
     listening: bool,
     modals: Modals,
+    new_room: bool,
 }
 impl<'a> MtxChat<'a> {
     pub fn new(chat: &Chat) -> MtxChat {
@@ -103,6 +104,7 @@ impl<'a> MtxChat<'a> {
             since: EMPTY.to_string(),
             listening: false,
             modals: modals,
+            new_room: false,
         }
     }
 
@@ -243,6 +245,12 @@ impl<'a> MtxChat<'a> {
                 if let Some(room) = self.get_room_id() {
                     self.dialogue_set(Some(room.as_str()));
                     self.listen();
+                    if self.new_room {
+                        self.new_room = false;
+                        self.modals
+                            .show_notification(t!("mtxchat.listen.patience", locales::LANG), None)
+                            .expect("notification failed");
+                    }
                     return true;
                 } else {
                     self.modals
@@ -403,10 +411,13 @@ impl<'a> MtxChat<'a> {
         let builder = match self.get(ROOM_NAME_KEY) {
             // TODO add TextValidationFn
             Ok(Some(room)) => builder.field_placeholder_persist(Some(room), None),
-            _ => builder.field(
-                Some(t!("mtxchat.room.name", locales::LANG).to_string()),
-                None,
-            ),
+            _ => {
+                self.new_room = true;
+                builder.field(
+                    Some(t!("mtxchat.room.name", locales::LANG).to_string()),
+                    None,
+                )
+            }
         };
         let builder = match self.get(ROOM_DOMAIN_KEY) {
             // TODO add TextValidationFn
