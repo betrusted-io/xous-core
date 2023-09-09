@@ -141,6 +141,7 @@ impl<'a> MtxChat<'a> {
                 ROOM_NAME_KEY => self.room_name = value.to_string(),
                 ROOM_DOMAIN_KEY => self.room_domain = value.to_string(),
                 SINCE_KEY => self.since = value.to_string(),
+                TOKEN_KEY => self.token = value.to_string(),
                 USER_NAME_KEY => self.user_name = value.to_string(),
                 USER_DOMAIN_KEY => self.user_domain = value.to_string(),
                 USER_ID_KEY => self.user_id = value.to_string(),
