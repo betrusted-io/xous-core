@@ -522,12 +522,22 @@ impl<'a> MtxChat<'a> {
             let token = self.token.clone();
             let chat_cid = self.chat.cid();
             move || {
-                // log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
+                let xns = xous_names::XousNames::new().unwrap();
+                let modals = Modals::new(&xns).expect("can't connect to Modals server");
+                log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
                 if let Some((_since, events)) =
                     web::client_sync(&server, &filter, &since, MTX_LONG_TIMEOUT, &room_id, &token)
                 {
                     // TODO send "since" to mtxchat server
                     // and you probably want to have a look at Dialogue::MAX_BYTES
+
+                    // TODO resolve suspected race condition
+                    // This progress modal is masking a bug by slowing the loop down
+                    // Precursor "Guru Mediation" `voilated: nonNull::new_unchecked`
+                    modals
+                        .start_progress("Receiving events ...", 0, events.len() as u32, 0)
+                        .expect("no progress bar");
+                    let mut event_count = 0;
                     for event in events {
                         let sender = event.sender.unwrap_or("anon".to_string());
                         let body = event.body.unwrap_or("...".to_string());
@@ -542,8 +552,13 @@ impl<'a> MtxChat<'a> {
                             Err(_) => Err(xous::Error::InternalError),
                         }
                         .expect("failed to convert post into buffer");
+                        event_count += 1;
+                        modals
+                            .update_progress(event_count)
+                            .expect("no progress update");
                     }
                 }
+                modals.finish_progress().expect("failed progress finish");
                 // trigger the chat ui to save the dialogue to the pddb
                 xous::send_message(
                     chat_cid,
@@ -625,7 +640,9 @@ impl<'a> MtxChat<'a> {
                     .expect("no progress update");
                 if let Some(conf) = self.netmgr.get_ipv4_config() {
                     if conf.dhcp == com_rs::DhcpState::Bound {
-                        self.modals.finish_progress().expect("failed progress finish");
+                        self.modals
+                            .finish_progress()
+                            .expect("failed progress finish");
                         return true;
                     }
                 }
