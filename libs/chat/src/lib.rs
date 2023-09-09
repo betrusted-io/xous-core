@@ -97,6 +97,17 @@ impl Chat {
         }
     }
 
+    /// Show some user help
+    ///
+    pub fn help(&self) {
+        xous::send_message(
+            self.cid,
+            xous::Message::new_scalar(ChatOp::Help as usize, 0, 0, 0, 0),
+        )
+        .map(|_| ())
+        .expect("failed to get help");
+    }
+
     /// Add a new MenuItem to the App menu
     ///
     /// # Arguments
@@ -363,6 +374,10 @@ pub fn server(
                         msg.forward(cid, opcode).expect("failed to fwd rawkey");
                     }
                 }
+            }
+            Some(ChatOp::Help) => {
+                log::info!("ChatOp::Help");
+                ui.help();
             }
             Some(ChatOp::GamRedraw) => {
                 log::info!("ChatOp::GamRedraw");

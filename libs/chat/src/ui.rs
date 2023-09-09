@@ -310,6 +310,14 @@ impl Ui {
         }
     }
 
+    /// Show some user help
+    ///
+    pub fn help(&self) {
+        self.modals
+            .show_notification(t!("chat.help.navigation", locales::LANG), None)
+            .expect("notification failed");
+    }
+
     /// Add a new MenuItem to the App menu
     ///
     /// # Arguments

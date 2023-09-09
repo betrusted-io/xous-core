@@ -78,13 +78,14 @@ pub struct MtxChat<'a> {
     since: String,
     listening: bool,
     modals: Modals,
+    new_username: bool,
     new_room: bool,
 }
 impl<'a> MtxChat<'a> {
     pub fn new(chat: &Chat) -> MtxChat {
         let xns = xous_names::XousNames::new().unwrap();
         let modals = Modals::new(&xns).expect("can't connect to Modals server");
-        let trng = Trng::new(&xns).unwrap(); 
+        let trng = Trng::new(&xns).unwrap();
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
         MtxChat {
@@ -104,6 +105,7 @@ impl<'a> MtxChat<'a> {
             since: EMPTY.to_string(),
             listening: false,
             modals: modals,
+            new_username: false,
             new_room: false,
         }
     }
@@ -251,6 +253,10 @@ impl<'a> MtxChat<'a> {
                             .show_notification(t!("mtxchat.listen.patience", locales::LANG), None)
                             .expect("notification failed");
                     }
+                    if self.new_username {
+                        self.new_username = false;
+                        self.help();
+                    }
                     return true;
                 } else {
                     self.modals
@@ -332,10 +338,13 @@ impl<'a> MtxChat<'a> {
         let builder = match self.get(USER_NAME_KEY) {
             // TODO add TextValidationFn
             Ok(Some(user)) => builder.field_placeholder_persist(Some(user), None),
-            _ => builder.field(
-                Some(t!("mtxchat.user_name", locales::LANG).to_string()),
-                None,
-            ),
+            _ => {
+                self.new_username = true;
+                builder.field(
+                    Some(t!("mtxchat.user_name", locales::LANG).to_string()),
+                    None,
+                )
+            }
         };
         let builder = match self.get(USER_DOMAIN_KEY) {
             // TODO add TextValidationFn
@@ -447,6 +456,10 @@ impl<'a> MtxChat<'a> {
         self.chat
             .dialogue_set(MTXCHAT_DIALOGUE, room)
             .expect("failed to set dialogue");
+    }
+
+    pub fn help(&self) {
+        self.chat.help();
     }
 
     // assume logged in, token is valid, room_id is valid, user is valid
