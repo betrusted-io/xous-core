@@ -221,9 +221,8 @@ impl Tls {
                         let pos: u16 = u16::from_be_bytes([bytes[0], bytes[1]]);
                         let pos: usize = pos.into();
                         // deserialize the trust-anchor
-                        let archive = unsafe {
-                            rkyv::archived_value::<RustlsOwnedTrustAnchor>(&bytes, pos)
-                        };
+                        let archive =
+                            unsafe { rkyv::archived_value::<RustlsOwnedTrustAnchor>(&bytes, pos) };
                         let ta = archive.deserialize(&mut AllocDeserializer {}).ok();
                         log::info!("get '{}' = '{:?}'", key, &ta);
                         ta

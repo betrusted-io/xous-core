@@ -53,7 +53,7 @@ pub fn shellchat<'a>(
                     )
                 })
                 .collect();
-            let mut count:u32 = rotas.len().try_into().unwrap();
+            let mut count: u32 = rotas.len().try_into().unwrap();
             let xns = XousNames::new().unwrap();
             let modals = Modals::new(&xns).unwrap();
             modals
@@ -159,7 +159,12 @@ pub fn shellchat<'a>(
         }
         None | _ => {
             write!(ret, "{}\n", t!("tls.cmd", locales::LANG)).ok();
-            write!(ret, "\tdeleteall\t{}\n", t!("tls.deleteall_cmd", locales::LANG)).ok();
+            write!(
+                ret,
+                "\tdeleteall\t{}\n",
+                t!("tls.deleteall_cmd", locales::LANG)
+            )
+            .ok();
             write!(ret, "\thelp\n").ok();
             write!(ret, "\tlist\t{}\n", t!("tls.list_cmd", locales::LANG)).ok();
             #[cfg(feature = "rootCA")]
