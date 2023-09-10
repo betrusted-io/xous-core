@@ -244,6 +244,65 @@ impl Tls {
         }
         root_store
     }
+
+    /// Probes the target and returns true is at least 1 certificate is trusted
+    ///
+    /// Establishes a tls connection to the target host, extracts the
+    /// certificates offered and immediately closes the connection.
+    /// The certificates are presented by modal to the user, and saved to the
+    /// pddb if trusted.
+    ///
+    /// By default, rustls only provides access to a trusted certificate chain.
+    /// Probe briefly stifles the certificate validation (ie trusts everything)
+    /// in order to grab the untrusted cetificate chain and present it to the
+    /// user for examination.
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - the target tls site (i.e. betrusted.io)
+    ///
+    pub fn probe(&self, target: &str) -> Result<usize, Error> {
+        log::info!("starting TLS probe");
+        // Attempt to open the tls connection with an empty root_store
+        let root_store = rustls::RootCertStore::empty();
+        // Stifle the default rustls certificate verification's complaint about an
+        // unknown/untrusted CA root certificate so that we get to see the certificate chain
+        let stifled_verifier =
+            Arc::new(danger::StifledCertificateVerification { roots: root_store });
+        let config = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_custom_certificate_verifier(stifled_verifier)
+            .with_no_client_auth();
+        match target.try_into() {
+            Ok(server_name) => {
+                let mut conn =
+                    rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
+                log::info!("connect TCPstream to {}", target);
+                let url = format!("{}:443", target);
+                match TcpStream::connect(url) {
+                    Ok(mut sock) => {
+                        match conn.complete_io(&mut sock) {
+                            Ok(_) => log::info!("handshake complete"),
+                            Err(e) => log::warn!("{e}"),
+                        }
+                        conn.send_close_notify();
+                        match conn.peer_certificates() {
+                            Some(certificates) => Ok(self.check_trust(certificates)),
+                            None => Ok(0),
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("{e}");
+                        Err(e)
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("failed to create sever_name from {target}: {e}");
+                Err(Error::from(ErrorKind::InvalidInput))
+            }
+        }
+    }
 }
 
 // https://stackoverflow.com/questions/57029974/how-to-split-string-into-chunks-in-rust-to-insert-spaces
