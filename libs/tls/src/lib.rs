@@ -1,5 +1,5 @@
 pub mod cmd;
-pub mod danger;
+mod danger;
 pub mod rota;
 
 use crate::rota::RustlsOwnedTrustAnchor;

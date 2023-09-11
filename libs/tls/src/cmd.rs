@@ -1,4 +1,4 @@
-use crate::{danger, Tls};
+use crate::Tls;
 use locales::t;
 #[cfg(feature = "rootCA")]
 use modals::Modals;
