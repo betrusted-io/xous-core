@@ -197,7 +197,8 @@ impl PddbOs {
         )
         .expect("Couldn't map the PDDB memory range");
         #[cfg(any(feature="precursor", feature="renode"))]
-        log::info!("pddb slice len: {}, PDDB_A_LEN: {}, raw len: {}", pddb.as_slice::<u8>().len(), PDDB_A_LEN, pddb.len()); // sanity check the PDDB size on init
+        // Safety: all u8 values are valid
+        log::info!("pddb slice len: {}, PDDB_A_LEN: {}, raw len: {}", unsafe { pddb.as_slice::<u8>().len() }, PDDB_A_LEN, pddb.len()); // sanity check the PDDB size on init
 
         // the mbbb is located one page off from the Page Table
         let key_phys_base = PageAlignedPa::from(size_of::<PageTableInFlash>());
@@ -376,7 +377,7 @@ impl PddbOs {
         // log::trace!("patch bef: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize + self.data_phys_base.as_usize()..offset as usize + self.data_phys_base.as_usize() + 48]);
         assert!(data.len() + offset as usize <= PDDB_A_LEN - self.data_phys_base.as_usize(), "attempt to store past disk boundary");
         self.spinor.patch(
-            self.pddb_mr.as_slice(),
+            unsafe { self.pddb_mr.as_slice() },
             xous::PDDB_LOC,
             &data,
             offset + self.data_phys_base.as_u32(),
@@ -391,7 +392,7 @@ impl PddbOs {
             if let Some(mbbb) = self.mbbb_retrieve() {
                 if let Some(erased_offset) = self.pt_find_erased_slot() {
                     self.spinor.patch(
-                        self.pddb_mr.as_slice(),
+                        unsafe { self.pddb_mr.as_slice() },
                         xous::PDDB_LOC,
                         &mbbb,
                         self.pt_phys_base.as_u32() + erased_offset,
@@ -407,7 +408,7 @@ impl PddbOs {
             // 3. copy the data to a local buffer
             let mut mbbb_page = [0u8; PAGE_SIZE];
             for (&src, dst) in
-            self.pddb_mr.as_slice()[self.pt_phys_base.as_usize() + base_page..self.pt_phys_base.as_usize() + base_page + PAGE_SIZE].iter()
+            unsafe { self.pddb_mr.as_slice()[self.pt_phys_base.as_usize() + base_page..self.pt_phys_base.as_usize() + base_page + PAGE_SIZE].iter() }
             .zip(mbbb_page.iter_mut()) {
                 *dst = src;
             }
@@ -423,7 +424,7 @@ impl PddbOs {
             // 6. erase the original page area, thus making the MBBB the authorative location
             let blank = [0xffu8; PAGE_SIZE];
             self.spinor.patch(
-                self.pddb_mr.as_slice(),
+                unsafe { self.pddb_mr.as_slice() },
                 xous::PDDB_LOC,
                 &blank,
                 self.pt_phys_base.as_u32() + base_page as u32,
@@ -436,7 +437,7 @@ impl PddbOs {
     fn patch_pagetable_raw(&self, data: &[u8], offset: u32) {
         assert!(data.len() + offset as usize <= size_of::<PageTableInFlash>(), "attempt to patch past page table end");
         self.spinor.patch(
-            self.pddb_mr.as_slice(),
+            unsafe { self.pddb_mr.as_slice() },
             xous::PDDB_LOC,
             &data,
             self.pt_phys_base.as_u32() + offset,
@@ -446,7 +447,7 @@ impl PddbOs {
         assert!(data.len() + offset as usize <= PAGE_SIZE, "attempt to burn key data that is outside the key region");
         log::info!("patching keys area with {} bytes", data.len());
         self.spinor.patch(
-            self.pddb_mr.as_slice(),
+            unsafe { self.pddb_mr.as_slice() },
             xous::PDDB_LOC,
             data,
             self.key_phys_base.as_u32() + offset
@@ -455,7 +456,7 @@ impl PddbOs {
     fn patch_mbbb(&self, data: &[u8], offset: u32) {
         assert!(data.len() + offset as usize <= PAGE_SIZE * MBBB_PAGES, "mbbb patch would go out of bounds");
         self.spinor.patch(
-            self.pddb_mr.as_slice(),
+            unsafe { self.pddb_mr.as_slice() },
             xous::PDDB_LOC,
             data,
             self.mbbb_phys_base.as_u32() + offset
@@ -466,7 +467,7 @@ impl PddbOs {
     fn patch_fscb(&self, data: &[u8], offset: u32) {
         assert!(data.len() + offset as usize <= PAGE_SIZE * FSCB_PAGES, "fscb patch would go out of bounds");
         self.spinor.patch(
-            self.pddb_mr.as_slice(),
+            unsafe { self.pddb_mr.as_slice() },
             xous::PDDB_LOC,
             data,
             self.fscb_phys_base.as_u32() + offset
@@ -497,7 +498,7 @@ impl PddbOs {
     /// This would want to be optimized or cached for a much larger filesystem.
     /// Returns the physical address of the erased slot as an offset from the pt_phys_base()
     fn pt_find_erased_slot(&self) -> Option<PhysAddr> {
-        let pt: &[u8] = &self.pddb_mr.as_slice()[self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()];
+        let pt: &[u8] = unsafe { &self.pddb_mr.as_slice()[self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()] };
         let blank = [0xffu8; aes::BLOCK_SIZE];
         for (index, page) in pt.chunks(PAGE_SIZE).enumerate() {
             if page[..aes::BLOCK_SIZE] == blank {
@@ -507,7 +508,7 @@ impl PddbOs {
         None
     }
     fn pt_as_slice(&self) -> &[u8] {
-        &self.pddb_mr.as_slice()[self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()]
+        unsafe { &self.pddb_mr.as_slice()[self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()] }
     }
 
     /// scans the page tables and returns all entries for a given basis
@@ -639,7 +640,7 @@ impl PddbOs {
 
     /// maps a StaticCryptoData structure into the key area of the PDDB.
     fn static_crypto_data_get(&self) -> &StaticCryptoData {
-        let scd_ptr = self.pddb_mr.as_slice::<u8>()[self.key_phys_base.as_usize()..self.key_phys_base.as_usize() + PAGE_SIZE].as_ptr() as *const StaticCryptoData;
+        let scd_ptr = unsafe { self.pddb_mr.as_slice::<u8>()[self.key_phys_base.as_usize()..self.key_phys_base.as_usize() + PAGE_SIZE].as_ptr() as *const StaticCryptoData };
         let scd: &StaticCryptoData = unsafe{scd_ptr.as_ref().unwrap()};
         scd
     }
@@ -781,7 +782,7 @@ impl PddbOs {
     }
 
     fn mbbb_as_slice(&self) -> &[u8] {
-        &self.pddb_mr.as_slice()[self.mbbb_phys_base.as_usize()..self.mbbb_phys_base.as_usize() + MBBB_PAGES * PAGE_SIZE]
+        unsafe { &self.pddb_mr.as_slice()[self.mbbb_phys_base.as_usize()..self.mbbb_phys_base.as_usize() + MBBB_PAGES * PAGE_SIZE] }
     }
     fn mbbb_retrieve(&self) -> Option<&[u8]> {
         // Invariant: MBBB pages should be blank, unless a page is stashed there. So, just check the first
@@ -880,7 +881,7 @@ impl PddbOs {
                             // We could "paper over" this by re-reading the data, but really, this problem should be solved by the d-cache
                             // flush in the SPINOR primitive.
                             let page_start = dest_page_start as usize * PAGE_SIZE;
-                            let fscb_slice = &self.pddb_mr.as_slice()[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE];
+                            let fscb_slice = &unsafe { self.pddb_mr.as_slice() }[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE];
                             let mut fscb_buf = [0; FASTSPACE_PAGES * PAGE_SIZE - size_of::<Nonce>()];
                             // copy the encrypted data to the decryption buffer
                             fscb_buf.copy_from_slice(&fscb_slice[page_start + size_of::<Nonce>() .. page_start + FASTSPACE_PAGES * PAGE_SIZE]);
@@ -1095,7 +1096,7 @@ impl PddbOs {
     }
 
     fn fscb_deref(&self) -> &[u8] {
-        &self.pddb_mr.as_slice()[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE]
+        unsafe { &self.pddb_mr.as_slice()[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE] }
     }
     /// Reads the data structures in the FSCB, if any, and stores the results in the fspace_cache HashSet.
     /// Note the following convention on the fscb: if the first 128 bits of a page are all 1's, then that sector
@@ -1122,7 +1123,7 @@ impl PddbOs {
             self.fspace_log_len = 0;
 
             // let fscb_slice = self.fscb_deref(); // can't use this line because it causse self to be immutably borrowed, so we write out the equivalent below.
-            let fscb_slice = &self.pddb_mr.as_slice()[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE];
+            let fscb_slice = unsafe { &self.pddb_mr.as_slice()[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE] };
 
             // 1. scan through the entire space, and look for the FastSpace record. It can be identified by the
             // first 16 (aes::BLOCK_SIZE) bytes not being all 1's.
@@ -1517,9 +1518,9 @@ impl PddbOs {
     /// We don't clip it off because it would require re-allocating a vector, and it's cheaper (although less elegant) to later
     /// just index past it.
     pub(crate) fn data_decrypt_page(&self, cipher: &Aes256GcmSiv, aad: &[u8], page: &PhysPage) -> Option<Vec::<u8>> {
-        let ct_slice = &self.pddb_mr.as_slice()[
+        let ct_slice = unsafe { &self.pddb_mr.as_slice()[
             self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE ..
-            self.data_phys_base.as_usize() + (page.page_number() as usize + 1) * PAGE_SIZE];
+            self.data_phys_base.as_usize() + (page.page_number() as usize + 1) * PAGE_SIZE] };
         let nonce = &ct_slice[..size_of::<Nonce>()];
         let ct = &ct_slice[size_of::<Nonce>()..];
         match cipher.decrypt(
@@ -1557,9 +1558,9 @@ impl PddbOs {
         const KCOM_NONCE_LEN: usize = 32;
         const KCOM_LEN: usize = 32;
         const MAC_LEN: usize = 16;
-        let ct_slice = &self.pddb_mr.as_slice()[
+        let ct_slice = unsafe { &self.pddb_mr.as_slice()[
             self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE ..
-            self.data_phys_base.as_usize() + (page.page_number() as usize + 1) * PAGE_SIZE];
+            self.data_phys_base.as_usize() + (page.page_number() as usize + 1) * PAGE_SIZE] };
         log::debug!("commit data at 0x{:x}", self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE);
         let nonce = &ct_slice[..size_of::<Nonce>()];
         let ct_total = &ct_slice[size_of::<Nonce>()..];
@@ -1838,7 +1839,7 @@ impl PddbOs {
                 // do a blank check first to see if the sector really needs erasing
                 let mut blank = true;
                 let slice_start = (offset - xous::PDDB_LOC) as usize / size_of::<u32>();
-                for word in self.pddb_mr.as_slice::<u32>()[slice_start..slice_start + SPINOR_BULK_ERASE_SIZE as usize / size_of::<u32>()].iter() {
+                for word in unsafe { self.pddb_mr.as_slice::<u32>()[slice_start..slice_start + SPINOR_BULK_ERASE_SIZE as usize / size_of::<u32>()].iter() } {
                     if *word != 0xFFFF_FFFF {
                         blank = false;
                         break;
@@ -2000,7 +2001,7 @@ impl PddbOs {
                 // session key, previous data should be undecipherable. You shouldn't do this for a production erase
                 // but this is good for speeding up testing.
                 let mut is_blank = true;
-                let block: &[u8] = &self.pddb_mr.as_slice()[offset + aes::BLOCK_SIZE * 3..offset + aes::BLOCK_SIZE * 4];
+                let block: &[u8] = unsafe { &self.pddb_mr.as_slice()[offset + aes::BLOCK_SIZE * 3..offset + aes::BLOCK_SIZE * 4] };
                 for (&a, &b) in block.iter().zip(blank.iter()) {
                     if a != b {
                         is_blank = false;
@@ -2022,7 +2023,7 @@ impl PddbOs {
                 }
             }
             self.spinor.patch(
-                self.pddb_mr.as_slice(),
+                unsafe { self.pddb_mr.as_slice() },
                 xous::PDDB_LOC,
                 &temp,
                 offset as u32
@@ -2184,7 +2185,7 @@ impl PddbOs {
         if let Some(mbbb) = self.mbbb_retrieve() {
             if let Some(erased_offset) = self.pt_find_erased_slot() {
                 self.spinor.patch(
-                    self.pddb_mr.as_slice(),
+                    unsafe { self.pddb_mr.as_slice() },
                     xous::PDDB_LOC,
                     &mbbb,
                     self.pt_phys_base.as_u32() + erased_offset,
@@ -2255,7 +2256,7 @@ impl PddbOs {
             // at the base of the `pddb_mr`.
             let pddb_data_len = PDDB_A_LEN - self.data_phys_base.as_usize();
             let pddb_data_pages = pddb_data_len / PAGE_SIZE;
-            let pagetable: &[u8] = &self.pddb_mr.as_slice()[..pddb_data_pages * size_of::<Pte>()];
+            let pagetable: &[u8] = unsafe { &self.pddb_mr.as_slice()[..pddb_data_pages * size_of::<Pte>()] };
             log::info!("Derived page table of len 0x{:x}", pagetable.len());
             let entries_per_page = PAGE_SIZE / size_of::<Pte>();
             modals.start_progress(t!("pddb.rekey.running", locales::LANG), 0, (pddb_data_pages * size_of::<Pte>()) as u32, 0).ok();
@@ -2633,7 +2634,7 @@ impl PddbOs {
 
     pub(crate) fn checksums(&self, modals: Option::<&Modals>) -> root_keys::api::Checksums {
         let mut checksums = root_keys::api::Checksums::default();
-        let pddb = self.pddb_mr.as_slice();
+        let pddb = unsafe { self.pddb_mr.as_slice() };
         if let Some(m) = modals {
             m.start_progress(
                 t!("pddb.checksums", locales::LANG),

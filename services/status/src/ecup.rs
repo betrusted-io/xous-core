@@ -80,7 +80,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC firmware package memory range");
     #[cfg(not(target_os = "xous"))]
-    for d in ec_package.as_slice_mut::<u8>().iter_mut() { *d = 0xFF } // simulate blank flash
+    for d in unsafe { ec_package.as_slice_mut::<u8>().iter_mut() } { *d = 0xFF } // simulate blank flash
     #[cfg(not(target_os = "xous"))]
     let mut wf_package = xous::syscall::map_memory(
         None,
@@ -89,7 +89,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC wf200 package memory range");
     #[cfg(not(target_os = "xous"))]
-    for d in wf_package.as_slice_mut::<u8>().iter_mut() { *d = 0xFF }
+    for d in unsafe { wf_package.as_slice_mut::<u8>().iter_mut() } { *d = 0xFF }
 
     loop {
         let msg = xous::receive_message(sid).unwrap();

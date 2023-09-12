@@ -427,7 +427,7 @@ fn name_from_msg(env: &xous::MessageEnvelope) -> Result<&str, NameConversionErro
 fn fill_response(mut env: xous::MessageEnvelope, entries: &HashMap<IpAddr, u32>) -> Option<()> {
     let mem = env.body.memory_message_mut()?;
 
-    let s: &mut [u8] = mem.buf.as_slice_mut();
+    let s: &mut [u8] = unsafe { mem.buf.as_slice_mut() };
     let mut i = s.iter_mut();
 
     // First tag = 1 for "Error" -- we'll fill this in at the end when it's successful
@@ -472,7 +472,7 @@ fn fill_response(mut env: xous::MessageEnvelope, entries: &HashMap<IpAddr, u32>)
 fn fill_error(mut env: xous::MessageEnvelope, code: DnsResponseCode) -> Option<()> {
     let mem = env.body.memory_message_mut()?;
 
-    let s: &mut [u8] = mem.buf.as_slice_mut();
+    let s: &mut [u8] = unsafe { mem.buf.as_slice_mut() };
     let mut i = s.iter_mut();
 
     *i.next()? = 1;

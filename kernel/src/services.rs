@@ -1645,7 +1645,7 @@ impl SystemServices {
         // buf: MemoryRange,
     ) -> Result<*mut usize, xous_kernel::Error> {
         let buf = unsafe { MemoryRange::new(src_virt as usize, len) }?;
-        let buf = buf.as_slice();
+        let buf = unsafe { buf.as_slice() };
         let current_pid = self.current_pid();
         {
             let target_process = self.get_process(dest_pid)?;

@@ -123,7 +123,8 @@ impl XousDisplay {
         }
     }
     pub fn pop(&mut self) {
-        let fb: &mut [u32] = self.fb.as_slice_mut();
+        // Safety: `u32` contains no undefined values
+        let fb: &mut [u32] = unsafe { self.fb.as_slice_mut() };
         // skip copying the status bar, so that the status info is not overwritten by the pop.
         // this is "fixed" at 32 pixels high (2 * Cjk glyph height hint) per line 79 in gam/src/main.rs
         fb[FB_WIDTH_WORDS * 32..FB_SIZE].copy_from_slice(&self.srfb[FB_WIDTH_WORDS * 32..FB_SIZE]);
@@ -184,7 +185,8 @@ impl XousDisplay {
     }
     pub fn resume(&mut self) {
         self.susres.resume();
-        let fb: &mut [u32] = self.fb.as_slice_mut();
+        // Safety: `u32` contains no undefined values
+        let fb: &mut [u32] = unsafe { self.fb.as_slice_mut() };
         fb[..FB_SIZE].copy_from_slice(&self.srfb);
 
         self.redraw();
@@ -241,7 +243,8 @@ impl XousDisplay {
     }
 
     pub fn as_slice(&self) -> &[u32] {
-        &self.fb.as_slice::<u32>()[..FB_SIZE]
+        // Safety: all values of `[u32]` are valid
+        unsafe { &self.fb.as_slice::<u32>()[..FB_SIZE] }
     }
 
     /// Beneath this line are pure-HAL layer, and should not be user-visible

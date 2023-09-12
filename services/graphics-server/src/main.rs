@@ -488,7 +488,8 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                     };
                     //let mut bulkread = buf.as_flat::<BulkRead, _>().unwrap(); // try to skip the copy/init step by using a persistent structure
-                    let fontslice = fontregion.as_slice::<u8>();
+                    // Safety: `u8` contains no undefined values
+                    let fontslice = unsafe { fontregion.as_slice::<u8>() };
                     assert!(fontlen <= fontslice.len() as u32);
                     if bulkread.from_offset >= fontlen {
                         log::error!(
@@ -520,7 +521,8 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         ((backend::FB_SIZE * 4) + 4096) & !4095,
                         xous::MemoryFlags::R | xous::MemoryFlags::W,
                     ).expect("couldn't map stash frame buffer");
-                    let stash = &mut stashmem.as_slice_mut()[..backend::FB_SIZE];
+                    // Safety: `u8` contains no undefined values
+                    let stash = unsafe { &mut stashmem.as_slice_mut()[..backend::FB_SIZE] };
                     for (&src, dst) in display.as_slice().iter().zip(stash.iter_mut()) {
                         *dst = src;
                     }
@@ -535,7 +537,8 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         ((backend::FB_SIZE * 4) + 4096) & !4095,
                         xous::MemoryFlags::R | xous::MemoryFlags::W,
                     ).expect("couldn't map stash frame buffer");
-                    let testpat = &mut testmem.as_slice_mut()[..backend::FB_SIZE];
+                    // Safety: `u8` contains no undefined values
+                    let testpat = unsafe { &mut testmem.as_slice_mut()[..backend::FB_SIZE] }; 
                     const DWELL: usize = 1000;
                     while ticktimer.elapsed_ms() - start_time < duration as u64 {
                         // all black

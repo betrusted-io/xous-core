@@ -812,7 +812,8 @@ fn wrapped_main() -> ! {
                 if let Some(mem) = msg.body.memory_message_mut() {
                     mem.offset = None;
                     if let Some(name) = basis_cache.basis_latest() {
-                        for (src, dest) in name.as_bytes().iter().zip(mem.buf.as_slice_mut().iter_mut()) {
+                        // Safety: `u8` contains no undefined values
+                        for (src, dest) in unsafe { name.as_bytes().iter().zip(mem.buf.as_slice_mut().iter_mut()) } {
                             *dest = *src;
                         }
                         mem.offset = xous::MemorySize::new(name.len().min(mem.buf.len()));
