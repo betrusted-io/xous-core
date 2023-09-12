@@ -1,5 +1,5 @@
 pub mod cmd;
-mod danger;
+pub mod danger;
 pub mod rota;
 
 use crate::rota::RustlsOwnedTrustAnchor;
@@ -31,17 +31,9 @@ impl Tls {
         }
     }
 
-    /// Presents a modal to the user to select trusted tls certificates
-    /// and saves the selected certificates to the pddb
-    ///
-    /// # Arguments
-    ///
-    /// * `certificates` - the certificates to be presented
-    ///
-    ///  # Returns
-    ///
-    /// a count of trusted certificates
-    ///
+    // presents a modal to the user to select trusted tls certificates
+    // and saves the selected certificates to the pddb
+    // returns a count of trusted certificates
     pub fn check_trust(&self, certificates: &[Certificate]) -> usize {
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
@@ -100,12 +92,8 @@ impl Tls {
         }
     }
 
-    /// Deletes ALL tls trust-anchors from the pddb
-    ///
-    /// # Returns
-    ///
-    /// the number of trust-anchors deleted
-    ///
+    // deletes ALL tls trust-anchors from the pddb
+    // returns the number of certs deleted
     pub fn del_all_cert(&self) -> Result<usize, Error> {
         let count = match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
             Ok(list) => list.len(),
@@ -128,12 +116,7 @@ impl Tls {
         Ok(count)
     }
 
-    /// Deletes a tls trust-anchor from the pddb
-    ///
-    /// # Arguments
-    ///
-    /// * `key` - the pddb-key containing the unwanted trust-anchor
-    ///
+    // deletes a tls trust-anchor from the pddb
     pub fn del_cert(&self, key: &str) -> Result<(), Error> {
         match self.pddb.delete_key(TLS_TRUSTED_DICT, key, None) {
             Ok(_) => {
@@ -148,12 +131,7 @@ impl Tls {
         return Ok(());
     }
 
-    /// Saves a tls trust-anchor to the pddb
-    ///
-    /// # Arguments
-    ///
-    /// * `ta` - a trusted trust-anchor
-    ///
+    // saves a tls trust-anchor to the pddb
     pub fn save_cert(&self, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
         let key = ta.pddb_key();
         match self.pddb.get(
@@ -197,12 +175,8 @@ impl Tls {
         Ok(())
     }
 
-    /// Returns a tls trust-anchor from the pddb
-    ///
-    /// # Arguments
-    ///
-    /// * `key` - pddb key holding the trust-anchor
-    ///
+
+    // retrieves a tls trust-anchor from the pddb
     pub fn get_cert(&self, key: &str) -> Option<RustlsOwnedTrustAnchor> {
         match self.pddb.get(
             TLS_TRUSTED_DICT,
@@ -221,8 +195,9 @@ impl Tls {
                         let pos: u16 = u16::from_be_bytes([bytes[0], bytes[1]]);
                         let pos: usize = pos.into();
                         // deserialize the trust-anchor
-                        let archive =
-                            unsafe { rkyv::archived_value::<RustlsOwnedTrustAnchor>(&bytes, pos) };
+                        let archive = unsafe {
+                            rkyv::archived_value::<RustlsOwnedTrustAnchor>(&bytes, pos)
+                        };
                         let ta = archive.deserialize(&mut AllocDeserializer {}).ok();
                         log::info!("get '{}' = '{:?}'", key, &ta);
                         ta
@@ -240,8 +215,6 @@ impl Tls {
         }
     }
 
-    /// Returns a Vec of all trusted trust-anchors
-    ///
     pub fn trusted(&self) -> Vec<RustlsOwnedTrustAnchor> {
         match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
             Ok(list) => list
@@ -256,8 +229,6 @@ impl Tls {
         }
     }
 
-    /// Returns a RootCertStore containing all trusted trust-anchors
-    ///
     pub fn root_store(&self) -> RootCertStore {
         let mut root_store = RootCertStore::empty();
         match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
@@ -272,65 +243,6 @@ impl Tls {
             Err(e) => log::warn!("failed to get iter over trusted: {e}"),
         }
         root_store
-    }
-
-    /// Probes the target and returns true is at least 1 certificate is trusted
-    ///
-    /// Establishes a tls connection to the target host, extracts the
-    /// certificates offered and immediately closes the connection.
-    /// The certificates are presented by modal to the user, and saved to the
-    /// pddb if trusted.
-    ///
-    /// By default, rustls only provides access to a trusted certificate chain.
-    /// Probe briefly stifles the certificate validation (ie trusts everything)
-    /// in order to grab the untrusted cetificate chain and present it to the
-    /// user for examination.
-    ///
-    /// # Arguments
-    ///
-    /// * `target` - the target tls site (i.e. betrusted.io)
-    ///
-    pub fn probe(&self, target: &str) -> Result<usize, Error> {
-        log::info!("starting TLS probe");
-        // Attempt to open the tls connection with an empty root_store
-        let root_store = rustls::RootCertStore::empty();
-        // Stifle the default rustls certificate verification's complaint about an
-        // unknown/untrusted CA root certificate so that we get to see the certificate chain
-        let stifled_verifier =
-            Arc::new(danger::StifledCertificateVerification { roots: root_store });
-        let config = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_custom_certificate_verifier(stifled_verifier)
-            .with_no_client_auth();
-        match target.try_into() {
-            Ok(server_name) => {
-                let mut conn =
-                    rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-                log::info!("connect TCPstream to {}", target);
-                let url = format!("{}:443", target);
-                match TcpStream::connect(url) {
-                    Ok(mut sock) => {
-                        match conn.complete_io(&mut sock) {
-                            Ok(_) => log::info!("handshake complete"),
-                            Err(e) => log::warn!("{e}"),
-                        }
-                        conn.send_close_notify();
-                        match conn.peer_certificates() {
-                            Some(certificates) => Ok(self.check_trust(certificates)),
-                            None => Ok(0),
-                        }
-                    }
-                    Err(e) => {
-                        log::warn!("{e}");
-                        Err(e)
-                    }
-                }
-            }
-            Err(e) => {
-                log::warn!("failed to create sever_name from {target}: {e}");
-                Err(Error::from(ErrorKind::InvalidInput))
-            }
-        }
     }
 }
 
