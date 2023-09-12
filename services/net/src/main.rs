@@ -813,7 +813,7 @@ fn main() -> ! {
                                 Some(body) => {
                                     // u32::MAX indicates a zero-length receive
                                     body.valid = xous::MemorySize::new(u32::MAX as usize);
-                                    let response_data = body.buf.as_slice_mut::<u32>();
+                                    let response_data = unsafe { body.buf.as_slice_mut::<u32>() };
                                     response_data[0] = 0;
                                     response_data[1] = 0;
                                 },
@@ -894,7 +894,7 @@ fn main() -> ! {
                 {
                     let socket = iface.get_socket::<TcpSocket>(*connection);
                     body.valid = xous::MemorySize::new(
-                        write_address(socket.local_endpoint().addr, body.buf.as_slice_mut())
+                        write_address(socket.local_endpoint().addr, unsafe { body.buf.as_slice_mut() })
                             .unwrap_or_default(),
                     );
                 } else {
@@ -1089,7 +1089,7 @@ fn main() -> ! {
                 iface.get_socket::<UdpSocket>(handle).close();
                 iface.remove_socket(handle);
                 if let Some(response) = msg.body.memory_message_mut() {
-                    response.buf.as_slice_mut::<u8>()[0] = 0;
+                    unsafe { response.buf.as_slice_mut::<u8>()[0] = 0 };
                 } else if !msg.body.has_memory() && msg.body.is_blocking() {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
@@ -1411,7 +1411,7 @@ fn main() -> ! {
                     } else {
                         0
                     };
-                    match socket.recv_slice(&mut body.buf.as_slice_mut()[..buflen]) {
+                    match socket.recv_slice(unsafe { &mut body.buf.as_slice_mut()[..buflen] }) {
                         Ok(count) => {
                             log::debug!("rxrcv of {}", count);
                             body.valid = xous::MemorySize::new(count);
@@ -1484,7 +1484,7 @@ fn main() -> ! {
                     } else {
                         0
                     };
-                    match socket.peek_slice(&mut body.buf.as_slice_mut()[..buflen]) {
+                    match socket.peek_slice(unsafe { &mut body.buf.as_slice_mut()[..buflen] }) {
                         Ok(count) => {
                             log::debug!("peekrcv of {}", count);
                             body.valid = xous::MemorySize::new(count);
@@ -1538,7 +1538,7 @@ fn main() -> ! {
                     let body = env.body.memory_message_mut().unwrap();
                     // Perform the transfer
                     let sent_octets = {
-                        let data = body.buf.as_slice::<u8>();
+                        let data = unsafe { body.buf.as_slice::<u8>() };
                         let length = body
                             .valid
                             .map(|v| {
@@ -1561,7 +1561,7 @@ fn main() -> ! {
                     };
 
                     log::trace!("sent {}", sent_octets);
-                    let response_data = body.buf.as_slice_mut::<u32>();
+                    let response_data = unsafe { body.buf.as_slice_mut::<u32>() };
                     response_data[0] = 0;
                     response_data[1] = sent_octets as u32;
                 }
@@ -1588,7 +1588,7 @@ fn main() -> ! {
                         }
                     };
                     let body = env.body.memory_message_mut().unwrap();
-                    let buf = body.buf.as_slice_mut::<u8>();
+                    let buf = unsafe { body.buf.as_slice_mut::<u8>() };
 
                     tcp_accept_success(buf, fd as u16, ep);
                 }
@@ -1636,7 +1636,7 @@ fn main() -> ! {
                             Ok((data, endpoint)) => {
                                 udp_rx_success(
                                     // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
-                                    msg.body.memory_message_mut().unwrap().buf.as_slice_mut(),
+                                    unsafe { msg.body.memory_message_mut().unwrap().buf.as_slice_mut() },
                                     data,
                                     *endpoint // have to duplicate the code between peek and recv because of this type difference
                                 );
@@ -1652,7 +1652,7 @@ fn main() -> ! {
                                 log::debug!("netpump udp rx");
                                 udp_rx_success(
                                     // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
-                                    msg.body.memory_message_mut().unwrap().buf.as_slice_mut(),
+                                    unsafe { msg.body.memory_message_mut().unwrap().buf.as_slice_mut() },
                                     data,
                                     endpoint
                                 );

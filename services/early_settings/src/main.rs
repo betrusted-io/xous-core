@@ -43,7 +43,8 @@ impl State {
             None => return,
         };
 
-        let settings: &[u8] = settings.as_slice();
+        // Safety: all values of `[u8]` are valid
+        let settings: &[u8] = unsafe { settings.as_slice() };
 
         let new_data_u32 = u32::from_le_bytes(data.try_into().unwrap());
 
@@ -62,7 +63,8 @@ impl State {
             None => return 0,
         };
 
-        let settings: &[u8] = settings.as_slice();
+        // Safety: all values of `[u8]` are valid
+        let settings: &[u8] = unsafe { settings.as_slice() };
 
         u32::from_le_bytes(settings[slot.range()].try_into().unwrap())
     }

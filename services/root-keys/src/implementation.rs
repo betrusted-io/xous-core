@@ -227,10 +227,10 @@ impl<'a> RootKeys {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         ).expect("couldn't map sensitive data page");
         // make sure the caches start out as zeros
-        for w in pass_cache.as_slice_mut::<u32>().iter_mut() {
+        for w in unsafe { pass_cache.as_slice_mut::<u32>().iter_mut() } {
             *w = 0;
         }
-        for w in sensitive_data.as_slice_mut::<u32>().iter_mut() {
+        for w in unsafe { sensitive_data.as_slice_mut::<u32>().iter_mut() } {
             *w = 0;
         }
 
@@ -282,19 +282,19 @@ impl<'a> RootKeys {
         keys
     }
     pub fn gateware(&self) -> &[u8] {
-        self.gateware_mr.as_slice::<u8>()
+        unsafe { self.gateware_mr.as_slice::<u8>() }
     }
     pub fn gateware_base(&self) -> u32 { self.gateware_base }
     pub fn staging(&self) -> &[u8] {
-        self.staging_mr.as_slice::<u8>()
+        unsafe { self.staging_mr.as_slice::<u8>() }
     }
     pub fn staging_base(&self) -> u32 { self.staging_base }
     pub fn loader_code(&self) -> &[u8] {
-        self.loader_code_mr.as_slice::<u8>()
+        unsafe { self.loader_code_mr.as_slice::<u8>() }
     }
     pub fn loader_base(&self) -> u32 { self.loader_code_base }
     pub fn kernel(&self) -> &[u8] {
-        self.kernel_mr.as_slice::<u8>()
+        unsafe { self.kernel_mr.as_slice::<u8>() }
     }
     pub fn kernel_base(&self) -> u32 { self.kernel_base }
 
@@ -634,13 +634,13 @@ impl<'a> RootKeys {
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
     pub fn purge_sensitive_data(&mut self) {
-        for d in self.sensitive_data.borrow_mut().as_slice_mut::<u32>().iter_mut() {
+        for d in unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>().iter_mut() } {
             *d = 0;
         }
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
     fn populate_sensitive_data(&mut self) {
-        for (addr, d) in self.sensitive_data.borrow_mut().as_slice_mut::<u32>().iter_mut().enumerate() {
+        for (addr, d) in unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>().iter_mut().enumerate() } {
             if addr > 255 {
                 break;
             }
@@ -664,13 +664,13 @@ impl<'a> RootKeys {
         // now encrypt the key, and store it into the sensitive_data for access later on by the patching routine
         if self.is_initialized() {
             for (dst, (key, pw)) in
-            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize .. KeyRomLocs::FPGA_KEY as usize + 8].iter_mut().zip(
+            unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize .. KeyRomLocs::FPGA_KEY as usize + 8].iter_mut() }.zip(
             pcache.fpga_key.chunks(4).into_iter().zip(pcache.hashed_update_pw.chunks(4).into_iter())) {
                 *dst = u32::from_be_bytes(key[0..4].try_into().unwrap()) ^ u32::from_be_bytes(pw[0..4].try_into().unwrap());
             }
         } else {
             for (dst, key) in
-            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize .. KeyRomLocs::FPGA_KEY as usize + 8].iter_mut().zip(
+            unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize .. KeyRomLocs::FPGA_KEY as usize + 8].iter_mut() }.zip(
             pcache.fpga_key.chunks(4).into_iter()) {
                 *dst = u32::from_be_bytes(key[0..4].try_into().unwrap());
             }
@@ -830,7 +830,7 @@ impl<'a> RootKeys {
     fn read_staged_key_256(&mut self, index: u8) -> [u8; 32] {
         let mut key: [u8; 32] = [0; 32];
         for (addr, word) in key.chunks_mut(4).into_iter().enumerate() {
-            let keyword = self.sensitive_data.borrow().as_slice::<u32>()[index as usize + addr];
+            let keyword = unsafe { self.sensitive_data.borrow().as_slice::<u32>()[index as usize + addr] };
             for (&byte, dst) in keyword.to_be_bytes().iter().zip(word.iter_mut()) {
                 *dst = byte;
             }
@@ -847,7 +847,7 @@ impl<'a> RootKeys {
             // we're not initialized, use the salt that should already be in the staging area
             let mut key: [u8; 16] = [0; 16];
             for (word, &keyword) in key.chunks_mut(4).into_iter()
-            .zip(self.sensitive_data.borrow_mut().as_slice::<u32>() // get the sensitive_data as a slice &mut[u32]
+            .zip(unsafe { self.sensitive_data.borrow_mut().as_slice::<u32>() } // get the sensitive_data as a slice &mut[u32]
             [KeyRomLocs::PEPPER as usize..KeyRomLocs::PEPPER as usize + 128/(size_of::<u32>()*8)].iter()) {
                 for (&byte, dst) in keyword.to_be_bytes().iter().zip(word.iter_mut()) {
                     *dst = byte;
@@ -904,11 +904,11 @@ impl<'a> RootKeys {
         // make a copy of the KEYROM to hold the new mods, in the sensitive data area
         for addr in 0..256 {
             self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr);
-            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
+            unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA) };
         }
 
         // provision the pepper
-        for keyword in self.sensitive_data.borrow_mut().as_slice_mut::<u32>()
+        for keyword in unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>() }
         [KeyRomLocs::PEPPER as usize..KeyRomLocs::PEPPER as usize + 128/(size_of::<u32>()*8)].iter_mut() {
             *keyword = self.trng.get_u32().expect("couldn't get random number");
         }
@@ -919,8 +919,8 @@ impl<'a> RootKeys {
         self.susres.set_suspendable(false).expect("couldn't block suspend/resume");
 
         // populate the staging area, in particular we are interested in the "pepper" so passwords work correctly.
-        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[..256]
-        .copy_from_slice(&rom.0);
+        unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[..256]
+        .copy_from_slice(&rom.0) };
 
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
         // copy the plaintext FPGA key to the pcache
@@ -928,8 +928,8 @@ impl<'a> RootKeys {
         pcache.fpga_key_valid = 1;
 
         // stage the plaintext FPGA key into the keyrom area for encryption by the key_init routine.
-        self.sensitive_data.borrow_mut().as_slice_mut::<u8>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 32]
-            .copy_from_slice(&key.0);
+        unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u8>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 32]
+            .copy_from_slice(&key.0) };
 
         self.restore_running = true;
     }
@@ -1011,7 +1011,7 @@ impl<'a> RootKeys {
         // get access to the pcache and generate a keypair
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
         // initialize the global rollback constant to 0
-        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::GLOBAL_ROLLBACK as usize] = 0;
+        unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::GLOBAL_ROLLBACK as usize] = 0 };
         let mut root_sk = [0u8; ed25519_dalek::SECRET_KEY_LENGTH];
         self.trng.fill_bytes(&mut root_sk);
         #[cfg(feature = "hazardous-debug")]
@@ -1067,7 +1067,7 @@ impl<'a> RootKeys {
         pcache.fpga_key_valid = 1;
 
         // now encrypt it in the staging area
-        for (word, hashed_pass) in self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()
+        for (word, hashed_pass) in unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut() }
         .zip(pcache.hashed_update_pw.chunks(4).into_iter()) {
             *word = *word ^ u32::from_be_bytes(hashed_pass.try_into().unwrap());
         }
@@ -1088,7 +1088,7 @@ impl<'a> RootKeys {
         // pub key is easy, no need to encrypt
         let public_key: [u8; ed25519_dalek::PUBLIC_KEY_LENGTH] = keypair.public.to_bytes();
         for (src, dst) in public_key.chunks(4).into_iter()
-        .zip(self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::SELFSIGN_PUBKEY as usize..KeyRomLocs::SELFSIGN_PUBKEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
+        .zip(unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::SELFSIGN_PUBKEY as usize..KeyRomLocs::SELFSIGN_PUBKEY as usize + 256/(size_of::<u32>()*8)].iter_mut() }) {
             *dst = u32::from_be_bytes(src.try_into().unwrap())
         }
         log::debug!("public key as computed: {:x?}", public_key);
@@ -1110,7 +1110,7 @@ impl<'a> RootKeys {
 
         // store the private key to the keyrom staging area
         for (src, dst) in private_key_enc.chunks(4).into_iter()
-        .zip(self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::SELFSIGN_PRIVKEY as usize..KeyRomLocs::SELFSIGN_PRIVKEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
+        .zip(unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::SELFSIGN_PRIVKEY as usize..KeyRomLocs::SELFSIGN_PRIVKEY as usize + 256/(size_of::<u32>()*8)].iter_mut() }) {
             *dst = u32::from_be_bytes(src.try_into().unwrap())
         }
         #[cfg(feature = "hazardous-debug")]
@@ -1135,7 +1135,7 @@ impl<'a> RootKeys {
 
         // store the boot key to the keyrom staging area
         for (src, dst) in boot_key_enc.chunks(4).into_iter()
-        .zip(self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::USER_KEY as usize..KeyRomLocs::USER_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
+        .zip(unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::USER_KEY as usize..KeyRomLocs::USER_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut() }) {
             *dst = u32::from_be_bytes(src.try_into().unwrap())
         }
 
@@ -1152,7 +1152,7 @@ impl<'a> RootKeys {
         log::debug!("loader len: {} bytes", loader_len);
 
         // set the "init" bit in the staging area
-        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::CONFIG as usize] |= keyrom_config::INITIALIZED.ms(1);
+        unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::CONFIG as usize] |= keyrom_config::INITIALIZED.ms(1) };
 
         #[cfg(feature = "hazardous-debug")]
         {
@@ -1354,7 +1354,7 @@ impl<'a> RootKeys {
             old_key.copy_from_slice(&pcache.fpga_key);
 
             // now encrypt the FPGA key for the Keyrom in-place to the provided password
-            for (word, hashed_pass) in self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()
+            for (word, hashed_pass) in unsafe { self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut() }
             .zip(pcache.hashed_update_pw.chunks(4).into_iter()) {
                 *word = *word ^ u32::from_be_bytes(hashed_pass.try_into().unwrap());
             }
@@ -2030,7 +2030,7 @@ impl<'a> RootKeys {
 
             // wrap the patch call with a range check, because the patch lookup search is pretty expensive
             if self.patch_in_range(src_oracle, from, from + spinor::SPINOR_ERASE_SIZE as u32) {
-                dummy_consume ^= self.patch_sector(src_oracle, from, &mut pt_sector, &self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0..256]);
+                dummy_consume ^= self.patch_sector(src_oracle, from, &mut pt_sector, unsafe { &self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0..256] });
             }
 
             let hash_len = if bytes_hashed + decrypt_len < hash_stop {

@@ -27,7 +27,7 @@ pub(crate) fn std_tcp_connect(
         }
     };
 
-    let bytes = body.buf.as_slice::<u8>();
+    let bytes = unsafe { body.buf.as_slice::<u8>() };
     let remote_port = u16::from_le_bytes([bytes[0], bytes[1]]);
     let timeout_ms = NonZeroU64::new(u64::from_le_bytes(bytes[2..10].try_into().unwrap()));
     let address = match parse_address(&bytes[10..]) {
@@ -120,7 +120,7 @@ pub(crate) fn std_tcp_tx(
 
     // Perform the transfer
     let sent_octets = {
-        let data = body.buf.as_slice::<u8>();
+        let data = unsafe { body.buf.as_slice::<u8>() };
         let length = body
             .valid
             .map(|v| {
@@ -142,7 +142,7 @@ pub(crate) fn std_tcp_tx(
     };
 
     log::trace!("sent {}", sent_octets);
-    let response_data = body.buf.as_slice_mut::<u32>();
+    let response_data = unsafe { body.buf.as_slice_mut::<u32>() };
     response_data[0] = 0;
     response_data[1] = sent_octets as u32;
 }
@@ -186,7 +186,7 @@ pub(crate) fn std_tcp_rx(
         } else {
             0
         };
-        match socket.recv_slice(&mut body.buf.as_slice_mut()[..buflen]) {
+        match socket.recv_slice(unsafe { &mut body.buf.as_slice_mut()[..buflen] }) {
             Ok(bytes) => {
                 // it's actually valid to receive 0 bytes, but the encoding of this field doesn't allow it.
                 // so, `None` is abused to represent the value of "0" bytes, which is what is naturally returned
@@ -263,7 +263,7 @@ pub(crate) fn std_tcp_peek(
         } else {
             0
         };
-        match socket.peek_slice(&mut body.buf.as_slice_mut()[..buflen]) {
+        match socket.peek_slice(unsafe { &mut body.buf.as_slice_mut()[..buflen] }) {
             Ok(bytes) => {
                 // it's actually valid to receive 0 bytes, but the encoding of this field doesn't allow it.
                 // so, `None` is abused to represent the value of "0" bytes, which is what is naturally returned

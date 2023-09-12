@@ -25,7 +25,7 @@ pub(crate) fn std_udp_bind(
         }
     };
 
-    let bytes = body.buf.as_slice::<u8>();
+    let bytes = unsafe { body.buf.as_slice::<u8>() };
     let local_port = u16::from_le_bytes([bytes[0], bytes[1]]);
     let address = match parse_address(&bytes[2..]) {
         Some(addr) => addr,
@@ -62,7 +62,7 @@ pub(crate) fn std_udp_bind(
     let idx = insert_or_append(our_sockets, handle) as u8;
 
     let body = msg.body.memory_message_mut().unwrap();
-    let bfr = body.buf.as_slice_mut::<u8>();
+    let bfr = unsafe { body.buf.as_slice_mut::<u8>() };
     log::trace!("successfully connected: {} -> {:?}:{}", idx, address, local_port);
     bfr[0] = 0;
     bfr[1] = idx;
@@ -95,7 +95,7 @@ pub(crate) fn std_udp_rx(
         }
     };
 
-    let args = body.buf.as_slice::<u8>();
+    let args = unsafe { body.buf.as_slice::<u8>() };
     let nonblocking = args[0] == 0;
     let expiry = if !nonblocking {
         let to = u64::from_le_bytes(args[1..9].try_into().unwrap());
@@ -143,7 +143,7 @@ pub(crate) fn std_udp_rx(
             // difference in types means you can't do a pattern match assign to a common variable.
             match socket.peek() {
                 Ok((data, endpoint)) => {
-                    udp_rx_success(body.buf.as_slice_mut(), data, *endpoint);
+                    udp_rx_success(unsafe { body.buf.as_slice_mut() }, data, *endpoint);
                 }
                 Err(e) => {
                     log::error!("unable to receive: {:?}", e);
@@ -154,7 +154,7 @@ pub(crate) fn std_udp_rx(
             match socket.recv() {
                 Ok((data, endpoint)) => {
                     log::debug!("immediate udp rx");
-                    udp_rx_success(body.buf.as_slice_mut(), data, endpoint);
+                    udp_rx_success(unsafe { body.buf.as_slice_mut() }, data, endpoint);
                 }
                 Err(e) => {
                     log::error!("unable to receive: {:?}", e);
@@ -206,7 +206,7 @@ pub(crate) fn std_udp_tx(
     };
 
     // unpack arguments
-    let bytes = body.buf.as_slice::<u8>();
+    let bytes = unsafe { body.buf.as_slice::<u8>() };
     let remote_port = u16::from_le_bytes([bytes[0], bytes[1]]);
     let address = match parse_address(&bytes[2..]) {
         Some(addr) => addr,
@@ -247,7 +247,7 @@ pub(crate) fn std_udp_tx(
         }
     }
     match socket.send_slice(&bytes[21..21 + len as usize], IpEndpoint::new(address, remote_port)) {
-        Ok(_) => {
+        Ok(_) => unsafe {
             body.buf.as_slice_mut()[0] = 0;
         }
         Err(_e) => {
@@ -304,7 +304,7 @@ pub(crate) fn std_failure(mut env: xous::MessageEnvelope, code: NetError) -> Opt
     };
 
     body.valid = None;
-    let s: &mut [u8] = body.buf.as_slice_mut();
+    let s: &mut [u8] = unsafe { body.buf.as_slice_mut() };
     let mut i = s.iter_mut();
 
     *i.next()? = 1;

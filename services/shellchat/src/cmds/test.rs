@@ -403,7 +403,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         ).expect("couldn't allocate record buffer"));
                     }
                     if let Some(recbuf) = self.recbuf {
-                        let recslice = recbuf.as_slice::<u8>();
+                        let recslice = unsafe { recbuf.as_slice::<u8>() };
                         const BUFLEN: usize = 512;
                         // serialize and send audio as b64 encoded data
                         for (i, sample) in recslice[recslice.len()-4096 * size_of::<u32>()..].chunks_exact(BUFLEN).enumerate() {
@@ -822,7 +822,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         ).expect("couldn't allocate record buffer"));
                     }
                     if let Some(mut recbuf) = self.recbuf {
-                        let rec_samples = recbuf.as_slice_mut::<u32>();
+                        let rec_samples = unsafe { recbuf.as_slice_mut::<u32>() };
                         let rec_len = rec_samples.len();
                         loop {
                             if let Some(frame) = frames.dq_frame() {

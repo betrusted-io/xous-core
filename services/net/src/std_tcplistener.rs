@@ -18,7 +18,7 @@ pub(crate) fn std_tcp_listen(
         }
     };
 
-    let bytes = body.buf.as_slice::<u8>();
+    let bytes = unsafe { body.buf.as_slice::<u8>() };
     let mut local_port = u16::from_le_bytes([bytes[0], bytes[1]]);
     let mut retry_local_port = false;
     if local_port == 0 {
@@ -83,7 +83,7 @@ pub(crate) fn std_tcp_listen(
     let fd = insert_or_append(our_sockets, handle) as u8;
 
     let body = msg.body.memory_message_mut().unwrap();
-    let bfr = body.buf.as_slice_mut::<u8>();
+    let bfr = unsafe { body.buf.as_slice_mut::<u8>() };
     log::debug!("successfully connected: {} -> {:?}:{}", fd, address, local_port);
     bfr[0] = 0;
     bfr[1] = fd;
@@ -119,14 +119,14 @@ pub(crate) fn std_tcp_accept(
         }
     };
 
-    let args = body.buf.as_slice::<u8>();
+    let args = unsafe { body.buf.as_slice::<u8>() };
     let nonblocking = args[0] == 0;
 
     let socket = iface.get_socket::<TcpSocket>(*handle);
 
     if socket.is_active() {
         log::debug!("accept did not block; immediately returning TcpSocket");
-        let buf = body.buf.as_slice_mut::<u8>();
+        let buf = unsafe { body.buf.as_slice_mut::<u8>() };
         tcp_server_remote_close_poll.push(*handle);
         tcp_accept_success(buf, fd as u16, socket.remote_endpoint());
         return;
