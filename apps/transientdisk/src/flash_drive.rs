@@ -25,8 +25,9 @@ impl FlashDrive {
         )
         .unwrap();
 
-        // initialize backing slice with bogus data
-        let backing_slice: &mut [u32] = backing.as_slice_mut();
+        // initialize backing slice with bogus data. Safety: all `[u32]`
+        // values are valid
+        let backing_slice: &mut [u32] = unsafe { backing.as_slice_mut() };
         for (index, d) in backing_slice.iter_mut().enumerate() {
             *d = index as u32;
         }
@@ -44,7 +45,8 @@ impl FlashDrive {
             .memory_message_mut()
             .expect("incorrect message type received");
         let lba = body.offset.map(|v| v.get()).unwrap_or_default();
-        let data = body.buf.as_slice_mut::<u8>();
+        // Safety: all values of `[u32]` are valid
+        let data = unsafe { body.buf.as_slice_mut::<u8>() }; 
 
         self.read_inner(lba, data);
     }
@@ -55,7 +57,8 @@ impl FlashDrive {
             .memory_message_mut()
             .expect("incorrect message type received");
         let lba = body.offset.map(|v| v.get()).unwrap_or_default();
-        let data = body.buf.as_slice_mut::<u8>();
+        // Safety: all values of `[u32]` are valid
+        let data = unsafe { body.buf.as_slice_mut::<u8>() };
 
         self.write_inner(lba, data);
     }
@@ -67,7 +70,8 @@ impl FlashDrive {
 
 impl FlashDrive {
     fn read_inner(&mut self, lba: usize, data: &mut [u8]) {
-        let backing_slice: &[u8] = self.memory.as_slice();
+        // Safety: all values of `[u8]` are valid
+        let backing_slice: &[u8] = unsafe { self.memory.as_slice() };
 
         let rawdata = &backing_slice[lba * self.block_size..(lba + 1) * self.block_size];
 
@@ -75,7 +79,8 @@ impl FlashDrive {
     }
 
     fn write_inner(&mut self, lba: usize, data: &mut [u8]) {
-        let backing_slice: &mut [u8] = self.memory.as_slice_mut();
+        // Safety: all values of `[u8]` are valid
+        let backing_slice: &mut [u8] = unsafe { self.memory.as_slice_mut() };
         backing_slice[lba * self.block_size..(lba + 1) * self.block_size]
             .copy_from_slice(&data[..self.block_size]);
     }
