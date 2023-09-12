@@ -8,10 +8,13 @@ use chat::{Chat, ChatOp};
 use locales::t;
 use modals::Modals;
 use pddb::Pddb;
+use std::sync::Arc;
 use std::fmt::Write as _;
 use std::io::{Error, ErrorKind, Read, Write as StdWrite};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tls::Tls;
 use trng::*;
+use ureq::Agent;
 use xous_ipc::Buffer;
 
 /// PDDB Dict for mtxchat keys
@@ -69,6 +72,7 @@ pub struct MtxChat<'a> {
     user_id: String,
     user_name: String,
     user_domain: String,
+    agent: Agent,
     token: String,
     logged_in: bool,
     room_id: String,
@@ -88,6 +92,7 @@ impl<'a> MtxChat<'a> {
         let trng = Trng::new(&xns).unwrap();
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
+        let tls = Tls::new();
         MtxChat {
             chat: chat,
             trng: trng,
@@ -96,6 +101,9 @@ impl<'a> MtxChat<'a> {
             user_id: EMPTY.to_string(),
             user_name: EMPTY.to_string(),
             user_domain: DOMAIN_MATRIX.to_string(),
+            agent: ureq::builder()
+                .tls_config(Arc::new(tls.client_config()))
+                .build(),
             token: EMPTY.to_string(),
             logged_in: false,
             room_id: EMPTY.to_string(),
@@ -290,7 +298,7 @@ impl<'a> MtxChat<'a> {
         )
         .expect("failed to write server");
         if self.token.len() > 0 {
-            if let Some(user_id) = web::whoami(&server, &self.token) {
+            if let Some(user_id) = web::whoami(&server, &self.token, &mut self.agent) {
                 let i = match user_id.find('@') {
                     Some(index) => index + 1,
                     None => 0,
@@ -309,10 +317,10 @@ impl<'a> MtxChat<'a> {
             }
         }
         if !self.logged_in {
-            if web::get_login_type(&server) {
+            if web::get_login_type(&server, &mut self.agent) {
                 self.login_modal();
                 let password = self.get_or(PASSWORD_KEY, EMPTY);
-                if let Some(new_token) = web::authenticate_user(&server, &self.user_id, &password) {
+                if let Some(new_token) = web::authenticate_user(&server, &self.user_id, &password, &mut self.agent) {
                     self.set_debug(TOKEN_KEY, &new_token);
                     self.logged_in = true;
                 } else {
@@ -403,7 +411,7 @@ impl<'a> MtxChat<'a> {
         write!(room, "#{}:{}", &self.room_name, &self.room_domain).expect("failed to write room");
         let mut server = String::new();
         write!(server, "{}{}", HTTPS, &self.user_domain).expect("failed to write server");
-        if let Some(room_id) = web::get_room_id(&server, &room, &self.token) {
+        if let Some(room_id) = web::get_room_id(&server, &room, &self.token, &mut self.agent) {
             self.set_debug(ROOM_ID_KEY, &room_id);
             Some(room)
         } else {
@@ -480,7 +488,7 @@ impl<'a> MtxChat<'a> {
                 &self.token
             );
             if let Some(new_filter) =
-                web::get_filter(&self.user_id, &server, &self.room_id, &self.token)
+                web::get_filter(&self.user_id, &server, &self.room_id, &self.token, &mut self.agent)
             {
                 self.set_debug(FILTER_KEY, &new_filter);
                 true
@@ -519,6 +527,7 @@ impl<'a> MtxChat<'a> {
                 &self.get_or(ROOM_DOMAIN_KEY, DOMAIN_MATRIX)
             )
             .expect("failed to write server");
+            let mut agent = self.agent.clone();
             let filter = self.filter.clone();
             let since = self.since.clone();
             let room_id = self.room_id.clone();
@@ -529,7 +538,7 @@ impl<'a> MtxChat<'a> {
                 let modals = Modals::new(&xns).expect("can't connect to Modals server");
                 log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
                 if let Some((_since, events)) =
-                    web::client_sync(&server, &filter, &since, MTX_LONG_TIMEOUT, &room_id, &token)
+                    web::client_sync(&server, &filter, &since, MTX_LONG_TIMEOUT, &room_id, &token, &mut agent)
                 {
                     // TODO send "since" to mtxchat server
                     // and you probably want to have a look at Dialogue::MAX_BYTES
@@ -607,7 +616,7 @@ impl<'a> MtxChat<'a> {
         log::info!("txn_id = {}", txn_id);
         let mut server = String::new();
         write!(server, "{}{}", HTTPS, &self.user_domain).expect("failed to write server");
-        if web::send_message(&server, &self.room_id, &text, &txn_id, &self.token) {
+        if web::send_message(&server, &self.room_id, &text, &txn_id, &self.token, &mut self.agent) {
             log::info!("SENT: {}", text);
         } else {
             log::info!("FAILED TO SEND");

@@ -10,7 +10,7 @@ use rkyv::{
     ser::{serializers::WriteSerializer, Serializer},
     Deserialize,
 };
-use rustls::{Certificate, RootCertStore};
+use rustls::{Certificate, ClientConfig, RootCertStore};
 use sha2::Digest;
 use std::convert::{Into, TryFrom};
 use std::io::{Error, Read, Write};
@@ -199,7 +199,8 @@ impl Tls {
                             rkyv::archived_value::<RustlsOwnedTrustAnchor>(&bytes, pos)
                         };
                         let ta = archive.deserialize(&mut AllocDeserializer {}).ok();
-                        log::info!("get '{}' = '{:?}'", key, &ta);
+                        log::info!("get {}", key);
+                        log::trace!("get '{}' = '{:?}'", key, &ta);
                         ta
                     }
                     Err(e) => {
@@ -243,6 +244,13 @@ impl Tls {
             Err(e) => log::warn!("failed to get iter over trusted: {e}"),
         }
         root_store
+    }
+
+    pub fn client_config(&self) -> ClientConfig {
+        rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(self.root_store())
+            .with_no_client_auth()
     }
 }
 

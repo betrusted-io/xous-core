@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use ureq;
+use ureq::Agent;
 use ureq::serde_json::{Map, Value};
 
 use crate::{url, Msg};
@@ -58,21 +58,21 @@ pub fn handle_response(maybe_response: Result<ureq::Response, ureq::Error>) -> O
     }
 }
 
-pub fn get_json(url: &str) -> Result<ureq::Response, ureq::Error> {
-    ureq::get(&url).set(ACCEPT, ACCEPT_JSON).call()
+pub fn get_json(url: &str, agent: &mut Agent) -> Result<ureq::Response, ureq::Error> {
+    agent.get(&url).set(ACCEPT, ACCEPT_JSON).call()
 }
 
-pub fn get_json_auth(url: &str, token: &str) -> Result<ureq::Response, ureq::Error> {
+pub fn get_json_auth(url: &str, token: &str, agent: &mut Agent) -> Result<ureq::Response, ureq::Error> {
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
-    ureq::get(&url)
+    agent.get(&url)
         .set(ACCEPT, ACCEPT_JSON)
         .set(AUTHORIZATION, &authorization)
         .call()
 }
 
-pub fn post_string(url: &str, request_body: &str) -> Result<ureq::Response, ureq::Error> {
-    ureq::post(&url)
+pub fn post_string(url: &str, request_body: &str, agent: &mut Agent) -> Result<ureq::Response, ureq::Error> {
+    agent.post(&url)
         .set(ACCEPT, ACCEPT_JSON)
         .send_string(request_body)
 }
@@ -81,10 +81,11 @@ pub fn post_string_auth(
     url: &str,
     request_body: &str,
     token: &str,
+    agent: &mut Agent,
 ) -> Result<ureq::Response, ureq::Error> {
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
-    ureq::post(&url)
+    agent.post(&url)
         .set(ACCEPT, ACCEPT_JSON)
         .set(AUTHORIZATION, &authorization)
         .send_string(request_body)
@@ -94,10 +95,11 @@ pub fn put_string_auth(
     url: &str,
     request_body: &str,
     token: &str,
+    agent: &mut Agent,
 ) -> Result<ureq::Response, ureq::Error> {
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
-    ureq::put(&url)
+    agent.put(&url)
         .set(ACCEPT, ACCEPT_JSON)
         .set(AUTHORIZATION, &authorization)
         .send_string(request_body)
@@ -105,10 +107,10 @@ pub fn put_string_auth(
 
 // --------------------------------
 
-pub fn whoami(server: &str, token: &str) -> Option<String> {
+pub fn whoami(server: &str, token: &str, agent: &mut Agent) -> Option<String> {
     let mut url = String::from(server);
     url.push_str("/_matrix/client/r0/account/whoami");
-    if let Some(value) = handle_response(get_json_auth(&url, token)) {
+    if let Some(value) = handle_response(get_json_auth(&url, token, agent)) {
         if let Value::Object(body) = value {
             if let Some(Value::String(device_id)) = body.get("device_id") {
                 log::info!("device_id = {}", device_id);
@@ -122,11 +124,11 @@ pub fn whoami(server: &str, token: &str) -> Option<String> {
     None
 }
 
-pub fn get_login_type(server: &str) -> bool {
+pub fn get_login_type(server: &str, agent: &mut Agent) -> bool {
     let mut url = String::from(server);
     url.push_str("/_matrix/client/r0/login");
     let mut found = false;
-    if let Some(value) = handle_response(get_json(&url)) {
+    if let Some(value) = handle_response(get_json(&url, agent)) {
         if let Value::Object(body) = value {
             if let Some(Value::Array(flows)) = body.get("flows") {
                 for flow in flows.iter() {
@@ -173,13 +175,13 @@ impl AuthRequest {
 }
 
 // fn authenticate_user() -> Result<String, ureq::Error> {
-pub fn authenticate_user(server: &str, user: &str, password: &str) -> Option<String> {
+pub fn authenticate_user(server: &str, user: &str, password: &str, agent: &mut Agent) -> Option<String> {
     let mut maybe_token: Option<String> = None;
     let mut url = String::from(server);
     url.push_str("/_matrix/client/r0/login");
     let auth_request = AuthRequest::new(user, password);
     if let Some(request_body) = serialize(&auth_request) {
-        if let Some(value) = handle_response(post_string(&url, &request_body)) {
+        if let Some(value) = handle_response(post_string(&url, &request_body, agent)) {
             if let Value::Object(body) = value {
                 if let Some(Value::String(access_token)) = body.get("access_token") {
                     maybe_token = Some(access_token.to_string())
@@ -190,13 +192,13 @@ pub fn authenticate_user(server: &str, user: &str, password: &str) -> Option<Str
     maybe_token
 }
 
-pub fn get_room_id(server: &str, room_server: &str, token: &str) -> Option<String> {
+pub fn get_room_id(server: &str, room_server: &str, token: &str, agent: &mut Agent) -> Option<String> {
     let room_encoded = url::encode(room_server);
     let mut url = String::from(server);
     url.push_str("/_matrix/client/v3/directory/room/");
     url.push_str(&room_encoded);
     log::info!("get_room_id = {}", url);
-    if let Some(value) = handle_response(get_json_auth(&url, token)) {
+    if let Some(value) = handle_response(get_json_auth(&url, token, agent)) {
         if let Value::Object(body) = value {
             if let Some(Value::String(room_id)) = body.get("room_id") {
                 Some(room_id.to_string())
@@ -303,7 +305,7 @@ impl FilterRequest {
     }
 }
 
-pub fn get_filter(user: &str, server: &str, room_id: &str, token: &str) -> Option<String> {
+pub fn get_filter(user: &str, server: &str, room_id: &str, token: &str, agent: &mut Agent) -> Option<String> {
     let user_encoded = url::encode(user);
     let mut url = String::from(server);
     url.push_str("/_matrix/client/v3/user/");
@@ -312,7 +314,7 @@ pub fn get_filter(user: &str, server: &str, room_id: &str, token: &str) -> Optio
     log::info!("get_filter = {}", url);
     let filter_request = FilterRequest::new(room_id);
     if let Some(request_body) = serialize(&filter_request) {
-        if let Some(value) = handle_response(post_string_auth(&url, &request_body, token)) {
+        if let Some(value) = handle_response(post_string_auth(&url, &request_body, token, agent)) {
             if let Value::Object(body) = value {
                 if let Some(Value::String(filter_id)) = body.get("filter_id") {
                     log::info!("filter_id = {}", filter_id);
@@ -377,6 +379,7 @@ pub fn client_sync(
     timeout: i32,
     room_id: &str,
     token: &str,
+    agent: &mut Agent,
 ) -> Option<(String, Vec<Msg>)> {
     log::info!("heap usage: {}", crate::heap_usage());
     let mut url = String::from(server);
@@ -389,7 +392,7 @@ pub fn client_sync(
         url.push_str(since);
     }
     log::info!("client_sync = {}", url);
-    if let Some(value) = handle_response(get_json_auth(&url, token)) {
+    if let Some(value) = handle_response(get_json_auth(&url, token, agent)) {
         if let Value::Object(body) = value {
             if let Some(Value::String(next_batch)) = body.get("next_batch") {
                 Some((next_batch.to_string(), get_messages(body, room_id)))
@@ -420,7 +423,7 @@ impl MessageRequest {
     }
 }
 
-pub fn send_message(server: &str, room_id: &str, text: &str, txn_id: &str, token: &str) -> bool {
+pub fn send_message(server: &str, room_id: &str, text: &str, txn_id: &str, token: &str, agent: &mut Agent) -> bool {
     log::info!("heap usage: {}", crate::heap_usage());
     let room_id_encoded = url::encode(room_id);
     let mut url = String::from(server);
@@ -431,7 +434,7 @@ pub fn send_message(server: &str, room_id: &str, text: &str, txn_id: &str, token
     log::info!("send_message = {}", url);
     let message_request = MessageRequest::new(text);
     if let Some(request_body) = serialize(&message_request) {
-        if let Some(value) = handle_response(put_string_auth(&url, &request_body, token)) {
+        if let Some(value) = handle_response(put_string_auth(&url, &request_body, token, agent)) {
             if let Value::Object(_body) = value {
                 true
             } else {
