@@ -238,7 +238,7 @@ impl Tls {
                     .map(|key| self.get_cert(&key))
                     .filter_map(|rota| rota)
                     .map(|t| Into::<rustls::OwnedTrustAnchor>::into(t));
-                root_store.add_server_trust_anchors(rota);
+                root_store.add_trust_anchors(rota);
             }
             Err(e) => log::warn!("failed to get iter over trusted: {e}"),
         }
