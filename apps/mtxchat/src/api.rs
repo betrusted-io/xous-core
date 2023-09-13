@@ -1,5 +1,3 @@
-use rkyv::{Archive, Deserialize, Serialize};
-
 #[allow(dead_code)]
 pub(crate) const SERVER_NAME_MTXCHAT: &str = "_Matrix chat_";
 
@@ -32,4 +30,3 @@ pub struct Msg {
     pub sender: Option<String>,
     pub ts: Option<u64>,
 }
-

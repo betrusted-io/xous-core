@@ -105,8 +105,6 @@ pub enum PostFlag {
     Hidden,
 }
 
-
-
 #[derive(
     Archive,
     Serialize,

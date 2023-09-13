@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use ureq::Agent;
 use ureq::serde_json::{Map, Value};
+use ureq::Agent;
 
 use crate::{url, Msg};
 
@@ -62,17 +62,27 @@ pub fn get_json(url: &str, agent: &mut Agent) -> Result<ureq::Response, ureq::Er
     agent.get(&url).set(ACCEPT, ACCEPT_JSON).call()
 }
 
-pub fn get_json_auth(url: &str, token: &str, agent: &mut Agent) -> Result<ureq::Response, ureq::Error> {
+pub fn get_json_auth(
+    url: &str,
+    token: &str,
+    agent: &mut Agent,
+) -> Result<ureq::Response, ureq::Error> {
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
-    agent.get(&url)
+    agent
+        .get(&url)
         .set(ACCEPT, ACCEPT_JSON)
         .set(AUTHORIZATION, &authorization)
         .call()
 }
 
-pub fn post_string(url: &str, request_body: &str, agent: &mut Agent) -> Result<ureq::Response, ureq::Error> {
-    agent.post(&url)
+pub fn post_string(
+    url: &str,
+    request_body: &str,
+    agent: &mut Agent,
+) -> Result<ureq::Response, ureq::Error> {
+    agent
+        .post(&url)
         .set(ACCEPT, ACCEPT_JSON)
         .send_string(request_body)
 }
@@ -85,7 +95,8 @@ pub fn post_string_auth(
 ) -> Result<ureq::Response, ureq::Error> {
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
-    agent.post(&url)
+    agent
+        .post(&url)
         .set(ACCEPT, ACCEPT_JSON)
         .set(AUTHORIZATION, &authorization)
         .send_string(request_body)
@@ -99,7 +110,8 @@ pub fn put_string_auth(
 ) -> Result<ureq::Response, ureq::Error> {
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
-    agent.put(&url)
+    agent
+        .put(&url)
         .set(ACCEPT, ACCEPT_JSON)
         .set(AUTHORIZATION, &authorization)
         .send_string(request_body)
@@ -175,7 +187,12 @@ impl AuthRequest {
 }
 
 // fn authenticate_user() -> Result<String, ureq::Error> {
-pub fn authenticate_user(server: &str, user: &str, password: &str, agent: &mut Agent) -> Option<String> {
+pub fn authenticate_user(
+    server: &str,
+    user: &str,
+    password: &str,
+    agent: &mut Agent,
+) -> Option<String> {
     let mut maybe_token: Option<String> = None;
     let mut url = String::from(server);
     url.push_str("/_matrix/client/r0/login");
@@ -192,7 +209,12 @@ pub fn authenticate_user(server: &str, user: &str, password: &str, agent: &mut A
     maybe_token
 }
 
-pub fn get_room_id(server: &str, room_server: &str, token: &str, agent: &mut Agent) -> Option<String> {
+pub fn get_room_id(
+    server: &str,
+    room_server: &str,
+    token: &str,
+    agent: &mut Agent,
+) -> Option<String> {
     let room_encoded = url::encode(room_server);
     let mut url = String::from(server);
     url.push_str("/_matrix/client/v3/directory/room/");
@@ -305,7 +327,13 @@ impl FilterRequest {
     }
 }
 
-pub fn get_filter(user: &str, server: &str, room_id: &str, token: &str, agent: &mut Agent) -> Option<String> {
+pub fn get_filter(
+    user: &str,
+    server: &str,
+    room_id: &str,
+    token: &str,
+    agent: &mut Agent,
+) -> Option<String> {
     let user_encoded = url::encode(user);
     let mut url = String::from(server);
     url.push_str("/_matrix/client/v3/user/");
@@ -375,7 +403,7 @@ fn get_messages(body: Map<String, Value>, room_id: &str) -> Vec<Msg> {
 pub fn client_sync(
     server: &str,
     filter: &str,
-    since: &str,
+    since: Option<&str>,
     timeout: i32,
     room_id: &str,
     token: &str,
@@ -387,7 +415,7 @@ pub fn client_sync(
     url.push_str(filter);
     url.push_str("&timeout=");
     url.push_str(&timeout.to_string());
-    if since.len() > 0 {
+    if let Some(since) = since {
         url.push_str("&since=");
         url.push_str(since);
     }
@@ -423,7 +451,14 @@ impl MessageRequest {
     }
 }
 
-pub fn send_message(server: &str, room_id: &str, text: &str, txn_id: &str, token: &str, agent: &mut Agent) -> bool {
+pub fn send_message(
+    server: &str,
+    room_id: &str,
+    text: &str,
+    txn_id: &str,
+    token: &str,
+    agent: &mut Agent,
+) -> bool {
     log::info!("heap usage: {}", crate::heap_usage());
     let room_id_encoded = url::encode(room_id);
     let mut url = String::from(server);
