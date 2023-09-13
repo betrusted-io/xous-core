@@ -1,10 +1,12 @@
 pub mod api;
+mod listen;
 mod url;
 mod web;
 
 use crate::web::get_username;
 pub use api::*;
-use chat::{Chat, ChatOp};
+use chat::Chat;
+use listen::listen;
 use locales::t;
 use modals::Modals;
 use pddb::Pddb;
@@ -15,7 +17,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tls::Tls;
 use trng::*;
 use ureq::Agent;
-use xous_ipc::Buffer;
 
 /// PDDB Dict for mtxchat keys
 const MTXCHAT_STATE: &str = "mtxchat.state";
@@ -550,63 +551,20 @@ impl<'a> MtxChat<'a> {
                         .unwrap_or("".to_string());
                     let mut server = String::new();
                     write!(server, "{}{}", HTTPS, &domain,).expect("failed to write server");
-                    let mut agent = self.agent.clone();
-                    let filter = filter.clone();
-                    let since = self.since.clone();
-                    let room_id = room_id.clone();
                     let token = token.clone();
-                    let chat_cid = self.chat.cid();
+                    let room_id = room_id.clone();
+                    let since = self.since.clone();
+                    let filter = filter.clone();
+                    let chat_cid = self.chat.cid().clone();
                     move || {
-                        let xns = xous_names::XousNames::new().unwrap();
-                        let modals = Modals::new(&xns).expect("can't connect to Modals server");
-                        log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
-                        if let Some((_since, events)) = web::client_sync(
+                        listen(
                             &server,
-                            &filter,
-                            since.as_deref(),
-                            MTX_LONG_TIMEOUT,
-                            &room_id,
                             &token,
-                            &mut agent,
-                        ) {
-                            // TODO send "since" to mtxchat server
-                            // and you probably want to have a look at Dialogue::MAX_BYTES
-
-                            // TODO resolve suspected race condition
-                            // This progress modal is masking a bug by slowing the loop down
-                            // Precursor "Guru Mediation" `voilated: nonNull::new_unchecked`
-                            modals
-                                .start_progress("Receiving events ...", 0, events.len() as u32, 0)
-                                .expect("no progress bar");
-                            let mut event_count = 0;
-                            for event in events {
-                                let sender = event.sender.unwrap_or("anon".to_string());
-                                let body = event.body.unwrap_or("...".to_string());
-                                let post = chat::Post {
-                                    author: xous_ipc::String::from_str(&get_username(&sender)),
-                                    timestamp: event.ts.unwrap_or(0),
-                                    text: xous_ipc::String::from_str(&body),
-                                    attach_url: None,
-                                };
-                                match Buffer::into_buf(post) {
-                                    Ok(buf) => {
-                                        buf.send(chat_cid, ChatOp::PostAdd as u32).map(|_| ())
-                                    }
-                                    Err(_) => Err(xous::Error::InternalError),
-                                }
-                                .expect("failed to convert post into buffer");
-                                event_count += 1;
-                                modals
-                                    .update_progress(event_count)
-                                    .expect("no progress update");
-                            }
-                        }
-                        modals.finish_progress().expect("failed progress finish");
-                        // trigger the chat ui to save the dialogue to the pddb
-                        xous::send_message(
+                            &room_id,
+                            since.as_deref(),
+                            &filter,
                             chat_cid,
-                            xous::Message::new_scalar(ChatOp::DialogueSave as usize, 0, 0, 0, 0),
-                        )
+                        );
                     }
                 });
                 "Started listening"
