@@ -8,9 +8,9 @@ use chat::{Chat, ChatOp};
 use locales::t;
 use modals::Modals;
 use pddb::Pddb;
-use std::sync::Arc;
 use std::fmt::Write as _;
 use std::io::{Error, ErrorKind, Read, Write as StdWrite};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tls::Tls;
 use trng::*;
@@ -35,7 +35,6 @@ const USER_DOMAIN_KEY: &str = "user_domain";
 const HTTPS: &str = "https://";
 const DOMAIN_MATRIX: &str = "matrix.org";
 
-const EMPTY: &str = "";
 const MTX_LONG_TIMEOUT: i32 = 60000; // ms
 const WIFI_TIMEOUT: u32 = 10; // seconds
 
@@ -69,17 +68,17 @@ pub struct MtxChat<'a> {
     trng: Trng,
     pddb: Pddb,
     netmgr: net::NetManager,
-    user_id: String,
-    user_name: String,
-    user_domain: String,
+    user_id: Option<String>,
+    user_name: Option<String>,
+    user_domain: Option<String>,
     agent: Agent,
-    token: String,
+    token: Option<String>,
     logged_in: bool,
-    room_id: String,
-    room_name: String,
-    room_domain: String,
-    filter: String,
-    since: String,
+    room_id: Option<String>,
+    room_name: Option<String>,
+    room_domain: Option<String>,
+    filter: Option<String>,
+    since: Option<String>,
     listening: bool,
     modals: Modals,
     new_username: bool,
@@ -98,19 +97,19 @@ impl<'a> MtxChat<'a> {
             trng: trng,
             pddb: pddb,
             netmgr: net::NetManager::new(),
-            user_id: EMPTY.to_string(),
-            user_name: EMPTY.to_string(),
-            user_domain: DOMAIN_MATRIX.to_string(),
+            user_id: None,
+            user_name: None,
+            user_domain: Some(DOMAIN_MATRIX.to_string()),
             agent: ureq::builder()
                 .tls_config(Arc::new(tls.client_config()))
                 .build(),
-            token: EMPTY.to_string(),
+            token: None,
             logged_in: false,
-            room_id: EMPTY.to_string(),
-            room_name: EMPTY.to_string(),
-            room_domain: EMPTY.to_string(),
-            filter: EMPTY.to_string(),
-            since: EMPTY.to_string(),
+            room_id: None,
+            room_name: None,
+            room_domain: None,
+            filter: None,
+            since: None,
             listening: false,
             modals: modals,
             new_username: false,
@@ -143,16 +142,16 @@ impl<'a> MtxChat<'a> {
             };
             match key {
                 // update cached values
-                FILTER_KEY => self.filter = value.to_string(),
+                FILTER_KEY => self.filter = Some(value.to_string()),
                 PASSWORD_KEY => (),
-                ROOM_ID_KEY => self.room_id = value.to_string(),
-                ROOM_NAME_KEY => self.room_name = value.to_string(),
-                ROOM_DOMAIN_KEY => self.room_domain = value.to_string(),
-                SINCE_KEY => self.since = value.to_string(),
-                TOKEN_KEY => self.token = value.to_string(),
-                USER_NAME_KEY => self.user_name = value.to_string(),
-                USER_DOMAIN_KEY => self.user_domain = value.to_string(),
-                USER_ID_KEY => self.user_id = value.to_string(),
+                ROOM_ID_KEY => self.room_id = Some(value.to_string()),
+                ROOM_NAME_KEY => self.room_name = Some(value.to_string()),
+                ROOM_DOMAIN_KEY => self.room_domain = Some(value.to_string()),
+                SINCE_KEY => self.since = Some(value.to_string()),
+                TOKEN_KEY => self.token = Some(value.to_string()),
+                USER_NAME_KEY => self.user_name = Some(value.to_string()),
+                USER_DOMAIN_KEY => self.user_domain = Some(value.to_string()),
+                USER_ID_KEY => self.user_id = Some(value.to_string()),
                 _ => {}
             }
             Ok(())
@@ -187,13 +186,14 @@ impl<'a> MtxChat<'a> {
             }
             match key {
                 // update cached values
-                FILTER_KEY => self.filter = EMPTY.to_string(),
-                ROOM_ID_KEY => self.room_id = EMPTY.to_string(),
-                ROOM_DOMAIN_KEY => self.room_domain = EMPTY.to_string(),
-                SINCE_KEY => self.since = EMPTY.to_string(),
-                USER_DOMAIN_KEY => self.user_domain = EMPTY.to_string(),
-                USER_ID_KEY => self.user_id = EMPTY.to_string(),
-                USER_NAME_KEY => self.user_name = EMPTY.to_string(),
+                FILTER_KEY => self.filter = None,
+                PASSWORD_KEY => (),
+                ROOM_ID_KEY => self.room_id = None,
+                ROOM_DOMAIN_KEY => self.room_domain = None,
+                SINCE_KEY => self.since = None,
+                USER_DOMAIN_KEY => self.user_domain = None,
+                USER_ID_KEY => self.user_id = None,
+                USER_NAME_KEY => self.user_name = None,
                 _ => {}
             }
             Ok(())
@@ -238,17 +238,6 @@ impl<'a> MtxChat<'a> {
         Ok(value)
     }
 
-    pub fn get_or(&mut self, key: &str, default: &str) -> String {
-        match self.get(key) {
-            Ok(None) => default.to_string(),
-            Ok(Some(value)) => value.to_string(),
-            Err(e) => {
-                log::info!("error getting key {}: {:?}", key, e);
-                default.to_string()
-            }
-        }
-    }
-
     pub fn connect(&mut self) -> bool {
         log::info!("Attempting connect to Matrix server");
         if self.wifi() {
@@ -287,18 +276,21 @@ impl<'a> MtxChat<'a> {
     }
 
     pub fn login(&mut self) -> bool {
-        self.token = self.get_or(TOKEN_KEY, EMPTY);
+        self.token = self.get(TOKEN_KEY).unwrap_or(None);
         self.logged_in = false;
         let mut server = String::new();
         write!(
             server,
             "{}{}",
             HTTPS,
-            &self.get_or(USER_DOMAIN_KEY, DOMAIN_MATRIX)
+            &self
+                .get(USER_DOMAIN_KEY)
+                .unwrap_or(Some(DOMAIN_MATRIX.to_string()))
+                .unwrap_or("".to_string())
         )
         .expect("failed to write server");
-        if self.token.len() > 0 {
-            if let Some(user_id) = web::whoami(&server, &self.token, &mut self.agent) {
+        if let Some(token) = &self.token {
+            if let Some(user_id) = web::whoami(&server, &token, &mut self.agent) {
                 let i = match user_id.find('@') {
                     Some(index) => index + 1,
                     None => 0,
@@ -319,16 +311,22 @@ impl<'a> MtxChat<'a> {
         if !self.logged_in {
             if web::get_login_type(&server, &mut self.agent) {
                 self.login_modal();
-                let password = self.get_or(PASSWORD_KEY, EMPTY);
-                if let Some(new_token) = web::authenticate_user(&server, &self.user_id, &password, &mut self.agent) {
-                    self.set_debug(TOKEN_KEY, &new_token);
-                    self.logged_in = true;
-                } else {
-                    log::warn!(
-                        "Error: cannnot login with type: {}",
-                        web::MTX_LOGIN_PASSWORD
-                    );
-                }
+                let log_entry = match (&self.user_id, self.get(PASSWORD_KEY).unwrap_or(None)) {
+                    (Some(user_id), Some(password)) => {
+                        if let Some(new_token) =
+                            web::authenticate_user(&server, &user_id, &password, &mut self.agent)
+                        {
+                            self.set_debug(TOKEN_KEY, &new_token);
+                            self.logged_in = true;
+                            "authenticated user"
+                        } else {
+                            "Error: cannnot login with password"
+                        }
+                    }
+                    (None, _) => "missing user id",
+                    (_, None) => "missing password",
+                };
+                log::info!("{log_entry}");
             } else {
                 log::warn!("failed to web::get_login_type()");
             }
@@ -385,17 +383,21 @@ impl<'a> MtxChat<'a> {
                         .expect("failed to save password");
                 }
             }
-            let mut user_id = String::new();
-            write!(user_id, "@{}:{}", self.user_name, self.user_domain)
-                .expect("failed to write user_id");
-            self.set(USER_ID_KEY, &user_id)
-                .expect("failed to save user");
+            if let Some(user_name) = &self.user_name {
+                if let Some(user_domain) = &self.user_domain {
+                    let mut user_id = String::new();
+                    write!(user_id, "@{}:{}", user_name, user_domain)
+                        .expect("failed to write user_id");
+                    self.set(USER_ID_KEY, &user_id)
+                        .expect("failed to save user");
+                }
+            }
         }
         log::info!(
-            "# user = '{}' user_name = '{}' server = '{}'",
+            "# user = {:?} user_name = {:?} server = {:?}",
             self.user_id,
             self.user_name,
-            self.user_domain
+            self.user_domain,
         );
     }
 
@@ -404,20 +406,35 @@ impl<'a> MtxChat<'a> {
         // TODO logout with server
     }
 
-    // assume logged in, token is valid
     pub fn get_room_id(&mut self) -> Option<String> {
-        let mut room = String::new();
         self.room_modal();
-        write!(room, "#{}:{}", &self.room_name, &self.room_domain).expect("failed to write room");
-        let mut server = String::new();
-        write!(server, "{}{}", HTTPS, &self.user_domain).expect("failed to write server");
-        if let Some(room_id) = web::get_room_id(&server, &room, &self.token, &mut self.agent) {
-            self.set_debug(ROOM_ID_KEY, &room_id);
-            Some(room)
-        } else {
-            log::warn!("failed to return room_id");
-            None
-        }
+        let log_entry = match (
+            self.logged_in,
+            &self.token,
+            &self.user_domain,
+            &self.room_name,
+            &self.room_domain,
+        ) {
+            (true, Some(token), Some(user_domain), Some(room_name), Some(room_domain)) => {
+                let mut room = String::new();
+                write!(room, "#{}:{}", &room_name, &room_domain).expect("failed to write room");
+                let mut server = String::new();
+                write!(server, "{}{}", HTTPS, &user_domain).expect("failed to write server");
+                if let Some(room_id) = web::get_room_id(&server, &room, &token, &mut self.agent) {
+                    self.set_debug(ROOM_ID_KEY, &room_id);
+                    return Some(room);
+                } else {
+                    "failed to get room_id"
+                }
+            }
+            (false, _, _, _, _) => "Not logged in",
+            (_, None, _, _, _) => "No token set",
+            (_, _, None, _, _) => "No user domain set",
+            (_, _, _, None, _) => "No room name set",
+            (_, _, _, _, None) => "No room domain set",
+        };
+        log::warn!("{log_entry}");
+        None
     }
 
     pub fn redraw(&self) {
@@ -473,111 +490,134 @@ impl<'a> MtxChat<'a> {
         self.chat.help();
     }
 
-    // assume logged in, token is valid, room_id is valid, user is valid
     pub fn get_filter(&mut self) -> bool {
-        if self.filter.len() > 0 {
-            true
-        } else {
-            let mut server = String::new();
-            write!(server, "{}{}", HTTPS, &self.user_domain).expect("failed to write server");
-            log::info!(
-                "get_filter {} : {} : {} : {}",
-                &self.user_id,
-                &server,
-                &self.room_id,
-                &self.token
-            );
-            if let Some(new_filter) =
-                web::get_filter(&self.user_id, &server, &self.room_id, &self.token, &mut self.agent)
-            {
-                self.set_debug(FILTER_KEY, &new_filter);
-                true
-            } else {
-                false
+        let log_entry = match (
+            &self.filter,
+            &self.logged_in,
+            &self.token,
+            &self.user_id,
+            &self.user_domain,
+            &self.room_id,
+        ) {
+            (Some(_filter), _, _, _, _, _) => "filter already set",
+            (_, true, Some(token), Some(user_id), Some(user_domain), Some(room_id)) => {
+                let mut server = String::new();
+                write!(server, "{}{}", HTTPS, &user_domain).expect("failed to write server");
+                log::info!(
+                    "get_filter {} : {} : {} : {}",
+                    &user_id,
+                    &server,
+                    &room_id,
+                    &token
+                );
+                if let Some(new_filter) =
+                    web::get_filter(&user_id, &server, &room_id, &token, &mut self.agent)
+                {
+                    if self.set_debug(FILTER_KEY, &new_filter) {
+                        "set filter"
+                    } else {
+                        "failed to set"
+                    }
+                } else {
+                    "failed to get filter"
+                }
             }
-        }
+            (_, false, _, _, _, _) => "Not logged in",
+            (_, _, None, _, _, _) => "No token set",
+            (_, _, _, None, _, _) => "No user id set",
+            (_, _, _, _, None, _) => "No user domain set",
+            (_, _, _, _, _, None) => "No room id set",
+        };
+        log::warn!("{log_entry}");
+        self.filter.is_some()
     }
 
     pub fn listen(&mut self) {
-        if self.listening {
-            log::info!("Already listening");
-            return;
-        }
-        if !self.logged_in {
-            log::info!("Not logged in");
-            return;
-        }
-        if self.room_id.len() == 0 {
-            log::info!("No room id set");
-            return;
-        }
-        if self.filter.len() == 0 {
-            if !self.get_filter() {
-                return;
-            }
-        }
-        self.listening = true;
-        log::info!("Started listening");
-        std::thread::spawn({
-            let mut server = String::new();
-            write!(
-                server,
-                "{}{}",
-                HTTPS,
-                &self.get_or(ROOM_DOMAIN_KEY, DOMAIN_MATRIX)
-            )
-            .expect("failed to write server");
-            let mut agent = self.agent.clone();
-            let filter = self.filter.clone();
-            let since = self.since.clone();
-            let room_id = self.room_id.clone();
-            let token = self.token.clone();
-            let chat_cid = self.chat.cid();
-            move || {
-                let xns = xous_names::XousNames::new().unwrap();
-                let modals = Modals::new(&xns).expect("can't connect to Modals server");
-                log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
-                if let Some((_since, events)) =
-                    web::client_sync(&server, &filter, &since, MTX_LONG_TIMEOUT, &room_id, &token, &mut agent)
-                {
-                    // TODO send "since" to mtxchat server
-                    // and you probably want to have a look at Dialogue::MAX_BYTES
+        self.get_filter();
+        let log_entry = match (
+            self.listening,
+            self.logged_in,
+            &self.token,
+            &self.room_id,
+            &self.filter,
+        ) {
+            (false, true, Some(token), Some(room_id), Some(filter)) => {
+                self.listening = true;
+                std::thread::spawn({
+                    let domain = self
+                        .get(ROOM_DOMAIN_KEY)
+                        .unwrap_or(Some(DOMAIN_MATRIX.to_string()))
+                        .unwrap_or("".to_string());
+                    let mut server = String::new();
+                    write!(server, "{}{}", HTTPS, &domain,).expect("failed to write server");
+                    let mut agent = self.agent.clone();
+                    let filter = filter.clone();
+                    let since = self.since.clone();
+                    let room_id = room_id.clone();
+                    let token = token.clone();
+                    let chat_cid = self.chat.cid();
+                    move || {
+                        let xns = xous_names::XousNames::new().unwrap();
+                        let modals = Modals::new(&xns).expect("can't connect to Modals server");
+                        log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
+                        if let Some((_since, events)) = web::client_sync(
+                            &server,
+                            &filter,
+                            since.as_deref(),
+                            MTX_LONG_TIMEOUT,
+                            &room_id,
+                            &token,
+                            &mut agent,
+                        ) {
+                            // TODO send "since" to mtxchat server
+                            // and you probably want to have a look at Dialogue::MAX_BYTES
 
-                    // TODO resolve suspected race condition
-                    // This progress modal is masking a bug by slowing the loop down
-                    // Precursor "Guru Mediation" `voilated: nonNull::new_unchecked`
-                    modals
-                        .start_progress("Receiving events ...", 0, events.len() as u32, 0)
-                        .expect("no progress bar");
-                    let mut event_count = 0;
-                    for event in events {
-                        let sender = event.sender.unwrap_or("anon".to_string());
-                        let body = event.body.unwrap_or("...".to_string());
-                        let post = chat::Post {
-                            author: xous_ipc::String::from_str(&get_username(&sender)),
-                            timestamp: event.ts.unwrap_or(0),
-                            text: xous_ipc::String::from_str(&body),
-                            attach_url: None,
-                        };
-                        match Buffer::into_buf(post) {
-                            Ok(buf) => buf.send(chat_cid, ChatOp::PostAdd as u32).map(|_| ()),
-                            Err(_) => Err(xous::Error::InternalError),
+                            // TODO resolve suspected race condition
+                            // This progress modal is masking a bug by slowing the loop down
+                            // Precursor "Guru Mediation" `voilated: nonNull::new_unchecked`
+                            modals
+                                .start_progress("Receiving events ...", 0, events.len() as u32, 0)
+                                .expect("no progress bar");
+                            let mut event_count = 0;
+                            for event in events {
+                                let sender = event.sender.unwrap_or("anon".to_string());
+                                let body = event.body.unwrap_or("...".to_string());
+                                let post = chat::Post {
+                                    author: xous_ipc::String::from_str(&get_username(&sender)),
+                                    timestamp: event.ts.unwrap_or(0),
+                                    text: xous_ipc::String::from_str(&body),
+                                    attach_url: None,
+                                };
+                                match Buffer::into_buf(post) {
+                                    Ok(buf) => {
+                                        buf.send(chat_cid, ChatOp::PostAdd as u32).map(|_| ())
+                                    }
+                                    Err(_) => Err(xous::Error::InternalError),
+                                }
+                                .expect("failed to convert post into buffer");
+                                event_count += 1;
+                                modals
+                                    .update_progress(event_count)
+                                    .expect("no progress update");
+                            }
                         }
-                        .expect("failed to convert post into buffer");
-                        event_count += 1;
-                        modals
-                            .update_progress(event_count)
-                            .expect("no progress update");
+                        modals.finish_progress().expect("failed progress finish");
+                        // trigger the chat ui to save the dialogue to the pddb
+                        xous::send_message(
+                            chat_cid,
+                            xous::Message::new_scalar(ChatOp::DialogueSave as usize, 0, 0, 0, 0),
+                        )
                     }
-                }
-                modals.finish_progress().expect("failed progress finish");
-                // trigger the chat ui to save the dialogue to the pddb
-                xous::send_message(
-                    chat_cid,
-                    xous::Message::new_scalar(ChatOp::DialogueSave as usize, 0, 0, 0, 0),
-                )
+                });
+                "Started listening"
             }
-        });
+            (true, _, _, _, _) => "Already listening",
+            (_, false, _, _, _) => "Not logged in",
+            (_, _, None, _, _) => "No token set",
+            (_, _, _, None, _) => "No room id set",
+            (_, _, _, _, None) => "No filter set",
+        };
+        log::info!("{log_entry}");
     }
 
     pub fn listen_over(&mut self, since: &str) {
@@ -603,24 +643,29 @@ impl<'a> MtxChat<'a> {
     }
 
     pub fn post(&mut self, text: &str) {
-        if !self.logged_in {
-            if !self.login() {
-                return;
-            }
-        }
-        if self.room_id.len() == 0 {
-            log::info!("No room id set");
-            return;
-        }
         let txn_id = self.gen_txn_id();
-        log::info!("txn_id = {}", txn_id);
-        let mut server = String::new();
-        write!(server, "{}{}", HTTPS, &self.user_domain).expect("failed to write server");
-        if web::send_message(&server, &self.room_id, &text, &txn_id, &self.token, &mut self.agent) {
-            log::info!("SENT: {}", text);
-        } else {
-            log::info!("FAILED TO SEND");
-        }
+        let log_entry = match (
+            self.logged_in,
+            &self.token,
+            &self.user_domain,
+            &self.room_id,
+        ) {
+            (true, Some(token), Some(user_domain), Some(room_id)) => {
+                log::info!("txn_id = {}", txn_id);
+                let mut server = String::new();
+                write!(server, "{}{}", HTTPS, &user_domain).expect("failed to write server");
+                if web::send_message(&server, &room_id, &text, &txn_id, token, &mut self.agent) {
+                    "SENT"
+                } else {
+                    "FAILED TO SEND"
+                }
+            }
+            (false, _, _, _) => "Not logged in",
+            (_, None, _, _) => "No token set",
+            (_, _, None, _) => "No user domain set",
+            (_, _, _, None) => "No room id set",
+        };
+        log::info!("{log_entry}");
     }
 
     // returns true is wifi is connected
