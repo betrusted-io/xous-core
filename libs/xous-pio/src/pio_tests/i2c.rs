@@ -1,4 +1,5 @@
-use crate::pio_generated::utra::rp_pio;
+use utralib::generated::utra::rp_pio;
+
 use crate::*;
 use super::report_api;
 

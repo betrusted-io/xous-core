@@ -1,5 +1,5 @@
 use pio::RP2040_MAX_PROGRAM_SIZE;
-use crate::pio_generated::utra::rp_pio::{self, SFR_FDEBUG, SFR_FLEVEL, SFR_FSTAT, SFR_DBG_CFGINFO};
+use utralib::utra::rp_pio::{self, SFR_FDEBUG, SFR_FLEVEL, SFR_FSTAT, SFR_DBG_CFGINFO};
 use crate::*;
 use super::report_api;
 

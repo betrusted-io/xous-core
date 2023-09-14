@@ -131,6 +131,10 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
     sm_a.sm_set_enabled(false);
     a_prog.setup_default_config(&mut sm_a);
     sm_a.config_set_out_pins(0, 32);
+    sm_a.sm_set_pindirs_with_mask(
+        0xFFFF_FFFF,
+        0xFFFF_FFFF
+    );
     sm_a.config_set_clkdiv(133.0); // have it run slow so this test operates in the background
     sm_a.config_set_out_shift(false, true, 32);
     sm_a.sm_set_pindirs_with_mask(0x10, 0x10);
@@ -170,7 +174,7 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
     let mut state = 0x1111_0000;
     for d in region_a.iter_mut() {
         *d = state;
-        state += 1;
+        state += 0x0101_0101;
     }
 
     cc_struct.channels[0].dst_end_ptr =
