@@ -126,6 +126,8 @@ impl<'a> MtxChat<'a> {
             ))
         } else {
             log::info!("set '{}' = '{}'", key, value);
+            // delete key first to ensure data in a prior longer key is gone
+            self.pddb.delete_key(MTXCHAT_STATE, key, None).ok();
             match self
                 .pddb
                 .get(MTXCHAT_STATE, key, None, true, true, None, None::<fn()>)
