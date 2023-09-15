@@ -36,8 +36,16 @@ pub fn basic_tests (pl230: &mut Pl230) -> bool {
 
     const DMA_LEN: usize = 16;
     // setup the PL230 to do a simple transfer between two memory regions
+    // dma_mainram feature will cause us to DMA between main memory regions. This works under RTL sims.
+    #[cfg(feature="dma_mainram")]
     let mut region_a = [0u32; DMA_LEN];
+    #[cfg(feature="dma_mainram")]
     let region_b = [0u32; DMA_LEN];
+    // The alternate is to DMA between IFRAM regions. This works under FPGA and RTL sim.
+    #[cfg(not(feature="dma_mainram"))]
+    let region_a = unsafe{core::slice::from_raw_parts_mut((utralib::HW_IFRAM0_MEM + 4096) as *mut u32, DMA_LEN)};
+    #[cfg(not(feature="dma_mainram"))]
+    let region_b = unsafe{core::slice::from_raw_parts_mut(utralib::HW_IFRAM1_MEM as *mut u32, DMA_LEN)};
     let mut state = 0x1111_1111;
     for d in region_a.iter_mut() {
         *d = state;
@@ -89,16 +97,31 @@ pub fn basic_tests (pl230: &mut Pl230) -> bool {
         "nop",
     ); }
 
+    // manual flushing, as a sanity check of cache flush if needed
+    /*
+    {
+        let flush_ptr = 0x6100_0000 as *mut u32;
+        let mut dummy: u32 = 0;
+        // read a bunch of data to ensure the cache is flushed
+        for i in 0..131072 {
+            dummy += unsafe{flush_ptr.add(i).read_volatile()};
+        }
+        report_api("dummy: ", dummy);
+    } */
+
     let mut passing = true;
+    let mut errs = 0;
     for (i, (src, dst)) in region_a.iter().zip(region_b.iter()).enumerate() {
         if *src != *dst {
             report_api("error in iter ", i as u32);
             report_api("src: ", *src);
             report_api("dst: ", *dst);
             passing = false;
+            errs += 1;
         }
     }
     report_api("basic dma result (1=pass)", if passing { 1 } else { 0 });
+    report_api("errs: ", errs);
     passing
 }
 
