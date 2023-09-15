@@ -248,10 +248,12 @@ impl OutputWriter {
             writelen
         }
         #[cfg(feature="cramium-fpga")]
-        for c in buf {
-            self.putc(*c)
+        {
+            for c in buf {
+                self.putc(*c)
+            }
+            buf.len()
         }
-        buf.len()
     }
 
     pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> {
