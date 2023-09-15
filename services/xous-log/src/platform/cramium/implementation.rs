@@ -31,15 +31,16 @@ pub fn init() -> Output {
     #[cfg(feature="cramium-soc")]
     {
         // TODO: need to write an allocator for the UDMA memory region as well
-        let tx_buf = xous::syscall::map_memory(
+        let tx_buf_region = xous::syscall::map_memory(
             xous::MemoryAddress::new(utralib::HW_IFRAM0_MEM),
             None,
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map UDMA buffer");
-        unsafe { UART_DMA_BUF = tx_buf.as_mut_ptr() as *mut u8 };
+        unsafe { UART_DMA_BUF = tx_buf_region.as_mut_ptr() as *mut u8 };
 
+        /*
         // TODO: migrate this to an allocator that can handle all IOs
         let iox_buf = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::iox::HW_IOX_BASE),
@@ -59,11 +60,11 @@ pub fn init() -> Output {
 
         let iox_csr = iox_buf.as_mut_ptr() as *mut u32;
         unsafe {
-            iox_csr.add(0).write_volatile(0x0140);  // PAL
+            iox_csr.add(0).write_volatile(0b00_00_00_01_01_00_00_00);  // PAL AF1 on PA3/PA4
             iox_csr.add(0x1c / core::mem::size_of::<u32>()).write_volatile(0x1400); // PDH
-            iox_csr.add(0x148 / core::mem::size_of::<u32>()).write_volatile(0xff); // PA
+            iox_csr.add(0x148 / core::mem::size_of::<u32>()).write_volatile(0x10); // PA4 output
             iox_csr.add(0x148 / core::mem::size_of::<u32>() + 3).write_volatile(0xffff); // PD
-            iox_csr.add(0x160 / core::mem::size_of::<u32>()).write_volatile(0xffff); // pullups for port A
+            iox_csr.add(0x160 / core::mem::size_of::<u32>()).write_volatile(0x8); // PA3 pullup
         }
 
         let mut udma_ctrl = CSR::new(udma_ctrl.as_mut_ptr() as _);
@@ -73,13 +74,28 @@ pub fn init() -> Output {
 
         // setup the baud rate
         let mut uart_csr = CSR::new(uart.as_mut_ptr() as *mut u32);
-        //let baudrate: u32 = 115200;
-        //let freq: u32 = 32_000_000;
-        //let clk_counter: u32 = (freq + baudrate / 2) / baudrate;
-        let clk_counter: u32 = 2174; // empirically determined for the FPGA target
+        let baudrate: u32 = 115200;
+        let freq: u32 = 100_000_000;
+        let clk_counter: u32 = (freq + baudrate / 2) / baudrate;
         uart_csr.wo(utra::udma_uart_0::REG_UART_SETUP,
             0x0306 | (clk_counter << 16)
-        );
+        ); */
+
+        // rely on the bootloader to set up all the above params
+        /* //  for debug: send a test string to confirm everything is configured correctly
+        let tx_buf = tx_buf_region.as_mut_ptr() as *mut u8;
+        for i in 0..16 {
+            unsafe { tx_buf.add(i).write_volatile('M' as u32 as u8 + i as u8) };
+        }
+        let mut udma_uart = CSR::new(uart.as_mut_ptr() as *mut u32);
+        udma_uart.wo(utra::udma_uart_0::REG_TX_SADDR, tx_buf as u32);
+        udma_uart.wo(utra::udma_uart_0::REG_TX_SIZE, 16);
+        // send it
+        udma_uart.wo(utra::udma_uart_0::REG_TX_CFG, 0x10); // EN
+        // wait for it all to be done
+        while udma_uart.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {   }
+        while (udma_uart.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {  }
+        */
     }
 
     #[cfg(feature="inject")]
@@ -195,10 +211,39 @@ impl OutputWriter {
     /// bytes written. This is mostly compatible with `std::io::Write`,
     /// except it is infallible.
     pub fn write(&mut self, buf: &[u8]) -> usize {
-        for c in buf {
-            self.putc(*c);
+        // write the whole buffer via DMA, and then idle with yield_slice() for better
+        // concurrency (as opposed to character-by-character polling).
+
+        let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
+        // enqueue our character to send via DMA
+        unsafe {
+            if UART_DMA_BUF as usize != 0 {
+                // convert the raw pointer to a 4k buffer region. This is "by fiat", we don't
+                // have a formal allocator for this region yet
+                let dest_buf = core::slice::from_raw_parts_mut(UART_DMA_BUF as *mut u8, 4096);
+                // copy the whole buf to the destination
+                for (&s, d) in buf.iter().zip(dest_buf.iter_mut()) {
+                    *d = s;
+                }
+            }
         }
-        buf.len()
+        // configure the DMA
+        uart_csr.wo(utra::udma_uart_0::REG_TX_SADDR, utralib::HW_IFRAM0_MEM as u32); // source is the physical address
+        let writelen = buf.len().min(4096); // we will send the smaller of the buffer length or the maximum size of the DMA page
+        uart_csr.wo(utra::udma_uart_0::REG_TX_SIZE, writelen as u32);
+        // send it
+        uart_csr.wo(utra::udma_uart_0::REG_TX_CFG, 0x10); // EN
+        // wait for it all to be done
+        while uart_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {
+            // this should complete quickly because we're just ensuring nothing is already in progress
+        }
+        while (uart_csr.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {
+            // this takes a bit longer; yield the time because we expect the average
+            // time to send to be around 0.25ms or so, so this is worth it.
+            xous::yield_slice();
+        }
+
+        writelen
     }
 
     pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> {
