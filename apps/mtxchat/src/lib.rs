@@ -254,10 +254,6 @@ impl<'a> MtxChat<'a> {
                             .show_notification(t!("mtxchat.listen.patience", locales::LANG), None)
                             .expect("notification failed");
                     }
-                    if self.new_username {
-                        self.new_username = false;
-                        self.help();
-                    }
                     return true;
                 } else {
                     self.modals
@@ -268,6 +264,10 @@ impl<'a> MtxChat<'a> {
                 self.modals
                     .show_notification(t!("mtxchat.login.failed", locales::LANG), None)
                     .expect("notification failed");
+            }
+            if self.new_username {
+                self.new_username = false;
+                self.help();
             }
         } else {
             self.modals
@@ -348,19 +348,20 @@ impl<'a> MtxChat<'a> {
 
     pub fn login_modal(&mut self) {
         const HIDE: &str = "*****";
+        let mut old_username = String::new();
         let mut builder = self
             .modals
             .alert_builder(t!("mtxchat.login.title", locales::LANG));
         let builder = match self.get(USER_NAME_KEY) {
             // TODO add TextValidationFn
-            Ok(Some(user)) => builder.field_placeholder_persist(Some(user), None),
-            _ => {
-                self.new_username = true;
-                builder.field(
-                    Some(t!("mtxchat.user_name", locales::LANG).to_string()),
-                    None,
-                )
+            Ok(Some(user)) => {
+                old_username = user.clone();
+                builder.field_placeholder_persist(Some(user), None)
             }
+            _ => builder.field(
+                Some(t!("mtxchat.user_name", locales::LANG).to_string()),
+                None,
+            ),
         };
         let builder = match self.get(USER_DOMAIN_KEY) {
             // TODO add TextValidationFn
@@ -379,6 +380,7 @@ impl<'a> MtxChat<'a> {
             if let Ok(content) = payloads.content()[0].content.as_str() {
                 self.set(USER_NAME_KEY, content)
                     .expect("failed to save username");
+                self.new_username = content.ne(&old_username);
             }
             if let Ok(content) = payloads.content()[1].content.as_str() {
                 self.set(USER_DOMAIN_KEY, content)
@@ -449,19 +451,20 @@ impl<'a> MtxChat<'a> {
     }
 
     pub fn room_modal(&mut self) {
+        let mut old_room = String::new();
         let mut builder = self
             .modals
             .alert_builder(t!("mtxchat.room.title", locales::LANG));
         let builder = match self.get(ROOM_NAME_KEY) {
             // TODO add TextValidationFn
-            Ok(Some(room)) => builder.field_placeholder_persist(Some(room), None),
-            _ => {
-                self.new_room = true;
-                builder.field(
-                    Some(t!("mtxchat.room.name", locales::LANG).to_string()),
-                    None,
-                )
+            Ok(Some(room)) => {
+                old_room = room.clone();
+                builder.field_placeholder_persist(Some(room), None)
             }
+            _ => builder.field(
+                Some(t!("mtxchat.room.name", locales::LANG).to_string()),
+                None,
+            ),
         };
         let builder = match self.get(ROOM_DOMAIN_KEY) {
             // TODO add TextValidationFn
@@ -475,6 +478,7 @@ impl<'a> MtxChat<'a> {
             if let Ok(content) = payloads.content()[0].content.as_str() {
                 self.set(ROOM_NAME_KEY, content)
                     .expect("failed to save server");
+                self.new_room = content.ne(&old_room);
             }
             if let Ok(content) = payloads.content()[1].content.as_str() {
                 self.set(ROOM_DOMAIN_KEY, content)
