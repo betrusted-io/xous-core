@@ -211,39 +211,47 @@ impl OutputWriter {
     /// bytes written. This is mostly compatible with `std::io::Write`,
     /// except it is infallible.
     pub fn write(&mut self, buf: &[u8]) -> usize {
-        // write the whole buffer via DMA, and then idle with yield_slice() for better
-        // concurrency (as opposed to character-by-character polling).
+        #[cfg(feature="cramium-soc")]
+        {
+            // write the whole buffer via DMA, and then idle with yield_slice() for better
+            // concurrency (as opposed to character-by-character polling).
 
-        let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
-        // enqueue our character to send via DMA
-        unsafe {
-            if UART_DMA_BUF as usize != 0 {
-                // convert the raw pointer to a 4k buffer region. This is "by fiat", we don't
-                // have a formal allocator for this region yet
-                let dest_buf = core::slice::from_raw_parts_mut(UART_DMA_BUF as *mut u8, 4096);
-                // copy the whole buf to the destination
-                for (&s, d) in buf.iter().zip(dest_buf.iter_mut()) {
-                    *d = s;
+            let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
+            // enqueue our character to send via DMA
+            unsafe {
+                if UART_DMA_BUF as usize != 0 {
+                    // convert the raw pointer to a 4k buffer region. This is "by fiat", we don't
+                    // have a formal allocator for this region yet
+                    let dest_buf = core::slice::from_raw_parts_mut(UART_DMA_BUF as *mut u8, 4096);
+                    // copy the whole buf to the destination
+                    for (&s, d) in buf.iter().zip(dest_buf.iter_mut()) {
+                        *d = s;
+                    }
                 }
             }
-        }
-        // configure the DMA
-        uart_csr.wo(utra::udma_uart_0::REG_TX_SADDR, utralib::HW_IFRAM0_MEM as u32); // source is the physical address
-        let writelen = buf.len().min(4096); // we will send the smaller of the buffer length or the maximum size of the DMA page
-        uart_csr.wo(utra::udma_uart_0::REG_TX_SIZE, writelen as u32);
-        // send it
-        uart_csr.wo(utra::udma_uart_0::REG_TX_CFG, 0x10); // EN
-        // wait for it all to be done
-        while uart_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {
-            // this should complete quickly because we're just ensuring nothing is already in progress
-        }
-        while (uart_csr.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {
-            // this takes a bit longer; yield the time because we expect the average
-            // time to send to be around 0.25ms or so, so this is worth it.
-            xous::yield_slice();
-        }
+            // configure the DMA
+            uart_csr.wo(utra::udma_uart_0::REG_TX_SADDR, utralib::HW_IFRAM0_MEM as u32); // source is the physical address
+            let writelen = buf.len().min(4096); // we will send the smaller of the buffer length or the maximum size of the DMA page
+            uart_csr.wo(utra::udma_uart_0::REG_TX_SIZE, writelen as u32);
+            // send it
+            uart_csr.wo(utra::udma_uart_0::REG_TX_CFG, 0x10); // EN
+            // wait for it all to be done
+            while uart_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {
+                // this should complete quickly because we're just ensuring nothing is already in progress
+            }
+            while (uart_csr.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {
+                // this takes a bit longer; yield the time because we expect the average
+                // time to send to be around 0.25ms or so, so this is worth it.
+                xous::yield_slice();
+            }
 
-        writelen
+            writelen
+        }
+        #[cfg(feature="cramium-fpga")]
+        for c in buf {
+            self.putc(*c)
+        }
+        buf.len()
     }
 
     pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> {
