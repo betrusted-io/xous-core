@@ -288,8 +288,8 @@ impl<'a> MtxChat<'a> {
             HTTPS,
             &self
                 .get(USER_DOMAIN_KEY)
-                .unwrap_or(Some(DOMAIN_MATRIX.to_string()))
-                .unwrap_or("".to_string())
+                .unwrap_or(None)
+                .unwrap_or(DOMAIN_MATRIX.to_string())
         )
         .expect("failed to write server");
         if let Some(token) = &self.token {
@@ -338,6 +338,10 @@ impl<'a> MtxChat<'a> {
             log::info!("logged_in");
         } else {
             log::info!("login failed");
+            // unset credentials to facilitate re-attempt
+            self.unset(TOKEN_KEY).expect("failed to unset token");
+            self.unset(USER_DOMAIN_KEY)
+                .expect("failed to unset user domain");
         }
         self.logged_in
     }
