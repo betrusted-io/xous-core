@@ -14,7 +14,7 @@ pio-proc = "0.2.2"
 pio = "0.2.1"
 
 [target.'cfg(target_os = "xous")'.dependencies]
-xous = "0.9.50"
+xous = "0.9.51"
 
 [features]
 cramium-soc = ["utralib/cramium-soc"]
