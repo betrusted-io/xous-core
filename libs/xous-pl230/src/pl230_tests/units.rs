@@ -108,13 +108,11 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
 
     let iox_csr = utra::iox::HW_IOX_BASE as *mut u32;
     unsafe {
-        iox_csr.add(0).write_volatile(0x0140);  // PAL
-        iox_csr.add(8 / core::mem::size_of::<u32>()).write_volatile(0x0140);  // PBL
-        iox_csr.add(0x1c / core::mem::size_of::<u32>()).write_volatile(0x1400); // PDH
-        iox_csr.add(0x148 / core::mem::size_of::<u32>()).write_volatile(0xff); // PA
-        iox_csr.add(0x148 / core::mem::size_of::<u32>() + 3).write_volatile(0xffff); // PD
-        iox_csr.add(0x160 / core::mem::size_of::<u32>()).write_volatile(0xffff); // pullups for port A
-        iox_csr.add(0x200 / core::mem::size_of::<u32>()).write_volatile(0x10); // select PA4 as PIO output
+        iox_csr.add(0x8 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PBL
+        iox_csr.add(0xC / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PBH
+        iox_csr.add(0x10 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PCL
+        iox_csr.add(0x14 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PCH
+        iox_csr.add(0x200 / core::mem::size_of::<u32>()).write_volatile(0xffffffff); // PIO sel port D31-0
     }
 
     // setup PIO block as DMA target -- just take the data coming into the TX
