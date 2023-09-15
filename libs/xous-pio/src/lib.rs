@@ -3,9 +3,8 @@
 use pio::Program;
 use pio::RP2040_MAX_PROGRAM_SIZE;
 
-mod pio_generated;
-use pio_generated::utra::rp_pio;
-use pio_generated::*;
+use utralib::generated::*;
+use utralib::generated::utra::rp_pio;
 
 #[cfg(feature="tests")]
 pub mod pio_tests;

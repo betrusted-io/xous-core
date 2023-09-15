@@ -23,6 +23,7 @@ precursor = []
 hosted = []
 renode = []
 pio = ["xous-pio"]
+dma-mainram = []
 
 tests = ["pio"]
 default = ["tests", "pio"]
