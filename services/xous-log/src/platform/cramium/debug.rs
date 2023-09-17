@@ -43,11 +43,21 @@ impl Uart {
 #[cfg(feature="cramium-soc")]
 impl Uart {
     pub fn putc(&self, c: u8) {
-        assert!(unsafe { DEFAULT_UART_ADDR } as usize != 0);
-        let mut uart_csr = CSR::new(unsafe { DEFAULT_UART_ADDR as *mut u32 });
-
-        while uart_csr.r(utra::duart::SFR_SR) != 0 {}
-        uart_csr.wo(utra::duart::SFR_TXD, c as u32);
+        let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
+        // enqueue our character to send via DMA
+        unsafe {
+            if crate::implementation::UART_DMA_BUF as usize != 0 {
+                crate::implementation::UART_DMA_BUF.write_volatile(c); // write to the virtual memory address
+            }
+        }
+        // configure the DMA
+        uart_csr.wo(utra::udma_uart_0::REG_TX_SADDR, utralib::HW_IFRAM0_MEM as u32); // source is the physical address
+        uart_csr.wo(utra::udma_uart_0::REG_TX_SIZE, 1);
+        // send it
+        uart_csr.wo(utra::udma_uart_0::REG_TX_CFG, 0x10); // EN
+        // wait for it all to be done
+        while uart_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {   }
+        while (uart_csr.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {  }
     }
 }
 
