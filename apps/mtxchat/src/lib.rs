@@ -1,6 +1,5 @@
 pub mod api;
 mod listen;
-mod url;
 mod web;
 
 use crate::web::get_username;
@@ -17,6 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tls::Tls;
 use trng::*;
 use ureq::Agent;
+use url::Url;
 
 /// PDDB Dict for mtxchat keys
 const MTXCHAT_STATE: &str = "mtxchat.state";
@@ -33,7 +33,6 @@ const USER_ID_KEY: &str = "_user_id";
 const USER_NAME_KEY: &str = "user_name";
 const USER_DOMAIN_KEY: &str = "user_domain";
 
-const HTTPS: &str = "https://";
 const DOMAIN_MATRIX: &str = "matrix.org";
 
 const MTX_LONG_TIMEOUT: i32 = 60000; // ms
@@ -281,19 +280,13 @@ impl<'a> MtxChat<'a> {
     pub fn login(&mut self) -> bool {
         self.token = self.get(TOKEN_KEY).unwrap_or(None);
         self.logged_in = false;
-        let mut server = String::new();
-        write!(
-            server,
-            "{}{}",
-            HTTPS,
-            &self
-                .get(USER_DOMAIN_KEY)
-                .unwrap_or(None)
-                .unwrap_or(DOMAIN_MATRIX.to_string())
-        )
-        .expect("failed to write server");
+
+        let mut url = Url::parse("https://matrix.org").unwrap();
+        if let Ok(host) = self.get(USER_DOMAIN_KEY){
+            url.set_host(host.as_deref()).expect("failed to set host");
+        }
         if let Some(token) = &self.token {
-            if let Some(user_id) = web::whoami(&server, &token, &mut self.agent) {
+            if let Some(user_id) = web::whoami(&mut url, &token, &mut self.agent) {
                 let i = match user_id.find('@') {
                     Some(index) => index + 1,
                     None => 0,
@@ -312,12 +305,12 @@ impl<'a> MtxChat<'a> {
             }
         }
         if !self.logged_in {
-            if web::get_login_type(&server, &mut self.agent) {
+            if web::get_login_type(&mut url, &mut self.agent) {
                 self.login_modal();
                 let log_entry = match (&self.user_id, self.get(PASSWORD_KEY).unwrap_or(None)) {
                     (Some(user_id), Some(password)) => {
                         if let Some(new_token) =
-                            web::authenticate_user(&server, &user_id, &password, &mut self.agent)
+                            web::authenticate_user(&mut url, &user_id, &password, &mut self.agent)
                         {
                             self.set_debug(TOKEN_KEY, &new_token);
                             self.logged_in = true;
@@ -427,9 +420,9 @@ impl<'a> MtxChat<'a> {
             (true, Some(token), Some(user_domain), Some(room_name), Some(room_domain)) => {
                 let mut room = String::new();
                 write!(room, "#{}:{}", &room_name, &room_domain).expect("failed to write room");
-                let mut server = String::new();
-                write!(server, "{}{}", HTTPS, &user_domain).expect("failed to write server");
-                if let Some(room_id) = web::get_room_id(&server, &room, &token, &mut self.agent) {
+                let mut url = Url::parse("https://matrix.org").unwrap();
+                url.set_host(Some(user_domain)).expect("failed to set host");
+                if let Some(room_id) = web::get_room_id(&mut url, &room, &token, &mut self.agent) {
                     self.set_debug(ROOM_ID_KEY, &room_id);
                     return Some(room);
                 } else {
@@ -512,17 +505,17 @@ impl<'a> MtxChat<'a> {
         ) {
             (Some(_filter), _, _, _, _, _) => "filter already set",
             (_, true, Some(token), Some(user_id), Some(user_domain), Some(room_id)) => {
-                let mut server = String::new();
-                write!(server, "{}{}", HTTPS, &user_domain).expect("failed to write server");
+                let mut url = Url::parse("https://matrix.org").unwrap();
+                url.set_host(Some(user_domain)).expect("failed to set host");
                 log::info!(
                     "get_filter {} : {} : {} : {}",
                     &user_id,
-                    &server,
+                    &url.as_str(),
                     &room_id,
                     &token
                 );
                 if let Some(new_filter) =
-                    web::get_filter(&user_id, &server, &room_id, &token, &mut self.agent)
+                    web::get_filter(&user_id, &mut url, &room_id, &token, &mut self.agent)
                 {
                     if self.set_debug(FILTER_KEY, &new_filter) {
                         "set filter"
@@ -555,12 +548,10 @@ impl<'a> MtxChat<'a> {
             (false, true, Some(token), Some(room_id), Some(filter)) => {
                 self.listening = true;
                 std::thread::spawn({
-                    let domain = self
-                        .get(ROOM_DOMAIN_KEY)
-                        .unwrap_or(Some(DOMAIN_MATRIX.to_string()))
-                        .unwrap_or("".to_string());
-                    let mut server = String::new();
-                    write!(server, "{}{}", HTTPS, &domain,).expect("failed to write server");
+                    let mut url = Url::parse("https://matrix.org").unwrap();
+                    if let Ok(host) = self.get(ROOM_DOMAIN_KEY){
+                        url.set_host(host.as_deref()).expect("failed to set host");
+                    }
                     let token = token.clone();
                     let room_id = room_id.clone();
                     let since = self.since.clone();
@@ -568,7 +559,7 @@ impl<'a> MtxChat<'a> {
                     let chat_cid = self.chat.cid().clone();
                     move || {
                         listen(
-                            &server,
+                            &mut url,
                             &token,
                             &room_id,
                             since.as_deref(),
@@ -620,9 +611,9 @@ impl<'a> MtxChat<'a> {
         ) {
             (true, Some(token), Some(user_domain), Some(room_id)) => {
                 log::info!("txn_id = {}", txn_id);
-                let mut server = String::new();
-                write!(server, "{}{}", HTTPS, &user_domain).expect("failed to write server");
-                if web::send_message(&server, &room_id, &text, &txn_id, token, &mut self.agent) {
+                let mut url = Url::parse("https://matrix.org").unwrap();
+                url.set_host(Some(user_domain)).expect("failed to set host");
+                if web::send_message(&mut url, &room_id, &text, &txn_id, token, &mut self.agent) {
                     "SENT"
                 } else {
                     "FAILED TO SEND"

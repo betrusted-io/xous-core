@@ -3,11 +3,12 @@ use chat::ChatOp;
 use modals::Modals;
 use std::sync::Arc;
 use tls::Tls;
+use url::Url;
 use xous::CID;
 use xous_ipc::Buffer;
 
 pub fn listen(
-    server: &str,
+    url: &mut Url,
     token: &str,
     room_id: &str,
     since: Option<&str>,
@@ -23,7 +24,7 @@ pub fn listen(
         .tls_config(Arc::new(tls.client_config()))
         .build();
     if let Some((_since, events)) = web::client_sync(
-        server,
+        url,
         filter,
         since,
         MTX_LONG_TIMEOUT,
