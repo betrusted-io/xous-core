@@ -5,7 +5,6 @@
 pub mod api;
 
 pub use api::*;
-use api::{Callback, ComIntSources, NET_MTU, Opcode};
 use com_rs::{DhcpState, LinkState};
 use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
 use xous_ipc::{String, Buffer};

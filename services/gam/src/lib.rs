@@ -15,8 +15,8 @@ pub mod bitmap;
 #[cfg(feature="ditherpunk")]
 pub use bitmap::{Bitmap, Img, PixelType, DecodePng};
 
-use graphics_server::api::{TextOp, TextView};
-use graphics_server::api::{Gid, Line, Circle, RoundedRectangle, TokenClaim};
+pub use graphics_server::api::{TextOp, TextView};
+pub use graphics_server::api::{Gid, Line, Circle, RoundedRectangle, TokenClaim};
 pub use graphics_server::api::{Point, Rectangle};
 #[cfg(feature="ditherpunk")]
 pub use graphics_server::api::Tile;
