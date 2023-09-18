@@ -282,8 +282,8 @@ impl<'a> MtxChat<'a> {
         self.logged_in = false;
 
         let mut url = Url::parse("https://matrix.org").unwrap();
-        if let Ok(host) = self.get(USER_DOMAIN_KEY) {
-            url.set_host(host.as_deref()).expect("failed to set host");
+        if let Ok(Some(host)) = self.get(USER_DOMAIN_KEY) {
+            url.set_host(Some(&host)).expect("failed to set host");
         }
         if let Some(token) = &self.token {
             if let Some(user_id) = web::whoami(&mut url, &token, &mut self.agent) {
