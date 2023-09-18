@@ -330,7 +330,6 @@ pub fn get_filter(
     token: &str,
     agent: &mut Agent,
 ) -> Option<String> {
-
     let mut path = String::from("_matrix/client/v3/user/");
     path.push_str(&user);
     path.push_str("/filter");
@@ -407,16 +406,11 @@ pub fn client_sync(
 ) -> Option<(String, Vec<Msg>)> {
     log::info!("heap usage: {}", crate::heap_usage());
     url.set_path("_matrix/client/r0/sync");
-    let mut filter_q = String::from("filter=");
-    filter_q.push_str(&filter);
-    url.set_query(Some(&filter_q));
-    let mut timeout_q = String::from("timeout=");
-    url.set_query(Some(&timeout_q));
-    timeout_q.push_str(&timeout.to_string());
-    let mut since_q = String::from("since=");
+    url.query_pairs_mut().append_pair("filter", &filter);
+    url.query_pairs_mut()
+        .append_pair("timeout", &timeout.to_string());
     if let Some(since) = since {
-        since_q.push_str(since);
-        url.set_query(Some(&since_q));
+        url.query_pairs_mut().append_pair("since", since);
     }
     log::info!("client_sync = {}", url.as_str());
     if let Some(value) = handle_response(get_json_auth(&url, token, agent)) {
