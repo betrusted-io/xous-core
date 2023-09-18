@@ -244,8 +244,8 @@ impl<'a> MtxChat<'a> {
         log::info!("Attempting connect to Matrix server");
         if self.wifi() {
             if self.login() {
-                if let Some(room) = self.get_room_id() {
-                    self.dialogue_set(Some(room.as_str()));
+                if let Some(_room_id) = self.get_room_id() {
+                    self.dialogue_set(self.room_alias().as_deref());
                     self.listen();
                     if self.new_room {
                         self.new_room = false;
@@ -282,7 +282,7 @@ impl<'a> MtxChat<'a> {
         self.logged_in = false;
 
         let mut url = Url::parse("https://matrix.org").unwrap();
-        if let Ok(host) = self.get(USER_DOMAIN_KEY){
+        if let Ok(host) = self.get(USER_DOMAIN_KEY) {
             url.set_host(host.as_deref()).expect("failed to set host");
         }
         if let Some(token) = &self.token {
@@ -408,32 +408,45 @@ impl<'a> MtxChat<'a> {
         // TODO logout with server
     }
 
+    pub fn room_alias(&self) -> Option<String> {
+        let log_entry = match (&self.room_name, &self.room_domain) {
+            (Some(room_name), Some(room_domain)) => {
+                let mut room_alias = String::new();
+                write!(room_alias, "#{}:{}", &room_name, &room_domain)
+                    .expect("failed to write room");
+                return Some(room_alias);
+            }
+            (None, _) => "No room name set",
+            (_, None) => "No room domain set",
+        };
+        log::warn!("{log_entry}");
+        None
+    }
+
     pub fn get_room_id(&mut self) -> Option<String> {
         self.room_modal();
         let log_entry = match (
             self.logged_in,
             &self.token,
             &self.user_domain,
-            &self.room_name,
-            &self.room_domain,
+            &self.room_alias(),
         ) {
-            (true, Some(token), Some(user_domain), Some(room_name), Some(room_domain)) => {
-                let mut room = String::new();
-                write!(room, "#{}:{}", &room_name, &room_domain).expect("failed to write room");
+            (true, Some(token), Some(user_domain), Some(room_alias)) => {
                 let mut url = Url::parse("https://matrix.org").unwrap();
                 url.set_host(Some(user_domain)).expect("failed to set host");
-                if let Some(room_id) = web::get_room_id(&mut url, &room, &token, &mut self.agent) {
+                if let Some(room_id) =
+                    web::get_room_id(&mut url, &room_alias, &token, &mut self.agent)
+                {
                     self.set_debug(ROOM_ID_KEY, &room_id);
-                    return Some(room);
+                    return Some(room_id);
                 } else {
                     "failed to get room_id"
                 }
             }
-            (false, _, _, _, _) => "Not logged in",
-            (_, None, _, _, _) => "No token set",
-            (_, _, None, _, _) => "No user domain set",
-            (_, _, _, None, _) => "No room name set",
-            (_, _, _, _, None) => "No room domain set",
+            (false, _, _, _) => "Not logged in",
+            (_, None, _, _) => "No token set",
+            (_, _, None, _) => "No user domain set",
+            (_, _, _, None) => "No room alias set",
         };
         log::warn!("{log_entry}");
         None
@@ -484,9 +497,9 @@ impl<'a> MtxChat<'a> {
         );
     }
 
-    pub fn dialogue_set(&self, room: Option<&str>) {
+    pub fn dialogue_set(&self, room_alias: Option<&str>) {
         self.chat
-            .dialogue_set(MTXCHAT_DIALOGUE, room)
+            .dialogue_set(MTXCHAT_DIALOGUE, room_alias)
             .expect("failed to set dialogue");
     }
 
