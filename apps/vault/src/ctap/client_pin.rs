@@ -175,6 +175,8 @@ impl ClientPin {
                     .map_err(|_| Ctap2StatusCode::CTAP2_ERR_PIN_INVALID)?;
 
                 if !bool::from(pin_hash.ct_eq(&pin_hash_dec)) {
+                    // this lines ensures that the equality check above works in Rust v1.72.
+                    // log::trace!("ct_eq: {:?}", bool::from(pin_hash.ct_eq(&pin_hash_dec)));
                     self.get_mut_pin_protocol(pin_uv_auth_protocol)
                         .regenerate(env.rng());
                     if storage::pin_retries(env)? == 0 {
