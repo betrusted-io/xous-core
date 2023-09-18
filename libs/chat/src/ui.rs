@@ -343,18 +343,24 @@ impl Ui {
     ///
     pub fn post_add(
         &mut self,
+        dialogue_id: &str,
         author: &str,
         timestamp: u64,
         text: &str,
         attach_url: Option<&str>,
     ) -> Result<(), Error> {
-        match &mut self.dialogue {
-            Some(ref mut dialogue) => {
-                dialogue
-                    .post_add(author, timestamp, text, attach_url)
-                    .unwrap();
+        match (&self.pddb_key, &mut self.dialogue) {
+            (Some(pddb_key), Some(ref mut dialogue)) => {
+                if pddb_key.eq(&dialogue_id) {
+                    dialogue
+                        .post_add(author, timestamp, text, attach_url)
+                        .unwrap();
+                } else {
+                    log::warn!("dropping Post as dialogue_id does not match pddb_key");
+                }
             }
-            None => log::warn!("no Dialogue available to add Post"),
+            (None, _) => log::warn!("no pddb_key set to match dialogue_id"),
+            (_, None) => log::warn!("no Dialogue available to add Post"),
         }
         Ok(())
     }

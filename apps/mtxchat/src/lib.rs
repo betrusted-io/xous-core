@@ -557,18 +557,20 @@ impl<'a> MtxChat<'a> {
             &self.token,
             &self.room_id,
             &self.filter,
+            &self.room_alias(),
         ) {
-            (false, true, Some(token), Some(room_id), Some(filter)) => {
+            (false, true, Some(token), Some(room_id), Some(filter), Some(room_alias)) => {
                 self.listening = true;
                 std::thread::spawn({
                     let mut url = Url::parse("https://matrix.org").unwrap();
-                    if let Ok(host) = self.get(ROOM_DOMAIN_KEY){
+                    if let Ok(host) = self.get(ROOM_DOMAIN_KEY) {
                         url.set_host(host.as_deref()).expect("failed to set host");
                     }
                     let token = token.clone();
                     let room_id = room_id.clone();
                     let since = self.since.clone();
                     let filter = filter.clone();
+                    let room_alias = room_alias.clone();
                     let chat_cid = self.chat.cid().clone();
                     move || {
                         listen(
@@ -577,17 +579,19 @@ impl<'a> MtxChat<'a> {
                             &room_id,
                             since.as_deref(),
                             &filter,
+                            &room_alias,
                             chat_cid,
                         );
                     }
                 });
                 "Started listening"
             }
-            (true, _, _, _, _) => "Already listening",
-            (_, false, _, _, _) => "Not logged in",
-            (_, _, None, _, _) => "No token set",
-            (_, _, _, None, _) => "No room id set",
-            (_, _, _, _, None) => "No filter set",
+            (true, _, _, _, _, _) => "Already listening",
+            (_, false, _, _, _, _) => "Not logged in",
+            (_, _, None, _, _, _) => "No token set",
+            (_, _, _, None, _, _) => "No room id set",
+            (_, _, _, _, None, _) => "No filter set",
+            (_, _, _, _, _, None) => "No room alias set",
         };
         log::info!("{log_entry}");
     }

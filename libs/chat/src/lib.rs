@@ -142,6 +142,7 @@ impl Chat {
         attach_url: Option<&str>,
     ) -> Result<(), Error> {
         let mut post = api::Post {
+            dialogue_id: xous_ipc::String::new(),
             author: xous_ipc::String::new(),
             timestamp: timestamp,
             text: xous_ipc::String::new(),
@@ -389,9 +390,10 @@ pub fn server(
                 log::info!("ChatOp::PostAdd");
                 let buffer =
                     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                match buffer.to_original::<Post, _>() {
+                match buffer.to_original::<api::Post, _>() {
                     Ok(post) => ui
                         .post_add(
+                            post.dialogue_id.as_str().unwrap(),
                             post.author.as_str().unwrap(),
                             post.timestamp,
                             post.text.as_str().unwrap(),

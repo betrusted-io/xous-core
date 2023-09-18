@@ -65,6 +65,7 @@ pub struct Dialogue {
 
 #[derive(Archive, Serialize, Deserialize, Debug)]
 pub struct Post {
+    pub dialogue_id: xous_ipc::String<128>,
     pub author: xous_ipc::String<128>,
     pub timestamp: u64,
     pub text: xous_ipc::String<POST_TEXT_MAX>,

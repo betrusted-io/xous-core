@@ -13,6 +13,7 @@ pub fn listen(
     room_id: &str,
     since: Option<&str>,
     filter: &str,
+    dialogue_id: &str,
     chat_cid: CID,
 ) {
     let xns = xous_names::XousNames::new().unwrap();
@@ -46,6 +47,7 @@ pub fn listen(
             let sender = event.sender.unwrap_or("anon".to_string());
             let body = event.body.unwrap_or("...".to_string());
             let post = chat::Post {
+                dialogue_id: xous_ipc::String::from_str(&dialogue_id),
                 author: xous_ipc::String::from_str(&get_username(&sender)),
                 timestamp: event.ts.unwrap_or(0),
                 text: xous_ipc::String::from_str(&body),
