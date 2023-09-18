@@ -1,4 +1,3 @@
-use crypto_mac::InvalidKeyLength;
 use sha1::Sha1;
 use hmac::{Hmac, Mac, NewMac};
 use std::{
@@ -67,24 +66,6 @@ pub struct TotpEntry {
     pub algorithm: TotpAlgorithm,
 }
 
-#[derive(Debug)]
-pub enum Error {
-    Io(std::io::Error),
-    DigestLength(InvalidKeyLength),
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Error::Io(err)
-    }
-}
-
-impl From<InvalidKeyLength> for Error {
-    fn from(err: InvalidKeyLength) -> Self {
-        Error::DigestLength(err)
-    }
-}
-
 pub fn get_current_unix_time() -> Result<u64, SystemTimeError> {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -98,7 +79,7 @@ fn unpack_u64(v: u64) -> [u8; 8] {
     bytes
 }
 
-fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Vec<u8>, Error> {
+fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Vec<u8>, xous::Error> {
     let mut computed_hmac = Vec::new();
     let checked_step = if totp_entry.step_seconds == 0 {
         log::warn!("totp step_seconds was 0, this would cause a div-by-zero; forcing to 1. Check that this is not an HOTP record?");
@@ -110,20 +91,20 @@ fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Ve
         // The OpenTitan HMAC core does not support hmac-sha1. Fall back to
         // a software implementation.
         TotpAlgorithm::HmacSha1 => {
-            let mut mac: Hmac<Sha1> = Hmac::new_from_slice(&totp_entry.shared_secret)?;
+            let mut mac: Hmac<Sha1> = Hmac::new_from_slice(&totp_entry.shared_secret).map_err(|_| xous::Error::InternalError)?;
             mac.update(&unpack_u64(unix_timestamp / checked_step));
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
         }
         // note: sha256/sha512 implementations not yet tested, as we have yet to find a site that uses this to test against.
         TotpAlgorithm::HmacSha256 => {
-            let mut mac: Hmac<sha2::Sha256> = Hmac::new_from_slice(&totp_entry.shared_secret)?;
+            let mut mac: Hmac<sha2::Sha256> = Hmac::new_from_slice(&totp_entry.shared_secret).map_err(|_| xous::Error::InternalError)?;
             mac.update(&unpack_u64(unix_timestamp / checked_step));
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
         }
         TotpAlgorithm::HmacSha512 => {
-            let mut mac: Hmac<sha2::Sha512> = Hmac::new_from_slice(&totp_entry.shared_secret)?;
+            let mut mac: Hmac<sha2::Sha512> = Hmac::new_from_slice(&totp_entry.shared_secret).map_err(|_| xous::Error::InternalError)?;
             mac.update(&unpack_u64(unix_timestamp / checked_step));
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
@@ -136,7 +117,7 @@ fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Ve
     Ok(computed_hmac)
 }
 
-pub fn generate_totp_code(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<String, Error> {
+pub fn generate_totp_code(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<String, xous::Error> {
     let hash = generate_hmac_bytes(unix_timestamp, totp_entry)?;
     let offset: usize = (hash.last().unwrap_or(&0) & 0xf) as usize;
     let binary: u64 = (((hash[offset] & 0x7f) as u64) << 24)

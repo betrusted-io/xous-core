@@ -27,7 +27,7 @@ content-plugin-api = {path = "../../services/content-plugin-api"} # all content 
 backup = {path = "libraries/backup"}
 byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
-subtle = { version = "2.2.3", default-features = false, features = ["nightly"] }
+subtle = { version = "2.5.0", features = ["core_hint_black_box"] }
 rand_core = "0.6.3"
 ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.47"}
 userprefs = {path = "../../libs/userprefs"}
@@ -47,7 +47,6 @@ chrono = {version = "0.4.19", default-features = false, features = ["std"]}
 passwords = "3.1.9"
 
 # totp
-crypto-mac = "0.11.1"
 sha-1 = "0.9.8"
 hmac = "0.11.0"
 digest = "0.9.0"
