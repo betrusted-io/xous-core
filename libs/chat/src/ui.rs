@@ -106,14 +106,14 @@ impl Ui {
             .expect("couldn't get dimensions of content canvas");
         // TODO this is a stub - implement F1-4 actions and autocompletes
         let _icontray = Icontray::new(Some(xous::connect(sid).unwrap()), ["F1", "F2", "F3", "F4"]);
-        let pddb = pddb::Pddb::new();
-        pddb.try_mount();
         let menu_mgr = menu_matic(
             Vec::<MenuItem>::new(),
             app_menu,
             Some(xous::create_server().unwrap()),
         )
         .expect("couldn't create MenuMatic manager");
+        let pddb = pddb::Pddb::new();
+        pddb.try_mount();
         Ui {
             input: None,
             msg: None,
