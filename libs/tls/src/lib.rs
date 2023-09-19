@@ -12,8 +12,10 @@ use rkyv::{
 };
 use rustls::{Certificate, ClientConfig, RootCertStore};
 use sha2::Digest;
-use std::convert::{Into, TryFrom};
-use std::io::{Error, Read, Write};
+use std::convert::{Into, TryFrom, TryInto};
+use std::io::{Error, Read, Write, ErrorKind};
+use std::sync::Arc;
+use std::net::TcpStream;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use xous_names::XousNames;
 
