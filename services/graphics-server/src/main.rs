@@ -388,6 +388,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     tv.cursor.pt.x = composition.final_cursor().pt.x;
                     tv.cursor.pt.y = composition.final_cursor().pt.y;
                     tv.cursor.line_height = composition.final_cursor().line_height;
+                    tv.overflow = Some(composition.final_overflow());
 
                     tv.bounds_computed = Some(
                         clear_rect

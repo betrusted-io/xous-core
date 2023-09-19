@@ -53,7 +53,6 @@ impl RustlsOwnedTrustAnchor {
     // see https://docs.rs/x509-parser/0.15.0/src/x509_parser/x509.rs.html#260-274
     #[allow(unreachable_code)]
     pub fn public_key(&self) -> Result<Vec<u8>, Error> {
-        todo!(); // fails decode
         match add_der_header(Tag::Sequence, &self.spki) {
             Ok(der) => match x509_parser::x509::SubjectPublicKeyInfo::from_der(&der) {
                 Ok((_, spki)) => Ok(spki.subject_public_key.data.to_vec()),
@@ -144,11 +143,7 @@ fn add_der_header(tag: Tag, naked: &Vec<u8>) -> Result<Vec<u8>, Error> {
             let mut buff: [u8; 32] = [0u8; 32];
             match header.encode_to_slice(&mut buff) {
                 Ok(der) => {
-                    let der = [der, naked].concat();
-                    match x509_parser::x509::X509Name::from_der(&der) {
-                        Ok((_, decoded)) => Ok(decoded.as_raw().to_vec()),
-                        Err(_) => Err(Error::new(ErrorKind::InvalidData, "der parse failed: from")),
-                    }
+                    Ok([der, naked].concat())
                 }
                 Err(_) => Err(Error::new(
                     ErrorKind::InvalidData,
