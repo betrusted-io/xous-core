@@ -431,14 +431,14 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         let mut val = String::<1024>::new();
                         join_tokens(&mut val, &mut tokens);
                         if val.len() > 0 {
-                            socket.write_message(tungstenite::Message::Text(val.as_str().unwrap().into())).unwrap();
+                            socket.send(tungstenite::Message::Text(val.as_str().unwrap().into())).unwrap();
                         } else {
-                            socket.write_message(tungstenite::Message::Text("Hello WebSocket".into())).unwrap();
+                            socket.send(tungstenite::Message::Text("Hello WebSocket".into())).unwrap();
                         }
-                        match socket.read_message() {
+                        match socket.read() {
                             Ok(msg) => {
-                                log::info!("Received: {}", msg);
-                                write!(ret, "Rx: {}", msg).ok();
+                                log::info!("Received: {:?}", msg);
+                                write!(ret, "Rx: {:?}", msg).ok();
                             },
                             Err(e) => {
                                 log::info!("got ws error: {:?}, quitting", e);

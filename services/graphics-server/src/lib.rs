@@ -156,6 +156,7 @@ impl Gfx {
         let tvr = buf.to_original::<TextView, _>().unwrap();
         tv.bounds_computed = tvr.bounds_computed;
         tv.cursor = tvr.cursor;
+        tv.overflow = tvr.overflow;
         Ok(())
     }
 

@@ -278,9 +278,9 @@ pub const HW_SEG_HOUT_MEM_LEN: usize = 256;
 pub const HW_SEG_SOB_MEM:     usize = 0x40020700;
 pub const HW_SEG_SOB_MEM_LEN: usize = 256;
 pub const HW_SEG_PCON_MEM:     usize = 0x40020800;
-pub const HW_SEG_PCON_MEM_LEN: usize = 256;
-pub const HW_SEG_PKB_MEM:     usize = 0x40020900;
-pub const HW_SEG_PKB_MEM_LEN: usize = 256;
+pub const HW_SEG_PCON_MEM_LEN: usize = 0;
+pub const HW_SEG_PKB_MEM:     usize = 0x40020800;
+pub const HW_SEG_PKB_MEM_LEN: usize = 512;
 pub const HW_SEG_PIB_MEM:     usize = 0x40020a00;
 pub const HW_SEG_PIB_MEM_LEN: usize = 1024;
 pub const HW_SEG_PSIB_MEM:     usize = 0x40020e00;
@@ -400,6 +400,7 @@ pub const HW_IOX_BASE :   usize = 0x5012f000;
 pub const HW_PWM_BASE :   usize = 0x50120000;
 pub const HW_SDDC_BASE :   usize = 0x50121000;
 pub const HW_RP_PIO_BASE :   usize = 0x50123000;
+pub const HW_CORESUB_SRAMTRM_BASE :   usize = 0x40014000;
 pub const HW_MDMA_BASE :   usize = 0x40012000;
 pub const HW_QFC_BASE :   usize = 0x40010000;
 pub const HW_MBOX_APB_BASE :   usize = 0x40013000;
@@ -3286,7 +3287,7 @@ pub mod utra {
     }
 
     pub mod aes {
-        pub const AES_NUMREGS: usize = 10;
+        pub const AES_NUMREGS: usize = 11;
 
         pub const SFR_CRFUNC: crate::Register = crate::Register::new(0, 0xff);
         pub const SFR_CRFUNC_SFR_CRFUNC: crate::Field = crate::Field::new(8, 0, SFR_CRFUNC);
@@ -3311,6 +3312,9 @@ pub mod utra {
         pub const SFR_OPT1: crate::Register = crate::Register::new(5, 0xffff);
         pub const SFR_OPT1_SFR_OPT1: crate::Field = crate::Field::new(16, 0, SFR_OPT1);
 
+        pub const SFR_OPTLTX: crate::Register = crate::Register::new(6, 0xf);
+        pub const SFR_OPTLTX_SFR_OPTLTX: crate::Field = crate::Field::new(4, 0, SFR_OPTLTX);
+
         pub const SFR_SEGPTR_PTRID_IV: crate::Register = crate::Register::new(12, 0xfff);
         pub const SFR_SEGPTR_PTRID_IV_PTRID_IV: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_PTRID_IV);
 
@@ -3327,7 +3331,7 @@ pub mod utra {
     }
 
     pub mod combohash {
-        pub const COMBOHASH_NUMREGS: usize = 13;
+        pub const COMBOHASH_NUMREGS: usize = 14;
 
         pub const SFR_CRFUNC: crate::Register = crate::Register::new(0, 0xff);
         pub const SFR_CRFUNC_CR_FUNC: crate::Field = crate::Field::new(8, 0, SFR_CRFUNC);
@@ -3338,11 +3342,13 @@ pub mod utra {
         pub const SFR_SRMFSM: crate::Register = crate::Register::new(2, 0xff);
         pub const SFR_SRMFSM_MFSM: crate::Field = crate::Field::new(8, 0, SFR_SRMFSM);
 
-        pub const SFR_FR: crate::Register = crate::Register::new(3, 0xf);
+        pub const SFR_FR: crate::Register = crate::Register::new(3, 0x3f);
         pub const SFR_FR_MFSM_DONE: crate::Field = crate::Field::new(1, 0, SFR_FR);
         pub const SFR_FR_HASH_DONE: crate::Field = crate::Field::new(1, 1, SFR_FR);
         pub const SFR_FR_CHNLO_DONE: crate::Field = crate::Field::new(1, 2, SFR_FR);
         pub const SFR_FR_CHNLI_DONE: crate::Field = crate::Field::new(1, 3, SFR_FR);
+        pub const SFR_FR_CHKDONE: crate::Field = crate::Field::new(1, 4, SFR_FR);
+        pub const SFR_FR_CHKPASS: crate::Field = crate::Field::new(1, 5, SFR_FR);
 
         pub const SFR_OPT1: crate::Register = crate::Register::new(4, 0xffff);
         pub const SFR_OPT1_CR_OPT_HASHCNT: crate::Field = crate::Field::new(16, 0, SFR_OPT1);
@@ -3354,6 +3360,9 @@ pub mod utra {
 
         pub const SFR_OPT3: crate::Register = crate::Register::new(6, 0xff);
         pub const SFR_OPT3_SFR_OPT3: crate::Field = crate::Field::new(8, 0, SFR_OPT3);
+
+        pub const SFR_BLKT0: crate::Register = crate::Register::new(7, 0xff);
+        pub const SFR_BLKT0_SFR_BLKT0: crate::Field = crate::Field::new(8, 0, SFR_BLKT0);
 
         pub const SFR_SEGPTR_SEGID_LKEY: crate::Register = crate::Register::new(8, 0xfff);
         pub const SFR_SEGPTR_SEGID_LKEY_SEGID_LKEY: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_SEGID_LKEY);
@@ -3370,17 +3379,18 @@ pub mod utra {
         pub const SFR_SEGPTR_SEGID_HOUT: crate::Register = crate::Register::new(13, 0xfff);
         pub const SFR_SEGPTR_SEGID_HOUT_SEGID_HOUT: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_SEGID_HOUT);
 
-        pub const SFR_SEGPTR_SEGID_SOB: crate::Register = crate::Register::new(14, 0xfff);
-        pub const SFR_SEGPTR_SEGID_SOB_SEGID_SOB: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_SEGID_SOB);
+        pub const SFR_SEGPTR_SEGID_HOUT2: crate::Register = crate::Register::new(15, 0xfff);
+        pub const SFR_SEGPTR_SEGID_HOUT2_SEGID_HOUT2: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_SEGID_HOUT2);
 
         pub const HW_COMBOHASH_BASE: usize = 0x4002b000;
     }
 
     pub mod pke {
-        pub const PKE_NUMREGS: usize = 12;
+        pub const PKE_NUMREGS: usize = 14;
 
-        pub const SFR_CRFUNC: crate::Register = crate::Register::new(0, 0xff);
-        pub const SFR_CRFUNC_SFR_CRFUNC: crate::Field = crate::Field::new(8, 0, SFR_CRFUNC);
+        pub const SFR_CRFUNC: crate::Register = crate::Register::new(0, 0xffff);
+        pub const SFR_CRFUNC_CR_FUNC: crate::Field = crate::Field::new(8, 0, SFR_CRFUNC);
+        pub const SFR_CRFUNC_CR_PCOREIR: crate::Field = crate::Field::new(8, 8, SFR_CRFUNC);
 
         pub const SFR_AR: crate::Register = crate::Register::new(1, 0xffffffff);
         pub const SFR_AR_SFR_AR: crate::Field = crate::Field::new(32, 0, SFR_AR);
@@ -3401,6 +3411,12 @@ pub mod utra {
 
         pub const SFR_OPTEW: crate::Register = crate::Register::new(5, 0x1fff);
         pub const SFR_OPTEW_SFR_OPTEW: crate::Field = crate::Field::new(13, 0, SFR_OPTEW);
+
+        pub const SFR_OPTRW: crate::Register = crate::Register::new(6, 0x3ff);
+        pub const SFR_OPTRW_SFR_OPTRW: crate::Field = crate::Field::new(10, 0, SFR_OPTRW);
+
+        pub const SFR_OPTLTX: crate::Register = crate::Register::new(7, 0x1f);
+        pub const SFR_OPTLTX_SFR_OPTLTX: crate::Field = crate::Field::new(5, 0, SFR_OPTLTX);
 
         pub const SFR_OPTMASK: crate::Register = crate::Register::new(8, 0xffff);
         pub const SFR_OPTMASK_SFR_OPTMASK: crate::Field = crate::Field::new(16, 0, SFR_OPTMASK);
@@ -3484,7 +3500,7 @@ pub mod utra {
     }
 
     pub mod sce_glbsfr {
-        pub const SCE_GLBSFR_NUMREGS: usize = 17;
+        pub const SCE_GLBSFR_NUMREGS: usize = 18;
 
         pub const SFR_SCEMODE: crate::Register = crate::Register::new(0, 0x3);
         pub const SFR_SCEMODE_CR_SCEMODE: crate::Field = crate::Field::new(2, 0, SFR_SCEMODE);
@@ -3507,8 +3523,8 @@ pub mod utra {
         pub const SFR_ARCLR: crate::Register = crate::Register::new(7, 0xffffffff);
         pub const SFR_ARCLR_AR_CLRRAM: crate::Field = crate::Field::new(32, 0, SFR_ARCLR);
 
-        pub const SFR_TICKCYC: crate::Register = crate::Register::new(8, 0xff);
-        pub const SFR_TICKCYC_SFR_TICKCYC: crate::Field = crate::Field::new(8, 0, SFR_TICKCYC);
+        pub const SFR_FRACERR: crate::Register = crate::Register::new(8, 0xff);
+        pub const SFR_FRACERR_FR_ACERR: crate::Field = crate::Field::new(8, 0, SFR_FRACERR);
 
         pub const SFR_TICKCNT: crate::Register = crate::Register::new(9, 0xffffffff);
         pub const SFR_TICKCNT_SFR_TICKCNT: crate::Field = crate::Field::new(32, 0, SFR_TICKCNT);
@@ -3537,17 +3553,20 @@ pub mod utra {
         pub const SFR_FFCNT_SR_FF5: crate::Register = crate::Register::new(21, 0xffff);
         pub const SFR_FFCNT_SR_FF5_SR_FF5: crate::Field = crate::Field::new(16, 0, SFR_FFCNT_SR_FF5);
 
+        pub const SFR_TS: crate::Register = crate::Register::new(63, 0xffff);
+        pub const SFR_TS_CR_TS: crate::Field = crate::Field::new(16, 0, SFR_TS);
+
         pub const HW_SCE_GLBSFR_BASE: usize = 0x40028000;
     }
 
     pub mod trng {
-        pub const TRNG_NUMREGS: usize = 5;
+        pub const TRNG_NUMREGS: usize = 9;
 
         pub const SFR_CRSRC: crate::Register = crate::Register::new(0, 0xfff);
         pub const SFR_CRSRC_SFR_CRSRC: crate::Field = crate::Field::new(12, 0, SFR_CRSRC);
 
-        pub const SFR_AR_STOP: crate::Register = crate::Register::new(1, 0xffffffff);
-        pub const SFR_AR_STOP_SFR_AR_STOP: crate::Field = crate::Field::new(32, 0, SFR_AR_STOP);
+        pub const SFR_CRANA: crate::Register = crate::Register::new(1, 0xffff);
+        pub const SFR_CRANA_SFR_CRANA: crate::Field = crate::Field::new(16, 0, SFR_CRANA);
 
         pub const SFR_PP: crate::Register = crate::Register::new(2, 0x1ffff);
         pub const SFR_PP_SFR_PP: crate::Field = crate::Field::new(17, 0, SFR_PP);
@@ -3557,6 +3576,18 @@ pub mod utra {
 
         pub const SFR_SR: crate::Register = crate::Register::new(4, 0xffffffff);
         pub const SFR_SR_SR_RNG: crate::Field = crate::Field::new(32, 0, SFR_SR);
+
+        pub const SFR_AR_GEN: crate::Register = crate::Register::new(5, 0xffffffff);
+        pub const SFR_AR_GEN_SFR_AR_GEN: crate::Field = crate::Field::new(32, 0, SFR_AR_GEN);
+
+        pub const SFR_FR: crate::Register = crate::Register::new(6, 0x3);
+        pub const SFR_FR_SFR_FR: crate::Field = crate::Field::new(2, 0, SFR_FR);
+
+        pub const SFR_CHAIN_RNGCHAINEN0: crate::Register = crate::Register::new(16, 0xffffffff);
+        pub const SFR_CHAIN_RNGCHAINEN0_RNGCHAINEN0: crate::Field = crate::Field::new(32, 0, SFR_CHAIN_RNGCHAINEN0);
+
+        pub const SFR_CHAIN_RNGCHAINEN1: crate::Register = crate::Register::new(17, 0xffffffff);
+        pub const SFR_CHAIN_RNGCHAINEN1_RNGCHAINEN1: crate::Field = crate::Field::new(32, 0, SFR_CHAIN_RNGCHAINEN1);
 
         pub const HW_TRNG_BASE: usize = 0x4002e000;
     }
@@ -3670,7 +3701,7 @@ pub mod utra {
     }
 
     pub mod sysctrl {
-        pub const SYSCTRL_NUMREGS: usize = 31;
+        pub const SYSCTRL_NUMREGS: usize = 33;
 
         pub const SFR_CGUSEC: crate::Register = crate::Register::new(0, 0xffff);
         pub const SFR_CGUSEC_SFR_CGUSEC: crate::Field = crate::Field::new(16, 0, SFR_CGUSEC);
@@ -3681,26 +3712,32 @@ pub mod utra {
         pub const SFR_CGUSEL0: crate::Register = crate::Register::new(4, 0x3);
         pub const SFR_CGUSEL0_SFR_CGUSEL0: crate::Field = crate::Field::new(2, 0, SFR_CGUSEL0);
 
-        pub const SFR_CGUFD_CFGFDCR0: crate::Register = crate::Register::new(5, 0xffff);
-        pub const SFR_CGUFD_CFGFDCR0_CFGFDCR0: crate::Field = crate::Field::new(16, 0, SFR_CGUFD_CFGFDCR0);
+        pub const SFR_CGUFD_CFGFDCR_0_4_0: crate::Register = crate::Register::new(5, 0xffff);
+        pub const SFR_CGUFD_CFGFDCR_0_4_0_CFGFDCR_0_4_0: crate::Field = crate::Field::new(16, 0, SFR_CGUFD_CFGFDCR_0_4_0);
 
-        pub const SFR_CGUFD_CFGFDCR1: crate::Register = crate::Register::new(6, 0xffff);
-        pub const SFR_CGUFD_CFGFDCR1_CFGFDCR1: crate::Field = crate::Field::new(16, 0, SFR_CGUFD_CFGFDCR1);
+        pub const SFR_CGUFD_CFGFDCR_0_4_1: crate::Register = crate::Register::new(6, 0xffff);
+        pub const SFR_CGUFD_CFGFDCR_0_4_1_CFGFDCR_0_4_1: crate::Field = crate::Field::new(16, 0, SFR_CGUFD_CFGFDCR_0_4_1);
 
-        pub const SFR_CGUFD_CFGFDCR2: crate::Register = crate::Register::new(7, 0xffff);
-        pub const SFR_CGUFD_CFGFDCR2_CFGFDCR2: crate::Field = crate::Field::new(16, 0, SFR_CGUFD_CFGFDCR2);
+        pub const SFR_CGUFD_CFGFDCR_0_4_2: crate::Register = crate::Register::new(7, 0xffff);
+        pub const SFR_CGUFD_CFGFDCR_0_4_2_CFGFDCR_0_4_2: crate::Field = crate::Field::new(16, 0, SFR_CGUFD_CFGFDCR_0_4_2);
 
-        pub const SFR_CGUFD_CFGFDCR3: crate::Register = crate::Register::new(8, 0xffff);
-        pub const SFR_CGUFD_CFGFDCR3_CFGFDCR3: crate::Field = crate::Field::new(16, 0, SFR_CGUFD_CFGFDCR3);
+        pub const SFR_CGUFD_CFGFDCR_0_4_3: crate::Register = crate::Register::new(8, 0xffff);
+        pub const SFR_CGUFD_CFGFDCR_0_4_3_CFGFDCR_0_4_3: crate::Field = crate::Field::new(16, 0, SFR_CGUFD_CFGFDCR_0_4_3);
 
-        pub const SFR_CGUFD_CFGFDCR4: crate::Register = crate::Register::new(9, 0xffff);
-        pub const SFR_CGUFD_CFGFDCR4_CFGFDCR4: crate::Field = crate::Field::new(16, 0, SFR_CGUFD_CFGFDCR4);
+        pub const SFR_CGUFD_CFGFDCR_0_4_4: crate::Register = crate::Register::new(9, 0xffff);
+        pub const SFR_CGUFD_CFGFDCR_0_4_4_CFGFDCR_0_4_4: crate::Field = crate::Field::new(16, 0, SFR_CGUFD_CFGFDCR_0_4_4);
+
+        pub const SFR_CGUFDAO: crate::Register = crate::Register::new(10, 0xffff);
+        pub const SFR_CGUFDAO_CFGFDCR: crate::Field = crate::Field::new(16, 0, SFR_CGUFDAO);
 
         pub const SFR_CGUSET: crate::Register = crate::Register::new(11, 0xffffffff);
         pub const SFR_CGUSET_SFR_CGUSET: crate::Field = crate::Field::new(32, 0, SFR_CGUSET);
 
         pub const SFR_CGUSEL1: crate::Register = crate::Register::new(12, 0x1);
         pub const SFR_CGUSEL1_SFR_CGUSEL1: crate::Field = crate::Field::new(1, 0, SFR_CGUSEL1);
+
+        pub const SFR_CGUFDPKE: crate::Register = crate::Register::new(13, 0x1ff);
+        pub const SFR_CGUFDPKE_SFR_CGUFDPKE: crate::Field = crate::Field::new(9, 0, SFR_CGUFDPKE);
 
         pub const SFR_CGUFSSR_FSFREQ0: crate::Register = crate::Register::new(16, 0xffff);
         pub const SFR_CGUFSSR_FSFREQ0_FSFREQ0: crate::Field = crate::Field::new(16, 0, SFR_CGUFSSR_FSFREQ0);
@@ -4704,6 +4741,30 @@ pub mod utra {
         pub const HW_RP_PIO_BASE: usize = 0x50123000;
     }
 
+    pub mod coresub_sramtrm {
+        pub const CORESUB_SRAMTRM_NUMREGS: usize = 6;
+
+        pub const SFR_CACHE: crate::Register = crate::Register::new(0, 0x7);
+        pub const SFR_CACHE_SFR_CACHE: crate::Field = crate::Field::new(3, 0, SFR_CACHE);
+
+        pub const SFR_ITCM: crate::Register = crate::Register::new(1, 0x1f);
+        pub const SFR_ITCM_SFR_ITCM: crate::Field = crate::Field::new(5, 0, SFR_ITCM);
+
+        pub const SFR_DTCM: crate::Register = crate::Register::new(2, 0x1f);
+        pub const SFR_DTCM_SFR_DTCM: crate::Field = crate::Field::new(5, 0, SFR_DTCM);
+
+        pub const SFR_SRAM0: crate::Register = crate::Register::new(3, 0x1f);
+        pub const SFR_SRAM0_SFR_SRAM0: crate::Field = crate::Field::new(5, 0, SFR_SRAM0);
+
+        pub const SFR_SRAM1: crate::Register = crate::Register::new(4, 0x1f);
+        pub const SFR_SRAM1_SFR_SRAM1: crate::Field = crate::Field::new(5, 0, SFR_SRAM1);
+
+        pub const SFR_VEXRAM: crate::Register = crate::Register::new(5, 0x7);
+        pub const SFR_VEXRAM_SFR_VEXRAM: crate::Field = crate::Field::new(3, 0, SFR_VEXRAM);
+
+        pub const HW_CORESUB_SRAMTRM_BASE: usize = 0x40014000;
+    }
+
     pub mod mdma {
         pub const MDMA_NUMREGS: usize = 24;
 
@@ -4911,7 +4972,7 @@ pub mod utra {
     }
 
     pub mod sensorc {
-        pub const SENSORC_NUMREGS: usize = 14;
+        pub const SENSORC_NUMREGS: usize = 19;
 
         pub const SFR_VDMASK0: crate::Register = crate::Register::new(0, 0xff);
         pub const SFR_VDMASK0_CR_VDMASK0: crate::Field = crate::Field::new(8, 0, SFR_VDMASK0);
@@ -4920,7 +4981,10 @@ pub mod utra {
         pub const SFR_VDMASK1_CR_VDMASK1: crate::Field = crate::Field::new(8, 0, SFR_VDMASK1);
 
         pub const SFR_VDSR: crate::Register = crate::Register::new(2, 0xff);
-        pub const SFR_VDSR_SR_VDSR: crate::Field = crate::Field::new(8, 0, SFR_VDSR);
+        pub const SFR_VDSR_VDFLAG: crate::Field = crate::Field::new(8, 0, SFR_VDSR);
+
+        pub const SFR_VDFR: crate::Register = crate::Register::new(3, 0xff);
+        pub const SFR_VDFR_VDFLAG: crate::Field = crate::Field::new(8, 0, SFR_VDFR);
 
         pub const SFR_LDMASK: crate::Register = crate::Register::new(4, 0xf);
         pub const SFR_LDMASK_CR_LDMASK: crate::Field = crate::Field::new(4, 0, SFR_LDMASK);
@@ -4954,6 +5018,18 @@ pub mod utra {
 
         pub const SFR_VDCFG_CR_VDCFG7: crate::Register = crate::Register::new(15, 0xf);
         pub const SFR_VDCFG_CR_VDCFG7_CR_VDCFG7: crate::Field = crate::Field::new(4, 0, SFR_VDCFG_CR_VDCFG7);
+
+        pub const SFR_VDIP_ENA: crate::Register = crate::Register::new(16, 0xf);
+        pub const SFR_VDIP_ENA_VDENA: crate::Field = crate::Field::new(4, 0, SFR_VDIP_ENA);
+
+        pub const SFR_VDIP_TEST: crate::Register = crate::Register::new(17, 0xff);
+        pub const SFR_VDIP_TEST_VDTST: crate::Field = crate::Field::new(8, 0, SFR_VDIP_TEST);
+
+        pub const SFR_LDIP_TEST: crate::Register = crate::Register::new(18, 0xf);
+        pub const SFR_LDIP_TEST_LDTST: crate::Field = crate::Field::new(4, 0, SFR_LDIP_TEST);
+
+        pub const SFR_LDIP_FD: crate::Register = crate::Register::new(19, 0xffff);
+        pub const SFR_LDIP_FD_SFR_LDIP_FD: crate::Field = crate::Field::new(16, 0, SFR_LDIP_FD);
 
         pub const HW_SENSORC_BASE: usize = 0x40053000;
     }
@@ -14836,6 +14912,14 @@ mod tests {
         baz |= aes_csr.ms(utra::aes::SFR_OPT1_SFR_OPT1, 1);
         aes_csr.wfo(utra::aes::SFR_OPT1_SFR_OPT1, baz);
 
+        let foo = aes_csr.r(utra::aes::SFR_OPTLTX);
+        aes_csr.wo(utra::aes::SFR_OPTLTX, foo);
+        let bar = aes_csr.rf(utra::aes::SFR_OPTLTX_SFR_OPTLTX);
+        aes_csr.rmwf(utra::aes::SFR_OPTLTX_SFR_OPTLTX, bar);
+        let mut baz = aes_csr.zf(utra::aes::SFR_OPTLTX_SFR_OPTLTX, bar);
+        baz |= aes_csr.ms(utra::aes::SFR_OPTLTX_SFR_OPTLTX, 1);
+        aes_csr.wfo(utra::aes::SFR_OPTLTX_SFR_OPTLTX, baz);
+
         let foo = aes_csr.r(utra::aes::SFR_SEGPTR_PTRID_IV);
         aes_csr.wo(utra::aes::SFR_SEGPTR_PTRID_IV, foo);
         let bar = aes_csr.rf(utra::aes::SFR_SEGPTR_PTRID_IV_PTRID_IV);
@@ -14921,6 +15005,16 @@ mod tests {
         let mut baz = combohash_csr.zf(utra::combohash::SFR_FR_CHNLI_DONE, bar);
         baz |= combohash_csr.ms(utra::combohash::SFR_FR_CHNLI_DONE, 1);
         combohash_csr.wfo(utra::combohash::SFR_FR_CHNLI_DONE, baz);
+        let bar = combohash_csr.rf(utra::combohash::SFR_FR_CHKDONE);
+        combohash_csr.rmwf(utra::combohash::SFR_FR_CHKDONE, bar);
+        let mut baz = combohash_csr.zf(utra::combohash::SFR_FR_CHKDONE, bar);
+        baz |= combohash_csr.ms(utra::combohash::SFR_FR_CHKDONE, 1);
+        combohash_csr.wfo(utra::combohash::SFR_FR_CHKDONE, baz);
+        let bar = combohash_csr.rf(utra::combohash::SFR_FR_CHKPASS);
+        combohash_csr.rmwf(utra::combohash::SFR_FR_CHKPASS, bar);
+        let mut baz = combohash_csr.zf(utra::combohash::SFR_FR_CHKPASS, bar);
+        baz |= combohash_csr.ms(utra::combohash::SFR_FR_CHKPASS, 1);
+        combohash_csr.wfo(utra::combohash::SFR_FR_CHKPASS, baz);
 
         let foo = combohash_csr.r(utra::combohash::SFR_OPT1);
         combohash_csr.wo(utra::combohash::SFR_OPT1, foo);
@@ -14955,6 +15049,14 @@ mod tests {
         let mut baz = combohash_csr.zf(utra::combohash::SFR_OPT3_SFR_OPT3, bar);
         baz |= combohash_csr.ms(utra::combohash::SFR_OPT3_SFR_OPT3, 1);
         combohash_csr.wfo(utra::combohash::SFR_OPT3_SFR_OPT3, baz);
+
+        let foo = combohash_csr.r(utra::combohash::SFR_BLKT0);
+        combohash_csr.wo(utra::combohash::SFR_BLKT0, foo);
+        let bar = combohash_csr.rf(utra::combohash::SFR_BLKT0_SFR_BLKT0);
+        combohash_csr.rmwf(utra::combohash::SFR_BLKT0_SFR_BLKT0, bar);
+        let mut baz = combohash_csr.zf(utra::combohash::SFR_BLKT0_SFR_BLKT0, bar);
+        baz |= combohash_csr.ms(utra::combohash::SFR_BLKT0_SFR_BLKT0, 1);
+        combohash_csr.wfo(utra::combohash::SFR_BLKT0_SFR_BLKT0, baz);
 
         let foo = combohash_csr.r(utra::combohash::SFR_SEGPTR_SEGID_LKEY);
         combohash_csr.wo(utra::combohash::SFR_SEGPTR_SEGID_LKEY, foo);
@@ -14996,13 +15098,13 @@ mod tests {
         baz |= combohash_csr.ms(utra::combohash::SFR_SEGPTR_SEGID_HOUT_SEGID_HOUT, 1);
         combohash_csr.wfo(utra::combohash::SFR_SEGPTR_SEGID_HOUT_SEGID_HOUT, baz);
 
-        let foo = combohash_csr.r(utra::combohash::SFR_SEGPTR_SEGID_SOB);
-        combohash_csr.wo(utra::combohash::SFR_SEGPTR_SEGID_SOB, foo);
-        let bar = combohash_csr.rf(utra::combohash::SFR_SEGPTR_SEGID_SOB_SEGID_SOB);
-        combohash_csr.rmwf(utra::combohash::SFR_SEGPTR_SEGID_SOB_SEGID_SOB, bar);
-        let mut baz = combohash_csr.zf(utra::combohash::SFR_SEGPTR_SEGID_SOB_SEGID_SOB, bar);
-        baz |= combohash_csr.ms(utra::combohash::SFR_SEGPTR_SEGID_SOB_SEGID_SOB, 1);
-        combohash_csr.wfo(utra::combohash::SFR_SEGPTR_SEGID_SOB_SEGID_SOB, baz);
+        let foo = combohash_csr.r(utra::combohash::SFR_SEGPTR_SEGID_HOUT2);
+        combohash_csr.wo(utra::combohash::SFR_SEGPTR_SEGID_HOUT2, foo);
+        let bar = combohash_csr.rf(utra::combohash::SFR_SEGPTR_SEGID_HOUT2_SEGID_HOUT2);
+        combohash_csr.rmwf(utra::combohash::SFR_SEGPTR_SEGID_HOUT2_SEGID_HOUT2, bar);
+        let mut baz = combohash_csr.zf(utra::combohash::SFR_SEGPTR_SEGID_HOUT2_SEGID_HOUT2, bar);
+        baz |= combohash_csr.ms(utra::combohash::SFR_SEGPTR_SEGID_HOUT2_SEGID_HOUT2, 1);
+        combohash_csr.wfo(utra::combohash::SFR_SEGPTR_SEGID_HOUT2_SEGID_HOUT2, baz);
   }
 
     #[test]
@@ -15013,11 +15115,16 @@ mod tests {
 
         let foo = pke_csr.r(utra::pke::SFR_CRFUNC);
         pke_csr.wo(utra::pke::SFR_CRFUNC, foo);
-        let bar = pke_csr.rf(utra::pke::SFR_CRFUNC_SFR_CRFUNC);
-        pke_csr.rmwf(utra::pke::SFR_CRFUNC_SFR_CRFUNC, bar);
-        let mut baz = pke_csr.zf(utra::pke::SFR_CRFUNC_SFR_CRFUNC, bar);
-        baz |= pke_csr.ms(utra::pke::SFR_CRFUNC_SFR_CRFUNC, 1);
-        pke_csr.wfo(utra::pke::SFR_CRFUNC_SFR_CRFUNC, baz);
+        let bar = pke_csr.rf(utra::pke::SFR_CRFUNC_CR_FUNC);
+        pke_csr.rmwf(utra::pke::SFR_CRFUNC_CR_FUNC, bar);
+        let mut baz = pke_csr.zf(utra::pke::SFR_CRFUNC_CR_FUNC, bar);
+        baz |= pke_csr.ms(utra::pke::SFR_CRFUNC_CR_FUNC, 1);
+        pke_csr.wfo(utra::pke::SFR_CRFUNC_CR_FUNC, baz);
+        let bar = pke_csr.rf(utra::pke::SFR_CRFUNC_CR_PCOREIR);
+        pke_csr.rmwf(utra::pke::SFR_CRFUNC_CR_PCOREIR, bar);
+        let mut baz = pke_csr.zf(utra::pke::SFR_CRFUNC_CR_PCOREIR, bar);
+        baz |= pke_csr.ms(utra::pke::SFR_CRFUNC_CR_PCOREIR, 1);
+        pke_csr.wfo(utra::pke::SFR_CRFUNC_CR_PCOREIR, baz);
 
         let foo = pke_csr.r(utra::pke::SFR_AR);
         pke_csr.wo(utra::pke::SFR_AR, foo);
@@ -15083,6 +15190,22 @@ mod tests {
         let mut baz = pke_csr.zf(utra::pke::SFR_OPTEW_SFR_OPTEW, bar);
         baz |= pke_csr.ms(utra::pke::SFR_OPTEW_SFR_OPTEW, 1);
         pke_csr.wfo(utra::pke::SFR_OPTEW_SFR_OPTEW, baz);
+
+        let foo = pke_csr.r(utra::pke::SFR_OPTRW);
+        pke_csr.wo(utra::pke::SFR_OPTRW, foo);
+        let bar = pke_csr.rf(utra::pke::SFR_OPTRW_SFR_OPTRW);
+        pke_csr.rmwf(utra::pke::SFR_OPTRW_SFR_OPTRW, bar);
+        let mut baz = pke_csr.zf(utra::pke::SFR_OPTRW_SFR_OPTRW, bar);
+        baz |= pke_csr.ms(utra::pke::SFR_OPTRW_SFR_OPTRW, 1);
+        pke_csr.wfo(utra::pke::SFR_OPTRW_SFR_OPTRW, baz);
+
+        let foo = pke_csr.r(utra::pke::SFR_OPTLTX);
+        pke_csr.wo(utra::pke::SFR_OPTLTX, foo);
+        let bar = pke_csr.rf(utra::pke::SFR_OPTLTX_SFR_OPTLTX);
+        pke_csr.rmwf(utra::pke::SFR_OPTLTX_SFR_OPTLTX, bar);
+        let mut baz = pke_csr.zf(utra::pke::SFR_OPTLTX_SFR_OPTLTX, bar);
+        baz |= pke_csr.ms(utra::pke::SFR_OPTLTX_SFR_OPTLTX, 1);
+        pke_csr.wfo(utra::pke::SFR_OPTLTX_SFR_OPTLTX, baz);
 
         let foo = pke_csr.r(utra::pke::SFR_OPTMASK);
         pke_csr.wo(utra::pke::SFR_OPTMASK, foo);
@@ -15346,13 +15469,13 @@ mod tests {
         baz |= sce_glbsfr_csr.ms(utra::sce_glbsfr::SFR_ARCLR_AR_CLRRAM, 1);
         sce_glbsfr_csr.wfo(utra::sce_glbsfr::SFR_ARCLR_AR_CLRRAM, baz);
 
-        let foo = sce_glbsfr_csr.r(utra::sce_glbsfr::SFR_TICKCYC);
-        sce_glbsfr_csr.wo(utra::sce_glbsfr::SFR_TICKCYC, foo);
-        let bar = sce_glbsfr_csr.rf(utra::sce_glbsfr::SFR_TICKCYC_SFR_TICKCYC);
-        sce_glbsfr_csr.rmwf(utra::sce_glbsfr::SFR_TICKCYC_SFR_TICKCYC, bar);
-        let mut baz = sce_glbsfr_csr.zf(utra::sce_glbsfr::SFR_TICKCYC_SFR_TICKCYC, bar);
-        baz |= sce_glbsfr_csr.ms(utra::sce_glbsfr::SFR_TICKCYC_SFR_TICKCYC, 1);
-        sce_glbsfr_csr.wfo(utra::sce_glbsfr::SFR_TICKCYC_SFR_TICKCYC, baz);
+        let foo = sce_glbsfr_csr.r(utra::sce_glbsfr::SFR_FRACERR);
+        sce_glbsfr_csr.wo(utra::sce_glbsfr::SFR_FRACERR, foo);
+        let bar = sce_glbsfr_csr.rf(utra::sce_glbsfr::SFR_FRACERR_FR_ACERR);
+        sce_glbsfr_csr.rmwf(utra::sce_glbsfr::SFR_FRACERR_FR_ACERR, bar);
+        let mut baz = sce_glbsfr_csr.zf(utra::sce_glbsfr::SFR_FRACERR_FR_ACERR, bar);
+        baz |= sce_glbsfr_csr.ms(utra::sce_glbsfr::SFR_FRACERR_FR_ACERR, 1);
+        sce_glbsfr_csr.wfo(utra::sce_glbsfr::SFR_FRACERR_FR_ACERR, baz);
 
         let foo = sce_glbsfr_csr.r(utra::sce_glbsfr::SFR_TICKCNT);
         sce_glbsfr_csr.wo(utra::sce_glbsfr::SFR_TICKCNT, foo);
@@ -15425,6 +15548,14 @@ mod tests {
         let mut baz = sce_glbsfr_csr.zf(utra::sce_glbsfr::SFR_FFCNT_SR_FF5_SR_FF5, bar);
         baz |= sce_glbsfr_csr.ms(utra::sce_glbsfr::SFR_FFCNT_SR_FF5_SR_FF5, 1);
         sce_glbsfr_csr.wfo(utra::sce_glbsfr::SFR_FFCNT_SR_FF5_SR_FF5, baz);
+
+        let foo = sce_glbsfr_csr.r(utra::sce_glbsfr::SFR_TS);
+        sce_glbsfr_csr.wo(utra::sce_glbsfr::SFR_TS, foo);
+        let bar = sce_glbsfr_csr.rf(utra::sce_glbsfr::SFR_TS_CR_TS);
+        sce_glbsfr_csr.rmwf(utra::sce_glbsfr::SFR_TS_CR_TS, bar);
+        let mut baz = sce_glbsfr_csr.zf(utra::sce_glbsfr::SFR_TS_CR_TS, bar);
+        baz |= sce_glbsfr_csr.ms(utra::sce_glbsfr::SFR_TS_CR_TS, 1);
+        sce_glbsfr_csr.wfo(utra::sce_glbsfr::SFR_TS_CR_TS, baz);
   }
 
     #[test]
@@ -15441,13 +15572,13 @@ mod tests {
         baz |= trng_csr.ms(utra::trng::SFR_CRSRC_SFR_CRSRC, 1);
         trng_csr.wfo(utra::trng::SFR_CRSRC_SFR_CRSRC, baz);
 
-        let foo = trng_csr.r(utra::trng::SFR_AR_STOP);
-        trng_csr.wo(utra::trng::SFR_AR_STOP, foo);
-        let bar = trng_csr.rf(utra::trng::SFR_AR_STOP_SFR_AR_STOP);
-        trng_csr.rmwf(utra::trng::SFR_AR_STOP_SFR_AR_STOP, bar);
-        let mut baz = trng_csr.zf(utra::trng::SFR_AR_STOP_SFR_AR_STOP, bar);
-        baz |= trng_csr.ms(utra::trng::SFR_AR_STOP_SFR_AR_STOP, 1);
-        trng_csr.wfo(utra::trng::SFR_AR_STOP_SFR_AR_STOP, baz);
+        let foo = trng_csr.r(utra::trng::SFR_CRANA);
+        trng_csr.wo(utra::trng::SFR_CRANA, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_CRANA_SFR_CRANA);
+        trng_csr.rmwf(utra::trng::SFR_CRANA_SFR_CRANA, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_CRANA_SFR_CRANA, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_CRANA_SFR_CRANA, 1);
+        trng_csr.wfo(utra::trng::SFR_CRANA_SFR_CRANA, baz);
 
         let foo = trng_csr.r(utra::trng::SFR_PP);
         trng_csr.wo(utra::trng::SFR_PP, foo);
@@ -15472,6 +15603,38 @@ mod tests {
         let mut baz = trng_csr.zf(utra::trng::SFR_SR_SR_RNG, bar);
         baz |= trng_csr.ms(utra::trng::SFR_SR_SR_RNG, 1);
         trng_csr.wfo(utra::trng::SFR_SR_SR_RNG, baz);
+
+        let foo = trng_csr.r(utra::trng::SFR_AR_GEN);
+        trng_csr.wo(utra::trng::SFR_AR_GEN, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_AR_GEN_SFR_AR_GEN);
+        trng_csr.rmwf(utra::trng::SFR_AR_GEN_SFR_AR_GEN, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_AR_GEN_SFR_AR_GEN, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_AR_GEN_SFR_AR_GEN, 1);
+        trng_csr.wfo(utra::trng::SFR_AR_GEN_SFR_AR_GEN, baz);
+
+        let foo = trng_csr.r(utra::trng::SFR_FR);
+        trng_csr.wo(utra::trng::SFR_FR, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_FR_SFR_FR);
+        trng_csr.rmwf(utra::trng::SFR_FR_SFR_FR, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_FR_SFR_FR, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_FR_SFR_FR, 1);
+        trng_csr.wfo(utra::trng::SFR_FR_SFR_FR, baz);
+
+        let foo = trng_csr.r(utra::trng::SFR_CHAIN_RNGCHAINEN0);
+        trng_csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_CHAIN_RNGCHAINEN0_RNGCHAINEN0);
+        trng_csr.rmwf(utra::trng::SFR_CHAIN_RNGCHAINEN0_RNGCHAINEN0, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_CHAIN_RNGCHAINEN0_RNGCHAINEN0, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_CHAIN_RNGCHAINEN0_RNGCHAINEN0, 1);
+        trng_csr.wfo(utra::trng::SFR_CHAIN_RNGCHAINEN0_RNGCHAINEN0, baz);
+
+        let foo = trng_csr.r(utra::trng::SFR_CHAIN_RNGCHAINEN1);
+        trng_csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN1, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_CHAIN_RNGCHAINEN1_RNGCHAINEN1);
+        trng_csr.rmwf(utra::trng::SFR_CHAIN_RNGCHAINEN1_RNGCHAINEN1, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_CHAIN_RNGCHAINEN1_RNGCHAINEN1, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_CHAIN_RNGCHAINEN1_RNGCHAINEN1, 1);
+        trng_csr.wfo(utra::trng::SFR_CHAIN_RNGCHAINEN1_RNGCHAINEN1, baz);
   }
 
     #[test]
@@ -15747,45 +15910,53 @@ mod tests {
         baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUSEL0_SFR_CGUSEL0, 1);
         sysctrl_csr.wfo(utra::sysctrl::SFR_CGUSEL0_SFR_CGUSEL0, baz);
 
-        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFD_CFGFDCR0);
-        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR0, foo);
-        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFD_CFGFDCR0_CFGFDCR0);
-        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFD_CFGFDCR0_CFGFDCR0, bar);
-        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFD_CFGFDCR0_CFGFDCR0, bar);
-        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFD_CFGFDCR0_CFGFDCR0, 1);
-        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFD_CFGFDCR0_CFGFDCR0, baz);
+        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0);
+        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0, foo);
+        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0_CFGFDCR_0_4_0);
+        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0_CFGFDCR_0_4_0, bar);
+        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0_CFGFDCR_0_4_0, bar);
+        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0_CFGFDCR_0_4_0, 1);
+        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_0_CFGFDCR_0_4_0, baz);
 
-        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFD_CFGFDCR1);
-        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR1, foo);
-        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFD_CFGFDCR1_CFGFDCR1);
-        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFD_CFGFDCR1_CFGFDCR1, bar);
-        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFD_CFGFDCR1_CFGFDCR1, bar);
-        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFD_CFGFDCR1_CFGFDCR1, 1);
-        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFD_CFGFDCR1_CFGFDCR1, baz);
+        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1);
+        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1, foo);
+        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1_CFGFDCR_0_4_1);
+        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1_CFGFDCR_0_4_1, bar);
+        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1_CFGFDCR_0_4_1, bar);
+        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1_CFGFDCR_0_4_1, 1);
+        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_1_CFGFDCR_0_4_1, baz);
 
-        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFD_CFGFDCR2);
-        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR2, foo);
-        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFD_CFGFDCR2_CFGFDCR2);
-        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFD_CFGFDCR2_CFGFDCR2, bar);
-        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFD_CFGFDCR2_CFGFDCR2, bar);
-        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFD_CFGFDCR2_CFGFDCR2, 1);
-        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFD_CFGFDCR2_CFGFDCR2, baz);
+        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2);
+        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2, foo);
+        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2_CFGFDCR_0_4_2);
+        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2_CFGFDCR_0_4_2, bar);
+        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2_CFGFDCR_0_4_2, bar);
+        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2_CFGFDCR_0_4_2, 1);
+        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_2_CFGFDCR_0_4_2, baz);
 
-        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFD_CFGFDCR3);
-        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR3, foo);
-        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFD_CFGFDCR3_CFGFDCR3);
-        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFD_CFGFDCR3_CFGFDCR3, bar);
-        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFD_CFGFDCR3_CFGFDCR3, bar);
-        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFD_CFGFDCR3_CFGFDCR3, 1);
-        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFD_CFGFDCR3_CFGFDCR3, baz);
+        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3);
+        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3, foo);
+        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3_CFGFDCR_0_4_3);
+        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3_CFGFDCR_0_4_3, bar);
+        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3_CFGFDCR_0_4_3, bar);
+        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3_CFGFDCR_0_4_3, 1);
+        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_3_CFGFDCR_0_4_3, baz);
 
-        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFD_CFGFDCR4);
-        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR4, foo);
-        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFD_CFGFDCR4_CFGFDCR4);
-        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFD_CFGFDCR4_CFGFDCR4, bar);
-        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFD_CFGFDCR4_CFGFDCR4, bar);
-        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFD_CFGFDCR4_CFGFDCR4, 1);
-        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFD_CFGFDCR4_CFGFDCR4, baz);
+        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4);
+        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4, foo);
+        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4_CFGFDCR_0_4_4);
+        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4_CFGFDCR_0_4_4, bar);
+        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4_CFGFDCR_0_4_4, bar);
+        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4_CFGFDCR_0_4_4, 1);
+        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFD_CFGFDCR_0_4_4_CFGFDCR_0_4_4, baz);
+
+        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFDAO);
+        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFDAO, foo);
+        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFDAO_CFGFDCR);
+        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFDAO_CFGFDCR, bar);
+        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFDAO_CFGFDCR, bar);
+        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFDAO_CFGFDCR, 1);
+        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFDAO_CFGFDCR, baz);
 
         let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUSET);
         sysctrl_csr.wo(utra::sysctrl::SFR_CGUSET, foo);
@@ -15802,6 +15973,14 @@ mod tests {
         let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUSEL1_SFR_CGUSEL1, bar);
         baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUSEL1_SFR_CGUSEL1, 1);
         sysctrl_csr.wfo(utra::sysctrl::SFR_CGUSEL1_SFR_CGUSEL1, baz);
+
+        let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFDPKE);
+        sysctrl_csr.wo(utra::sysctrl::SFR_CGUFDPKE, foo);
+        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_CGUFDPKE_SFR_CGUFDPKE);
+        sysctrl_csr.rmwf(utra::sysctrl::SFR_CGUFDPKE_SFR_CGUFDPKE, bar);
+        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGUFDPKE_SFR_CGUFDPKE, bar);
+        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGUFDPKE_SFR_CGUFDPKE, 1);
+        sysctrl_csr.wfo(utra::sysctrl::SFR_CGUFDPKE_SFR_CGUFDPKE, baz);
 
         let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUFSSR_FSFREQ0);
         sysctrl_csr.wo(utra::sysctrl::SFR_CGUFSSR_FSFREQ0, foo);
@@ -18810,6 +18989,61 @@ mod tests {
 
     #[test]
     #[ignore]
+    fn compile_check_coresub_sramtrm_csr() {
+        use super::*;
+        let mut coresub_sramtrm_csr = CSR::new(HW_CORESUB_SRAMTRM_BASE as *mut u32);
+
+        let foo = coresub_sramtrm_csr.r(utra::coresub_sramtrm::SFR_CACHE);
+        coresub_sramtrm_csr.wo(utra::coresub_sramtrm::SFR_CACHE, foo);
+        let bar = coresub_sramtrm_csr.rf(utra::coresub_sramtrm::SFR_CACHE_SFR_CACHE);
+        coresub_sramtrm_csr.rmwf(utra::coresub_sramtrm::SFR_CACHE_SFR_CACHE, bar);
+        let mut baz = coresub_sramtrm_csr.zf(utra::coresub_sramtrm::SFR_CACHE_SFR_CACHE, bar);
+        baz |= coresub_sramtrm_csr.ms(utra::coresub_sramtrm::SFR_CACHE_SFR_CACHE, 1);
+        coresub_sramtrm_csr.wfo(utra::coresub_sramtrm::SFR_CACHE_SFR_CACHE, baz);
+
+        let foo = coresub_sramtrm_csr.r(utra::coresub_sramtrm::SFR_ITCM);
+        coresub_sramtrm_csr.wo(utra::coresub_sramtrm::SFR_ITCM, foo);
+        let bar = coresub_sramtrm_csr.rf(utra::coresub_sramtrm::SFR_ITCM_SFR_ITCM);
+        coresub_sramtrm_csr.rmwf(utra::coresub_sramtrm::SFR_ITCM_SFR_ITCM, bar);
+        let mut baz = coresub_sramtrm_csr.zf(utra::coresub_sramtrm::SFR_ITCM_SFR_ITCM, bar);
+        baz |= coresub_sramtrm_csr.ms(utra::coresub_sramtrm::SFR_ITCM_SFR_ITCM, 1);
+        coresub_sramtrm_csr.wfo(utra::coresub_sramtrm::SFR_ITCM_SFR_ITCM, baz);
+
+        let foo = coresub_sramtrm_csr.r(utra::coresub_sramtrm::SFR_DTCM);
+        coresub_sramtrm_csr.wo(utra::coresub_sramtrm::SFR_DTCM, foo);
+        let bar = coresub_sramtrm_csr.rf(utra::coresub_sramtrm::SFR_DTCM_SFR_DTCM);
+        coresub_sramtrm_csr.rmwf(utra::coresub_sramtrm::SFR_DTCM_SFR_DTCM, bar);
+        let mut baz = coresub_sramtrm_csr.zf(utra::coresub_sramtrm::SFR_DTCM_SFR_DTCM, bar);
+        baz |= coresub_sramtrm_csr.ms(utra::coresub_sramtrm::SFR_DTCM_SFR_DTCM, 1);
+        coresub_sramtrm_csr.wfo(utra::coresub_sramtrm::SFR_DTCM_SFR_DTCM, baz);
+
+        let foo = coresub_sramtrm_csr.r(utra::coresub_sramtrm::SFR_SRAM0);
+        coresub_sramtrm_csr.wo(utra::coresub_sramtrm::SFR_SRAM0, foo);
+        let bar = coresub_sramtrm_csr.rf(utra::coresub_sramtrm::SFR_SRAM0_SFR_SRAM0);
+        coresub_sramtrm_csr.rmwf(utra::coresub_sramtrm::SFR_SRAM0_SFR_SRAM0, bar);
+        let mut baz = coresub_sramtrm_csr.zf(utra::coresub_sramtrm::SFR_SRAM0_SFR_SRAM0, bar);
+        baz |= coresub_sramtrm_csr.ms(utra::coresub_sramtrm::SFR_SRAM0_SFR_SRAM0, 1);
+        coresub_sramtrm_csr.wfo(utra::coresub_sramtrm::SFR_SRAM0_SFR_SRAM0, baz);
+
+        let foo = coresub_sramtrm_csr.r(utra::coresub_sramtrm::SFR_SRAM1);
+        coresub_sramtrm_csr.wo(utra::coresub_sramtrm::SFR_SRAM1, foo);
+        let bar = coresub_sramtrm_csr.rf(utra::coresub_sramtrm::SFR_SRAM1_SFR_SRAM1);
+        coresub_sramtrm_csr.rmwf(utra::coresub_sramtrm::SFR_SRAM1_SFR_SRAM1, bar);
+        let mut baz = coresub_sramtrm_csr.zf(utra::coresub_sramtrm::SFR_SRAM1_SFR_SRAM1, bar);
+        baz |= coresub_sramtrm_csr.ms(utra::coresub_sramtrm::SFR_SRAM1_SFR_SRAM1, 1);
+        coresub_sramtrm_csr.wfo(utra::coresub_sramtrm::SFR_SRAM1_SFR_SRAM1, baz);
+
+        let foo = coresub_sramtrm_csr.r(utra::coresub_sramtrm::SFR_VEXRAM);
+        coresub_sramtrm_csr.wo(utra::coresub_sramtrm::SFR_VEXRAM, foo);
+        let bar = coresub_sramtrm_csr.rf(utra::coresub_sramtrm::SFR_VEXRAM_SFR_VEXRAM);
+        coresub_sramtrm_csr.rmwf(utra::coresub_sramtrm::SFR_VEXRAM_SFR_VEXRAM, bar);
+        let mut baz = coresub_sramtrm_csr.zf(utra::coresub_sramtrm::SFR_VEXRAM_SFR_VEXRAM, bar);
+        baz |= coresub_sramtrm_csr.ms(utra::coresub_sramtrm::SFR_VEXRAM_SFR_VEXRAM, 1);
+        coresub_sramtrm_csr.wfo(utra::coresub_sramtrm::SFR_VEXRAM_SFR_VEXRAM, baz);
+  }
+
+    #[test]
+    #[ignore]
     fn compile_check_mdma_csr() {
         use super::*;
         let mut mdma_csr = CSR::new(HW_MDMA_BASE as *mut u32);
@@ -19348,11 +19582,19 @@ mod tests {
 
         let foo = sensorc_csr.r(utra::sensorc::SFR_VDSR);
         sensorc_csr.wo(utra::sensorc::SFR_VDSR, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDSR_SR_VDSR);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDSR_SR_VDSR, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDSR_SR_VDSR, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDSR_SR_VDSR, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDSR_SR_VDSR, baz);
+        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDSR_VDFLAG);
+        sensorc_csr.rmwf(utra::sensorc::SFR_VDSR_VDFLAG, bar);
+        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDSR_VDFLAG, bar);
+        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDSR_VDFLAG, 1);
+        sensorc_csr.wfo(utra::sensorc::SFR_VDSR_VDFLAG, baz);
+
+        let foo = sensorc_csr.r(utra::sensorc::SFR_VDFR);
+        sensorc_csr.wo(utra::sensorc::SFR_VDFR, foo);
+        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDFR_VDFLAG);
+        sensorc_csr.rmwf(utra::sensorc::SFR_VDFR_VDFLAG, bar);
+        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDFR_VDFLAG, bar);
+        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDFR_VDFLAG, 1);
+        sensorc_csr.wfo(utra::sensorc::SFR_VDFR_VDFLAG, baz);
 
         let foo = sensorc_csr.r(utra::sensorc::SFR_LDMASK);
         sensorc_csr.wo(utra::sensorc::SFR_LDMASK, foo);
@@ -19441,5 +19683,37 @@ mod tests {
         let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDCFG_CR_VDCFG7_CR_VDCFG7, bar);
         baz |= sensorc_csr.ms(utra::sensorc::SFR_VDCFG_CR_VDCFG7_CR_VDCFG7, 1);
         sensorc_csr.wfo(utra::sensorc::SFR_VDCFG_CR_VDCFG7_CR_VDCFG7, baz);
+
+        let foo = sensorc_csr.r(utra::sensorc::SFR_VDIP_ENA);
+        sensorc_csr.wo(utra::sensorc::SFR_VDIP_ENA, foo);
+        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDIP_ENA_VDENA);
+        sensorc_csr.rmwf(utra::sensorc::SFR_VDIP_ENA_VDENA, bar);
+        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDIP_ENA_VDENA, bar);
+        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDIP_ENA_VDENA, 1);
+        sensorc_csr.wfo(utra::sensorc::SFR_VDIP_ENA_VDENA, baz);
+
+        let foo = sensorc_csr.r(utra::sensorc::SFR_VDIP_TEST);
+        sensorc_csr.wo(utra::sensorc::SFR_VDIP_TEST, foo);
+        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDIP_TEST_VDTST);
+        sensorc_csr.rmwf(utra::sensorc::SFR_VDIP_TEST_VDTST, bar);
+        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDIP_TEST_VDTST, bar);
+        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDIP_TEST_VDTST, 1);
+        sensorc_csr.wfo(utra::sensorc::SFR_VDIP_TEST_VDTST, baz);
+
+        let foo = sensorc_csr.r(utra::sensorc::SFR_LDIP_TEST);
+        sensorc_csr.wo(utra::sensorc::SFR_LDIP_TEST, foo);
+        let bar = sensorc_csr.rf(utra::sensorc::SFR_LDIP_TEST_LDTST);
+        sensorc_csr.rmwf(utra::sensorc::SFR_LDIP_TEST_LDTST, bar);
+        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_LDIP_TEST_LDTST, bar);
+        baz |= sensorc_csr.ms(utra::sensorc::SFR_LDIP_TEST_LDTST, 1);
+        sensorc_csr.wfo(utra::sensorc::SFR_LDIP_TEST_LDTST, baz);
+
+        let foo = sensorc_csr.r(utra::sensorc::SFR_LDIP_FD);
+        sensorc_csr.wo(utra::sensorc::SFR_LDIP_FD, foo);
+        let bar = sensorc_csr.rf(utra::sensorc::SFR_LDIP_FD_SFR_LDIP_FD);
+        sensorc_csr.rmwf(utra::sensorc::SFR_LDIP_FD_SFR_LDIP_FD, bar);
+        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_LDIP_FD_SFR_LDIP_FD, bar);
+        baz |= sensorc_csr.ms(utra::sensorc::SFR_LDIP_FD_SFR_LDIP_FD, 1);
+        sensorc_csr.wfo(utra::sensorc::SFR_LDIP_FD_SFR_LDIP_FD, baz);
   }
 }

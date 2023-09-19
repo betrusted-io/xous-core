@@ -9,15 +9,15 @@ use crate::{
     debug::shell::process_characters,
     PID,
 };
-#[cfg(feature="cramium-fpga")]
 use utralib::generated::*;
-#[cfg(feature="cramium-fpga")]
 use xous_kernel::{MemoryFlags, MemoryType};
 
 #[cfg(feature="cramium-soc")]
 use crate::{
     io::{SerialWrite, SerialRead},
+    mem::MemoryManager,
     debug::shell::process_characters,
+    PID,
 };
 
 /// UART virtual address.
@@ -136,7 +136,21 @@ pub fn init() {
 
 #[cfg(feature="cramium-soc")]
 pub fn init() {   // there is no kernel UART yet...just a placeholder function
-    let uart = Uart::new(UART_ADDR, IRQ0_ADDR, process_characters);
+    // Map the UART peripheral.
+    MemoryManager::with_mut(|memory_manager| {
+        memory_manager
+            .map_range(
+                utra::duart::HW_DUART_BASE as *mut u8,
+                (UART_ADDR & !4095) as *mut u8,
+                4096,
+                PID::new(1).unwrap(),
+                MemoryFlags::R | MemoryFlags::W,
+                MemoryType::Default,
+            )
+            .expect("unable to map serial port")
+    });
+    let mut uart = Uart::new(UART_ADDR, IRQ0_ADDR, process_characters);
+    uart.init();
     unsafe{
         UART = Some(uart);
         crate::debug::shell::init(UART.as_mut().unwrap());
@@ -145,19 +159,26 @@ pub fn init() {   // there is no kernel UART yet...just a placeholder function
 
 #[cfg(feature="cramium-soc")]
 pub struct Uart {
+    uart_csr: CSR<u32>,
 }
 
 #[cfg(feature="cramium-soc")]
 impl Uart {
-    pub fn new(_addr: usize, _irq_addr: usize, _callback: fn(&mut Self)) -> Uart {
+    pub fn new(addr: usize, _irq_addr: usize, _callback: fn(&mut Self)) -> Uart {
         Uart {
+            uart_csr: CSR::new(addr as *mut u32),
         }
+    }
+    pub fn init(&mut self) {
+        // duart requires no special initializations
     }
 }
 
 #[cfg(feature="cramium-soc")]
 impl SerialWrite for Uart {
-    fn putc(&mut self, _c: u8) {
+    fn putc(&mut self, c: u8) {
+        while self.uart_csr.r(utra::duart::SFR_SR) != 0 {}
+        self.uart_csr.wo(utra::duart::SFR_TXD, c as u32);
     }
 }
 
