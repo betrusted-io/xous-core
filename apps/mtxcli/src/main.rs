@@ -21,7 +21,7 @@ pub(crate) enum MtxcliOp {
 }
 
 // This name should be (1) unique (2) under 64 characters long and (3) ideally descriptive.
-pub(crate) const SERVER_NAME_MTXCLI: &str = "_Matrix chat_";
+pub(crate) const SERVER_NAME_MTXCLI: &str = "_Matrix cli_";
 
 fn main () -> ! {
     let stack_size = 1024 * 1024;

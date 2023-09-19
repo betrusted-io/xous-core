@@ -25,7 +25,7 @@
         "en-tts": "Welcome to the simple MTXCHAT demo. Type /help for available commands",
         "fr": "Bienvenue à la démo simple de MTXCHAT. Tapez /help pour les commandes disponibles",
         "ja": "シンプルなMTXCHATデモへようこそ",
-        "zh": "简单的 mtxchat 演示活动"
+        "zh": "简单的 mtxcli 演示活动"
     },
     "mtxchat.heap.help": {
         "en": "/heap",
@@ -55,12 +55,11 @@
         "ja": "MTXCHAT ready *EN*",
         "zh": "MTXCHAT ready *EN*"
     },
-    "mtxchat.logged.in": {
-        "en": "logged in",
-        "en-tts": "logged in",
-        "fr": "connecté",
-        "ja": "logged in *EN*",
-        "zh": "logged in *EN*"
+    "mtxchat.login.item": {
+        "en": "Login",
+        "en-tts": "Login",
+        "ja": "Login *EN*",
+        "zh": "Login *EN*"
     },
     "mtxchat.logged.out": {
         "en": "logged out",
@@ -90,12 +89,12 @@
         "ja": "/login *EN*",
         "zh": "/login *EN*"
     },
-    "mtxchat.logout.help": {
-        "en": "/logout",
-        "en-tts": "logout",
-        "fr": "/logout (déconnexion)",
-        "ja": "/logout *EN*",
-        "zh": "/logout *EN*"
+    "mtxchat.logout.item": {
+        "en": "Logout",
+        "en-tts": "Logout",
+        "fr": "Logout (déconnexion)",
+        "ja": "Logout *EN*",
+        "zh": "Logout *EN*"
     },
     "mtxchat.migration.completed": {
         "en": "migration completed",
@@ -126,8 +125,8 @@
         "zh": "WARNING: pddb not mounted *EN*"
     },
     "mtxchat.login.title": {
-        "en": "Matrix /login",
-        "en-tts": "Matrix /login"
+        "en": "Matrix login",
+        "en-tts": "Matrix login"
     },
     "mtxchat.password": {
         "en": "password",
@@ -136,18 +135,27 @@
         "ja": "password *EN*",
         "zh": "password *EN*"
     },
-    "mtxchat.please.set.room": {
-        "en": "please /set room #my-room-to-join",
-        "en-tts": "please /set room #my-room-to-join",
-        "fr": "Veuillez /set room #ma-chambre",
-        "ja": "please /set room #my-room-to-join *EN*",
-        "zh": "please /set room #my-room-to-join *EN*"
+    "mtxchat.room": {
+        "en": "room",
+        "en-tts": "room"
     },
-    "mtxchat.server": {
-        "en": "server",
-        "en-tts": "server"
+    "mtxchat.room.title": {
+        "en": "Matrix room",
+        "en-tts": "Matrix room"
     },
-    "mtxchat.username": {
+    "mtxchat.room.item": {
+        "en": "Room",
+        "en-tts": "Room"
+    },
+    "mtxchat.room.name": {
+        "en": "room name",
+        "en-tts": "room name"
+    },
+    "mtxchat.domain": {
+        "en": "domain",
+        "en-tts": "domain"
+    },
+    "mtxchat.user_name": {
         "en": "username",
         "en-tts": "username",
         "fr": "utilisateur",
@@ -211,10 +219,18 @@
         "zh": "WiFi connected *EN*"
     },
     "mtxchat.wifi.warning": {
-        "en": "WARNING: WiFi not connected",
-        "en-tts": "WARNING: WiFi not connected",
-        "fr": "AVERTISSEMENT: WiFi pas connecté",
-        "ja": "WARNING: WiFi not connected *EN*",
-        "zh": "WARNING: WiFi not connected *EN*"
+        "en": "WiFi not connected. Entering read-only mode",
+        "en-tts": "WiFi not connected Entering read-only mode",
+        "fr": "WiFi pas connecté",
+        "ja": "WiFi not connected.  Entering read-only mode *EN*",
+        "zh": "WiFi not connected.  Entering read-only mode *EN*"
+    },
+    "mtxchat.listen.patience": {
+        "en": "It takes a while to get new events from the [matrix] server.\nPlease be patient :-)",
+        "en-tts": "It takes a while to get new events from the [matrix] server.\nPlease be patient."
+    },
+    "mtxchat.close.item": {
+        "en": "Close menu",
+        "en-tts": "Close menu"
     }
 }
