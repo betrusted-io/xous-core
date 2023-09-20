@@ -28,7 +28,6 @@ com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f
 llio = { path = "../../services/llio"}
 net = { path = "../../services/net" }
 pddb = { path = "../../services/pddb" }
-status = { path = "../../services/status" }
 # new dependencies for mtxcli
 percent-encoding = "2.2"
 serde = { version = "1.0", features = [ "derive" ] }

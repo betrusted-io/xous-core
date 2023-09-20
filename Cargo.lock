@@ -2865,7 +2865,6 @@ dependencies = [
  "pddb",
  "percent-encoding",
  "serde",
- "status",
  "trng",
  "ureq",
  "xous 0.9.51 (registry+https://github.com/rust-lang/crates.io-index)",
