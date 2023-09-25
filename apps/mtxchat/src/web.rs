@@ -1,7 +1,7 @@
 use crate::Msg;
 use serde::{Deserialize, Serialize};
 use ureq::serde_json::{Map, Value};
-use ureq::Agent;
+use ureq::{Agent, ErrorKind};
 use url::Url;
 
 const ACCEPT: &str = "Accept";
@@ -45,14 +45,16 @@ pub fn handle_response(maybe_response: Result<ureq::Response, ureq::Error>) -> O
             }
         }
         Err(ureq::Error::Status(code, response)) => {
-            /* the server returned an unexpected status
-            code (such as 400, 500 etc) */
+            // the server returned an unexpected status code (such as 400, 500 etc)
             let err_body = response.into_string().unwrap();
             log::info!("ERROR code {} err_body = {}", code, err_body);
             None
         }
-        Err(e) => {
-            log::info!("ERROR in handle_response: {:?}", e);
+        Err(ureq::Error::Transport(kind)) => {
+            match kind.kind() {
+                ErrorKind::ConnectionFailed => log::warn!("TLS failure"),
+                _ => log::info!("Transport error: {:?}", kind),
+            };
             None
         }
     }

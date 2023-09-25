@@ -13,7 +13,7 @@ use std::fmt::Write as _;
 use std::io::{Error, ErrorKind, Read, Write as StdWrite};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tls::Tls;
+use tls::xtls::TlsConnector;
 use trng::*;
 use ureq::Agent;
 use url::Url;
@@ -91,7 +91,6 @@ impl<'a> MtxChat<'a> {
         let trng = Trng::new(&xns).unwrap();
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
-        let tls = Tls::new();
         MtxChat {
             chat: chat,
             trng: trng,
@@ -101,7 +100,7 @@ impl<'a> MtxChat<'a> {
             user_name: None,
             user_domain: Some(DOMAIN_MATRIX.to_string()),
             agent: ureq::builder()
-                .tls_config(Arc::new(tls.client_config()))
+                .tls_connector(Arc::new(TlsConnector{}))
                 .build(),
             token: None,
             logged_in: false,

@@ -2,7 +2,7 @@ use crate::{get_username, web, MTX_LONG_TIMEOUT};
 use chat::ChatOp;
 use modals::Modals;
 use std::sync::Arc;
-use tls::Tls;
+use tls::xtls::TlsConnector;
 use url::Url;
 use xous::CID;
 use xous_ipc::Buffer;
@@ -20,9 +20,8 @@ pub fn listen(
     let modals = Modals::new(&xns).expect("can't connect to Modals server");
     log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
 
-    let tls = Tls::new();
     let mut agent = ureq::builder()
-        .tls_config(Arc::new(tls.client_config()))
+        .tls_connector(Arc::new(TlsConnector{}))
         .build();
     if let Some((_since, events)) = web::client_sync(
         url,
