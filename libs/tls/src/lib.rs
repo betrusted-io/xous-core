@@ -1,6 +1,7 @@
 pub mod cmd;
 mod danger;
 pub mod rota;
+pub mod xtls;
 
 use crate::rota::RustlsOwnedTrustAnchor;
 use locales::t;
@@ -13,9 +14,9 @@ use rkyv::{
 use rustls::{Certificate, ClientConfig, RootCertStore};
 use sha2::Digest;
 use std::convert::{Into, TryFrom, TryInto};
-use std::io::{Error, Read, Write, ErrorKind};
-use std::sync::Arc;
+use std::io::{Error, ErrorKind, Read, Write};
 use std::net::TcpStream;
+use std::sync::Arc;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use xous_names::XousNames;
 

@@ -26,9 +26,6 @@ Use another device such as a mobile or PC to:
   * https://spec.matrix.org/latest/#room-structure
 * Join the room
 
-On Precursor, make sure to trust a tls certificate offered by the matrix server.
-* shellchat `net tls probe matrix.org` and then `sleep coldboot`
-
 
 ## Functionality
 
