@@ -1,5 +1,4 @@
 use crate::*;
-use crate::device::NetPhy;
 use smoltcp::wire::{IpEndpoint, IpAddress};
 use ticktimer_server::Ticktimer;
 
@@ -8,11 +7,9 @@ use ticktimer_server::Ticktimer;
 /// Sockets are stored in the PID/SocketHandle HashMap `process_sockets` (this is shared with TCP)
 /// `recv` requests create `UpdStdState` objects, that are stored in a `udp_rx` Vec.
 
-const BUFLEN: usize = NET_MTU as usize;
-
 pub(crate) fn std_udp_bind(
     mut msg: xous::MessageEnvelope,
-    iface: &mut Interface,
+    _iface: &mut Interface,
     sockets: &mut SocketSet,
     our_sockets: &mut Vec<Option<SocketHandle>>,
     ) {
@@ -55,7 +52,6 @@ pub(crate) fn std_udp_bind(
         .map_err(|e| match e {
             smoltcp::socket::udp::BindError::InvalidState => NetError::SocketInUse,
             smoltcp::socket::udp::BindError::Unaddressable => NetError::Unaddressable,
-            _ => NetError::LibraryError,
         })
     {
         log::trace!("couldn't connect: {:?}", e);
@@ -249,7 +245,6 @@ pub(crate) fn std_udp_tx(
         .map_err(|e| match e {
             smoltcp::socket::udp::BindError::InvalidState => NetError::WouldBlock,
             smoltcp::socket::udp::BindError::Unaddressable => NetError::Unaddressable,
-            _ => NetError::LibraryError,
         }) {
             std_failure(msg, e);
             return;
@@ -285,9 +280,6 @@ pub(crate) fn udp_rx_success(buf: &mut [u8], rx: &[u8], ep: IpEndpoint) {
             for (&s, d) in a.0.iter().zip(buf[4..20].iter_mut()) {
                 *d = s;
             }
-        }
-        _ => {
-            buf[3] = 0; // this is the invalid/error type
         }
     }
     let port = ep.port.to_le_bytes();

@@ -12,7 +12,7 @@ use std_udp::*;
 mod std_tcplistener;
 use std_tcplistener::*;
 
-use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
+use com::api::{ComIntSources, Ipv4Conf};
 use num_traits::*;
 
 mod connection_manager;
@@ -23,16 +23,16 @@ mod tests;
 #[cfg(feature="btest")]
 mod btests;
 
-use std::collections::{BTreeMap, HashMap, BTreeSet};
+use std::collections::HashMap;
 use std::convert::TryInto;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message, CID, SID};
 use xous_ipc::Buffer;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use smoltcp::iface::{Interface, Config, SocketSet};
-use smoltcp::phy::{Device, Medium, Tracer};
+use smoltcp::phy::{Device, Tracer};
 use smoltcp::socket::{tcp, udp, icmp};
-use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr, IpEndpoint};
+use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, IpEndpoint};
 use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 
 use core::num::NonZeroU64;
@@ -51,7 +51,6 @@ pub static MAC_ADDRESS_LSB: AtomicU32 = AtomicU32::new(0);
 pub static MAC_ADDRESS_MSB: AtomicU16 = AtomicU16::new(0);
 
 const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
-const MAX_DELAY_THREADS: u32 = 9;
 const PING_IDENT: u16 = 0x22b;
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -247,6 +246,12 @@ fn main() -> ! {
     let tcp4_handle = sockets.add(tcp4_socket);
     */
     let icmp_handle = sockets.add(icmp_socket);
+    { // put in a block to retire the icmp_socket variable in this scope
+        let icmp_socket = sockets.get_mut::<icmp::Socket>(icmp_handle);
+        icmp_socket
+            .bind(icmp::Endpoint::Ident(PING_IDENT))
+            .expect("couldn't bind to icmp socket");
+    }
 
     // ------------- libstd variant -----------
     // Each process keeps track of its own sockets. These are kept in a Vec. When a handle
@@ -498,7 +503,6 @@ fn main() -> ! {
                                 &device_caps.checksum,
                             );
                         }
-                        _ => unimplemented!(),
                     }
                     seq += 1;
                     // fire off a Pump to get the stack to actually transmit the ping; this call merely queues it for sending
@@ -1295,7 +1299,7 @@ fn main() -> ! {
                     }
                 }
             }),
-            Some(Opcode::NetPump) => msg_scalar_unpack!(msg, wup_hi, wup_lo, _, _, {
+            Some(Opcode::NetPump) => msg_scalar_unpack!(msg, _, _, _, _, {
                 log::trace!("NetPump");
                 let now = timer.elapsed_ms();
                 let timestamp = Instant::from_millis(now as i64);
@@ -1890,7 +1894,6 @@ fn main() -> ! {
                                         log::error!("got unhandled ICMP type, ignoring!");
                                     }
                                 }
-                                _ => unimplemented!(),
                             }
                         }
                     }

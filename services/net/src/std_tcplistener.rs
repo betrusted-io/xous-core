@@ -4,7 +4,7 @@ use smoltcp::socket::tcp;
 
 pub(crate) fn std_tcp_listen(
     mut msg: xous::MessageEnvelope,
-    iface: &mut Interface,
+    _iface: &mut Interface,
     sockets: &mut SocketSet,
     our_sockets: &mut Vec<Option<SocketHandle>>,
     trng: &trng::Trng,
@@ -46,7 +46,6 @@ pub(crate) fn std_tcp_listen(
     let tcp_socket = tcp::Socket::new(tcp_rx_buffer, tcp_tx_buffer);
 
     let handle = sockets.add(tcp_socket);
-    let cx = iface.context();
     let tcp_socket = sockets.get_mut::<tcp::Socket>(handle);
 
     loop {
@@ -55,7 +54,6 @@ pub(crate) fn std_tcp_listen(
             .map_err(|e| match e {
                 smoltcp::socket::tcp::ListenError::InvalidState => NetError::SocketInUse,
                 smoltcp::socket::tcp::ListenError::Unaddressable => NetError::Unaddressable,
-                _ => NetError::LibraryError,
             })
         {
             match e {
@@ -97,7 +95,7 @@ pub(crate) fn std_tcp_listen(
 
 pub(crate) fn std_tcp_accept(
     mut msg: xous::MessageEnvelope,
-    iface: &mut Interface,
+    _iface: &mut Interface,
     sockets: &mut SocketSet,
     tcp_accept_waiting: &mut Vec<Option<AcceptingSocket>>,
     tcp_server_remote_close_poll: &mut Vec<SocketHandle>,
@@ -173,9 +171,6 @@ pub(crate) fn tcp_accept_success(buf: &mut [u8], fd: u16, ep: IpEndpoint) {
             for (&s, d) in a.0.iter().zip(buf[4..20].iter_mut()) {
                 *d = s;
             }
-        }
-        _ => {
-            buf[3] = 0; // this is the invalid/error type
         }
     }
     let port = ep.port.to_le_bytes();

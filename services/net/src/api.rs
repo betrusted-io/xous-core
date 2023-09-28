@@ -458,7 +458,6 @@ pub fn ipaddress_to_ipaddr(other: IpAddress) -> IpAddr {
             let octets = ipv6.0;
             IpAddr::V6(Ipv6Addr::from(octets))
         }
-        _ => unimplemented!(),
     }
 }
 

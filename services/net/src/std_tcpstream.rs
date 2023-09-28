@@ -53,7 +53,6 @@ pub(crate) fn std_tcp_connect(
         .map_err(|e| match e {
             smoltcp::socket::tcp::ConnectError::InvalidState => NetError::SocketInUse,
             smoltcp::socket::tcp::ConnectError::Unaddressable => NetError::Unaddressable,
-            _ => NetError::LibraryError,
         })
     {
         log::debug!("couldn't connect: {:?}", e);
@@ -76,7 +75,7 @@ pub(crate) fn std_tcp_connect(
 pub(crate) fn std_tcp_tx(
     mut msg: xous::MessageEnvelope,
     timer: &Ticktimer,
-    iface: &mut Interface,
+    _iface: &mut Interface,
     sockets: &mut SocketSet,
     tcp_tx_waiting: &mut Vec<Option<WaitingSocket>>,
     our_sockets: &Vec<Option<SocketHandle>>,
@@ -150,7 +149,7 @@ pub(crate) fn std_tcp_tx(
 pub(crate) fn std_tcp_rx(
     mut msg: xous::MessageEnvelope,
     timer: &Ticktimer,
-    iface: &mut Interface,
+    _iface: &mut Interface,
     sockets: &mut SocketSet,
     tcp_rx_waiting: &mut Vec<Option<WaitingSocket>>,
     our_sockets: &Vec<Option<SocketHandle>>,
@@ -228,7 +227,7 @@ pub(crate) fn std_tcp_rx(
 pub(crate) fn std_tcp_peek(
     mut msg: xous::MessageEnvelope,
     timer: &Ticktimer,
-    iface: &mut Interface,
+    _iface: &mut Interface,
     sockets: &mut SocketSet,
     our_sockets: &Vec<Option<SocketHandle>>,
     tcp_peek_waiting: &mut Vec<Option<WaitingSocket>>,

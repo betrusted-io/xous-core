@@ -6,10 +6,6 @@ use smoltcp::wire::{ArpPacket, ArpRepr, ArpOperation, Ipv4Address, EthernetAddre
 use num_traits::*;
 use std::convert::TryInto;
 
-use smoltcp::{
-    time::Instant,
-};
-
 use crate::{MAC_ADDRESS_LSB, MAC_ADDRESS_MSB};
 use core::sync::atomic::Ordering;
 use std::collections::VecDeque;
