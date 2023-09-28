@@ -1,7 +1,6 @@
 use com::Com;
 use com::api::NET_MTU;
 
-use smoltcp::Result;
 use smoltcp::phy::{self, DeviceCapabilities, Medium};
 use smoltcp::wire::{ArpPacket, ArpRepr, ArpOperation, Ipv4Address, EthernetAddress, EthernetFrame, EthernetProtocol};
 use num_traits::*;
@@ -49,11 +48,11 @@ impl<'a> NetPhy {
     }
 }
 
-impl<'a> phy::Device<'a> for NetPhy {
-    type RxToken = NetPhyRxToken<'a>;
-    type TxToken = NetPhyTxToken<'a>;
+impl phy::Device for NetPhy {
+    type RxToken<'a> = NetPhyRxToken<'a>;
+    type TxToken<'a> = NetPhyTxToken<'a>;
 
-    fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
+    fn receive(&mut self, _instant: smoltcp::time::Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         if let Some(rx_len) = self.loopback_pending.lock().unwrap().pop_front() {
             // loopback takes precedence
             self.com.wlan_fetch_loopback_packet(&mut self.rx_buffer[..rx_len as usize]).expect("Couldn't call wlan_fetch_packet in device adapter");
@@ -72,7 +71,7 @@ impl<'a> phy::Device<'a> for NetPhy {
         }
     }
 
-    fn transmit(&'a mut self) -> Option<Self::TxToken> {
+    fn transmit(&mut self, _instant: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
         Some(NetPhyTxToken{buf: &mut self.tx_buffer[..], com: &self.com, loopback_conn: self.loopback_conn, loopback_count: self.loopback_pending.clone()})
     }
 
@@ -90,8 +89,8 @@ pub struct NetPhyRxToken<'a> {
 }
 
 impl<'a, 'c> phy::RxToken for NetPhyRxToken<'a> {
-    fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> Result<R>
-        where F: FnOnce(&mut [u8]) -> Result<R>
+    fn consume<R, F>(mut self, f: F) -> R
+        where F: FnOnce(&mut [u8]) -> R
     {
         let result = f(&mut self.buf);
         //log::info!("rx: {:x?}", self.buf);
@@ -152,8 +151,8 @@ impl <'a> NetPhyTxToken<'a> {
 }
 
 impl<'a> phy::TxToken for NetPhyTxToken<'a> {
-    fn consume<R, F>(mut self, _timestamp: Instant, len: usize, f: F) -> Result<R>
-        where F: FnOnce(&mut [u8]) -> Result<R>
+    fn consume<R, F>(mut self, len: usize, f: F) -> R
+        where F: FnOnce(&mut [u8]) -> R
     {
         let result = f(&mut self.buf[..len]);
         //log::info!("txlen: {}", len);
@@ -177,59 +176,58 @@ impl<'a> phy::TxToken for NetPhyTxToken<'a> {
                     loopback = true;
                 }
             }
-
-            if result.is_ok() {
-                if loopback {
-                    self.com.wlan_queue_loopback(&self.buf[..len]);
-                    self.loopback_rx(len);
-                } else {
-                    {
-                        // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this issue as well:
-                        // https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
-                        // this part of the hack finds ARP packets to and from the local device, and responds to them with packet injections
-                        let pkt = &self.buf[..len];
-                        if let Ok(frame) = EthernetFrame::new_checked(pkt) {
-                            if frame.ethertype() == EthernetProtocol::Arp {
-                                // we're parsing packets that came from our own stack -- they better be OK!
-                                let arp_packet = ArpPacket::new_checked(frame.payload()).unwrap();
-                                let arp_repr = ArpRepr::parse(&arp_packet).unwrap();
-                                match arp_repr {
-                                    ArpRepr::EthernetIpv4 {
-                                        operation, source_hardware_addr, source_protocol_addr, target_protocol_addr, ..
-                                    } => {
-                                        log::trace!("outgoing arp: {:?} {:?} {:?}", source_hardware_addr, source_protocol_addr, target_protocol_addr);
-                                        if target_protocol_addr.as_bytes() == [127, 0, 0, 1] && operation == ArpOperation::Request {
-                                            log::trace!("intercepted outgoing arp for 127.0.0.1: {:?}", pkt);
-                                            self.wlan_queue_localhost_arp(
-                                                source_hardware_addr.as_bytes().try_into().unwrap(),
-                                                source_protocol_addr,
-                                                EthernetAddress([0, 0, 0, 0, 0, 0,]),
-                                                Ipv4Address([127, 0, 0, 1]),
-                                            );
-                                            return result;
-                                        } else if source_protocol_addr.as_bytes() == [127, 0, 0, 1] && operation == ArpOperation::Request {
-                                            // reverse lookup case
-                                            log::trace!("intercepted outgoing arp for own IP: {:?} {:?}", target_protocol_addr, pkt);
-                                            self.wlan_queue_localhost_arp(
-                                                source_hardware_addr.as_bytes().try_into().unwrap(),
-                                                source_protocol_addr,
-                                                source_hardware_addr,
-                                                target_protocol_addr,
-                                            );
-                                            return result;
-                                        } else {
-                                            // don't do anything, pass it on
-                                        }
+            // NOTE: was protected by if result.is_ok(), but looking at smoltcp, the calling routines
+            // *always* return OK, or nothing. So we are removing the protecting .is_ok()...
+            if loopback {
+                self.com.wlan_queue_loopback(&self.buf[..len]);
+                self.loopback_rx(len);
+            } else {
+                {
+                    // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this issue as well:
+                    // https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
+                    // this part of the hack finds ARP packets to and from the local device, and responds to them with packet injections
+                    let pkt = &self.buf[..len];
+                    if let Ok(frame) = EthernetFrame::new_checked(pkt) {
+                        if frame.ethertype() == EthernetProtocol::Arp {
+                            // we're parsing packets that came from our own stack -- they better be OK!
+                            let arp_packet = ArpPacket::new_checked(frame.payload()).unwrap();
+                            let arp_repr = ArpRepr::parse(&arp_packet).unwrap();
+                            match arp_repr {
+                                ArpRepr::EthernetIpv4 {
+                                    operation, source_hardware_addr, source_protocol_addr, target_protocol_addr, ..
+                                } => {
+                                    log::trace!("outgoing arp: {:?} {:?} {:?}", source_hardware_addr, source_protocol_addr, target_protocol_addr);
+                                    if target_protocol_addr.as_bytes() == [127, 0, 0, 1] && operation == ArpOperation::Request {
+                                        log::trace!("intercepted outgoing arp for 127.0.0.1: {:?}", pkt);
+                                        self.wlan_queue_localhost_arp(
+                                            source_hardware_addr.as_bytes().try_into().unwrap(),
+                                            source_protocol_addr,
+                                            EthernetAddress([0, 0, 0, 0, 0, 0,]),
+                                            Ipv4Address([127, 0, 0, 1]),
+                                        );
+                                        return result;
+                                    } else if source_protocol_addr.as_bytes() == [127, 0, 0, 1] && operation == ArpOperation::Request {
+                                        // reverse lookup case
+                                        log::trace!("intercepted outgoing arp for own IP: {:?} {:?}", target_protocol_addr, pkt);
+                                        self.wlan_queue_localhost_arp(
+                                            source_hardware_addr.as_bytes().try_into().unwrap(),
+                                            source_protocol_addr,
+                                            source_hardware_addr,
+                                            target_protocol_addr,
+                                        );
+                                        return result;
+                                    } else {
+                                        // don't do anything, pass it on
                                     }
-                                    _ => {}, // pass it on
                                 }
+                                _ => {}, // pass it on
                             }
                         }
                     }
-
-                    // normally this would be the only line!
-                    self.com.wlan_send_packet(&self.buf[..len]).map_err(|_| smoltcp::Error::Dropped)?;
                 }
+
+                // normally this would be the only line!
+                self.com.wlan_send_packet(&self.buf[..len]).expect("driver error sending WLAN packet");
             }
         }
         result

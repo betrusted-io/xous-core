@@ -37,6 +37,7 @@ pub const MIN_EC_REV: SemVer = SemVer {
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 #[repr(C)]
 pub(crate) enum Opcode {
+    SetupMpsc = 0,
     /// Calls for UDP implementation (now deprecated to libstd)
     //UdpBind = 0,
     //UdpClose = 1,
