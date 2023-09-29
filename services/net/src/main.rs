@@ -52,6 +52,11 @@ pub static MAC_ADDRESS_MSB: AtomicU16 = AtomicU16::new(0);
 
 const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
 const PING_IDENT: u16 = 0x22b;
+/// This sets the default poll time on the net interface.
+/// Anything smaller than 1 ms is rounded up to 1ms; increasing this
+/// number saves power. In general, most network events create an interrupt
+/// so the poll interval should be OK to be set quite high.
+const NET_DEFAULT_POLL_MS: u64 = 500;
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 enum WaitOp {
@@ -140,7 +145,7 @@ fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -361,7 +366,7 @@ fn main() -> ! {
         let timestamp = Instant::now();
         let deadline = match iface.poll_at(timestamp, &sockets) {
             Some(poll_at) if timestamp < poll_at => poll_at - timestamp,
-            _ => Duration::from_millis(0),
+            _ => Duration::from_millis(NET_DEFAULT_POLL_MS),
         };
 
         let msg_or_timeout = core_rx.recv_timeout(
@@ -1304,7 +1309,8 @@ fn main() -> ! {
                 let now = timer.elapsed_ms();
                 let timestamp = Instant::from_millis(now as i64);
                 if !iface.poll(timestamp, &mut device, &mut sockets) {
-                    log::debug!("poll error");
+                    // nothing to do, continue on.
+                    continue
                 }
 
                 // Connect calls take time to establish. This block checks to see if connections
