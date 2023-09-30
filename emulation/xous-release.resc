@@ -1,4 +1,10 @@
 i @emulation/betrusted.resc
 i @emulation/linux-server.resc
 
+
+# Connect EC to the switch
+mach set "EC"
+connector Connect sysbus.wifi.wf200 switch
+mach clear
+
 start

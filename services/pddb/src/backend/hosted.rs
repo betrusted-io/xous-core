@@ -78,15 +78,13 @@ impl EmuStorage {
         EmuStorage {
         }
     }
-    pub fn as_slice<T>(&self) -> &[T] {
-        unsafe {
+    pub unsafe fn as_slice<T>(&self) -> &[T] {
             core::slice::from_raw_parts(
                 flashmem().memory.as_ptr() as *const T,
                 flashmem().memory.len() / core::mem::size_of::<T>(),
             )
-        }
     }
-    pub fn as_mut_slice(&mut self) -> &mut [u8] {
+    pub unsafe fn as_mut_slice(&mut self) -> &mut [u8] {
         flashmem().memory.as_mut_slice()
     }
     /// used to reset the storage for repeated test case generation

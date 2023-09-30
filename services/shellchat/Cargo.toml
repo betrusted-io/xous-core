@@ -16,13 +16,13 @@ ime-plugin-shell = {path = "../ime-plugin-shell"}
 ime-plugin-tts = {path = "../ime-plugin-tts"}
 llio = {path = "../llio"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.46"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.46"}
-xous = "0.9.50"
-xous-ipc = "0.9.50"
-xous-names = {package = "xous-api-names", version = "0.9.48"}
+log-server = {package = "xous-api-log", version = "0.1.47"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.47"}
+xous = "0.9.51"
+xous-ipc = "0.9.51"
+xous-names = {package = "xous-api-names", version = "0.9.49"}
 keyboard = {path = "../keyboard"}
-susres = {package = "xous-api-susres", version = "0.9.46"}
+susres = {package = "xous-api-susres", version = "0.9.47"}
 codec = {path = "../codec"}
 #engine-sha512 = {path="../engine-sha512"}
 sha2 = {path="../engine-sha512"}
@@ -82,7 +82,7 @@ url = {version = "2.2.2", optional = true}
 ring = {version = "0.16.20", optional = true}   
 
 # for websocket testing
-tungstenite = {version = "0.17.3", optional = true, features = ["rustls-tls-webpki-roots"]}
+tungstenite = {version = "0.20.0", optional = true, features = ["rustls-tls-webpki-roots"]}
 
 # for performance testing
 perflib = {path="../../tools/perflib", optional = true}

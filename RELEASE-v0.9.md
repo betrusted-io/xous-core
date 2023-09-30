@@ -407,6 +407,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 
 ## New in v0.9.15
 - refresh item cache after leaving vault host readout mode
+- Regressions have bee found in Rust 1.72. We suspect the llvm back-end for RV32 is emitting invalid code, see issue #416 and #417 for more details. For now, the optimization level has been set to `s` as a work-around.
 
 ## Roadmap
 - Lots of testing and bug fixes

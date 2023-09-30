@@ -246,7 +246,7 @@ fn read_next_syscall_result(
                         memory_message.buf,
                     )
                     .expect("couldn't allocate range");
-                    if let Err(e) = stream.read_exact(memory_message.buf.as_slice_mut()) {
+                    if let Err(e) = stream.read_exact(unsafe { memory_message.buf.as_slice_mut() }) {
                         eprintln!("Server shut down: {}", e);
                         std::process::exit(0);
                     }

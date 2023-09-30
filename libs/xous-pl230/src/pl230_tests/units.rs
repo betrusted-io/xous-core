@@ -25,8 +25,16 @@ pub fn basic_tests (pl230: &mut Pl230) {
     report_api("status after enable", pl230.csr.r(utra::pl230::STATUS));
 
     // setup the PL230 to do a simple transfer between two memory regions
-    let mut region_a = [0u32; 16];
-    let region_b = [0u32; 16];
+    // dma_mainram feature will cause us to DMA between main memory regions. This works under RTL sims.
+    #[cfg(feature="dma_mainram")]
+    let mut region_a = [0u32; DMA_LEN];
+    #[cfg(feature="dma_mainram")]
+    let region_b = [0u32; DMA_LEN];
+    // The alternate is to DMA between IFRAM regions. This works under FPGA and RTL sim.
+    #[cfg(not(feature="dma_mainram"))]
+    let region_a = unsafe{core::slice::from_raw_parts_mut((utralib::HW_IFRAM0_MEM + 4096) as *mut u32, DMA_LEN)};
+    #[cfg(not(feature="dma_mainram"))]
+    let region_b = unsafe{core::slice::from_raw_parts_mut(utralib::HW_IFRAM1_MEM as *mut u32, DMA_LEN)};
     let mut state = 0x1111_1111;
     for d in region_a.iter_mut() {
         *d = state;
@@ -64,16 +72,56 @@ pub fn basic_tests (pl230: &mut Pl230) {
         report_api("dma progress ", cc_struct.channels[0].control);
         timeout += 1;
     }
-    for d in region_b {
-        report_api("b: ", d);
+
+    unsafe {core::arch::asm!(
+        ".word 0x500F",
+        "nop",
+        "nop",
+        "nop",
+        "nop",
+        "nop",
+    ); }
+
+    // manual flushing, as a sanity check of cache flush if needed
+    /*
+    {
+        let flush_ptr = 0x6100_0000 as *mut u32;
+        let mut dummy: u32 = 0;
+        // read a bunch of data to ensure the cache is flushed
+        for i in 0..131072 {
+            dummy += unsafe{flush_ptr.add(i).read_volatile()};
+        }
+        report_api("dummy: ", dummy);
+    } */
+
+    let mut passing = true;
+    let mut errs = 0;
+    for (i, (src, dst)) in region_a.iter().zip(region_b.iter()).enumerate() {
+        if *src != *dst {
+            report_api("error in iter ", i as u32);
+            report_api("src: ", *src);
+            report_api("dst: ", *dst);
+            passing = false;
+            errs += 1;
+        }
     }
     report_api("basic dma result (1=pass)", if passing { 1 } else { 0 });
+    report_api("errs: ", errs);
     passing
 }
 
 #[cfg(feature="pio")]
 pub fn pio_test(pl230: &mut Pl230) -> bool {
     use xous_pio::*;
+
+    let iox_csr = utra::iox::HW_IOX_BASE as *mut u32;
+    unsafe {
+        iox_csr.add(0x8 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PBL
+        iox_csr.add(0xC / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PBH
+        iox_csr.add(0x10 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PCL
+        iox_csr.add(0x14 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PCH
+        iox_csr.add(0x200 / core::mem::size_of::<u32>()).write_volatile(0xffffffff); // PIO sel port D31-0
+    }
 
     // setup PIO block as DMA target -- just take the data coming into the TX
     // FIFO and send it to the GPIO pins.
@@ -89,8 +137,13 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
     sm_a.sm_set_enabled(false);
     a_prog.setup_default_config(&mut sm_a);
     sm_a.config_set_out_pins(0, 32);
+    sm_a.sm_set_pindirs_with_mask(
+        0xFFFF_FFFF,
+        0xFFFF_FFFF
+    );
     sm_a.config_set_clkdiv(133.0); // have it run slow so this test operates in the background
     sm_a.config_set_out_shift(false, true, 32);
+    sm_a.sm_set_pindirs_with_mask(0x10, 0x10);
     sm_a.sm_init(a_prog.entry());
     sm_a.sm_clear_fifos(); // ensure the fifos are cleared for this test
 
@@ -127,7 +180,7 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
     let mut state = 0x1111_0000;
     for d in region_a.iter_mut() {
         *d = state;
-        state += 1;
+        state += 0x0101_0101;
     }
 
     cc_struct.channels[0].dst_end_ptr =

@@ -1,5 +1,5 @@
 use crate::*;
-use crate::pio_generated::utra::rp_pio;
+use utralib::utra::rp_pio;
 use super::report_api;
 
 const SIM_SCALE_FACTOR: f32 = 200.0; // speedup over real time to have simulation finish in a reasonable amount of time

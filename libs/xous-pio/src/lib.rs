@@ -3,9 +3,8 @@
 use pio::Program;
 use pio::RP2040_MAX_PROGRAM_SIZE;
 
-mod pio_generated;
-use pio_generated::utra::rp_pio;
-use pio_generated::*;
+use utralib::generated::*;
+use utralib::generated::utra::rp_pio;
 
 #[cfg(feature="tests")]
 pub mod pio_tests;
@@ -390,6 +389,20 @@ impl PioSm {
             SmBit::Sm2 => self.pio.wo(rp_pio::SFR_TXF2, data),
             SmBit::Sm3 => self.pio.wo(rp_pio::SFR_TXF3, data),
         }
+        unsafe { // let the write go through before continuing
+            core::arch::asm!(
+                ".word 0x500F",
+                "nop",
+                "nop",
+                "nop",
+                "nop",
+                "fence",
+                "nop",
+                "nop",
+                "nop",
+                "nop",
+            );
+        }
     }
     pub fn sm_txfifo_push_u16_msb(&mut self, data: u16) {
         match self.sm {
@@ -397,6 +410,20 @@ impl PioSm {
             SmBit::Sm1 => self.pio.wo(rp_pio::SFR_TXF1, (data as u32) << 16),
             SmBit::Sm2 => self.pio.wo(rp_pio::SFR_TXF2, (data as u32) << 16),
             SmBit::Sm3 => self.pio.wo(rp_pio::SFR_TXF3, (data as u32) << 16),
+        }
+        unsafe { // let the write go through before continuing
+            core::arch::asm!(
+                ".word 0x500F",
+                "nop",
+                "nop",
+                "nop",
+                "nop",
+                "fence",
+                "nop",
+                "nop",
+                "nop",
+                "nop",
+            );
         }
     }
     #[allow(dead_code)]
@@ -407,6 +434,20 @@ impl PioSm {
             SmBit::Sm2 => self.pio.wo(rp_pio::SFR_TXF2, data as u32),
             SmBit::Sm3 => self.pio.wo(rp_pio::SFR_TXF3, data as u32),
         }
+        unsafe { // let the write go through before continuing
+            core::arch::asm!(
+                ".word 0x500F",
+                "nop",
+                "nop",
+                "nop",
+                "nop",
+                "fence",
+                "nop",
+                "nop",
+                "nop",
+                "nop",
+            );
+        }
     }
     pub fn sm_txfifo_push_u8_msb(&mut self, data: u8) {
         match self.sm {
@@ -414,6 +455,20 @@ impl PioSm {
             SmBit::Sm1 => self.pio.wo(rp_pio::SFR_TXF1, (data as u32) << 24),
             SmBit::Sm2 => self.pio.wo(rp_pio::SFR_TXF2, (data as u32) << 24),
             SmBit::Sm3 => self.pio.wo(rp_pio::SFR_TXF3, (data as u32) << 24),
+        }
+        unsafe { // let the write go through before continuing
+            core::arch::asm!(
+                ".word 0x500F",
+                "nop",
+                "nop",
+                "nop",
+                "nop",
+                "fence",
+                "nop",
+                "nop",
+                "nop",
+                "nop",
+            );
         }
     }
     pub fn sm_rxfifo_is_empty(&self) -> bool {

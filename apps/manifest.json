@@ -34,16 +34,25 @@
         }
     },
     "mtxcli": {
-        "context_name": "Matrix chat",
+        "context_name": "Matrix cli",
         "menu_name": {
             "appmenu.mtxcli": {
-                "en": "Matrix chat",
+                "en": "Matrix cli",
                 "en-tts": "MATRIX demo",
                 "fr": "Matrix messagerie",
                 "ja": "シンプルなMATRIXデモ",
                 "zh": "基本 MATRIX 演示"
             }
         }
+    },
+    "mtxchat": {
+        "context_name": "[matrix]",
+        "menu_name": {
+            "appmenu.mtxchat": {
+                "en": "[matrix]"
+            }
+        },
+        "submenu": 1
     },
     "repl": {
         "context_name": "repl demo app",

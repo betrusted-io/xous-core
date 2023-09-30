@@ -997,7 +997,8 @@ impl Pddb {
             let mut serializer = WriteSerializer::new(AlignedVec::new());
             let pos = serializer.serialize_value(&request).unwrap();
             let buf = serializer.into_inner();
-            msg_mem.as_slice_mut()[..buf.len()].copy_from_slice(buf.as_slice());
+            // Safety: `u8` contains no undefined values
+            unsafe { msg_mem.as_slice_mut()[..buf.len()].copy_from_slice(buf.as_slice()) };
             // initiate the request: assemble a MemoryMessage
             let msg = xous::MemoryMessage {
                 id: Opcode::DictBulkRead.to_usize().unwrap(),
@@ -1016,8 +1017,9 @@ impl Pddb {
             // unpack the return code. The result is not a single rkyv struct, it's hand-packed binary data. Unpack it.
             let mut index = 0;
             let mut header = BulkReadHeader::default();
+            // Safety: `u8` contains no undefined values
             header.deref_mut().copy_from_slice(
-                &msg_mem.as_slice()[index..index + size_of::<BulkReadHeader>()]
+                unsafe { &msg_mem.as_slice()[index..index + size_of::<BulkReadHeader>()] }
             );
             index += size_of::<BulkReadHeader>();
             match FromPrimitive::from_u32(header.code).unwrap_or(PddbBulkReadCode::InternalError) {
@@ -1042,9 +1044,11 @@ impl Pddb {
                             // quit if we don't have enough space to decode at least another two indices
                             break;
                         }
-                        let size = u32::from_le_bytes(msg_mem.as_slice()[index..index + size_of::<u32>()].try_into().unwrap());
+                        // Safety: `u32` contains no undefined values
+                        let size = unsafe { u32::from_le_bytes(msg_mem.as_slice()[index..index + size_of::<u32>()].try_into().unwrap()) };
                         index += size_of::<u32>();
-                        let pos = u32::from_le_bytes(msg_mem.as_slice()[index..index + size_of::<u32>()].try_into().unwrap());
+                        // Safety: `u32` contains no undefined values
+                        let pos = unsafe { u32::from_le_bytes(msg_mem.as_slice()[index..index + size_of::<u32>()].try_into().unwrap()) };
                         index += size_of::<u32>();
                         log::trace!("unpacking message at {}({})", size, pos);
                         if size != 0 && pos != 0 {

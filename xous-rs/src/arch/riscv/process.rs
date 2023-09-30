@@ -151,7 +151,7 @@ pub fn create_process_pre(args: &ProcessArgs) -> core::result::Result<ProcessIni
         spawn_stub_rounded,
         crate::MemoryFlags::R | crate::MemoryFlags::W | crate::MemoryFlags::X,
     )?;
-    for (dest, src) in spawn_memory.as_slice_mut().iter_mut().zip(args.stub) {
+    for (dest, src) in unsafe { spawn_memory.as_slice_mut().iter_mut().zip(args.stub) } {
         *dest = *src;
     }
     Ok(ProcessInit {
