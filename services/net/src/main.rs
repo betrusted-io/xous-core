@@ -32,7 +32,7 @@ use byteorder::{ByteOrder, NetworkEndian};
 use smoltcp::iface::{Interface, Config, SocketSet};
 use smoltcp::phy::{Device, Tracer};
 use smoltcp::socket::{tcp, udp, icmp};
-use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, IpEndpoint};
+use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, IpEndpoint, HardwareAddress};
 use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 
 use core::num::NonZeroU64;
@@ -161,7 +161,7 @@ fn main() -> ! {
     let timer = ticktimer_server::Ticktimer::new().unwrap();
 
     // we need a trng for port numbers
-    let trng = trng::Trng::new(&xns).unwrap();
+    let mut trng = trng::Trng::new(&xns).unwrap();
 
     // hook the COM interrupt listener
     let net_cid = xous::connect(net_sid).unwrap();
@@ -180,13 +180,18 @@ fn main() -> ! {
     let mut net_config: Option<Ipv4Conf> = None;
 
     // ----------- build the device
+    let mut config_valid = true;
     let hw_config = match com.wlan_get_config() {
         Ok(config) => config,
         Err(e) => {
             log::error!("Something is wrong with the EC, got {:?} when requesting a MAC address. Trying our best to bodge through it.", e);
+            let mut fake_mac = [0u8; 6];
+            trng.fill_bytes_via_next(&mut fake_mac);
+            fake_mac[0] = 2; // locally administered
+            config_valid = false;
             Ipv4Conf {
                 dhcp: com_rs::DhcpState::Invalid,
-                mac: [2, 2, 4, 5, 6, 2],
+                mac: fake_mac,
                 addr: [169, 254, 0, 2], // link local address
                 gtwy: [169, 254, 0, 1], // something bogus
                 mask: [255, 255, 0, 0,],
@@ -198,8 +203,19 @@ fn main() -> ! {
     log::debug!("My MAC address is: {:x?}", hw_config.mac);
     MAC_ADDRESS_LSB.store(u32::from_be_bytes(hw_config.mac[2..6].try_into().unwrap()), Ordering::SeqCst);
     MAC_ADDRESS_MSB.store(u16::from_be_bytes(hw_config.mac[0..2].try_into().unwrap()), Ordering::SeqCst);
-
-    let mut config = Config::new(EthernetAddress(hw_config.mac).into());
+    let mac_unchecked: HardwareAddress = EthernetAddress(hw_config.mac).into();
+    let mut config = if !mac_unchecked.is_unicast() {
+        Config::new(mac_unchecked)
+    } else {
+        let mut fake_mac = [0u8; 6];
+        trng.fill_bytes_via_next(&mut fake_mac);
+        fake_mac[0] = 2; // locally administered
+        MAC_ADDRESS_LSB.store(u32::from_be_bytes(fake_mac[2..6].try_into().unwrap()), Ordering::SeqCst);
+        MAC_ADDRESS_MSB.store(u16::from_be_bytes(fake_mac[0..2].try_into().unwrap()), Ordering::SeqCst);
+        config_valid = false;
+        log::warn!("We had a bogus MAC address from the EC, filling in a temporary fake one to avoid panics: {:x?}", fake_mac);
+        Config::new(EthernetAddress(fake_mac).into())
+    };
     config.random_seed = trng.get_u64().unwrap();
 
     let device = device::NetPhy::new(&xns, net_cid);
@@ -328,6 +344,29 @@ fn main() -> ! {
     });
     let mut self_sender: Option::<usize> = None;
     loop {
+        if !config_valid { // try to fix our configuration from a bogus default to something valid...
+            match com.wlan_get_config() {
+                Ok(hw_config) => {
+                    let mac_unchecked: HardwareAddress = EthernetAddress(hw_config.mac).into();
+                    if mac_unchecked.is_unicast() {
+                        MAC_ADDRESS_LSB.store(u32::from_be_bytes(hw_config.mac[2..6].try_into().unwrap()), Ordering::SeqCst);
+                        MAC_ADDRESS_MSB.store(u16::from_be_bytes(hw_config.mac[0..2].try_into().unwrap()), Ordering::SeqCst);
+                        config = Config::new(mac_unchecked);
+                        config.random_seed = trng.get_u64().unwrap();
+                        // rebuild the interface with the new config
+                        iface = Interface::new(config, &mut device, Instant::from_millis(timer.elapsed_ms() as i64));
+                        config_valid = true;
+                    } else {
+                        // else, config_valid stays false, and we try again next time around
+                        log::warn!("Non-unicast MAC address reported by the EC: {:x?}, config invalid!", hw_config.mac);
+                        timer.sleep_ms(900).unwrap(); // throttle the net crate so that the COM may have a chance to restore the EC.
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Something is still wrong in the EC, got {:?}", e);
+                }
+            }
+        }
         let now = timer.elapsed_ms();
         let timestamp = Instant::from_millis(now as i64);
         let deadline = match iface.poll_at(timestamp, &sockets) {
