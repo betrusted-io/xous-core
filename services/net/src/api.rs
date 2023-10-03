@@ -34,7 +34,7 @@ pub const MIN_EC_REV: SemVer = SemVer {
 };
 
 /// Dispatch opcodes to the Net crate main loop.
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub(crate) enum Opcode {
     SetupMpsc = 0,

@@ -56,7 +56,7 @@ const PING_IDENT: u16 = 0x22b;
 /// Anything smaller than 1 ms is rounded up to 1ms; increasing this
 /// number saves power. In general, most network events create an interrupt
 /// so the poll interval should be OK to be set quite high.
-const NET_DEFAULT_POLL_MS: u64 = 500;
+const NET_DEFAULT_POLL_MS: u64 = 900;
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 enum WaitOp {
@@ -145,7 +145,7 @@ fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -207,49 +207,14 @@ fn main() -> ! {
         log::trace!("{}", _printer);
     });
     let device_caps = device.capabilities();
-    let mut iface = Interface::new(config, &mut device, Instant::now());
+    let mut iface = Interface::new(config, &mut device, Instant::from_millis(timer.elapsed_ms() as i64));
 
     // Create sockets
-    /*
-    let udp_rx_buffer = udp::PacketBuffer::new(
-        vec![udp::PacketMetadata::EMPTY, udp::PacketMetadata::EMPTY],
-        vec![0; 65535],
-    );
-    let udp_tx_buffer = udp::PacketBuffer::new(
-        vec![udp::PacketMetadata::EMPTY, udp::PacketMetadata::EMPTY],
-        vec![0; 65535],
-    );
-    let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
-
-    let tcp1_rx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);
-    let tcp1_tx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);
-    let tcp1_socket = tcp::Socket::new(tcp1_rx_buffer, tcp1_tx_buffer);
-
-    let tcp2_rx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);
-    let tcp2_tx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);
-    let tcp2_socket = tcp::Socket::new(tcp2_rx_buffer, tcp2_tx_buffer);
-
-    let tcp3_rx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);
-    let tcp3_tx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);
-    let tcp3_socket = tcp::Socket::new(tcp3_rx_buffer, tcp3_tx_buffer);
-
-    let tcp4_rx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);
-    let tcp4_tx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);
-    let tcp4_socket = tcp::Socket::new(tcp4_rx_buffer, tcp4_tx_buffer);
-    */
-
     let icmp_rx_buffer = icmp::PacketBuffer::new(vec![icmp::PacketMetadata::EMPTY], vec![0; 256]);
     let icmp_tx_buffer = icmp::PacketBuffer::new(vec![icmp::PacketMetadata::EMPTY], vec![0; 256]);
     let icmp_socket = icmp::Socket::new(icmp_rx_buffer, icmp_tx_buffer);
 
     let mut sockets = SocketSet::new(vec![]);
-    /*
-    let udp_handle = sockets.add(udp_socket);
-    let tcp1_handle = sockets.add(tcp1_socket);
-    let tcp2_handle = sockets.add(tcp2_socket);
-    let tcp3_handle = sockets.add(tcp3_socket);
-    let tcp4_handle = sockets.add(tcp4_socket);
-    */
     let icmp_handle = sockets.add(icmp_socket);
     { // put in a block to retire the icmp_socket variable in this scope
         let icmp_socket = sockets.get_mut::<icmp::Socket>(icmp_handle);
@@ -363,18 +328,19 @@ fn main() -> ! {
     });
     let mut self_sender: Option::<usize> = None;
     loop {
-        let timestamp = Instant::now();
+        let now = timer.elapsed_ms();
+        let timestamp = Instant::from_millis(now as i64);
         let deadline = match iface.poll_at(timestamp, &sockets) {
             Some(poll_at) if timestamp < poll_at => poll_at - timestamp,
             _ => Duration::from_millis(NET_DEFAULT_POLL_MS),
         };
-
         let msg_or_timeout = core_rx.recv_timeout(
             std::time::Duration::from_millis(deadline.millis())
         );
         let mut msg = match msg_or_timeout {
             Ok(m) => m,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                log::trace!("poll timeout; issuing NetPump");
                 // originate a Pump call when a timeout is reached
                 xous::envelope::Envelope {
                     // self_sender should be safe to unwrap because it is the first thing
@@ -410,7 +376,11 @@ fn main() -> ! {
         }
         let op = FromPrimitive::from_usize(msg.body.id() & 0x7fff);
         let nonblocking = (msg.body.id() & NONBLOCKING_FLAG) != 0;
-        log::debug!("{:?}", op);
+        if op != Some(Opcode::NetPump) {
+            log::debug!("{:?}", op);
+        } else {
+            log::trace!("{:?}", op);
+        }
         match op {
             Some(Opcode::SetupMpsc) => {
                 self_sender = Some(msg.sender.to_usize());
@@ -422,10 +392,10 @@ fn main() -> ! {
                 };
                 let mut pkt = buf.to_original::<NetPingPacket, _>().unwrap();
 
-                let timestamp = Instant::now();
+                let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
                 iface.poll(timestamp, &mut device, &mut sockets);
 
-                let timestamp = Instant::now();
+                let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
                 let socket = sockets.get_mut::<icmp::Socket>(icmp_handle);
                 if !socket.is_open() {
                     socket.bind(icmp::Endpoint::Ident(PING_IDENT)).unwrap();
@@ -1031,7 +1001,6 @@ fn main() -> ! {
                     let socket = sockets.get_mut::<tcp::Socket>(*connection);
                     let args = msg.body.scalar_message().unwrap();
                     let no_delay = args.arg1 != 0;
-                    log::warn!("Setting nagle to {}, see issue #210 about readback!", !no_delay);
                     socket.set_nagle_enabled(!no_delay);
                     xous::return_scalar(msg.sender, 0).ok();
                 } else {
@@ -1169,6 +1138,7 @@ fn main() -> ! {
                                     if config.addr != [127, 0, 0, 1] {
                                         // note: ARP cache is stale. Maybe that's ok?
                                         iface.update_ip_addrs(|ip_addrs| {
+                                            ip_addrs.clear();
                                             ip_addrs
                                                 .push(IpCidr::new(IpAddress::v4(
                                                     config.addr[0],
@@ -1177,9 +1147,15 @@ fn main() -> ! {
                                                     config.addr[3],
                                                 ), 24))
                                                 .unwrap();
+                                            // ...and the loopback interface
+                                            ip_addrs
+                                                .push(IpCidr::new(IpAddress::v4(
+                                                    127, 0, 0, 1
+                                                ), 8))
+                                                .unwrap();
                                         });
                                     } else {
-                                        log::info!("not updating loopback address");
+                                        log::warn!("Attempt to update the loopback interface! Ignoring.");
                                     }
                                     // reset the default route, in case it has changed
                                     iface.routes_mut().remove_default_ipv4_route();
@@ -1310,12 +1286,15 @@ fn main() -> ! {
                 let timestamp = Instant::from_millis(now as i64);
                 if !iface.poll(timestamp, &mut device, &mut sockets) {
                     // nothing to do, continue on.
+                    log::debug!("No change to socket readiness");
                     continue
+                } else {
+                    log::debug!("Socket readiness changed");
                 }
 
                 // Connect calls take time to establish. This block checks to see if connections
                 // have been made and issues callbacks as necessary.
-                log::trace!("pump: tcpconnect");
+                // log::trace!("pump: tcpconnect");
                 for connection in tcp_connect_waiting.iter_mut() {
                     let socket;
                     let (env, _handle, fd, local_port, remote_port) = {
@@ -1345,7 +1324,7 @@ fn main() -> ! {
                 }
 
                 // This block handles TCP Rx for libstd callers
-                log::trace!("pump: tcp rx");
+                // log::trace!("pump: tcp rx");
                 for connection in tcp_rx_waiting.iter_mut() {
                     let socket;
                     let WaitingSocket {
@@ -1418,7 +1397,7 @@ fn main() -> ! {
                 }
 
                 // This block handles TCP Peek for libstd callers
-                log::trace!("pump: tcp peek");
+                // log::trace!("pump: tcp peek");
                 for connection in tcp_peek_waiting.iter_mut() {
                     let socket;
                     let WaitingSocket {
@@ -1491,7 +1470,7 @@ fn main() -> ! {
                 }
 
                 // This block handles TCP Tx for libstd callers
-                log::trace!("pump: tcp tx");
+                // log::trace!("pump: tcp tx");
                 for connection in tcp_tx_waiting.iter_mut() {
                     let socket;
                     let WaitingSocket {
@@ -1559,7 +1538,7 @@ fn main() -> ! {
                 }
 
                 // this handles TCP std listeners
-                log::trace!("pump: tcp listen");
+                // log::trace!("pump: tcp listen");
                 for connection in tcp_accept_waiting.iter_mut() {
                     let ep: IpEndpoint;
                     let AcceptingSocket {
@@ -1586,7 +1565,7 @@ fn main() -> ! {
                 }
 
                 // this block handles StdUdp
-                log::trace!("pump: udp");
+                // log::trace!("pump: udp");
                 for connection in udp_rx_waiting.iter_mut() {
                     let socket;
                     let UdpStdState {
@@ -1657,7 +1636,7 @@ fn main() -> ! {
                     }
                 }
 
-                log::trace!("pump: tcp close");
+                // log::trace!("pump: tcp close");
                 tcp_tx_closing.retain(|(handle, sender)| {
                     if std_tcp_can_close(&tcp_tx_waiting, *handle) {
                         let socket = sockets.get_mut::<tcp::Socket>(*handle);
@@ -1726,7 +1705,7 @@ fn main() -> ! {
                 });
 
                 // this block contains the ICMP Rx handler. Tx is initiated by an incoming message to the Net crate.
-                log::trace!("pump: icmp");
+                // log::trace!("pump: icmp");
                 {
                     let socket = sockets.get_mut::<icmp::Socket>(icmp_handle);
                     if !socket.is_open() {
@@ -1905,7 +1884,7 @@ fn main() -> ! {
                     }
                 }
                 // this block handles ICMP retirement; it runs everytime we pump the block
-                log::trace!("pump: icmp retirement");
+                // log::trace!("pump: icmp retirement");
                 {
                     // notify the callback to drop its connection, because the queue is now empty
                     // do this before we clear the queue, because we want the Drop message to come on the iteration
@@ -1946,6 +1925,8 @@ fn main() -> ! {
                         }
                     );
                 }
+                // use this to revert targeted tracing
+                // log::set_max_level(log::LevelFilter::Info);
             }),
             Some(Opcode::GetIpv4Config) => {
                 let mut buffer = unsafe {

@@ -10,9 +10,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub(crate) fn start_batch_tests() {
     let _ = thread::spawn({
         move || {
-            let run_passing = true;
+            let run_passing = false;
             let tt = ticktimer_server::Ticktimer::new().unwrap();
-            const PRINT_DELAY: usize = 3000;
+            const PRINT_DELAY: usize = 2000;
             if run_passing {
                 log::info!("################################################## bind_error");
                 tt.sleep_ms(PRINT_DELAY).ok();
@@ -32,6 +32,18 @@ pub(crate) fn start_batch_tests() {
                 log::info!("################################################## read_eof");
                 tt.sleep_ms(PRINT_DELAY).ok();
                 read_eof();
+
+                // This test can fail if there is a ticktimer scheduling error:
+                /*
+                    INFO:shellchat::nettests: ################################################## write_close (services\shellchat\src\nettests.rs:35)
+                    INFO:shellchat::nettests: ++++++++++++++++++++++++++create server (services\shellchat\src\nettests.rs:252)
+                    INFO:shellchat::nettests: ++++++++++++++++++++++++++try to establish connection (services\shellchat\src\nettests.rs:265)
+                    INFO:shellchat::nettests: ++++++++++++++++++++++++++established (services\shellchat\src\nettests.rs:267)
+                    INFO:shellchat::nettests: ----------------------------create and drop connection to server (services\shellchat\src\nettests.rs:257)
+                    INFO:shellchat::nettests: ----------------------------signal that we should proceed to send the data to the closed server (services\shellchat\src\nettests.rs:262)
+                    ERR :xous_ticktimer: requested to wake 1 entries, which is more than the current 2 waiting entries (services\xous-ticktimer\src\main.rs:429)
+                       -- hangs here forever.
+                 */
                 log::info!("################################################## write_close");
                 tt.sleep_ms(PRINT_DELAY).ok();
                 write_close();
@@ -49,9 +61,9 @@ pub(crate) fn start_batch_tests() {
                 tt.sleep_ms(PRINT_DELAY).ok();
                 write_vectored();
 
-                // This test cannot be run until issue #210 is fixed see https://github.com/betrusted-io/xous-core/issues/210
-                //log::info!("################################################## nodelay");
-                //nodelay();
+                log::info!("################################################## nodelay");
+                nodelay();
+                tt.sleep_ms(PRINT_DELAY).ok();
                 log::info!("################################################## ttl");
                 tt.sleep_ms(PRINT_DELAY).ok();
                 ttl();
@@ -90,13 +102,14 @@ pub(crate) fn start_batch_tests() {
                 log::info!("################################################## clone_while_reading");
                 tt.sleep_ms(PRINT_DELAY).ok();
                 clone_while_reading();
-                log::info!("################################################## clone_accept_smoke");
-                tt.sleep_ms(PRINT_DELAY).ok();
-                clone_accept_smoke();
-                log::info!("################################################## clone_accept_concurrent");
-                tt.sleep_ms(PRINT_DELAY).ok();
-                clone_accept_concurrent();
             }
+
+            log::info!("################################################## clone_accept_smoke");
+            tt.sleep_ms(PRINT_DELAY).ok();
+            clone_accept_smoke();
+            log::info!("################################################## clone_accept_concurrent");
+            tt.sleep_ms(PRINT_DELAY).ok();
+            clone_accept_concurrent();
 
             log::info!("################################################## multiple_connect_serial");
             tt.sleep_ms(PRINT_DELAY).ok();
