@@ -38,6 +38,7 @@ pub const MIN_EC_REV: SemVer = SemVer {
 #[repr(C)]
 pub(crate) enum Opcode {
     SetupMpsc = 0,
+    SetDebug = 1,
     /// Calls for UDP implementation (now deprecated to libstd)
     //UdpBind = 0,
     //UdpClose = 1,

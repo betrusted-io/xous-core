@@ -385,6 +385,14 @@ fn main() -> ! {
             Some(Opcode::SetupMpsc) => {
                 self_sender = Some(msg.sender.to_usize());
             }
+            Some(Opcode::SetDebug) => msg_scalar_unpack!(msg, level, _, _, _, {
+                match level {
+                    0 => log::set_max_level(log::LevelFilter::Info),
+                    1 => log::set_max_level(log::LevelFilter::Debug),
+                    2 => log::set_max_level(log::LevelFilter::Trace),
+                    _ => log::set_max_level(log::LevelFilter::Info),
+                }
+            }),
             Some(Opcode::Ping) => {
                 log::debug!("Ping");
                 let mut buf = unsafe {

@@ -8,6 +8,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub(crate) fn start_batch_tests() {
+    let netmgr = net::NetManager::new();
     let _ = thread::spawn({
         move || {
             let run_passing = false;
@@ -106,10 +107,14 @@ pub(crate) fn start_batch_tests() {
 
             log::info!("################################################## clone_accept_smoke");
             tt.sleep_ms(PRINT_DELAY).ok();
+            netmgr.set_debug_level(log::LevelFilter::Trace);
             clone_accept_smoke();
+            netmgr.set_debug_level(log::LevelFilter::Info);
             log::info!("################################################## clone_accept_concurrent");
             tt.sleep_ms(PRINT_DELAY).ok();
+            netmgr.set_debug_level(log::LevelFilter::Trace);
             clone_accept_concurrent();
+            netmgr.set_debug_level(log::LevelFilter::Info);
 
             log::info!("################################################## multiple_connect_serial");
             tt.sleep_ms(PRINT_DELAY).ok();
