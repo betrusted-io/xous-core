@@ -1,5 +1,4 @@
 use crate::*;
-use crate::device::NetPhy;
 use smoltcp::wire::{IpEndpoint, IpAddress};
 use ticktimer_server::Ticktimer;
 
@@ -8,11 +7,10 @@ use ticktimer_server::Ticktimer;
 /// Sockets are stored in the PID/SocketHandle HashMap `process_sockets` (this is shared with TCP)
 /// `recv` requests create `UpdStdState` objects, that are stored in a `udp_rx` Vec.
 
-const BUFLEN: usize = NET_MTU as usize;
-
 pub(crate) fn std_udp_bind(
     mut msg: xous::MessageEnvelope,
-    iface: &mut Interface::<NetPhy>,
+    _iface: &mut Interface,
+    sockets: &mut SocketSet,
     our_sockets: &mut Vec<Option<SocketHandle>>,
     ) {
     // Ignore nonblocking and scalar messages
@@ -36,21 +34,24 @@ pub(crate) fn std_udp_bind(
         }
     };
 
-    let udp_rx_buffer =
-    UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; BUFLEN]);
-    let udp_tx_buffer =
-        UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; BUFLEN]);
-    let udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
-    let handle = iface.add_socket(udp_socket);
-    let udp_socket = iface.get_socket::<UdpSocket>(handle);
+    let udp_rx_buffer = udp::PacketBuffer::new(
+        vec![udp::PacketMetadata::EMPTY, udp::PacketMetadata::EMPTY],
+        vec![0; 65535],
+    );
+    let udp_tx_buffer = udp::PacketBuffer::new(
+        vec![udp::PacketMetadata::EMPTY, udp::PacketMetadata::EMPTY],
+        vec![0; 65535],
+    );
+    let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
+    let handle = sockets.add(udp_socket);
+    let udp_socket = sockets.get_mut::<udp::Socket>(handle);
 
     // Attempt to connect, returning the error if there is one
     if let Err(e) = udp_socket
         .bind(IpEndpoint{addr: address, port: local_port})
         .map_err(|e| match e {
-            smoltcp::Error::Illegal => NetError::SocketInUse,
-            smoltcp::Error::Unaddressable => NetError::Unaddressable,
-            _ => NetError::LibraryError,
+            smoltcp::socket::udp::BindError::InvalidState => NetError::SocketInUse,
+            smoltcp::socket::udp::BindError::Unaddressable => NetError::Unaddressable,
         })
     {
         log::trace!("couldn't connect: {:?}", e);
@@ -71,7 +72,8 @@ pub(crate) fn std_udp_bind(
 pub(crate) fn std_udp_rx(
     mut msg: xous::MessageEnvelope,
     timer: &Ticktimer,
-    iface: &mut Interface::<NetPhy>,
+    iface: &mut Interface,
+    sockets: &mut SocketSet,
     udp_rx_waiting: &mut Vec<Option<UdpStdState>>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
@@ -116,20 +118,22 @@ pub(crate) fn std_udp_rx(
             return;
         }
     };
-    let socket = iface.get_socket::<UdpSocket>(*handle);
+    let socket = sockets.get_mut::<udp::Socket>(*handle);
     let port = socket.endpoint().port;
+    // TODO: comment below may be invalid after port to latest smoltcp. Error handler
+    // is also suspect.
+    //
     // force the local address to correspond to our (one and only) IP address
     // the underlying smoltcp library can't handle unspecified source addresses
     // because the library itself works with multiple interfaces and has no default resolution mechanism
     // this may eventually get fixed see https://github.com/smoltcp-rs/smoltcp/issues/599
-    if socket.endpoint().addr != IpAddress::Ipv4(local_addr) {
+    if socket.endpoint().addr.expect("UDP endpoint missing") != IpAddress::Ipv4(local_addr) {
         if socket.is_open() {
             socket.close();
         }
         if let Err(e) = socket.bind(IpEndpoint{addr: IpAddress::Ipv4(local_addr), port})
         .map_err(|e| match e {
-            smoltcp::Error::Illegal => NetError::SocketInUse,
-            smoltcp::Error::Unaddressable => NetError::Unaddressable,
+            smoltcp::socket::udp::BindError::Unaddressable => NetError::WouldBlock,
             _ => NetError::LibraryError,
         }) {
             std_failure(msg, e);
@@ -143,7 +147,7 @@ pub(crate) fn std_udp_rx(
             // difference in types means you can't do a pattern match assign to a common variable.
             match socket.peek() {
                 Ok((data, endpoint)) => {
-                    udp_rx_success(unsafe { body.buf.as_slice_mut() }, data, *endpoint);
+                    udp_rx_success(unsafe { body.buf.as_slice_mut() }, data, endpoint.endpoint);
                 }
                 Err(e) => {
                     log::error!("unable to receive: {:?}", e);
@@ -154,7 +158,7 @@ pub(crate) fn std_udp_rx(
             match socket.recv() {
                 Ok((data, endpoint)) => {
                     log::debug!("immediate udp rx");
-                    udp_rx_success(unsafe { body.buf.as_slice_mut() }, data, endpoint);
+                    udp_rx_success(unsafe { body.buf.as_slice_mut() }, data, endpoint.endpoint);
                 }
                 Err(e) => {
                     log::error!("unable to receive: {:?}", e);
@@ -185,7 +189,8 @@ pub(crate) fn std_udp_rx(
 
 pub(crate) fn std_udp_tx(
     mut msg: xous::MessageEnvelope,
-    iface: &mut Interface::<NetPhy>,
+    iface: &mut Interface,
+    sockets: &mut SocketSet,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
     // unpack meta
@@ -226,21 +231,20 @@ pub(crate) fn std_udp_tx(
             return;
         }
     };
-    let socket = iface.get_socket::<UdpSocket>(*handle);
+    let socket = sockets.get_mut::<udp::Socket>(*handle);
     let port = socket.endpoint().port;
     // force the local address to correspond to our (one and only) IP address
     // the underlying smoltcp library can't handle unspecified source addresses
     // because the library itself works with multiple interfaces and has no default resolution mechanism
     // this may eventually get fixed see https://github.com/smoltcp-rs/smoltcp/issues/599
-    if socket.endpoint().addr != IpAddress::Ipv4(local_addr) {
+    if socket.endpoint().addr.expect("UDP TX endpoint missing") != IpAddress::Ipv4(local_addr) {
         if socket.is_open() {
             socket.close();
         }
         if let Err(e) = socket.bind(IpEndpoint{addr: IpAddress::Ipv4(local_addr), port})
         .map_err(|e| match e {
-            smoltcp::Error::Illegal => NetError::SocketInUse,
-            smoltcp::Error::Unaddressable => NetError::Unaddressable,
-            _ => NetError::LibraryError,
+            smoltcp::socket::udp::BindError::InvalidState => NetError::WouldBlock,
+            smoltcp::socket::udp::BindError::Unaddressable => NetError::Unaddressable,
         }) {
             std_failure(msg, e);
             return;
@@ -276,9 +280,6 @@ pub(crate) fn udp_rx_success(buf: &mut [u8], rx: &[u8], ep: IpEndpoint) {
             for (&s, d) in a.0.iter().zip(buf[4..20].iter_mut()) {
                 *d = s;
             }
-        }
-        _ => {
-            buf[3] = 0; // this is the invalid/error type
         }
     }
     let port = ep.port.to_le_bytes();

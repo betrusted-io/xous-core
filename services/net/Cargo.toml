@@ -35,11 +35,12 @@ xous-semver = "0.1.2"
 [dependencies.smoltcp]
 # some historical notes for development on branches in the future
 # path = "../../../smoltcp"
-#git = "https://github.com/smoltcp-rs/smoltcp.git"
+git = "https://github.com/smoltcp-rs/smoltcp.git"
+branch = "main"
 #git = "https://github.com/betrusted-io/smoltcp.git"
 #rev = "35c8ec3d30c846442a1faae01fb0537641aef898"
 # 0.8.1 drops the rand_core dep and doesn't have the breaking IPv4 change (see issue #613)
-version = "0.8.1"
+# version = "0.8.1"
 default-features = false
 features = [
   "std", "log", # needed for `cargo test --no-default-features --features default` :/
