@@ -132,6 +132,7 @@ pub enum Message {
     Scalar(ScalarMessage),
     BlockingScalar(ScalarMessage),
 }
+unsafe impl Send for Message {}
 
 impl Message {
     pub fn new_scalar(

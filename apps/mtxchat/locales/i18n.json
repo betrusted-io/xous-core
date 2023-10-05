@@ -1,0 +1,236 @@
+{
+    "mtxchat.clock.warning": {
+        "en": "WARNING: clock not set",
+        "en-tts": "WARNING: clock not set",
+        "fr": "AVERTISSEMENT : horloge non réglée",
+        "ja": "WARNING: clock not set *EN*",
+        "zh": "WARNING: clock not set *EN*"
+    },
+    "mtxchat.filter.failed": {
+        "en": "error: could not create filter",
+        "en-tts": "error: could not create filter",
+        "fr": "erreur: impossible de créer un filtre *MT*",
+        "ja": "error: could not create filter *EN*",
+        "zh": "error: could not create filter *EN*"
+    },
+    "mtxchat.get.help": {
+        "en": "/get key",
+        "en-tts": "get key",
+        "fr": "/get clé",
+        "ja": "/get key *EN*",
+        "zh": "/get key *EN*"
+    },
+    "mtxchat.greeting": {
+        "en": "Welcome to the MTXCHAT demo. Type /help for available commands",
+        "en-tts": "Welcome to the simple MTXCHAT demo. Type /help for available commands",
+        "fr": "Bienvenue à la démo simple de MTXCHAT. Tapez /help pour les commandes disponibles",
+        "ja": "シンプルなMTXCHATデモへようこそ",
+        "zh": "简单的 mtxcli 演示活动"
+    },
+    "mtxchat.heap.help": {
+        "en": "/heap",
+        "en-tts": "heap",
+        "fr": "/heap",
+        "ja": "/heap",
+        "zh": "/heap"
+    },
+    "mtxchat.help.help": {
+        "en": "/help [cmd]",
+        "en-tts": "help [cmd]",
+        "fr": "/help [cmd]",
+        "ja": "/help [cmd] *EN*",
+        "zh": "/help [cmd] *EN*"
+    },
+    "mtxchat.help.overview": {
+        "en": "available mtxcli commands:",
+        "en-tts": "available mtxcli commands:",
+        "fr": "commandes mtxcli disponibles:",
+        "ja": "available mtxcli commands: *EN*",
+        "zh": "available mtxcli commands: *EN*"
+    },
+    "mtxchat.initialized": {
+        "en": "MTXCHAT ready",
+        "en-tts": "MTXCHAT ready",
+        "fr": "MTXCHAT prêt",
+        "ja": "MTXCHAT ready *EN*",
+        "zh": "MTXCHAT ready *EN*"
+    },
+    "mtxchat.login.item": {
+        "en": "Login",
+        "en-tts": "Login",
+        "ja": "Login *EN*",
+        "zh": "Login *EN*"
+    },
+    "mtxchat.logged.out": {
+        "en": "logged out",
+        "en-tts": "logged out",
+        "fr": "déconnecté",
+        "ja": "logged out *EN*",
+        "zh": "logged out *EN*"
+    },
+    "mtxchat.logging.in": {
+        "en": "logging in...",
+        "en-tts": "logging in",
+        "fr": "connexion...",
+        "ja": "logging in... *EN*",
+        "zh": "logging in... *EN*"
+    },
+    "mtxchat.login.failed": {
+        "en": "authentication failed",
+        "en-tts": "authentication failed",
+        "fr": "échec de l'authentification",
+        "ja": "authentication failed *EN*",
+        "zh": "authentication failed *EN*"
+    },
+    "mtxchat.login.help": {
+        "en": "/login",
+        "en-tts": "login",
+        "fr": "/login (connexion)",
+        "ja": "/login *EN*",
+        "zh": "/login *EN*"
+    },
+    "mtxchat.logout.item": {
+        "en": "Logout",
+        "en-tts": "Logout",
+        "fr": "Logout (déconnexion)",
+        "ja": "Logout *EN*",
+        "zh": "Logout *EN*"
+    },
+    "mtxchat.migration.completed": {
+        "en": "migration completed",
+        "en-tts": "migration completed",
+        "fr": "migration terminée",
+        "ja": "migration completed *EN*",
+        "zh": "migration completed *EN*"
+    },
+    "mtxchat.migrations.complete": {
+        "en": "migrations complete",
+        "en-tts": "migrations complete",
+        "fr": "tous les migrations terminées",
+        "ja": "migrations complete *EN*",
+        "zh": "migrations complete *EN*"
+    },
+    "mtxchat.not.connected": {
+        "en": "not connected",
+        "en-tts": "not conntected",
+        "fr": "déconnecté",
+        "ja": "not connected *EN*",
+        "zh": "not connected *EN*"
+    },
+    "mtxchat.pddb.warning": {
+        "en": "WARNING: pddb not mounted",
+        "en-tts": "WARNING: pddb not mounted",
+        "fr": "AVERTISSEMENT: pddb pas monté",
+        "ja": "WARNING: pddb not mounted *EN*",
+        "zh": "WARNING: pddb not mounted *EN*"
+    },
+    "mtxchat.login.title": {
+        "en": "Matrix login",
+        "en-tts": "Matrix login"
+    },
+    "mtxchat.password": {
+        "en": "password",
+        "en-tts": "password",
+        "fr": "de-passe",
+        "ja": "password *EN*",
+        "zh": "password *EN*"
+    },
+    "mtxchat.room": {
+        "en": "room",
+        "en-tts": "room"
+    },
+    "mtxchat.room.title": {
+        "en": "Matrix room",
+        "en-tts": "Matrix room"
+    },
+    "mtxchat.room.item": {
+        "en": "Room",
+        "en-tts": "Room"
+    },
+    "mtxchat.room.name": {
+        "en": "room name",
+        "en-tts": "room name"
+    },
+    "mtxchat.domain": {
+        "en": "domain",
+        "en-tts": "domain"
+    },
+    "mtxchat.user_name": {
+        "en": "username",
+        "en-tts": "username",
+        "fr": "utilisateur",
+        "ja": "username *EN*",
+        "zh": "username *EN*"
+    },
+    "mtxchat.roomid.failed": {
+        "en": "error: could not find room_id",
+        "en-tts": "error: could not find room_id",
+        "fr": "erreur: impossible de trouver chambre",
+        "ja": "error: could not find room_id *EN*",
+        "zh": "error: could not find room_id *EN*"
+    },
+    "mtxchat.running.migrations": {
+        "en": "Running migrations from version",
+        "en-tts": "Running migrations from version",
+        "fr": "Exécution des migrations à partir de la version",
+        "ja": "Running migrations from version *EN*",
+        "zh": "Running migrations from version *EN*"
+    },
+    "mtxchat.send.failed": {
+        "en": "failed to send!",
+        "en-tts": "failed to send!",
+        "fr": "n'a pas envoyé!",
+        "ja": "failed to send! *EN*",
+        "zh": "failed to send! *EN*"
+    },
+    "mtxchat.set.help": {
+        "en": "/set key value",
+        "en-tts": "set key value",
+        "fr": "/set clé valeur",
+        "ja": "/set key value *EN*",
+        "zh": "/set key value *EN*"
+    },
+    "mtxchat.status.help": {
+        "en": "/status",
+        "en-tts": "status",
+        "fr": "/status (statut)",
+        "ja": "/status *EN*",
+        "zh": "/status *EN*"
+    },
+    "mtxchat.unknown.help": {
+        "en": "unknown command",
+        "en-tts": "unknown command",
+        "fr": "commande inconnue",
+        "ja": "unknown command *EN*",
+        "zh": "unknown command *EN*"
+    },
+    "mtxchat.unset.help": {
+        "en": "/unset key",
+        "en-tts": "unset key",
+        "fr": "/unset clé",
+        "ja": "/unset key *EN*",
+        "zh": "/unset key *EN*"
+    },
+    "mtxchat.wifi.connected": {
+        "en": "WiFi connected",
+        "en-tts": "WiFi connected",
+        "fr": "WiFi connecté",
+        "ja": "WiFi connected *EN*",
+        "zh": "WiFi connected *EN*"
+    },
+    "mtxchat.wifi.warning": {
+        "en": "WiFi not connected. Entering read-only mode",
+        "en-tts": "WiFi not connected Entering read-only mode",
+        "fr": "WiFi pas connecté",
+        "ja": "WiFi not connected.  Entering read-only mode *EN*",
+        "zh": "WiFi not connected.  Entering read-only mode *EN*"
+    },
+    "mtxchat.listen.patience": {
+        "en": "It takes a while to get new events from the [matrix] server.\nPlease be patient :-)",
+        "en-tts": "It takes a while to get new events from the [matrix] server.\nPlease be patient."
+    },
+    "mtxchat.close.item": {
+        "en": "Close menu",
+        "en-tts": "Close menu"
+    }
+}

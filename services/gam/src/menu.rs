@@ -9,7 +9,7 @@ pub use graphics_server::*;
 use xous_ipc::{String, Buffer};
 use num_traits::*;
 
-use graphics_server::api::{PixelColor, TextBounds, DrawStyle};
+pub use graphics_server::api::{PixelColor, TextBounds, DrawStyle};
 
 #[cfg(feature = "tts")]
 use tts_frontend::*;

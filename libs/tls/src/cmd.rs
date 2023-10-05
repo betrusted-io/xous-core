@@ -1,4 +1,4 @@
-use crate::{danger, Tls};
+use crate::Tls;
 use locales::t;
 #[cfg(feature = "rootCA")]
 use modals::Modals;
@@ -53,7 +53,7 @@ pub fn shellchat<'a>(
                     )
                 })
                 .collect();
-            let mut count:u32 = rotas.len().try_into().unwrap();
+            let mut count: u32 = rotas.len().try_into().unwrap();
             let xns = XousNames::new().unwrap();
             let modals = Modals::new(&xns).unwrap();
             modals
@@ -75,60 +75,20 @@ pub fn shellchat<'a>(
         // pddb if trusted.
         Some("probe") => {
             log::set_max_level(log::LevelFilter::Info);
-            log::info!("starting TLS probe");
-            // Attempt to open the tls connection with an empty root_store
-            let root_store = rustls::RootCertStore::empty();
-            // Stifle the default rustls certificate verification's complaint about an
-            // unknown/untrusted CA root certificate so that we get to see the certificate chain
-            let stifled_verifier =
-                Arc::new(danger::StifledCertificateVerification { roots: root_store });
-            let config = rustls::ClientConfig::builder()
-                .with_safe_defaults()
-                .with_custom_certificate_verifier(stifled_verifier)
-                .with_no_client_auth();
             let target = match tokens.next() {
                 Some(target) => target,
-                None => "bunnyfoo.com",
+                None => "betrusted.io",
             };
-            let server_name = target.try_into().unwrap_or_else(|e| {
-                log::warn!("failed to create sever_name from {target}: {e}");
-                write!(
+            let tls = Tls::new();
+            match tls.probe(target) {
+                Ok(count) => write!(ret, "{} {}", count, t!("tls.probe_done", locales::LANG)).ok(),
+                Err(_) => write!(
                     ret,
                     "{} {target}",
                     t!("tls.probe_fail_servername", locales::LANG)
                 )
-                .ok();
-                "bunnyfoo.com".try_into().unwrap()
-            });
-            let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-            log::info!("connect TCPstream to {}", target);
-            let url = format!("{}:443", target);
-            match TcpStream::connect(url) {
-                Ok(mut sock) => {
-                    match conn.complete_io(&mut sock) {
-                        Ok(_) => log::info!("handshake complete"),
-                        Err(e) => {
-                            write!(ret, "{e}").ok();
-                            log::warn!("{e}");
-                        }
-                    }
-                    conn.send_close_notify();
-
-                    match conn.peer_certificates() {
-                        Some(certificates) => {
-                            let tls = Tls::new();
-                            let count = tls.check_trust(certificates);
-                            write!(ret, "{} {}", count, t!("tls.probe_done", locales::LANG)).ok();
-                        }
-                        None => (),
-                    };
-                }
-                Err(e) => {
-                    write!(ret, "{e}").ok();
-                    log::warn!("{e}")
-                }
+                .ok(),
             };
-
             log::set_max_level(log::LevelFilter::Info);
         }
 
@@ -199,7 +159,12 @@ pub fn shellchat<'a>(
         }
         None | _ => {
             write!(ret, "{}\n", t!("tls.cmd", locales::LANG)).ok();
-            write!(ret, "\tdeleteall\t{}\n", t!("tls.deleteall_cmd", locales::LANG)).ok();
+            write!(
+                ret,
+                "\tdeleteall\t{}\n",
+                t!("tls.deleteall_cmd", locales::LANG)
+            )
+            .ok();
             write!(ret, "\thelp\n").ok();
             write!(ret, "\tlist\t{}\n", t!("tls.list_cmd", locales::LANG)).ok();
             #[cfg(feature = "rootCA")]

@@ -59,6 +59,18 @@ impl NetManager {
             wifi_state_sid: None,
         }
     }
+    pub fn set_debug_level(&self, level: log::LevelFilter) {
+        let code = match level {
+            log::LevelFilter::Info => 0,
+            log::LevelFilter::Debug => 1,
+            log::LevelFilter::Trace => 2,
+            _ => 0,
+        };
+        send_message(
+            self.netconn.conn(),
+            Message::new_scalar(Opcode::SetDebug.to_usize().unwrap(), code, 0, 0, 0),
+        ).expect("couldn't set debug");
+    }
     pub fn get_ipv4_config(&self) -> Option<Ipv4Conf> {
         let storage = Some(Ipv4Conf::default().encode_u16());
         let mut buf = Buffer::into_buf(storage).expect("Couldn't convert to memory structure");

@@ -245,6 +245,7 @@ fn wrapped_main() -> ! {
                                 // copy back the fields that we want to be mutable
                                 tv.cursor = tv_clone.cursor;
                                 tv.bounds_computed = tv_clone.bounds_computed;
+                                tv.overflow = tv_clone.overflow;
 
                                 let ret = api::Return::RenderReturn(tv);
                                 buffer.replace(ret).unwrap();
@@ -285,6 +286,7 @@ fn wrapped_main() -> ! {
                         log::trace!("got computed cursor of {:?}, bounds {:?}", tv_clone.cursor, tv_clone.bounds_computed);
                         tv.cursor = tv_clone.cursor;
                         tv.bounds_computed = tv_clone.bounds_computed;
+                        tv.overflow = tv_clone.overflow;
 
                         let ret = api::Return::RenderReturn(tv);
                         buffer.replace(ret).unwrap();

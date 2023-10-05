@@ -10,9 +10,9 @@ homepage = "https://betrusted.io/xous-book/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous-api-log = {package = "xous-api-log", version = "0.1.47"}
-xous = "0.9.51"
-xous-ipc = "0.9.51"
+xous-api-log = {package = "xous-api-log", version = "0.1.48"}
+xous = "0.9.52"
+xous-ipc = "0.9.52"
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
@@ -24,7 +24,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 
 [target.'cfg(target_arch = "arm")'.dependencies]
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", features = ["lcd-console"]}
-xous = { version = "0.9.51", features = ["v2p"] } # v2p feature is used when lcd-console feature is turned on
+xous = { version = "0.9.52", features = ["v2p"] } # v2p feature is used when lcd-console feature is turned on
 
 [features]
 cramium-soc = ["utralib/cramium-soc"]

@@ -10,11 +10,11 @@ description = "Matrix chat"
 log = "0.4.14"
 num-derive = { version = "0.3.3", default-features = false}
 num-traits = { version = "0.2.14", default-features = false}
-xous = "0.9.51"
-xous-ipc = "0.9.51"
-log-server = { package = "xous-api-log", version = "0.1.47" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.47" }
-xous-names = { package = "xous-api-names", version = "0.9.49" }
+xous = "0.9.52"
+xous-ipc = "0.9.52"
+log-server = { package = "xous-api-log", version = "0.1.48" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.48" }
+xous-names = { package = "xous-api-names", version = "0.9.50" }
 gam = { path = "../../services/gam" }
 graphics-server = { path = "../../services/graphics-server" }
 trng = { path = "../../services/trng"}
@@ -28,7 +28,6 @@ com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f
 llio = { path = "../../services/llio"}
 net = { path = "../../services/net" }
 pddb = { path = "../../services/pddb" }
-status = { path = "../../services/status" }
 # new dependencies for mtxcli
 percent-encoding = "2.2"
 serde = { version = "1.0", features = [ "derive" ] }

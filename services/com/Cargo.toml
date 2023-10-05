@@ -9,13 +9,13 @@ version = "0.1.0"
 [dependencies]
 com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.47"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.47"}
-susres = {package = "xous-api-susres", version = "0.9.47"}
+log-server = {package = "xous-api-log", version = "0.1.48"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.48"}
+susres = {package = "xous-api-susres", version = "0.9.48"}
 typenum = "1.12"
-xous = "0.9.51"
-xous-ipc = "0.9.51"
-xous-names = {package = "xous-api-names", version = "0.9.49"}
+xous = "0.9.52"
+xous-ipc = "0.9.52"
+xous-names = {package = "xous-api-names", version = "0.9.50"}
 trng = {path = "../trng"}
 llio = {path = "../llio"}
 

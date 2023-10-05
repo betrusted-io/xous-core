@@ -59,9 +59,6 @@ impl From<IpAddress> for NetIpAddr {
         match other {
             IpAddress::Ipv4(ipv4) => NetIpAddr::Ipv4(ipv4.0),
             IpAddress::Ipv6(ipv6) => NetIpAddr::Ipv6(ipv6.0),
-            _ => {
-                panic!("Invalid IpAddress")
-            }
         }
     }
 }

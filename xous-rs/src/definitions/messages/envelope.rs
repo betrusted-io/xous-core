@@ -7,6 +7,7 @@ pub struct Envelope {
     pub sender: MessageSender,
     pub body: Message,
 }
+unsafe impl Send for Envelope {}
 
 impl Envelope {
     pub fn to_usize(&self) -> [usize; 7] {
