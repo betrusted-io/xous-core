@@ -67,7 +67,7 @@ dependencies = [
  "aes 0.8.1",
  "hex-literal",
  "log",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
 ]
 
@@ -295,7 +295,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "trng",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -591,7 +591,7 @@ dependencies = [
  "pddb",
  "rkyv",
  "trng",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -701,8 +701,8 @@ dependencies = [
  "num-traits",
  "rkyv",
  "trng",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -732,8 +732,8 @@ dependencies = [
  "rkyv",
  "trng",
  "typenum",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -790,7 +790,7 @@ dependencies = [
  "graphics-server",
  "log",
  "rkyv",
- "xous 0.9.51",
+ "xous",
  "xous-api-names",
 ]
 
@@ -824,8 +824,8 @@ name = "cram-console"
 version = "0.1.0"
 dependencies = [
  "log",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -840,8 +840,8 @@ dependencies = [
  "log",
  "num-derive",
  "num-traits",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -854,8 +854,8 @@ dependencies = [
  "log",
  "num-derive",
  "num-traits",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -1410,8 +1410,8 @@ dependencies = [
  "sntpc",
  "trng",
  "userprefs",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -1435,8 +1435,8 @@ dependencies = [
  "once_cell",
  "rkyv",
  "spinor",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -1590,8 +1590,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -1761,8 +1761,8 @@ dependencies = [
  "log",
  "num-derive",
  "num-traits",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -1984,8 +1984,8 @@ dependencies = [
  "sha2 0.9.8",
  "trng",
  "tts-frontend",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -2051,7 +2051,7 @@ dependencies = [
  "wasi 0.11.0+wasi-snapshot-preview1",
  "wasm-bindgen",
  "wasm-bindgen-test",
- "xous 0.9.51",
+ "xous",
  "xous-api-names",
  "xous-ipc 0.9.52",
 ]
@@ -2085,8 +2085,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -2138,12 +2138,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
-name = "hashbrown"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dfda62a12f55daeae5015f81b0baea145391cb4520f86c248fc615d72640d12"
-
-[[package]]
 name = "heapless"
 version = "0.7.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2173,7 +2167,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "tts-frontend",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-ipc 0.9.52",
@@ -2347,8 +2341,8 @@ dependencies = [
  "num-traits",
  "rkyv",
  "tts-frontend",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -2364,7 +2358,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "xous 0.9.51",
+ "xous",
  "xous-api-names",
  "xous-ipc 0.9.52",
 ]
@@ -2378,8 +2372,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -2397,8 +2391,8 @@ dependencies = [
  "num-traits",
  "rkyv",
  "tts-frontend",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -2511,8 +2505,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -2534,8 +2528,8 @@ name = "kernel-test"
 version = "0.1.0"
 dependencies = [
  "log",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-ticktimer",
 ]
@@ -2551,8 +2545,8 @@ dependencies = [
  "num-traits",
  "rkyv",
  "spinor",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -2632,8 +2626,8 @@ dependencies = [
  "net",
  "num-derive",
  "num-traits",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -2656,8 +2650,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -2820,8 +2814,8 @@ dependencies = [
  "rkyv",
  "trng",
  "tts-frontend",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -2857,7 +2851,7 @@ dependencies = [
  "trng",
  "ureq",
  "url",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -2887,7 +2881,7 @@ dependencies = [
  "serde",
  "trng",
  "ureq",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -2926,8 +2920,8 @@ dependencies = [
  "rkyv",
  "smoltcp",
  "trng",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -3329,8 +3323,8 @@ dependencies = [
  "subtle",
  "trng",
  "tts-frontend",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -3362,8 +3356,8 @@ name = "perflib"
 version = "0.1.0"
 dependencies = [
  "log",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
 ]
 
 [[package]]
@@ -3906,7 +3900,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "trng",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -3948,7 +3942,7 @@ dependencies = [
  "spin 0.5.2",
  "untrusted",
  "winapi",
- "xous 0.9.51",
+ "xous",
  "xous-api-names",
  "xous-ipc 0.9.52",
 ]
@@ -4010,8 +4004,8 @@ dependencies = [
  "trng",
  "tts-frontend",
  "usb-device-xous",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -4321,8 +4315,8 @@ dependencies = [
  "opaque-debug",
  "rkyv",
  "trng",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -4416,7 +4410,7 @@ dependencies = [
  "usb-device-xous",
  "utralib 0.1.23",
  "x25519-dalek",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -4463,12 +4457,14 @@ checksum = "942b4a808e05215192e39f4ab80813e599068285906cc91aa64f923db842bd5a"
 
 [[package]]
 name = "smoltcp"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee34c1e1bfc7e9206cc0fb8030a90129b4e319ab53856249bb27642cab914fb3"
+version = "0.10.0"
+source = "git+https://github.com/smoltcp-rs/smoltcp.git?branch=main#edfdb23243a973d458397a2b4e76f527bacb1fd6"
 dependencies = [
  "bitflags 1.3.2",
  "byteorder",
+ "cfg-if",
+ "defmt",
+ "heapless",
  "libc",
  "log",
  "managed",
@@ -4520,8 +4516,8 @@ dependencies = [
  "rand 0.8.5",
  "rkyv",
  "trng",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -4581,8 +4577,8 @@ dependencies = [
  "trng",
  "usb-device-xous",
  "userprefs",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -4779,7 +4775,7 @@ name = "ticktimer-test-client"
 version = "0.1.0"
 dependencies = [
  "log",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
 ]
 
@@ -4864,7 +4860,7 @@ dependencies = [
  "ureq",
  "webpki-roots 0.24.0",
  "x509-parser",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -4981,7 +4977,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "usb-device-xous",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-ipc 0.9.52",
@@ -4998,8 +4994,8 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_core 0.5.1",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -5016,8 +5012,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
@@ -5174,7 +5170,7 @@ dependencies = [
  "usbd_scsi 0.1.1",
  "utralib 0.1.23",
  "vcell",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -5199,7 +5195,7 @@ dependencies = [
  "usbd-human-interface-device 0.1.1",
  "utralib 0.1.23",
  "vcell",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -5262,7 +5258,7 @@ dependencies = [
  "typenum",
  "usb-device",
  "usbd_mass_storage 0.1.0",
- "xous 0.9.51",
+ "xous",
  "xous-api-ticktimer",
 ]
 
@@ -5336,7 +5332,7 @@ dependencies = [
  "usb-device",
  "usbd_bulk_only_transport 0.1.0",
  "usbd_mass_storage 0.1.0",
- "xous 0.9.51",
+ "xous",
  "xous-api-ticktimer",
 ]
 
@@ -5422,8 +5418,8 @@ dependencies = [
  "usb-device-xous",
  "usbd-human-interface-device 0.2.1",
  "userprefs",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -5917,23 +5913,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "xous"
-version = "0.9.52"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cf9d53b2052febeca453568bf0b36dc49cc5bf2e909026a85eba4bbb11b8ddb"
-dependencies = [
- "lazy_static",
-]
-
-[[package]]
 name = "xous-api-log"
 version = "0.1.47"
 dependencies = [
  "log",
  "num-derive",
  "num-traits",
- "xous 0.9.51",
- "xous-ipc 0.9.52",
+ "xous",
+ "xous-ipc 0.9.51 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5946,7 +5933,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-ipc 0.9.52",
 ]
@@ -5961,8 +5948,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-ipc 0.9.52",
@@ -5978,7 +5965,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "xous 0.9.51",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -5992,7 +5979,7 @@ version = "0.9.51"
 dependencies = [
  "bitflags 1.3.2",
  "rkyv",
- "xous 0.9.51",
+ "xous",
 ]
 
 [[package]]
@@ -6003,7 +5990,7 @@ checksum = "2b28aeb268628d175e4c61aa49f3a6587784c6c03fa7e1fc212f370d61537706"
 dependencies = [
  "bitflags 1.3.2",
  "rkyv",
- "xous 0.9.52",
+ "xous",
 ]
 
 [[package]]
@@ -6022,8 +6009,8 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "stats_alloc",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-riscv",
 ]
 
@@ -6036,8 +6023,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-ipc 0.9.52",
 ]
@@ -6050,8 +6037,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-ipc 0.9.52",
@@ -6065,8 +6052,8 @@ dependencies = [
  "log",
  "pio",
  "pio-proc",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
 ]
 
 [[package]]
@@ -6077,8 +6064,8 @@ dependencies = [
  "log",
  "pio",
  "pio-proc",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-pio",
 ]
 
@@ -6106,8 +6093,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -6123,8 +6110,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "utralib 0.1.23",
- "xous 0.9.51",
+ "utralib",
+ "xous",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
@@ -6143,7 +6130,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
- "xous 0.9.51",
+ "xous",
  "xous-api-names",
  "xous-ipc 0.9.52",
 ]

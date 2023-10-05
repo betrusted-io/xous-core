@@ -40,10 +40,6 @@ pub(crate) fn write_address(address: IpAddress, data: &mut [u8]) -> Option<usize
             }
             Some(16)
         }
-        _ => {
-            *i.next()? = 0;
-            Some(1)
-        }
     }
 }
 

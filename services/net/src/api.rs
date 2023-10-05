@@ -34,9 +34,11 @@ pub const MIN_EC_REV: SemVer = SemVer {
 };
 
 /// Dispatch opcodes to the Net crate main loop.
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub(crate) enum Opcode {
+    SetupMpsc = 0,
+    SetDebug = 1,
     /// Calls for UDP implementation (now deprecated to libstd)
     //UdpBind = 0,
     //UdpClose = 1,
@@ -457,7 +459,6 @@ pub fn ipaddress_to_ipaddr(other: IpAddress) -> IpAddr {
             let octets = ipv6.0;
             IpAddr::V6(Ipv6Addr::from(octets))
         }
-        _ => unimplemented!(),
     }
 }
 

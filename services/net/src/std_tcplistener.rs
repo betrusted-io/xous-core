@@ -1,10 +1,11 @@
 use crate::*;
-use crate::device::NetPhy;
 use smoltcp::wire::{IpEndpoint, IpAddress};
+use smoltcp::socket::tcp;
 
 pub(crate) fn std_tcp_listen(
     mut msg: xous::MessageEnvelope,
-    iface: &mut Interface::<NetPhy>,
+    _iface: &mut Interface,
+    sockets: &mut SocketSet,
     our_sockets: &mut Vec<Option<SocketHandle>>,
     trng: &trng::Trng,
     ) {
@@ -40,19 +41,19 @@ pub(crate) fn std_tcp_listen(
         return;
     }
 
-    let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-    let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-    let tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
-    let handle = iface.add_socket(tcp_socket);
-    let tcp_socket = iface.get_socket::<TcpSocket>(handle);
+    let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
+    let tcp_tx_buffer = tcp::SocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
+    let tcp_socket = tcp::Socket::new(tcp_rx_buffer, tcp_tx_buffer);
+
+    let handle = sockets.add(tcp_socket);
+    let tcp_socket = sockets.get_mut::<tcp::Socket>(handle);
 
     loop {
         if let Err(e) = tcp_socket
             .listen(local_port)
             .map_err(|e| match e {
-                smoltcp::Error::Illegal => NetError::SocketInUse,
-                smoltcp::Error::Unaddressable => NetError::Unaddressable,
-                _ => NetError::LibraryError,
+                smoltcp::socket::tcp::ListenError::InvalidState => NetError::SocketInUse,
+                smoltcp::socket::tcp::ListenError::Unaddressable => NetError::Unaddressable,
             })
         {
             match e {
@@ -94,7 +95,8 @@ pub(crate) fn std_tcp_listen(
 
 pub(crate) fn std_tcp_accept(
     mut msg: xous::MessageEnvelope,
-    iface: &mut Interface::<NetPhy>,
+    _iface: &mut Interface,
+    sockets: &mut SocketSet,
     tcp_accept_waiting: &mut Vec<Option<AcceptingSocket>>,
     tcp_server_remote_close_poll: &mut Vec<SocketHandle>,
     our_sockets: &Vec<Option<SocketHandle>>,
@@ -122,13 +124,13 @@ pub(crate) fn std_tcp_accept(
     let args = unsafe { body.buf.as_slice::<u8>() };
     let nonblocking = args[0] == 0;
 
-    let socket = iface.get_socket::<TcpSocket>(*handle);
+    let socket = sockets.get::<tcp::Socket>(*handle);
 
     if socket.is_active() {
         log::debug!("accept did not block; immediately returning TcpSocket");
         let buf = unsafe { body.buf.as_slice_mut::<u8>() };
         tcp_server_remote_close_poll.push(*handle);
-        tcp_accept_success(buf, fd as u16, socket.remote_endpoint());
+        tcp_accept_success(buf, fd as u16, socket.remote_endpoint().expect("TCP accept missing remote endpoint"));
         return;
     }
 
@@ -169,9 +171,6 @@ pub(crate) fn tcp_accept_success(buf: &mut [u8], fd: u16, ep: IpEndpoint) {
             for (&s, d) in a.0.iter().zip(buf[4..20].iter_mut()) {
                 *d = s;
             }
-        }
-        _ => {
-            buf[3] = 0; // this is the invalid/error type
         }
     }
     let port = ep.port.to_le_bytes();

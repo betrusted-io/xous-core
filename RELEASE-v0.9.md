@@ -408,6 +408,9 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 ## New in v0.9.15
 - refresh item cache after leaving vault host readout mode
 - Regressions have bee found in Rust 1.72. We suspect the llvm back-end for RV32 is emitting invalid code, see issue #416 and #417 for more details. For now, the optimization level has been set to `s` as a work-around.
+- Network stack is updated to work with the `main` branch of `smoltcp`. This is not intended as a release configuration -- this note is here so that when a release is snapshotted out, we remember to pin to a particular commit (or ideally an official release, if one happens in time).
+  - This fixes a number of long-standing issues, including #210 and #407.
+  - Fairly major overhaul to the network stack. We now use mspc primitives to implement the wait/poll loop, which should make the net stack much more efficient and robust.
 
 ## Roadmap
 - Lots of testing and bug fixes

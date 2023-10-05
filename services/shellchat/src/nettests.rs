@@ -8,11 +8,12 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub(crate) fn start_batch_tests() {
+    let netmgr = net::NetManager::new();
     let _ = thread::spawn({
         move || {
-            let run_passing = true;
+            let run_passing = false;
             let tt = ticktimer_server::Ticktimer::new().unwrap();
-            const PRINT_DELAY: usize = 3000;
+            const PRINT_DELAY: usize = 2000;
             if run_passing {
                 log::info!("################################################## bind_error");
                 tt.sleep_ms(PRINT_DELAY).ok();
@@ -32,6 +33,18 @@ pub(crate) fn start_batch_tests() {
                 log::info!("################################################## read_eof");
                 tt.sleep_ms(PRINT_DELAY).ok();
                 read_eof();
+
+                // This test can fail if there is a ticktimer scheduling error:
+                /*
+                    INFO:shellchat::nettests: ################################################## write_close (services\shellchat\src\nettests.rs:35)
+                    INFO:shellchat::nettests: ++++++++++++++++++++++++++create server (services\shellchat\src\nettests.rs:252)
+                    INFO:shellchat::nettests: ++++++++++++++++++++++++++try to establish connection (services\shellchat\src\nettests.rs:265)
+                    INFO:shellchat::nettests: ++++++++++++++++++++++++++established (services\shellchat\src\nettests.rs:267)
+                    INFO:shellchat::nettests: ----------------------------create and drop connection to server (services\shellchat\src\nettests.rs:257)
+                    INFO:shellchat::nettests: ----------------------------signal that we should proceed to send the data to the closed server (services\shellchat\src\nettests.rs:262)
+                    ERR :xous_ticktimer: requested to wake 1 entries, which is more than the current 2 waiting entries (services\xous-ticktimer\src\main.rs:429)
+                       -- hangs here forever.
+                 */
                 log::info!("################################################## write_close");
                 tt.sleep_ms(PRINT_DELAY).ok();
                 write_close();
@@ -49,9 +62,9 @@ pub(crate) fn start_batch_tests() {
                 tt.sleep_ms(PRINT_DELAY).ok();
                 write_vectored();
 
-                // This test cannot be run until issue #210 is fixed see https://github.com/betrusted-io/xous-core/issues/210
-                //log::info!("################################################## nodelay");
-                //nodelay();
+                log::info!("################################################## nodelay");
+                nodelay();
+                tt.sleep_ms(PRINT_DELAY).ok();
                 log::info!("################################################## ttl");
                 tt.sleep_ms(PRINT_DELAY).ok();
                 ttl();
@@ -90,23 +103,40 @@ pub(crate) fn start_batch_tests() {
                 log::info!("################################################## clone_while_reading");
                 tt.sleep_ms(PRINT_DELAY).ok();
                 clone_while_reading();
+
+                // these tests fail after being called in the long series of tests, but when run on their
+                // own they pass...
                 log::info!("################################################## clone_accept_smoke");
                 tt.sleep_ms(PRINT_DELAY).ok();
+                //netmgr.set_debug_level(log::LevelFilter::Trace);
                 clone_accept_smoke();
+                //netmgr.set_debug_level(log::LevelFilter::Info);
                 log::info!("################################################## clone_accept_concurrent");
                 tt.sleep_ms(PRINT_DELAY).ok();
+                //netmgr.set_debug_level(log::LevelFilter::Trace);
                 clone_accept_concurrent();
+                //netmgr.set_debug_level(log::LevelFilter::Info);
             }
 
+            // These tests seem to fail unless you insert some debug prints in them. This is a problem
+            // likely related to race conditions in condvars and ticktimers. We're going to waive this
+            // for now because the tests themselves are pretty synthetic, it's rare that you create
+            // multiple sockets simply for the purpose of abandoning them? Or at least, not when
+            // used as a client; perhaps in a server environment this is common, but Xous isn't targeting
+            // a server (yet).
             log::info!("################################################## multiple_connect_serial");
             tt.sleep_ms(PRINT_DELAY).ok();
             multiple_connect_serial();
             log::info!("################################################## multiple_connect_interleaved_greedy_schedule");
             tt.sleep_ms(PRINT_DELAY).ok();
+            netmgr.set_debug_level(log::LevelFilter::Debug);
             multiple_connect_interleaved_greedy_schedule();
+            netmgr.set_debug_level(log::LevelFilter::Info);
             log::info!("################################################## multiple_connect_interleaved_lazy_schedule");
             tt.sleep_ms(PRINT_DELAY).ok();
+            netmgr.set_debug_level(log::LevelFilter::Trace);
             multiple_connect_interleaved_lazy_schedule();
+            netmgr.set_debug_level(log::LevelFilter::Info);
 
             log::info!("################################################## FIN");
             log::info!("################################################## FIN");
@@ -308,6 +338,7 @@ fn multiple_connect_serial() {
 fn multiple_connect_interleaved_greedy_schedule() {
     const MAX: usize = 3;
     each_ip(&mut |addr| {
+        log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~bind to addr: {:?}", addr);
         let acceptor = t!(TcpListener::bind(&addr));
 
         let _t = thread::spawn(move || {
@@ -315,28 +346,35 @@ fn multiple_connect_interleaved_greedy_schedule() {
             for (i, stream) in acceptor.incoming().enumerate().take(MAX) {
                 // Start another thread to handle the connection
                 let _t = thread::spawn(move || {
+                    log::info!("++++++++++++++++++++++++++++++++ start thread {}", i);
                     let mut stream = t!(stream);
                     let mut buf = [0];
                     t!(stream.read(&mut buf));
+                    log::info!("++++++++++++++++++++++++++++++++ thread {} read: {:?}", i, buf);
                     assert!(buf[0] == i as u8);
                 });
             }
         });
 
         connect(0, addr);
+        log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~after connect(0)");
     });
 
     fn connect(i: usize, addr: SocketAddr) {
+        log::info!("******************************* connect {}", i);
         if i == MAX {
             return;
         }
 
         let t = thread::spawn(move || {
-            let mut stream = t!(TcpStream::connect(&addr));
+            log::info!("******************************* connect {:?}", addr);
+            let mut stream = t!(TcpStream::connect(&addr)); // errors out here
             // Connect again before writing
             connect(i + 1, addr);
+            log::info!("******************************* writing {:?}", i);
             t!(stream.write(&[i as u8]));
         });
+        log::info!("******************************* joining... {}", i);
         t.join().ok().expect("thread panicked");
     }
 }
@@ -580,18 +618,27 @@ fn clone_while_reading() {
 
 fn clone_accept_smoke() {
     each_ip(&mut |addr| {
+        log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~bind to addr: {:?}", addr);
         let a = t!(TcpListener::bind(&addr));
+        log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~bind to addr clone");
         let a2 = t!(a.try_clone());
 
         let _t = thread::spawn(move || {
+            log::info!("++++++++++++++++++++++++++++++++connect #1");
             let _ = TcpStream::connect(&addr);
+            log::info!("++++++++++++++++++++++++++++++++#1 connected");
         });
         let _t = thread::spawn(move || {
+            log::info!("--------------------------------connect #2");
             let _ = TcpStream::connect(&addr);
+            log::info!("--------------------------------#2 connected");
         });
 
+        log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#1 accept");
         t!(a.accept());
+        log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#2 accept");
         t!(a2.accept());
+        log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~FINISH");
     })
 }
 
