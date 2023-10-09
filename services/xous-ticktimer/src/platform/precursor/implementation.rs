@@ -1,29 +1,47 @@
 const TICKS_PER_MS: u64 = 1;
 
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::collections::BTreeMap;
 
-use crate::TimerRequest;
 use crate::TimeoutExpiry;
+use crate::TimerRequest;
 
 use susres::{RegManager, RegOrField, SuspendResume};
 use utralib::generated::*;
 
+use xous::definitions::MessageSender;
+
+/// Add some slack to ensure that when we set the timeout, it
+/// doesn't end up in the past due to processing latencies.
+const LATENCY_SLACK_MS: i64 = 3;
+
 pub struct XousTickTimer {
     csr: utralib::CSR<u32>,
     current_response: Option<TimerRequest>,
-    last_response: Option<TimerRequest>,
-    connection: xous::CID,
     ticktimer_sr_manager: RegManager<{ utra::ticktimer::TICKTIMER_NUMREGS }>,
     wdt_sr_manager: RegManager<{ utra::wdt::WDT_NUMREGS }>,
     wdt: utralib::CSR<u32>,
 }
 
+/// Connection ID to the ticktimer server, for use in interrupt contexts.
+static TICKTIMER_CONNECTION: AtomicU32 = AtomicU32::new(0);
+
+/// The Message ID of the last message we responded to
+static LAST_RESPONDER: AtomicUsize = AtomicUsize::new(0);
+
+/// This is incremented every time the ticktimer IRQ fires. It's used to
+/// determine how many events were missed during processing of new
+/// ticktimer events.
+static TICKTIMER_SEQUENCE_NUMBER: AtomicUsize = AtomicUsize::new(0);
+
 fn handle_irq(_irq_no: usize, arg: *mut usize) {
-    let xtt = unsafe { &mut *(arg as *mut XousTickTimer) };
+    let xtt: &mut XousTickTimer = unsafe { &mut *(arg as *mut XousTickTimer) };
+    let connection = TICKTIMER_CONNECTION.load(Ordering::Relaxed);
     // println!("In IRQ, connection: {}", xtt.connection);
 
     // Safe because we're in an interrupt, and this interrupt is only
-    // enabled when this value is not None.
+    // enabled when this value is not None. Furthermore, the value is
+    // only ever updated when interrupts are disabled.
     let response = xtt.current_response.take().unwrap();
     xous::return_scalar(response.sender, response.kind as usize).ok();
 
@@ -35,7 +53,7 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
     // Which is fine, because the queue is always recalculated any time a message arrives.
     use num_traits::ToPrimitive;
     xous::try_send_message(
-        xtt.connection,
+        connection,
         xous::Message::Scalar(xous::ScalarMessage {
             id: crate::api::Opcode::RecalculateSleep.to_usize().unwrap(),
             arg1: response.sender.to_usize(),
@@ -44,10 +62,14 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
             arg4: 0,
         }),
     )
-        .ok();
+    .ok();
 
-    // Save the response so we can be sure we don't double-return messages.
-    xtt.last_response = Some(response);
+    // Remember what the last message was that we responded to. This will prevent
+    // double-responding to messages.
+    LAST_RESPONDER.store(response.sender.to_usize(), Ordering::Relaxed);
+
+    // Note that we've handled another IRQ event.
+    TICKTIMER_SEQUENCE_NUMBER.fetch_add(1, Ordering::Relaxed);
 }
 
 impl XousTickTimer {
@@ -59,14 +81,14 @@ impl XousTickTimer {
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
-            .expect("couldn't map Tick Timer CSR range");
+        .expect("couldn't map Tick Timer CSR range");
         let wdt = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::wdt::HW_WDT_BASE),
             None,
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
-            .expect("couldn't map Watchdog timer CSR range");
+        .expect("couldn't map Watchdog timer CSR range");
 
         let ticktimer_sr_manager = RegManager::new(csr.as_mut_ptr() as *mut u32);
         let wdt_sr_manager = RegManager::new(wdt.as_mut_ptr() as *mut u32);
@@ -74,8 +96,6 @@ impl XousTickTimer {
         let mut xtt = XousTickTimer {
             csr: CSR::new(csr.as_mut_ptr() as *mut u32),
             current_response: None,
-            last_response: None,
-            connection,
             ticktimer_sr_manager,
             wdt_sr_manager,
             wdt: CSR::new(wdt.as_mut_ptr() as *mut u32),
@@ -89,23 +109,33 @@ impl XousTickTimer {
             // xtt.wdt_sr_manager.push(RegOrField::Field(utra::wdt::WATCHDOG_ENABLE), None);
         }
 
+        // Keep a copy of the connection around so we can use it in the interrupt.
+        TICKTIMER_CONNECTION.store(connection.into(), Ordering::Relaxed);
+
         xtt
     }
 
-    pub fn last_response(&self) -> &Option<TimerRequest> {
-        &self.last_response
+    pub fn last_response(&self) -> MessageSender {
+        MessageSender::from_usize(LAST_RESPONDER.load(Ordering::Relaxed))
     }
 
-    pub fn clear_last_response(&mut self) {
-        self.last_response = None;
+    /// Return the number of times the ticktimer IRQ has fired.
+    ///
+    /// # Safety
+    ///
+    /// This function is safe to call only if interrupts are disabled. Otherwise,
+    /// the value may change during processing.
+    pub unsafe fn sequence_number() -> usize {
+        TICKTIMER_SEQUENCE_NUMBER.load(Ordering::Relaxed)
     }
+
     pub fn init(&mut self) {
         xous::claim_interrupt(
             utra::ticktimer::TICKTIMER_IRQ,
             handle_irq,
             self as *mut XousTickTimer as *mut usize,
         )
-            .expect("couldn't claim irq");
+        .expect("couldn't claim irq");
 
         self.ticktimer_sr_manager
             .push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET0), None);
@@ -116,6 +146,7 @@ impl XousTickTimer {
         self.ticktimer_sr_manager
             .push(RegOrField::Reg(utra::ticktimer::EV_ENABLE), None);
     }
+
     pub fn reset(&mut self) {
         self.csr.wfo(utra::ticktimer::CONTROL_RESET, 0b1);
         self.csr.wo(utra::ticktimer::CONTROL, 0); // not paused, not reset -> free-run
@@ -143,10 +174,10 @@ impl XousTickTimer {
             #[cfg(feature = "debug-print")]
             {
                 log::info!(
-                        "Stopping currently-running timer sr.msec: {}  elapsed_ms: {}",
-                        sr.msec,
-                        self.elapsed_ms()
-                    );
+                    "Stopping currently-running timer sr.msec: {}  elapsed_ms: {}",
+                    sr.msec,
+                    self.elapsed_ms()
+                );
             }
             Some(sr)
         } else {
@@ -155,12 +186,12 @@ impl XousTickTimer {
     }
 
     pub fn schedule_response(&mut self, request: TimerRequest) {
-        let irq_target = request.msec;
+        let irq_target = request.msec.to_i64().wrapping_add(LATENCY_SLACK_MS);
         log::trace!(
-                "setting a response at {} ms (current time: {} ms)",
-                irq_target,
-                self.elapsed_ms()
-            );
+            "setting a response at {} ms (current time: {} ms)",
+            irq_target,
+            self.elapsed_ms()
+        );
 
         // Disable the timer interrupt
         assert!(self.csr.rf(utra::ticktimer::EV_ENABLE_ALARM) == 0);
@@ -192,10 +223,10 @@ impl XousTickTimer {
         let state = self.wdt.r(utra::wdt::STATE);
         if state & self.wdt.ms(utra::wdt::STATE_DISARMED, 1) == 0 {
             log::info!(
-                    "{} WDT is not disarmed, state: 0x{:x}",
-                    self.elapsed_ms(),
-                    state
-                );
+                "{} WDT is not disarmed, state: 0x{:x}",
+                self.elapsed_ms(),
+                state
+            );
         }
     }
 
@@ -209,6 +240,7 @@ impl XousTickTimer {
         // by writing this after suspend(), resume will get the prior value
         self.csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, 0);
     }
+
     pub fn resume(&mut self) {
         // this is a write-once bit that's later erased, so it can't be managed automatically
         // thus we have to restore in manually on a resume
@@ -224,24 +256,28 @@ impl XousTickTimer {
         self.ticktimer_sr_manager.resume();
 
         log::trace!(
-                "ticktimer enable: {}",
-                self.csr.r(utra::ticktimer::EV_ENABLE)
-            );
+            "ticktimer enable: {}",
+            self.csr.r(utra::ticktimer::EV_ENABLE)
+        );
         log::trace!(
-                "ticktimer time/target: {}/{}",
-                self.csr.r(utra::ticktimer::TIME0),
-                self.csr.r(utra::ticktimer::MSLEEP_TARGET0)
-            );
+            "ticktimer time/target: {}/{}",
+            self.csr.r(utra::ticktimer::TIME0),
+            self.csr.r(utra::ticktimer::MSLEEP_TARGET0)
+        );
     }
-
 
     /// Disable the sleep interrupt and remove the currently-pending sleep item.
     /// If the sleep item has fired, then there will be no existing sleep item
     /// remaining.
-    pub fn stop_sleep(
+    ///
+    /// # Returns
+    ///
+    /// The serial number of the ticktimer handler at the point where
+    /// interrupts were disabled.
+    pub(crate) fn stop_sleep(
         &mut self,
         sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
-    ) {
+    ) -> usize {
         // If there's a sleep request ongoing now, grab it.
         if let Some(current) = self.stop_interrupt() {
             #[cfg(feature = "debug-print")]
@@ -251,9 +287,10 @@ impl XousTickTimer {
             #[cfg(feature = "debug-print")]
             log::info!("There was no existing sleep() request");
         }
+        TICKTIMER_SEQUENCE_NUMBER.load(Ordering::Relaxed)
     }
 
-    pub fn start_sleep(
+    pub(crate) fn start_sleep(
         &mut self,
         sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
     ) {
@@ -262,7 +299,9 @@ impl XousTickTimer {
             #[cfg(feature = "debug-print")]
             log::info!(
                 "scheduling a response at {} to {} (heap: {:?})",
-                next_response.msec, next_response.sender, sleep_heap
+                next_response.msec,
+                next_response.sender,
+                sleep_heap
             );
 
             self.schedule_response(next_response);
@@ -275,20 +314,17 @@ impl XousTickTimer {
         }
     }
 
-    /// Recalculate the sleep timer, optionally adding a new Request to the list of available
-    /// sleep events. This involves stopping the timer, recalculating the newest item, then
-    /// restarting the timer.
+    /// Recalculate sleep without starting and stopping the sleep timer.
     ///
-    /// Note that interrupts are always enabled, which is why we must stop the timer prior to
-    /// reordering the list.
-    pub fn recalculate_sleep(
+    /// # Safety
+    ///
+    /// This must be called with the sleep timer already stopped
+    pub(crate) unsafe fn recalculate_sleep_offline(
         &mut self,
-        sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
+        sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>,
         new: Option<TimerRequest>,
     ) {
-        self.stop_sleep(sleep_heap);
         log::trace!("Elapsed: {}", self.elapsed_ms());
-        self.clear_last_response();
 
         // If we have a new sleep request, add it to the heap.
         if let Some(mut request) = new {
@@ -308,7 +344,21 @@ impl XousTickTimer {
             #[cfg(feature = "debug-print")]
             log::info!("No new sleep request");
         }
+    }
 
+    /// Recalculate the sleep timer, optionally adding a new Request to the list of available
+    /// sleep events. This involves stopping the timer, recalculating the newest item, then
+    /// restarting the timer.
+    ///
+    /// Note that interrupts are always enabled, which is why we must stop the timer prior to
+    /// reordering the list.
+    pub(crate) fn recalculate_sleep(
+        &mut self,
+        sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>,
+        new: Option<TimerRequest>,
+    ) {
+        self.stop_sleep(sleep_heap);
+        unsafe { self.recalculate_sleep_offline(sleep_heap, new) }
         self.start_sleep(sleep_heap);
     }
 }

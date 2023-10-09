@@ -1,31 +1,92 @@
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 #[macro_use]
 pub mod precursor;
-#[cfg(any(feature="precursor", feature="renode"))]
+use core::ops::{Add, AddAssign};
+
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub use precursor::*;
 
-#[cfg(any(not(target_os = "xous"),
-    not(any(feature="precursor", feature="renode", feature="atsama5d27", feature="cramium-fpga", feature="cramium-soc", not(target_os = "xous")))
+#[cfg(any(
+    not(target_os = "xous"),
+    not(any(
+        feature = "precursor",
+        feature = "renode",
+        feature = "atsama5d27",
+        feature = "cramium-fpga",
+        feature = "cramium-soc",
+        not(target_os = "xous")
+    ))
 ))]
 pub mod hosted;
-#[cfg(any(not(target_os = "xous"),
-    not(any(feature="precursor", feature="renode", feature="atsama5d27", feature="cramium-fpga", feature="cramium-soc", not(target_os = "xous")))
+#[cfg(any(
+    not(target_os = "xous"),
+    not(any(
+        feature = "precursor",
+        feature = "renode",
+        feature = "atsama5d27",
+        feature = "cramium-fpga",
+        feature = "cramium-soc",
+        not(target_os = "xous")
+    ))
 ))]
 pub use hosted::*;
 
-#[cfg(any(feature="atsama5d27"))]
+#[cfg(any(feature = "atsama5d27"))]
 #[macro_use]
 pub mod atsama5d2;
-#[cfg(any(feature="atsama5d27"))]
+#[cfg(any(feature = "atsama5d27"))]
 pub use atsama5d2::*;
 
-#[cfg(any(feature="cramium-fpga", feature="cramium-soc"))]
+#[cfg(any(feature = "cramium-fpga", feature = "cramium-soc"))]
 #[macro_use]
 pub mod cramium;
-#[cfg(any(feature="cramium-fpga", feature="cramium-soc"))]
+#[cfg(any(feature = "cramium-fpga", feature = "cramium-soc"))]
 pub use cramium::*;
 
-pub(crate) type TimeoutExpiry = i64;
+#[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
+pub(crate) struct TimeoutExpiry(i64);
+impl TimeoutExpiry {
+    pub fn to_i64(&self) -> i64 {
+        self.0
+    }
+}
+
+impl Add<i64> for TimeoutExpiry {
+    type Output = TimeoutExpiry;
+    fn add(self, rhs: i64) -> Self::Output {
+        TimeoutExpiry(self.0 + rhs)
+    }
+}
+
+impl AddAssign<i64> for TimeoutExpiry {
+    fn add_assign(&mut self, rhs: i64) {
+        self.0 += rhs;
+    }
+}
+
+impl core::fmt::Display for TimeoutExpiry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}ms", self.0)
+    }
+}
+
+impl core::fmt::Debug for TimeoutExpiry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}ms", self.0)
+    }
+}
+
+impl From<i64> for TimeoutExpiry {
+    fn from(item: i64) -> Self {
+        TimeoutExpiry(item)
+    }
+}
+
+impl From<usize> for TimeoutExpiry {
+    fn from(item: usize) -> Self {
+        TimeoutExpiry(item as i64)
+    }
+}
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub enum RequestKind {
