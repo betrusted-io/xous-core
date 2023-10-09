@@ -73,6 +73,12 @@ fn main() -> ! {
     // is currently at 900, the Request will be `1900`.
     let mut sleep_heap: BTreeMap<TimeoutExpiry, TimerRequest> = BTreeMap::new();
 
+    // A list of mutexes that should be allowed to run immediately, because the
+    // thread they were waiting on has already unlocked the mutex. This occurs
+    // when a thread attempts to Lock a Mutex and fails, then gets preempted
+    // before it has a chance to send the `LockMutex` message to us.
+    let mut mutex_ready_table: HashMap<Option<xous::PID>, HashSet<usize>> = HashMap::new();
+
     // A list of message IDs that are waiting to receive a Notification. This queue is drained
     // by threads sending `NotifyCondition` to us, or by a condvar timing out.
     let mut notify_table: HashMap<
@@ -239,15 +245,22 @@ fn main() -> ! {
                 };
 
                 let pid = msg.sender.pid();
+                let mutex_id = scalar.arg1;
 
-                // This item is not in the Ready list, so add our sender to the list of processes
-                // to get called when UnlockMutex is invoked
-                let awaiting = mutex_hash.entry(pid).or_default();
+                // If this item is in the Ready list, then someone unlocked this Mutex after the
+                // sender locked it but before they got a chance to send this message. Return
+                // immediately without blocking.
+                if mutex_ready_table.entry(pid).or_default().remove(&mutex_id) {
+                    scalar.id = 0;
+                    continue;
+                }
 
                 // Add this to the end of the list of entries to call so that when `UnlockMutex` is sent
                 // the message will get a response.
-                awaiting
-                    .entry(scalar.arg1)
+                mutex_hash
+                    .entry(pid)
+                    .or_default()
+                    .entry(mutex_id)
                     .or_default()
                     .push_back(msg.sender);
 
@@ -257,10 +270,10 @@ fn main() -> ! {
             }
 
             api::Opcode::UnlockMutex => {
-                if msg.body.is_blocking() {
-                    log::error!("sender made UnlockMutex request that was blocking");
-                    continue;
-                }
+                // if msg.body.is_blocking() {
+                //     log::error!("sender made UnlockMutex request that was blocking");
+                //     continue;
+                // }
                 let Some(scalar) = msg.body.scalar_message() else {
                     log::error!("made a call to UnlockMutex with a non-scalar message");
                     continue;
@@ -268,25 +281,34 @@ fn main() -> ! {
 
                 let pid = msg.sender.pid();
 
-                // Get a list of awaiting mutexes for this process
-                let awaiting = mutex_hash
+                // If there's something waiting in the queue, respond to that message
+                let mut returned = false;
+                if let Some(sender) = mutex_hash
                     .entry(pid)
                     .or_default()
                     .entry(scalar.arg1)
-                    .or_default();
-
-                // Get the vector of awaiting mutex entries.
-                let mutex_entry = awaiting;
-
-                // If there's something waiting in the queue, respond to that message
-                if let Some(sender) = mutex_entry.pop_front() {
+                    .or_default()
+                    .pop_front()
+                {
                     xous::return_scalar(sender, 0).unwrap();
+                    returned = true;
                 } else {
                     log::warn!(
                         "Process {} Attempted to unlock a mutex {:08x} that has not yet been locked",
                         pid.map(|v| v.get()).unwrap_or_default(),
                         scalar.arg1
                     );
+                    if !mutex_ready_table
+                        .entry(pid)
+                        .or_default()
+                        .insert(scalar.arg1)
+                    {
+                        log::error!("attempted to ready mutex {:08x} for PID {:?}, but there was already one waiting", scalar.arg1, pid);
+                    }
+                }
+
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    scalar.id = if returned { 1 } else { 0 };
                 }
             }
 
@@ -296,15 +318,24 @@ fn main() -> ! {
                     continue;
                 };
 
+                let pid = msg.sender.pid();
+
                 // Remove all instances of this mutex from the mutex hash
-                if let Some(responders) = mutex_hash
-                    .entry(msg.sender.pid())
-                    .or_default()
-                    .remove(&scalar.arg1)
-                {
+                if let Some(responders) = mutex_hash.entry(pid).or_default().remove(&scalar.arg1) {
                     if responders.len() != 0 {
                         log::error!("When freeing mutex {:08x}, there were {} mutexes awaiting to be unlocked", scalar.arg1, responders.len());
                     }
+                }
+
+                if mutex_ready_table
+                    .entry(pid)
+                    .or_default()
+                    .remove(&scalar.arg1)
+                {
+                    log::error!(
+                        "When freeing mutex {:08x}, there was one pending unlock request that hasn't been answered",
+                        scalar.arg1,
+                    );
                 }
             }
 
@@ -465,9 +496,8 @@ fn main() -> ! {
 
                 // Return the number of conditions that were notified
                 if let Some(return_value) = msg.body.scalar_message_mut() {
-                    return_value.arg1 = notified_count;
+                    return_value.id = notified_count;
                 }
-                return_type = 1; // Return a Scalar1
             }
 
             api::Opcode::FreeCondition => {
