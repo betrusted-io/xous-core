@@ -1,10 +1,16 @@
 use crate::RequestKind;
-use crate::TimerRequest;
 use crate::TimeoutExpiry;
+use crate::TimerRequest;
 
 use num_traits::ToPrimitive;
-use std::convert::TryInto;
 use std::collections::BTreeMap;
+use std::convert::TryInto;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
+use xous::definitions::MessageSender;
+
+/// The Message ID of the last message we responded to
+static LAST_RESPONDER: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug)]
 enum SleepComms {
@@ -26,17 +32,19 @@ impl XousTickTimer {
         let (sleep_sender, sleep_receiver) = std::sync::mpsc::channel();
         let (time_remaining_sender, time_remaining_receiver) = std::sync::mpsc::channel();
         xous::create_thread(move || {
+            use std::sync::mpsc::RecvTimeoutError;
             let mut timeout = None;
             let mut current_response: Option<TimerRequest> = None;
             loop {
+                log::trace!("waiting for{} for an event", timeout.map(|d: Duration| format!(" {} ms", d.as_millis())).unwrap_or("ever".to_string()));
                 let result = match timeout {
                     None => sleep_receiver
                         .recv()
-                        .map_err(|_| std::sync::mpsc::RecvTimeoutError::Disconnected),
+                        .map_err(|_| RecvTimeoutError::Disconnected),
                     Some(s) => sleep_receiver.recv_timeout(s),
                 };
                 match result {
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    Err(RecvTimeoutError::Timeout) => {
                         let response = current_response.take().unwrap();
                         #[cfg(feature = "debug-print")]
                         log::info!("Returning scalar to {}", response.sender);
@@ -54,10 +62,11 @@ impl XousTickTimer {
                                 arg4: 0,
                             }),
                         )
-                            .unwrap();
+                        .unwrap();
+                        LAST_RESPONDER.store(response.sender.to_usize(), Ordering::Relaxed);
                         timeout = None;
                     }
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    Err(RecvTimeoutError::Disconnected) => {
                         return;
                     }
                     Ok(SleepComms::InterruptSleep) => {
@@ -69,25 +78,25 @@ impl XousTickTimer {
                         if duration > 0 {
                             #[cfg(feature = "debug-print")]
                             log::info!(
-                                    "Starting sleep for {} ms, returning to {}",
-                                    duration,
-                                    new_sender
-                                );
+                                "Starting sleep for {} ms, returning to {}",
+                                duration,
+                                new_sender
+                            );
                         } else {
                             #[cfg(feature = "debug-print")]
                             log::info!(
-                                    "Clamping duration to 0 (was: {})m returning to {}",
-                                    duration,
-                                    new_sender
-                                );
+                                "Clamping duration to 0 (was: {})m returning to {}",
+                                duration,
+                                new_sender
+                            );
                             duration = 0;
                         }
-                        timeout = Some(std::time::Duration::from_millis(
+                        timeout = Some(Duration::from_millis(
                             duration.try_into().unwrap(),
                         ));
                         current_response = Some(TimerRequest {
                             sender: new_sender,
-                            msec: expiry,
+                            msec: expiry.into(),
                             kind: RequestKind::Sleep,
                             data: 0,
                         });
@@ -95,20 +104,20 @@ impl XousTickTimer {
                 }
             }
         })
-            .unwrap();
+        .unwrap();
 
         XousTickTimer {
-            start: std::time::Instant::now(),
+            start: Instant::now(),
             time_remaining_receiver,
             sleep_comms: sleep_sender,
         }
     }
 
-    pub fn last_response(&self) -> &Option<TimerRequest> {
-        &None
+    /// Used for sanity-checking to make sure we're not double-responding
+    pub fn last_response(&self) -> MessageSender {
+        MessageSender::from_usize(LAST_RESPONDER.load(Ordering::Relaxed))
     }
 
-    pub fn clear_last_response(&mut self) {}
     pub fn reset(&mut self) {
         self.start = std::time::Instant::now();
     }
@@ -125,15 +134,15 @@ impl XousTickTimer {
     pub fn schedule_response(&mut self, request: TimerRequest) {
         #[cfg(feature = "debug-print")]
         log::info!(
-                "request.msec: {}  self.elapsed_ms: {}  returning to: {}",
-                request.msec,
-                self.elapsed_ms(),
-                request.sender
-            );
+            "request.msec: {}  self.elapsed_ms: {}  returning to: {}",
+            request.msec,
+            self.elapsed_ms(),
+            request.sender
+        );
         self.sleep_comms
             .send(SleepComms::StartSleep(
                 request.sender,
-                request.msec as i64,
+                request.msec.to_i64(),
                 self.elapsed_ms(),
             ))
             .unwrap();
@@ -157,7 +166,7 @@ impl XousTickTimer {
     /// Disable the sleep interrupt and remove the currently-pending sleep item.
     /// If the sleep item has fired, then there will be no existing sleep item
     /// remaining.
-    pub fn stop_sleep(
+    pub(crate) fn stop_sleep(
         &mut self,
         sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
     ) {
@@ -172,7 +181,7 @@ impl XousTickTimer {
         }
     }
 
-    pub fn start_sleep(
+    pub(crate) fn start_sleep(
         &mut self,
         sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
     ) {
@@ -181,7 +190,9 @@ impl XousTickTimer {
             #[cfg(feature = "debug-print")]
             log::info!(
                 "scheduling a response at {} to {} (heap: {:?})",
-                next_response.msec, next_response.sender, sleep_heap
+                next_response.msec,
+                next_response.sender,
+                sleep_heap
             );
 
             self.schedule_response(next_response);
@@ -200,14 +211,12 @@ impl XousTickTimer {
     ///
     /// Note that interrupts are always enabled, which is why we must stop the timer prior to
     /// reordering the list.
-    pub fn recalculate_sleep(
+    pub(crate) unsafe fn recalculate_sleep_offline(
         &mut self,
         sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
         new: Option<TimerRequest>,
     ) {
-        self.stop_sleep(sleep_heap);
         log::trace!("Elapsed: {}", self.elapsed_ms());
-        self.clear_last_response();
 
         // If we have a new sleep request, add it to the heap.
         if let Some(mut request) = new {
@@ -227,7 +236,15 @@ impl XousTickTimer {
             #[cfg(feature = "debug-print")]
             log::info!("No new sleep request");
         }
+    }
 
+    pub(crate) fn recalculate_sleep(
+        &mut self,
+        sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
+        new: Option<TimerRequest>,
+    ) {
+        self.stop_sleep(sleep_heap);
+        unsafe { self.recalculate_sleep_offline(sleep_heap, new) }
         self.start_sleep(sleep_heap);
     }
 }
