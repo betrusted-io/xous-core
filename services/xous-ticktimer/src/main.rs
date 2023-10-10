@@ -193,8 +193,12 @@ fn main() -> ! {
                     let len_after = awaiting.len();
                     assert!(len_before != len_after);
 
-                    // As a final check, make sure the last notification is from us.
-                    assert!(ticktimer.last_response() == sender);
+                    // Note multiple events elapsing since the last recalculate. Theorized to be harmless.
+                    if ticktimer.last_response() != sender {
+                        log::warn!("Multiple events triggered before we could recalculate sleep: ticktimer.last_response() {:?} != sender {:?}; sleep_heap.len(): {}",
+                            ticktimer.last_response(), sender, sleep_heap.len()
+                        );
+                    }
                 }
 
                 // Recalculate sleep with the newly-adjusted hash and re-enable

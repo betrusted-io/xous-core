@@ -11,9 +11,14 @@ use utralib::generated::*;
 
 use xous::definitions::MessageSender;
 
-/// Add some slack to ensure that when we set the timeout, it
-/// doesn't end up in the past due to processing latencies.
-const LATENCY_SLACK_MS: i64 = 3;
+/// Latency slack may be necessary for hardware implementations that can't handle
+/// events that happened in the past. However, for Precursor hardware, alarms will
+/// trigger based on a "less than or equal to current time" basis, so even if an
+/// alarm happens in the "past" due to slippage between the current time reading
+/// and the alarm setting, the alarm should still trigger.
+///
+/// Note that setting this number larger than 0 will degrade scheduler performance.
+const LATENCY_SLACK_MS: i64 = 0;
 
 pub struct XousTickTimer {
     csr: utralib::CSR<u32>,
