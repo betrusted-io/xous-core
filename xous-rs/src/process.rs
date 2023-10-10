@@ -10,7 +10,7 @@ pub fn id() -> u32 {
 
     if let Ok(pid) = crate::syscall::current_pid() {
         CACHED_PID.store(pid.get() as u32, Ordering::Relaxed);
-        pid.get() as u32;
+        pid.get() as u32
     } else {
         0
     }
