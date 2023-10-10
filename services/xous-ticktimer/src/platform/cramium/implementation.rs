@@ -306,7 +306,7 @@ impl XousTickTimer {
         if let Some(current) = self.stop_interrupt() {
             #[cfg(feature = "debug-print")]
             log::info!("Existing request was {:?}", current);
-            sleep_heap.insert(current.msec, current);
+            assert!(sleep_heap.insert(current.msec, current).is_none(), "Existing sleep_heap entry would be overwritten");
         } else {
             #[cfg(feature = "debug-print")]
             log::info!("There was no existing sleep() request");
@@ -363,7 +363,7 @@ impl XousTickTimer {
 
             #[cfg(feature = "debug-print")]
             log::info!("Modified, the request was: {:?}", request);
-            sleep_heap.insert(request.msec, request);
+            assert!(sleep_heap.insert(request.msec, request).is_none(), "Existing sleep_heap entry would be overwritten");
         } else {
             #[cfg(feature = "debug-print")]
             log::info!("No new sleep request");
