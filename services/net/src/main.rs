@@ -926,7 +926,7 @@ fn main() -> ! {
                                     .unwrap_or_default(),
                             )
                         }
-                        None => respond_with_error(msg, NetError::Invalid).unwrap(),
+                        None => respond_with_error(msg, NetError::Invalid).unwrap_or(()), // this always returns None, can't do anything other than this.
                     }
                 } else {
                     respond_with_error(msg, NetError::Invalid);
