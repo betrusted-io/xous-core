@@ -1,7 +1,20 @@
 {
     "sigchat.account.failed": {
-        "en": "Failed to obtain Signal Account",
-        "en-tts": "Failed to obtain Signal Account"
+        "en": "Failed to setup Signal Account",
+        "en-tts": "Failed to setup Signal Account"
+    },
+    "sigchat.account.link": {
+        "en": "Link to an existing Signal Account",
+        "en-tts": "Link to an existing Signal Account"
+    },
+    "sigchat.account.register": {
+        "en": "Register a new Signal Account",
+        "en-tts": "Register a new Signal Account"
+    },
+    "sigchat.account.title": {
+        "en": "Setup Signal on this device.",
+        "en-tts": "Setup Signal on this device."
+    },
     },
     "sigchat.number": {
         "en": "Number",

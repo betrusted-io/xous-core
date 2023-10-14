@@ -42,14 +42,13 @@ impl<'a> SigChat<'a> {
         }
     }
 
-
     /// Connect to the Signal servers
     ///
     pub fn connect(&mut self) -> bool {
         log::info!("Attempting connect to Signal server");
         if self.wifi() {
             if self.account.is_none() {
-                self.account_modal();
+                self.account_setup();
             }
             if let Some(account) = &self.account {
                 log::info!(
@@ -72,12 +71,68 @@ impl<'a> SigChat<'a> {
         false
     }
 
-    /// Attempts to obtain a phone number from the user and set self.account = a new Account.
+    /// Setup a Signal Account via Registration or Linking
+    ///
+    fn account_setup(&mut self) {
+        self.modals
+            .add_list_item(t!("sigchat.account.link", locales::LANG))
+            .expect("failed add list item");
+        self.modals
+            .add_list_item(t!("sigchat.account.register", locales::LANG))
+            .expect("failed add list item");
+        self.modals
+            .get_radiobutton(t!("sigchat.account.title", locales::LANG))
+            .expect("failed radiobutton modal");
+        match self.modals.get_radio_index() {
+            Ok(index) => match index {
+                0 => self.account_link(),
+                1 => self.account_register(),
+                _ => log::warn!("invalid index"),
+            },
+            Err(e) => log::warn!("failed to select register/link {:?}", e),
+        }
+    }
+
+    /// Link this device to an existing Signal Account
+    ///
+    /// Signal allows to link additional devices to your primary device (e.g. Signal-Android).
+    /// Note that currently Signal allows up to three linked devices per primary.
+    ///
+    pub fn account_link(&self) {
+        self.modals
+            .show_notification(&"sorry - linking is not implemented yet", None)
+            .expect("notification failed");
+    }
+
+    /// Register a new Signal Account with this as the primary device.
+    ///
+    /// A Signal Account requires a phone number to receive SMS or incoming calls for registration & validation.
+    /// The phone number must include the country calling code, i.e. the number must start with a "+" sign.
+    /// Warning: this will disable the authentication of your phone as a primary device.
+    ///
+    pub fn account_register(&mut self) {
+        self.modals
+            .show_notification(&"sorry - registration is not implemented yet", None)
+            .expect("notification failed");
+        match self.number_modal() {
+            Ok(number) => {
+                log::info!("registration phone number = {:?}", number);
+                match Account::new(SIGCHAT_ACCOUNT, &number.to_string()) {
+                    Ok(account) => self.account = Some(account),
+                    Err(e) => log::warn!("failed to create new Account: {e}"),
+                }
+            }
+            Err(e) => log::warn!("failed to get phone number: {e}"),
+        }
+    }
+
+    /// Attempts to obtain a phone number from the user.
     ///
     /// A Signal Account requires a phone number to receive SMS or incoming calls for registration & validation.
     /// The phone number must include the country calling code, i.e. the number must start with a "+" sign.
     ///
-    fn account_modal(&mut self) {
+    #[allow(dead_code)]
+    fn number_modal(&mut self) -> Result<String, Error> {
         let mut builder = self
             .modals
             .alert_builder(t!("sigchat.number.title", locales::LANG));
@@ -86,14 +141,11 @@ impl<'a> SigChat<'a> {
             Ok(payloads) => match payloads.content()[0].content.as_str() {
                 Ok(number) => {
                     log::info!("registration phone number = {:?}", number);
-                    match Account::new(SIGCHAT_ACCOUNT, &number.to_string()) {
-                        Ok(account) => self.account = Some(account),
-                        Err(e) => log::warn!("failed to create new Account: {e}"),
-                    }
+                    Ok(number.to_string())
                 }
-                Err(e) => log::warn!("failed to get payload from modal: {e}"),
+                Err(e) => Err(Error::new(ErrorKind::InvalidData, e)),
             },
-            Err(e) => log::warn!("failed to build modal: {:?}", e),
+            Err(_) => Err(Error::from(ErrorKind::ConnectionRefused)),
         }
     }
 
