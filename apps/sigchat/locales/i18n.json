@@ -1,4 +1,16 @@
 {
+    "sigchat.account.failed": {
+        "en": "Failed to obtain Signal Account",
+        "en-tts": "Failed to obtain Signal Account"
+    },
+    "sigchat.number": {
+        "en": "Number",
+        "en-tts": "Number"
+    },
+    "sigchat.number.title": {
+        "en": "Phone Number",
+        "en-tts": "Phone Number"
+    },
     "sigchat.pddb.warning": {
         "en": "WARNING: pddb not mounted",
         "en-tts": "WARNING: pddb not mounted",
