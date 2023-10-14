@@ -30,6 +30,8 @@ The `sigchat` code is primarily concerned with the Signal specific protocols, wh
 The Chat library provides the UI to display a series of Signal post (Posts) in a Signal group (Dialogue) stored in the pddb. Each Dialogue is stored in the `pddb:dict` `sigchat.dialogue` under a descriptive `pddb:key` (ie ``).
 
 `sigchat` passes a menu to the Chat UI:
+* `register` to register a new Signal account with a phone number
+* `link` this device to an existing Signal account.
 
 The `sigchat` servers is set to receive:
 * `SigchatOp::Post` A memory msg containing an outbount user post

@@ -15,6 +15,17 @@
         "en": "Setup Signal on this device.",
         "en-tts": "Setup Signal on this device."
     },
+    "sigchat.menu.close": {
+        "en": "Close menu",
+        "en-tts": "Close menu"
+    },
+    "sigchat.register": {
+        "en": "Register",
+        "en-tts": "Register"
+    },
+    "sigchat.link": {
+        "en": "Link",
+        "en-tts": "Link"
     },
     "sigchat.number": {
         "en": "Number",
