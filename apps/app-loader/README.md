@@ -2,7 +2,7 @@
 
 This app allows you to load apps onto your device at runtime and is intended to be used by developers who would like to quickly test their apps on physical hardware.
 At the moment the apps are loaded onto the device using a primitive HTTP server; however, in the future, other (faster) methods may be implemented.
-Depending on how good the device's WiFi connection is, loading the app can take anywhere from 10 or 20 seconds for a small app to a couple of minutes for a large app.
+Depending on how good the device's WiFi connection is, loading the app can take anywhere from 20 seconds for a small app to a couple of minutes for a large app. Additionally, if you are loading a particularly large app, your device's WiFi connection may cut out while you are trying to load it, leading to your device not being able to download the app (this is another reason why different methods of app loading may need to be implemented).
 Note that at the moment you can only load apps once each time the device runs since process destruction has not been implemented in Xous yet.
 
 ## Usage
@@ -24,7 +24,7 @@ Now, after selecting `App Loader` from the app menu on the device, you should se
 | Close      |
 \------------/
 ```
-From here, you can select `Set Server` and then input the address of your server (e.g., `http://` followed by the ip address of your server, a `:`, and the port you are running it on). If you do not prefix it with `http://`, the app will present an error and make you try it again.
+From here, you can select `Set Server` and then input the address of your server (e.g., `http://` followed by the ip address of your server, a `:`, and the port you are running it on). If you do not prefix the address with `http://`, the app will present an error and make you re-enter it.
 Now, the screen should look like:
 ```
 /-----------------\
