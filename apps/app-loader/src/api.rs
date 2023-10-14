@@ -88,7 +88,7 @@ impl AppLoader {
 
 
 	let mut memory = xous::map_memory(None, None, len + if len & 0xFFF == 0 { 0 } else { 0x1000 - (len & 0xFFF) }, xous::MemoryFlags::R | xous::MemoryFlags::W).expect("Couldn't map memory");
-	response.into_reader().read_exact(&mut memory.as_slice_mut()[..len]).expect("Couldn't read");
+	response.into_reader().read_exact(&mut unsafe{ memory.as_slice_mut() }[..len]).expect("Couldn't read");
 
 	self.modals.update_progress(1).expect("Couldn't update progress");
 	//////////////////////
