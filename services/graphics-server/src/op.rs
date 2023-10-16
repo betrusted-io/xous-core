@@ -12,6 +12,9 @@ pub const HEIGHT: i16 = 536;
 /// For passing frame buffer references
 pub type LcdFB = [u32; LCD_FRAME_BUF_SIZE];
 
+/// Set the expected rectangle length for the busy animation
+pub const BUSY_ANIMATION_RECT_WIDTH: i16 = 32; // golden ratio off of a height of 20
+
 fn put_pixel(fb: &mut LcdFB, x: i16, y: i16, color: PixelColor) {
     let mut clip_y: usize = y as usize;
     if clip_y >= LCD_LINES {
@@ -254,7 +257,7 @@ impl Iterator for RectangleIterator {
     }
 }
 
-pub fn rectangle(fb: &mut LcdFB, rect: Rectangle, clip: Option<Rectangle>) {
+pub fn rectangle(fb: &mut LcdFB, rect: Rectangle, clip: Option<Rectangle>, xor: bool) {
     let r = RectangleIterator {
         top_left: rect.tl,
         bottom_right: rect.br,
@@ -264,7 +267,20 @@ pub fn rectangle(fb: &mut LcdFB, rect: Rectangle, clip: Option<Rectangle>) {
     };
 
     for pixel in r {
-        put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
+        if !xor {
+            put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
+        } else {
+            if rect.width() <= BUSY_ANIMATION_RECT_WIDTH as u32 {
+                // only allow xor of a rectangle if it is within the expected width for the busy animation
+                // This is to make it annoying for someone using an XOR rectangle to synthesize inverted
+                // text on an otherwise untrusted dialog box (I suspect it's not impossible, but introduces
+                // a likelihood of drawing artifacts especially across translations and font size selections).
+                xor_pixel(fb, pixel.0.x, pixel.0.y);
+            } else {
+                log::warn!("invalid xor rect width");
+                put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
+            }
+        }
     }
 }
 

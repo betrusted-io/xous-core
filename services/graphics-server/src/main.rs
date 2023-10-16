@@ -189,7 +189,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                             op::circle(display.native_buffer(), circ, Some(obj.clip));
                         }
                         ClipObjectType::Rect(rect) => {
-                            op::rectangle(display.native_buffer(), rect, Some(obj.clip));
+                            op::rectangle(display.native_buffer(), rect, Some(obj.clip), false);
                         }
                         ClipObjectType::RoundRect(rr) => {
                             op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
@@ -217,7 +217,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                                     op::circle(display.native_buffer(), circ, Some(obj.clip));
                                 }
                                 ClipObjectType::Rect(rect) => {
-                                    op::rectangle(display.native_buffer(), rect, Some(obj.clip));
+                                    op::rectangle(display.native_buffer(), rect, Some(obj.clip), false);
                                 }
                                 ClipObjectType::RoundRect(rr) => {
                                     op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
@@ -323,13 +323,25 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                             r
                     }
                     _ => {
-                        // composition_top_left already had a screen_offset added when it was computed. just margin it out
-                            let mut r = Rectangle::new(
-                                composition_top_left,
-                                composition_top_left.add(Point::new(composition.bb_width() as _, composition.bb_height() as _))
-                            );
-                            r.margin_out(tv.margin);
-                            r
+                            if tv.busy_animation_state.is_some() {
+                                // we want to clear the entire potentially drawable region, not just the dirty box if we're
+                                // doing a busy animation.
+                                let r = Rectangle::new(
+                                    Point::new(screen_offset.x, composition_top_left.y),
+                                    Point::new(screen_offset.x, composition_top_left.y).add(
+                                        Point::new(typeset_extent.x, composition.bb_height())
+                                    )
+                                );
+                                r
+                            } else {
+                                // composition_top_left already had a screen_offset added when it was computed. just margin it out
+                                let mut r = Rectangle::new(
+                                    composition_top_left,
+                                    composition_top_left.add(Point::new(composition.bb_width() as _, composition.bb_height() as _))
+                                );
+                                r.margin_out(tv.margin);
+                                r
+                            }
                         }
                     };
 
@@ -370,7 +382,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                                 tv.clip_rect,
                             );
                         } else {
-                            op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect);
+                            op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect, false);
                         }
                     }
                     // for now, if we're in braille mode, emit all text to the debug log so we can see it
@@ -384,6 +396,55 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                             .unwrap_or(Rectangle::new(Point::new(0, 0), Point::new(0, 0,)));
                         composition.render(display.native_buffer(), composition_top_left, tv.invert, smallest_rect);
                     }
+
+                    // run the busy animation
+                    if let Some(state) = tv.busy_animation_state {
+                        let total_width = typeset_extent.x as i16;
+                        if total_width > op::BUSY_ANIMATION_RECT_WIDTH * 2 {
+                            let step = state as i16 % (op::BUSY_ANIMATION_RECT_WIDTH * 2);
+                            for offset in (0..(total_width + op::BUSY_ANIMATION_RECT_WIDTH * 2))
+                            .step_by((op::BUSY_ANIMATION_RECT_WIDTH * 2) as usize) {
+                                let left_x = offset + step + composition_top_left.x;
+                                if offset == 0 && (step >= op::BUSY_ANIMATION_RECT_WIDTH) && (step < op::BUSY_ANIMATION_RECT_WIDTH * 2) {
+                                    // handle the truncated "left" rectangle
+                                    let mut trunc_rect = Rectangle::new(
+                                        Point::new(composition_top_left.x as i16, clear_rect.tl().y),
+                                        Point::new((step + composition_top_left.x - op::BUSY_ANIMATION_RECT_WIDTH) as i16, clear_rect.br().y)
+                                    );
+                                    trunc_rect.style = DrawStyle {
+                                        fill_color: Some(PixelColor::Light),
+                                        stroke_color: None,
+                                        stroke_width: 0,
+                                    };
+                                    op::rectangle(
+                                        display.native_buffer(),
+                                        trunc_rect,
+                                        tv.clip_rect,
+                                        true
+                                    );
+                                } // the "right" rectangle is handled by the clipping mask
+                                let mut xor_rect = Rectangle::new(
+                                    Point::new(left_x as i16, clear_rect.tl().y),
+                                    Point::new((left_x + op::BUSY_ANIMATION_RECT_WIDTH) as i16, clear_rect.br().y)
+                                );
+                                xor_rect.style = DrawStyle {
+                                    fill_color: Some(PixelColor::Light),
+                                    stroke_color: None,
+                                    stroke_width: 0,
+                                };
+                                op::rectangle(
+                                    display.native_buffer(),
+                                    xor_rect,
+                                    tv.clip_rect,
+                                    true
+                                );
+                            }
+                        } else {
+                            // don't do the animation, this could be abused to create inverted text
+                        }
+                        tv.busy_animation_state = Some(state + 2);
+                    }
+
                     // type mismatch for now, replace this with a simple equals once we sort that out
                     tv.cursor.pt.x = composition.final_cursor().pt.x;
                     tv.cursor.pt.y = composition.final_cursor().pt.y;
@@ -404,7 +465,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                 Some(Opcode::Clear) => {
                     let mut r = Rectangle::full_screen();
                     r.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 0);
-                    op::rectangle(display.native_buffer(), r, screen_clip.into())
+                    op::rectangle(display.native_buffer(), r, screen_clip.into(), false)
                 }
                 Some(Opcode::Line) => msg_scalar_unpack!(msg, p1, p2, style, _, {
                     let l =
@@ -417,7 +478,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         Point::from(br),
                         DrawStyle::from(style),
                     );
-                    op::rectangle(display.native_buffer(), r, screen_clip.into());
+                    op::rectangle(display.native_buffer(), r, screen_clip.into(), false);
                 }),
                 Some(Opcode::RoundedRectangle) => msg_scalar_unpack!(msg, tl, br, style, r, {
                     let rr = RoundedRectangle::new(
