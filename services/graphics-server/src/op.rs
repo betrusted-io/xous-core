@@ -275,7 +275,7 @@ pub fn rectangle(fb: &mut LcdFB, rect: Rectangle, clip: Option<Rectangle>, xor: 
                 // This is to make it annoying for someone using an XOR rectangle to synthesize inverted
                 // text on an otherwise untrusted dialog box (I suspect it's not impossible, but introduces
                 // a likelihood of drawing artifacts especially across translations and font size selections).
-                if pixel.0.y % 20 < 10 {
+                if pixel.0.y % 20 < 18 {
                     xor_pixel(fb, pixel.0.x, pixel.0.y);
                 } else {
                     // don't allow XOR on some pixels to avoid this being used as a primitive to synthesize secure boxes
