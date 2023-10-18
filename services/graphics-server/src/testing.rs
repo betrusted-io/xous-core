@@ -62,10 +62,16 @@ pub fn tests() {
                         tv.insertion = None;
                         tv.draw_border = false;
                         tv.busy_animation_state = Some(0);
-                        for _ in 0..4800 {
-                            gfx.draw_textview(&mut tv).unwrap();
-                            gfx.flush().unwrap();
-                            ticktimer.sleep_ms(100).unwrap();
+                        for y in 0..30 {
+                            gfx.draw_rectangle(checkbound).unwrap();
+                            tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new_coords(
+                                10, 10 +  y, 240, 30 + y
+                            ));
+                            for _ in 0..5 {
+                                gfx.draw_textview(&mut tv).unwrap();
+                                gfx.flush().unwrap();
+                                ticktimer.sleep_ms(100).unwrap();
+                            }
                         }
                     }
                     Some(TestType::BoundingBox) => {
