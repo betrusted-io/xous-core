@@ -251,7 +251,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_hosted()
                    .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
                    .add_services(&get_cratespecs())
-                   .add_feature("graphics-server/testing");
+                   .add_feature("graphics-server/gfx-testing");
         },
         Some("hosted-ci") => {
             builder.target_hosted()
