@@ -79,7 +79,7 @@ impl From<usize> for TextOp {
 
 // roughly 168 bytes to represent the rest of the struct, and we want to fill out the 4096 byte page with text
 const TEXTVIEW_LEN: usize = 3072;
-const TEXTVIEW_DEFAULT_STYLE: GlyphStyle = GlyphStyle::Regular;
+pub const TEXTVIEW_DEFAULT_STYLE: GlyphStyle = GlyphStyle::Regular;
 
 #[derive(Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TextView {
