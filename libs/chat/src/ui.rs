@@ -4,20 +4,24 @@ use crate::icontray::Icontray;
 use dialogue::{post::Post, Dialogue};
 use gam::{menu_matic, MenuMatic, UxRegistration};
 use graphics_server::api::GlyphStyle;
-use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
+use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView, Line};
 use locales::t;
 use modals::Modals;
 use rkyv::de::deserializers::AllocDeserializer;
 use rkyv::ser::serializers::WriteSerializer;
 use rkyv::ser::Serializer;
 use rkyv::Deserialize;
+use ticktimer_server::Ticktimer;
 use std::cmp::min;
 use std::convert::TryFrom;
+use std::fmt::Write as TextWrite;
 
 use std::io::{Error, ErrorKind, Read, Write};
 use xous::{MessageEnvelope, CID};
 
 use xous_names::XousNames;
+
+pub const BUSY_ANIMATION_RATE_MS: usize = 50;
 
 #[allow(dead_code)]
 pub(crate) struct Ui {
@@ -42,6 +46,7 @@ pub(crate) struct Ui {
     canvas: Gid,
     gam: gam::Gam,
     modals: Modals,
+    tt: Ticktimer,
 
     // variables regarding the posts currently onscreen
     // the selected post is hilighted onscreen and the focus of the msg menu F4
@@ -53,6 +58,14 @@ pub(crate) struct Ui {
 
     // variables that define our graphical attributes
     screensize: Point,
+    /// height of the status bar. This is subtracted from screensize.
+    status_height: u16,
+    /// TextView for the status bar. This encapsulates the state of the busy animation, and the text within.
+    status_tv: TextView,
+    /// track the last time we update the status bar; use this avoid double-updating busy animations
+    status_last_update_ms: u64,
+    /// track the last non-busy message so we can restore it when the busy state stops
+    status_last_msg: Option<String>,
     bubble_width: u16,
     margin: Point,        // margin to edge of canvas
     bubble_margin: Point, // margin of text in bubbles
@@ -114,6 +127,24 @@ impl Ui {
         .expect("couldn't create MenuMatic manager");
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
+
+        // setup the initial status bar contents
+        let margin = Point::new(4, 4);
+        let status_height = gam.glyph_height_hint(
+            graphics_server::api::text::TEXTVIEW_DEFAULT_STYLE).unwrap() as u16
+            + margin.y as u16 * 2;
+        let mut status_tv = TextView::new(canvas,
+            TextBounds::BoundingBox(Rectangle::new(
+                Point::new(0, 0),
+                Point::new(screensize.x, status_height as i16)
+            ))
+        );
+        status_tv.margin = margin;
+        status_tv.draw_border = false;
+        status_tv.clear_area = true;
+        write!(status_tv, "{}", t!("chat.status.initial", locales::LANG).to_string()).ok();
+        let tt = ticktimer_server::Ticktimer::new().unwrap();
+        let status_last_update_ms = tt.elapsed_ms();
         Ui {
             input: None,
             msg: None,
@@ -126,7 +157,12 @@ impl Ui {
             canvas,
             gam,
             modals,
+            tt,
             screensize,
+            status_height,
+            status_tv,
+            status_last_update_ms,
+            status_last_msg: None,
             post_selected: None,
             post_anchor: None,
             post_topdown: false,
@@ -517,6 +553,12 @@ impl Ui {
         } else {
             bubble_tv.border_width = 1;
         }
+        bubble_tv.clip_rect = Some(
+            Rectangle::new(
+                Point::new(0, self.status_height as i16 + self.margin.y),
+                self.screensize
+            )
+        );
         bubble_tv.draw_border = true;
         bubble_tv.clear_area = true;
         bubble_tv.rounded_border = Some(self.bubble_radius);
@@ -535,7 +577,7 @@ impl Ui {
             .draw_rectangle(
                 self.canvas,
                 Rectangle::new_with_style(
-                    Point::new(0, 0),
+                    Point::new(0, self.status_height as i16),
                     self.screensize,
                     DrawStyle {
                         fill_color: Some(PixelColor::Light),
@@ -574,12 +616,56 @@ impl Ui {
             while !self.layout().unwrap_or(true) && attempt < 3 {
                 attempt += 1;
             }
+            self.status_last_update_ms = self.tt.elapsed_ms();
         } else {
             self.clear_area(); // no dialogue so clear screen
         }
         log::trace!("chat app redraw##");
         self.gam.redraw().expect("couldn't redraw screen");
         Ok(())
+    }
+
+    /// Update the busy state. Does not touch any other aspect of the screen layout.
+    pub(crate) fn redraw_busy(&mut self) -> Result<(), xous::Error> {
+        let curtime = self.tt.elapsed_ms();
+        if curtime - self.status_last_update_ms > BUSY_ANIMATION_RATE_MS as u64 {
+            self.gam.post_textview(&mut self.status_tv)?;
+            self.gam.redraw().expect("couldn't redraw screen");
+            self.status_last_update_ms = curtime;
+        }
+        Ok(())
+    }
+
+    /// Returns `true` if the status bar is currently set for the busy animation
+    pub(crate) fn is_busy(&self) -> bool {
+        self.status_tv.busy_animation_state.is_some()
+    }
+
+    /// If not currently busy, save the current status bar message and kick off the animation.
+    /// Updates the text of the status bar in all cases.
+    pub(crate) fn set_busy(&mut self, msg: &str) {
+        if self.status_tv.busy_animation_state.is_none() {
+            // stash a copy of the last message that wasn't a busy message
+            self.status_last_msg = Some(
+                self.status_tv.to_str().to_owned()
+            );
+            self.status_tv.busy_animation_state = Some(0);
+        }
+        self.status_tv.clear_str();
+        write!(self.status_tv, "{}", msg).ok();
+        xous::send_message(self.app_cid.unwrap(),
+            xous::Message::new_scalar(
+                ChatOp::UpdateBusy as usize, 0, 0, 0, 0)
+        ).ok();
+    }
+
+    /// Stops the busy animation state
+    pub(crate) fn clear_busy(&mut self) {
+        self.status_tv.busy_animation_state = None;
+        if let Some(prev_msg) = self.status_last_msg.take() {
+            self.status_tv.clear_str();
+            write!(self.status_tv, "{}", prev_msg).ok();
+        }
     }
 
     /// Layout the post bubbles on the screen.
@@ -599,6 +685,15 @@ impl Ui {
     ///
     fn layout(&mut self) -> Result<bool, Error> {
         self.clear_area();
+        self.gam.post_textview(&mut self.status_tv)
+            .expect("couldn't render status bar");
+        let status_border = Line::new(
+            Point::new(0, self.status_height as i16),
+            Point::new(self.screensize.x, self.status_height as i16)
+        );
+        self.gam.draw_line(self.canvas,
+            status_border
+        ).expect("couldn't draw status lower border");
         match (&self.dialogue, &self.post_anchor) {
             (Some(dialogue), Some(post_anchor)) => {
                 log::info!("redrawing dialogue: {}", dialogue.title);
@@ -608,7 +703,7 @@ impl Ui {
                 // initialise the first post index AND the vertical position on the screen
                 let mut post_index = *post_anchor;
                 let mut anchor_y = match self.post_topdown {
-                    true => 0,
+                    true => self.status_height as i16 + self.margin.y,
                     false => self.screensize.y - self.margin.y,
                 };
 
