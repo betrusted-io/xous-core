@@ -4,11 +4,13 @@ pub mod icontray;
 pub mod ui;
 
 pub use api::*;
+pub use ui::BUSY_ANIMATION_RATE_MS;
 use gam::MenuItem;
 use num_traits::FromPrimitive;
 use std::convert::TryInto;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
 
 use xous::{Error, CID, SID};
 use xous_ipc::Buffer;
@@ -40,6 +42,18 @@ impl Chat {
         let chat_sid = xous::create_server().unwrap();
         let chat_cid = xous::connect(chat_sid).unwrap();
 
+        let busy_bumper = xous::create_server().unwrap();
+        let busy_bumper_cid = xous::connect(busy_bumper).unwrap();
+
+        log::info!("starting idle animation runner");
+        let run_busy_animation = Arc::new(AtomicBool::new(false));
+        thread::spawn({
+            let run_busy_animation = run_busy_animation.clone();
+            move || {
+                busy_animator(busy_bumper, busy_bumper_cid, chat_cid, run_busy_animation);
+            }
+        });
+
         log::info!("Starting chat UI server",);
         thread::spawn({
             move || {
@@ -51,6 +65,8 @@ impl Chat {
                     opcode_post,
                     opcode_event,
                     opcode_rawkeys,
+                    run_busy_animation,
+                    busy_bumper_cid,
                 );
             }
         });
@@ -222,6 +238,78 @@ impl Chat {
         .map(|_| ())
         .expect("failed to Redraw Chat UI");
     }
+
+    /// Run or stop the busy/waiting animation.
+    ///
+    /// # Arguments
+    ///
+    /// `msg` - If `Some()`, updates the status bar to show the `msg` and start the animation running
+    /// If `None`, restores the last status message before being busy and stops the animation.
+    pub fn set_busy_state(&self, msg: Option<String>) -> Result<(), Error> {
+        let bm = BusyMessage {
+            busy_msg: match msg {
+                None => None,
+                Some(m) => {
+                    Some(
+                        xous_ipc::String::from_str(&m)
+                    )
+                }
+            }
+        };
+        match Buffer::into_buf(bm) {
+            Ok(buf) => match buf.send(self.cid, ChatOp::SetBusyAnimationState as u32) {
+                Ok(..) => {
+                    Ok(())
+                }
+                Err(_) => Err(xous::Error::InternalError),
+            },
+            Err(_) => Err(xous::Error::InternalError),
+        }
+    }
+}
+
+/// Helper server that pumps the busy animation state until instructed to stop.
+///
+/// # Arguments
+///
+/// * `busy_bumper` - the server ID to use for the helper server
+/// * `busy_bumper_cid` - the corresponding connection ID
+/// * `chat_cid` - the CID to the main chat loop, used to initiate redraw events as necessary
+/// * `run_busy_animation` - a shared `AtomicBool` which, when `true`, causes the loop to reschedule itself to run.
+pub fn busy_animator(
+    busy_bumper: SID,
+    busy_bumper_cid : CID,
+    chat_cid: CID,
+    run_busy_animation: Arc<AtomicBool>) {
+        let tt = ticktimer_server::Ticktimer::new().unwrap();
+        loop {
+            let msg = xous::receive_message(busy_bumper).unwrap();
+            match FromPrimitive::from_usize(msg.body.id()) {
+                Some(BusyAnimOp::Start) => {
+                    tt.sleep_ms(crate::BUSY_ANIMATION_RATE_MS).unwrap();
+                    xous::try_send_message(busy_bumper_cid,
+                        xous::Message::new_scalar(
+                            BusyAnimOp::Pump as usize, 0, 0, 0, 0)
+                    ).ok();
+                }
+                Some(BusyAnimOp::Pump) => {
+                    if run_busy_animation.load(Ordering::SeqCst) {
+                        xous::try_send_message(chat_cid,
+                            xous::Message::new_scalar(
+                                ChatOp::UpdateBusy as usize, 0, 0, 0, 0)
+                        ).ok();
+                        tt.sleep_ms(crate::BUSY_ANIMATION_RATE_MS).unwrap();
+                        xous::try_send_message(busy_bumper_cid,
+                            xous::Message::new_scalar(
+                                BusyAnimOp::Pump as usize, 0, 0, 0, 0)
+                        ).ok();
+                    }
+                }
+                _ => {
+                    log::warn!("Unexpected message: {:?}", msg);
+                }
+            }
+        }
 }
 
 /// The Chat UI server a manages a Chat UI to read a display and navigate a
@@ -245,6 +333,8 @@ pub fn server(
     opcode_post: Option<usize>,
     opcode_event: Option<usize>,
     opcode_rawkeys: Option<usize>,
+    run_busy_animation: Arc<AtomicBool>,
+    busy_bumper_cid: CID,
 ) -> ! {
     //log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -256,7 +346,37 @@ pub fn server(
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
+        if ui.is_busy() {
+            if !run_busy_animation.swap(true, Ordering::SeqCst) {
+                // only send off the Pump request on the transition from false->true; this causes the machine to run
+                xous::try_send_message(busy_bumper_cid,
+                    xous::Message::new_scalar(
+                        BusyAnimOp::Pump as usize, 0, 0, 0, 0)
+                ).ok();
+            }
+        } else {
+            // make sure the animation stops running. Not sure if this is the most efficient way to handle this,
+            // but I think an atomic bool set is just a couple dozen CPU cycles...?
+            run_busy_animation.store(false, Ordering::SeqCst);
+        }
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(ChatOp::UpdateBusy) => {
+                ui.redraw_busy().expect("CHAT couldn't redraw");
+            }
+            Some(ChatOp::SetBusyAnimationState) => {
+                let buffer = unsafe {
+                    Buffer::from_memory_message(msg.body.memory_message().unwrap())
+                };
+                let s = buffer.to_original::<BusyMessage, _>().unwrap();
+                match s.busy_msg {
+                    Some(msg) => {
+                        ui.set_busy(msg.as_str().unwrap());
+                    }
+                    None => {
+                        ui.clear_busy();
+                    }
+                }
+            }
             Some(ChatOp::DialogueSave) => {
                 log::info!("ChatOp::DialogueSave");
                 ui.dialogue_save().expect("failed to save Dialogue");
