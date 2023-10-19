@@ -113,6 +113,9 @@ pub struct TextView {
     // this field specifies the beginning and end of a "selected" region of text
     pub selected: Option<[u32; 2]>,
 
+    // this field tracks the state of a busy animation, if `Some`
+    pub busy_animation_state: Option<u32>,
+
     pub text: String<3072>,
 }
 impl TextView {
@@ -139,6 +142,7 @@ impl TextView {
             clear_area: true,
             overflow: None,
             dry_run: false,
+            busy_animation_state: None,
         }
     }
     pub fn dry_run(&self) -> bool {
