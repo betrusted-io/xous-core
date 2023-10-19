@@ -1,4 +1,16 @@
 {
+    "mtxchat.busy.connecting": {
+        "en": "Connecting...",
+        "en-tts": "Connecting..."
+    },
+    "mtxchat.busy.updating": {
+        "en": "Updating...",
+        "en-tts": "Updating..."
+    },
+    "mtxchat.busy.sending": {
+        "en": "Sending...",
+        "en-tts": "Sending..."
+    },
     "mtxchat.clock.warning": {
         "en": "WARNING: clock not set",
         "en-tts": "WARNING: clock not set",

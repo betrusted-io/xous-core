@@ -241,6 +241,7 @@ impl<'a> MtxChat<'a> {
 
     pub fn connect(&mut self) -> bool {
         log::info!("Attempting connect to Matrix server");
+        self.chat.set_busy_state(Some(t!("mtxchat.busy.connecting", locales::LANG).to_owned())).expect("couldn't set busy state");
         if self.wifi() {
             if self.login() {
                 if let Some(_room_id) = self.get_room_id() {
@@ -252,6 +253,7 @@ impl<'a> MtxChat<'a> {
                             .show_notification(t!("mtxchat.listen.patience", locales::LANG), None)
                             .expect("notification failed");
                     }
+                    self.chat.set_busy_state(None).expect("couldn't clear busy state");
                     return true;
                 } else {
                     self.modals
@@ -273,6 +275,7 @@ impl<'a> MtxChat<'a> {
                 .expect("notification failed");
         }
         self.dialogue_set(None);
+        self.chat.set_busy_state(None).expect("couldn't clear busy state");
         false
     }
 
@@ -626,14 +629,17 @@ impl<'a> MtxChat<'a> {
             &self.room_id,
         ) {
             (true, Some(token), Some(user_domain), Some(room_id)) => {
+                self.chat.set_busy_state(Some(t!("mtxchat.busy.sending", locales::LANG).to_owned())).expect("couldn't set busy state");
                 log::info!("txn_id = {}", txn_id);
                 let mut url = Url::parse("https://matrix.org").unwrap();
                 url.set_host(Some(user_domain)).expect("failed to set host");
-                if web::send_message(&mut url, &room_id, &text, &txn_id, token, &mut self.agent) {
+                let r = if web::send_message(&mut url, &room_id, &text, &txn_id, token, &mut self.agent) {
                     "SENT"
                 } else {
                     "FAILED TO SEND"
-                }
+                };
+                self.chat.set_busy_state(None).expect("couldn't clear busy state");
+                r
             }
             (false, _, _, _) => "Not logged in",
             (_, None, _, _) => "No token set",
