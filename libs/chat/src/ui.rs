@@ -131,17 +131,18 @@ impl Ui {
         // setup the initial status bar contents
         let margin = Point::new(4, 4);
         let status_height = gam.glyph_height_hint(
-            graphics_server::api::text::TEXTVIEW_DEFAULT_STYLE).unwrap() as u16
-            + margin.y as u16 * 2;
+            GlyphStyle::Regular).unwrap() as u16;
         let mut status_tv = TextView::new(canvas,
             TextBounds::BoundingBox(Rectangle::new(
                 Point::new(0, 0),
-                Point::new(screensize.x, status_height as i16)
+                Point::new(screensize.x, status_height as _),
             ))
         );
+        status_tv.style = GlyphStyle::Regular;
         status_tv.margin = margin;
         status_tv.draw_border = false;
         status_tv.clear_area = true;
+        status_tv.margin = Point::new(0, 0);
         write!(status_tv, "{}", t!("chat.status.initial", locales::LANG).to_string()).ok();
         let tt = ticktimer_server::Ticktimer::new().unwrap();
         let status_last_update_ms = tt.elapsed_ms();

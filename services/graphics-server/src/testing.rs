@@ -56,7 +56,7 @@ pub fn tests() {
                         let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
                         TextBounds::BoundingBox(anim_rect));
                         tv.clip_rect = Some(clipping_area);
-                        tv.style = TEST_STYLE;
+                        tv.style = GlyphStyle::Small;
                         tv.ellipsis = false;
                         write!(tv, "Test of busy animation").unwrap();
                         tv.insertion = None;
