@@ -18,6 +18,10 @@
         "ja": "WARNING: clock not set *EN*",
         "zh": "WARNING: clock not set *EN*"
     },
+    "mtxchat.status.default" : {
+        "en": "Use ← for login menu",
+        "en-tts": "Use ← for login menu"
+    },
     "mtxchat.filter.failed": {
         "en": "error: could not create filter",
         "en-tts": "error: could not create filter",

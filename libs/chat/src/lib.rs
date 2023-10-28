@@ -12,7 +12,7 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
 
-use xous::{Error, CID, SID};
+use xous::{Error, CID, SID, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 pub struct Chat {
@@ -239,32 +239,31 @@ impl Chat {
         .expect("failed to Redraw Chat UI");
     }
 
-    /// Run or stop the busy/waiting animation.
+    /// Set the status bar text.
     ///
     /// # Arguments
     ///
-    /// `msg` - If `Some()`, updates the status bar to show the `msg` and start the animation running
-    /// If `None`, restores the last status message before being busy and stops the animation.
-    pub fn set_busy_state(&self, msg: Option<String>) -> Result<(), Error> {
+    /// `msg` - the text to show
+    ///
+    /// This method implements the latest recommendation of panicing on internal errors.
+    pub fn set_status_text(&self, msg: &str) {
         let bm = BusyMessage {
-            busy_msg: match msg {
-                None => None,
-                Some(m) => {
-                    Some(
-                        xous_ipc::String::from_str(&m)
-                    )
-                }
-            }
+            busy_msg: xous_ipc::String::from_str(msg)
         };
-        match Buffer::into_buf(bm) {
-            Ok(buf) => match buf.send(self.cid, ChatOp::SetBusyAnimationState as u32) {
-                Ok(..) => {
-                    Ok(())
-                }
-                Err(_) => Err(xous::Error::InternalError),
-            },
-            Err(_) => Err(xous::Error::InternalError),
-        }
+        Buffer::into_buf(bm).expect("internal error").send(
+            self.cid, ChatOp::SetStatusText as u32
+        ).expect("internal error");
+    }
+
+    pub fn set_busy_state(&self, run: bool) {
+        xous::send_message(
+            self.cid,
+            xous::Message::new_scalar(ChatOp::SetBusyAnimationState as usize,
+                if run { 1 } else { 0 },
+                0, 0, 0),
+        )
+        .map(|_| ())
+        .expect("internal error");
     }
 }
 
@@ -299,6 +298,7 @@ pub fn busy_animator(
                                 ChatOp::UpdateBusy as usize, 0, 0, 0, 0)
                         ).ok();
                         tt.sleep_ms(crate::BUSY_ANIMATION_RATE_MS).unwrap();
+                        log::info!("busy!");
                         xous::try_send_message(busy_bumper_cid,
                             xous::Message::new_scalar(
                                 BusyAnimOp::Pump as usize, 0, 0, 0, 0)
@@ -346,37 +346,32 @@ pub fn server(
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
-        if ui.is_busy() {
-            if !run_busy_animation.swap(true, Ordering::SeqCst) {
-                // only send off the Pump request on the transition from false->true; this causes the machine to run
-                xous::try_send_message(busy_bumper_cid,
-                    xous::Message::new_scalar(
-                        BusyAnimOp::Pump as usize, 0, 0, 0, 0)
-                ).ok();
-            }
-        } else {
-            // make sure the animation stops running. Not sure if this is the most efficient way to handle this,
-            // but I think an atomic bool set is just a couple dozen CPU cycles...?
-            run_busy_animation.store(false, Ordering::SeqCst);
-        }
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ChatOp::UpdateBusy) => {
                 ui.redraw_busy().expect("CHAT couldn't redraw");
             }
-            Some(ChatOp::SetBusyAnimationState) => {
+            Some(ChatOp::SetStatusText) => {
                 let buffer = unsafe {
                     Buffer::from_memory_message(msg.body.memory_message().unwrap())
                 };
                 let s = buffer.to_original::<BusyMessage, _>().unwrap();
-                match s.busy_msg {
-                    Some(msg) => {
-                        ui.set_busy(msg.as_str().unwrap());
-                    }
-                    None => {
-                        ui.clear_busy();
-                    }
-                }
+                ui.set_status_text(s.busy_msg.as_str().unwrap());
             }
+            Some(ChatOp::SetBusyAnimationState) => msg_scalar_unpack!(msg, state, _, _, _, {
+                if state != 0 {
+                    ui.set_busy_state(true);
+                    if !run_busy_animation.swap(true, Ordering::SeqCst) {
+                        // only send off the Pump request on the transition from false->true; this causes the machine to run
+                        xous::try_send_message(busy_bumper_cid,
+                            xous::Message::new_scalar(
+                                BusyAnimOp::Pump as usize, 0, 0, 0, 0)
+                        ).ok();
+                    }
+                } else {
+                    ui.set_busy_state(false);
+                    run_busy_animation.store(false, Ordering::SeqCst)
+                }
+            }),
             Some(ChatOp::DialogueSave) => {
                 log::info!("ChatOp::DialogueSave");
                 ui.dialogue_save().expect("failed to save Dialogue");

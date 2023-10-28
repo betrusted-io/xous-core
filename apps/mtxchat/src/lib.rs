@@ -83,6 +83,7 @@ pub struct MtxChat<'a> {
     modals: Modals,
     new_username: bool,
     new_room: bool,
+    status: String,
 }
 impl<'a> MtxChat<'a> {
     pub fn new(chat: &Chat) -> MtxChat {
@@ -91,6 +92,8 @@ impl<'a> MtxChat<'a> {
         let trng = Trng::new(&xns).unwrap();
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
+        let status = t!("mtxchat.status.default", locales::LANG).to_owned();
+        chat.set_status_text(&status);
         MtxChat {
             chat: chat,
             trng: trng,
@@ -113,6 +116,7 @@ impl<'a> MtxChat<'a> {
             modals: modals,
             new_username: false,
             new_room: false,
+            status,
         }
     }
 
@@ -241,7 +245,6 @@ impl<'a> MtxChat<'a> {
 
     pub fn connect(&mut self) -> bool {
         log::info!("Attempting connect to Matrix server");
-        self.chat.set_busy_state(Some(t!("mtxchat.busy.connecting", locales::LANG).to_owned())).expect("couldn't set busy state");
         if self.wifi() {
             if self.login() {
                 if let Some(_room_id) = self.get_room_id() {
@@ -253,7 +256,6 @@ impl<'a> MtxChat<'a> {
                             .show_notification(t!("mtxchat.listen.patience", locales::LANG), None)
                             .expect("notification failed");
                     }
-                    self.chat.set_busy_state(None).expect("couldn't clear busy state");
                     return true;
                 } else {
                     self.modals
@@ -275,11 +277,12 @@ impl<'a> MtxChat<'a> {
                 .expect("notification failed");
         }
         self.dialogue_set(None);
-        self.chat.set_busy_state(None).expect("couldn't clear busy state");
         false
     }
 
     pub fn login(&mut self) -> bool {
+        self.chat.set_status_text(t!("mtxchat.busy.connecting", locales::LANG));
+        self.chat.set_busy_state(true);
         self.token = self.get(TOKEN_KEY).unwrap_or(None);
         self.logged_in = false;
 
@@ -338,6 +341,8 @@ impl<'a> MtxChat<'a> {
             self.unset(USER_DOMAIN_KEY)
                 .expect("failed to unset user domain");
         }
+        self.chat.set_status_text(&self.status);
+        self.chat.set_busy_state(false);
         self.logged_in
     }
 
@@ -629,7 +634,8 @@ impl<'a> MtxChat<'a> {
             &self.room_id,
         ) {
             (true, Some(token), Some(user_domain), Some(room_id)) => {
-                self.chat.set_busy_state(Some(t!("mtxchat.busy.sending", locales::LANG).to_owned())).expect("couldn't set busy state");
+                self.chat.set_status_text(t!("mtxchat.busy.sending", locales::LANG));
+                self.chat.set_busy_state(true);
                 log::info!("txn_id = {}", txn_id);
                 let mut url = Url::parse("https://matrix.org").unwrap();
                 url.set_host(Some(user_domain)).expect("failed to set host");
@@ -638,7 +644,8 @@ impl<'a> MtxChat<'a> {
                 } else {
                     "FAILED TO SEND"
                 };
-                self.chat.set_busy_state(None).expect("couldn't clear busy state");
+                self.chat.set_status_text(&self.status);
+                self.chat.set_busy_state(false);
                 r
             }
             (false, _, _, _) => "Not logged in",

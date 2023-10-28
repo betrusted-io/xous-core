@@ -64,8 +64,6 @@ pub(crate) struct Ui {
     status_tv: TextView,
     /// track the last time we update the status bar; use this avoid double-updating busy animations
     status_last_update_ms: u64,
-    /// track the last non-busy message so we can restore it when the busy state stops
-    status_last_msg: Option<String>,
     bubble_width: u16,
     margin: Point,        // margin to edge of canvas
     bubble_margin: Point, // margin of text in bubbles
@@ -163,7 +161,6 @@ impl Ui {
             status_height,
             status_tv,
             status_last_update_ms,
-            status_last_msg: None,
             post_selected: None,
             post_anchor: None,
             post_topdown: false,
@@ -642,16 +639,8 @@ impl Ui {
         self.status_tv.busy_animation_state.is_some()
     }
 
-    /// If not currently busy, save the current status bar message and kick off the animation.
-    /// Updates the text of the status bar in all cases.
-    pub(crate) fn set_busy(&mut self, msg: &str) {
-        if self.status_tv.busy_animation_state.is_none() {
-            // stash a copy of the last message that wasn't a busy message
-            self.status_last_msg = Some(
-                self.status_tv.to_str().to_owned()
-            );
-            self.status_tv.busy_animation_state = Some(0);
-        }
+    /// Set the status bar text
+    pub(crate) fn set_status_text(&mut self, msg: &str) {
         self.status_tv.clear_str();
         write!(self.status_tv, "{}", msg).ok();
         xous::send_message(self.app_cid.unwrap(),
@@ -659,13 +648,12 @@ impl Ui {
                 ChatOp::UpdateBusy as usize, 0, 0, 0, 0)
         ).ok();
     }
-
-    /// Stops the busy animation state
-    pub(crate) fn clear_busy(&mut self) {
-        self.status_tv.busy_animation_state = None;
-        if let Some(prev_msg) = self.status_last_msg.take() {
-            self.status_tv.clear_str();
-            write!(self.status_tv, "{}", prev_msg).ok();
+    /// Sets the status bar to animate the busy animation
+    pub(crate) fn set_busy_state(&mut self, run: bool) {
+        if run {
+            self.status_tv.busy_animation_state = Some(0); // the "glitch" to 0 is intentional, gives an indicator that a new op has started
+        } else {
+            self.status_tv.busy_animation_state = None;
         }
     }
 
