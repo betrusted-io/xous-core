@@ -363,6 +363,9 @@ pub fn server(
             Some(ChatOp::UpdateBusy) => {
                 ui.redraw_busy().expect("CHAT couldn't redraw");
             }
+            Some(ChatOp::UpdateBusyForced) => {
+                ui.redraw_status_forced().expect("CHAT couldn't redraw");
+            }
             Some(ChatOp::SetStatusText) => {
                 let buffer = unsafe {
                     Buffer::from_memory_message(msg.body.memory_message().unwrap())

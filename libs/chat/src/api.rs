@@ -43,7 +43,10 @@ pub enum ChatOp {
     /// Set the status idle text (to be shown when exiting all busy states)
     SetStatusIdleText,
     /// Update just the state of the busy animation, if any. Internal opcode.
+    /// Will skip the update if called too often.
     UpdateBusy,
+    /// Force update the busy bar, without rate throttling. Internal opcode.
+    UpdateBusyForced,
     /// exit the application
     Quit,
 }

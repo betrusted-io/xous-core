@@ -20,8 +20,8 @@
         "en-tts": "no dialogues available to read"
     },
     "chat.status.initial" : {
-        "en": "Idle",
-        "en-tts": "Idle"
+        "en": "Use ← to raise menu",
+        "en-tts": "Use ← to raise menu"
     },
     "chat.help.navigation": {
         "en": "use ↑ & ↓ to scroll thru old posts\nuse ← & → to show menus\nF1-F4 dont do anything yet.",

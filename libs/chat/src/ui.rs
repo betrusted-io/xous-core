@@ -38,6 +38,8 @@ pub(crate) struct Ui {
     dialogue: Option<Dialogue>,
 
     // Callbacks:
+    // callback to our own server
+    self_cid: CID,
     // optional SID of the "Owner" Chat App to receive UI-events
     app_cid: Option<CID>,
     // optional opcode ID to process UI-event msgs
@@ -153,6 +155,7 @@ impl Ui {
             pddb_dict: None,
             pddb_key: None,
             dialogue: None,
+            self_cid: xous::connect(sid).unwrap(),
             app_cid,
             opcode_event,
             canvas,
@@ -637,6 +640,15 @@ impl Ui {
         Ok(())
     }
 
+    /// Update the status bar, without any throttling
+    pub(crate) fn redraw_status_forced(&mut self) -> Result<(), xous::Error> {
+        self.gam.post_textview(&mut self.status_tv)?;
+        self.gam.redraw().expect("couldn't redraw screen");
+        let curtime = self.tt.elapsed_ms();
+        self.status_last_update_ms = curtime;
+        Ok(())
+    }
+
     /// Returns `true` if the status bar is currently set for the busy animation
     pub(crate) fn is_busy(&self) -> bool {
         self.status_tv.busy_animation_state.is_some()
@@ -646,7 +658,7 @@ impl Ui {
     pub(crate) fn set_status_text(&mut self, msg: &str) {
         self.status_tv.clear_str();
         write!(self.status_tv, "{}", msg).ok();
-        xous::send_message(self.app_cid.unwrap(),
+        xous::send_message(self.self_cid,
             xous::Message::new_scalar(
                 ChatOp::UpdateBusy as usize, 0, 0, 0, 0)
         ).ok();
@@ -659,9 +671,10 @@ impl Ui {
             if self.status_tv.busy_animation_state.take().is_some() {
                 self.status_tv.clear_str();
                 write!(self.status_tv, "{}", self.status_idle_text).ok();
-                xous::send_message(self.app_cid.unwrap(),
+                // force the update, to ensure the idle state text is actually rendered
+                xous::send_message(self.self_cid,
                     xous::Message::new_scalar(
-                        ChatOp::UpdateBusy as usize, 0, 0, 0, 0)
+                        ChatOp::UpdateBusyForced as usize, 0, 0, 0, 0)
                 ).ok();
             }
         }
