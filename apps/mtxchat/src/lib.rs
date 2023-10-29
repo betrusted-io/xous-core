@@ -38,6 +38,7 @@ const DOMAIN_MATRIX: &str = "matrix.org";
 
 const MTX_LONG_TIMEOUT_MS: i32 = 60000; // ms
 const WIFI_TIMEOUT_MS: u32 = 30_000; // ms
+const SEND_RETRIES: usize = 3;
 
 pub const CLOCK_NOT_SET_ID: usize = 1;
 pub const PDDB_NOT_MOUNTED_ID: usize = 2;
@@ -255,9 +256,8 @@ impl<'a> MtxChat<'a> {
                     self.listen();
                     if self.new_room {
                         self.new_room = false;
-                        self.modals
-                            .show_notification(t!("mtxchat.listen.patience", locales::LANG), None)
-                            .expect("notification failed");
+                        self.chat.set_status_text(t!("mtxchat.busy.new_listen", locales::LANG));
+                        self.chat.set_busy_state(true);
                     }
                     return true;
                 } else {
@@ -284,7 +284,7 @@ impl<'a> MtxChat<'a> {
     }
 
     pub fn login(&mut self) -> bool {
-        self.chat.set_status_text(t!("mtxchat.busy.connecting", locales::LANG));
+        self.chat.set_status_text(t!("mtxchat.busy.login", locales::LANG));
         self.chat.set_busy_state(true);
         self.token = self.get(TOKEN_KEY).unwrap_or(None);
         self.logged_in = false;
@@ -444,12 +444,18 @@ impl<'a> MtxChat<'a> {
             (true, Some(token), Some(user_domain), Some(room_alias)) => {
                 let mut url = Url::parse("https://matrix.org").unwrap();
                 url.set_host(Some(user_domain)).expect("failed to set host");
+                self.chat.set_status_text(t!("mtxchat.busy.room_id", locales::LANG));
+                self.chat.set_busy_state(true);
                 if let Some(room_id) =
                     web::get_room_id(&mut url, &room_alias, &token, &mut self.agent)
                 {
                     self.set_debug(ROOM_ID_KEY, &room_id);
+                    self.chat.set_status_text(&self.status);
+                    self.chat.set_busy_state(false);
                     return Some(room_id);
                 } else {
+                    self.chat.set_status_text(&self.status);
+                    self.chat.set_busy_state(false);
                     "failed to get room_id"
                 }
             }
@@ -642,7 +648,14 @@ impl<'a> MtxChat<'a> {
                 log::info!("txn_id = {}", txn_id);
                 let mut url = Url::parse("https://matrix.org").unwrap();
                 url.set_host(Some(user_domain)).expect("failed to set host");
-                let r = if web::send_message(&mut url, &room_id, &text, &txn_id, token, &mut self.agent) {
+                let mut success = false;
+                for _ in 0..SEND_RETRIES {
+                    if web::send_message(&mut url, &room_id, &text, &txn_id, token, &mut self.agent) {
+                        success = true;
+                        break;
+                    }
+                }
+                let r = if success {
                     "SENT"
                 } else {
                     "FAILED TO SEND"

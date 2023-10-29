@@ -11,6 +11,18 @@
         "en": "Sending...",
         "en-tts": "Sending..."
     },
+    "mtxchat.busy.room_id": {
+        "en": "Getting room ID...",
+        "en-tts": "Getting room ID..."
+    },
+    "mtxchat.busy.login": {
+        "en": "Logging in...",
+        "en-tts": "Logging in..."
+    },
+    "mtxchat.busy.new_listen": {
+        "en": "Syncing all events from server...",
+        "en-tts": "Syncing all events from server..."
+    },
     "mtxchat.clock.warning": {
         "en": "WARNING: clock not set",
         "en-tts": "WARNING: clock not set",
@@ -244,10 +256,6 @@
     "mtxchat.wifi.warning_status": {
         "en": "No connection! Read-only.",
         "en-tts": "No connection! Read-only."
-    },
-    "mtxchat.listen.patience": {
-        "en": "It takes a while to get new events from the [matrix] server.\nPlease be patient :-)",
-        "en-tts": "It takes a while to get new events from the [matrix] server.\nPlease be patient."
     },
     "mtxchat.close.item": {
         "en": "Close menu",
