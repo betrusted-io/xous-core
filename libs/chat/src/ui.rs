@@ -62,8 +62,10 @@ pub(crate) struct Ui {
     status_height: u16,
     /// TextView for the status bar. This encapsulates the state of the busy animation, and the text within.
     status_tv: TextView,
-    /// track the last time we update the status bar; use this avoid double-updating busy animations
+    /// Track the last time we update the status bar; use this avoid double-updating busy animations
     status_last_update_ms: u64,
+    /// The default message to show when we exit a busy state
+    status_idle_text: String,
     bubble_width: u16,
     margin: Point,        // margin to edge of canvas
     bubble_margin: Point, // margin of text in bubbles
@@ -173,6 +175,7 @@ impl Ui {
             app_menu: app_menu.to_owned(),
             menu_mgr: menu_mgr,
             token: token,
+            status_idle_text: t!("chat.status.initial", locales::LANG).to_string(),
         }
     }
 
@@ -627,7 +630,6 @@ impl Ui {
     pub(crate) fn redraw_busy(&mut self) -> Result<(), xous::Error> {
         let curtime = self.tt.elapsed_ms();
         if curtime - self.status_last_update_ms > BUSY_ANIMATION_RATE_MS as u64 {
-            log::info!("update!");
             self.gam.post_textview(&mut self.status_tv)?;
             self.gam.redraw().expect("couldn't redraw screen");
             self.status_last_update_ms = curtime;
@@ -654,8 +656,20 @@ impl Ui {
         if run {
             self.status_tv.busy_animation_state = Some(0); // the "glitch" to 0 is intentional, gives an indicator that a new op has started
         } else {
-            self.status_tv.busy_animation_state = None;
+            if self.status_tv.busy_animation_state.take().is_some() {
+                self.status_tv.clear_str();
+                write!(self.status_tv, "{}", self.status_idle_text).ok();
+                xous::send_message(self.app_cid.unwrap(),
+                    xous::Message::new_scalar(
+                        ChatOp::UpdateBusy as usize, 0, 0, 0, 0)
+                ).ok();
+            }
         }
+    }
+    /// Set the default idle text. Does *not* cause a redraw. If you need
+    /// an instant re-draw, call `set_status_text()`
+    pub(crate) fn set_status_idle_text(&mut self, msg: &str) {
+        self.status_idle_text = msg.to_owned();
     }
 
     /// Layout the post bubbles on the screen.

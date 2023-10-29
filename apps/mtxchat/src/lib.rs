@@ -85,7 +85,6 @@ pub struct MtxChat<'a> {
     modals: Modals,
     new_username: bool,
     new_room: bool,
-    status: String,
     tt: Ticktimer,
 }
 impl<'a> MtxChat<'a> {
@@ -119,7 +118,6 @@ impl<'a> MtxChat<'a> {
             modals: modals,
             new_username: false,
             new_room: false,
-            status,
             tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
@@ -344,7 +342,6 @@ impl<'a> MtxChat<'a> {
             self.unset(USER_DOMAIN_KEY)
                 .expect("failed to unset user domain");
         }
-        self.chat.set_status_text(&self.status);
         self.chat.set_busy_state(false);
         self.logged_in
     }
@@ -450,11 +447,9 @@ impl<'a> MtxChat<'a> {
                     web::get_room_id(&mut url, &room_alias, &token, &mut self.agent)
                 {
                     self.set_debug(ROOM_ID_KEY, &room_id);
-                    self.chat.set_status_text(&self.status);
                     self.chat.set_busy_state(false);
                     return Some(room_id);
                 } else {
-                    self.chat.set_status_text(&self.status);
                     self.chat.set_busy_state(false);
                     "failed to get room_id"
                 }
@@ -660,7 +655,6 @@ impl<'a> MtxChat<'a> {
                 } else {
                     "FAILED TO SEND"
                 };
-                self.chat.set_status_text(&self.status);
                 self.chat.set_busy_state(false);
                 r
             }
@@ -697,7 +691,6 @@ impl<'a> MtxChat<'a> {
                 if let Some(conf) = self.netmgr.get_ipv4_config() {
                     if conf.dhcp == com_rs::DhcpState::Bound {
                         self.chat.set_busy_state(false);
-                        self.chat.set_status_text(&self.status);
                         return true;
                     }
                 }

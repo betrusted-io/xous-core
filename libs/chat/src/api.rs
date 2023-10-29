@@ -40,6 +40,8 @@ pub enum ChatOp {
     SetStatusText,
     /// Run or stop the busy animation.
     SetBusyAnimationState,
+    /// Set the status idle text (to be shown when exiting all busy states)
+    SetStatusIdleText,
     /// Update just the state of the busy animation, if any. Internal opcode.
     UpdateBusy,
     /// exit the application

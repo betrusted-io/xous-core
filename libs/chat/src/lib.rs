@@ -265,6 +265,20 @@ impl Chat {
         .map(|_| ())
         .expect("internal error");
     }
+
+    /// Set status bar text when system is idle.
+    /// This is a convenience so we don't have to track the ins/outs of busy/idle state
+    /// and update the text, especially when we have multiple potential servers vying
+    /// to set a busy state.
+    pub fn set_status_idle_text(&self, msg: &str) {
+        let bm = BusyMessage {
+            busy_msg: xous_ipc::String::from_str(msg)
+        };
+        Buffer::into_buf(bm).expect("internal error").send(
+            self.cid, ChatOp::SetStatusIdleText as u32
+        ).expect("internal error");
+    }
+
 }
 
 /// Helper server that pumps the busy animation state until instructed to stop.
@@ -298,7 +312,6 @@ pub fn busy_animator(
                                 ChatOp::UpdateBusy as usize, 0, 0, 0, 0)
                         ).ok();
                         tt.sleep_ms(crate::BUSY_ANIMATION_RATE_MS).unwrap();
-                        log::info!("busy!");
                         xous::try_send_message(busy_bumper_cid,
                             xous::Message::new_scalar(
                                 BusyAnimOp::Pump as usize, 0, 0, 0, 0)
@@ -357,6 +370,13 @@ pub fn server(
                 let s = buffer.to_original::<BusyMessage, _>().unwrap();
                 ui.set_status_text(s.busy_msg.as_str().unwrap());
             }
+            Some(ChatOp::SetStatusIdleText) => {
+                let buffer = unsafe {
+                    Buffer::from_memory_message(msg.body.memory_message().unwrap())
+                };
+                let s = buffer.to_original::<BusyMessage, _>().unwrap();
+                ui.set_status_idle_text(s.busy_msg.as_str().unwrap());
+            }
             Some(ChatOp::SetBusyAnimationState) => msg_scalar_unpack!(msg, state, _, _, _, {
                 if state != 0 {
                     ui.set_busy_state(true);
@@ -368,8 +388,8 @@ pub fn server(
                         ).ok();
                     }
                 } else {
+                    run_busy_animation.store(false, Ordering::SeqCst);
                     ui.set_busy_state(false);
-                    run_busy_animation.store(false, Ordering::SeqCst)
                 }
             }),
             Some(ChatOp::DialogueSave) => {
@@ -570,4 +590,26 @@ pub fn now() -> u64 {
         .as_secs()
         .try_into()
         .unwrap()
+}
+
+/// "context-free" (cf) communication with the chat object.
+/// This is accomplished by making a copy of the connection to the chat server.
+pub fn cf_set_status_text(chat_cid: xous::CID, msg: &str) {
+    let bm = BusyMessage {
+        busy_msg: xous_ipc::String::from_str(msg)
+    };
+    Buffer::into_buf(bm).expect("internal error").send(
+        chat_cid, ChatOp::SetStatusText as u32
+    ).expect("internal error");
+}
+
+pub fn cf_set_busy_state(chat_cid: xous::CID, run: bool) {
+    xous::send_message(
+        chat_cid,
+        xous::Message::new_scalar(ChatOp::SetBusyAnimationState as usize,
+            if run { 1 } else { 0 },
+            0, 0, 0),
+    )
+    .map(|_| ())
+    .expect("internal error");
 }
