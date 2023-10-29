@@ -246,6 +246,7 @@ fn wrapped_main() -> ! {
                                 tv.cursor = tv_clone.cursor;
                                 tv.bounds_computed = tv_clone.bounds_computed;
                                 tv.overflow = tv_clone.overflow;
+                                tv.busy_animation_state = tv_clone.busy_animation_state;
 
                                 let ret = api::Return::RenderReturn(tv);
                                 buffer.replace(ret).unwrap();
@@ -287,6 +288,7 @@ fn wrapped_main() -> ! {
                         tv.cursor = tv_clone.cursor;
                         tv.bounds_computed = tv_clone.bounds_computed;
                         tv.overflow = tv_clone.overflow;
+                        tv.busy_animation_state = tv_clone.busy_animation_state;
 
                         let ret = api::Return::RenderReturn(tv);
                         buffer.replace(ret).unwrap();
