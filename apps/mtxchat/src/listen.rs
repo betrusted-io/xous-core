@@ -1,4 +1,4 @@
-use crate::{get_username, web, MTX_LONG_TIMEOUT};
+use crate::{get_username, web, MTX_LONG_TIMEOUT_MS};
 use chat::ChatOp;
 use modals::Modals;
 use std::sync::Arc;
@@ -18,7 +18,7 @@ pub fn listen(
 ) {
     let xns = xous_names::XousNames::new().unwrap();
     let modals = Modals::new(&xns).expect("can't connect to Modals server");
-    log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
+    log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT_MS);
 
     let mut agent = ureq::builder()
         .tls_connector(Arc::new(TlsConnector{}))
@@ -27,7 +27,7 @@ pub fn listen(
         url,
         filter,
         since,
-        MTX_LONG_TIMEOUT,
+        MTX_LONG_TIMEOUT_MS,
         &room_id,
         &token,
         &mut agent,

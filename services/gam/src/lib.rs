@@ -154,6 +154,7 @@ impl Gam {
                 tv.bounds_computed = tvr.bounds_computed;
                 tv.cursor = tvr.cursor;
                 tv.overflow = tvr.overflow;
+                tv.busy_animation_state = tvr.busy_animation_state;
             }
             api::Return::NotCurrentlyDrawable => {
                 tv.bounds_computed = None;

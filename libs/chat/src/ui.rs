@@ -21,7 +21,7 @@ use xous::{MessageEnvelope, CID};
 
 use xous_names::XousNames;
 
-pub const BUSY_ANIMATION_RATE_MS: usize = 50;
+pub const BUSY_ANIMATION_RATE_MS: usize = 200;
 
 #[allow(dead_code)]
 pub(crate) struct Ui {
@@ -627,6 +627,7 @@ impl Ui {
     pub(crate) fn redraw_busy(&mut self) -> Result<(), xous::Error> {
         let curtime = self.tt.elapsed_ms();
         if curtime - self.status_last_update_ms > BUSY_ANIMATION_RATE_MS as u64 {
+            log::info!("update!");
             self.gam.post_textview(&mut self.status_tv)?;
             self.gam.redraw().expect("couldn't redraw screen");
             self.status_last_update_ms = curtime;

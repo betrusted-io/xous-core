@@ -9,6 +9,7 @@ use listen::listen;
 use locales::t;
 use modals::Modals;
 use pddb::Pddb;
+use ticktimer_server::Ticktimer;
 use std::fmt::Write as _;
 use std::io::{Error, ErrorKind, Read, Write as StdWrite};
 use std::sync::Arc;
@@ -35,8 +36,8 @@ const USER_DOMAIN_KEY: &str = "user_domain";
 
 const DOMAIN_MATRIX: &str = "matrix.org";
 
-const MTX_LONG_TIMEOUT: i32 = 60000; // ms
-const WIFI_TIMEOUT: u32 = 10; // seconds
+const MTX_LONG_TIMEOUT_MS: i32 = 60000; // ms
+const WIFI_TIMEOUT_MS: u32 = 30_000; // ms
 
 pub const CLOCK_NOT_SET_ID: usize = 1;
 pub const PDDB_NOT_MOUNTED_ID: usize = 2;
@@ -84,6 +85,7 @@ pub struct MtxChat<'a> {
     new_username: bool,
     new_room: bool,
     status: String,
+    tt: Ticktimer,
 }
 impl<'a> MtxChat<'a> {
     pub fn new(chat: &Chat) -> MtxChat {
@@ -117,6 +119,7 @@ impl<'a> MtxChat<'a> {
             new_username: false,
             new_room: false,
             status,
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
 
@@ -674,25 +677,23 @@ impl<'a> MtxChat<'a> {
 
         while self.wifi_try_modal() {
             self.netmgr.connection_manager_wifi_on_and_run().unwrap();
-            self.modals
-                .start_progress("Connecting ...", 0, 10, 0)
-                .expect("no progress bar");
-            let tt = ticktimer_server::Ticktimer::new().unwrap();
-            for wait in 0..WIFI_TIMEOUT {
-                tt.sleep_ms(1000).unwrap();
-                self.modals
-                    .update_progress(wait)
-                    .expect("no progress update");
+            self.chat.set_status_text(t!("mtxchat.busy.connecting", locales::LANG));
+            self.chat.set_busy_state(true);
+            let start = self.tt.elapsed_ms();
+            while self.tt.elapsed_ms() - start < WIFI_TIMEOUT_MS as u64 {
                 if let Some(conf) = self.netmgr.get_ipv4_config() {
                     if conf.dhcp == com_rs::DhcpState::Bound {
-                        self.modals
-                            .finish_progress()
-                            .expect("failed progress finish");
+                        self.chat.set_busy_state(false);
+                        self.chat.set_status_text(&self.status);
                         return true;
                     }
                 }
+                self.tt.sleep_ms(1000).unwrap();
             }
+            self.modals.show_notification(t!("mtxchat.wifi.warning", locales::LANG), None).unwrap();
         }
+        self.chat.set_busy_state(false);
+        self.chat.set_status_text(t!("mtxchat.wifi.warning_status", locales::LANG));
         false
     }
 

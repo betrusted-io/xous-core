@@ -241,6 +241,10 @@
         "ja": "WiFi not connected.  Entering read-only mode *EN*",
         "zh": "WiFi not connected.  Entering read-only mode *EN*"
     },
+    "mtxchat.wifi.warning_status": {
+        "en": "No connection! Read-only.",
+        "en-tts": "No connection! Read-only."
+    },
     "mtxchat.listen.patience": {
         "en": "It takes a while to get new events from the [matrix] server.\nPlease be patient :-)",
         "en-tts": "It takes a while to get new events from the [matrix] server.\nPlease be patient."
