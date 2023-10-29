@@ -19,6 +19,10 @@
         "en": "Logging in...",
         "en-tts": "Logging in..."
     },
+    "mtxchat.busy.rx_events": {
+        "en": "Receiving events...",
+        "en-tts": "Receiving events..."
+    },
     "mtxchat.busy.new_listen": {
         "en": "Syncing all events from server...",
         "en-tts": "Syncing all events from server..."

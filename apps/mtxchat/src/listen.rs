@@ -1,11 +1,11 @@
 use crate::{get_username, web, MTX_LONG_TIMEOUT_MS};
 use chat::ChatOp;
-use modals::Modals;
 use std::sync::Arc;
 use tls::xtls::TlsConnector;
 use url::Url;
 use xous::CID;
 use xous_ipc::Buffer;
+use locales::t;
 
 pub fn listen(
     url: &mut Url,
@@ -16,8 +16,6 @@ pub fn listen(
     dialogue_id: &str,
     chat_cid: CID,
 ) {
-    let xns = xous_names::XousNames::new().unwrap();
-    let modals = Modals::new(&xns).expect("can't connect to Modals server");
     log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT_MS);
 
     let mut agent = ureq::builder()
@@ -38,9 +36,8 @@ pub fn listen(
         // TODO resolve suspected race condition
         // This progress modal is masking a bug by slowing the loop down
         // Precursor "Guru Mediation" `voilated: nonNull::new_unchecked`
-        modals
-            .start_progress("Receiving events ...", 0, events.len() as u32, 0)
-            .expect("no progress bar");
+        chat::cf_set_status_text(chat_cid, t!("mtxchat.busy.rx_events", locales::LANG));
+        chat::cf_set_busy_state(chat_cid, true);
         let mut event_count = 0;
         for event in events {
             let sender = event.sender.unwrap_or("anon".to_string());
@@ -58,12 +55,14 @@ pub fn listen(
             }
             .expect("failed to convert post into buffer");
             event_count += 1;
-            modals
-                .update_progress(event_count)
-                .expect("no progress update");
+            chat::cf_set_status_text(chat_cid,
+                &format!("{} {}",
+                t!("mtxchat.busy.rx_events", locales::LANG),
+                event_count)
+            );
         }
     }
-    modals.finish_progress().expect("failed progress finish");
+    chat::cf_set_busy_state(chat_cid, false);
     // trigger the chat ui to save the dialogue to the pddb
     xous::send_message(
         chat_cid,
