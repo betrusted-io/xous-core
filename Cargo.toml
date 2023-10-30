@@ -187,7 +187,7 @@ path = "./svd2utra"
 # path = "./api/xous-api-names"
 # [patch.crates-io.xous-api-susres]
 # path = "./api/xous-api-susres"
-[patch.crates-io.xous-api-log]
-path = "./api/xous-api-log"
+# [patch.crates-io.xous-api-log]
+# path = "./api/xous-api-log"
 # [patch.crates-io.xous-api-ticktimer]
 # path = "./api/xous-api-ticktimer"

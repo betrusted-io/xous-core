@@ -9,7 +9,7 @@ Note that at the moment you can only load apps once each time the device runs si
 
 First, add the app loader to your device's image as you would with any other app:
 ```
-$ cargo xtask app-image-xip --app app-loader
+$ cargo xtask app-image-xip --app app-loader --feature unsafe-app-loading
 $ sudo python3 tools/usb_update.py -k target/riscv32imac-unknown-xous-elf/release/xous.img -l target/riscv32imac-unknown-xous-elf/release/loader.bin
 ```
 Then, compile the apps you would like on your device and start the app server. For example, if you would like to serve the apps `hello`, `ball`, and `vault` on port 8000, run:

@@ -567,6 +567,9 @@ fn wrapped_main() -> ! {
                         // set before the leaving state due to interior-mutability issues (see the block under the debug statement
                         // titled "resolving visibility rules"). The fix is to simply not issue a context switch if it's the same app.
                         // It saves CPU thrashing and also works around this problem. (see issue #145)
+                        #[cfg(not(feature="unsafe-app-loading"))]
+                        let authorized_switchers = vec![MAIN_MENU_NAME, ROOTKEY_MODAL_NAME, gam::STATUS_BAR_NAME];
+                        #[cfg(feature="unsafe-app-loading")]
                         let authorized_switchers = [&[MAIN_MENU_NAME, ROOTKEY_MODAL_NAME, gam::STATUS_BAR_NAME], gam::EXPECTED_APP_CONTEXTS].concat().to_vec();
                         for switchers in authorized_switchers {
                             if let Some(auth_token) = context_mgr.find_app_token_by_name(switchers) {
@@ -670,11 +673,13 @@ fn wrapped_main() -> ! {
                 context_mgr.allow_mainmenu();
                 xous::return_scalar(msg.sender, 0).ok();
             }
-	    Some(Opcode::RegisterName) => {
-		let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-		let registration = buffer.to_original::<NameRegistration, _>().unwrap();
-		context_mgr.register_name(registration.name.to_str(), &registration.auth_token);
-	    }
+            #[cfg(feature="unsafe-app-loading")]
+            Some(Opcode::RegisterName) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let registration = buffer.to_original::<NameRegistration, _>().unwrap();
+                gfx.set_devboot(); // indicate to users that we are no longer in a codebase that is exclusively trusted code
+                context_mgr.register_name(registration.name.to_str(), &registration.auth_token);
+            }
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }
