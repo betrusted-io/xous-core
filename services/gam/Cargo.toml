@@ -52,3 +52,4 @@ tts = []
 # default = ["debugprint"] # "debugprint"
 default = []
 ditherpunk = []
+unsafe-app-loading = []  # allow new contexts to be registered dynamically - this is unsafe and should not be set for release builds.

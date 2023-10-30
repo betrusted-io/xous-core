@@ -110,6 +110,7 @@ pub struct UxRegistration {
     /// If the LayoutType is not an App, this field is ignored and does nothing
     pub focuschange_id: Option<u32>,
 }
+#[cfg(feature="unsafe-app-loading")]
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct NameRegistration {
     pub name: String::<128>,
@@ -217,7 +218,8 @@ pub(crate) enum Opcode {
     /// This resolves race conditions that depend upon the PDDB configurations.
     AllowMainMenu = 33,
 
-    /// Register a name that can aquire a token. This is only intended to be used with pre-registered apps
+    /// Register a name that can acquire a token. This is only intended to be used with pre-registered apps
+    #[cfg(feature="unsafe-app-loading")]
     RegisterName = 34,
 }
 
