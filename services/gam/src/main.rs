@@ -677,6 +677,7 @@ fn wrapped_main() -> ! {
             Some(Opcode::RegisterName) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let registration = buffer.to_original::<NameRegistration, _>().unwrap();
+                gfx.set_devboot(); // indicate to users that we are no longer in a codebase that is exclusively trusted code
                 context_mgr.register_name(registration.name.to_str(), &registration.auth_token);
             }
             Some(Opcode::Quit) => break,
