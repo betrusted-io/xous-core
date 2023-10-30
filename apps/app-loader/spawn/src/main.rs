@@ -11,7 +11,7 @@ impl From<xous::MessageId> for StartupCommand {
     fn from(src: xous::MessageId) -> StartupCommand {
         match src {
             1 => StartupCommand::LoadElf,
-	    2 => StartupCommand::PingResponse,
+            2 => StartupCommand::PingResponse,
             _ => StartupCommand::Unhandled,
         }
     }
@@ -20,7 +20,7 @@ impl From<xous::MessageId> for StartupCommand {
 #[panic_handler]
 fn handle_panic(arg: &core::panic::PanicInfo) -> ! {
     log::info!("{arg}");
-    loop {}
+    xous::terminate_process(1);
 }
 
 #[no_mangle]
@@ -29,18 +29,27 @@ pub extern "C" fn init(server1: u32, server2: u32, server3: u32, server4: u32) -
 
     // recreate the extra sections that were cut out of the stub
     {
-	let mut memory = xous::map_memory(
-	    None,
-	    core::num::NonZeroUsize::new(0x40000000),
-	    0x1000,
-	    xous::MemoryFlags::R | xous::MemoryFlags::W
-	).unwrap();
-	let connection = core::sync::atomic::AtomicU32::new(0);
-	let slice = unsafe { core::slice::from_raw_parts(&connection as *const _ as *const u8, core::mem::size_of::<core::sync::atomic::AtomicU32>()) };
-	for (dest, src) in memory.as_slice_mut::<u8>().iter_mut().skip(8).zip(slice) {
-	    *dest = *src;
-	}
-	// everything should drop now
+        let mut memory = xous::map_memory(
+            None,
+            core::num::NonZeroUsize::new(0x40000000),
+            0x1000,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .unwrap();
+        let connection = core::sync::atomic::AtomicU32::new(0);
+        let slice = unsafe {
+            core::slice::from_raw_parts(
+                &connection as *const _ as *const u8,
+                core::mem::size_of::<core::sync::atomic::AtomicU32>(),
+            )
+        };
+        // safety: memory is freshly allocated by map_memory, should be aligned and init'd to 0
+        unsafe {
+            for (dest, src) in memory.as_slice_mut::<u8>().iter_mut().skip(8).zip(slice) {
+                *dest = *src;
+            }
+        }
+        // everything should drop now
     }
 
     log_server::init_wait().unwrap();
@@ -52,12 +61,12 @@ pub extern "C" fn init(server1: u32, server2: u32, server3: u32, server4: u32) -
         {
             match envelope.id().into() {
                 StartupCommand::LoadElf => {
-		    let entry_point = read_elf(envelope.body.memory_message_mut());
-		    drop(envelope); // we have to get rid of all messages to destroy the server
-		    // destroy the server
-		    xous::destroy_server(server).expect("Couldn't destroy spawn server");
-		    jump(entry_point);
-		},
+                    let entry_point = read_elf(envelope.body.memory_message_mut());
+                    drop(envelope); // we have to get rid of all messages to destroy the server
+                                    // destroy the server
+                    xous::destroy_server(server).expect("Couldn't destroy spawn server");
+                    jump(entry_point);
+                }
                 StartupCommand::PingResponse => ping_response(envelope),
                 _ => panic!("Unsupported"),
             }
@@ -80,7 +89,8 @@ fn read_elf(memory: Option<&mut xous::MemoryMessage>) -> usize {
     };
 
     // get the elf binary from the message
-    let mut bin = memory.buf.as_slice::<u8>();
+    // safety: buf should be aligned and correctly sized inside the MemoryMessage
+    let mut bin = unsafe {memory.buf.as_slice::<u8>()};
 
     // go to the beginning of the ELF file using the provided offset
     bin = &bin[memory.offset.and_then(|n| Some(n.get())).unwrap_or(0)..];
@@ -92,17 +102,17 @@ fn read_elf(memory: Option<&mut xous::MemoryMessage>) -> usize {
 
     // a helper function to get a region of the file as a usize
     let to_usize = |start, size| {
-	if size == 1 {
-	    return bin[start] as usize;
-	}
-	if size == 2 {
-	    // assumes little endianness
-	    return u16::from_le_bytes(bin[start..start+size].try_into().unwrap()) as usize;
-	}
-	if size == 4 {
-	    return u32::from_le_bytes(bin[start..start+size].try_into().unwrap()) as usize;
-	}
-	panic!("Tried to get usize of invalid size!");
+        if size == 1 {
+            return bin[start] as usize;
+        }
+        if size == 2 {
+            // assumes little endianness
+            return u16::from_le_bytes(bin[start..start + size].try_into().unwrap()) as usize;
+        }
+        if size == 4 {
+            return u32::from_le_bytes(bin[start..start + size].try_into().unwrap()) as usize;
+        }
+        panic!("Tried to get usize of invalid size!");
     };
 
     // some basic stuff to know
@@ -113,40 +123,59 @@ fn read_elf(memory: Option<&mut xous::MemoryMessage>) -> usize {
 
     // add the segments we should load
     for i in 0..ph_count {
-	let start = ph_start + i * ph_size;
-	// only load PT_LOAD segments
-	if  to_usize(start, 4) == 0x00000001 {
-	    let src_addr = to_usize(start+0x04, 4);
-	    let vaddr = to_usize(start+0x08, 4);
-	    let padding = if vaddr & 0xFFF == 0 { 0 } else { vaddr & 0xFFF };
-	    let file_size = to_usize(start+0x10, 4);
-	    let mem_size = to_usize(start+0x14, 4);
-	    let mem_size = mem_size + padding;
-	    let mem_size = mem_size + if mem_size & 0xFFF == 0 { 0 } else { 0x1000 - (mem_size & 0xFFF) };
+        let start = ph_start + i * ph_size;
+        // only load PT_LOAD segments
+        if to_usize(start, 4) == 0x00000001 {
+            let src_addr = to_usize(start + 0x04, 4);
+            let vaddr = to_usize(start + 0x08, 4);
+            let padding = if vaddr & 0xFFF == 0 { 0 } else { vaddr & 0xFFF };
+            let file_size = to_usize(start + 0x10, 4);
+            let mem_size = to_usize(start + 0x14, 4);
+            let mem_size = mem_size + padding;
+            let mem_size = mem_size
+                + if mem_size & 0xFFF == 0 {
+                    0
+                } else {
+                    0x1000 - (mem_size & 0xFFF)
+                };
 
-	    assert_eq!(0, mem_size & 0xFFF);
-	    assert_eq!(0, (vaddr - padding) & 0xFFF);
+            assert_eq!(0, mem_size & 0xFFF);
+            assert_eq!(0, (vaddr - padding) & 0xFFF);
 
-	    log::info!("Loading offset {} to virtual address {} with memory size {}", src_addr, vaddr, mem_size);
-	    let mut target_memory = xous::map_memory(
-		None,
-		core::num::NonZeroUsize::new(vaddr-padding),
-		mem_size,
-		xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::X,
-	    )
-		.unwrap();
+            log::info!(
+                "Loading offset {} to virtual address {} with memory size {}",
+                src_addr,
+                vaddr,
+                mem_size
+            );
+            let mut target_memory = xous::map_memory(
+                None,
+                core::num::NonZeroUsize::new(vaddr - padding),
+                mem_size,
+                xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::X,
+            )
+            .unwrap();
 
-	    for (dest, src) in target_memory.as_slice_mut().iter_mut().skip(padding)
-		.zip(bin[src_addr..core::cmp::min(max, src_addr+file_size)].iter())
-	    {
-		*dest = *src;
-	    }
-	    for dest in target_memory.as_slice_mut().iter_mut().skip(padding+file_size)
-		.take(mem_size-file_size-padding)
-	    {
-		*dest = 0;
-	    }
-	}
+            // TODO: rationalize why this is safe
+            unsafe {
+                for (dest, src) in target_memory
+                    .as_slice_mut()
+                    .iter_mut()
+                    .skip(padding)
+                    .zip(bin[src_addr..core::cmp::min(max, src_addr + file_size)].iter())
+                {
+                    *dest = *src;
+                }
+                for dest in target_memory
+                    .as_slice_mut()
+                    .iter_mut()
+                    .skip(padding + file_size)
+                    .take(mem_size - file_size - padding)
+                {
+                    *dest = 0;
+                }
+            }
+        }
     }
 
     memory.offset = None;
