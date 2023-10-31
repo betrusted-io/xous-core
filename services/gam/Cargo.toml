@@ -14,18 +14,18 @@ ime-plugin-api = {path = "../ime-plugin-api"}
 ime-plugin-shell = {path = "../ime-plugin-shell"}
 keyboard = {path = "../keyboard"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.49"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.49"}
+log-server = {package = "xous-api-log", version = "0.1.50"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.50"}
 trng = {path = "../trng"}
-xous = "0.9.53"
-xous-ipc = "0.9.53"
-xous-names = {package = "xous-api-names", version = "0.9.51"}
+xous = "0.9.54"
+xous-ipc = "0.9.54"
+xous-names = {package = "xous-api-names", version = "0.9.52"}
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
-susres = {package = "xous-api-susres", version = "0.9.49"} # used for the sleep now menu item
+susres = {package = "xous-api-susres", version = "0.9.50"} # used for the sleep now menu item
 
 enum_dispatch = "0.3.7" # used for trait-based dispatch off of multiple layout objects.
 locales = {path = "../../locales"}
