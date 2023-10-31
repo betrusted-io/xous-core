@@ -386,6 +386,7 @@ impl Process {
         }
 
         process.inner = Default::default();
+	process.inner.pid = pid;
 
         // Mark the stack as "unallocated-but-free"
         let init_sp = (thread_init.stack.as_ptr() as usize) & !0xfff;

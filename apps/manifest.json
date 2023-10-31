@@ -1,4 +1,14 @@
 {
+    "app-loader": {
+	"context_name": "App Loader",
+	"menu_name": {
+	    "appmenu.app-loader": {
+		"en": "App Loader",
+		"en-tts": "App Loader"
+	    }
+	},
+	"submenu": 2
+    },
     "ball": {
         "context_name": "ball demo app",
         "menu_name": {

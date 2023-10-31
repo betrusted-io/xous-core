@@ -130,6 +130,8 @@ pub(crate) struct Builder {
     locale_stash: String,
     /// when set to true, hosted mode builds but does not run
     dry_run: bool,
+    /// when set to true, user selected packages are compiled but no image is created
+    no_image: bool,
 }
 
 impl Builder {
@@ -154,6 +156,7 @@ impl Builder {
             locale_override: None,
             locale_stash: String::new(),
             dry_run: false,
+	    no_image: false,
         }
     }
     /// Specify an alternate loader key, as a String that can encode a file name
@@ -235,6 +238,14 @@ impl Builder {
         self.run_svd2repl = false;
         self.loader = CrateSpec::Local("loader".to_string(), false);
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), false);
+        self
+    }
+    pub fn target_precursor_no_image<'a>(&'a mut self, soc_version: &str) -> &'a mut Builder {
+        self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.stream = BuildStream::Release;
+        self.utra_target = format!("precursor-{}", soc_version).to_string();
+        self.run_svd2repl = false;
+	self.no_image = true;
         self
     }
 
@@ -597,8 +608,13 @@ impl Builder {
             false
         )?;
 
-        // ------ either create an image, or launch hosted mode ------
-        if self.target.is_none() { // hosted mode doesn't specify a cross-compilation target!
+        // ------ either stop here, create an image, or launch hosted mode ------
+        if self.no_image {
+	    println!("The following apps/services were compiled:");
+	    for path in services_path {
+		println!("{}", path);
+	    }
+	} else if self.target.is_none() { // hosted mode doesn't specify a cross-compilation target!
             // throw a warning if prebuilts are specified for hosted mode
             for item in [&self.services[..], &self.apps[..]].concat() {
                 match item {

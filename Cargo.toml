@@ -72,6 +72,8 @@ members = [
   "services/dns",
   "services/modals",
   "services/early_settings",
+  "apps/app-loader",
+  "apps/app-loader/spawn",
   "apps/ball",
   "apps/hello",
   "apps/mtxchat",

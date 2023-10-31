@@ -130,6 +130,10 @@ impl ContextManager {
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
         self.tm.claim_token(name)
     }
+    #[cfg(feature="unsafe-app-loading")]
+    pub(crate) fn register_name(&mut self, name: &str, auth_token: &[u32; 4]) {
+	    self.tm.register_name(name, auth_token);
+    }
     pub(crate) fn allow_untrusted_code(&self) -> bool {
         self.tm.allow_untrusted_code()
     }
