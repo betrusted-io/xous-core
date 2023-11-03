@@ -1,10 +1,42 @@
 {
+    "mtxchat.busy.connecting": {
+        "en": "Connecting...",
+        "en-tts": "Connecting..."
+    },
+    "mtxchat.busy.updating": {
+        "en": "Updating...",
+        "en-tts": "Updating..."
+    },
+    "mtxchat.busy.sending": {
+        "en": "Sending...",
+        "en-tts": "Sending..."
+    },
+    "mtxchat.busy.room_id": {
+        "en": "Getting room ID...",
+        "en-tts": "Getting room ID..."
+    },
+    "mtxchat.busy.login": {
+        "en": "Logging in...",
+        "en-tts": "Logging in..."
+    },
+    "mtxchat.busy.rx_events": {
+        "en": "Receiving events...",
+        "en-tts": "Receiving events..."
+    },
+    "mtxchat.busy.new_listen": {
+        "en": "Syncing all events from server...",
+        "en-tts": "Syncing all events from server..."
+    },
     "mtxchat.clock.warning": {
         "en": "WARNING: clock not set",
         "en-tts": "WARNING: clock not set",
         "fr": "AVERTISSEMENT : horloge non réglée",
         "ja": "WARNING: clock not set *EN*",
         "zh": "WARNING: clock not set *EN*"
+    },
+    "mtxchat.status.default" : {
+        "en": "Use ← for login menu",
+        "en-tts": "Use ← for login menu"
     },
     "mtxchat.filter.failed": {
         "en": "error: could not create filter",
@@ -225,9 +257,9 @@
         "ja": "WiFi not connected.  Entering read-only mode *EN*",
         "zh": "WiFi not connected.  Entering read-only mode *EN*"
     },
-    "mtxchat.listen.patience": {
-        "en": "It takes a while to get new events from the [matrix] server.\nPlease be patient :-)",
-        "en-tts": "It takes a while to get new events from the [matrix] server.\nPlease be patient."
+    "mtxchat.wifi.warning_status": {
+        "en": "No connection! Read-only.",
+        "en-tts": "No connection! Read-only."
     },
     "mtxchat.close.item": {
         "en": "Close menu",

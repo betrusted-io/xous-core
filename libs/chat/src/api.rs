@@ -36,8 +36,25 @@ pub enum ChatOp {
     /// Find a Post by timestamp and Author
     PostFind,
     PostFlag,
+    /// Set status bar text
+    SetStatusText,
+    /// Run or stop the busy animation.
+    SetBusyAnimationState,
+    /// Set the status idle text (to be shown when exiting all busy states)
+    SetStatusIdleText,
+    /// Update just the state of the busy animation, if any. Internal opcode.
+    /// Will skip the update if called too often.
+    UpdateBusy,
+    /// Force update the busy bar, without rate throttling. Internal opcode.
+    UpdateBusyForced,
     /// exit the application
     Quit,
+}
+
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub(crate) enum BusyAnimOp {
+    Start,
+    Pump,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -119,4 +136,9 @@ pub enum AuthorFlag {
     Bold,
     Hidden,
     Right,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug)]
+pub struct BusyMessage {
+    pub busy_msg: xous_ipc::String<128>,
 }

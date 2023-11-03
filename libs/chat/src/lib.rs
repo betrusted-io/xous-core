@@ -4,13 +4,15 @@ pub mod icontray;
 pub mod ui;
 
 pub use api::*;
+pub use ui::BUSY_ANIMATION_RATE_MS;
 use gam::MenuItem;
 use num_traits::FromPrimitive;
 use std::convert::TryInto;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
 
-use xous::{Error, CID, SID};
+use xous::{Error, CID, SID, msg_scalar_unpack};
 use xous_ipc::Buffer;
 
 pub struct Chat {
@@ -40,6 +42,18 @@ impl Chat {
         let chat_sid = xous::create_server().unwrap();
         let chat_cid = xous::connect(chat_sid).unwrap();
 
+        let busy_bumper = xous::create_server().unwrap();
+        let busy_bumper_cid = xous::connect(busy_bumper).unwrap();
+
+        log::info!("starting idle animation runner");
+        let run_busy_animation = Arc::new(AtomicBool::new(false));
+        thread::spawn({
+            let run_busy_animation = run_busy_animation.clone();
+            move || {
+                busy_animator(busy_bumper, busy_bumper_cid, chat_cid, run_busy_animation);
+            }
+        });
+
         log::info!("Starting chat UI server",);
         thread::spawn({
             move || {
@@ -51,6 +65,8 @@ impl Chat {
                     opcode_post,
                     opcode_event,
                     opcode_rawkeys,
+                    run_busy_animation,
+                    busy_bumper_cid,
                 );
             }
         });
@@ -222,6 +238,91 @@ impl Chat {
         .map(|_| ())
         .expect("failed to Redraw Chat UI");
     }
+
+    /// Set the status bar text.
+    ///
+    /// # Arguments
+    ///
+    /// `msg` - the text to show
+    ///
+    /// This method implements the latest recommendation of panicing on internal errors.
+    pub fn set_status_text(&self, msg: &str) {
+        let bm = BusyMessage {
+            busy_msg: xous_ipc::String::from_str(msg)
+        };
+        Buffer::into_buf(bm).expect("internal error").send(
+            self.cid, ChatOp::SetStatusText as u32
+        ).expect("internal error");
+    }
+
+    pub fn set_busy_state(&self, run: bool) {
+        xous::send_message(
+            self.cid,
+            xous::Message::new_scalar(ChatOp::SetBusyAnimationState as usize,
+                if run { 1 } else { 0 },
+                0, 0, 0),
+        )
+        .map(|_| ())
+        .expect("internal error");
+    }
+
+    /// Set status bar text when system is idle.
+    /// This is a convenience so we don't have to track the ins/outs of busy/idle state
+    /// and update the text, especially when we have multiple potential servers vying
+    /// to set a busy state.
+    pub fn set_status_idle_text(&self, msg: &str) {
+        let bm = BusyMessage {
+            busy_msg: xous_ipc::String::from_str(msg)
+        };
+        Buffer::into_buf(bm).expect("internal error").send(
+            self.cid, ChatOp::SetStatusIdleText as u32
+        ).expect("internal error");
+    }
+
+}
+
+/// Helper server that pumps the busy animation state until instructed to stop.
+///
+/// # Arguments
+///
+/// * `busy_bumper` - the server ID to use for the helper server
+/// * `busy_bumper_cid` - the corresponding connection ID
+/// * `chat_cid` - the CID to the main chat loop, used to initiate redraw events as necessary
+/// * `run_busy_animation` - a shared `AtomicBool` which, when `true`, causes the loop to reschedule itself to run.
+pub fn busy_animator(
+    busy_bumper: SID,
+    busy_bumper_cid : CID,
+    chat_cid: CID,
+    run_busy_animation: Arc<AtomicBool>) {
+        let tt = ticktimer_server::Ticktimer::new().unwrap();
+        loop {
+            let msg = xous::receive_message(busy_bumper).unwrap();
+            match FromPrimitive::from_usize(msg.body.id()) {
+                Some(BusyAnimOp::Start) => {
+                    tt.sleep_ms(crate::BUSY_ANIMATION_RATE_MS).unwrap();
+                    xous::try_send_message(busy_bumper_cid,
+                        xous::Message::new_scalar(
+                            BusyAnimOp::Pump as usize, 0, 0, 0, 0)
+                    ).ok();
+                }
+                Some(BusyAnimOp::Pump) => {
+                    if run_busy_animation.load(Ordering::SeqCst) {
+                        xous::try_send_message(chat_cid,
+                            xous::Message::new_scalar(
+                                ChatOp::UpdateBusy as usize, 0, 0, 0, 0)
+                        ).ok();
+                        tt.sleep_ms(crate::BUSY_ANIMATION_RATE_MS).unwrap();
+                        xous::try_send_message(busy_bumper_cid,
+                            xous::Message::new_scalar(
+                                BusyAnimOp::Pump as usize, 0, 0, 0, 0)
+                        ).ok();
+                    }
+                }
+                _ => {
+                    log::warn!("Unexpected message: {:?}", msg);
+                }
+            }
+        }
 }
 
 /// The Chat UI server a manages a Chat UI to read a display and navigate a
@@ -245,6 +346,8 @@ pub fn server(
     opcode_post: Option<usize>,
     opcode_event: Option<usize>,
     opcode_rawkeys: Option<usize>,
+    run_busy_animation: Arc<AtomicBool>,
+    busy_bumper_cid: CID,
 ) -> ! {
     //log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -257,6 +360,41 @@ pub fn server(
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(ChatOp::UpdateBusy) => {
+                ui.redraw_busy().expect("CHAT couldn't redraw");
+            }
+            Some(ChatOp::UpdateBusyForced) => {
+                ui.redraw_status_forced().expect("CHAT couldn't redraw");
+            }
+            Some(ChatOp::SetStatusText) => {
+                let buffer = unsafe {
+                    Buffer::from_memory_message(msg.body.memory_message().unwrap())
+                };
+                let s = buffer.to_original::<BusyMessage, _>().unwrap();
+                ui.set_status_text(s.busy_msg.as_str().unwrap());
+            }
+            Some(ChatOp::SetStatusIdleText) => {
+                let buffer = unsafe {
+                    Buffer::from_memory_message(msg.body.memory_message().unwrap())
+                };
+                let s = buffer.to_original::<BusyMessage, _>().unwrap();
+                ui.set_status_idle_text(s.busy_msg.as_str().unwrap());
+            }
+            Some(ChatOp::SetBusyAnimationState) => msg_scalar_unpack!(msg, state, _, _, _, {
+                if state != 0 {
+                    ui.set_busy_state(true);
+                    if !run_busy_animation.swap(true, Ordering::SeqCst) {
+                        // only send off the Pump request on the transition from false->true; this causes the machine to run
+                        xous::try_send_message(busy_bumper_cid,
+                            xous::Message::new_scalar(
+                                BusyAnimOp::Pump as usize, 0, 0, 0, 0)
+                        ).ok();
+                    }
+                } else {
+                    run_busy_animation.store(false, Ordering::SeqCst);
+                    ui.set_busy_state(false);
+                }
+            }),
             Some(ChatOp::DialogueSave) => {
                 log::info!("ChatOp::DialogueSave");
                 ui.dialogue_save().expect("failed to save Dialogue");
@@ -455,4 +593,26 @@ pub fn now() -> u64 {
         .as_secs()
         .try_into()
         .unwrap()
+}
+
+/// "context-free" (cf) communication with the chat object.
+/// This is accomplished by making a copy of the connection to the chat server.
+pub fn cf_set_status_text(chat_cid: xous::CID, msg: &str) {
+    let bm = BusyMessage {
+        busy_msg: xous_ipc::String::from_str(msg)
+    };
+    Buffer::into_buf(bm).expect("internal error").send(
+        chat_cid, ChatOp::SetStatusText as u32
+    ).expect("internal error");
+}
+
+pub fn cf_set_busy_state(chat_cid: xous::CID, run: bool) {
+    xous::send_message(
+        chat_cid,
+        xous::Message::new_scalar(ChatOp::SetBusyAnimationState as usize,
+            if run { 1 } else { 0 },
+            0, 0, 0),
+    )
+    .map(|_| ())
+    .expect("internal error");
 }
