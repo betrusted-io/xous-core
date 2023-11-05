@@ -13,22 +13,22 @@ pub use trust_mode::TrustMode;
 // see signal-cli Manual Page - https://github.com/AsamK/signal-cli/blob/master/man/signal-cli.1.adoc
 
 #[allow(dead_code)]
-pub struct Manager<'a> {
-    account: &'a Account,
+pub struct Manager {
+    account:Account,
     trust_mode: TrustMode,
     log_verbose: bool,
     log_scrub: bool,
     log_send: bool,
 }
 
-impl <'a> Manager<'a> {
+impl Manager {
     /// Create a new Signal account
     ///
     /// # Arguments
     /// * `live` - Specify the server environment
     /// * `account` - Specify your phone number, that will be your identifier. The phone number must include the country calling code, i.e. the number must start with a "+" sign.
     ///
-    pub fn new(account: &Account, trust_mode: TrustMode) -> Manager {
+    pub fn new(account: Account, trust_mode: TrustMode) -> Manager {
         Manager {
             account,
             trust_mode,

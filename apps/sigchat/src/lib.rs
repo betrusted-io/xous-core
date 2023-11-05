@@ -23,8 +23,8 @@ pub const HOSTED_MODE: bool = false;
 
 //#[derive(Debug)]
 pub struct SigChat<'a> {
-    account: Option<Account>,
     chat: &'a Chat,
+    manager: Option<Manager>,
     netmgr: net::NetManager,
     modals: Modals,
 }
@@ -35,8 +35,11 @@ impl<'a> SigChat<'a> {
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
         SigChat {
-            account: Account::read(SIGCHAT_ACCOUNT).ok(),
             chat: chat,
+            manager: match Account::read(SIGCHAT_ACCOUNT) {
+                Ok(account) => Some(Manager::new(account, TrustMode::OnFirstUse)),
+                Err(_) => None,
+            },
             netmgr: net::NetManager::new(),
             modals: modals,
         }
@@ -47,16 +50,11 @@ impl<'a> SigChat<'a> {
     pub fn connect(&mut self) -> bool {
         log::info!("Attempting connect to Signal server");
         if self.wifi() {
-            if self.account.is_none() {
+            if self.manager.is_none() {
                 self.account_setup();
             }
-            if let Some(account) = &self.account {
-                log::info!(
-                    "Signal account OK: {}: {}",
-                    self.account.is_some(),
-                    self.account.as_ref().unwrap().number()
-                );
-                let _manager = Manager::new(&account, TrustMode::OnFirstUse);
+            if let Some(manager) = &self.manager {
+                log::info!("Signal manager OK" );
             } else {
                 self.modals
                     .show_notification(t!("sigchat.account.failed", locales::LANG), None)
