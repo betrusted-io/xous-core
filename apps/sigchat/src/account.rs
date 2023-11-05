@@ -10,7 +10,7 @@ pub struct Account {
     pddb: Pddb,
     pddb_dict: String,
     service_environment: ServiceEnvironment,
-    number: String,
+    number: Option<String>,
     registered: bool,
 }
 
@@ -19,7 +19,7 @@ const NUMBER_KEY: &str = "number";
 const REGISTERED_KEY: &str = "registered";
 
 impl Account {
-    pub fn new(pddb_dict: &str, number: &str) -> Result<Account, Error> {
+    pub fn new(pddb_dict: &str) -> Result<Account, Error> {
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
         set(
@@ -28,7 +28,6 @@ impl Account {
             SERVICE_ENVIRONMENT_KEY,
             Some(&ServiceEnvironment::Staging.to_string()),
         )?;
-        set(&pddb, pddb_dict, NUMBER_KEY, Some(&number))?;
         set(&pddb, pddb_dict, REGISTERED_KEY, Some(&false.to_string()))?;
         Account::read(pddb_dict)
     }
@@ -38,34 +37,33 @@ impl Account {
         pddb.try_mount();
         match (
             get(&pddb, pddb_dict, SERVICE_ENVIRONMENT_KEY),
-            get(&pddb, pddb_dict, NUMBER_KEY),
             get(&pddb, pddb_dict, REGISTERED_KEY),
         ) {
-            (Ok(Some(service_environment)), Ok(Some(number)), Ok(Some(registered))) => {
-                Ok(Account {
-                    pddb: pddb,
-                    pddb_dict: pddb_dict.to_string(),
-                    service_environment: ServiceEnvironment::from_str(&service_environment)
-                        .unwrap(),
-                    number: number,
-                    registered: registered.parse().unwrap(),
-                })
-            }
-            (Err(e), _, _) => Err(e),
-            (_, Err(e), _) => Err(e),
-            (_, _, Err(e)) => Err(e),
-            (_, _, _) => Err(Error::from(ErrorKind::InvalidData)),
+            (Ok(Some(service_environment)), Ok(Some(registered))) => Ok(Account {
+                pddb: pddb,
+                pddb_dict: pddb_dict.to_string(),
+                service_environment: ServiceEnvironment::from_str(&service_environment).unwrap(),
+                number: None,
+                registered: registered.parse().unwrap(),
+            }),
+            (Err(e), _) => Err(e),
+            (_, Err(e)) => Err(e),
+            (_, _) => Err(Error::from(ErrorKind::InvalidData)),
         }
     }
 
-    pub fn number(&self) -> &str {
-        &self.number
+    #[allow(dead_code)]
+    pub fn number(&self) -> Option<&str> {
+        match &self.number {
+            Some(num) => Some(&num),
+            None => None,
+        }
     }
 
     #[allow(dead_code)]
     pub fn set_number(&mut self, value: &str) -> Result<(), Error> {
         match self.set(NUMBER_KEY, Some(value)) {
-            Ok(_) => self.number = value.to_string(),
+            Ok(_) => self.number = Some(value.to_string()),
             Err(e) => log::warn!("failed to set signal account number: {e}"),
         }
         Ok(())

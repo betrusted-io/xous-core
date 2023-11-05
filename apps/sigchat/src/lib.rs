@@ -53,7 +53,7 @@ impl<'a> SigChat<'a> {
             if self.manager.is_none() {
                 self.account_setup();
             }
-            if let Some(manager) = &self.manager {
+            if let Some(_manager) = &self.manager {
                 log::info!("Signal manager OK" );
             } else {
                 self.modals
@@ -115,8 +115,15 @@ impl<'a> SigChat<'a> {
         match self.number_modal() {
             Ok(number) => {
                 log::info!("registration phone number = {:?}", number);
-                match Account::new(SIGCHAT_ACCOUNT, &number.to_string()) {
-                    Ok(account) => self.account = Some(account),
+                match Account::new(SIGCHAT_ACCOUNT) {
+                    Ok(mut account) => {
+                        match account.set_number(&number.to_string()) {
+                            Ok(_number) => {
+                                self.manager = Some(Manager::new(account, TrustMode::OnFirstUse));
+                            }
+                            Err(e) => log::warn!("failed to set Account number: {e}"),
+                        }
+                    }
                     Err(e) => log::warn!("failed to create new Account: {e}"),
                 }
             }
