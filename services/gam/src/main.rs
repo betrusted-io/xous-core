@@ -175,7 +175,7 @@ fn wrapped_main() -> ! {
                         continue; // don't allow any redraws if a powerdown is requested
                     }
                     let elapsed_time = ticktimer.elapsed_ms();
-                    if elapsed_time - last_time > 33 {  // rate limit updates, no point in going faster than the eye can see
+                    if elapsed_time - last_time > gam::RATE_LIMIT_MS as u64 {  // rate limit updates, no point in going faster than the eye can see
                         last_time = elapsed_time;
 
                         if deface(&gfx, &trng, &mut canvases) {
@@ -246,6 +246,7 @@ fn wrapped_main() -> ! {
                                 tv.cursor = tv_clone.cursor;
                                 tv.bounds_computed = tv_clone.bounds_computed;
                                 tv.overflow = tv_clone.overflow;
+                                tv.busy_animation_state = tv_clone.busy_animation_state;
 
                                 let ret = api::Return::RenderReturn(tv);
                                 buffer.replace(ret).unwrap();
@@ -287,6 +288,7 @@ fn wrapped_main() -> ! {
                         tv.cursor = tv_clone.cursor;
                         tv.bounds_computed = tv_clone.bounds_computed;
                         tv.overflow = tv_clone.overflow;
+                        tv.busy_animation_state = tv_clone.busy_animation_state;
 
                         let ret = api::Return::RenderReturn(tv);
                         buffer.replace(ret).unwrap();

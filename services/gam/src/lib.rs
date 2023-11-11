@@ -31,6 +31,7 @@ use ime_plugin_api::{ImefCallback, ApiToken};
 
 #[doc = include_str!("../README.md")]
 
+pub const RATE_LIMIT_MS: usize = 33;
 pub const SYSTEM_STYLE: GlyphStyle = GlyphStyle::Tall;
 
 // Add names here and insert them into the EXPECTED_BOOT_CONTEXTS structure below.
@@ -154,6 +155,7 @@ impl Gam {
                 tv.bounds_computed = tvr.bounds_computed;
                 tv.cursor = tvr.cursor;
                 tv.overflow = tvr.overflow;
+                tv.busy_animation_state = tvr.busy_animation_state;
             }
             api::Return::NotCurrentlyDrawable => {
                 tv.bounds_computed = None;
