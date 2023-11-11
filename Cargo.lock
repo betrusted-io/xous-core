@@ -1309,28 +1309,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "delegate"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35c47a31748d9cfa641f6cccb3608385fafe261ba36054f3d40d5a3ca11eb1af"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.103",
-]
-
-[[package]]
-name = "delegate"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d70a2d4995466955a415223acf3c9c934b9ff2339631cdf4ffc893da4bacd717"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.103",
-]
-
-[[package]]
 name = "der"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1904,6 +1882,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fugit"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17186ad64927d5ac8f02c1e77ccefa08ccd9eaa314d5a4772278aa204a22f7e7"
+dependencies = [
+ "gcd",
+]
+
+[[package]]
 name = "funty"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2029,6 +2016,12 @@ dependencies = [
  "xous-api-ticktimer",
  "xous-ipc 0.9.54 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "gcd"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d758ba1b47b00caf47f24925c0074ecb20d6dfcffe7f6d53395c0465674841a"
 
 [[package]]
 name = "gdbstub"
@@ -2158,14 +2151,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "hash32-derive"
-version = "0.1.1"
+name = "hash32"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59d2aba832b60be25c1b169146b27c64115470981b128ed84c8db18c1b03c6ff"
+checksum = "47d60b12902ba28e2730cd37e95b8c9223af2808df9e902d4df49588d1470606"
 dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.103",
+ "byteorder",
 ]
 
 [[package]]
@@ -2181,9 +2172,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db04bc24a18b9ea980628ecf00e6c0264f3c1426dac36c00cb49b6fbad8b0743"
 dependencies = [
  "atomic-polyfill",
- "hash32",
+ "hash32 0.2.1",
  "rustc_version 0.4.0",
  "spin 0.9.3",
+ "stable_deref_trait",
+]
+
+[[package]]
+name = "heapless"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
+dependencies = [
+ "hash32 0.3.1",
  "stable_deref_trait",
 ]
 
@@ -3065,7 +3066,16 @@ version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf5395665662ef45796a4ff5486c5d41d29e0c09640af4c5f17fd94ee2c119c9"
 dependencies = [
- "num_enum_derive",
+ "num_enum_derive 0.5.7",
+]
+
+[[package]]
+name = "num_enum"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a015b430d3c108a207fd776d2e2196aaf8b1cf8cf93253e3a097ff3085076a1"
+dependencies = [
+ "num_enum_derive 0.6.1",
 ]
 
 [[package]]
@@ -3077,6 +3087,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.103",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96667db765a921f7b295ffee8b60472b686a51d4f21c2ee4ffdb94c7013b65a6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.23",
 ]
 
 [[package]]
@@ -3105,6 +3126,12 @@ name = "opaque-debug"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
+
+[[package]]
+name = "option-block"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0f2c5d345596a14d7c8b032a68f437955f0059f2eb9a5972371c84f7eef3227"
 
 [[package]]
 name = "orbclient"
@@ -3394,7 +3421,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76e09694b50f89f302ed531c1f2a7569f0be5867aee4ab4f8f729bbeec0078e3"
 dependencies = [
  "arrayvec",
- "num_enum",
+ "num_enum 0.5.7",
  "paste",
 ]
 
@@ -4479,13 +4506,13 @@ checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 [[package]]
 name = "smoltcp"
 version = "0.10.0"
-source = "git+https://github.com/smoltcp-rs/smoltcp.git?branch=main#edfdb23243a973d458397a2b4e76f527bacb1fd6"
+source = "git+https://github.com/smoltcp-rs/smoltcp.git?branch=main#9b791ae3057e10f7afcb70c67deb5daf714293a9"
 dependencies = [
  "bitflags 1.3.2",
  "byteorder",
  "cfg-if",
  "defmt",
- "heapless",
+ "heapless 0.8.0",
  "libc",
  "log",
  "managed",
@@ -5184,14 +5211,14 @@ dependencies = [
  "modals",
  "num-derive",
  "num-traits",
- "num_enum",
+ "num_enum 0.5.7",
  "packed_struct",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rkyv",
  "trng",
  "usb-device",
- "usbd-human-interface-device 0.2.1",
+ "usbd-human-interface-device",
  "usbd-serial",
  "usbd_mass_storage 0.1.0",
  "usbd_scsi 0.1.1",
@@ -5219,7 +5246,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "usb-device",
- "usbd-human-interface-device 0.1.1",
+ "usbd-human-interface-device",
  "utralib",
  "vcell",
  "xous 0.9.54 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -5231,34 +5258,15 @@ dependencies = [
 
 [[package]]
 name = "usbd-human-interface-device"
-version = "0.1.1"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "262ce4294612a8fc830daeaded8b111e241dff8520965979d1754eb87fb33951"
+checksum = "809d98d59a6fccbdcf27026101e9a753c5a98d66898061eee7dd8bfd4eff1d03"
 dependencies = [
- "delegate 0.6.2",
- "embedded-time",
  "frunk",
- "hash32",
- "hash32-derive",
- "heapless",
- "log",
- "num_enum",
- "packed_struct",
- "usb-device",
-]
-
-[[package]]
-name = "usbd-human-interface-device"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f01ee9d05b01603f4d6ee43e7d0ebe140f16567d6ff99fde0dc1ea6e7564e65"
-dependencies = [
- "delegate 0.7.0",
- "embedded-time",
- "frunk",
- "heapless",
- "log",
- "num_enum",
+ "fugit",
+ "heapless 0.7.16",
+ "num_enum 0.6.1",
+ "option-block",
  "packed_struct",
  "usb-device",
 ]
@@ -5435,7 +5443,7 @@ dependencies = [
  "trng",
  "tts-frontend",
  "usb-device-xous",
- "usbd-human-interface-device 0.2.1",
+ "usbd-human-interface-device",
  "userprefs",
  "utralib",
  "xous 0.9.54 (registry+https://github.com/rust-lang/crates.io-index)",

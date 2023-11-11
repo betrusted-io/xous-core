@@ -312,7 +312,7 @@ fn main() -> ! {
                             match typed_reply {
                                 HidIterType::Ctap(reply) => {
                                     for pkt_reply in reply {
-                                        let mut reply = RawFidoMsg::default();
+                                        let mut reply = RawFidoReport::default();
                                         reply.packet.copy_from_slice(&pkt_reply);
                                         let status = ctap.env().main_hid_connection().u2f_send(reply);
                                         match status {
@@ -372,7 +372,7 @@ fn main() -> ! {
                                         }
                                     };
                                     for pkt_reply in reply {
-                                        let mut reply = RawFidoMsg::default();
+                                        let mut reply = RawFidoReport::default();
                                         reply.packet.copy_from_slice(&pkt_reply);
                                         let status = ctap.env().main_hid_connection().u2f_send(reply);
                                         match status {
