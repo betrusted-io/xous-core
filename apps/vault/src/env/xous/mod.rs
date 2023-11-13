@@ -48,10 +48,10 @@ impl XousHidConnection {
             }
         }
     }
-    pub fn u2f_wait_incoming(&self) -> Result<RawFidoMsg, xous::Error> {
+    pub fn u2f_wait_incoming(&self) -> Result<RawFidoReport, xous::Error> {
         self.endpoint.u2f_wait_incoming()
     }
-    pub fn u2f_send(&self, msg: RawFidoMsg) -> Result<(), xous::Error> {
+    pub fn u2f_send(&self, msg: RawFidoReport) -> Result<(), xous::Error> {
         self.endpoint.u2f_send(msg)
     }
 }
@@ -62,7 +62,7 @@ impl HidConnection for XousHidConnection {
         buf: &mut [u8; 64],
         _timeout: Duration,
     ) -> SendOrRecvResult {
-        let mut reply = RawFidoMsg::default();
+        let mut reply = RawFidoReport::default();
         reply.packet.copy_from_slice(buf);
         match self.endpoint.u2f_send(reply) {
             Ok(()) => Ok(SendOrRecvStatus::Sent),
