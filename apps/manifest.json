@@ -66,6 +66,15 @@
             }
         }
     },
+    "sigchat": {
+        "context_name": "signal",
+        "menu_name": {
+            "appmenu.sigchat": {
+                "en": "Signal"
+            }
+        },
+        "submenu": 1
+    },
     "vault": {
         "context_name": "Key Vault",
         "menu_name": {

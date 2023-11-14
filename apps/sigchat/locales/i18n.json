@@ -1,0 +1,63 @@
+{
+    "sigchat.account.failed": {
+        "en": "Failed to setup Signal Account",
+        "en-tts": "Failed to setup Signal Account"
+    },
+    "sigchat.account.link": {
+        "en": "Link to an existing Signal Account",
+        "en-tts": "Link to an existing Signal Account"
+    },
+    "sigchat.account.register": {
+        "en": "Register a new Signal Account",
+        "en-tts": "Register a new Signal Account"
+    },
+    "sigchat.account.title": {
+        "en": "Setup Signal on this device.",
+        "en-tts": "Setup Signal on this device."
+    },
+    "sigchat.menu.close": {
+        "en": "Close menu",
+        "en-tts": "Close menu"
+    },
+    "sigchat.register": {
+        "en": "Register",
+        "en-tts": "Register"
+    },
+    "sigchat.link": {
+        "en": "Link",
+        "en-tts": "Link"
+    },
+    "sigchat.number": {
+        "en": "Number",
+        "en-tts": "Number"
+    },
+    "sigchat.number.title": {
+        "en": "Phone Number",
+        "en-tts": "Phone Number"
+    },
+    "sigchat.pddb.warning": {
+        "en": "WARNING: pddb not mounted",
+        "en-tts": "WARNING: pddb not mounted",
+        "fr": "AVERTISSEMENT: pddb pas monté",
+        "ja": "WARNING: pddb not mounted *EN*",
+        "zh": "WARNING: pddb not mounted *EN*"
+    },
+    "sigchat.wifi.connected": {
+        "en": "WiFi connected",
+        "en-tts": "WiFi connected",
+        "fr": "WiFi connecté",
+        "ja": "WiFi connected *EN*",
+        "zh": "WiFi connected *EN*"
+    },
+    "sigchat.wifi.warning": {
+        "en": "WiFi not connected. Entering read-only mode",
+        "en-tts": "WiFi not connected Entering read-only mode",
+        "fr": "WiFi pas connecté",
+        "ja": "WiFi not connected.  Entering read-only mode *EN*",
+        "zh": "WiFi not connected.  Entering read-only mode *EN*"
+    },
+    "sigchat.close.item": {
+        "en": "Close menu",
+        "en-tts": "Close menu"
+    }
+}
