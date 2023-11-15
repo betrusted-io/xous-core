@@ -363,6 +363,13 @@
         "ja": "これはどのタイプの OTP レコードですか (わからない場合は、おそらく TOTP です)。",
         "zh": "这是哪种类型的 OTP 记录（如果您不知道，可能是 TOTP）？"
     },
+    "vault.newitem.lowercase": {
+        "en": "Lowercase letters",
+        "en-tts": "Lowercase letters",
+        "fr": "Lettres minuscules",
+        "ja": "小文字",
+        "zh": "小写字母"
+    },
     "vault.newitem.name": {
         "en": "Please name the credential:",
         "en-tts": "Please name the credential",
