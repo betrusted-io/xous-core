@@ -6,11 +6,11 @@ use trng::api::TrngTestMode;
 use xous::{CID, send_message, Message};
 use num_traits::*;
 pub use usb_device::device::UsbDeviceState;
-pub use usbd_human_interface_device::device::keyboard::KeyboardLedsReport;
-pub use usbd_human_interface_device::page::Keyboard as UsbKeyCode;
+pub use xous_usb_hid::device::keyboard::KeyboardLedsReport;
+pub use xous_usb_hid::page::Keyboard as UsbKeyCode;
 use packed_struct::PackedStruct;
 use xous_ipc::Buffer;
-pub use usbd_human_interface_device::device::fido::RawFidoReport;
+pub use xous_usb_hid::device::fido::RawFidoReport;
 
 #[derive(Debug)]
 pub struct UsbHid {

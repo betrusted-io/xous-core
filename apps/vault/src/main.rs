@@ -29,7 +29,7 @@ use crate::vendor_commands::VendorSession;
 use ux::framework::{VaultUx, DEFAULT_FONT, FONT_LIST, name_to_style};
 use xous_ipc::Buffer;
 use xous::{send_message, Message, msg_blocking_scalar_unpack, msg_scalar_unpack};
-use usbd_human_interface_device::device::fido::*;
+use xous_usb_hid::device::fido::*;
 use num_traits::*;
 
 use std::thread;

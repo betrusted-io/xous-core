@@ -3,10 +3,10 @@ use crate::*;
 use num_traits::*;
 use usb_device_xous::KeyboardLedsReport;
 use usb_device_xous::UsbDeviceType;
-use usbd_human_interface_device::device::fido::RawFidoReport;
-use usbd_human_interface_device::device::fido::RawFidoConfig;
-use usbd_human_interface_device::device::fido::RawFido;
-use usbd_human_interface_device::device::DeviceClass;
+use xous_usb_hid::device::fido::RawFidoReport;
+use xous_usb_hid::device::fido::RawFidoConfig;
+use xous_usb_hid::device::fido::RawFido;
+use xous_usb_hid::device::DeviceClass;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 #[cfg(not(feature="minimal"))]
 use xous_semver::SemVer;
@@ -17,9 +17,9 @@ use utralib::generated::*;
 
 use usb_device::prelude::*;
 use usb_device::class_prelude::*;
-use usbd_human_interface_device::page::Keyboard;
-use usbd_human_interface_device::device::keyboard::{NKROBootKeyboard, NKROBootKeyboardConfig};
-use usbd_human_interface_device::prelude::*;
+use xous_usb_hid::page::Keyboard;
+use xous_usb_hid::device::keyboard::{NKROBootKeyboard, NKROBootKeyboardConfig};
+use xous_usb_hid::prelude::*;
 
 use std::convert::TryInto;
 #[cfg(not(feature="minimal"))]

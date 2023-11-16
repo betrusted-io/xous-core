@@ -16,7 +16,7 @@ use ctap_crypto::rng256::XousRng256;
 use xous::try_send_message;
 use xous_names::XousNames;
 use crate::env::xous::storage::XousUpgradeStorage;
-use usbd_human_interface_device::device::fido::*;
+use xous_usb_hid::device::fido::*;
 use modals::Modals;
 use locales::t;
 use std::io::{Read, Write};

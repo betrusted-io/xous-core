@@ -17,7 +17,7 @@ graphics-server = {path = "../../services/graphics-server" }
 locales = {path = "../../locales"}
 tts-frontend = {path="../../services/tts"}
 usb-device-xous = {path="../../services/usb-device-xous"}
-usbd-human-interface-device = "0.4.3"
+xous-usb-hid = {git = "https://github.com/betrusted-io/xous-usb-hid.git"}
 pddb = {path = "../../services/pddb" }
 modals = {path = "../../services/modals" }
 trng = {path="../../services/trng"}

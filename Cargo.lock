@@ -5254,7 +5254,6 @@ dependencies = [
  "rkyv",
  "trng",
  "usb-device",
- "usbd-human-interface-device",
  "usbd-serial",
  "usbd_mass_storage 0.1.0",
  "usbd_scsi 0.1.1",
@@ -5267,6 +5266,7 @@ dependencies = [
  "xous-api-ticktimer",
  "xous-ipc 0.9.54 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
+ "xous-usb-hid",
 ]
 
 [[package]]
@@ -5282,7 +5282,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "usb-device",
- "usbd-human-interface-device",
  "utralib",
  "vcell",
  "xous 0.9.54 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -5290,21 +5289,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
-]
-
-[[package]]
-name = "usbd-human-interface-device"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "809d98d59a6fccbdcf27026101e9a753c5a98d66898061eee7dd8bfd4eff1d03"
-dependencies = [
- "frunk",
- "fugit",
- "heapless 0.7.16",
- "num_enum 0.6.1",
- "option-block",
- "packed_struct",
- "usb-device",
+ "xous-usb-hid",
 ]
 
 [[package]]
@@ -5479,7 +5464,6 @@ dependencies = [
  "trng",
  "tts-frontend",
  "usb-device-xous",
- "usbd-human-interface-device",
  "userprefs",
  "utralib",
  "xous 0.9.54 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -5488,6 +5472,7 @@ dependencies = [
  "xous-api-susres",
  "xous-api-ticktimer",
  "xous-ipc 0.9.54 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-usb-hid",
 ]
 
 [[package]]
@@ -6259,6 +6244,20 @@ dependencies = [
  "xous 0.9.54 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-names",
  "xous-ipc 0.9.54 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "xous-usb-hid"
+version = "0.4.3"
+source = "git+https://github.com/betrusted-io/xous-usb-hid.git#eba35e886d08e504cf10026221aec0fbfc63e201"
+dependencies = [
+ "frunk",
+ "fugit",
+ "heapless 0.7.16",
+ "num_enum 0.6.1",
+ "option-block",
+ "packed_struct",
+ "usb-device",
 ]
 
 [[package]]

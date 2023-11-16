@@ -418,6 +418,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - sigchat skeleton added thanks to @nhoj
 - usbd-human-interface-device bumped to latest in preparation for a fork
 - Fix #446 - add support for numeric-only passwords in `vault`
+- Fork usbd-human-interface-device to xous-usb-hid
 
 ## Roadmap
 - Lots of testing and bug fixes

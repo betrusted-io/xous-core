@@ -1,7 +1,7 @@
 use crate::*;
 
 use num_traits::*;
-use usbd_human_interface_device::device::fido::RawFidoReport;
+use xous_usb_hid::device::fido::RawFidoReport;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_semver::SemVer;
 use core::num::NonZeroU8;
