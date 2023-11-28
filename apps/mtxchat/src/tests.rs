@@ -13,8 +13,13 @@ pub fn test_ui(chat: &Chat) {
     // generate a list of test posts that are repeatable each time
     chat.post_add("alice", 1_700_000_000, "hello world!", None).ok();
     chat.post_add("bob", 1_700_000_002, "hi alice!", None).ok();
+    for i in 0..5 {
+        chat.post_add("alice", 1_700_000_005 + i*4, &format!("alice sez {}", i), None).ok();
+        chat.post_add("bob", 1_700_000_006 + i*4, &format!("bob sez {}", i), None).ok();
+        chat.post_add("trent", 1_700_000_007 + i*4, &format!("trent sez {}", i), None).ok();
+    }
+    chat.post_add("alice", 1_700_001_000, "eom", None).ok();
 
-    tt.sleep_ms(2000).ok();
     log::info!("triggering save");
     xous::send_message(
         chat.cid(),
@@ -22,13 +27,9 @@ pub fn test_ui(chat: &Chat) {
     )
     .expect("failed to send new inbound msgs");
 
-    log::info!("sleep");
-    tt.sleep_ms(5000).ok();
-    log::info!("redraw");
-    chat.redraw();
-
+    log::info!("test done, displaying result");
     loop {
+        // just idle so that the main loop of mtxchat doesn't trigger and interfere with the test
         tt.sleep_ms(5000).ok();
-        log::info!("test done, displaying result");
     }
 }
