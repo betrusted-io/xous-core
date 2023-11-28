@@ -687,12 +687,23 @@ impl Ui {
 
     /// Layout the post bubbles on the screen.
     ///
+    /// The challenge is to layout a sub-set of the posts on screen, ensuring that
+    /// the selected-post is fully displayed, and to do something non-jarring as the
+    /// user moves the selection up or down.
+    ///
+    /// That is, when the user clicks up then the currently selected post should go
+    /// un-bold, and the post above should go bold, without movement - unless the newly
+    /// selected post is partially or fully off-screen, in which case, the posts need
+    /// to move down. There are three edge cases, when the first or last post is reached,
+    /// or when the post is too big for the screen. And an additional challenge,
+    /// that the only way to calculate the vertical height of a post is to lay it out.
+    ///
     /// The layout proceeds from top-down or bottom-up (starting with the
     /// `post_anchor`), drawing a bubble for each Post, until the available space
     /// is exhausted.
     /// * If the `post_selected` is fully displayed, then `Ok(true)` is Returned.
     /// * If the `post_selected` is NOT fully displayed, then the `post_anchor`
-    /// is set as the `post_anchor`, and `Ok(false)` is Returned - signalling that
+    /// is set as the `post_selected`, and `Ok(false)` is Returned - signalling that
     /// a re-layout is in order.
     /// * If the first/last Post is fully displayed, then the `post_topdown` is
     /// toggled, the `post_anchor` is set to the first/last Post, and `Ok(false)`
