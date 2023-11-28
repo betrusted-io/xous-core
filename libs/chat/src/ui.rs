@@ -391,12 +391,12 @@ impl Ui {
     ) -> Result<(), Error> {
         match (&self.pddb_key, &mut self.dialogue) {
             (Some(pddb_key), Some(ref mut dialogue)) => {
-                if pddb_key.eq(&dialogue_id) {
+                if dialogue_id.len() == 0 || pddb_key.eq(&dialogue_id) {
                     dialogue
                         .post_add(author, timestamp, text, attach_url)
                         .unwrap();
                 } else {
-                    log::warn!("dropping Post as dialogue_id does not match pddb_key");
+                    log::warn!("dropping Post as dialogue_id does not match pddb_key: '{}' vs '{}'", pddb_key, dialogue_id);
                 }
             }
             (None, _) => log::warn!("no pddb_key set to match dialogue_id"),
