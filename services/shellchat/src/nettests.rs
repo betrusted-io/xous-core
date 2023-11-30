@@ -180,7 +180,7 @@ fn bind_error() {
 }
 
 fn connect_error() {
-    match TcpStream::connect("0.0.0.0:1") {
+    match TcpStream::connect(("0.0.0.0",1)) {
         Ok(..) => panic!(),
         Err(e) => {
             log::info!("connect_error is {:?}", e);

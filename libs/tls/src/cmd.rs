@@ -111,8 +111,7 @@ pub fn shellchat<'a>(
                     .unwrap();
 
             log::info!("connect TCPstream to {}", target);
-            let url = format!("{}:443", target);
-            match TcpStream::connect(url) {
+            match TcpStream::connect((target, 443)) {
                 Ok(mut sock) => {
                     log::info!("tcp connected");
                     write!(ret, "{}", t!("tls.test_success_tcp", locales::LANG)).ok();
