@@ -2845,7 +2845,6 @@ dependencies = [
  "pddb",
  "percent-encoding",
  "rkyv",
- "rustls",
  "serde",
  "tls",
  "trng",
