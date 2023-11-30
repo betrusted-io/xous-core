@@ -650,20 +650,6 @@ impl Ui {
     /// to move down. There are three edge cases, when the first or last post is reached,
     /// or when the post is too big for the screen. And an additional challenge,
     /// that the only way to calculate the vertical height of a post is to lay it out.
-    ///
-    /// The layout proceeds from top-down or bottom-up (starting with the
-    /// `post_anchor`), drawing a bubble for each Post, until the available space
-    /// is exhausted.
-    /// * If the `post_selected` is fully displayed, then `Ok(true)` is Returned.
-    /// * If the `post_selected` is NOT fully displayed, then the `post_anchor`
-    /// is set as the `post_selected`, and `Ok(false)` is Returned - signalling that
-    /// a re-layout is in order.
-    /// * If the first/last Post is fully displayed, then the `post_topdown` is
-    /// toggled, the `post_anchor` is set to the first/last Post, and `Ok(false)`
-    /// is Returned - signalling that a re-layout is in order.
-    ///
-    /// Error if there if Dialogue is None
-    ///
     fn layout(&mut self) -> Result<(), Error> {
         if let Some(dialogue) = self.dialogue.as_mut() {
             log::info!("redrawing dialogue: {}", dialogue.title);
@@ -737,6 +723,7 @@ impl Ui {
                 if self.layout_range.len() == 0 {
                     // not enough elements to fill the entire screen. Just select everything from selected
                     // to the last possible message.
+                    log::debug!("Not enough elements to fill the screen");
                     if self.layout_topdown {
                         self.layout_range = (starting_at..).collect();
                     } else {
@@ -777,6 +764,7 @@ impl Ui {
             } else {
                 self.vp.status_height as i16 + self.vp.layout_screensize.y - self.vp.bubble_margin.y
             };
+            log::debug!("Laying out with selected {:?} in range {:?}; topdown: {:?}", self.layout_selected, self.layout_range, self.layout_topdown);
             for &post_index in &self.layout_range {
                 let post = dialogue.post_get(post_index).expect("should be a valid post at this index");
                 let highlight = if let Some(selected) = self.layout_selected {
