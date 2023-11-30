@@ -2,6 +2,7 @@ use super::attach::Attach;
 
 use crate::PostFlag;
 use enumset::EnumSet;
+use graphics_server::Rectangle;
 use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Archive, Serialize, Deserialize, Debug)]
@@ -11,6 +12,7 @@ pub struct Post {
     text: String,
     attach: Option<Attach>,
     pub flags: u16,
+    pub bounding_box: Option<Rectangle>,
 }
 
 #[allow(dead_code)]
@@ -22,6 +24,7 @@ impl Post {
             text: text.to_string(),
             attach: attach,
             flags: 0,
+            bounding_box: None,
         }
     }
 

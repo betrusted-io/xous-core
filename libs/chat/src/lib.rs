@@ -4,9 +4,12 @@ pub mod icontray;
 pub mod ui;
 
 pub use api::*;
+use graphics_server::{TextView, Point, Rectangle, TextBounds};
+use graphics_server::api::GlyphStyle;
 pub use ui::BUSY_ANIMATION_RATE_MS;
 use gam::MenuItem;
 use num_traits::FromPrimitive;
+use ui::VisualProperties;
 use std::convert::TryInto;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -14,6 +17,42 @@ use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
 
 use xous::{Error, CID, SID, msg_scalar_unpack};
 use xous_ipc::Buffer;
+
+/// Create a TextView with the default properties common to all text bubbles.
+pub(crate) fn default_textview(
+    post: &crate::dialogue::post::Post,
+    hilite: bool,
+    vp: &VisualProperties,
+) -> TextView {
+    use std::fmt::Write;
+    let mut bubble_tv = TextView::new(
+        vp.canvas,
+        TextBounds::GrowableFromBl(
+            Point::new(vp.margin.x, vp.screensize.y),
+            vp.bubble_width
+        )
+    );
+    if hilite {
+        bubble_tv.border_width = 3;
+    } else {
+        bubble_tv.border_width = 1;
+    }
+    bubble_tv.clip_rect = Some(
+        Rectangle::new(
+            Point::new(0, vp.status_height as i16 + vp.margin.y),
+            vp.screensize
+        )
+    );
+    bubble_tv.draw_border = true;
+    bubble_tv.clear_area = true;
+    bubble_tv.rounded_border = Some(vp.bubble_radius);
+    bubble_tv.style = GlyphStyle::Regular;
+    bubble_tv.margin = vp.bubble_margin;
+    bubble_tv.ellipsis = false;
+    bubble_tv.insertion = None;
+    write!(bubble_tv.text, "{}", post.text()).expect("couldn't write history text to TextView");
+    bubble_tv
+}
 
 pub struct Chat {
     cid: CID,

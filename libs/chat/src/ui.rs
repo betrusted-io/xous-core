@@ -23,6 +23,18 @@ use xous_names::XousNames;
 
 pub const BUSY_ANIMATION_RATE_MS: usize = 200;
 
+pub struct VisualProperties {
+    pub canvas: Gid,
+    // variables that define our graphical attributes
+    pub screensize: Point,
+    /// height of the status bar. This is subtracted from screensize.
+    pub status_height: u16,
+    pub bubble_width: u16,
+    pub margin: Point,        // margin to edge of canvas
+    pub bubble_margin: Point, // margin of text in bubbles
+    pub bubble_radius: u16,
+    pub bubble_space: i16, // spacing between text bubbles
+}
 #[allow(dead_code)]
 pub(crate) struct Ui {
     // optional structures that indicate new input to the Chat loop per iteration
@@ -45,7 +57,6 @@ pub(crate) struct Ui {
     // optional opcode ID to process UI-event msgs
     opcode_event: Option<usize>,
 
-    canvas: Gid,
     gam: gam::Gam,
     modals: Modals,
     tt: Ticktimer,
@@ -58,21 +69,14 @@ pub(crate) struct Ui {
     // layout post bubbles on the screen from top-down or bottom-up
     post_topdown: bool,
 
-    // variables that define our graphical attributes
-    screensize: Point,
-    /// height of the status bar. This is subtracted from screensize.
-    status_height: u16,
     /// TextView for the status bar. This encapsulates the state of the busy animation, and the text within.
     status_tv: TextView,
     /// Track the last time we update the status bar; use this avoid double-updating busy animations
     status_last_update_ms: u64,
     /// The default message to show when we exit a busy state
     status_idle_text: String,
-    bubble_width: u16,
-    margin: Point,        // margin to edge of canvas
-    bubble_margin: Point, // margin of text in bubbles
-    bubble_radius: u16,
-    bubble_space: i16, // spacing between text bubbles
+
+    vp: VisualProperties,
 
     // variables that define a menu
     menu_mode: bool,
@@ -148,6 +152,16 @@ impl Ui {
         write!(status_tv, "{}", t!("chat.status.initial", locales::LANG).to_string()).ok();
         let tt = ticktimer_server::Ticktimer::new().unwrap();
         let status_last_update_ms = tt.elapsed_ms();
+        let bubble_properties = VisualProperties {
+            canvas,
+            screensize,
+            status_height,
+            bubble_width: ((screensize.x / 5) * 4) as u16, // 80% width for the text bubbles
+            margin: Point::new(4, 4),
+            bubble_margin: Point::new(4, 4),
+            bubble_radius: 4,
+            bubble_space: 4,
+        };
         Ui {
             input: None,
             msg: None,
@@ -158,22 +172,15 @@ impl Ui {
             self_cid: xous::connect(sid).unwrap(),
             app_cid,
             opcode_event,
-            canvas,
             gam,
             modals,
             tt,
-            screensize,
-            status_height,
             status_tv,
             status_last_update_ms,
             post_selected: None,
             post_anchor: None,
             post_topdown: false,
-            bubble_width: ((screensize.x / 5) * 4) as u16, // 80% width for the text bubbles
-            margin: Point::new(4, 4),
-            bubble_margin: Point::new(4, 4),
-            bubble_radius: 4,
-            bubble_space: 4,
+            vp: bubble_properties,
             menu_mode: true,
             app_menu: app_menu.to_owned(),
             menu_mgr: menu_mgr,
@@ -393,7 +400,7 @@ impl Ui {
             (Some(pddb_key), Some(ref mut dialogue)) => {
                 if dialogue_id.len() == 0 || pddb_key.eq(&dialogue_id) {
                     dialogue
-                        .post_add(author, timestamp, text, attach_url)
+                        .post_add(author, timestamp, text, attach_url, Some((&self.vp, &self.gam)))
                         .unwrap();
                 } else {
                     log::warn!("dropping Post as dialogue_id does not match pddb_key: '{}' vs '{}'", pddb_key, dialogue_id);
@@ -528,20 +535,22 @@ impl Ui {
     /// * `anchor_y` - the vertical position on screen to draw TextView bubble
     ///
     fn bubble(&self, post: &Post, dialogue: &Dialogue, hilite: bool, anchor_y: i16) -> TextView {
+        // create a textview with all of our default properties
+        let mut bubble_tv = default_textview(post, hilite, &self.vp);
+
         // set alignment of bubble left/right
         let mut align_right = false;
-        let mut anchor_x = self.margin.x; // default to align left
+        let mut anchor_x = self.vp.margin.x; // default to align left
         if let Some(author) = dialogue.author(post.author_id()) {
             if author.flag_is(AuthorFlag::Right) {
                 // align right
                 align_right = true;
-                anchor_x = self.screensize.x - self.margin.x;
+                anchor_x = self.vp.screensize.x - self.vp.margin.x;
             }
         }
-
         // set the text bounds of the bubble and the growth direction
         let anchor = Point::new(anchor_x, anchor_y);
-        let width = self.bubble_width;
+        let width = self.vp.bubble_width;
         let text_bounds = match (self.post_topdown, align_right) {
             (true, true) => TextBounds::GrowableFromTr(anchor, width),
             (true, false) => TextBounds::GrowableFromTl(anchor, width),
@@ -549,28 +558,7 @@ impl Ui {
             (false, false) => TextBounds::GrowableFromBl(anchor, width),
         };
 
-        // create the bubble with the anchor and a growable direction
-        use std::fmt::Write;
-        let mut bubble_tv = TextView::new(self.canvas, text_bounds);
-        if hilite {
-            bubble_tv.border_width = 3;
-        } else {
-            bubble_tv.border_width = 1;
-        }
-        bubble_tv.clip_rect = Some(
-            Rectangle::new(
-                Point::new(0, self.status_height as i16 + self.margin.y),
-                self.screensize
-            )
-        );
-        bubble_tv.draw_border = true;
-        bubble_tv.clear_area = true;
-        bubble_tv.rounded_border = Some(self.bubble_radius);
-        bubble_tv.style = GlyphStyle::Regular;
-        bubble_tv.margin = self.bubble_margin;
-        bubble_tv.ellipsis = false;
-        bubble_tv.insertion = None;
-        write!(bubble_tv.text, "{}", post.text()).expect("couldn't write history text to TextView");
+        bubble_tv.bounds_hint = text_bounds;
         bubble_tv
     }
 
@@ -579,10 +567,10 @@ impl Ui {
     fn clear_area(&self) {
         self.gam
             .draw_rectangle(
-                self.canvas,
+                self.vp.canvas,
                 Rectangle::new_with_style(
-                    Point::new(0, self.status_height as i16),
-                    self.screensize,
+                    Point::new(0, self.vp.status_height as i16),
+                    self.vp.screensize,
                     DrawStyle {
                         fill_color: Some(PixelColor::Light),
                         stroke_color: None,
@@ -716,12 +704,13 @@ impl Ui {
         self.gam.post_textview(&mut self.status_tv)
             .expect("couldn't render status bar");
         let status_border = Line::new(
-            Point::new(0, self.status_height as i16),
-            Point::new(self.screensize.x, self.status_height as i16)
+            Point::new(0, self.vp.status_height as i16),
+            Point::new(self.vp.screensize.x, self.vp.status_height as i16)
         );
-        self.gam.draw_line(self.canvas,
+        self.gam.draw_line(self.vp.canvas,
             status_border
         ).expect("couldn't draw status lower border");
+
         match (&self.dialogue, &self.post_anchor) {
             (Some(dialogue), Some(post_anchor)) => {
                 log::info!("redrawing dialogue: {}", dialogue.title);
@@ -731,8 +720,8 @@ impl Ui {
                 // initialise the first post index AND the vertical position on the screen
                 let mut post_index = *post_anchor;
                 let mut anchor_y = match self.post_topdown {
-                    true => self.status_height as i16 + self.margin.y,
-                    false => self.screensize.y - self.margin.y,
+                    true => self.vp.status_height as i16 + self.vp.margin.y,
+                    false => self.vp.screensize.y - self.vp.margin.y,
                 };
 
                 // fill the screen with post bubbles from top-down or bottom-up
@@ -766,8 +755,8 @@ impl Ui {
                                             }
                                             post_index += 1;
                                             anchor_y += (bounds.br.y - bounds.tl.y)
-                                                + self.bubble_space
-                                                + self.bubble_margin.y;
+                                                + self.vp.bubble_space
+                                                + self.vp.bubble_margin.y;
                                         }
                                         false => {
                                             if post_index == 0 {
@@ -778,8 +767,8 @@ impl Ui {
                                             }
                                             post_index -= 1;
                                             anchor_y -= (bounds.br.y - bounds.tl.y)
-                                                + self.bubble_space
-                                                + self.bubble_margin.y;
+                                                + self.vp.bubble_space
+                                                + self.vp.bubble_margin.y;
                                         }
                                     },
                                     None => {
