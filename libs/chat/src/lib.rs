@@ -28,7 +28,7 @@ pub(crate) fn default_textview(
     let mut bubble_tv = TextView::new(
         vp.canvas,
         TextBounds::GrowableFromBl(
-            Point::new(vp.margin.x, vp.screensize.y),
+            Point::new(vp.margin.x, vp.layout_screensize.y),
             vp.bubble_width
         )
     );
@@ -40,7 +40,7 @@ pub(crate) fn default_textview(
     bubble_tv.clip_rect = Some(
         Rectangle::new(
             Point::new(0, vp.status_height as i16 + vp.margin.y),
-            vp.screensize
+            vp.layout_screensize
         )
     );
     bubble_tv.draw_border = true;
@@ -53,6 +53,52 @@ pub(crate) fn default_textview(
     write!(bubble_tv.text, "{}", post.text()).expect("couldn't write history text to TextView");
     bubble_tv
 }
+
+/// Return a TextView bubble representing a Dialogue Post
+///
+/// # Arguments
+///
+/// * `vp` - the visual properties to be applied to the textview
+/// * `topdown` - direction of the layout
+/// * `post` - the post to represent in a TextView bubble
+/// * `dialogue` - containing the Post for context info
+/// * `hilite` - hilite this Post on the screen (thicker border)
+/// * `anchor_y` - the vertical position on screen to draw TextView bubble
+///
+fn bubble(
+    vp: &VisualProperties,
+    topdown: bool,
+    post: &crate::dialogue::post::Post,
+    dialogue: &crate::dialogue::Dialogue,
+    hilite: bool,
+    anchor_y: i16) -> TextView {
+    // create a textview with all of our default properties
+    let mut bubble_tv = default_textview(post, hilite, vp);
+
+    // set alignment of bubble left/right
+    let mut align_right = false;
+    let mut anchor_x = vp.margin.x; // default to align left
+    if let Some(author) = dialogue.author(post.author_id()) {
+        if author.flag_is(AuthorFlag::Right) {
+            // align right
+            align_right = true;
+            anchor_x = vp.layout_screensize.x - vp.margin.x;
+        }
+    }
+    // set the text bounds of the bubble and the growth direction
+    let anchor = Point::new(anchor_x, anchor_y);
+    let width = vp.bubble_width;
+    let text_bounds = match (topdown, align_right) {
+        (true, true) => TextBounds::GrowableFromTr(anchor, width),
+        (true, false) => TextBounds::GrowableFromTl(anchor, width),
+        (false, true) => TextBounds::GrowableFromBr(anchor, width),
+        (false, false) => TextBounds::GrowableFromBl(anchor, width),
+    };
+
+    bubble_tv.bounds_hint = text_bounds;
+    bubble_tv
+}
+
 
 pub struct Chat {
     cid: CID,

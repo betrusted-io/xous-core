@@ -23,10 +23,11 @@ use xous_names::XousNames;
 
 pub const BUSY_ANIMATION_RATE_MS: usize = 200;
 
+/// Variables that define the visual properties of the layout
 pub struct VisualProperties {
     pub canvas: Gid,
-    // variables that define our graphical attributes
-    pub screensize: Point,
+    pub total_screensize: Point,
+    pub layout_screensize: Point,
     /// height of the status bar. This is subtracted from screensize.
     pub status_height: u16,
     pub bubble_width: u16,
@@ -61,13 +62,16 @@ pub(crate) struct Ui {
     modals: Modals,
     tt: Ticktimer,
 
-    // variables regarding the posts currently onscreen
-    // the selected post is hilighted onscreen and the focus of the msg menu F4
-    post_selected: Option<usize>,
-    // the anchor post is drawn first, at the top or bottom of the screen
-    post_anchor: Option<usize>,
-    // layout post bubbles on the screen from top-down or bottom-up
-    post_topdown: bool,
+    /// These variables are managed exclusively by the layout routine.
+    /// the selected post is highlighted onscreen and the focus of the msg menu
+    layout_selected: Option<usize>,
+    /// the range of posts that are currently drawable. This was originally implemented as
+    /// an Option<Range>, but we need to be able to do RangeInclusive and Reversed ranges.
+    /// The RangeBounds trait isn't object-safe, so we can't Box/dyn it either...
+    /// So, instead, we turn the ranges into a Vec and operate from there...
+    layout_range: Vec<usize>,
+    /// layout post bubbles on the screen from top-down or bottom-up
+    layout_topdown: bool,
 
     /// TextView for the status bar. This encapsulates the state of the busy animation, and the text within.
     status_tv: TextView,
@@ -154,7 +158,8 @@ impl Ui {
         let status_last_update_ms = tt.elapsed_ms();
         let bubble_properties = VisualProperties {
             canvas,
-            screensize,
+            total_screensize: screensize,
+            layout_screensize: Point::new(screensize.x, screensize.y - status_height as i16),
             status_height,
             bubble_width: ((screensize.x / 5) * 4) as u16, // 80% width for the text bubbles
             margin: Point::new(4, 4),
@@ -177,9 +182,9 @@ impl Ui {
             tt,
             status_tv,
             status_last_update_ms,
-            post_selected: None,
-            post_anchor: None,
-            post_topdown: false,
+            layout_selected: None,
+            layout_range: Vec::new(),
+            layout_topdown: false,
             vp: bubble_properties,
             menu_mode: true,
             app_menu: app_menu.to_owned(),
@@ -212,9 +217,9 @@ impl Ui {
                                 {
                                     Ok(dialogue) => {
                                         // show most recent posts onscreen
-                                        self.post_selected = dialogue.post_last();
-                                        self.post_anchor = self.post_selected;
-                                        self.post_topdown = false;
+                                        self.layout_selected = dialogue.post_last();
+                                        self.layout_range.clear();
+                                        self.layout_topdown = false;
                                         Some(dialogue)
                                     }
                                     Err(e) => {
@@ -464,11 +469,11 @@ impl Ui {
     ///
     /// * `index` - POST_SELECT_NEXT or POST_SELECT_PREV or an arbitraty index
     pub fn post_select(&mut self, index: usize) {
-        self.post_selected = match &self.dialogue {
+        self.layout_selected = match &self.dialogue {
             Some(dialogue) => {
                 match dialogue.post_last() {
                     Some(last_post) => {
-                        match (index, self.post_selected) {
+                        match (index, self.layout_selected) {
                             (POST_SELECTED_NEXT, Some(selected)) => {
                                 if selected >= last_post {
                                     self.event(Event::Bottom);
@@ -525,52 +530,15 @@ impl Ui {
         }
     }
 
-    /// Return a TextView bubble representing a Dialogue Post
+    /// Clear the screen area, not including the status bar
     ///
-    /// # Arguments
-    ///
-    /// * `post` - the post to represent in a TextView bubble
-    /// * `dialogue` - containing the Post for context info
-    /// * `hilite` - hilite this Post on the screen (thicker border)
-    /// * `anchor_y` - the vertical position on screen to draw TextView bubble
-    ///
-    fn bubble(&self, post: &Post, dialogue: &Dialogue, hilite: bool, anchor_y: i16) -> TextView {
-        // create a textview with all of our default properties
-        let mut bubble_tv = default_textview(post, hilite, &self.vp);
-
-        // set alignment of bubble left/right
-        let mut align_right = false;
-        let mut anchor_x = self.vp.margin.x; // default to align left
-        if let Some(author) = dialogue.author(post.author_id()) {
-            if author.flag_is(AuthorFlag::Right) {
-                // align right
-                align_right = true;
-                anchor_x = self.vp.screensize.x - self.vp.margin.x;
-            }
-        }
-        // set the text bounds of the bubble and the growth direction
-        let anchor = Point::new(anchor_x, anchor_y);
-        let width = self.vp.bubble_width;
-        let text_bounds = match (self.post_topdown, align_right) {
-            (true, true) => TextBounds::GrowableFromTr(anchor, width),
-            (true, false) => TextBounds::GrowableFromTl(anchor, width),
-            (false, true) => TextBounds::GrowableFromBr(anchor, width),
-            (false, false) => TextBounds::GrowableFromBl(anchor, width),
-        };
-
-        bubble_tv.bounds_hint = text_bounds;
-        bubble_tv
-    }
-
-    // Clear the screen area
-    //
     fn clear_area(&self) {
         self.gam
             .draw_rectangle(
                 self.vp.canvas,
                 Rectangle::new_with_style(
                     Point::new(0, self.vp.status_height as i16),
-                    self.vp.screensize,
+                    self.vp.total_screensize,
                     DrawStyle {
                         fill_color: Some(PixelColor::Light),
                         stroke_color: None,
@@ -604,10 +572,7 @@ impl Ui {
     ///
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
         if self.dialogue.is_some() {
-            let mut attempt = 0;
-            while !self.layout().unwrap_or(true) && attempt < 3 {
-                attempt += 1;
-            }
+            self.layout().expect("layout failed to execute");
             self.status_last_update_ms = self.tt.elapsed_ms();
         } else {
             self.clear_area(); // no dialogue so clear screen
@@ -699,110 +664,170 @@ impl Ui {
     ///
     /// Error if there if Dialogue is None
     ///
-    fn layout(&mut self) -> Result<bool, Error> {
-        self.clear_area();
-        self.gam.post_textview(&mut self.status_tv)
-            .expect("couldn't render status bar");
-        let status_border = Line::new(
-            Point::new(0, self.vp.status_height as i16),
-            Point::new(self.vp.screensize.x, self.vp.status_height as i16)
-        );
-        self.gam.draw_line(self.vp.canvas,
-            status_border
-        ).expect("couldn't draw status lower border");
+    fn layout(&mut self) -> Result<(), Error> {
+        if let Some(dialogue) = self.dialogue.as_mut() {
+            log::info!("redrawing dialogue: {}", dialogue.title);
 
-        match (&self.dialogue, &self.post_anchor) {
-            (Some(dialogue), Some(post_anchor)) => {
-                log::info!("redrawing dialogue: {}", dialogue.title);
-                let mut post_selected_visible = false;
-                let mut bubble_count = 0;
+            // 1. Consistency check the layout range versus selected post.
+            let search_required = if let Some(selected) = self.layout_selected {
+                !self.layout_range.contains(&selected)
+            } else {
+                true
+            };
 
-                // initialise the first post index AND the vertical position on the screen
-                let mut post_index = *post_anchor;
-                let mut anchor_y = match self.post_topdown {
-                    true => self.vp.status_height as i16 + self.vp.margin.y,
-                    false => self.vp.screensize.y - self.vp.margin.y,
+            // 2. Adjust the displayable range.
+            if search_required {
+                let starting_at = if let Some(selected) = self.layout_selected {
+                    if self.layout_range.len() > 0 {
+                        self.layout_topdown = selected <= *self.layout_range.iter().min().unwrap_or(&0);
+                        selected
+                    } else {
+                        // if no range is available, go from the bottom up, starting with the selected post
+                        self.layout_topdown = false;
+                        selected
+                    }
+                } else {
+                    // no post selected, always layout from bottom up, starting at the most recent post
+                    self.layout_topdown = false;
+                    dialogue.post_last().unwrap_or(0)
                 };
-
-                // fill the screen with post bubbles from top-down or bottom-up
-                let mut post_is_fully_visible = true;
-                let mut is_selected = false;
-                while post_is_fully_visible {
-                    log::trace!("redrawing post: {post_index}");
-                    match (dialogue.post_get(post_index), &self.post_selected) {
-                        (Some(post), Some(post_selected)) => {
-                            is_selected = post_index == *post_selected;
-
-                            // create a bubble and place on canvas
-                            let mut bubble_tv = self.bubble(post, dialogue, is_selected, anchor_y);
-                            self.gam
-                                .post_textview(&mut bubble_tv)
-                                .expect("couldn't render bubble textview");
-                            bubble_count += 1;
-                            post_is_fully_visible = !bubble_tv.overflow.unwrap_or(true);
-                            if post_is_fully_visible {
-                                // step to the next post AND the next vertical position on the screen
-                                match bubble_tv.bounds_computed {
-                                    Some(bounds) => match self.post_topdown {
-                                        true => {
-                                            if post_index
-                                                >= dialogue.post_last().unwrap_or(usize::MAX)
-                                            {
-                                                log::info!("trigger a re-layout from bottom-up");
-                                                self.post_topdown = false;
-                                                self.post_anchor = dialogue.post_last();
-                                                return Ok(false);
-                                            }
-                                            post_index += 1;
-                                            anchor_y += (bounds.br.y - bounds.tl.y)
-                                                + self.vp.bubble_space
-                                                + self.vp.bubble_margin.y;
-                                        }
-                                        false => {
-                                            if post_index == 0 {
-                                                log::info!("trigger a re-layout from top-down");
-                                                self.post_topdown = true;
-                                                self.post_anchor = Some(0);
-                                                return Ok(false);
-                                            }
-                                            post_index -= 1;
-                                            anchor_y -= (bounds.br.y - bounds.tl.y)
-                                                + self.vp.bubble_space
-                                                + self.vp.bubble_margin.y;
-                                        }
-                                    },
-                                    None => {
-                                        log::info!("bubble is offscreen so noop");
-                                        post_is_fully_visible = false;
-                                    }
-                                };
-
-                                // check if the selected post is fully visible
-                                post_selected_visible = post_selected_visible || is_selected;
+                let mut fwd_iter;
+                let mut rev_iter;
+                let search_window: &mut dyn Iterator<Item = _> = if self.layout_topdown {
+                    // search from the selected post to all newer posts, top-to-down
+                    fwd_iter = dialogue.posts_as_slice_mut()[starting_at..].iter_mut();
+                    &mut fwd_iter
+                } else {
+                    // search from oldest post to selected post, bottom-to-top
+                    rev_iter = dialogue.posts_as_slice_mut()[..=starting_at].iter_mut().rev();
+                    &mut rev_iter
+                };
+                let mut total_height = 0;
+                self.layout_range.clear();
+                for (i, post) in search_window.enumerate() {
+                    let next_height = if let Some(bb) = post.bounding_box {
+                        bb.height() + self.vp.bubble_space as u32 + self.vp.bubble_margin.y as u32
+                    } else {
+                        // if the "natural height" has not been computed, do so now.
+                        let mut layout_bubble = default_textview(post, false, &self.vp);
+                        if self.gam.bounds_compute_textview(&mut layout_bubble).is_ok() {
+                            post.bounding_box = layout_bubble.bounds_computed;
+                            match layout_bubble.bounds_computed {
+                                Some(r) => r.height() + self.vp.bubble_space as u32 + self.vp.bubble_margin.y as u32,
+                                None => {
+                                    log::warn!("Unexpected null bounds in computing textview heights, layout will be incorrect.");
+                                    0
+                                }
                             }
+                        } else {
+                            log::warn!("Unexpected error in computing textview heights, layout will be incorrect.");
+                            0
                         }
-                        (None, _) => {
-                            log::trace!("not enough post bubbles to fill the screen");
-                            return Ok(true);
+                    };
+                    if total_height + next_height > self.vp.layout_screensize.y as u32 {
+                        if self.layout_topdown {
+                            self.layout_range = (starting_at..starting_at + i).collect();
+                        } else {
+                            self.layout_range = (starting_at - i..=starting_at).rev().collect();
                         }
-                        (_, _) => return Ok(true), // get me outa-here
+                        break
+                    }
+                    total_height += next_height;
+                }
+                if self.layout_range.len() == 0 {
+                    // not enough elements to fill the entire screen. Just select everything from selected
+                    // to the last possible message.
+                    if self.layout_topdown {
+                        self.layout_range = (starting_at..).collect();
+                    } else {
+                        self.layout_range = (0..=starting_at).rev().collect();
                     }
                 }
-                if post_selected_visible || (bubble_count == 1 && is_selected) {
-                    Ok(true)
+            }
+            assert!(self.layout_range.len() > 0, "Layout range should be set at this point.");
+
+            // 3. clear the entire area, and re-draw the status bar
+            self.gam
+            .draw_rectangle(
+                self.vp.canvas,
+                Rectangle::new_with_style(
+                    Point::new(0, 0),
+                    self.vp.total_screensize,
+                    DrawStyle {
+                        fill_color: Some(PixelColor::Light),
+                        stroke_color: None,
+                        stroke_width: 0,
+                    },
+                ),
+            )
+            .expect("can't clear canvas area");
+            self.gam.post_textview(&mut self.status_tv)
+                .expect("couldn't render status bar");
+            let status_border = Line::new(
+                Point::new(0, self.vp.status_height as i16),
+                Point::new(self.vp.total_screensize.x, self.vp.status_height as i16)
+            );
+            self.gam.draw_line(self.vp.canvas,
+                status_border
+            ).expect("couldn't draw status lower border");
+
+            // 4. draw the text bubbles, in the order computed in step 2.
+            let mut y = if self.layout_topdown {
+                self.vp.status_height as i16 + self.vp.bubble_margin.y
+            } else {
+                self.vp.status_height as i16 + self.vp.layout_screensize.y - self.vp.bubble_margin.y
+            };
+            for &post_index in &self.layout_range {
+                let post = dialogue.post_get(post_index).expect("should be a valid post at this index");
+                let highlight = if let Some(selected) = self.layout_selected {
+                    selected == post_index
                 } else {
-                    log::info!("trigger a re-layout with selected post visible");
-                    self.post_topdown = self.post_selected >= self.post_anchor;
-                    self.post_anchor = self.post_selected;
-                    Ok(false)
+                    false
+                };
+                let mut bubble_tv = bubble(
+                    &self.vp, self.layout_topdown, post, dialogue, highlight, y);
+                self.gam
+                    .post_textview(&mut bubble_tv)
+                    .expect("couldn't render bubble textview");
+                // double check the actual bounds against expected bounds
+                match bubble_tv.bounds_computed {
+                    Some(actual_r) => {
+                        let expected_r = post.bounding_box.expect("bb should be computed by now");
+                        if expected_r.height() != actual_r.height() {
+                            log::warn!(
+                                "Height mismatch of drawn versus pre-computed text (expected {}, got {}) for {}",
+                                expected_r.height(),
+                                actual_r.height(),
+                                bubble_tv.to_str()
+                            );
+                        }
+                        if self.layout_topdown {
+                            y += actual_r.height() as i16;
+                        } else {
+                            y -= actual_r.height() as i16;
+                        }
+                        // sanity check the computations
+                        if y > self.vp.layout_screensize.y + self.vp.status_height as i16
+                        || y < self.vp.status_height as i16 {
+                            log::error!("Computed range of elements sent to layout overflows at index {}", post_index);
+                            // stop laying out to avoid text artifacts
+                            break;
+                        }
+                        // add y-margin before the next iteration
+                        if self.layout_topdown {
+                            y += self.vp.bubble_space + self.vp.bubble_margin.y;
+                        } else {
+                            y -= self.vp.bubble_space + self.vp.bubble_margin.y;
+                        }
+                    }
+                    _ => {
+                        log::error!("No bounds computed for {}, this is a GAM or typesetter bug!", bubble_tv.to_str());
+                    }
                 }
             }
-            (Some(_dialogue), None) => {
-                log::info!("no posts to display");
-                // TODO show dialogue info as a default?
-                Ok(true)
-            }
-            (None, _) => Err(Error::new(ErrorKind::InvalidData, "missing dialogue")),
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::InvalidData, "missing dialogue"))
         }
     }
 }

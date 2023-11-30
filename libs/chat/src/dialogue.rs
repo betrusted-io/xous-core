@@ -7,7 +7,7 @@ use crate::{now, default_textview};
 
 use author::Author;
 use gam::Gam;
-use core::slice::Iter;
+use core::slice::{Iter, IterMut};
 use post::Post;
 use rkyv::{Archive, Deserialize, Serialize};
 use std::collections::HashMap;
@@ -178,10 +178,25 @@ impl Dialogue {
         }
     }
 
+    /// Return a slice of posts
+    pub fn posts_as_slice(&self) -> &[Post] {
+        &self.posts
+    }
+
+    pub fn posts_as_slice_mut(&mut self) -> &mut [Post] {
+        &mut self.posts
+    }
+
     /// Return an iterator over the Dialogue Posts (oldest first)
     ///
     pub fn posts(&self) -> Iter<Post> {
         return self.posts.iter();
+    }
+
+    /// Return a mut iterator over the Dialogue Posts (oldest first)
+    ///
+    pub fn posts_mut(&mut self) -> IterMut<Post> {
+        return self.posts.iter_mut();
     }
 
     /// Return Some<Author> by id, or None.
