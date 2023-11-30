@@ -311,8 +311,7 @@ impl Tls {
                 let mut conn =
                     rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
                 log::info!("connect TCPstream to {}", target);
-                let url = format!("{}:443", target);
-                match TcpStream::connect(url) {
+                match TcpStream::connect((target, 443)) {
                     Ok(mut sock) => {
                         match conn.complete_io(&mut sock) {
                             Ok(_) => log::info!("handshake complete"),

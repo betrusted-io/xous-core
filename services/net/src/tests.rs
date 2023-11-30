@@ -47,7 +47,7 @@ fn bind_error() {
 
 #[test]
 fn connect_error() {
-    match TcpStream::connect("0.0.0.0:1") {
+    match TcpStream::connect(("0.0.0.0",1)) {
         Ok(..) => panic!(),
         Err(e) => assert!(
             e.kind() == ErrorKind::ConnectionRefused
