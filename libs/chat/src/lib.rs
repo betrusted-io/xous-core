@@ -354,7 +354,7 @@ pub fn server(
     log::info!("my PID is {}", xous::process::id());
 
     let mut ui = ui::Ui::new(sid, app_name, app_menu, app_cid, opcode_event);
-
+    let mut dialogue_key = None;
     let mut allow_redraw = false;
     loop {
         let msg = xous::receive_message(sid).unwrap();
@@ -408,7 +408,7 @@ pub fn server(
                 let buffer =
                     unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dialogue = buffer.to_original::<Dialogue, _>().unwrap();
-                let dialogue_key = match dialogue.key {
+                dialogue_key = match dialogue.key {
                     Some(key) => Some(key.to_string()),
                     None => None,
                 };
@@ -526,19 +526,24 @@ pub fn server(
             }
             Some(ChatOp::PostAdd) => {
                 log::info!("ChatOp::PostAdd");
-                let buffer =
-                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                match buffer.to_original::<api::Post, _>() {
-                    Ok(post) => ui
-                        .post_add(
-                            post.dialogue_id.as_str().unwrap(),
-                            post.author.as_str().unwrap(),
-                            post.timestamp,
-                            post.text.as_str().unwrap(),
-                            None, // TODO implement
-                        )
-                        .unwrap(),
-                    Err(e) => log::warn!("failed to deserialize Post: {:?}", e),
+                match dialogue_key {
+                    Some(ref dialogue_id) => {
+                        let buffer =
+                            unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        match buffer.to_original::<api::Post, _>() {
+                            Ok(post) => ui
+                                .post_add(
+                                    &dialogue_id,
+                                    post.author.as_str().unwrap(),
+                                    post.timestamp,
+                                    post.text.as_str().unwrap(),
+                                    None, // TODO implement
+                                )
+                                .unwrap(),
+                            Err(e) => log::warn!("failed to deserialize Post: {:?}", e),
+                        }
+                    }
+                    None => log::warn!("failed to PostAdd with Dialogue == None"),
                 }
             }
             Some(ChatOp::PostDel) => {

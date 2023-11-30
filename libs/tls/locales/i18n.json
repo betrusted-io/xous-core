@@ -40,8 +40,20 @@
         "en-tts": "save host CA'a if trusted"
     },
     "tls.probe_fail_servername": {
-        "en": "failed to create sever name from",
-        "en-tts": "failed to create sever name from"
+        "en": "failed to create server name from",
+        "en-tts": "failed to create server name from"
+    },
+    "tls.probe_invalid_certificate": {
+        "en": "Invalid certificate : ",
+        "en-tts": "Invalid certificate : "
+    },
+    "tls.probe_help_unknown_issuer": {
+        "en": "you may choose to trust a known CA",
+        "en-tts": "you may choose to trust a known CA"
+    },
+    "tls.probe_help_not_valid_yet": {
+        "en": "error maybe caused by an improperly set clock",
+        "en-tts": "error maybe caused by an improperly set clock"
     },
     "tls.probe_done": {
         "en": "trusted CA's",

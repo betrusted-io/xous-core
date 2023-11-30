@@ -278,7 +278,7 @@ impl Tls {
         root_store
     }
 
-    /// Probes the target and returns true is at least 1 certificate is trusted
+    /// Probes the target and returns a count of newly trusted 1 certificates
     ///
     /// Establishes a tls connection to the target host, extracts the
     /// certificates offered and immediately closes the connection.
