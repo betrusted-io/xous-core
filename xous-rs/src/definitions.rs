@@ -425,7 +425,7 @@ impl Result {
                     9, me_enc[0], me_enc[1], me_enc[2], me_enc[3], me_enc[4], me_enc[5], me_enc[6],
                 ]
             }
-            Result::ThreadID(ctx) => [10, *ctx as usize, 0, 0, 0, 0, 0, 0],
+            Result::ThreadID(ctx) => [10, *ctx, 0, 0, 0, 0, 0, 0],
             Result::ProcessID(pid) => [11, pid.get() as _, 0, 0, 0, 0, 0, 0],
             Result::Unimplemented => [21, 0, 0, 0, 0, 0, 0, 0],
             Result::BlockedProcess => [13, 0, 0, 0, 0, 0, 0, 0],
