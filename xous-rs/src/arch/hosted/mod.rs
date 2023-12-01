@@ -49,7 +49,7 @@ lazy_static::lazy_static! {
 
         // Note: &* is required due to how `lazy_static` works behind the scenes:
         // https://github.com/rust-lang-nursery/lazy-static.rs/issues/119#issuecomment-419595818
-        let mut conn = TcpStream::connect(&*NETWORK_CONNECT_ADDRESS).expect("unable to connect to Xous kernel");
+        let mut conn = TcpStream::connect(*NETWORK_CONNECT_ADDRESS).expect("unable to connect to Xous kernel");
 
         // Disable Nagel's algorithm, since we're running locally and managing buffers ourselves
         conn.set_nodelay(true).unwrap();
