@@ -52,8 +52,8 @@ pub const BASE_QUANTA_MS: u32 = 10;
 // where _|TT|_ and _|TE|_ are bookends around the data to be reported
 // <ident> is a single-word identifier that routes the data to a given parser
 // <data> is free-form data, which will be split at comma boundaries by the parser
-pub const BOOKEND_START: &'static str = "_|TT|_";
-pub const BOOKEND_END: &'static str = "_|TE|_";
+pub const BOOKEND_START: &str = "_|TT|_";
+pub const BOOKEND_END: &str = "_|TE|_";
 
 #[cfg(not(target_os = "xous"))]
 use core::sync::atomic::AtomicU64;
@@ -425,7 +425,7 @@ impl Result {
                     9, me_enc[0], me_enc[1], me_enc[2], me_enc[3], me_enc[4], me_enc[5], me_enc[6],
                 ]
             }
-            Result::ThreadID(ctx) => [10, *ctx as usize, 0, 0, 0, 0, 0, 0],
+            Result::ThreadID(ctx) => [10, *ctx, 0, 0, 0, 0, 0, 0],
             Result::ProcessID(pid) => [11, pid.get() as _, 0, 0, 0, 0, 0, 0],
             Result::Unimplemented => [21, 0, 0, 0, 0, 0, 0, 0],
             Result::BlockedProcess => [13, 0, 0, 0, 0, 0, 0, 0],

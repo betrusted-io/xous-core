@@ -49,7 +49,7 @@ lazy_static::lazy_static! {
 
         // Note: &* is required due to how `lazy_static` works behind the scenes:
         // https://github.com/rust-lang-nursery/lazy-static.rs/issues/119#issuecomment-419595818
-        let mut conn = TcpStream::connect(&*NETWORK_CONNECT_ADDRESS).expect("unable to connect to Xous kernel");
+        let mut conn = TcpStream::connect(*NETWORK_CONNECT_ADDRESS).expect("unable to connect to Xous kernel");
 
         // Disable Nagel's algorithm, since we're running locally and managing buffers ourselves
         conn.set_nodelay(true).unwrap();
@@ -262,7 +262,7 @@ fn read_next_syscall_result(
             } else if kind == CallMemoryKind::Borrow || kind == CallMemoryKind::MutableBorrow {
                 // Read the buffer back from the remote host.
                 use core::slice;
-                let mut data = unsafe { slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()) };
+                let data = unsafe { slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()) };
 
                 // If it's a Borrow, verify the contents haven't changed by saving the previous
                 // buffer in a Vec called `previous_data`.
@@ -272,7 +272,7 @@ fn read_next_syscall_result(
                 };
 
                 // Read the incoming data from the network.
-                if let Err(e) = stream.read_exact(&mut data) {
+                if let Err(e) = stream.read_exact(data) {
                     eprintln!("Server shut down: {}", e);
                     std::process::exit(0);
                 }

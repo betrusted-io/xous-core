@@ -71,7 +71,7 @@ impl TryFrom<[usize; 7]> for ProcessInit {
     type Error = crate::Error;
     fn try_from(src: [usize; 7]) -> core::result::Result<ProcessInit, crate::Error> {
         let mut exploded = vec![];
-        for word in src[0..4].into_iter() {
+        for word in src[0..4].iter() {
             exploded.extend_from_slice(&(*word as u32).to_le_bytes());
         }
         let mut key = [0u8; 16];
@@ -156,7 +156,7 @@ pub fn create_process_post(
 
     // println!("Launching process...");
     Command::new(shell)
-        .args(&args)
+        .args(args)
         .env("XOUS_SERVER", server_env)
         .env("XOUS_PID", pid_env)
         .env("XOUS_PROCESS_NAME", process_name_env)
