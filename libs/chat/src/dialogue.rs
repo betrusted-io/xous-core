@@ -94,6 +94,7 @@ impl Dialogue {
                 // compute the bounds for the post if visual properties are specified
                 if let Some((vp, gam)) = vp {
                     let mut layout_bubble = default_textview(&new, false, vp);
+                    log::debug!("Computing bounds on {:?}", layout_bubble);
                     if gam.bounds_compute_textview(&mut layout_bubble).is_ok() {
                         new.bounding_box = layout_bubble.bounds_computed;
                     }
