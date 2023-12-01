@@ -7,11 +7,11 @@ edition = "2018"
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
-xous = "0.9.54"
-xous-ipc = "0.9.54"
+xous = "0.9.55"
+xous-ipc = "0.9.55"
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
-log-server = { package = "xous-api-log", version = "0.1.50" }
-xous-names = { package = "xous-api-names", version = "0.9.52" }
+log-server = { package = "xous-api-log", version = "0.1.51" }
+xous-names = { package = "xous-api-names", version = "0.9.53" }
 gam = {path = "../../services/gam" }
 graphics-server = {path = "../../services/graphics-server" }
 locales = {path = "../../locales"}
@@ -21,7 +21,7 @@ xous-usb-hid = {git = "https://github.com/betrusted-io/xous-usb-hid.git"}
 pddb = {path = "../../services/pddb" }
 modals = {path = "../../services/modals" }
 trng = {path="../../services/trng"}
-susres = {package = "xous-api-susres", version = "0.9.50"}
+susres = {package = "xous-api-susres", version = "0.9.51"}
 ime-plugin-api = {path = "../../services/ime-plugin-api"}
 content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
 backup = {path = "libraries/backup"}
@@ -29,7 +29,7 @@ byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.5.0", features = ["core_hint_black_box"] }
 rand_core = "0.6.3"
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.50"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.51"}
 userprefs = {path = "../../libs/userprefs"}
 
 # opensk
