@@ -52,8 +52,8 @@ pub const BASE_QUANTA_MS: u32 = 10;
 // where _|TT|_ and _|TE|_ are bookends around the data to be reported
 // <ident> is a single-word identifier that routes the data to a given parser
 // <data> is free-form data, which will be split at comma boundaries by the parser
-pub const BOOKEND_START: &'static str = "_|TT|_";
-pub const BOOKEND_END: &'static str = "_|TE|_";
+pub const BOOKEND_START: &str = "_|TT|_";
+pub const BOOKEND_END: &str = "_|TE|_";
 
 #[cfg(not(target_os = "xous"))]
 use core::sync::atomic::AtomicU64;
