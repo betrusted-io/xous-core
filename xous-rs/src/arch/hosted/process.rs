@@ -156,7 +156,7 @@ pub fn create_process_post(
 
     // println!("Launching process...");
     Command::new(shell)
-        .args(&args)
+        .args(args)
         .env("XOUS_SERVER", server_env)
         .env("XOUS_PID", pid_env)
         .env("XOUS_PROCESS_NAME", process_name_env)
