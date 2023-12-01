@@ -685,7 +685,13 @@ impl Ui {
                     &mut fwd_iter
                 } else {
                     // search from oldest post to selected post, bottom-to-top
-                    rev_iter = dialogue.posts_as_slice_mut()[..=starting_at].iter_mut().rev();
+                    if dialogue.posts_as_slice().len() > 0 {
+                        rev_iter = dialogue.posts_as_slice_mut()[..=starting_at].iter_mut().rev();
+                    } else {
+                        // zero-length case we still have to return an empty iterator, but
+                        // we can't have the range be inclusive and the code still work
+                        rev_iter = dialogue.posts_as_slice_mut().iter_mut().rev();
+                    }
                     &mut rev_iter
                 };
                 let mut total_height = 0;
@@ -696,6 +702,7 @@ impl Ui {
                     } else {
                         // if the "natural height" has not been computed, do so now.
                         let mut layout_bubble = default_textview(post, false, &self.vp);
+                        log::debug!("compute bounds on {}", layout_bubble);
                         if self.gam.bounds_compute_textview(&mut layout_bubble).is_ok() {
                             post.bounding_box = layout_bubble.bounds_computed;
                             match layout_bubble.bounds_computed {
@@ -727,11 +734,16 @@ impl Ui {
                     if self.layout_topdown {
                         self.layout_range = (starting_at..).collect();
                     } else {
-                        self.layout_range = (0..=starting_at).rev().collect();
+                        if dialogue.posts_as_slice().len() > 0 {
+                            self.layout_range = (0..=starting_at).rev().collect();
+                        } else {
+                            // "empty range" in case of no posts
+                            self.layout_range = (0..0).rev().collect();
+                        }
                     }
                 }
             }
-            assert!(self.layout_range.len() > 0, "Layout range should be set at this point.");
+            assert!(dialogue.posts_as_slice().len() == 0 || self.layout_range.len() > 0, "Layout range should be set at this point.");
 
             // 3. clear the entire area, and re-draw the status bar
             self.gam
@@ -748,15 +760,6 @@ impl Ui {
                 ),
             )
             .expect("can't clear canvas area");
-            self.gam.post_textview(&mut self.status_tv)
-                .expect("couldn't render status bar");
-            let status_border = Line::new(
-                Point::new(0, self.vp.status_height as i16),
-                Point::new(self.vp.total_screensize.x, self.vp.status_height as i16)
-            );
-            self.gam.draw_line(self.vp.canvas,
-                status_border
-            ).expect("couldn't draw status lower border");
 
             // 4. draw the text bubbles, in the order computed in step 2.
             let mut y = if self.layout_topdown {
@@ -766,7 +769,15 @@ impl Ui {
             };
             log::debug!("Laying out with selected {:?} in range {:?}; topdown: {:?}", self.layout_selected, self.layout_range, self.layout_topdown);
             for &post_index in &self.layout_range {
-                let post = dialogue.post_get(post_index).expect("should be a valid post at this index");
+                let post = match dialogue.post_get(post_index) {
+                    Some(p) => p,
+                    None => {
+                        log::warn!("Expected post at index {}, returned nothing. Range {:?}, posts {:?}",
+                            post_index, self.layout_range, dialogue.posts_as_slice()
+                        );
+                        continue;
+                    }
+                };
                 let highlight = if let Some(selected) = self.layout_selected {
                     selected == post_index
                 } else {
@@ -813,6 +824,18 @@ impl Ui {
                     }
                 }
             }
+
+            // 5. draw status bar on top of any post that happens to flow over the top...
+            self.gam.post_textview(&mut self.status_tv)
+                .expect("couldn't render status bar");
+            let status_border = Line::new(
+                Point::new(0, self.vp.status_height as i16),
+                Point::new(self.vp.total_screensize.x, self.vp.status_height as i16)
+            );
+            self.gam.draw_line(self.vp.canvas,
+                status_border
+            ).expect("couldn't draw status lower border");
+
             Ok(())
         } else {
             Err(Error::new(ErrorKind::InvalidData, "missing dialogue"))
