@@ -1986,7 +1986,7 @@ pub fn reply_and_receive_next(
 /// ## Arguments
 ///
 ///  * **server**: The SID of the server to receive messages from
-///  * **msg**: An Option<MessageEnvelope> specifying the message to return.
+///  * **msg**: An `Option<MessageEnvelope>` specifying the message to return.
 ///  * **return_type**: If 1 or 2, responds to a BlockingScalarMessage
 ///                 with a Scalar1 or a Scalar2. Otherwise, will respond
 ///                 as normal.
