@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-pub(crate) const SERVER_NAME_MTXCHAT: &str = "_Matrix chat_";
+pub(crate) const SERVER_NAME_MTXCHAT: &str = "_Chat UI test_";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum MtxchatOp {

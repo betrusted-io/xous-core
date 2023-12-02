@@ -2,8 +2,6 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-#[cfg(feature="test-chat-ui")]
-mod tests;
 
 use api::*;
 use chat::{Chat, Event, POST_TEXT_MAX};
@@ -100,8 +98,6 @@ fn wrapped_main() -> ! {
     let mut mtxchat = MtxChat::new(&chat);
     let mut first_focus = true;
     let mut user_post: Option<String> = None;
-    #[cfg(feature="test-chat-ui")]
-    tests::test_ui(&chat);
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
