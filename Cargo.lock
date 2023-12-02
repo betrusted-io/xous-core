@@ -615,6 +615,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "chat-test"
+version = "0.1.0"
+dependencies = [
+ "chat",
+ "codec",
+ "com",
+ "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?rev=891bdd3ca8e41f81510d112483e178aea3e3a921)",
+ "content-plugin-api",
+ "gam",
+ "graphics-server",
+ "ime-plugin-api",
+ "ime-plugin-shell",
+ "llio",
+ "locales",
+ "log",
+ "modals",
+ "net",
+ "num-derive",
+ "num-traits",
+ "pddb",
+ "percent-encoding",
+ "rkyv",
+ "serde",
+ "tls",
+ "trng",
+ "ureq",
+ "url",
+ "xous 0.9.54 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+ "xous-ipc 0.9.54 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "checked_int_cast"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

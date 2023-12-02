@@ -1,8 +1,8 @@
 #[allow(dead_code)]
-pub(crate) const SERVER_NAME_MTXCHAT: &str = "_Chat UI test_";
+pub(crate) const SERVER_NAME_MTXCHAT: &str = "_Matrix chat_";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum MtxchatOp {
+pub enum ChatTestOp {
     /// chat ui event
     Event = 0,
     /// menu item click

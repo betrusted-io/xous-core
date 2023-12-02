@@ -2,10 +2,12 @@ pub mod attach;
 pub mod author;
 pub mod post;
 
-use crate::now;
+use crate::ui::VisualProperties;
+use crate::{now, default_textview};
 
 use author::Author;
-use core::slice::Iter;
+use gam::Gam;
+use core::slice::{Iter, IterMut};
 use post::Post;
 use rkyv::{Archive, Deserialize, Serialize};
 use std::collections::HashMap;
@@ -65,6 +67,7 @@ impl Dialogue {
     /// * `timestamp` - the timestamp of the Post
     /// * `text` - the text content of the Post
     /// * `attach_url` - a url of an attachment (image for example)
+    /// * `vp` - the visual properties of the system - so that we can pre-compute the size extents of the post
     ///
     pub fn post_add(
         &mut self,
@@ -72,10 +75,11 @@ impl Dialogue {
         timestamp: u64,
         text: &str,
         _attach_url: Option<&str>,
+        vp: Option<(&VisualProperties, &Gam)>,
     ) -> Result<(), Error> {
         match self.author_id(author) {
             Some(author_id) => {
-                let new = Post::new(
+                let mut new = Post::new(
                     author_id, timestamp, text, None, // TODO implement
                 );
                 if self.posts.len() == 0 {
@@ -86,6 +90,16 @@ impl Dialogue {
                 let first_ts = self.posts.first().map_or(0, |p| p.timestamp());
                 let last_ts = self.posts.last().map_or(0, |p| p.timestamp());
                 log::trace!("{:?}", new);
+
+                // compute the bounds for the post if visual properties are specified
+                if let Some((vp, gam)) = vp {
+                    let mut layout_bubble = default_textview(&new, false, vp);
+                    log::debug!("Computing bounds on {:?}", layout_bubble);
+                    if gam.bounds_compute_textview(&mut layout_bubble).is_ok() {
+                        new.bounding_box = layout_bubble.bounds_computed;
+                    }
+                }
+
                 if new_ts > last_ts {
                     log::info!("insert new post at end");
                     self.posts.push(new);
@@ -165,10 +179,25 @@ impl Dialogue {
         }
     }
 
+    /// Return a slice of posts
+    pub fn posts_as_slice(&self) -> &[Post] {
+        &self.posts
+    }
+
+    pub fn posts_as_slice_mut(&mut self) -> &mut [Post] {
+        &mut self.posts
+    }
+
     /// Return an iterator over the Dialogue Posts (oldest first)
     ///
     pub fn posts(&self) -> Iter<Post> {
         return self.posts.iter();
+    }
+
+    /// Return a mut iterator over the Dialogue Posts (oldest first)
+    ///
+    pub fn posts_mut(&mut self) -> IterMut<Post> {
+        return self.posts.iter_mut();
     }
 
     /// Return Some<Author> by id, or None.
