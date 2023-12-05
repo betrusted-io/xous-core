@@ -276,7 +276,7 @@ impl Message {
     }
 
     pub fn to_usize(&self) -> [usize; 6] {
-        let ret = match &*self {
+        let ret = match self {
             Message::MutableBorrow(m) => (0, m.to_usize()),
             Message::Borrow(m) => (1, m.to_usize()),
             Message::Move(m) => (2, m.to_usize()),

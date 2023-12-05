@@ -27,9 +27,9 @@ use std::collections::BTreeMap;
 
 use usb_device::prelude::*;
 use usb_device::class_prelude::*;
-use usbd_human_interface_device::page::Keyboard;
-use usbd_human_interface_device::device::keyboard::NKROBootKeyboardInterface;
-use usbd_human_interface_device::prelude::*;
+use xous_usb_hid::page::Keyboard;
+use xous_usb_hid::device::keyboard::NKROBootKeyboard;
+use xous_usb_hid::prelude::*;
 use embedded_time::Clock;
 use std::convert::TryInto;
 
@@ -95,12 +95,12 @@ fn main() -> ! {
     let usb_alloc = UsbBusAllocator::new(usbdev);
     let clock = EmbeddedClock::new();
     let mut keyboard = UsbHidClassBuilder::new()
-        .add_interface(
-            NKROBootKeyboardInterface::default_config(&clock),
+        .add_device(
+            NKROBootKeyboard::default(&clock),
         )
         .build(&usb_alloc);
     let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x3613))
-        .manufacturer("usbd-human-interface-device")
+        .manufacturer("xous-usb-hid")
         .product("NKRO Keyboard")
         .serial_number("PRECURSOR")
         .build();

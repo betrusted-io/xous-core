@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-pub use usbd_human_interface_device::page::Keyboard as UsbKeyCode;
+pub use xous_usb_hid::page::Keyboard as UsbKeyCode;
 
 #[cfg(any(feature="precursor", feature="renode"))]
 pub fn char_to_hid_code_us101(key: char) -> Vec<UsbKeyCode> {

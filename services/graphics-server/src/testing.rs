@@ -5,14 +5,15 @@ use num_traits::*;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 enum TestType {
-    BoundingBox = 0,
-    LowerRight = 1,
-    LowerLeft = 2,
-    TopLeft = 3,
-    TopRight = 4,
-    Overflow = 5,
-    Insert = 6,
-    End = 7,
+    BusyAnimation = 9,
+    BoundingBox = 10,
+    LowerRight = 11,
+    LowerLeft = 12,
+    TopLeft = 13,
+    TopRight = 14,
+    Overflow = 15,
+    Insert = 16,
+    End = 17,
 }
 const TEST_STYLE: GlyphStyle = GlyphStyle::Tall;
 pub fn tests() {
@@ -22,8 +23,8 @@ pub fn tests() {
             let gfx = graphics_server::Gfx::new(&xns).unwrap();
             let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
-            for index in TestType::BoundingBox.to_usize().unwrap()..TestType::End.to_usize().unwrap() {
-                // show a black screen
+            for index in TestType::BusyAnimation.to_usize().unwrap()..TestType::End.to_usize().unwrap() {
+                // pause between each tests
                 ticktimer.sleep_ms(1000).unwrap();
                 // draw a black screen
                 let screensize = gfx.screen_size().expect("Couldn't get screen size");
@@ -50,6 +51,29 @@ pub fn tests() {
                 gfx.flush().unwrap();
 
                 match FromPrimitive::from_usize(index) {
+                    Some(TestType::BusyAnimation) => {
+                        let anim_rect = Rectangle::new_coords(10, 10, 240, 30);
+                        let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
+                        TextBounds::BoundingBox(anim_rect));
+                        tv.clip_rect = Some(clipping_area);
+                        tv.style = GlyphStyle::Small;
+                        tv.ellipsis = false;
+                        write!(tv, "Test of busy animation").unwrap();
+                        tv.insertion = None;
+                        tv.draw_border = false;
+                        tv.busy_animation_state = Some(0);
+                        for y in 0..30 {
+                            gfx.draw_rectangle(checkbound).unwrap();
+                            tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new_coords(
+                                10, 10 +  y, 240, 30 + y
+                            ));
+                            for _ in 0..5 {
+                                gfx.draw_textview(&mut tv).unwrap();
+                                gfx.flush().unwrap();
+                                ticktimer.sleep_ms(100).unwrap();
+                            }
+                        }
+                    }
                     Some(TestType::BoundingBox) => {
                         let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
                         TextBounds::BoundingBox(

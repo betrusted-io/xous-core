@@ -248,32 +248,40 @@ impl<'a> ActionManager<'a> {
                         let mut upper = false;
                         let mut number = false;
                         let mut symbol = false;
-                        self.modals
-                            .add_list(vec![
-                                t!("vault.newitem.uppercase", locales::LANG),
-                                t!("vault.newitem.numbers", locales::LANG),
-                                t!("vault.newitem.symbols", locales::LANG),
-                            ]).expect("couldn't create configuration modal");
-                        match self.modals.get_checkbox(t!("vault.newitem.configure_generator", locales::LANG)) {
-                            Ok(options) => {
-                                for opt in options {
-                                    if opt == t!("vault.newitem.uppercase", locales::LANG) {upper = true;}
-                                    if opt == t!("vault.newitem.numbers", locales::LANG) {number = true;}
-                                    if opt == t!("vault.newitem.symbols", locales::LANG) {symbol = true;}
+                        let mut lower = false;
+                        while !upper && !number && !symbol && !lower {
+                            self.modals
+                                .add_list(vec![
+                                    t!("vault.newitem.lowercase", locales::LANG),
+                                    t!("vault.newitem.uppercase", locales::LANG),
+                                    t!("vault.newitem.numbers", locales::LANG),
+                                    t!("vault.newitem.symbols", locales::LANG),
+                                ]).expect("couldn't create configuration modal");
+                            match self.modals.get_checkbox(t!("vault.newitem.configure_generator", locales::LANG)) {
+                                Ok(options) => {
+                                    for opt in options {
+                                        if opt == t!("vault.newitem.lowercase", locales::LANG) {lower = true;}
+                                        if opt == t!("vault.newitem.uppercase", locales::LANG) {upper = true;}
+                                        if opt == t!("vault.newitem.numbers", locales::LANG) {number = true;}
+                                        if opt == t!("vault.newitem.symbols", locales::LANG) {symbol = true;}
+                                    }
                                 }
+                                _ => {log::error!("Modal selection error"); self.action_active.store(false, Ordering::SeqCst); return}
                             }
-                            _ => {log::error!("Modal selection error"); self.action_active.store(false, Ordering::SeqCst); return}
+                            if upper == false && lower == false && symbol == false && number == false {
+                                self.modals.show_notification(t!("vault.error.nothing_selected", locales::LANG), None).ok();
+                            }
                         }
                         #[cfg(feature="ux-swap-delay")]
                         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                         let pg2 = PasswordGenerator {
                             length: length as usize,
                             numbers: number,
-                            lowercase_letters: true,
+                            lowercase_letters: lower,
                             uppercase_letters: upper,
                             symbols: symbol,
                             spaces: false,
-                            exclude_similar_characters: true,
+                            exclude_similar_characters: upper || lower,
                             strict: true,
                         };
                         approved = false;
@@ -774,32 +782,40 @@ impl<'a> ActionManager<'a> {
                             let mut upper = false;
                             let mut number = false;
                             let mut symbol = false;
-                            self.modals
-                                .add_list(vec![
-                                    t!("vault.newitem.uppercase", locales::LANG),
-                                    t!("vault.newitem.numbers", locales::LANG),
-                                    t!("vault.newitem.symbols", locales::LANG),
-                                ]).expect("couldn't create configuration modal");
-                            match self.modals.get_checkbox(t!("vault.newitem.configure_generator", locales::LANG)) {
-                                Ok(options) => {
-                                    for opt in options {
-                                        if opt == t!("vault.newitem.uppercase", locales::LANG) {upper = true;}
-                                        if opt == t!("vault.newitem.numbers", locales::LANG) {number = true;}
-                                        if opt == t!("vault.newitem.symbols", locales::LANG) {symbol = true;}
+                            let mut lower = false;
+                            while !upper && !number && !symbol && !lower {
+                                self.modals
+                                    .add_list(vec![
+                                        t!("vault.newitem.lowercase", locales::LANG),
+                                        t!("vault.newitem.uppercase", locales::LANG),
+                                        t!("vault.newitem.numbers", locales::LANG),
+                                        t!("vault.newitem.symbols", locales::LANG),
+                                    ]).expect("couldn't create configuration modal");
+                                match self.modals.get_checkbox(t!("vault.newitem.configure_generator", locales::LANG)) {
+                                    Ok(options) => {
+                                        for opt in options {
+                                            if opt == t!("vault.newitem.lowercase", locales::LANG) {lower = true;}
+                                            if opt == t!("vault.newitem.uppercase", locales::LANG) {upper = true;}
+                                            if opt == t!("vault.newitem.numbers", locales::LANG) {number = true;}
+                                            if opt == t!("vault.newitem.symbols", locales::LANG) {symbol = true;}
+                                        }
                                     }
+                                    _ => {log::error!("Modal selection error"); self.action_active.store(false, Ordering::SeqCst); return}
                                 }
-                                _ => {log::error!("Modal selection error"); self.action_active.store(false, Ordering::SeqCst); return}
+                                if upper == false && lower == false && symbol == false && number == false {
+                                    self.modals.show_notification(t!("vault.error.nothing_selected", locales::LANG), None).ok();
+                                }
                             }
                             #[cfg(feature="ux-swap-delay")]
                             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                             let pg2 = PasswordGenerator {
                                 length: length as usize,
                                 numbers: number,
-                                lowercase_letters: true,
+                                lowercase_letters: lower,
                                 uppercase_letters: upper,
                                 symbols: symbol,
                                 spaces: false,
-                                exclude_similar_characters: true,
+                                exclude_similar_characters: upper || lower,
                                 strict: true,
                             };
                             approved = false;

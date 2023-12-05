@@ -15,8 +15,8 @@ Note that hosts with self-signed Certificates may be probed and trusted (e.g. [c
 A small set of shellchat commands are included to enact the base functionality:
 
 - `net tls probe <host>` will initiate a modified tls handshake with `<host>`, obtain the certificate chain offered by `<host>`, and immediately terminate the connection. A call to Tls::check_trust() will present the CA certificate chain in a modal to be individually selected and saved to PDDB if trusted.
--  `net tls test <host>` will attempt a normal tls handshake with `<host>` based on the trusted Root CA certificates in the PDDB. If the connection is successful, then a simple `get` is emitted, the response accepted, and the connection closed.
--  `net tls mozilla` trusts and saves all Root CA's in the [webpki-roots crate](https://crates.io/crates/webpki-roots) - which contains Mozilla's root certificates. (requires `--feature rootCA`)
+- `net tls test <host>` will attempt a normal tls handshake with `<host>` based on the trusted Root CA certificates in the PDDB. If the connection is successful, then a simple `get` is emitted, the response accepted, and the connection closed.
+- `net tls mozilla` trusts and saves all Root CA's in the [webpki-roots crate](https://crates.io/crates/webpki-roots) - which contains Mozilla's root certificates. (requires `--feature rootCA`)
 - `net list` lists all trusted certificates in the PDDB
 - `net deleteall` deletes all trusted certificates in the PDDB
 
@@ -37,5 +37,5 @@ Considerations:
 - there is an outstanding **issue** where the `checkbox` modal does not display options with multiple lines correctly. This impacts the display of fingerprints for some certificates with longer subjects.
 - It may be worth considering rendering public `pddb::KEY_NAME_LEN` to allow developer to avoid sending overly long key's which will be rejected by the pddb.
 - probably need a shellchat `net tls delete <cert>`
-- some broken code is included for a future fix if required [RustlsOwnedTrustAnchor::publik_key()](https://github.com/betrusted-io/xous-core/pull/394/commits/4e0298c17ad2c51aa220a88dc69bf2f56e51076f)
+- some broken code is included for a future fix if required [RustlsOwnedTrustAnchor::public_key()](https://github.com/betrusted-io/xous-core/pull/394/commits/4e0298c17ad2c51aa220a88dc69bf2f56e51076f)
 - some hosts (eg bunnyfoo.com) emit an `unexpected eof` error during tls handshake 🤷

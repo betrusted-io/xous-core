@@ -110,6 +110,12 @@ pub struct UxRegistration {
     /// If the LayoutType is not an App, this field is ignored and does nothing
     pub focuschange_id: Option<u32>,
 }
+#[cfg(feature="unsafe-app-loading")]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct NameRegistration {
+    pub name: String::<128>,
+    pub auth_token: [u32; 4],
+}
 
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -211,6 +217,10 @@ pub(crate) enum Opcode {
     /// Allow main menu activation. Used by the PDDB to turn ungate the main menu once it is mounted.
     /// This resolves race conditions that depend upon the PDDB configurations.
     AllowMainMenu = 33,
+
+    /// Register a name that can acquire a token. This is only intended to be used with pre-registered apps
+    #[cfg(feature="unsafe-app-loading")]
+    RegisterName = 34,
 }
 
 // small wart -- we have to reset the size of a modal to max size for resize computations

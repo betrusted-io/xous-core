@@ -7,17 +7,17 @@ description = "Xous USB device drivers"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.53"
-xous-ipc = "0.9.53"
-log-server = { package = "xous-api-log", version = "0.1.49" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.49" }
-xous-names = { package = "xous-api-names", version = "0.9.51" }
+xous = "0.9.55"
+xous-ipc = "0.9.55"
+log-server = { package = "xous-api-log", version = "0.1.51" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.51" }
+xous-names = { package = "xous-api-names", version = "0.9.53" }
 log = "0.4.14"
 llio = {path="../llio"}
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
-susres = {package = "xous-api-susres", version = "0.9.49"}
+susres = {package = "xous-api-susres", version = "0.9.51"}
 modals = {path = "../modals"}
 keyboard = {path = "../keyboard", features=["inject-api"]}
 bitfield = "0.13.2"
@@ -26,10 +26,10 @@ xous-semver = "0.1.2"
 utralib = { version = "0.1.23", optional = true, default-features = false }
 trng = {path="../trng"}
 
-usbd-human-interface-device = "0.2.1"
+xous-usb-hid = {git = "https://github.com/betrusted-io/xous-usb-hid.git"}
 embedded-time = "0.12.1" # required by the keyboard interface
-packed_struct = { version = "0.10", default-features = false } # used by the usbd-human-interface-device crate
-num_enum = { version = "0.5", default-features = false } # used by the usbd-human-interface-device crate
+packed_struct = { version = "0.10", default-features = false } # used by the xous-usb-hid crate
+num_enum = { version = "0.5", default-features = false } # used by the xous-usb-hid crate
 
 # Mass storage support
 usbd_scsi = { path = "../../libs/mass-storage/usbd_scsi", optional = true }

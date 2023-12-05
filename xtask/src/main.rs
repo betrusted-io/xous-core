@@ -251,7 +251,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_hosted()
                    .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
                    .add_services(&get_cratespecs())
-                   .add_feature("graphics-server/testing");
+                   .add_feature("graphics-server/gfx-testing");
         },
         Some("hosted-ci") => {
             builder.target_hosted()
@@ -363,6 +363,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_services(&user_pkgs.into_iter().map(String::from).collect())
                    .add_feature("avalanchetest");
         }
+	Some("compile-apps") => {
+	    builder.target_precursor_no_image(PRECURSOR_SOC_VERSION)
+		.add_services(&gfx_base_pkgs.into_iter().map(String::from).collect());
+	}
 
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
@@ -502,6 +506,7 @@ Other commands:
  generate-locales        (re)generate the locales include for the language selected in locales/src/locale.rs
  wycheproof-import       generate binary test vectors for engine-25519 from whycheproof-import/x25519.json
  install-toolkit         installs Xous toolkit with no prompt, useful in CI. Specify `--force` to remove existing toolchains
+ compile-apps            Just compiles the apps specified in [cratespecs], for example in order to use app server
 
 Note: By default, the `ticktimer` will get rebuilt every time. You can skip this by appending `--no-timestamp` to the command.
 "

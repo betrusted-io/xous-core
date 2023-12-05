@@ -1,4 +1,14 @@
 {
+    "app-loader": {
+        "context_name": "App Loader",
+        "menu_name": {
+            "appmenu.app-loader": {
+            "en": "App Loader",
+            "en-tts": "App Loader"
+            }
+        },
+        "submenu": 2
+    },
     "ball": {
         "context_name": "ball demo app",
         "menu_name": {
@@ -40,6 +50,15 @@
         "menu_name": {
             "appmenu.mtxchat": {
                 "en": "[matrix]"
+            }
+        },
+        "submenu": 1
+    },
+    "chat-test": {
+        "context_name": "Chat UI test",
+        "menu_name": {
+            "appmenu.chat-test": {
+                "en": "Chat UI test"
             }
         },
         "submenu": 1

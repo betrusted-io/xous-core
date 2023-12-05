@@ -411,6 +411,14 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Network stack is updated to work with the `main` branch of `smoltcp`. This is not intended as a release configuration -- this note is here so that when a release is snapshotted out, we remember to pin to a particular commit (or ideally an official release, if one happens in time).
   - This fixes a number of long-standing issues, including #210 and #407.
   - Fairly major overhaul to the network stack. We now use mspc primitives to implement the wait/poll loop, which should make the net stack much more efficient and robust.
+- mtxchat project kicked off by @nohj - see https://github.com/orgs/betrusted-io/projects/3/views/1 for project tracker
+- mutex & condvar refactor in ticktimer thanks to @xobs - improves performance and stability
+- App loader example code added thanks to @vihaanjim
+- Add "busy spinner" primitive to text boxes to the GAM. This allows UIs to show that something is happening without having to explicitly implement that.
+- sigchat skeleton added thanks to @nhoj
+- usbd-human-interface-device bumped to latest in preparation for a fork
+- Fix #446 - add support for numeric-only passwords in `vault`
+- Fork usbd-human-interface-device to xous-usb-hid
 
 ## Roadmap
 - Lots of testing and bug fixes

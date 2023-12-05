@@ -2,6 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
+
 use api::*;
 use chat::{Chat, Event, POST_TEXT_MAX};
 use gam::{MenuItem, MenuPayload};

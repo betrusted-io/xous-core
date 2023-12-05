@@ -16,7 +16,7 @@ use ctap_crypto::rng256::XousRng256;
 use xous::try_send_message;
 use xous_names::XousNames;
 use crate::env::xous::storage::XousUpgradeStorage;
-use usbd_human_interface_device::device::fido::*;
+use xous_usb_hid::device::fido::*;
 use modals::Modals;
 use locales::t;
 use std::io::{Read, Write};
@@ -48,10 +48,10 @@ impl XousHidConnection {
             }
         }
     }
-    pub fn u2f_wait_incoming(&self) -> Result<RawFidoMsg, xous::Error> {
+    pub fn u2f_wait_incoming(&self) -> Result<RawFidoReport, xous::Error> {
         self.endpoint.u2f_wait_incoming()
     }
-    pub fn u2f_send(&self, msg: RawFidoMsg) -> Result<(), xous::Error> {
+    pub fn u2f_send(&self, msg: RawFidoReport) -> Result<(), xous::Error> {
         self.endpoint.u2f_send(msg)
     }
 }
@@ -62,7 +62,7 @@ impl HidConnection for XousHidConnection {
         buf: &mut [u8; 64],
         _timeout: Duration,
     ) -> SendOrRecvResult {
-        let mut reply = RawFidoMsg::default();
+        let mut reply = RawFidoReport::default();
         reply.packet.copy_from_slice(buf);
         match self.endpoint.u2f_send(reply) {
             Ok(()) => Ok(SendOrRecvStatus::Sent),

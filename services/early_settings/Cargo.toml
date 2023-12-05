@@ -8,12 +8,12 @@ edition = "2021"
 
 [dependencies]
 log = {version = "0.4", features = ["max_level_trace", "release_max_level_trace"]}
-log-server = {package = "xous-api-log", version = "0.1.49"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.49"}
-xous = "0.9.53"
-xous-ipc = "0.9.53"
-xous-names = {package = "xous-api-names", version = "0.9.51"}
-susres = {package = "xous-api-susres", version = "0.9.49"}
+log-server = {package = "xous-api-log", version = "0.1.51"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.51"}
+xous = "0.9.55"
+xous-ipc = "0.9.55"
+xous-names = {package = "xous-api-names", version = "0.9.53"}
+susres = {package = "xous-api-susres", version = "0.9.51"}
 spinor = {path = "../../services/spinor"}
 
 num-derive = {version = "0.3.3", default-features = false}

@@ -1,0 +1,50 @@
+{
+    "apploader.close": {
+	"en": "Close",
+	"en-tts": "Close"
+    },
+    "apploader.menu.setserver": {
+	"en": "Set Server",
+	"en-tts": "Set Server"
+    },
+    "apploader.setserver.error": {
+	"en": "Invalid URL: ",
+	"en-tts": "Invalid URL: "
+    },
+    "apploader.menu.reloadapplist": {
+	"en": "Reload App List",
+	"en-tts": "Reload App List"
+    },
+    "apploader.reloadapplist.loading": {
+	"en": "Loading App List...",
+	"en-tts": "Loading App List"
+    },
+    "apploader.reloadapplist.connection_error": {
+	"en": "Could not connect to server: ",
+	"en-tts": "Could not connect to server: "
+    },
+    "apploader.reloadapplist.json_error": {
+	"en": "Could not convert to JSON: ",
+	"en-tts": "Could not convert to JSON: "
+    },
+    "apploader.menu.addapp": {
+	"en": "Add App",
+	"en-tts": "Add App"
+    },
+    "apploader.addapp.loading": {
+	"en": "Loading app...",
+	"en-tts": "Loading app"
+    },
+    "apploader.addapp.error": {
+	"en": "Binary could not be loaded :(",
+	"en-tts": "Binary could not be loaded sad face"
+    },
+    "apploader.addapp.content_length_error": {
+	"en": "No Content-Length header in server response",
+	"en-tts": "No Content-Length header in server response"
+    },
+    "apploader.addapp.server_error": {
+	"en": "Could not connect to server: ",
+	"en-tts": "Could not connect to server: "
+    }
+}

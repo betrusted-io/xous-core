@@ -29,7 +29,7 @@ use crate::vendor_commands::VendorSession;
 use ux::framework::{VaultUx, DEFAULT_FONT, FONT_LIST, name_to_style};
 use xous_ipc::Buffer;
 use xous::{send_message, Message, msg_blocking_scalar_unpack, msg_scalar_unpack};
-use usbd_human_interface_device::device::fido::*;
+use xous_usb_hid::device::fido::*;
 use num_traits::*;
 
 use std::thread;
@@ -312,7 +312,7 @@ fn main() -> ! {
                             match typed_reply {
                                 HidIterType::Ctap(reply) => {
                                     for pkt_reply in reply {
-                                        let mut reply = RawFidoMsg::default();
+                                        let mut reply = RawFidoReport::default();
                                         reply.packet.copy_from_slice(&pkt_reply);
                                         let status = ctap.env().main_hid_connection().u2f_send(reply);
                                         match status {
@@ -372,7 +372,7 @@ fn main() -> ! {
                                         }
                                     };
                                     for pkt_reply in reply {
-                                        let mut reply = RawFidoMsg::default();
+                                        let mut reply = RawFidoReport::default();
                                         reply.packet.copy_from_slice(&pkt_reply);
                                         let status = ctap.env().main_hid_connection().u2f_send(reply);
                                         match status {

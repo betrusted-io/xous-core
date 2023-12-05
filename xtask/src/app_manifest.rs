@@ -67,7 +67,7 @@ pub(crate) fn generate_app_menus(apps: &Vec<String>) {
         writeln!(
             gam_tokens,
             "pub const APP_NAME_{}: &'static str = \"{}\";",
-            app_name.to_uppercase(),
+            app_name.to_uppercase().replace("-", "_"),
             manifest.context_name,
         )
         .unwrap();
@@ -77,7 +77,7 @@ pub(crate) fn generate_app_menus(apps: &Vec<String>) {
                     gam_tokens,
                     "pub const APP_MENU_{}_{}: &'static str = \"{} Submenu {}\";",
                     i,
-                    app_name.to_uppercase(),
+                    app_name.to_uppercase().replace("-", "_"),
                     manifest.context_name,
                     i,
                 )
@@ -89,16 +89,16 @@ pub(crate) fn generate_app_menus(apps: &Vec<String>) {
         gam_tokens,
         "\npub const EXPECTED_APP_CONTEXTS: &[&'static str] = &["
     )
-    .unwrap();
+	.unwrap();
     for (app_name, manifest) in working_set.iter() {
-        writeln!(gam_tokens, "    APP_NAME_{},", app_name.to_uppercase(),).unwrap();
+        writeln!(gam_tokens, "    APP_NAME_{},", app_name.to_uppercase().replace("-", "_"),).unwrap();
         if let Some(menu_count) = manifest.submenu {
             for i in 0..menu_count {
                 writeln!(
                     gam_tokens,
                     "    APP_MENU_{}_{},",
                     i,
-                    app_name.to_uppercase(),
+                    app_name.to_uppercase().replace("-", "_"),
                 )
                 .unwrap();
             }
@@ -151,7 +151,7 @@ pub(crate) fn app_dispatch(gam: &gam::Gam, token: [u32; 4], index: usize) -> Res
             Ok(())
         }},",
             index,
-            app_name.to_uppercase()
+            app_name.to_uppercase().replace("-", "_")
         )
         .unwrap();
     }

@@ -1,4 +1,4 @@
-#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(any(target_os = "none", feature = "nostd"), no_std)]
 use core::fmt::Write;
 use core::sync::atomic::{AtomicU32, Ordering};
 use num_traits::ToPrimitive;
@@ -96,8 +96,10 @@ pub fn init() -> Result<(), LogError> {
 }
 
 pub fn init_wait() -> Result<(), ()> {
+    let sid = xous::SID::from_bytes(b"xous-log-server ").unwrap();
+    let cid = xous::connect(sid).or(Err(()))?;
     XOUS_LOGGER_CONNECTION.store(
-        xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).or(Err(()))?,
+        cid,
         Ordering::Relaxed,
     );
     log::set_logger(&XOUS_LOGGER).or(Err(()))?;

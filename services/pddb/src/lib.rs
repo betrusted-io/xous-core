@@ -115,7 +115,7 @@ impl Pddb {
             cb_handle: RefCell::new(None),
             keys,
             trng: trng::Trng::new(&xns).unwrap(),
-            /// These are record the result of the most recent call to list_keys()
+            // These are record the result of the most recent call to list_keys()
             key_count: RefCell::new(0),
             found_key_count: RefCell::new(0),
         }

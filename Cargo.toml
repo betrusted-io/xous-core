@@ -72,6 +72,8 @@ members = [
   "services/dns",
   "services/modals",
   "services/early_settings",
+  "apps/app-loader",
+  "apps/app-loader/spawn",
   "apps/ball",
   "apps/hello",
   "apps/mtxchat",
@@ -81,6 +83,7 @@ members = [
   "apps/vault",
   "apps/vault/tools/vaultbackup-rs",
   "apps/transientdisk",
+  "apps/chat-test",
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
@@ -149,8 +152,6 @@ git="https://github.com/betrusted-io/usb-device.git"
 branch="main"
 # local dev shortcuts
 #path = "../usb-device"
-#[patch.crates-io.usbd-human-interface-device]
-#path = "../usbd-human-interface-device"
 
 [patch.crates-io.getrandom]
 path = "imports/getrandom"

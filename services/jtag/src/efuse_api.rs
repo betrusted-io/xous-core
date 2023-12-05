@@ -52,10 +52,10 @@ const CMD_FUSE_CNTL: u32 = 0b110100;
 impl EfusePhy {
     pub fn new() -> Self {
         EfusePhy {
-            /// bank mapping as follows:
-            /// 0 - config
-            /// 1-11 - key (11 shared with user LSB)
-            /// 12 - user
+            // bank mapping as follows:
+            // 0 - config
+            // 1-11 - key (11 shared with user LSB)
+            // 12 - user
             banks: [0; FUSE_BANKS],
             key: [0; 32],
             user: 0,

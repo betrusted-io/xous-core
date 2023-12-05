@@ -18,18 +18,26 @@ pub(crate) struct NamedToken {
 }
 pub(crate) struct TokenManager {
     tokens: Vec::<NamedToken>,
+    #[cfg(feature="unsafe-app-loading")]
+    extra_names: Vec<String>,
     trng: trng::Trng,
 }
 impl<'a> TokenManager {
     pub(crate) fn new(xns: &xous_names::XousNames) -> TokenManager {
         TokenManager {
             tokens: Vec::new(),
+            #[cfg(feature="unsafe-app-loading")]
+	        extra_names: Vec::new(),
             trng: trng::Trng::new(&xns).unwrap(),
         }
     }
     /// checks to see if all the slots have been occupied. We can't allow untrusted code to run until all slots have checked in
     pub(crate) fn allow_untrusted_code(&self) -> bool {
-        if self.tokens.len() == (EXPECTED_BOOT_CONTEXTS.len() + EXPECTED_APP_CONTEXTS.len()) {
+        #[cfg(feature="unsafe-app-loading")]
+        let expected_len = EXPECTED_BOOT_CONTEXTS.len() + EXPECTED_APP_CONTEXTS.len() + self.extra_names.len();
+        #[cfg(not(feature="unsafe-app-loading"))]
+        let expected_len = EXPECTED_BOOT_CONTEXTS.len() + EXPECTED_APP_CONTEXTS.len();
+        if self.tokens.len() == expected_len {
             true
         } else {
             // throw a bone to the dev who has to debug this error. This typically only triggers after a major
@@ -49,6 +57,10 @@ impl<'a> TokenManager {
             found = true;
         }
         if EXPECTED_APP_CONTEXTS.iter().find(|&&context| context == name).is_some() {
+            found = true;
+        }
+        #[cfg(feature="unsafe-app-loading")]
+        if self.extra_names.iter().find(|&context| context == name).is_some() {
             found = true;
         }
         if !found {
@@ -89,5 +101,22 @@ impl<'a> TokenManager {
             }
         }
         None
+    }
+    /// Register a new name that can then claim a token. Note that only pre-registered applications are allowed to do this.
+    #[cfg(feature="unsafe-app-loading")]
+    pub(crate) fn register_name(&mut self, name: &str, auth_token: &[u32; 4]) {
+        if let Some(registrant) = self.lookup_name(auth_token) {
+            if EXPECTED_BOOT_CONTEXTS.iter()
+            .find(
+                |&&context| context == registrant).is_some()
+                || EXPECTED_APP_CONTEXTS.iter()
+                .find(|&&context| context == registrant).is_some() {
+                self.extra_names.push(name.to_string());
+            } else {
+                log::error!("`{}' does not have permission to register a new name because it is not pre-registered", registrant);
+            }
+        } else {
+            log::error!("Token {:?} does not correspond with a name", auth_token);
+        }
     }
 }

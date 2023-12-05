@@ -1,7 +1,7 @@
 use crate::*;
 
 use num_traits::*;
-use usbd_human_interface_device::device::fido::RawFidoMsg;
+use xous_usb_hid::device::fido::RawFidoReport;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_semver::SemVer;
 use core::num::NonZeroU8;
@@ -172,7 +172,7 @@ pub(crate) fn main_hosted() -> ! {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
                 if fido_listener_pid == msg.sender.pid() {
-                    let mut u2f_msg = RawFidoMsg::default();
+                    let mut u2f_msg = RawFidoReport::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
                     u2f_msg.packet.copy_from_slice(&u2f_ipc.data);
                     log::debug!("sent U2F packet {:x?}", u2f_ipc.data);

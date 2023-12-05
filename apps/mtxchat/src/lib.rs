@@ -9,6 +9,7 @@ use listen::listen;
 use locales::t;
 use modals::Modals;
 use pddb::Pddb;
+use ticktimer_server::Ticktimer;
 use std::fmt::Write as _;
 use std::io::{Error, ErrorKind, Read, Write as StdWrite};
 use std::sync::Arc;
@@ -35,8 +36,9 @@ const USER_DOMAIN_KEY: &str = "user_domain";
 
 const DOMAIN_MATRIX: &str = "matrix.org";
 
-const MTX_LONG_TIMEOUT: i32 = 60000; // ms
-const WIFI_TIMEOUT: u32 = 10; // seconds
+const MTX_LONG_TIMEOUT_MS: i32 = 60000; // ms
+const WIFI_TIMEOUT_MS: u32 = 30_000; // ms
+const SEND_RETRIES: usize = 3;
 
 pub const CLOCK_NOT_SET_ID: usize = 1;
 pub const PDDB_NOT_MOUNTED_ID: usize = 2;
@@ -83,6 +85,7 @@ pub struct MtxChat<'a> {
     modals: Modals,
     new_username: bool,
     new_room: bool,
+    tt: Ticktimer,
 }
 impl<'a> MtxChat<'a> {
     pub fn new(chat: &Chat) -> MtxChat {
@@ -91,6 +94,8 @@ impl<'a> MtxChat<'a> {
         let trng = Trng::new(&xns).unwrap();
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
+        let status = t!("mtxchat.status.default", locales::LANG).to_owned();
+        chat.set_status_text(&status);
         MtxChat {
             chat: chat,
             trng: trng,
@@ -113,6 +118,7 @@ impl<'a> MtxChat<'a> {
             modals: modals,
             new_username: false,
             new_room: false,
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
 
@@ -248,9 +254,8 @@ impl<'a> MtxChat<'a> {
                     self.listen();
                     if self.new_room {
                         self.new_room = false;
-                        self.modals
-                            .show_notification(t!("mtxchat.listen.patience", locales::LANG), None)
-                            .expect("notification failed");
+                        self.chat.set_status_text(t!("mtxchat.busy.new_listen", locales::LANG));
+                        self.chat.set_busy_state(true);
                     }
                     return true;
                 } else {
@@ -277,6 +282,8 @@ impl<'a> MtxChat<'a> {
     }
 
     pub fn login(&mut self) -> bool {
+        self.chat.set_status_text(t!("mtxchat.busy.login", locales::LANG));
+        self.chat.set_busy_state(true);
         self.token = self.get(TOKEN_KEY).unwrap_or(None);
         self.logged_in = false;
 
@@ -335,6 +342,7 @@ impl<'a> MtxChat<'a> {
             self.unset(USER_DOMAIN_KEY)
                 .expect("failed to unset user domain");
         }
+        self.chat.set_busy_state(false);
         self.logged_in
     }
 
@@ -433,12 +441,16 @@ impl<'a> MtxChat<'a> {
             (true, Some(token), Some(user_domain), Some(room_alias)) => {
                 let mut url = Url::parse("https://matrix.org").unwrap();
                 url.set_host(Some(user_domain)).expect("failed to set host");
+                self.chat.set_status_text(t!("mtxchat.busy.room_id", locales::LANG));
+                self.chat.set_busy_state(true);
                 if let Some(room_id) =
                     web::get_room_id(&mut url, &room_alias, &token, &mut self.agent)
                 {
                     self.set_debug(ROOM_ID_KEY, &room_id);
+                    self.chat.set_busy_state(false);
                     return Some(room_id);
                 } else {
+                    self.chat.set_busy_state(false);
                     "failed to get room_id"
                 }
             }
@@ -626,14 +638,25 @@ impl<'a> MtxChat<'a> {
             &self.room_id,
         ) {
             (true, Some(token), Some(user_domain), Some(room_id)) => {
+                self.chat.set_status_text(t!("mtxchat.busy.sending", locales::LANG));
+                self.chat.set_busy_state(true);
                 log::info!("txn_id = {}", txn_id);
                 let mut url = Url::parse("https://matrix.org").unwrap();
                 url.set_host(Some(user_domain)).expect("failed to set host");
-                if web::send_message(&mut url, &room_id, &text, &txn_id, token, &mut self.agent) {
+                let mut success = false;
+                for _ in 0..SEND_RETRIES {
+                    if web::send_message(&mut url, &room_id, &text, &txn_id, token, &mut self.agent) {
+                        success = true;
+                        break;
+                    }
+                }
+                let r = if success {
                     "SENT"
                 } else {
                     "FAILED TO SEND"
-                }
+                };
+                self.chat.set_busy_state(false);
+                r
             }
             (false, _, _, _) => "Not logged in",
             (_, None, _, _) => "No token set",
@@ -661,25 +684,22 @@ impl<'a> MtxChat<'a> {
 
         while self.wifi_try_modal() {
             self.netmgr.connection_manager_wifi_on_and_run().unwrap();
-            self.modals
-                .start_progress("Connecting ...", 0, 10, 0)
-                .expect("no progress bar");
-            let tt = ticktimer_server::Ticktimer::new().unwrap();
-            for wait in 0..WIFI_TIMEOUT {
-                tt.sleep_ms(1000).unwrap();
-                self.modals
-                    .update_progress(wait)
-                    .expect("no progress update");
+            self.chat.set_status_text(t!("mtxchat.busy.connecting", locales::LANG));
+            self.chat.set_busy_state(true);
+            let start = self.tt.elapsed_ms();
+            while self.tt.elapsed_ms() - start < WIFI_TIMEOUT_MS as u64 {
                 if let Some(conf) = self.netmgr.get_ipv4_config() {
                     if conf.dhcp == com_rs::DhcpState::Bound {
-                        self.modals
-                            .finish_progress()
-                            .expect("failed progress finish");
+                        self.chat.set_busy_state(false);
                         return true;
                     }
                 }
+                self.tt.sleep_ms(1000).unwrap();
             }
+            self.modals.show_notification(t!("mtxchat.wifi.warning", locales::LANG), None).unwrap();
         }
+        self.chat.set_busy_state(false);
+        self.chat.set_status_text(t!("mtxchat.wifi.warning_status", locales::LANG));
         false
     }
 
