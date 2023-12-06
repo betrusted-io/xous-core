@@ -456,7 +456,7 @@ pub fn start_time_server() {
                         }
                     }),
                     Some(TimeOp::WallClockTimeInit) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                        if utc_offset_ms == 0 || tz_offset_ms == 0 {
+                        if utc_offset_ms == 0 && tz_offset_ms == 0 {
                             xous::return_scalar(msg.sender, 0).unwrap();
                         } else {
                             xous::return_scalar(msg.sender, 1).unwrap();
