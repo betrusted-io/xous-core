@@ -285,6 +285,12 @@ fn main() -> ! {
     let mut i2c = llio::I2c::new(&xns);
     let tt = ticktimer_server::Ticktimer::new().unwrap();
 
+    // a variable to track if the EC has been registered as ready. This should be set by a call from
+    // whatever handles the EC updating routine: it is responsible for checking if the EC is up to date,
+    // and once it is brought into an up to date state, it then sets this variable. That routine is
+    // nominally domiciled in the status server.
+    let mut ec_ready = false;
+
     log::debug!("starting main loop");
     loop {
         let msg = xous::receive_message(llio_sid).unwrap();
@@ -506,6 +512,12 @@ fn main() -> ! {
                     latest_activity += period / 20;
                     latest_activity %= period;
                 }
+            }),
+            Some(Opcode::EventEcSetReady) => msg_scalar_unpack!(msg, ready, _, _, _, {
+                ec_ready = ready != 0;
+            }),
+            Some(Opcode::EventEcIsReady) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, if ec_ready {1} else {0}).ok();
             }),
             Some(Opcode::SetWakeupAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
                 if delay > u8::MAX as usize {

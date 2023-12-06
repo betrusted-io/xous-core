@@ -190,6 +190,26 @@ impl Llio {
             Message::new_scalar(Opcode::EventComEnable.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())
     }
+    /// Called by the updater routine when EC is ready to run. Note: no authenticity check is done, anyone
+    /// could call this and troll the system.
+    pub fn set_ec_ready(&self, ready: bool) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::EventEcSetReady.to_usize().unwrap(), if ready {1} else {0}, 0, 0, 0)
+        ).unwrap();
+    }
+    /// Used to poll if the EC has been set as ready by the updating routine. Domiciled in the LLIO because
+    /// this crate is already depended upon by most crates that need to poll this status, and we'd rather not
+    /// expose the COM directly to generic crates.
+    pub fn is_ec_ready(&self) -> bool {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::EventEcIsReady.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+        if let xous::Result::Scalar1(val) = response {
+            val != 0
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            false
+        }
+    }
     /// GPIO IRQ hook. When using this, ensure that the WFI power saving mode is turned off.
     /// Otherwise interrupts that hit during power save mode can be missed.
     pub fn hook_gpio_event_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
