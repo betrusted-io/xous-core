@@ -57,7 +57,7 @@
     "chat-test": {
         "context_name": "Chat UI test",
         "menu_name": {
-            "appmenu.mtxchat": {
+            "appmenu.chat-test": {
                 "en": "Chat UI test"
             }
         },
