@@ -672,6 +672,12 @@ fn wrapped_main() -> ! {
             //    - code = 2 -> mount failed, because too many PINs were retried. `count` is the number of retries.
             // If we need more nuance out of this routine, consider creating a custom public enum type to help marshall this.
             Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let llio = llio::Llio::new(&xns);
+                while !llio.is_ec_ready() {
+                    // spin-wait while the EC is not ready -- so that a PDDB mount does not interfere with
+                    // on-going EC updates. Also causes the mount dialog to delay until the EC status has been checked.
+                    tt.sleep_ms(1000).ok();
+                }
                 if basis_cache.basis_count() > 0 {
                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                 } else {
