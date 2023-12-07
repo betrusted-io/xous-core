@@ -422,7 +422,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Harden EC against power glitches during updates (requires EC update - do not plug or unplug USB during an update until this patch is finished updating)
 - Some housekeeping on the Xous wiki. Much more work is needed.
 - Delay PDDB mount dialogs until all update checks are completed. This is done with a call named `is_ec_ready` and `set_ec_ready` in the `llio`. Nominally, it can be set/unset to indicate if the EC is going into an update state. Initially it is unset, and it is set by the status loop once all the update activities are completed. But it could be set later on by a routine that manually initiates EC updates (although there is no sanctioned way to do that at the moment).
-- Fix validator to accept `tz_offset` == 0 as valid so long as the `utc_offset` is also not 0.
+- Fix validator to accept `tz_offset` == 0 as valid.
 
 ## Roadmap
 - Lots of testing and bug fixes
