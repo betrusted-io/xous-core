@@ -1,4 +1,4 @@
-# mtxchat
+# sigchat
 
 This is the skeleton of a Signal chat application.
 
