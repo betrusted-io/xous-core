@@ -70,7 +70,8 @@ impl<'a> SigChat<'a> {
         Ok(false)
     }
 
-    /// Setup a Signal Account via Registration or Linking
+    /// Setup a Signal Account via Registration or Linking,
+    /// or abort setup and read existing chat Dialogues in pddb
     ///
     fn account_setup(&mut self) -> Result<Account, Error> {
         log::info!("Attempting to setup a Signal Account");
@@ -81,13 +82,19 @@ impl<'a> SigChat<'a> {
             .add_list_item(t!("sigchat.account.register", locales::LANG))
             .expect("failed add list item");
         self.modals
+            .add_list_item(t!("sigchat.account.offline", locales::LANG))
+            .expect("failed add list item");
+        self.modals
             .get_radiobutton(t!("sigchat.account.title", locales::LANG))
             .expect("failed radiobutton modal");
         match self.modals.get_radio_index() {
             Ok(index) => match index {
                 0 => Ok(self.account_link()?),
                 1 => Ok(self.account_register()?),
-                
+                2 => {
+                    log::info!("account setup aborted");
+                    Err(Error::new(ErrorKind::Other, "account setup aborted"))
+                }
                 _ => {
                     log::warn!("invalid index");
                     Err(Error::new(ErrorKind::Other, "invalid radio index"))

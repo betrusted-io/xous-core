@@ -15,6 +15,10 @@
         "en": "Please scan with primary Signal device",
         "en-tts": "Please scan with primary Signal device"
     },
+    "sigchat.account.offline": {
+        "en": "Read Signal offline",
+        "en-tts": "Read Signal offline"
+    },
     "sigchat.account.register": {
         "en": "Register a new Signal Account",
         "en-tts": "Register a new Signal Account"
