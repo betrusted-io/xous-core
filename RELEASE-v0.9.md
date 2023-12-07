@@ -423,6 +423,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Some housekeeping on the Xous wiki. Much more work is needed.
 - Delay PDDB mount dialogs until all update checks are completed. This is done with a call named `is_ec_ready` and `set_ec_ready` in the `llio`. Nominally, it can be set/unset to indicate if the EC is going into an update state. Initially it is unset, and it is set by the status loop once all the update activities are completed. But it could be set later on by a routine that manually initiates EC updates (although there is no sanctioned way to do that at the moment).
 - Fix validator to accept `tz_offset` == 0 as valid.
+- Rust 1.74 rolled out. Xous now has much more native `std` support in mainline Rust, thanks to a huge effort by @xobs
+  - Fix regressions in libstd `lend_impl` and PDDB `WriteKeyStd`
 
 ## Roadmap
 - Lots of testing and bug fixes
