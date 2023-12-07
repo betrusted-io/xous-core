@@ -54,6 +54,18 @@
         "ja": "WARNING: pddb not mounted *EN*",
         "zh": "WARNING: pddb not mounted *EN*"
     },
+    "sigchat.status.connecting": {
+        "en": "connecting",
+        "en-tts": "connecting"
+    },
+    "sigchat.status.offline": {
+        "en": "Signal offline",
+        "en-tts": "Signal offline"
+    },
+    "sigchat.status.online": {
+        "en": "Signal online",
+        "en-tts": "Signal online"
+    },
     "sigchat.wifi.connected": {
         "en": "WiFi connected",
         "en-tts": "WiFi connected",

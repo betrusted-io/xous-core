@@ -54,20 +54,31 @@ impl<'a> SigChat<'a> {
                 log::info!("Setting up Signal Account Manager");
                 let account = match Account::read(SIGCHAT_ACCOUNT) {
                     Ok(account) => account,
-                    Err(e) => self.account_setup()?,
+                    Err(_) => self.account_setup()?,
                 };
+                self.chat
+                    .set_status_text(t!("sigchat.status.connecting", locales::LANG));
+                self.chat.set_busy_state(true);
                 self.manager = Some(Manager::new(account, TrustMode::OnFirstUse));
+                self.chat.set_busy_state(false);
             }
-            if let Some(manager) = &self.manager {
+            if self.manager.is_some() {
                 log::info!("Signal Account Manager OK");
+                self.chat
+                    .set_status_text(t!("sigchat.status.online", locales::LANG));
+                Ok(true)
+            } else {
+                log::info!("failed to setup Signal Account Manager");
+                self.chat
+                    .set_status_text(t!("sigchat.status.offline", locales::LANG));
+                Ok(false)
             }
         } else {
             self.modals
                 .show_notification(t!("sigchat.wifi.warning", locales::LANG), None)
                 .expect("notification failed");
+            Ok(false)
         }
-        self.dialogue_set(None);
-        Ok(false)
     }
 
     /// Setup a Signal Account via Registration or Linking,
@@ -102,7 +113,10 @@ impl<'a> SigChat<'a> {
             },
             Err(e) => {
                 log::warn!("failed to present account setup radio buttons: {:?}", e);
-                Err(Error::new(ErrorKind::Other, "failed to present account setup radio buttons"))
+                Err(Error::new(
+                    ErrorKind::Other,
+                    "failed to present account setup radio buttons",
+                ))
             }
         }
     }
