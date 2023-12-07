@@ -38,17 +38,19 @@ impl Account {
         match (
             get(&pddb, pddb_dict, SERVICE_ENVIRONMENT_KEY),
             get(&pddb, pddb_dict, REGISTERED_KEY),
+            get(&pddb, pddb_dict, NUMBER_KEY),
         ) {
-            (Ok(Some(service_environment)), Ok(Some(registered))) => Ok(Account {
+            (Ok(Some(service_environment)), Ok(Some(registered)), Ok(number)) => Ok(Account {
                 pddb: pddb,
                 pddb_dict: pddb_dict.to_string(),
                 service_environment: ServiceEnvironment::from_str(&service_environment).unwrap(),
-                number: None,
+                number: number,
                 registered: registered.parse().unwrap(),
             }),
-            (Err(e), _) => Err(e),
-            (_, Err(e)) => Err(e),
-            (_, _) => Err(Error::from(ErrorKind::InvalidData)),
+            (Err(e), _, _) => Err(e),
+            (_, Err(e), _) => Err(e),
+            (_, _, Err(e)) => Err(e),
+            (_, _, _) => Err(Error::from(ErrorKind::InvalidData)),
         }
     }
 
