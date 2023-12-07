@@ -84,7 +84,13 @@ fn wrapped_main() -> ! {
                         Some(Event::Focus) => {
                             if first_focus {
                                 first_focus = false;
-                                sigchat.connect();
+                                match sigchat.connect() {
+                                    Ok(true) => log::info!("connected to Signal Account"),
+                                    Ok(false) => log::info!("not connected to Signal Account"),
+                                    Err(e) => {
+                                        log::warn!("error while connecting to Signal Account: {e}")
+                                    }
+                                }
                             }
                             sigchat.redraw();
                         }
