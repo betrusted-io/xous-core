@@ -17,9 +17,7 @@ pub enum SigchatOp {
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum MenuOp {
-    Link,
     Noop,
-    Register,
 }
 
 #[allow(dead_code)]
