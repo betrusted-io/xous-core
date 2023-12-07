@@ -47,31 +47,33 @@ impl<'a> SigChat<'a> {
 
     /// Connect to the Signal servers
     ///
-    pub fn connect(&mut self) -> bool {
+    pub fn connect(&mut self) -> Result<bool, Error> {
         log::info!("Attempting connect to Signal server");
         if self.wifi() {
             if self.manager.is_none() {
-                self.account_setup();
+                log::info!("Setting up Signal Account Manager");
+                let account = match Account::read(SIGCHAT_ACCOUNT) {
+                    Ok(account) => account,
+                    Err(e) => self.account_setup()?,
+                };
+                self.manager = Some(Manager::new(account, TrustMode::OnFirstUse));
             }
-            if let Some(_manager) = &self.manager {
-                log::info!("Signal manager OK" );
-            } else {
-                self.modals
-                    .show_notification(t!("sigchat.account.failed", locales::LANG), None)
-                    .expect("notification failed");
-            };
+            if let Some(manager) = &self.manager {
+                log::info!("Signal Account Manager OK");
+            }
         } else {
             self.modals
                 .show_notification(t!("sigchat.wifi.warning", locales::LANG), None)
                 .expect("notification failed");
         }
         self.dialogue_set(None);
-        false
+        Ok(false)
     }
 
     /// Setup a Signal Account via Registration or Linking
     ///
-    fn account_setup(&mut self) {
+    fn account_setup(&mut self) -> Result<Account, Error> {
+        log::info!("Attempting to setup a Signal Account");
         self.modals
             .add_list_item(t!("sigchat.account.link", locales::LANG))
             .expect("failed add list item");
@@ -83,11 +85,18 @@ impl<'a> SigChat<'a> {
             .expect("failed radiobutton modal");
         match self.modals.get_radio_index() {
             Ok(index) => match index {
-                0 => self.account_link(),
-                1 => self.account_register(),
-                _ => log::warn!("invalid index"),
+                0 => Ok(self.account_link()?),
+                1 => Ok(self.account_register()?),
+                
+                _ => {
+                    log::warn!("invalid index");
+                    Err(Error::new(ErrorKind::Other, "invalid radio index"))
+                }
             },
-            Err(e) => log::warn!("failed to select register/link {:?}", e),
+            Err(e) => {
+                log::warn!("failed to present account setup radio buttons: {:?}", e);
+                Err(Error::new(ErrorKind::Other, "failed to present account setup radio buttons"))
+            }
         }
     }
 
@@ -108,7 +117,8 @@ impl<'a> SigChat<'a> {
     /// The phone number must include the country calling code, i.e. the number must start with a "+" sign.
     /// Warning: this will disable the authentication of your phone as a primary device.
     ///
-    pub fn account_register(&mut self) {
+    pub fn account_register(&mut self) -> Result<Account, Error> {
+        log::info!("Attempting to Register a new Signal Account");
         self.modals
             .show_notification(&"sorry - registration is not implemented yet", None)
             .expect("notification failed");
@@ -116,19 +126,18 @@ impl<'a> SigChat<'a> {
             Ok(number) => {
                 log::info!("registration phone number = {:?}", number);
                 match Account::new(SIGCHAT_ACCOUNT) {
-                    Ok(mut account) => {
-                        match account.set_number(&number.to_string()) {
-                            Ok(_number) => {
-                                self.manager = Some(Manager::new(account, TrustMode::OnFirstUse));
-                            }
-                            Err(e) => log::warn!("failed to set Account number: {e}"),
+                    Ok(mut account) => match account.set_number(&number.to_string()) {
+                        Ok(_number) => {
+                            self.manager = Some(Manager::new(account, TrustMode::OnFirstUse));
                         }
-                    }
+                        Err(e) => log::warn!("failed to set Account number: {e}"),
+                    },
                     Err(e) => log::warn!("failed to create new Account: {e}"),
                 }
             }
             Err(e) => log::warn!("failed to get phone number: {e}"),
         }
+        Err(Error::new(ErrorKind::Other, "not implmented"))
     }
 
     /// Attempts to obtain a phone number from the user.

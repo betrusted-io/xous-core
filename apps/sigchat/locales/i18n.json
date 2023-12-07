@@ -7,6 +7,14 @@
         "en": "Link to an existing Signal Account",
         "en-tts": "Link to an existing Signal Account"
     },
+    "sigchat.account.link.name": {
+        "en": "Please provide a name for this device",
+        "en-tts": "Please provide a name for this device"
+    },
+    "sigchat.account.link.scan": {
+        "en": "Please scan with primary Signal device",
+        "en-tts": "Please scan with primary Signal device"
+    },
     "sigchat.account.register": {
         "en": "Register a new Signal Account",
         "en-tts": "Register a new Signal Account"
