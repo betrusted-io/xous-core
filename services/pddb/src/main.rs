@@ -1735,7 +1735,8 @@ fn wrapped_main() -> ! {
             Opcode::SeekKeyStd => {
                 let fd = (msg.body.id() >> 16) & 0xffff;
                 if let Some(scalar) = msg.body.scalar_message() {
-                    let seek_by = (((scalar.arg2 as u32) as u64) << 32) | ((scalar.arg3 as u32) as u64);
+                    // NOTE: endian swap for compatibility with `std`
+                    let seek_by = (((scalar.arg3 as u32) as u64) << 32) | ((scalar.arg2 as u32) as u64);
                     let result = libstd::seek_key(scalar.arg1, seek_by, fd_mapping.entry(msg.sender.pid()).or_default(), fd);
                     if msg.body.is_blocking() {
                         match result {
