@@ -172,16 +172,24 @@ impl<'a> SigChat<'a> {
     /// true if at least 1 Certificate Authority is trusted
     ///
     fn probe_host(&self, host: &str) -> bool {
+        self.chat
+            .set_status_text(t!("sigchat.status.probing", locales::LANG));
+        self.chat.set_busy_state(true);
         let tls = Tls::new();
         match tls.probe(host) {
             Ok(0) => {
                 self.modals
                     .show_notification(t!("sigchat.account.abort", locales::LANG), None)
                     .expect("abort failed");
+                self.chat.set_busy_state(false);
                 false
             }
-            Ok(_count) => true,
+            Ok(_count) => {
+                self.chat.set_busy_state(false);
+                true
+            }
             Err(e) => {
+                self.chat.set_busy_state(false);
                 self.modals
                     .show_notification(&format!("{}", e), None)
                     .expect("qrcode failed");
@@ -213,18 +221,24 @@ impl<'a> SigChat<'a> {
                     DEFAULT_DEVICE_NAME,
                     t!("sigchat.account.link.name", locales::LANG),
                 );
+                self.chat
+                    .set_status_text(t!("sigchat.status.connecting", locales::LANG));
+                self.chat.set_busy_state(true);
                 match manager.link(Some(&name), Some(&host)) {
                     Ok(true) => {
                         log::info!("Linked Signal Account");
+                        self.chat.set_busy_state(false);
                     }
                     Ok(false) => {
                         log::info!("failed to link Signal Account");
+                        self.chat.set_busy_state(false);
                     }
                     Err(e) => {
                         log::warn!("error while linking Signal Account: {e}");
                         Account::delete(SIGCHAT_ACCOUNT).unwrap_or_else(|e| {
                             log::warn!("failed to delete unregistered account from pddb: {e}")
                         });
+                        self.chat.set_busy_state(false);
                         self.modals
                             .show_notification(&format!("{}", e), None)
                             .expect("notification failed");

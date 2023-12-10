@@ -74,6 +74,10 @@
         "en": "Signal online",
         "en-tts": "Signal online"
     },
+    "sigchat.status.probing": {
+        "en": "probing host for trusted tls",
+        "en-tts": "probing host for trusted tls"
+    },
     "sigchat.wifi.connected": {
         "en": "WiFi connected",
         "en-tts": "WiFi connected",
