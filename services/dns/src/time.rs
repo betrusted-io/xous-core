@@ -321,9 +321,10 @@ pub fn start_time_server() {
                             start_rtc_secs as i64 * 1000i64
                             + (tt.elapsed_ms() - start_tt_ms) as i64;
                         log::debug!("hw only UTC ms {}", t);
+                        // NOTE: endian swap for compatibility with `std`
                         xous::return_scalar2(msg.sender,
-                            (((t as u64) >> 32) & 0xFFFF_FFFF) as usize,
                             (t as u64 & 0xFFFF_FFFF) as usize,
+                            (((t as u64) >> 32) & 0xFFFF_FFFF) as usize,
                         ).expect("couldn't respond to GetUtcTimeMs");
                     }),
                     Some(TimeOp::GetLocalTimeMs) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
@@ -398,9 +399,10 @@ pub fn start_time_server() {
                             utc_offset_ms = 0;
                         }
                         log::trace!("utc ms {}", t);
+                        // NOTE: endian swap for compatibility with `std`
                         xous::return_scalar2(msg.sender,
-                            (((t as u64) >> 32) & 0xFFFF_FFFF) as usize,
                             (t as u64 & 0xFFFF_FFFF) as usize,
+                            (((t as u64) >> 32) & 0xFFFF_FFFF) as usize,
                         ).expect("couldn't respond to GetUtcTimeMs");
                     }),
                     Some(TimeOp::GetLocalTimeMs) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
