@@ -3,6 +3,14 @@
         "en": "Failed to setup Signal Account",
         "en-tts": "Failed to setup Signal Account"
     },
+    "sigchat.account.abort": {
+        "en": "Signal Account setup aborted",
+        "en-tts": "Signal Account setup aborted"
+    },
+    "sigchat.account.host.name": {
+        "en": "Please provide the Signal host server name",
+        "en-tts": "Please provide the Signal host server name"
+    },
     "sigchat.account.link": {
         "en": "Link to an existing Signal Account",
         "en-tts": "Link to an existing Signal Account"

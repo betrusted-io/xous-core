@@ -100,8 +100,32 @@ impl<'a> SigChat<'a> {
             .expect("failed radiobutton modal");
         match self.modals.get_radio_index() {
             Ok(index) => match index {
-                0 => Ok(self.account_link()?),
-                1 => Ok(self.account_register()?),
+                0 => {
+                    let host = self.name_modal(
+                        DEFAULT_HOST_NAME,
+                        t!("sigchat.account.host.name", locales::LANG),
+                    );
+                    match self.probe_host(&host) {
+                        true => Ok(self.account_link(&host)?),
+                        false => Err(Error::new(
+                            ErrorKind::Other,
+                            "failed to trust host certificate",
+                        )),
+                    }
+                }
+                1 => {
+                    let host = self.name_modal(
+                        DEFAULT_HOST_NAME,
+                        t!("sigchat.account.host.name", locales::LANG),
+                    );
+                    match self.probe_host(&host) {
+                        true => Ok(self.account_register(&host)?),
+                        false => Err(Error::new(
+                            ErrorKind::Other,
+                            "failed to trust host certificate",
+                        )),
+                    }
+                }
                 2 => {
                     log::info!("account setup aborted");
                     Err(Error::new(ErrorKind::Other, "account setup aborted"))
@@ -121,15 +145,63 @@ impl<'a> SigChat<'a> {
         }
     }
 
+    /// Probe host for tls Certificate Authority chain of trust
+    ///
+    /// # Arguments
+    /// * `host` - the dns name or ip address of a Signal server
+    ///
+    /// # Returns
+    /// true if at least 1 Certificate Authority is trusted
+    ///
+    fn probe_host(&self, host: &str) -> bool {
+        let tls = Tls::new();
+        match tls.probe(host) {
+            Ok(0) => {
+                self.modals
+                    .show_notification(t!("sigchat.account.abort", locales::LANG), None)
+                    .expect("abort failed");
+                false
+            }
+            Ok(_count) => true,
+            Err(e) => {
+                self.modals
+                    .show_notification(&format!("{}", e), None)
+                    .expect("qrcode failed");
+                false
+            }
+        }
+    }
+
     /// Link this device to an existing Signal Account
     ///
     /// Signal allows to link additional devices to your primary device (e.g. Signal-Android).
     /// Note that currently Signal allows up to three linked devices per primary.
     ///
-    pub fn account_link(&self) {
+    pub fn account_link(&mut self, host: &str) -> Result<Account, Error> {
         self.modals
             .show_notification(&"sorry - linking is not implemented yet", None)
             .expect("notification failed");
+    }
+
+    /// Prompt a name from the user
+    ///
+    /// # Arguments
+    /// * `default_name` - A name suggested to the user
+    /// * `prompt` - A prompt to explain what is being requested
+    ///
+    /// # Returns
+    /// the name provided by the user
+    /// 
+    fn name_modal(&self, default_name: &str, prompt: &str) -> String {
+        match self
+            .modals
+            .alert_builder(prompt)
+            .field(Some(default_name.to_string()), None)
+            .build()
+        {
+            Ok(text) => text.content()[0].content.to_string(),
+            _ => default_name.to_string(),
+        }
     }
 
     /// Register a new Signal Account with this as the primary device.
@@ -138,7 +210,7 @@ impl<'a> SigChat<'a> {
     /// The phone number must include the country calling code, i.e. the number must start with a "+" sign.
     /// Warning: this will disable the authentication of your phone as a primary device.
     ///
-    pub fn account_register(&mut self) -> Result<Account, Error> {
+    pub fn account_register(&mut self, host: &str) -> Result<Account, Error> {
         log::info!("Attempting to Register a new Signal Account");
         self.modals
             .show_notification(&"sorry - registration is not implemented yet", None)
