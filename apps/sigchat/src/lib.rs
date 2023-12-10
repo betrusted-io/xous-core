@@ -47,6 +47,14 @@ impl<'a> SigChat<'a> {
 
     /// Connect to the Signal servers
     ///
+    /// The process first waits for an active WiFi connection, and then
+    /// initiates a Signal Account Manager with the Signal Account struct stored
+    /// in the pddb (or kicks off the Account setup process otherwise). The
+    /// Account Manager orchestrates the interaction with the Signal host server.
+    ///
+    /// # Returns
+    /// true on a successful connection to a Signal Account/Server
+    ///
     pub fn connect(&mut self) -> Result<bool, Error> {
         log::info!("Attempting connect to Signal server");
         if self.wifi() {
@@ -83,6 +91,16 @@ impl<'a> SigChat<'a> {
 
     /// Setup a Signal Account via Registration or Linking,
     /// or abort setup and read existing chat Dialogues in pddb
+    ///
+    /// The user can choose to:
+    /// 1. Link to an existing Signal Account
+    /// 2. Register a new Signal Account
+    /// 3. Abort account setup to read existing Signal Dialogues stored in the pddb
+    /// The online options involve nominating the Signal host server,
+    /// and probing the host for trusted tlls Certificate Authorities.
+    ///
+    /// # Returns
+    /// Account struct stored in pddb
     ///
     fn account_setup(&mut self) -> Result<Account, Error> {
         log::info!("Attempting to setup a Signal Account");
@@ -176,6 +194,15 @@ impl<'a> SigChat<'a> {
     ///
     /// Signal allows to link additional devices to your primary device (e.g. Signal-Android).
     /// Note that currently Signal allows up to three linked devices per primary.
+    ///
+    /// The user must provide a name for the current device before the Link process
+    /// commences - culminating by presenting a qr-code to be scanned by the primary device.
+    ///
+    /// # Arguments
+    /// * `host` - the Signal server host name or ip-address
+    ///
+    /// # Returns
+    /// Account struct stored in pddb
     ///
     pub fn account_link(&mut self, host: &str) -> Result<Account, Error> {
         log::info!("Attempting to Link to an existing Signal Account");
@@ -305,6 +332,9 @@ impl<'a> SigChat<'a> {
     ///
     /// If wifi is not connected then a modal offers to "Connect to wifi?"
     /// and tries for 10 seconds before representing.
+    ///
+    /// # Returns
+    /// true when wifi is connected
     ///
     pub fn wifi(&self) -> bool {
         if HOSTED_MODE {
