@@ -178,9 +178,40 @@ impl<'a> SigChat<'a> {
     /// Note that currently Signal allows up to three linked devices per primary.
     ///
     pub fn account_link(&mut self, host: &str) -> Result<Account, Error> {
-        self.modals
-            .show_notification(&"sorry - linking is not implemented yet", None)
-            .expect("notification failed");
+        log::info!("Attempting to Link to an existing Signal Account");
+        match Account::new(SIGCHAT_ACCOUNT) {
+            Ok(account) => {
+                let mut manager = Manager::new(account, TrustMode::OnFirstUse);
+                let name = self.name_modal(
+                    DEFAULT_DEVICE_NAME,
+                    t!("sigchat.account.link.name", locales::LANG),
+                );
+                match manager.link(Some(&name), Some(&host)) {
+                    Ok(true) => {
+                        log::info!("Linked Signal Account");
+                    }
+                    Ok(false) => {
+                        log::info!("failed to link Signal Account");
+                    }
+                    Err(e) => {
+                        log::warn!("error while linking Signal Account: {e}");
+                        Account::delete(SIGCHAT_ACCOUNT).unwrap_or_else(|e| {
+                            log::warn!("failed to delete unregistered account from pddb: {e}")
+                        });
+                        self.modals
+                            .show_notification(&format!("{}", e), None)
+                            .expect("notification failed");
+                    }
+                }
+            }
+            Err(_) => {
+                log::warn!("failed to create new Account in pddb: {}", SIGCHAT_ACCOUNT);
+                self.modals
+                    .show_notification(t!("sigchat.account.failed", locales::LANG), None)
+                    .expect("notification failed");
+            }
+        };
+        Ok(Account::read(SIGCHAT_ACCOUNT)?)
     }
 
     /// Prompt a name from the user
@@ -210,7 +241,7 @@ impl<'a> SigChat<'a> {
     /// The phone number must include the country calling code, i.e. the number must start with a "+" sign.
     /// Warning: this will disable the authentication of your phone as a primary device.
     ///
-    pub fn account_register(&mut self, host: &str) -> Result<Account, Error> {
+    pub fn account_register(&mut self, _host: &str) -> Result<Account, Error> {
         log::info!("Attempting to Register a new Signal Account");
         self.modals
             .show_notification(&"sorry - registration is not implemented yet", None)

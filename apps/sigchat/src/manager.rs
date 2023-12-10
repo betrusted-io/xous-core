@@ -123,10 +123,11 @@ impl Manager {
     /// Link to an existing device, instead of registering a new number. This shows a "sgnl://linkdevice?uuid=…​" URI. If you want to connect to another signal-cli instance, you can just use this URI. If you want to link to an Android/iOS device, create a QR code with the URI (e.g. with qrencode) and scan that in the Signal app.
     ///
     /// # Arguments
-    /// * `name` - Optionally specify a name to describe this new device. By default "cli" will be used.
+    /// * `name` - Optionally specify a name to describe this new device (defaults to "xous").
+    /// * `host` - Optionally specify a host to connect to (defaults to "signal.org").
     ///
     #[allow(dead_code)]
-    pub fn link(_name: &str) -> Result<(), Error> {
+    pub fn link(&mut self, name: Option<&str>, host: Option<&str>) -> Result<bool, Error> {
         todo!();
     }
 

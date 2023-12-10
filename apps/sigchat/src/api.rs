@@ -1,5 +1,6 @@
 #[allow(dead_code)]
 pub(crate) const SERVER_NAME_SIGCHAT: &str = "_Signal chat_";
+pub(crate) const DEFAULT_DEVICE_NAME: &str = "xous";
 pub(crate) const DEFAULT_HOST_NAME: &str = "signal.org";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

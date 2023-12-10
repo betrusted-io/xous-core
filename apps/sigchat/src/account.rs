@@ -54,6 +54,18 @@ impl Account {
         }
     }
 
+    /// Delete this Account key/value from the pddb
+    ///
+    /// While this Account struct will persist in memory, a subsequent Account.read() will fail
+    ///
+    pub fn delete(pddb_dict: &str) -> Result<(), Error> {
+        let pddb = pddb::Pddb::new();
+        pddb.try_mount();
+        pddb.delete_dict(pddb_dict, None)?;
+        log::info!("deleted Signal Account from pddb");
+        Ok(())
+    }
+
     #[allow(dead_code)]
     pub fn number(&self) -> Option<&str> {
         match &self.number {
