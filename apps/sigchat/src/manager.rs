@@ -1,11 +1,13 @@
 mod group_permission;
 mod link_state;
+mod signal_ws;
 mod trust_mode;
 
-use crate::Account;
+use crate::{Account, DEFAULT_DEVICE_NAME, DEFAULT_HOST_NAME};
 use group_permission::GroupPermission;
 use link_state::LinkState;
 use std::io::Error;
+use signal_ws::SignalWS;
 pub use trust_mode::TrustMode;
 
 // Structure modeled on signal-cli by AsamK <asamk@gmx.de> and contributors - https://github.com/AsamK/signal-cli.
@@ -14,8 +16,9 @@ pub use trust_mode::TrustMode;
 
 #[allow(dead_code)]
 pub struct Manager {
-    account:Account,
+    account: Account,
     trust_mode: TrustMode,
+    websocket: Option<SignalWS>,
     log_verbose: bool,
     log_scrub: bool,
     log_send: bool,
@@ -32,6 +35,7 @@ impl Manager {
         Manager {
             account,
             trust_mode,
+            websocket: None,
             log_verbose: false,
             log_scrub: false,
             log_send: false,
@@ -128,7 +132,24 @@ impl Manager {
     ///
     #[allow(dead_code)]
     pub fn link(&mut self, name: Option<&str>, host: Option<&str>) -> Result<bool, Error> {
-        todo!();
+        // insert default values as required
+        let name = name.unwrap_or(DEFAULT_DEVICE_NAME);
+        let host = host.unwrap_or(DEFAULT_HOST_NAME);
+        match SignalWS::provision(&host) {
+            Ok(ws) => {
+                if let Some(prior_ws) = &mut self.websocket {
+                    prior_ws.close();
+                }
+                self.websocket = Some(ws);
+
+                log::info!("websocket established to link {name} at {host}");
+                log::warn!("Manager.link() not fully implemented.");
+            }
+            Err(e) => {
+                log::info!("failed to connect to server: {}", e);
+                Err(e)
+            }
+        }
     }
 
     /// Link another device to this device. Only works, if this is the primary device.
