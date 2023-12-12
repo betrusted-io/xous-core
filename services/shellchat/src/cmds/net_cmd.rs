@@ -415,16 +415,22 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 #[cfg(feature = "websocket")]
                 "ws" => {
                     if self.ws.is_none() {
-                        let (socket, response) =
-                        tungstenite::connect(url::Url::parse("wss://awake.noskills.club/ws").unwrap()).expect("Can't connect");
-
-                        log::info!("Connected to the server");
-                        log::info!("Response HTTP code: {}", response.status());
-                        log::info!("Response contains the following headers:");
-                        for (ref header, _value) in response.headers() {
-                            log::info!("* {}", header);
+                        let url = url::Url::parse("wss://awake.noskills.club/ws").expect("Can't parse");
+                        match tungstenite::connect(url) {
+                            Ok((socket, response)) => {
+                                log::info!("Connected to the server");
+                                log::info!("Response HTTP code: {}", response.status());
+                                log::info!("Response contains the following headers:");
+                                for (ref header, _value) in response.headers() {
+                                    log::info!("* {}", header);
+                                }
+                                self.ws = Some(socket);
+                            }
+                            Err(e) => {
+                                log::warn!("failed to connect to ws server: {e}");
+                                write!(ret, "failed to connect to ws server: {e}").ok();
+                            }
                         }
-                        self.ws = Some(socket);
                     }
                     let mut err = false;
                     if let Some(socket) = &mut self.ws {
