@@ -8,13 +8,13 @@ The tls handshake involves the host offering the client a Certificate signed for
 
 It does not seem in keeping with the Precursor/Xous idea to ask users to trust any such list of Root CA Certificates.
 
-This tls library enables the user to obtain and save trusted CA certificates to the PDDB as a personalised set of trusted Root CA certificates on which to establish a tls connection. This can be as simple for the user as responding to a modal, when making a first connection to an as yet un-trusted host. Just a couple of clicks. The developer need only call `Tls::check_trust()`.
+This tls library enables the user to obtain and save trusted CA certificates to the PDDB as a personalised set of trusted Root CA certificates on which to establish a tls connection. This can be as simple for the user as responding to a modal, when making a first connection to an as yet un-trusted host. Just a couple of clicks. The developer need only call `Tls::trust_modal()`.
 
 Note that hosts with self-signed Certificates may be probed and trusted (e.g. [chat.signal.org](https://chat.signal.org))
 
 A small set of shellchat commands are included to enact the base functionality:
 
-- `net tls probe <host>` will initiate a modified tls handshake with `<host>`, obtain the certificate chain offered by `<host>`, and immediately terminate the connection. A call to Tls::check_trust() will present the CA certificate chain in a modal to be individually selected and saved to PDDB if trusted.
+- `net tls probe <host>` will initiate a modified tls handshake with `<host>`, obtain the certificate chain offered by `<host>`, and immediately terminate the connection. A call to Tls::trust_modal() will present the CA certificate chain in a modal to be individually selected and saved to PDDB if trusted.
 - `net tls test <host>` will attempt a normal tls handshake with `<host>` based on the trusted Root CA certificates in the PDDB. If the connection is successful, then a simple `get` is emitted, the response accepted, and the connection closed.
 - `net tls mozilla` trusts and saves all Root CA's in the [webpki-roots crate](https://crates.io/crates/webpki-roots) - which contains Mozilla's root certificates. (requires `--feature rootCA`)
 - `net list` lists all trusted certificates in the PDDB

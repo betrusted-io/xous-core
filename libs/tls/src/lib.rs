@@ -45,7 +45,7 @@ impl Tls {
     ///
     /// a count of trusted certificates
     ///
-    pub fn check_trust(&self, certificates: &[Certificate]) -> usize {
+    pub fn trust_modal(&self, certificates: &[Certificate]) -> usize {
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
 
@@ -319,7 +319,7 @@ impl Tls {
                         }
                         conn.send_close_notify();
                         match conn.peer_certificates() {
-                            Some(certificates) => Ok(self.check_trust(certificates)),
+                            Some(certificates) => Ok(self.trust_modal(certificates)),
                             None => Ok(0),
                         }
                     }
