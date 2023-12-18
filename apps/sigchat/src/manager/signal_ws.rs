@@ -2,8 +2,9 @@ use rustls::{ClientConnection, StreamOwned};
 use std::io::{Error, ErrorKind};
 use std::net::TcpStream;
 use tls::Tls;
+use tungstenite::WebSocket;
 
-const PROVISIONING_PATH: &str = "/provisioning/";
+const PROVISIONING_PATH: &str = "/v1/websocket/provisioning/";
 const REGISTRATION_PATH: &str = "/v1/registration";
 
 #[allow(dead_code)]
@@ -71,6 +72,7 @@ impl SignalWS {
         log::info!("connecting websocket");
         match url::Url::parse(&server) {
             Ok(url) => {
+                log::info!("attempting websocket connection to {}", url.as_str());
                 let host = url.host_str().expect("failed to extract host from url");
                 match TcpStream::connect((host, 443)) {
                     Ok(sock) => {
@@ -79,7 +81,17 @@ impl SignalWS {
                         match xtls.stream_owned(host, sock) {
                             Ok(tls_stream) => {
                                 log::info!("tls configured");
-                                log::info!("WEBSOCKET NOT IMPLEMENTED YET");
+                                match tungstenite::client(url, tls_stream) {
+                                    Ok((socket, response)) => {
+                                        log::info!("Websocket connected to: {}", server);
+                                        log::info!("Response HTTP code: {}", response.status());
+                                        Ok(socket)
+                                    }
+                                    Err(e) => {
+                                        log::info!("failed to connect websocket: {}", e);
+                                        Err(Error::from(ErrorKind::ConnectionRefused))
+                                    }
+                                }
                             }
                             Err(e) => {
                                 log::warn!("failed to configure tls: {e}");
