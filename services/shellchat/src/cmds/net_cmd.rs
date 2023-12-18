@@ -8,7 +8,6 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use tls::Tls;
 use xous::MessageEnvelope;
 use xous_ipc::String;
 
@@ -22,7 +21,10 @@ use net::XousServerId;
 use perflib::*;
 
 #[cfg(feature = "websocket")]
-use tungstenite::{stream::MaybeTlsStream, WebSocket};
+use {
+    tls::Tls,
+    tungstenite::{stream::MaybeTlsStream, WebSocket},
+};
 
 pub struct NetCmd {
     callback_id: Option<u32>,

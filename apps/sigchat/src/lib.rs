@@ -9,6 +9,7 @@ use chat::Chat;
 use locales::t;
 use modals::Modals;
 use std::io::{Error, ErrorKind};
+use tls::Tls;
 
 /// PDDB Dict for sigchat keys
 const SIGCHAT_ACCOUNT: &str = "sigchat.account";
@@ -263,7 +264,7 @@ impl<'a> SigChat<'a> {
     ///
     /// # Returns
     /// the name provided by the user
-    /// 
+    ///
     fn name_modal(&self, default_name: &str, prompt: &str) -> String {
         match self
             .modals
