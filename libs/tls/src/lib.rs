@@ -11,7 +11,7 @@ use rkyv::{
     ser::{serializers::WriteSerializer, Serializer},
     Deserialize,
 };
-use rustls::{Certificate, ClientConfig, RootCertStore};
+use rustls::{Certificate, ClientConfig, ClientConnection, RootCertStore};
 use sha2::Digest;
 use std::convert::{Into, TryFrom, TryInto};
 use std::io::{Error, ErrorKind, Read, Write};
@@ -341,6 +341,16 @@ impl Tls {
             .with_safe_defaults()
             .with_root_certificates(self.root_store())
             .with_no_client_auth()
+    }
+
+    pub fn stream_owned(&self, host: &str, sock: TcpStream) -> Result<rustls::StreamOwned<ClientConnection, TcpStream>, Error> {
+        match rustls::ClientConnection::new(
+            Arc::new(self.client_config()),
+            host.try_into().expect("failed url host_str"),
+        ) {
+            Ok(conn) => Ok(rustls::StreamOwned::new(conn, sock)),
+            Err(_) => Err(Error::new(ErrorKind::Other, "failed to configure client connection"))
+        }        
     }
 }
 

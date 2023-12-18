@@ -74,9 +74,9 @@ impl SignalWS {
                 let host = url.host_str().expect("failed to extract host from url");
                 match TcpStream::connect((host, 443)) {
                     Ok(sock) => {
-                        log::info!("tcp connected");
+                        log::info!("tcp connected to {host}");
                         let xtls = Tls::new();
-                        match xtls.stream(host, sock) {
+                        match xtls.stream_owned(host, sock) {
                             Ok(tls_stream) => {
                                 log::info!("tls configured");
                                 log::info!("WEBSOCKET NOT IMPLEMENTED YET");
