@@ -227,8 +227,8 @@ impl Tls {
                         let archive =
                             unsafe { rkyv::archived_value::<RustlsOwnedTrustAnchor>(&bytes, pos) };
                         let ta = archive.deserialize(&mut AllocDeserializer {}).ok();
-                        log::info!("get {}", key);
-                        log::trace!("get '{}' = '{:?}'", key, &ta);
+                        log::info!("get trust anchor {}", key);
+                        log::trace!("get trust anchor'{}' = '{:?}'", key, &ta);
                         ta
                     }
                     Err(e) => {
