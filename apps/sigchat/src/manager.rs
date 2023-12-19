@@ -162,7 +162,21 @@ impl Manager {
                                         Some(device_link_uri.as_str()),
                                     )
                                     .expect("qrcode failed");
-                                Ok(false)
+                                match ws.read() {
+                                    Ok(Message::Binary(registration)) => {
+                                        log::info!("raw registration ProtoBuffer: {:?}", registration);
+                                        ws.close();
+                                        Ok(true)
+                                    }
+                                    Ok(_) => { 
+                                        log::warn!("unexpected Provisioning msg");
+                                        Err(link_err)
+                                    }
+                                    Err(e) => { 
+                                        log::warn!("{e}");
+                                        Err(link_err)
+                                    }
+                                }
                             }
                             Err(e) => {
                                 log::info!("{}", format!("{e}"));
