@@ -104,7 +104,7 @@ pub(crate) enum Opcode {
     AdcGpio5,
     AdcGpio2,
 
-    /// partially tested -- events
+    /// events
     EventComSubscribe, //(String<64>),
     //EventRtcSubscribe, //(String<64>),
     EventUsbAttachSubscribe, //(String<64>),
@@ -112,6 +112,11 @@ pub(crate) enum Opcode {
     //EventRtcEnable, //(bool),
     EventUsbAttachEnable, //(bool),
     EventActivityHappened,
+
+    /// Set EC status is ready
+    EventEcSetReady,
+    /// Query if EC status is ready
+    EventEcIsReady,
 
     /// internal from handler to main loop
     EventComHappened,

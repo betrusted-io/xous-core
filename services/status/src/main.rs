@@ -616,6 +616,8 @@ fn wrapped_main() -> ! {
     if soc_updated {
         log::info!("Soc update was triggered, UX flow should be running now...");
     }
+    // now that all the auto-update interaction is done, set the EC is ready flag
+    llio.set_ec_ready(true);
     // now that all the auto-update interaction is done, exit the gutter server. From
     // this point forward, messages will pile up in the status queue, until the main loop starts.
     send_message(cb_cid, Message::new_blocking_scalar(

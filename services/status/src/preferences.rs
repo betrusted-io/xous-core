@@ -121,7 +121,8 @@ impl PrefHandler for DevicePrefs {
                 true
             }
             _ => {
-                log::error!("Got unknown message: {}", op);
+                // this is "expected" - options that don't match here are matched down below.
+                log::info!("Got unknown message: {}, passing to next handler.", op);
                 false
             }
         } {

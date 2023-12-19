@@ -632,8 +632,9 @@ fn wrapped_main() -> ! {
         Opcode::SuspendResume as u32, my_cid).expect("couldn't create suspend/resume object");
     loop {
         let mut msg = xous::receive_message(pddb_sid).unwrap();
-        // log::error!("got msg: {:x?}", msg);
-        match FromPrimitive::from_usize(msg.body.id() & 0xffff).unwrap_or(Opcode::InvalidOpcode) {
+        let op: Opcode = FromPrimitive::from_usize(msg.body.id() & 0xffff).unwrap_or(Opcode::InvalidOpcode);
+        log::debug!("{:x?}", op);
+        match op {
             Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 basis_cache.suspend(&mut pddb_os);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
@@ -672,6 +673,12 @@ fn wrapped_main() -> ! {
             //    - code = 2 -> mount failed, because too many PINs were retried. `count` is the number of retries.
             // If we need more nuance out of this routine, consider creating a custom public enum type to help marshall this.
             Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let llio = llio::Llio::new(&xns);
+                while !llio.is_ec_ready() {
+                    // spin-wait while the EC is not ready -- so that a PDDB mount does not interfere with
+                    // on-going EC updates. Also causes the mount dialog to delay until the EC status has been checked.
+                    tt.sleep_ms(1000).ok();
+                }
                 if basis_cache.basis_count() > 0 {
                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                 } else {
@@ -1728,7 +1735,8 @@ fn wrapped_main() -> ! {
             Opcode::SeekKeyStd => {
                 let fd = (msg.body.id() >> 16) & 0xffff;
                 if let Some(scalar) = msg.body.scalar_message() {
-                    let seek_by = (((scalar.arg2 as u32) as u64) << 32) | ((scalar.arg3 as u32) as u64);
+                    // NOTE: endian swap for compatibility with `std`
+                    let seek_by = (((scalar.arg3 as u32) as u64) << 32) | ((scalar.arg2 as u32) as u64);
                     let result = libstd::seek_key(scalar.arg1, seek_by, fd_mapping.entry(msg.sender.pid()).or_default(), fd);
                     if msg.body.is_blocking() {
                         match result {

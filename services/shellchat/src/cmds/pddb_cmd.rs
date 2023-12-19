@@ -1099,6 +1099,23 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         write!(ret, "fscb test failed").ok();
                     }
                 }
+                "seektest" => {
+                    use std::fs::OpenOptions;
+                    std::fs::create_dir_all("testdict").expect("couldn't set up test directory");
+                    let mut file = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .open("testdict:seek")
+                    .expect("couldn't open/create testdict:seek");
+                    let test_data: [u8; 8] = [10, 10, 10, 10, 5, 6, 20, 24];
+                    file.write_all(&test_data).expect("couldn't write test data");
+                    file.seek(SeekFrom::Start(4)).expect("couldn't seek");
+                    let mut check = [0u8; 4];
+                    file.read(&mut check).expect("couldn't read back check data");
+                    log::info!("check data: {:?}", check);
+                    assert!(check == test_data[4..]);
+                }
                 // note that this feature only works in hosted mode
                 #[cfg(feature="pddbtest")]
                 "test" => {
