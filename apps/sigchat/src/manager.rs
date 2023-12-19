@@ -1,4 +1,5 @@
 mod group_permission;
+mod libsignal; // stub
 mod link_state;
 mod signal_ws;
 mod trust_mode;
@@ -155,10 +156,11 @@ impl Manager {
                     Ok(Message::Binary(uuid)) => {
                         log::info!("raw uuid ProtoBuffer: {:?}", uuid);
                         let uuid = "TODO decode uuid ProtoBuffer";
-                        let pub_key = "TODO generateIdentityKeyPair()";
+                        let identity_key_pair = libsignal::generate_identity_key_pair();
+                        let pub_key = identity_key_pair.djb_identity_key.key.clone();
                         match url::Url::parse_with_params(
                             "sgnl://linkdevice",
-                            &[("uuid", &uuid), ("pub_key", &pub_key)],
+                            &[("uuid", &uuid), ("pub_key", &pub_key.as_str())],
                         ) {
                             Ok(device_link_uri) => {
                                 log::info!("device_link_uri: {device_link_uri}");
