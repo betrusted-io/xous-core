@@ -129,6 +129,15 @@ impl Manager {
 
     /// Link to an existing device, instead of registering a new number. This shows a "sgnl://linkdevice?uuid=…​" URI. If you want to connect to another signal-cli instance, you can just use this URI. If you want to link to an Android/iOS device, create a QR code with the URI (e.g. with qrencode) and scan that in the Signal app.
     ///
+    /// Linking sigchat to an existing Signal Account involves:
+    /// 1. establishing a tls connection to the Signal Provisioning websocket server
+    /// 2. obtaining a uuid via the websocket
+    /// 3. generating a key-pair
+    /// 4. displaying a uri as a qr-code (containing the uuid and pub_key)
+    /// 5. scanning the qr-code with the primary Signal device
+    /// 6. obtaining device registration via the websocket
+    /// 7. completing the registration processing
+    ///
     /// # Arguments
     /// * `name` - Optionally specify a name to describe this new device (defaults to "xous").
     /// * `host` - Optionally specify a host to connect to (defaults to "signal.org").
@@ -165,6 +174,7 @@ impl Manager {
                                 match ws.read() {
                                     Ok(Message::Binary(registration)) => {
                                         log::info!("raw registration ProtoBuffer: {:?}", registration);
+                                        // TODO complete registration
                                         ws.close();
                                         Ok(true)
                                     }
