@@ -20,8 +20,8 @@
         "en-tts": "Please provide a name for this device"
     },
     "sigchat.account.link.scan": {
-        "en": "Please scan with primary Signal device",
-        "en-tts": "Please scan with primary Signal device"
+        "en": "Please scan with primary Signal device, and then",
+        "en-tts": "Please scan with primary Signal device, and then"
     },
     "sigchat.account.offline": {
         "en": "Read Signal offline",

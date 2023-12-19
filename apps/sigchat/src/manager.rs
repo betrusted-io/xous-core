@@ -6,7 +6,8 @@ mod trust_mode;
 use crate::{Account, DEFAULT_DEVICE_NAME, DEFAULT_HOST_NAME};
 use group_permission::GroupPermission;
 use link_state::LinkState;
-use std::io::Error;
+use locales::t;
+use modals::Modals;
 use signal_ws::SignalWS;
 use std::io::{Error, ErrorKind};
 pub use trust_mode::TrustMode;
@@ -144,8 +145,30 @@ impl Manager {
                 match ws.read() {
                     Ok(Message::Binary(uuid)) => {
                         log::info!("raw uuid ProtoBuffer: {:?}", uuid);
-                        ws.close();
-                        Ok(false)
+                        let uuid = "TODO decode uuid ProtoBuffer";
+                        let pub_key = "TODO generateIdentityKeyPair()";
+                        match url::Url::parse_with_params(
+                            "sgnl://linkdevice",
+                            &[("uuid", &uuid), ("pub_key", &pub_key)],
+                        ) {
+                            Ok(device_link_uri) => {
+                                log::info!("device_link_uri: {device_link_uri}");
+                                let xns = xous_names::XousNames::new().unwrap();
+                                let modals =
+                                    Modals::new(&xns).expect("can't connect to Modals server");
+                                modals
+                                    .show_notification(
+                                        t!("sigchat.account.link.scan", locales::LANG),
+                                        Some(device_link_uri.as_str()),
+                                    )
+                                    .expect("qrcode failed");
+                                Ok(false)
+                            }
+                            Err(e) => {
+                                log::info!("{}", format!("{e}"));
+                                Err(link_err)
+                            }
+                        }
                     }
                     Ok(_) => { 
                         log::warn!("unexpected Provisioning msg.");
