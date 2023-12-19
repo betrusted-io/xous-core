@@ -45,8 +45,13 @@ impl SignalWS {
             .unwrap_or_else(|e| log::warn!("failed to flush websocket: {e}"));
     }
 
-
-
+    pub fn read(&mut self) -> Result<Message, Error> {
+        match self.ws.read() {
+            Ok(msg) => Ok(msg),
+            Err(e) => {
+                log::warn!("{e}");
+                Err(Error::new(ErrorKind::Other, "error on reading ws"))
+            }
         }
     }
 

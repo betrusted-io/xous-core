@@ -8,7 +8,9 @@ use group_permission::GroupPermission;
 use link_state::LinkState;
 use std::io::Error;
 use signal_ws::SignalWS;
+use std::io::{Error, ErrorKind};
 pub use trust_mode::TrustMode;
+use tungstenite::Message;
 
 // Structure modeled on signal-cli by AsamK <asamk@gmx.de> and contributors - https://github.com/AsamK/signal-cli.
 // signal-cli is a commandline interface for libsignal-service-java. It supports registering, verifying, sending and receiving messages.
@@ -135,16 +137,27 @@ impl Manager {
         // insert default values as required
         let name = name.unwrap_or(DEFAULT_DEVICE_NAME);
         let host = host.unwrap_or(DEFAULT_HOST_NAME);
+        let link_err = Error::new(ErrorKind::Other,  "failed to link device",);
         match SignalWS::new_provision(&host) {
-            Ok(ws) => {
-                if let Some(prior_ws) = &mut self.websocket {
-                    prior_ws.close();
+            Ok(mut ws) => {
+                log::info!("provisioning websocket established to {host}");
+                match ws.read() {
+                    Ok(Message::Binary(uuid)) => {
+                        log::info!("raw uuid ProtoBuffer: {:?}", uuid);
+                        ws.close();
+                        Ok(false)
+                    }
+                    Ok(_) => { 
+                        log::warn!("unexpected Provisioning msg.");
+                        Err(link_err)
+                    }
+                    Err(e) => { 
+                        log::warn!("{e}");
+                        Err(link_err)
+                    }
                 }
-                self.websocket = Some(ws);
+            }               
 
-                log::info!("websocket established to link {name} at {host}");
-                log::warn!("Manager.link() not fully implemented.");
-            }
             Err(e) => {
                 log::info!("failed to connect to server: {}", e);
                 Err(e)
