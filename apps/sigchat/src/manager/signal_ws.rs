@@ -2,60 +2,51 @@ use rustls::{ClientConnection, StreamOwned};
 use std::io::{Error, ErrorKind};
 use std::net::TcpStream;
 use tls::Tls;
-use tungstenite::WebSocket;
+use tungstenite::{Message, WebSocket};
 
 const PROVISIONING_PATH: &str = "/v1/websocket/provisioning/";
 const REGISTRATION_PATH: &str = "/v1/registration";
 
 #[allow(dead_code)]
-pub enum SignalWS {
-    Message {
-        ws: WebSocket<StreamOwned<ClientConnection, TcpStream>>,
-    },
-    Provision {
-        ws: WebSocket<StreamOwned<ClientConnection, TcpStream>>,
-    },
-    Register {
-        ws: WebSocket<StreamOwned<ClientConnection, TcpStream>>,
-    },
+pub struct SignalWS {
+    ws: WebSocket<StreamOwned<ClientConnection, TcpStream>>,
 }
 
 impl SignalWS {
     #[allow(dead_code)]
-    pub fn message(_host: &str) -> Result<Self, Error> {
+    pub fn new_message(_host: &str) -> Result<Self, Error> {
         todo!();
     }
 
-    pub fn provision(host: &str) -> Result<Self, Error> {
+    pub fn new_provision(host: &str) -> Result<Self, Error> {
         let server = format!("wss://{host}{}", PROVISIONING_PATH);
-        // let mut conn = client_connection(&server);
         match SignalWS::connect(server) {
-            Ok(ws) => Ok(Self::Provision { ws }),
+            Ok(ws) => Ok(Self { ws }),
             Err(e) => Err(e),
         }
     }
 
     #[allow(dead_code)]
-    pub fn register(host: &str) -> Result<Self, Error> {
+    pub fn new_register(host: &str) -> Result<Self, Error> {
         let server = format!("wss://{host}{}", REGISTRATION_PATH);
-        // let mut conn = client_connection(&server);
         match SignalWS::connect(server) {
-            Ok(ws) => Ok(Self::Register { ws }),
+            Ok(ws) => Ok(Self { ws }),
             Err(e) => Err(e),
         }
     }
 
     pub fn close(&mut self) {
-        match self {
-            SignalWS::Message { ws, .. }
-            | SignalWS::Provision { ws, .. }
-            | SignalWS::Register { ws, .. } => {
-                ws.close(None)
-                    .unwrap_or_else(|e| log::warn!("failed to close websocket: {e}"));
-                // TODO close properly https://docs.rs/tungstenite/0.20.1/tungstenite/protocol/struct.WebSocket.html
-                ws.flush()
-                    .unwrap_or_else(|e| log::warn!("failed to flush websocket: {e}"));
-            }
+        self.ws
+            .close(None)
+            .unwrap_or_else(|e| log::warn!("failed to close websocket: {e}"));
+        // TODO close properly https://docs.rs/tungstenite/0.20.1/tungstenite/protocol/struct.WebSocket.html
+        self.ws
+            .flush()
+            .unwrap_or_else(|e| log::warn!("failed to flush websocket: {e}"));
+    }
+
+
+
         }
     }
 

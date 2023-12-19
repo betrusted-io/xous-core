@@ -135,7 +135,7 @@ impl Manager {
         // insert default values as required
         let name = name.unwrap_or(DEFAULT_DEVICE_NAME);
         let host = host.unwrap_or(DEFAULT_HOST_NAME);
-        match SignalWS::provision(&host) {
+        match SignalWS::new_provision(&host) {
             Ok(ws) => {
                 if let Some(prior_ws) = &mut self.websocket {
                     prior_ws.close();
