@@ -45,7 +45,7 @@ impl Tls {
     ///
     /// a count of trusted certificates
     ///
-    pub fn trust_modal(&self, certificates: &[Certificate]) -> usize {
+    pub fn trust_modal(&self, certificates: Vec<Certificate>) -> usize {
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
 
@@ -278,12 +278,10 @@ impl Tls {
         root_store
     }
 
-    /// Probes the target and returns a count of newly trusted 1 certificates
+    /// Probes the host and returns the TLS chain of trust
     ///
-    /// Establishes a tls connection to the target host, extracts the
+    /// Establishes a tls connection to the host, extracts the
     /// certificates offered and immediately closes the connection.
-    /// The certificates are presented by modal to the user, and saved to the
-    /// pddb if trusted.
     ///
     /// By default, rustls only provides access to a trusted certificate chain.
     /// Probe briefly stifles the certificate validation (ie trusts everything)
@@ -291,10 +289,12 @@ impl Tls {
     /// user for examination.
     ///
     /// # Arguments
+    /// * `host` - the target tls site (i.e. betrusted.io)
     ///
-    /// * `target` - the target tls site (i.e. betrusted.io)
+    /// # Returns
+    /// The TLS chain of trust for the host
     ///
-    pub fn probe(&self, target: &str) -> Result<usize, Error> {
+    pub fn probe(&self, host: &str) -> Result<Vec<Certificate>, Error> {
         log::info!("starting TLS probe");
         // Attempt to open the tls connection with an empty root_store
         let root_store = rustls::RootCertStore::empty();
@@ -306,12 +306,12 @@ impl Tls {
             .with_safe_defaults()
             .with_custom_certificate_verifier(stifled_verifier)
             .with_no_client_auth();
-        match target.try_into() {
+        match host.try_into() {
             Ok(server_name) => {
                 let mut conn =
                     rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-                log::info!("connect TCPstream to {}", target);
-                match TcpStream::connect((target, 443)) {
+                log::info!("connect TCPstream to {}", host);
+                match TcpStream::connect((host, 443)) {
                     Ok(mut sock) => {
                         match conn.complete_io(&mut sock) {
                             Ok(_) => log::info!("handshake complete"),
@@ -319,8 +319,8 @@ impl Tls {
                         }
                         conn.send_close_notify();
                         match conn.peer_certificates() {
-                            Some(certificates) => Ok(self.trust_modal(certificates)),
-                            None => Ok(0),
+                            Some(certificates) => Ok(certificates.to_vec()),
+                            None => Ok(vec![]),
                         }
                     }
                     Err(e) => {
@@ -330,14 +330,30 @@ impl Tls {
                 }
             }
             Err(e) => {
-                log::warn!("failed to create sever_name from {target}: {e}");
+                log::warn!("failed to create sever_name from {host}: {e}");
                 Err(Error::from(ErrorKind::InvalidInput))
             }
         }
     }
 
-    pub fn inspect(&self, target: &str) -> Result<usize, Error> {
-        self.probe(target)
+    /// Inspect and optionally trust Certificates offered by the host.
+    ///
+    /// Probes the host and presents the certificates offered in a modal.
+    /// The user can optionally save trusted certificates to the pddb.
+    ///
+    /// # Arguments
+    /// * `host` - the target tls site (i.e. betrusted.io)
+    ///
+    /// # Returns the number of trusted Certificates offered by the host
+    ///
+    pub fn inspect(&self, host: &str) -> Result<usize, Error> {
+        match self.probe(host) {
+            Ok(certs) => Ok(self.trust_modal(certs)),
+            Err(e) => {
+                log::warn!("failed to probe {host}: {e}");
+                Ok(0)
+            }
+        }
     }
 
     pub fn client_config(&self) -> ClientConfig {

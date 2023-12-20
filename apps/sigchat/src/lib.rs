@@ -178,16 +178,17 @@ impl<'a> SigChat<'a> {
         self.chat.set_busy_state(true);
         let tls = Tls::new();
         match tls.probe(host) {
-            Ok(0) => {
-                self.modals
-                    .show_notification(t!("sigchat.account.abort", locales::LANG), None)
-                    .expect("abort failed");
-                self.chat.set_busy_state(false);
-                false
-            }
-            Ok(_count) => {
-                self.chat.set_busy_state(false);
-                true
+            Ok(certs) => {
+                if certs.len() == 0 {
+                    self.modals
+                        .show_notification(t!("sigchat.account.abort", locales::LANG), None)
+                        .expect("abort failed");
+                    self.chat.set_busy_state(false);
+                    false
+                } else {
+                    self.chat.set_busy_state(false);
+                    true
+                }
             }
             Err(e) => {
                 self.chat.set_busy_state(false);
