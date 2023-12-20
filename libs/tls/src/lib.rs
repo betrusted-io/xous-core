@@ -336,6 +336,10 @@ impl Tls {
         }
     }
 
+    pub fn inspect(&self, target: &str) -> Result<usize, Error> {
+        self.probe(target)
+    }
+
     pub fn client_config(&self) -> ClientConfig {
         rustls::ClientConfig::builder()
             .with_safe_defaults()

@@ -4,8 +4,8 @@
         "en-tts": "Do you trust any of these certificate authorities?"
     },
     "tls.cmd_help": {
-        "en": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls probe <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser.",
-        "en-tts": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls probe <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser."
+        "en": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls inspect <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser.",
+        "en-tts": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls inspect <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser."
     },        
     "tls.cmd": {
         "en": "net tls <sub-command>",
@@ -35,11 +35,11 @@
         "en": "trusted Root CA's",
         "en-tts": "trusted Root CA's"
     },
-    "tls.probe_cmd": {
+    "tls.inspect_cmd": {
         "en": "save host CA'a if trusted",
         "en-tts": "save host CA'a if trusted"
     },
-    "tls.probe_fail_servername": {
+    "tls.inspect_fail_servername": {
         "en": "failed to create server name from",
         "en-tts": "failed to create server name from"
     },
@@ -55,7 +55,7 @@
         "en": "error maybe caused by an improperly set clock",
         "en-tts": "error maybe caused by an improperly set clock"
     },
-    "tls.probe_done": {
+    "tls.inspect_done": {
         "en": "trusted CA's",
         "en-tts": "trusted CA's"
     },

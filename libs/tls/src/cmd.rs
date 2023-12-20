@@ -69,23 +69,23 @@ pub fn shellchat<'a>(
             modals.finish_progress().expect("finish progress");
             write!(ret, "{} {}", count, t!("tls.mozilla_done", locales::LANG)).ok();
         }
-        // probe establishes a tls connection to the supplied host, extracts the
+        // inspect establishes a tls connection to the supplied host, extracts the
         // certificates offered and immediately closes the connection.
         // The certificates are presented by modal to the user, and saved to the
         // pddb if trusted.
-        Some("probe") => {
+        Some("inspect") => {
             log::set_max_level(log::LevelFilter::Info);
             let target = match tokens.next() {
                 Some(target) => target,
                 None => "betrusted.io",
             };
             let tls = Tls::new();
-            match tls.probe(target) {
-                Ok(count) => write!(ret, "{} {}", count, t!("tls.probe_done", locales::LANG)).ok(),
+            match tls.inspect(target) {
+                Ok(count) => write!(ret, "{} {}", count, t!("tls.inspect_done", locales::LANG)).ok(),
                 Err(_) => write!(
                     ret,
                     "{} {target}",
-                    t!("tls.probe_fail_servername", locales::LANG)
+                    t!("tls.inspect_fail_servername", locales::LANG)
                 )
                 .ok(),
             };
@@ -170,8 +170,8 @@ pub fn shellchat<'a>(
             write!(ret, "\tmozilla\t{}\n", t!("tls.mozilla_cmd", locales::LANG)).ok();
             write!(
                 ret,
-                "\tprobe <host>\t{}\n",
-                t!("tls.probe_cmd", locales::LANG)
+                "\tinspect <host>\t{}\n",
+                t!("tls.inspect_cmd", locales::LANG)
             )
             .ok();
             write!(
