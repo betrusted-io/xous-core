@@ -21,7 +21,7 @@ pub fn shellchat<'a>(
         Some("deleteall") => {
             log::info!("starting TLS delete certificates");
             let tls = Tls::new();
-            let count = tls.del_all_cert().unwrap();
+            let count = tls.del_all_rota().unwrap();
             write!(ret, "{} {}", count, t!("tls.deleteall_done", locales::LANG)).ok();
             log::info!("finished TLS delete certificates");
         }
@@ -62,7 +62,7 @@ pub fn shellchat<'a>(
             count = 0;
             let tls = Tls::new();
             for rota in rotas {
-                tls.save_cert(&rota).unwrap_or_else(|e| log::warn!("{e}"));
+                tls.save_rota(&rota).unwrap_or_else(|e| log::warn!("{e}"));
                 modals.update_progress(count).expect("no progress");
                 count += 1;
             }

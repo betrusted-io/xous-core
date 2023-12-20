@@ -84,7 +84,7 @@ impl Tls {
                     .map(|i| &certificates[*i].1)
                     .map(|x509| RustlsOwnedTrustAnchor::from(x509))
                     .for_each(|rota| {
-                        self.save_cert(&rota).unwrap_or_else(|e| {
+                        self.save_rota(&rota).unwrap_or_else(|e| {
                             log::warn!("failed to save cert: {e}");
                             modals
                                 .show_notification(
@@ -109,7 +109,7 @@ impl Tls {
     ///
     /// the number of trust-anchors deleted
     ///
-    pub fn del_all_cert(&self) -> Result<usize, Error> {
+    pub fn del_all_rota(&self) -> Result<usize, Error> {
         let count = match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
             Ok(list) => list.len(),
             Err(_) => 0,
@@ -137,7 +137,7 @@ impl Tls {
     ///
     /// * `key` - the pddb-key containing the unwanted trust-anchor
     ///
-    pub fn del_cert(&self, key: &str) -> Result<(), Error> {
+    pub fn del_rota(&self, key: &str) -> Result<(), Error> {
         match self.pddb.delete_key(TLS_TRUSTED_DICT, key, None) {
             Ok(_) => {
                 log::info!("Deleted {}:{}\n", TLS_TRUSTED_DICT, key);
@@ -157,7 +157,7 @@ impl Tls {
     ///
     /// * `ta` - a trusted trust-anchor
     ///
-    pub fn save_cert(&self, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
+    pub fn save_rota(&self, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
         let key = ta.pddb_key();
         match self.pddb.get(
             TLS_TRUSTED_DICT,
@@ -206,7 +206,7 @@ impl Tls {
     ///
     /// * `key` - pddb key holding the trust-anchor
     ///
-    pub fn get_cert(&self, key: &str) -> Option<RustlsOwnedTrustAnchor> {
+    pub fn get_rota(&self, key: &str) -> Option<RustlsOwnedTrustAnchor> {
         match self.pddb.get(
             TLS_TRUSTED_DICT,
             key,
@@ -250,7 +250,7 @@ impl Tls {
         match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
             Ok(list) => list
                 .iter()
-                .map(|key| self.get_cert(&key))
+                .map(|key| self.get_rota(&key))
                 .filter_map(|rota| rota)
                 .collect::<Vec<RustlsOwnedTrustAnchor>>(),
             Err(e) => {
@@ -268,7 +268,7 @@ impl Tls {
             Ok(list) => {
                 let rota = list
                     .iter()
-                    .map(|key| self.get_cert(&key))
+                    .map(|key| self.get_rota(&key))
                     .filter_map(|rota| rota)
                     .map(|t| Into::<rustls::OwnedTrustAnchor>::into(t));
                 root_store.add_trust_anchors(rota);
