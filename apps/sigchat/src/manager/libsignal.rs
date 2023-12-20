@@ -1,6 +1,36 @@
 // this is a stub for a wrapped libsignal
 
 
+// use org.whispersystems.signalservice.internal.crypto.PrimaryProvisioningCipher;
+pub struct PrimaryProvisioningCipher{}
+impl PrimaryProvisioningCipher {
+    pub fn new(_stub: Option<String>) ->  PrimaryProvisioningCipher {
+         PrimaryProvisioningCipher {}
+    }
+    pub fn decrypt(&self, _temp_identity: IdentityKeyPair, bytes: Vec<u8>) -> ProvisionMessage {
+        //log::info!("temp_identity: {:?}", temp_identity);
+        log::info!("raw uuid Protocol Buffer: {:?}", bytes);
+        ProvisionMessage {
+            number : "STUB number".to_string(),
+            aci : "STUB number".to_string(),
+            pni : "STUB number".to_string(),
+         } 
+    }
+}
+
+pub struct ProvisionMessage {
+    pub number: String,
+    pub aci:String,
+    pub pni:String,
+}
+impl ProvisionMessage {
+    pub fn decode(temp_identity: IdentityKeyPair, bytes: Vec<u8>) -> ProvisionMessage {
+        let primary_provisioning_cipher = PrimaryProvisioningCipher::new(None);
+        primary_provisioning_cipher.decrypt(temp_identity, bytes)
+    }
+}
+
+////////////////////////////////////////////////////////
 
 // https://github.com/signalapp/Signal-Android/blob/d2053d2db7b1b930b7058ce5506dd6037ac3b808/libsignal-service/src/main/protowire/Provisioning.proto#L13C9-L15
 //

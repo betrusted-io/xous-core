@@ -175,8 +175,13 @@ impl Manager {
                                 match ws.read() {
                                     Ok(Message::Binary(registration)) => {
                                         log::info!("raw registration ProtoBuffer: {:?}", registration);
-                                        // TODO complete registration
+                                        log::info!("device name: {name}");
                                         ws.close();
+                                        let provisioning_message = libsignal::ProvisionMessage::decode(identity_key_pair, registration);
+                                        log::info!("provisioning_message.number: {}", provisioning_message.number);
+                                        log::info!("provisioning_message.aci: {}", provisioning_message.aci);
+                                        log::info!("provisioning_message.pni: {}", provisioning_message.pni);
+                                        // TODO complete registration
                                         Ok(true)
                                     }
                                     Ok(_) => { 
