@@ -2,6 +2,23 @@
 
 
 
+// https://github.com/signalapp/Signal-Android/blob/d2053d2db7b1b930b7058ce5506dd6037ac3b808/libsignal-service/src/main/protowire/Provisioning.proto#L13C9-L15
+//
+// message ProvisioningUuid {
+//   optional string uuid = 1;
+// }
+pub struct ProvisioningUuid {
+    pub id : String,
+}
+impl ProvisioningUuid {
+    pub fn decode(bytes: Vec<u8>) -> ProvisioningUuid {
+        log::info!("raw uuid Protocol Buffer: {:?}", bytes);
+        ProvisioningUuid {id : "TODO decode uuid Protocol Buffer".to_string()} 
+    }
+}
+
+//////////////////////////////////////////////////////////
+
 // use org.signal.libsignal.protocol.IdentityKey;
 pub struct IdentityKey {
     pub key:String,

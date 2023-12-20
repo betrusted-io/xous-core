@@ -154,13 +154,12 @@ impl Manager {
                 log::info!("provisioning websocket established to {host}");
                 match ws.read() {
                     Ok(Message::Binary(uuid)) => {
-                        log::info!("raw uuid ProtoBuffer: {:?}", uuid);
-                        let uuid = "TODO decode uuid ProtoBuffer";
+                        let uuid = libsignal::ProvisioningUuid::decode(uuid).id.clone();
                         let identity_key_pair = libsignal::generate_identity_key_pair();
                         let pub_key = identity_key_pair.djb_identity_key.key.clone();
                         match url::Url::parse_with_params(
                             "sgnl://linkdevice",
-                            &[("uuid", &uuid), ("pub_key", &pub_key.as_str())],
+                            &[("uuid", &uuid.as_str()), ("pub_key", &pub_key.as_str())],
                         ) {
                             Ok(device_link_uri) => {
                                 log::info!("device_link_uri: {device_link_uri}");
