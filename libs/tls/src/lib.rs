@@ -260,6 +260,41 @@ impl Tls {
         }
     }
 
+    pub fn is_trusted_cert(&self, cert: Certificate) -> bool {
+        match X509Certificate::from_der(cert.as_ref()) {
+            Ok(result) => self.is_trusted_x509(&result.1),
+            Err(e) => {
+                log::warn!("failed to get x509 from Certificate: {e}");
+                false
+            }
+        }
+    }
+
+    pub fn is_trusted_x509(&self, x509: &X509Certificate) -> bool {
+        let ta = RustlsOwnedTrustAnchor::from(x509);
+        let key = ta.pddb_key();
+        match self.pddb.get(
+            TLS_TRUSTED_DICT,
+            &key,
+            None,
+            false,
+            false,
+            None,
+            None::<fn()>,
+        ) {
+            // Ok(_) => true,
+            // Err(_) => false,
+            Ok(_) => {
+                log::info!("trusted: {key}");
+                true
+            }
+            Err(_) => {
+                log::info!("UNtrusted: {key}");
+                false
+            }
+        }
+    }
+
     /// Returns a RootCertStore containing all trusted trust-anchors
     ///
     pub fn root_store(&self) -> RootCertStore {
