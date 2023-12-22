@@ -391,6 +391,37 @@ impl Tls {
         }
     }
 
+    /// Check if host offers a trusted Certificate, and optionally inspect if none trusted.
+    ///
+    /// Probes the host and checks if any of the Certificates are trusted. If none are
+    /// trusted, and inspect==true, then the offered certificates are presented in a modal.
+    /// The user can optionally save trusted certificates to the pddb.
+    ///
+    /// # Arguments
+    /// * `host` - the target tls site (i.e. betrusted.io)
+    /// * `inspect` - if no trusted certificates then inspect those offered
+    ///
+    /// # Returns
+    /// true if the user trusts at least one of the Certificates offered by the host.
+    ///
+    pub fn accessible(&self, host: &str, inspect: bool) -> bool {
+        match self.probe(host) {
+            Ok(certs) => {
+                match certs
+                    .iter()
+                    .find(|&cert| self.is_trusted_cert(cert.clone()))
+                {
+                    Some(_) => true,
+                    None => inspect && (self.trust_modal(certs) > 0),
+                }
+            }
+            Err(e) => {
+                log::warn!("failed to probe {host}: {e}");
+                false
+            }
+        }
+    }
+
     pub fn client_config(&self) -> ClientConfig {
         rustls::ClientConfig::builder()
             .with_safe_defaults()
