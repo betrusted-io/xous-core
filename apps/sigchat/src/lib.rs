@@ -177,26 +177,15 @@ impl<'a> SigChat<'a> {
             .set_status_text(t!("sigchat.status.probing", locales::LANG));
         self.chat.set_busy_state(true);
         let tls = Tls::new();
-        match tls.probe(host) {
-            Ok(certs) => {
-                if certs.len() == 0 {
-                    self.modals
-                        .show_notification(t!("sigchat.account.abort", locales::LANG), None)
-                        .expect("abort failed");
-                    self.chat.set_busy_state(false);
-                    false
-                } else {
-                    self.chat.set_busy_state(false);
-                    true
-                }
-            }
-            Err(e) => {
-                self.chat.set_busy_state(false);
-                self.modals
-                    .show_notification(&format!("{}", e), None)
-                    .expect("qrcode failed");
-                false
-            }
+        if tls.accessible(host, true) { 
+            self.chat.set_busy_state(false);
+            true
+        } else {
+            self.modals
+                .show_notification(t!("sigchat.account.abort", locales::LANG), None)
+                .expect("abort failed");
+            self.chat.set_busy_state(false);
+            false
         }
     }
 
