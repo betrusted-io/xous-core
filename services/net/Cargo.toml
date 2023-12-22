@@ -33,14 +33,12 @@ pddb = {path = "../pddb"}
 xous-semver = "0.1.2"
 
 [dependencies.smoltcp]
-# some historical notes for development on branches in the future
+# smoltcp is pinned to a fork on betrusted-io until a new release is available.
 # path = "../../../smoltcp"
-git = "https://github.com/smoltcp-rs/smoltcp.git"
-branch = "main"
-#git = "https://github.com/betrusted-io/smoltcp.git"
-#rev = "35c8ec3d30c846442a1faae01fb0537641aef898"
-# 0.8.1 drops the rand_core dep and doesn't have the breaking IPv4 change (see issue #613)
-# version = "0.8.1"
+git = "https://github.com/betrusted-io/smoltcp.git"
+rev = "8b59d57d9e392d704fdeb5029d691b9155a3687a"
+# branch = "main"
+
 default-features = false
 features = [
   "std", "log", # needed for `cargo test --no-default-features --features default` :/
@@ -49,12 +47,6 @@ features = [
   "proto-ipv4", "proto-ipv6",
   "socket-raw", "socket-icmp", "socket-udp", "socket-tcp",
 ]
-# tracking main branch changes:
-# works with:
-#  - edfdb23243a973d458397a2b4e76f527bacb1fd6
-# broken at:
-#  - e893a17fc761a9c1b34647ff09102993336cc341 (can't get past the first ping)
-#  - 9624adf20cbeaf627e907a87b4fdf74e8f3154fb (broken after the third attempt to ping?)
 
 [features]
 precursor = ["utralib/precursor"]
