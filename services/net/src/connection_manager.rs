@@ -145,7 +145,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             pumping.store(true, Ordering::SeqCst);
                             try_send_message(main_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).ok();
                             tt.sleep_ms(interval.load(Ordering::SeqCst) as usize).unwrap();
-                            send_message(self_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                            try_send_message(self_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).ok();
                             pumping.store(false, Ordering::SeqCst);
                         }
                     }),
