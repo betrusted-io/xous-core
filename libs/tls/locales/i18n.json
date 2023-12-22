@@ -1,7 +1,7 @@
 {
     "tls.check_trust_prompt": {
-        "en": "Do you trust any of these certificate authorities?",
-        "en-tts": "Do you trust any of these certificate authorities?"
+        "en": "Please select trusted certificate authorities.",
+        "en-tts": "Please select trusted certificate authorities."
     },
     "tls.cmd_help": {
         "en": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls inspect <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser.",
@@ -46,10 +46,6 @@
     "tls.probe_invalid_certificate": {
         "en": "Invalid certificate : ",
         "en-tts": "Invalid certificate : "
-    },
-    "tls.probe_help_unknown_issuer": {
-        "en": "you may choose to trust a known CA",
-        "en-tts": "you may choose to trust a known CA"
     },
     "tls.probe_help_not_valid_yet": {
         "en": "error maybe caused by an improperly set clock",
