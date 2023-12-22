@@ -425,6 +425,11 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Fix validator to accept `tz_offset` == 0 as valid.
 - Rust 1.74 rolled out. Xous now has much more native `std` support in mainline Rust, thanks to a huge effort by @xobs
   - Fix regressions in libstd `lend_impl` and PDDB `WriteKeyStd`
+  - Fix bug in `Seek`
+- Fix issue with `mpsc::channel` implementation that would lead to threads hanging under a race condition where `unpark()` is called in the middle of a `park_timeout()` call
+- Cleanup areas where `net` could block on a hung `connection_manager`
+- Stop running CI on `betrusted-soc` commits: there have been no changes to the design, all of the recent commits are fixing breaking changes in CI tooling. We should not force users to update their `soc` for a design that hasn't actually changed. Thus, users may note that the `soc` commit is not parallel with HEAD on `main`. CI & release staging will from now on be manually triggered only when an actual design change is made.
+- `smoltcp` is pinned to a branch. A lot of significant fixes have occurred since their last release in June, and we'd like to get this baked into 0.9.15. It's unclear when they will tag out a release, so this is a temporary fix to allow us to move ahead. Will revert to an officially blessed release once it's available!
 
 ## Roadmap
 - Lots of testing and bug fixes
