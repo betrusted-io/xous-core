@@ -49,6 +49,12 @@ features = [
   "proto-ipv4", "proto-ipv6",
   "socket-raw", "socket-icmp", "socket-udp", "socket-tcp",
 ]
+# tracking main branch changes:
+# works with:
+#  - edfdb23243a973d458397a2b4e76f527bacb1fd6
+# broken at:
+#  - e893a17fc761a9c1b34647ff09102993336cc341 (can't get past the first ping)
+#  - 9624adf20cbeaf627e907a87b4fdf74e8f3154fb (broken after the third attempt to ping?)
 
 [features]
 precursor = ["utralib/precursor"]
