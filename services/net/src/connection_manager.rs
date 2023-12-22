@@ -223,7 +223,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                         wifi_stats_cache = WlanStatus::from_ipc(WlanStatusIpc::default());
                         for &sub in status_subscribers.keys() {
                             let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
-                            buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                            match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
+                                Err(e) => log::warn!("Couldn't update wifi state subscriber: {:?}", e),
+                                _ => (),
+                            }
                         }
                         wifi_state = WifiState::Error;
                     }
@@ -240,7 +243,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 wifi_stats_cache = WlanStatus::from_ipc(WlanStatusIpc::default());
                                 for &sub in status_subscribers.keys() {
                                     let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
-                                    buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                                    match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
+                                        Err(e) => log::warn!("Couldn't update wifi state subscriber: {:?}", e),
+                                        _ => (),
+                                    }
                                 }
                             }
                             WifiState::Error => {
@@ -332,7 +338,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 log::debug!("stats update: {:?}", wifi_stats_cache);
                                 for &sub in status_subscribers.keys() {
                                     let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
-                                    buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                                    match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
+                                        Err(e) => log::warn!("Couldn't update wifi state subscriber: {:?}", e),
+                                        _ => (),
+                                    }
                                 }
                                 if wifi_stats_cache.ipv4.dhcp == com_rs::DhcpState::Bound {
                                     wifi_state = WifiState::Connected;
@@ -384,7 +393,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             wifi_stats_cache = WlanStatus::from_ipc(WlanStatusIpc::default());
                             for &sub in status_subscribers.keys() {
                                 let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
-                                buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                                match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
+                                    Err(e) => log::warn!("Couldn't update wifi state subscriber: {:?}", e),
+                                    _ => (),
+                                }
                             }
                         }
 
@@ -456,7 +468,11 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                     log::debug!("stats update: {:?}", wifi_stats_cache);
                                     for &sub in status_subscribers.keys() {
                                         let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
-                                        buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                                        match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
+                                            // just issue a warning -- this isn't a hard error because subscribers can disappear, but good to know this is happening.
+                                            Err(e) => log::warn!("Couldn't update wifi state subscriber: {:?}", e),
+                                            _ => (),
+                                        };
                                     }
                                 }
                                 WifiState::Off => {
@@ -480,7 +496,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             log::debug!("stats update: {:?}", wifi_stats_cache);
                             for &sub in status_subscribers.keys() {
                                 let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
-                                buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                                match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
+                                    Err(e) => log::warn!("Couldn't update wifi state subscriber: {:?}", e),
+                                    _ => (),
+                                }
                             }
                         }
                     }
@@ -587,7 +606,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 log::debug!("stats update: {:?}", wifi_stats_cache);
                 for &sub in status_subscribers.keys() {
                     let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
-                    buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                    match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
+                        Err(e) => log::warn!("Couldn't update wifi state subscriber: {:?}", e),
+                        _ => (),
+                    }
                 }
                 if !run.swap(true, Ordering::SeqCst) {
                     if !pumping.load(Ordering::SeqCst) { // avoid having multiple pump messages being sent if a user tries to rapidly toggle the run/stop switch
@@ -612,7 +634,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 log::debug!("stats update: {:?}", wifi_stats_cache);
                 for &sub in status_subscribers.keys() {
                     let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
-                    buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                    match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
+                        Err(e) => log::warn!("Couldn't update wifi state subscriber: {:?}", e),
+                        _ => (),
+                    }
                 }
                 if !run.swap(true, Ordering::SeqCst) {
                     if !pumping.load(Ordering::SeqCst) { // avoid having multiple pump messages being sent if a user tries to rapidly toggle the run/stop switch
@@ -640,7 +665,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 log::debug!("stats update: {:?}", wifi_stats_cache);
                 for &sub in status_subscribers.keys() {
                     let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
-                    buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                    match buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()) {
+                        Err(e) => log::warn!("Couldn't update wifi state subscriber: {:?}", e),
+                        _ => (),
+                    }
                 }
             }
             Some(ConnectionManagerOpcode::EcReset) => msg_scalar_unpack!(msg, _, _, _, _, {
