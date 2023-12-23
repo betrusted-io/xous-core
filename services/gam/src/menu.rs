@@ -12,7 +12,7 @@ use num_traits::*;
 pub use graphics_server::api::{PixelColor, TextBounds, DrawStyle};
 
 #[cfg(feature = "tts")]
-use tts_frontend::*;
+use tts_frontend::TtsFrontend;
 #[derive(Debug)]
 pub struct Menu<'a> {
     pub sid: xous::SID,
