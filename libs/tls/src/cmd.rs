@@ -81,7 +81,9 @@ pub fn shellchat<'a>(
             };
             let tls = Tls::new();
             match tls.inspect(target) {
-                Ok(count) => write!(ret, "{} {}", count, t!("tls.inspect_done", locales::LANG)).ok(),
+                Ok(count) => {
+                    write!(ret, "{} {}", count, t!("tls.inspect_done", locales::LANG)).ok()
+                }
                 Err(_) => write!(
                     ret,
                     "{} {target}",

@@ -260,6 +260,16 @@ impl Tls {
         }
     }
 
+    /// Checks if the rustls Certificate provided is trusted (saved in pddb)
+    ///
+    /// # Arguments
+    ///
+    /// * `cert` - an rustls Certificate to be checked
+    ///
+    /// # Returns
+    ///
+    /// true if the certificate is saved in the TLS_TRUSTED_DICT in the pddb
+    ///
     pub fn is_trusted_cert(&self, cert: Certificate) -> bool {
         match X509Certificate::from_der(cert.as_ref()) {
             Ok(result) => self.is_trusted_x509(&result.1),
@@ -270,6 +280,16 @@ impl Tls {
         }
     }
 
+    /// Checks if the x509 Certificate provided is trusted (saved in pddb)
+    ///
+    /// $ Arguments
+    ///
+    /// * `x509` - an x509 Certificate to be checked
+    ///
+    /// # Returns
+    ///
+    /// true if the certificate is saved in the TLS_TRUSTED_DICT in the pddb
+    ///
     pub fn is_trusted_x509(&self, x509: &X509Certificate) -> bool {
         let ta = RustlsOwnedTrustAnchor::from(x509);
         let key = ta.pddb_key();
@@ -282,8 +302,6 @@ impl Tls {
             None,
             None::<fn()>,
         ) {
-            // Ok(_) => true,
-            // Err(_) => false,
             Ok(_) => {
                 log::info!("trusted: {key}");
                 true
@@ -324,9 +342,11 @@ impl Tls {
     /// user for examination.
     ///
     /// # Arguments
+    ///
     /// * `host` - the target tls site (i.e. betrusted.io)
     ///
     /// # Returns
+    ///
     /// The TLS chain of trust for the host
     ///
     pub fn probe(&self, host: &str) -> Result<Vec<Certificate>, Error> {
@@ -377,9 +397,12 @@ impl Tls {
     /// The user can optionally save trusted certificates to the pddb.
     ///
     /// # Arguments
+    ///
     /// * `host` - the target tls site (i.e. betrusted.io)
     ///
-    /// # Returns the number of trusted Certificates offered by the host
+    /// # Returns
+    ///
+    /// the number of trusted Certificates offered by the host
     ///
     pub fn inspect(&self, host: &str) -> Result<usize, Error> {
         match self.probe(host) {
@@ -398,10 +421,12 @@ impl Tls {
     /// The user can optionally save trusted certificates to the pddb.
     ///
     /// # Arguments
+    ///
     /// * `host` - the target tls site (i.e. betrusted.io)
     /// * `inspect` - if no trusted certificates then inspect those offered
     ///
     /// # Returns
+    ///
     /// true if the user trusts at least one of the Certificates offered by the host.
     ///
     pub fn accessible(&self, host: &str, inspect: bool) -> bool {
@@ -429,14 +454,31 @@ impl Tls {
             .with_no_client_auth()
     }
 
-    pub fn stream_owned(&self, host: &str, sock: TcpStream) -> Result<rustls::StreamOwned<ClientConnection, TcpStream>, Error> {
+    /// Construct a tls-stream on the tcp-stream provided
+    ///
+    /// # Arguments
+    ///
+    /// * `host` - the host end-point of the stream
+    /// * `sock` - a tcp-stream connected to host
+    ///
+    /// # Returns
+    ///
+    /// an owned rusttls stream on the tcp-stream provided
+    pub fn stream_owned(
+        &self,
+        host: &str,
+        sock: TcpStream,
+    ) -> Result<rustls::StreamOwned<ClientConnection, TcpStream>, Error> {
         match rustls::ClientConnection::new(
             Arc::new(self.client_config()),
             host.try_into().expect("failed url host_str"),
         ) {
             Ok(conn) => Ok(rustls::StreamOwned::new(conn, sock)),
-            Err(_) => Err(Error::new(ErrorKind::Other, "failed to configure client connection"))
-        }        
+            Err(_) => Err(Error::new(
+                ErrorKind::Other,
+                "failed to configure client connection",
+            )),
+        }
     }
 }
 
