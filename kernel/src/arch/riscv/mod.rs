@@ -6,28 +6,28 @@ use riscv::register::{satp, sie, sstatus};
 pub mod exception;
 pub mod irq;
 pub mod mem;
+pub mod panic;
 pub mod process;
 pub mod syscall;
-pub mod panic;
 
 pub use process::Thread;
 
-#[cfg(any(feature="precursor", feature="renode"))]
-use utralib::generated::*;
-#[cfg(any(feature="precursor", feature="renode"))]
-use xous_kernel::{MemoryFlags, MemoryType, PID};
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 use crate::mem::MemoryManager;
-#[cfg(any(feature="cramium-soc", feature="cramium-fpga"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
+use utralib::generated::*;
+#[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
 use xous_kernel::PID;
+#[cfg(any(feature = "precursor", feature = "renode"))]
+use xous_kernel::{MemoryFlags, MemoryType, PID};
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub const WFI_KERNEL: Wfi = Wfi {
     // the manually chosen virtual address has to be in the top 4MiB as it is the only page shared among all processes
     base: 0xffcd_0000 as *mut usize, // see https://github.com/betrusted-io/xous-core/blob/master/docs/memory.md
 };
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub struct Wfi {
     pub base: *mut usize,
 }
@@ -37,7 +37,7 @@ pub fn current_pid() -> PID {
 }
 
 pub fn init() {
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     MemoryManager::with_mut(|memory_manager| {
         memory_manager
             .map_range(
@@ -50,9 +50,9 @@ pub fn init() {
             )
             .expect("unable to map WFI")
     });
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     let mut wfi_kernel_csr = CSR::new(WFI_KERNEL.base as *mut u32);
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     wfi_kernel_csr.wfo(utra::wfi::IGNORE_LOCKED_IGNORE_LOCKED, 1);
 
     unsafe {
@@ -64,17 +64,17 @@ pub fn init() {
 /// Put the core to sleep until an interrupt hits. Returns `true`
 /// to indicate the kernel should not exit.
 pub fn idle() -> bool {
-    #[cfg(any(feature="precursor", feature="renode"))]
-    let mut wfi_kernel_csr = CSR::new(WFI_KERNEL.base as *mut u32);
-
     // Issue `wfi`. This will return as soon as an external interrupt
     // is available.
-    #[cfg(any(feature="cramium-fpga", feature="cramium-soc"))]
+    #[cfg(any(feature = "cramium-fpga", feature = "cramium-soc", feature = "renode"))]
     // "traditional" path for stopping a clock
-    unsafe { riscv::asm::wfi() };
+    unsafe {
+        riscv::asm::wfi()
+    };
 
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor"))]
     {
+        let mut wfi_kernel_csr = CSR::new(WFI_KERNEL.base as *mut u32);
         // this invokes Precusor-SoC specific path to gate clocks:
         // 1. ignore_locked prevents the chip from going into reset if the PLL goes unlocked
         wfi_kernel_csr.wfo(utra::wfi::IGNORE_LOCKED_IGNORE_LOCKED, 1);
