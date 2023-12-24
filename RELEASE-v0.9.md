@@ -437,6 +437,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - refactor `rwlock` with more robust error handling
   - make `once` thread-safe
   - fix `thread_local_key`, `thread_parking`, `senres`
+- work around codec/rtc conflict on I2C bus with a delay on codec init (defer full fix to resolution of #467 on future release)
 
 ## New in 0.9.16
 
