@@ -33,10 +33,11 @@ pddb = {path = "../pddb"}
 xous-semver = "0.1.2"
 
 [dependencies.smoltcp]
-# smoltcp is pinned to a fork on betrusted-io until a new release is available.
+version = "0.11.0"
+
 # path = "../../../smoltcp"
-git = "https://github.com/betrusted-io/smoltcp.git"
-rev = "8b59d57d9e392d704fdeb5029d691b9155a3687a"
+# git = "https://github.com/betrusted-io/smoltcp.git"
+# rev = "8b59d57d9e392d704fdeb5029d691b9155a3687a"
 # branch = "main"
 
 default-features = false
