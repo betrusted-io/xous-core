@@ -124,6 +124,7 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
                     i2c_mutex_acquired = true;
                     xous::return_scalar(msg.sender, 1).ok();
                 } else {
+                    log::debug!("i2c mutex: blocking {:x?}", msg.sender);
                     blocking_callers.push(msg.sender);
                 }
             },
@@ -149,6 +150,7 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
                 // also guaranteeing that the ack happens before we allow the next thread to proceed
                 if let Some(next) = maybe_next {
                     assert!(i2c_mutex_acquired == true, "logic bug in passing mutex acquisition to next thread");
+                    log::debug!("i2c mutex: unblocking {:x?}", next);
                     xous::return_scalar(next, 1).ok(); // this unblocks the waiting thread, and immediately hands the quantum to that thread
                 }
             }
