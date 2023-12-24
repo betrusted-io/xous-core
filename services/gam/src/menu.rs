@@ -468,10 +468,12 @@ use std::sync::{Arc, Mutex};
 /// If you want to modify the menu, pass it a Some(xous::SID) which is the private server
 /// address of the management interface.
 pub fn menu_matic(items: Vec::<MenuItem>, menu_name: &'static str, maybe_manager: Option<xous::SID>) -> Option<MenuMatic> {
-    let menu = Arc::new(Mutex::new(Menu::new(menu_name)));
+    log::debug!("building menu '{:?}'", menu_name);
+    let mut naked_menu = Menu::new(menu_name);
     for item in items {
-        menu.lock().unwrap().add_item(item);
+        naked_menu.add_item(item);
     }
+    let menu = Arc::new(Mutex::new(naked_menu));
     let _ = thread::spawn({
         let menu = menu.clone();
         let sid = menu.lock().unwrap().sid.clone();
