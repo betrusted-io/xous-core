@@ -175,6 +175,7 @@ fn main() -> ! {
         }
     });
     let mut codec = codec::Codec::new(&xns).unwrap();
+    tt.sleep_ms(150).unwrap(); // de-congest startup sequence; TODO: make this not a race condition with RTC access. might be related to #467 (insufficiently broad locking of the I2C bus)
     codec.setup_8k_stream().expect("couldn't setup stream");
     tt.sleep_ms(50).unwrap();
     codec.set_speaker_volume(VolumeOps::Set, Some(0.0)).unwrap();
