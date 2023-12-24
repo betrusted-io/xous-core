@@ -62,8 +62,9 @@ fn wrapped_main() -> ! {
     let mut audio_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     loop {
         let mut msg = xous::receive_message(codec_sid).unwrap();
-        //log::trace!("got message {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let op: Option<api::Opcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", op);
+        match op {
             Some(api::Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 codec.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
