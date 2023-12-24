@@ -52,10 +52,13 @@ namespace Antmicro.Renode.Peripherals.Timers.Betrusted
         private void OnTick()
         {
             Interlocked.Increment(ref counter);
-            if (((uint)counter) >= this.reset_target)
+            if ((((uint)counter) >= reset_target) && RebootOnExpiry)
             {
                 this.Log(LogLevel.Error, "Watchdog timer expired -- requesting system reset");
-                this.machine.RequestReset();
+                machine.RequestReset();
+            } else if (((uint)counter) == reset_target)
+            {
+                this.Log(LogLevel.Error, "Watchdog timer expired -- not rebooting because RebootOnExpiry is false");
             }
         }
 
@@ -79,7 +82,7 @@ namespace Antmicro.Renode.Peripherals.Timers.Betrusted
         // Convert "approximately 65MHz" ticks to milliseconds
         private uint XilinxClockToMs(ulong xilinx_clocks)
         {
-            uint adjusted = (uint)((xilinx_clocks * 100) / 65000000);
+            uint adjusted = (uint)(xilinx_clocks * 100 / 65000000);
             this.Log(LogLevel.Debug, "Watchdog timer set for {0}. Will expire after {1} msec", xilinx_clocks, adjusted * 10);
             return adjusted;
         }
@@ -96,6 +99,7 @@ namespace Antmicro.Renode.Peripherals.Timers.Betrusted
         private uint reset_target;
         private bool enabled;
         private readonly DoubleWordRegisterCollection registers;
+        public bool RebootOnExpiry = true;
         private enum Registers
         {
             Watchdog = 0x0,
