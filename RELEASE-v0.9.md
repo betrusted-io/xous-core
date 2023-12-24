@@ -438,6 +438,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - make `once` thread-safe
   - fix `thread_local_key`, `thread_parking`, `senres`
 
+## New in 0.9.16
+
 ## Roadmap
 - Lots of testing and bug fixes
 - Fixing performance issues in `pddb`
