@@ -239,9 +239,50 @@ impl Account {
         get(&self.pddb, &self.pddb_dict, key)
     }
 
-    #[allow(dead_code)]
-    fn set(&self, key: &str, value: Option<&str>) -> Result<(), Error> {
-        set(&self.pddb, &self.pddb_dict, key, value)
+
+    // Sets the value of a pddb_key / field in the Account
+    //
+    // To guarantee consistency, the value is saved to the pddb and,
+    // on success, set to the corresponding field in the Account struct.
+    //
+    // # Arguments
+    // * `key` - the pddb_key corresponding to the Account field
+    // * `value` - the value to save into the Account field (and pddb)
+    //
+    // # Returns
+    //
+    // Ok()
+    //
+    fn set(&mut self, key: &str, value: Option<&str>) -> Result<(), Error> {
+        let owned_value = value.map(str::to_string);
+        match set(&self.pddb, &self.pddb_dict, key, value) {
+            Ok(()) => match key {
+                ACI_IDENTITY_PRIVATE_KEY => Ok(self.aci_identity_private = owned_value),
+                ACI_IDENTITY_PUBLIC_KEY => Ok(self.aci_identity_public = owned_value),
+                ACI_SERVICE_ID_KEY => Ok(self.aci_service_id = owned_value),
+                DEVICE_ID_KEY => Ok(self.device_id = owned_value.unwrap().parse().unwrap()),
+                IS_MULTI_DEVICE_KEY => {
+                    Ok(self.is_multi_device = owned_value.unwrap().parse().unwrap())
+                }
+                NUMBER_KEY => Ok(self.number = owned_value),
+                PASSWORD_KEY => Ok(self.password = owned_value),
+                PIN_MASTER_KEY_KEY => Ok(self.pin_master_key = owned_value),
+                PNI_IDENTITY_PRIVATE_KEY => Ok(self.pni_identity_private = owned_value),
+                PNI_IDENTITY_PUBLIC_KEY => Ok(self.pni_identity_public = owned_value),
+                PNI_SERVICE_ID_KEY => Ok(self.pni_service_id = owned_value),
+                PROFILE_KEY_KEY => Ok(self.profile_key = owned_value),
+                REGISTERED_KEY => Ok(self.registered = owned_value.unwrap().parse().unwrap()),
+                SERVICE_ENVIRONMENT_KEY => Ok(self.service_environment =
+                    ServiceEnvironment::from_str(&value.unwrap()).unwrap()),
+                STORAGE_KEY_KEY => Ok(self.storage_key = owned_value),
+                _ => {
+                    log::warn!("invalid key: {key}");
+                    let _ = &self.pddb.delete_key(&self.pddb_dict, &key, None);
+                    Err(Error::from(ErrorKind::NotFound))
+                }
+            },
+            Err(e) => Err(e),
+        }
     }
 }
 
