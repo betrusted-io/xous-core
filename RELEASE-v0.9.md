@@ -438,6 +438,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - make `once` thread-safe
   - fix `thread_local_key`, `thread_parking`, `senres`
 - work around codec/rtc conflict on I2C bus with a delay on codec init (defer full fix to resolution of #467 on future release)
+- Fix an issue where uninitialized memory is being returned from the kernel due to a pointer assumed to be pointing to `usize` actually pointing to `u8`, thus having its length incorrectly divided by the size of a `usize`
 
 ## New in 0.9.16
 
