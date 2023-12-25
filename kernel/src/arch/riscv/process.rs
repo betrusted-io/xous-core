@@ -414,11 +414,17 @@ impl Process {
         // Create the new context and set it to run in the new address space.
         let pid = self.pid.get();
         let thread = self.thread_mut(new_tid);
-        // println!("Setting up thread {}, pid {}", new_tid, pid);
         let sp = setup.stack.as_ptr() as usize + setup.stack.len();
         if sp <= 16 {
             return Err(xous_kernel::Error::BadAddress);
         }
+        // Zero out the thread registers, including special ones like `$tp`.
+        // This should already have been done by the destructor, but do it
+        // again anyway.
+        for val in &mut thread.registers {
+            *val = 0;
+        }
+        thread.sepc = 0;
         crate::arch::syscall::invoke(
             thread,
             pid == 1,
