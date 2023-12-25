@@ -1,5 +1,6 @@
 mod service_environment;
 
+use crate::manager::libsignal::{DeviceNameUtil, ProvisionMessage};
 use pddb::Pddb;
 use service_environment::ServiceEnvironment;
 use std::io::{Error, ErrorKind, Read, Write};
@@ -102,7 +103,6 @@ impl Account {
         set(&pddb, pddb_dict, STORE_MANIFEST_KEY, None)?;
         Account::read(pddb_dict)
     }
-
 
     // retrieves an existing Account from the pddb
     //
@@ -217,6 +217,64 @@ impl Account {
         Ok(())
     }
 
+    pub fn link(
+        &mut self,
+        device_name: &str,
+        provisioning_msg: ProvisionMessage,
+    ) -> Result<bool, Error> {
+        // TODO complete link pre-checks
+        // Check if this device can be relinked
+        // check not primary
+        // check not registered in another environment
+        // check account state with server
+
+        let aci = provisioning_msg.aci;
+        self.set(ACI_IDENTITY_PRIVATE_KEY, Some(&aci.djb_private_key.key))?;
+        self.set(ACI_IDENTITY_PUBLIC_KEY, Some(&aci.djb_identity_key.key))?;
+        self.set(ACI_SERVICE_ID_KEY, Some(&aci.service_id))?;
+        self.set(DEVICE_ID_KEY, Some("0"))?;
+        self.set(
+            ENCRYPTED_DEVICE_NAME_KEY,
+            Some(&DeviceNameUtil::encrypt_device_name(
+                device_name,
+                aci.djb_private_key,
+            )),
+        )?;
+        self.set(IS_MULTI_DEVICE_KEY, Some(&true.to_string()))?;
+        self.set(NUMBER_KEY, Some(&provisioning_msg.number))?;
+        self.set(PASSWORD_KEY, Some("STUB 32 bytes"))?;
+        self.set(PIN_MASTER_KEY_KEY, Some(&provisioning_msg.master_key))?;
+        let pni = provisioning_msg.pni;
+        self.set(PNI_IDENTITY_PRIVATE_KEY, Some(&pni.djb_private_key.key))?;
+        self.set(PNI_IDENTITY_PUBLIC_KEY, Some(&pni.djb_identity_key.key))?;
+        self.set(PNI_SERVICE_ID_KEY, Some(&aci.service_id))?;
+        self.set(
+            PROFILE_KEY_KEY,
+            Some(
+                &provisioning_msg
+                    .profile_key
+                    .unwrap_or_else(|| "STUB 32 bytes".to_string()),
+            ),
+        )?;
+        self.set(REGISTERED_KEY, Some(&false.to_string()))?;
+        self.set(STORAGE_KEY_KEY, None)?;
+        self.set(STORE_LAST_RECEIVE_TIMESTAMP_KEY, Some("0"))?;
+        self.set(STORE_MANIFEST_VERSION_KEY, Some("-1"))?;
+        self.set(STORE_MANIFEST_KEY, None)?;
+
+        // TODO complete registration setup
+        // getRecipientTrustedResolver().resolveSelfRecipientTrusted(getSelfRecipientAddress());
+        // getSenderKeyStore().deleteAll();
+        // trustSelfIdentity(ServiceIdType.ACI);
+        // trustSelfIdentity(ServiceIdType.PNI);
+        // aciAccountData.getSessionStore().archiveAllSessions();
+        // pniAccountData.getSessionStore().archiveAllSessions();
+        // clearAllPreKeys();
+        // getKeyValueStore().storeEntry(lastRecipientsRefresh, null);
+
+        Ok(false)
+    }
+
     #[allow(dead_code)]
     pub fn number(&self) -> Option<&str> {
         match &self.number {
@@ -238,7 +296,6 @@ impl Account {
     fn get(&self, key: &str) -> Result<Option<String>, Error> {
         get(&self.pddb, &self.pddb_dict, key)
     }
-
 
     // Sets the value of a pddb_key / field in the Account
     //

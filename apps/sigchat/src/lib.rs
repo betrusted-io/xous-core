@@ -177,7 +177,7 @@ impl<'a> SigChat<'a> {
             .set_status_text(t!("sigchat.status.probing", locales::LANG));
         self.chat.set_busy_state(true);
         let tls = Tls::new();
-        if tls.accessible(host, true) { 
+        if tls.accessible(host, true) {
             self.chat.set_busy_state(false);
             true
         } else {
@@ -236,8 +236,11 @@ impl<'a> SigChat<'a> {
                     }
                 }
             }
-            Err(_) => {
-                log::warn!("failed to create new Account in pddb: {}", SIGCHAT_ACCOUNT);
+            Err(e) => {
+                log::warn!(
+                    "failed to create new Account in pddb:{} : {e}",
+                    SIGCHAT_ACCOUNT
+                );
                 self.modals
                     .show_notification(t!("sigchat.account.failed", locales::LANG), None)
                     .expect("notification failed");

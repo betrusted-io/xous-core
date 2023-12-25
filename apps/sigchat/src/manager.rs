@@ -1,5 +1,5 @@
 mod group_permission;
-mod libsignal; // stub
+pub mod libsignal; // stub
 mod link_state;
 mod signal_ws;
 mod trust_mode;
@@ -137,7 +137,7 @@ impl Manager {
     /// 4. displaying a uri as a qr-code (containing the uuid and pub_key)
     /// 5. scanning the qr-code with the primary Signal device
     /// 6. obtaining device registration via the websocket
-    /// 7. completing the registration processing
+    /// 7. checking and saving account details
     ///
     /// # Arguments
     /// * `name` - Optionally specify a name to describe this new device (defaults to "xous").
@@ -148,12 +148,13 @@ impl Manager {
         // insert default values as required
         let name = name.unwrap_or(DEFAULT_DEVICE_NAME);
         let host = host.unwrap_or(DEFAULT_HOST_NAME);
-        let link_err = Error::new(ErrorKind::Other,  "failed to link device",);
+        let link_err = Error::new(ErrorKind::Other, "failed to link device");
         match SignalWS::new_provision(&host) {
             Ok(mut ws) => {
                 log::info!("provisioning websocket established to {host}");
                 match ws.read() {
                     Ok(Message::Binary(uuid)) => {
+                        log::info!("received Provisioning UUID message from host");
                         let uuid = libsignal::ProvisioningUuid::decode(uuid).id.clone();
                         let identity_key_pair = libsignal::generate_identity_key_pair();
                         let pub_key = identity_key_pair.djb_identity_key.key.clone();
@@ -174,21 +175,27 @@ impl Manager {
                                     .expect("qrcode failed");
                                 match ws.read() {
                                     Ok(Message::Binary(registration)) => {
-                                        log::info!("raw registration ProtoBuffer: {:?}", registration);
-                                        log::info!("device name: {name}");
+                                        log::info!("Registration message received from host");
                                         ws.close();
-                                        let provisioning_message = libsignal::ProvisionMessage::decode(identity_key_pair, registration);
-                                        log::info!("provisioning_message.number: {}", provisioning_message.number);
-                                        log::info!("provisioning_message.aci: {}", provisioning_message.aci);
-                                        log::info!("provisioning_message.pni: {}", provisioning_message.pni);
-                                        // TODO complete registration
-                                        Ok(true)
+                                        match self.account.link(
+                                            name,
+                                            libsignal::ProvisionMessage::decode(
+                                                identity_key_pair,
+                                                registration,
+                                            ),
+                                        ) {
+                                            Ok(result) => Ok(result),
+                                            Err(e) => {
+                                                log::warn!("linking error: {e}");
+                                                Ok(false)
+                                            }
+                                        }
                                     }
-                                    Ok(_) => { 
+                                    Ok(_) => {
                                         log::warn!("unexpected Provisioning msg");
                                         Err(link_err)
                                     }
-                                    Err(e) => { 
+                                    Err(e) => {
                                         log::warn!("{e}");
                                         Err(link_err)
                                     }
@@ -200,17 +207,16 @@ impl Manager {
                             }
                         }
                     }
-                    Ok(_) => { 
+                    Ok(_) => {
                         log::warn!("unexpected Provisioning msg.");
                         Err(link_err)
                     }
-                    Err(e) => { 
+                    Err(e) => {
                         log::warn!("{e}");
                         Err(link_err)
                     }
                 }
-            }               
-
+            }
             Err(e) => {
                 log::info!("failed to connect to server: {}", e);
                 Err(e)

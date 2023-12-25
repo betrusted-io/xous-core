@@ -1,27 +1,56 @@
 // this is a stub for a wrapped libsignal
 
+// org.whispersystems.signalservice.api.util.DeviceNameUtil;
+pub struct DeviceNameUtil {}
+impl DeviceNameUtil {
+    pub fn encrypt_device_name(_device_name: &str, _aci_private_key: IdentityKey) -> String {
+        "STUB".to_string()
+    }
+}
+
+////////////////////////////////////////////////////////
 
 // use org.whispersystems.signalservice.internal.crypto.PrimaryProvisioningCipher;
-pub struct PrimaryProvisioningCipher{}
+pub struct PrimaryProvisioningCipher {}
 impl PrimaryProvisioningCipher {
-    pub fn new(_stub: Option<String>) ->  PrimaryProvisioningCipher {
-         PrimaryProvisioningCipher {}
+    pub fn new(_stub: Option<String>) -> PrimaryProvisioningCipher {
+        PrimaryProvisioningCipher {}
     }
     pub fn decrypt(&self, _temp_identity: IdentityKeyPair, bytes: Vec<u8>) -> ProvisionMessage {
         //log::info!("temp_identity: {:?}", temp_identity);
         log::info!("raw uuid Protocol Buffer: {:?}", bytes);
         ProvisionMessage {
-            number : "STUB number".to_string(),
-            aci : "STUB number".to_string(),
-            pni : "STUB number".to_string(),
-         } 
+            number: "STUB number".to_string(),
+            aci: IdentityKeyPair {
+                service_id: "STUB".to_string(),
+                djb_identity_key: IdentityKey {
+                    key: "STUB".to_string(),
+                },
+                djb_private_key: IdentityKey {
+                    key: "STUB".to_string(),
+                },
+            },
+            pni: IdentityKeyPair {
+                service_id: "STUB".to_string(),
+                djb_identity_key: IdentityKey {
+                    key: "STUB".to_string(),
+                },
+                djb_private_key: IdentityKey {
+                    key: "STUB".to_string(),
+                },
+            },
+            master_key: "STUB number".to_string(),
+            profile_key: Some("STUB number".to_string()),
+        }
     }
 }
 
 pub struct ProvisionMessage {
     pub number: String,
-    pub aci:String,
-    pub pni:String,
+    pub aci: IdentityKeyPair,
+    pub pni: IdentityKeyPair,
+    pub master_key: String,
+    pub profile_key: Option<String>,
 }
 impl ProvisionMessage {
     pub fn decode(temp_identity: IdentityKeyPair, bytes: Vec<u8>) -> ProvisionMessage {
@@ -38,12 +67,14 @@ impl ProvisionMessage {
 //   optional string uuid = 1;
 // }
 pub struct ProvisioningUuid {
-    pub id : String,
+    pub id: String,
 }
 impl ProvisioningUuid {
     pub fn decode(bytes: Vec<u8>) -> ProvisioningUuid {
         log::info!("raw uuid Protocol Buffer: {:?}", bytes);
-        ProvisioningUuid {id : "TODO decode uuid Protocol Buffer".to_string()} 
+        ProvisioningUuid {
+            id: "TODO decode uuid Protocol Buffer".to_string(),
+        }
     }
 }
 
@@ -51,12 +82,12 @@ impl ProvisioningUuid {
 
 // use org.signal.libsignal.protocol.IdentityKey;
 pub struct IdentityKey {
-    pub key:String,
+    pub key: String,
 }
 impl IdentityKey {
     pub fn new(key: String) -> Self {
-        IdentityKey {key}
-    } 
+        IdentityKey { key }
+    }
 
     pub fn clone(&self) -> IdentityKey {
         IdentityKey::new(self.key.clone())
@@ -65,10 +96,10 @@ impl IdentityKey {
 
 // use org.signal.libsignal.protocol.IdentityKeyPair;
 pub struct IdentityKeyPair {
+    pub service_id: String,
     pub djb_identity_key: IdentityKey,
     pub djb_private_key: IdentityKey,
 }
-
 
 // use org.signal.libsignal.protocol.ecc.Curve;
 pub struct Curve {}
@@ -94,11 +125,14 @@ impl DjbKeyPair {
     }
 }
 
-
 // https://github.com/AsamK/signal-cli/blob/375bdb79485ec90beb9a154112821a4657740b7a/lib/src/main/java/org/asamk/signal/manager/util/KeyUtils.java#L45-L51
 pub fn generate_identity_key_pair() -> IdentityKeyPair {
     let djb_key_pair = Curve::generate_key_pair();
     let djb_identity_key = IdentityKey::new(djb_key_pair.get_public_key().key);
     let djb_private_key = djb_key_pair.get_private_key();
-    IdentityKeyPair { djb_identity_key, djb_private_key }
+    IdentityKeyPair {
+        service_id: "STUB".to_string(),
+        djb_identity_key,
+        djb_private_key,
+    }
 }
