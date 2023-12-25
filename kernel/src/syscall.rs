@@ -833,10 +833,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
 
                 if !phys_ptr.is_null() {
                     if mm.is_main_memory(phys_ptr) {
+                        let range_start = range.as_mut_ptr() as *mut usize;
+                        let range_end =
+                            range_start.wrapping_add(range.len() / core::mem::size_of::<usize>());
                         unsafe {
-                            range
-                                .as_mut_ptr()
-                                .write_bytes(0, range.len() / core::mem::size_of::<usize>())
+                            crate::mem::bzero(range_start, range_end);
                         };
                     }
                     for offset in (range.as_ptr() as usize..(range.as_ptr() as usize + range.len()))

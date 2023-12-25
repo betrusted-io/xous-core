@@ -451,7 +451,11 @@ impl MemoryManager {
         let virt = virt as *mut usize;
 
         // Zero-out the page
-        unsafe { virt.write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>()) };
+        let range_start = virt;
+        let range_end = range_start.wrapping_add(PAGE_SIZE / core::mem::size_of::<usize>());
+        unsafe {
+            crate::mem::bzero(range_start, range_end);
+        };
         if is_user {
             crate::arch::mem::hand_page_to_user(virt as _)?;
         }
@@ -868,5 +872,16 @@ impl MemoryManager {
         }
 
         Ok(())
+    }
+}
+
+pub unsafe fn bzero<T>(mut start: *mut T, end: *mut T)
+where
+    T: Copy,
+{
+    while start < end {
+        // NOTE(volatile) to prevent this from being transformed into `memclr`
+        core::ptr::write_volatile(start, core::mem::zeroed());
+        start = start.offset(1);
     }
 }
