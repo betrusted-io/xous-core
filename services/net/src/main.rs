@@ -25,7 +25,7 @@ mod btests;
 
 use std::collections::HashMap;
 use std::convert::TryInto;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message, CID, SID};
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, try_send_message, Message, CID, SID};
 use xous_ipc::Buffer;
 
 use byteorder::{ByteOrder, NetworkEndian};
@@ -338,6 +338,7 @@ fn main() -> ! {
             .ok();
             loop {
                 let msg = xous::receive_message(net_sid).unwrap();
+                log::debug!("core_tx send {:?}", msg);
                 core_tx.send(msg).unwrap();
             }
         }
@@ -1940,7 +1941,7 @@ fn main() -> ! {
                         if v.len() == 0 {
                             log::debug!("Dropping ping record for {:?}", conn.remote);
                             let ra = conn.remote.as_bytes();
-                            match xous::send_message(conn.cid,
+                            match xous::try_send_message(conn.cid,
                                 Message::new_scalar( // we should wait if the queue is full, as the "Drop" message is important
                                     conn.retop,
                                     NetPingCallback::Drop.to_usize().unwrap(),
@@ -1949,24 +1950,32 @@ fn main() -> ! {
                                     0,
                                 )
                             ) {
-                                Ok(_) => {},
+                                Ok(_) => {
+                                    match unsafe{xous::disconnect(conn.cid)} {
+                                        Ok(_) => {
+                                            false
+                                        },
+                                        Err(xous::Error::ServerNotFound) => {
+                                            log::debug!("Disconnected from a server that has already disappeared. Moving on.");
+                                            false
+                                        }
+                                        Err(e) => {
+                                            panic!("Unhandled error disconnecting from ping server: {:?}", e);
+                                        }
+                                    }
+                                },
+                                Err(xous::Error::ServerQueueFull) => {
+                                    // retain the message and retry again later
+                                    true
+                                }
                                 Err(xous::Error::ServerNotFound) => {
                                     log::debug!("Server already dropped before we could send it a drop message. Ignoring.");
+                                    false
                                 }
                                 Err(e) => {
                                     panic!("couldn't send Drop on empty queue from Ping server: {:?}", e);
                                 }
                             }
-                            match unsafe{xous::disconnect(conn.cid)} {
-                                Ok(_) => {},
-                                Err(xous::Error::ServerNotFound) => {
-                                    log::debug!("Disconnected from a server that has already disappeared. Moving on.");
-                                }
-                                Err(e) => {
-                                    panic!("Unhandled error disconnecting from ping server: {:?}", e);
-                                }
-                            }
-                            false
                         } else {
                             true
                         }
@@ -2018,80 +2027,25 @@ fn main() -> ! {
                 buffer.replace(ret_list).expect("couldn't return config");
             }
             Some(Opcode::ConnMgrStartStop) => msg_scalar_unpack!(msg, code, _, _, _, {
-                if code == 0 {
-                    // 0 is stop, 1 is start
-                    send_message(
-                        cm_cid,
-                        Message::new_scalar(
-                            connection_manager::ConnectionManagerOpcode::Stop
-                                .to_usize()
-                                .unwrap(),
-                            0,
-                            0,
-                            0,
-                            0,
-                        ),
-                    )
-                    .expect("couldn't send scan stop message");
-                } else if code == 1 {
-                    send_message(
-                        cm_cid,
-                        Message::new_scalar(
-                            connection_manager::ConnectionManagerOpcode::Run
-                                .to_usize()
-                                .unwrap(),
-                            0,
-                            0,
-                            0,
-                            0,
-                        ),
-                    )
-                    .expect("couldn't send scan run message");
-                } else if code == 2 {
-                    send_message(
-                        cm_cid,
-                        Message::new_scalar(
-                            connection_manager::ConnectionManagerOpcode::DisconnectAndStop
-                                .to_usize()
-                                .unwrap(),
-                            0,
-                            0,
-                            0,
-                            0,
-                        ),
-                    )
-                    .expect("couldn't send wifi disconnect and stop message");
-                } else if code == 3 {
-                    send_message(
-                        cm_cid,
-                        Message::new_scalar(
-                            connection_manager::ConnectionManagerOpcode::WifiOnAndRun
-                                .to_usize()
-                                .unwrap(),
-                            0,
-                            0,
-                            0,
-                            0,
-                        ),
-                    )
-                    .expect("couldn't send wifi on and run message");
-                } else if code == 4 {
-                    send_message(
-                        cm_cid,
-                        Message::new_scalar(
-                            connection_manager::ConnectionManagerOpcode::WifiOn
-                                .to_usize()
-                                .unwrap(),
-                            0,
-                            0,
-                            0,
-                            0,
-                        ),
-                    )
-                    .expect("couldn't send wifi on message");
-                } else {
-                    log::error!("Got incorrect start/stop code: {}", code);
-                }
+                let cm_op = match code {
+                    0 => connection_manager::ConnectionManagerOpcode::Stop.to_usize().unwrap(),
+                    1 => connection_manager::ConnectionManagerOpcode::Run.to_usize().unwrap(),
+                    2 => connection_manager::ConnectionManagerOpcode::DisconnectAndStop.to_usize().unwrap(),
+                    3 => connection_manager::ConnectionManagerOpcode::WifiOnAndRun.to_usize().unwrap(),
+                    4 => connection_manager::ConnectionManagerOpcode::WifiOn.to_usize().unwrap(),
+                    _ => {log::warn!("Got incorrect start/stop code, ignoring: {}", code); continue},
+                };
+                match try_send_message(
+                    cm_cid,
+                    Message::new_scalar(
+                        cm_op, 0, 0, 0, 0
+                    ),
+                ) {
+                    Err(xous::Error::ServerQueueFull) => {
+                        log::warn!("ConnMgrStartStop: connection manager queue full, dropping request for {:?}", cm_op);
+                    },
+                    _ => (),
+                };
             }),
             Some(Opcode::Reset) => {
                 // reset the DHCP address
@@ -2109,7 +2063,7 @@ fn main() -> ! {
                 iface.routes_mut().remove_default_ipv4_route();
                 dns_allclear_hook.notify();
 
-                send_message(
+                match try_send_message(
                     cm_cid,
                     Message::new_scalar( // this has to be non-blocking to avoid deadlock: reset can be called from inside connection_manager
                         connection_manager::ConnectionManagerOpcode::EcReset
@@ -2120,8 +2074,12 @@ fn main() -> ! {
                         0,
                         0,
                     ),
-                )
-                .expect("couldn't send EcReset message");
+                ) {
+                    Err(xous::Error::ServerQueueFull) => {
+                        log::warn!("Reset: connection manager queue full, dropping request for EcReset");
+                    },
+                    _ => (),
+                }
                 xous::return_scalar(msg.sender, 1).unwrap();
             }
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {

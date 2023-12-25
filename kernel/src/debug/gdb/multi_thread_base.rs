@@ -53,9 +53,7 @@ impl MultiThreadBase for XousTarget {
         regs: &gdbstub_arch::riscv::reg::RiscvCoreRegs<u32>,
         tid: Tid,
     ) -> TargetResult<(), Self> {
-        let Some(pid) = self.pid else {
-            return Ok(())
-        };
+        let Some(pid) = self.pid else { return Ok(()) };
 
         crate::services::SystemServices::with(|system_services| {
             let current_pid = system_services.current_pid();
@@ -92,8 +90,19 @@ impl MultiThreadBase for XousTarget {
         _tid: Tid, // same address space for each core
     ) -> TargetResult<(), Self> {
         let current_addr = start_addr as usize;
+        if (current_addr + data.len()) >= crate::arch::mem::USER_AREA_END
+            || (current_addr >= crate::arch::mem::USER_AREA_END)
+        {
+            for entry in data.iter_mut() {
+                *entry = 0
+            }
+            return Ok(()); // don't allow reads outside of the user area
+        }
+
         let Some(pid) = self.pid else {
-            for entry in data.iter_mut() { *entry = 0 };
+            for entry in data.iter_mut() {
+                *entry = 0
+            }
             return Ok(());
         };
 
@@ -153,11 +162,16 @@ impl MultiThreadBase for XousTarget {
         data: &[u8],
         _tid: Tid, // all threads share the same process memory space
     ) -> TargetResult<(), Self> {
-        let mut current_addr = start_addr;
+        let mut current_addr = start_addr as usize;
         let Some(pid) = self.pid else {
             println!("Couldn't poke memory: no current process!");
             return Ok(());
         };
+
+        if (current_addr + data.len()) > crate::arch::mem::USER_AREA_END {
+            return Ok(()); // don't allow reads outside of the user area
+        }
+
         crate::services::SystemServices::with(|system_services| {
             let current_pid = system_services.current_pid();
 

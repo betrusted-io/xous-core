@@ -219,7 +219,11 @@ impl Default for ProcessInner {
             mem_message_last: arch::mem::DEFAULT_MESSAGE_BASE,
             mem_heap_base: arch::mem::DEFAULT_HEAP_BASE,
             mem_heap_size: 0,
-            mem_heap_max: 524_288,
+            mem_heap_max: if cfg!(feature = "big-heap") {
+                1024 * 1024 * 12
+            } else {
+                1024 * 512
+            },
             connection_map: [None; 32],
             pid: unsafe { PID::new_unchecked(1) },
             _reserved: [0; 1],
