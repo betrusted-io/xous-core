@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-pub use crate::arch::process::Thread;
 use crate::{mem::MemoryManager, services::SystemServices};
 use core::mem;
 use xous_kernel::{MemoryAddress, MemoryRange, MemorySize, Message, MessageSender, PID, SID, TID};
