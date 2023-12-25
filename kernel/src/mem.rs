@@ -739,9 +739,14 @@ impl MemoryManager {
                     #[cfg(feature = "atsama5d27")]
                     {
                         let uart_base = crate::platform::atsama5d2::uart::HW_UART_BASE as usize;
-                        if pid.get() != 1 && (addr == uart_base || addr == uart_base + 0x1000 || addr == uart_base + 0x2000 || addr == uart_base + 0x3000) {
+                        if pid.get() != 1
+                            && (addr == uart_base
+                                || addr == uart_base + 0x1000
+                                || addr == uart_base + 0x2000
+                                || addr == uart_base + 0x3000)
+                        {
                             klog!("[!] UART sharing workaround used for {:08x} address", addr);
-                            return Ok(())
+                            return Ok(());
                         }
                     }
                     // -------------------------------

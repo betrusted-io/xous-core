@@ -475,9 +475,7 @@ fn return_result(
                 return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::MovedMemory => {
-                klog!(
-                    "WARNING: Tried to wait on a scalar message that was actually moved memory"
-                );
+                klog!("WARNING: Tried to wait on a scalar message that was actually moved memory");
                 return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
@@ -605,9 +603,7 @@ fn reply_and_receive_next(
                 }
             }
             WaitingMessage::MovedMemory => {
-                klog!(
-                    "WARNING: Tried to wait on a scalar message that was actually moved memory"
-                );
+                klog!("WARNING: Tried to wait on a scalar message that was actually moved memory");
                 return Err(xous_kernel::Error::DoubleFree);
             }
             WaitingMessage::None => {
@@ -745,12 +741,21 @@ fn receive_message(pid: PID, tid: TID, sid: SID, blocking: ExecutionType) -> Sys
 }
 
 pub fn handle(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult {
-    klog!("KERNEL({}:{}): Syscall {:x?}, in_irq={}", pid, tid, call, in_irq);
+    klog!(
+        "KERNEL({}:{}): Syscall {:x?}, in_irq={}",
+        pid,
+        tid,
+        call,
+        in_irq
+    );
     // let call_string = format!("{:x?}", call);
     // let start_time = std::time::Instant::now();
     #[allow(clippy::let_and_return)]
     let result = if in_irq && !call.can_call_from_interrupt() {
-        klog!("[!] Called {:?} that's cannot be called from the interrupt handler!", call);
+        klog!(
+            "[!] Called {:?} that's cannot be called from the interrupt handler!",
+            call
+        );
         Err(xous_kernel::Error::InvalidSyscall)
     } else {
         handle_inner(pid, tid, in_irq, call)

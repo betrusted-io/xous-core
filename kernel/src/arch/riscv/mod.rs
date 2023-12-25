@@ -10,8 +10,6 @@ pub mod panic;
 pub mod process;
 pub mod syscall;
 
-pub use process::Thread;
-
 #[cfg(any(feature = "precursor", feature = "renode"))]
 use crate::mem::MemoryManager;
 #[cfg(any(feature = "precursor", feature = "renode"))]
