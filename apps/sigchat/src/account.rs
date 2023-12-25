@@ -9,48 +9,199 @@ use std::str::FromStr;
 pub struct Account {
     pddb: Pddb,
     pddb_dict: String,
-    service_environment: ServiceEnvironment,
+    aci_identity_private: Option<String>,
+    aci_identity_public: Option<String>,
+    aci_service_id: Option<String>,
+    device_id: u32,
+    encrypted_device_name: Option<String>,
+    is_multi_device: bool,
     number: Option<String>,
+    password: Option<String>,
+    pin_master_key: Option<String>,
+    pni_identity_private: Option<String>,
+    pni_identity_public: Option<String>,
+    pni_service_id: Option<String>,
+    profile_key: Option<String>,
     registered: bool,
+    service_environment: ServiceEnvironment,
+    storage_key: Option<String>,
+    store_last_receive_timestamp: i64,
+    store_manifest_version: i64,
+    store_manifest: Option<String>,
 }
 
-const SERVICE_ENVIRONMENT_KEY: &str = "service_environment";
+const ACI_IDENTITY_PRIVATE_KEY: &str = "aci.identity.private";
+const ACI_IDENTITY_PUBLIC_KEY: &str = "aci.identity.public";
+const ACI_SERVICE_ID_KEY: &str = "aci.service_id";
+const DEVICE_ID_KEY: &str = "device_id";
+const ENCRYPTED_DEVICE_NAME_KEY: &str = "encrypted_device_name";
+const IS_MULTI_DEVICE_KEY: &str = "is_multi_device";
 const NUMBER_KEY: &str = "number";
+const PASSWORD_KEY: &str = "password";
+const PIN_MASTER_KEY_KEY: &str = "pin_master_key";
+const PNI_IDENTITY_PRIVATE_KEY: &str = "pni.identity.private";
+const PNI_IDENTITY_PUBLIC_KEY: &str = "pni.identity.public";
+const PNI_SERVICE_ID_KEY: &str = "pni.service_id";
+const PROFILE_KEY_KEY: &str = "profile_key";
 const REGISTERED_KEY: &str = "registered";
+const SERVICE_ENVIRONMENT_KEY: &str = "service_environment";
+const STORAGE_KEY_KEY: &str = "storage_key";
+const STORE_LAST_RECEIVE_TIMESTAMP_KEY: &str = "store_last_receive_timestamp";
+const STORE_MANIFEST_VERSION_KEY: &str = "store_manifest_version";
+const STORE_MANIFEST_KEY: &str = "store_manifest";
 
 impl Account {
+    // Create a new Account stored in pddb with default values
+    //
+    // This function saves default values for each field in the pddb
+    // and then calls read() to load the values into the Account struct
+    //
+    // # Arguments
+    // * `pddb_dict` - the pddb dictionary name to hold the Account
+    //
+    // # Returns
+    //
+    // a new Account with default values
+    //
     pub fn new(pddb_dict: &str) -> Result<Account, Error> {
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
+        set(&pddb, pddb_dict, ACI_IDENTITY_PRIVATE_KEY, None)?;
+        set(&pddb, pddb_dict, ACI_IDENTITY_PUBLIC_KEY, None)?;
+        set(&pddb, pddb_dict, ACI_SERVICE_ID_KEY, None)?;
+        set(&pddb, pddb_dict, DEVICE_ID_KEY, Some("0"))?;
+        set(&pddb, pddb_dict, ENCRYPTED_DEVICE_NAME_KEY, None)?;
+        set(
+            &pddb,
+            pddb_dict,
+            IS_MULTI_DEVICE_KEY,
+            Some(&false.to_string()),
+        )?;
+        set(&pddb, pddb_dict, NUMBER_KEY, None)?;
+        set(&pddb, pddb_dict, PASSWORD_KEY, None)?;
+        set(&pddb, pddb_dict, PIN_MASTER_KEY_KEY, None)?;
+        set(&pddb, pddb_dict, PNI_IDENTITY_PRIVATE_KEY, None)?;
+        set(&pddb, pddb_dict, PNI_IDENTITY_PUBLIC_KEY, None)?;
+        set(&pddb, pddb_dict, PNI_SERVICE_ID_KEY, None)?;
+        set(&pddb, pddb_dict, PROFILE_KEY_KEY, None)?;
+        set(&pddb, pddb_dict, REGISTERED_KEY, Some(&false.to_string()))?;
         set(
             &pddb,
             pddb_dict,
             SERVICE_ENVIRONMENT_KEY,
             Some(&ServiceEnvironment::Staging.to_string()),
         )?;
-        set(&pddb, pddb_dict, REGISTERED_KEY, Some(&false.to_string()))?;
+        set(&pddb, pddb_dict, STORAGE_KEY_KEY, None)?;
+        set(
+            &pddb,
+            pddb_dict,
+            STORE_LAST_RECEIVE_TIMESTAMP_KEY,
+            Some("0"),
+        )?;
+        set(&pddb, pddb_dict, STORE_MANIFEST_VERSION_KEY, Some("-1"))?;
+        set(&pddb, pddb_dict, STORE_MANIFEST_KEY, None)?;
         Account::read(pddb_dict)
     }
 
+
+    // retrieves an existing Account from the pddb
+    //
+    // # Arguments
+    // * `pddb_dict` - the pddb dictionary name holding the Account
+    //
+    // # Returns
+    //
+    // a Account with values read from pddb_dict
+    //
     pub fn read(pddb_dict: &str) -> Result<Account, Error> {
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
         match (
-            get(&pddb, pddb_dict, SERVICE_ENVIRONMENT_KEY),
-            get(&pddb, pddb_dict, REGISTERED_KEY),
+            get(&pddb, pddb_dict, ACI_IDENTITY_PRIVATE_KEY),
+            get(&pddb, pddb_dict, ACI_IDENTITY_PUBLIC_KEY),
+            get(&pddb, pddb_dict, ACI_SERVICE_ID_KEY),
+            get(&pddb, pddb_dict, DEVICE_ID_KEY),
+            get(&pddb, pddb_dict, ENCRYPTED_DEVICE_NAME_KEY),
+            get(&pddb, pddb_dict, IS_MULTI_DEVICE_KEY),
             get(&pddb, pddb_dict, NUMBER_KEY),
+            get(&pddb, pddb_dict, PASSWORD_KEY),
+            get(&pddb, pddb_dict, PIN_MASTER_KEY_KEY),
+            get(&pddb, pddb_dict, PNI_IDENTITY_PRIVATE_KEY),
+            get(&pddb, pddb_dict, PNI_IDENTITY_PUBLIC_KEY),
+            get(&pddb, pddb_dict, PNI_SERVICE_ID_KEY),
+            get(&pddb, pddb_dict, PROFILE_KEY_KEY),
+            get(&pddb, pddb_dict, REGISTERED_KEY),
+            get(&pddb, pddb_dict, SERVICE_ENVIRONMENT_KEY),
+            get(&pddb, pddb_dict, STORAGE_KEY_KEY),
+            get(&pddb, pddb_dict, STORE_LAST_RECEIVE_TIMESTAMP_KEY),
+            get(&pddb, pddb_dict, STORE_MANIFEST_VERSION_KEY),
+            get(&pddb, pddb_dict, STORE_MANIFEST_KEY),
         ) {
-            (Ok(Some(service_environment)), Ok(Some(registered)), Ok(number)) => Ok(Account {
+            (
+                Ok(aci_identity_private),
+                Ok(aci_identity_public),
+                Ok(aci_service_id),
+                Ok(Some(device_id)),
+                Ok(encrypted_device_name),
+                Ok(Some(is_multi_device)),
+                Ok(number),
+                Ok(password),
+                Ok(pin_master_key),
+                Ok(pni_identity_private),
+                Ok(pni_identity_public),
+                Ok(pni_service_id),
+                Ok(profile_key),
+                Ok(Some(registered)),
+                Ok(Some(service_environment)),
+                Ok(storage_key),
+                Ok(Some(store_last_receive_timestamp)),
+                Ok(Some(store_manifest_version)),
+                Ok(store_manifest),
+            ) => Ok(Account {
                 pddb: pddb,
                 pddb_dict: pddb_dict.to_string(),
-                service_environment: ServiceEnvironment::from_str(&service_environment).unwrap(),
+                aci_identity_private: aci_identity_private,
+                aci_identity_public: aci_identity_public,
+                aci_service_id: aci_service_id,
+                device_id: device_id.parse().unwrap(),
+                encrypted_device_name: encrypted_device_name,
+                is_multi_device: is_multi_device.parse().unwrap(),
                 number: number,
+                password: password,
+                pin_master_key: pin_master_key,
+                pni_identity_private: pni_identity_private,
+                pni_identity_public: pni_identity_public,
+                pni_service_id: pni_service_id,
+                profile_key: profile_key,
                 registered: registered.parse().unwrap(),
+                service_environment: ServiceEnvironment::from_str(&service_environment).unwrap(),
+                storage_key: storage_key,
+                store_last_receive_timestamp: store_last_receive_timestamp.parse().unwrap(),
+                store_manifest_version: store_manifest_version.parse().unwrap(),
+                store_manifest: store_manifest,
             }),
-            (Err(e), _, _) => Err(e),
-            (_, Err(e), _) => Err(e),
-            (_, _, Err(e)) => Err(e),
-            (_, _, _) => Err(Error::from(ErrorKind::InvalidData)),
+            (Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e)) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => {
+                Err(Error::from(ErrorKind::InvalidData))
+            }
         }
     }
 
