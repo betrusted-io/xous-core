@@ -39,6 +39,7 @@ usbd_mass_storage = { path = "../../libs/mass-storage/usbd_mass_storage", option
 usbd-serial = "0.1.1"
 
 ghostfat = "0.5.0"
+fugit = "0.3.7"
 
 [dependencies.usb-device]
 # see top level Cargo.toml for patch.crates-io directive to help with dev work

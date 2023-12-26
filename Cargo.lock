@@ -1889,9 +1889,9 @@ dependencies = [
 
 [[package]]
 name = "frunk_core"
-version = "0.4.0"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1246cf43ec80bf8b2505b5c360b8fb999c97dabd17dbb604d85558d5cbc25482"
+checksum = "af2469fab0bd07e64ccf0ad57a1438f63160c69b2e57f04a439653d68eb558d6"
 
 [[package]]
 name = "frunk_derives"
@@ -2297,6 +2297,24 @@ dependencies = [
  "cc",
  "libc",
  "pkg-config",
+]
+
+[[package]]
+name = "hidv2"
+version = "0.1.0"
+dependencies = [
+ "gam",
+ "graphics-server",
+ "locales",
+ "log",
+ "num-derive",
+ "num-traits",
+ "tts-frontend",
+ "usb-device-xous",
+ "xous 0.9.55 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-ipc 0.9.55 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5274,6 +5292,7 @@ version = "0.1.0"
 dependencies = [
  "bitfield",
  "embedded-time",
+ "fugit",
  "ghostfat",
  "keyboard",
  "llio",
@@ -6283,7 +6302,7 @@ dependencies = [
 [[package]]
 name = "xous-usb-hid"
 version = "0.4.3"
-source = "git+https://github.com/betrusted-io/xous-usb-hid.git#eba35e886d08e504cf10026221aec0fbfc63e201"
+source = "git+https://github.com/betrusted-io/xous-usb-hid.git#793ec00243c525f2d17dc1d3a185abdeec57aaf6"
 dependencies = [
  "frunk",
  "fugit",

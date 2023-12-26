@@ -411,6 +411,68 @@ impl UsbHid {
             )
         ).unwrap();
     }
+
+    // HID v2
+    pub fn connect_hid_app(&self, descriptor: Vec<u8>) -> Result<(), xous::Error> {
+        if descriptor.len() > MAX_HID_REPORT_DESCRIPTOR_LEN {
+            return Err(xous::Error::OutOfMemory)
+        }
+
+        let mut container = HIDReportDescriptorMessage{ 
+            descriptor: [0u8; MAX_HID_REPORT_DESCRIPTOR_LEN],
+            len: descriptor.len(),
+         };
+
+         for (place, element) in container.descriptor.iter_mut().zip(descriptor.iter()) {
+            *place = *element;
+        }
+
+        let mut buf = Buffer::into_buf(container).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::HIDSetDescriptor.to_u32().unwrap()).map(|_| ())?;
+
+        Ok(())
+    }
+
+    pub fn disconnect_hid_app(&self) -> Result<(), xous::Error> {
+        match send_message(self.conn, Message::new_blocking_scalar(
+            Opcode::HIDUnsetDescriptor.to_usize().unwrap(), 
+            0, 0, 0, 0)
+        ) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn read_report(&self) -> Result<HIDReport, xous::Error> {
+        let report = HIDReportMessage::default();
+
+        let mut buf = Buffer::into_buf(report).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::HIDReadReport.to_u32().unwrap()).map(|_| ())?;
+        
+        let report = buf.as_flat::<HIDReportMessage, _>().unwrap();
+
+        match report.has_data {
+            true => {
+                let mut ret = HIDReport::default();
+
+                // copy the data back
+                for (&s, d) in report.data.0[..report.data.0.len() as usize].iter().zip(ret.0.iter_mut()) {
+                    *d = s;
+                }
+
+                Ok(ret)
+                
+            },
+            false => Err(xous::Error::UnknownError),
+        }
+    }
+
+    pub fn write_report(&self, report: HIDReport) -> Result<(), xous::Error> {
+        let buf = Buffer::into_buf(report).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::HIDWriteReport.to_u32().unwrap()).map(|_| ())?;
+
+        Ok(())
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
