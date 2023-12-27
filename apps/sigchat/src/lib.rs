@@ -205,6 +205,9 @@ impl<'a> SigChat<'a> {
     ///
     pub fn account_link(&mut self, host: &str) -> Result<Account, Error> {
         log::info!("Attempting to Link to an existing Signal Account");
+        self.chat
+            .set_status_text(t!("sigchat.status.initializing", locales::LANG));
+        self.chat.set_busy_state(true);
         match Account::new(SIGCHAT_ACCOUNT) {
             Ok(account) => {
                 let mut manager = Manager::new(account, TrustMode::OnFirstUse);

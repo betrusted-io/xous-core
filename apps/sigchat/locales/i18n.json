@@ -66,6 +66,10 @@
         "en": "connecting",
         "en-tts": "connecting"
     },
+    "sigchat.status.initializing": {
+        "en": "initializing Signal account in pddb",
+        "en-tts": "initializing Signal account in pddb"
+    },
     "sigchat.status.offline": {
         "en": "Signal offline",
         "en-tts": "Signal offline"
