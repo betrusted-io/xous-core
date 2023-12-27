@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2023 Foundation Devices, Inc <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use core::panic::PanicInfo;
 use armv7;
+use core::panic::PanicInfo;
 
 #[cfg(feature = "atsama5d27")]
 #[panic_handler]

@@ -6,7 +6,6 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-
 // This murmur3 code was vendored in on April 28, 2021. We choose to vendor the code for this simple
 // non-cryptographic hash in to reduce the number of crate dependencies in the build system. See
 // https://github.com/betrusted-io/xous-core/issues/54 for more details on why.
@@ -50,7 +49,6 @@ fn calc_k(k: u32) -> u32 {
     k.wrapping_mul(C1).rotate_left(R1).wrapping_mul(C2)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,7 +78,8 @@ mod tests {
             assert_eq!(
                 murmur3_32(test.slice, 0),
                 test.hash_32,
-                "Failed on slice {:x?}", test.slice
+                "Failed on slice {:x?}",
+                test.slice
             );
         }
     }

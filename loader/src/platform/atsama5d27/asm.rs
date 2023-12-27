@@ -6,10 +6,10 @@
 
 extern "C" {
     pub fn start_kernel(
-        stack: usize,       // r0
-        ttbr: usize,        // r1
-        entrypoint: usize,  // r2
-        args: usize,        // r3
+        stack: usize,      // r0
+        ttbr: usize,       // r1
+        entrypoint: usize, // r2
+        args: usize,       // r3
         ip: usize,
         rpt: usize,
         debug: bool,

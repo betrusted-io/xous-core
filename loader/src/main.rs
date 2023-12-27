@@ -8,27 +8,27 @@ use args::{KernelArgument, KernelArguments};
 #[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/debug.rs")]
 mod debug;
 mod fonts;
-#[cfg(feature="secboot")]
+#[cfg(feature = "secboot")]
 mod secboot;
 
 #[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/asm.rs")]
 mod asm;
+mod bootconfig;
 #[cfg_attr(feature = "atsama5d27", path = "platform/atsama5d27/consts.rs")]
 mod consts;
+mod minielf;
+#[cfg(feature = "resume")]
+mod murmur3;
 mod phase1;
 mod phase2;
-mod bootconfig;
-mod minielf;
-#[cfg(feature="resume")]
-mod murmur3;
 mod platform;
 
-use consts::*;
 use asm::*;
+use bootconfig::BootConfig;
+use consts::*;
+use minielf::*;
 use phase1::{phase_1, InitialProcess};
 use phase2::{phase_2, ProgramDescription};
-use bootconfig::BootConfig;
-use minielf::*;
 
 use core::{mem, ptr, slice};
 
@@ -76,13 +76,13 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // should be the SoC, the FPGA should be the FPGA...the cross-sim is not really guaranteed to work
     // but it is just a handy tool  to use when it *does* work.
     //
-    #[cfg(feature="cramium-soc")]
+    #[cfg(feature = "cramium-soc")]
     crate::platform::early_init(); // sets up PLLs so we're not running at 16MHz...
 
     // initially validate the whole image on disk (including kernel args)
     // kernel args must be validated because tampering with them can change critical assumptions about
     // how data is loaded into memory
-    #[cfg(feature="secboot")]
+    #[cfg(feature = "secboot")]
     if !secboot::validate_xous_img(signed_buffer as *const u32) {
         loop {}
     };
@@ -102,7 +102,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     // Store the initial boot config on the stack.  We don't know
     // where in heap this memory will go.
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
-    #[cfg(feature="platform-tests")]
+    #[cfg(feature = "platform-tests")]
     platform::platform_tests();
 
     let mut cfg = BootConfig {
@@ -113,32 +113,36 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     read_initial_config(&mut cfg);
 
     // check to see if we are recovering from a clean suspend or not
-    #[cfg(feature="resume")]
+    #[cfg(feature = "resume")]
     let (clean, was_forced_suspend, susres_pid) = check_resume(&mut cfg);
-    #[cfg(not(feature="resume"))]
+    #[cfg(not(feature = "resume"))]
     let clean = {
         // cold boot path
         println!("No suspend marker found, doing a cold boot!");
-        #[cfg(feature="simulation-only")]
+        #[cfg(feature = "simulation-only")]
         println!("Configured for simulation. Skipping RAM clear!");
-        #[cfg(not(feature="simulation-only"))]
+        #[cfg(not(feature = "simulation-only"))]
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg);
-        #[cfg(feature="debug-print")]
-        if VDBG { check_load(&mut cfg); }
+        #[cfg(feature = "debug-print")]
+        if VDBG {
+            check_load(&mut cfg);
+        }
         println!("done initializing for cold boot.");
         false
     };
-    #[cfg(feature="resume")]
+    #[cfg(feature = "resume")]
     if !clean {
         // cold boot path
         println!("No suspend marker found, doing a cold boot!");
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg);
-        #[cfg(feature="debug-print")]
-        if VDBG { check_load(&mut cfg); }
+        #[cfg(feature = "debug-print")]
+        if VDBG {
+            check_load(&mut cfg);
+        }
         println!("done initializing for cold boot.");
     } else {
         // resume path
@@ -164,9 +168,10 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         let mut resume_csr = CSR::new(utra::susres::HW_SUSRES_BASE as *mut u32);
         // set the resume marker for the SUSRES server, noting the forced suspend status
         if was_forced_suspend {
-            resume_csr.wo(utra::susres::STATE,
-                resume_csr.ms(utra::susres::STATE_RESUME, 1) |
-                resume_csr.ms(utra::susres::STATE_WAS_FORCED, 1)
+            resume_csr.wo(
+                utra::susres::STATE,
+                resume_csr.ms(utra::susres::STATE_RESUME, 1)
+                    | resume_csr.ms(utra::susres::STATE_WAS_FORCED, 1),
             );
         } else {
             resume_csr.wfo(utra::susres::STATE_RESUME, 1);
@@ -188,13 +193,9 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         let rpt_offset =
             cfg.runtime_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         #[cfg(not(feature = "atsama5d27"))]
-        let _tt_addr = {
-            cfg.processes[0].satp
-        };
+        let _tt_addr = { cfg.processes[0].satp };
         #[cfg(feature = "atsama5d27")]
-        let _tt_addr = {
-            cfg.processes[0].ttbr0
-        };
+        let _tt_addr = { cfg.processes[0].ttbr0 };
         println!(
             "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x})",
             cfg.processes[0].entrypoint, _tt_addr, cfg.processes[0].sp,
@@ -211,15 +212,15 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         // critical parameters like these kernel arguments.
         #[cfg(not(feature = "atsama5d27"))]
         unsafe {
-            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut[u32; 7];
+            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut [u32; 7];
             (*backup_args)[0] = arg_offset as u32;
             (*backup_args)[1] = ip_offset as u32;
             (*backup_args)[2] = rpt_offset as u32;
             (*backup_args)[3] = cfg.processes[0].satp as u32;
             (*backup_args)[4] = cfg.processes[0].entrypoint as u32;
             (*backup_args)[5] = cfg.processes[0].sp as u32;
-            (*backup_args)[6] = if cfg.debug {1} else {0};
-            #[cfg(feature="debug-print")]
+            (*backup_args)[6] = if cfg.debug { 1 } else { 0 };
+            #[cfg(feature = "debug-print")]
             {
                 if VDBG {
                     println!("Backup kernel args:");
@@ -232,8 +233,9 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
 
         #[cfg(not(feature = "atsama5d27"))]
         {
-            #[cfg(not(feature="cramium-soc"))]
-            { // uart mux only exists on the FPGA variant
+            #[cfg(not(feature = "cramium-soc"))]
+            {
+                // uart mux only exists on the FPGA variant
                 use utralib::generated::*;
                 let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
                 gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // patch us over to a different UART for debug (1=LOG 2=APP, 0=KERNEL(hw reset default))
@@ -265,19 +267,24 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             )
         }
     } else {
-        #[cfg(feature="resume")]
+        #[cfg(feature = "resume")]
         unsafe {
-            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut[u32; 7];
-            #[cfg(feature="debug-print")]
+            let backup_args: *mut [u32; 7] = BACKUP_ARGS_ADDR as *mut [u32; 7];
+            #[cfg(feature = "debug-print")]
             {
                 println!("Using backed up kernel args:");
                 for i in 0..7 {
                     println!("0x{:08x}", (*backup_args)[i]);
                 }
             }
-            let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF | (((susres_pid as usize) & 0x1FF) << 22);
+            let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF
+                | (((susres_pid as usize) & 0x1FF) << 22);
             //let satp = (*backup_args)[3];
-            println!("Adjusting SATP to the sures process. Was: 0x{:08x} now: 0x{:08x}", (*backup_args)[3], satp);
+            println!(
+                "Adjusting SATP to the sures process. Was: 0x{:08x} now: 0x{:08x}",
+                (*backup_args)[3],
+                satp
+            );
 
             #[cfg(not(feature = "renode-bypass"))]
             {
@@ -293,11 +300,11 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
                 satp as usize,
                 (*backup_args)[4] as usize,
                 (*backup_args)[5] as usize,
-                if (*backup_args)[6] == 0 {false} else {true},
+                if (*backup_args)[6] == 0 { false } else { true },
                 clean,
             );
         }
-        #[cfg(not(feature="resume"))]
+        #[cfg(not(feature = "resume"))]
         panic!("Unreachable code executed");
     }
 }
@@ -341,7 +348,9 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
                 "invalid XKrn size"
             );
             kernel_seen = true;
-        } else if tag.name == u32::from_le_bytes(*b"IniE") || tag.name == u32::from_le_bytes(*b"IniF") {
+        } else if tag.name == u32::from_le_bytes(*b"IniE")
+            || tag.name == u32::from_le_bytes(*b"IniF")
+        {
             assert!(tag.size >= 4, "invalid Init size");
             init_seen = true;
             cfg.init_process_count += 1;
@@ -355,7 +364,7 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
 /// Checks a reserved area of RAM for a pattern with a pre-defined mathematical
 /// relationship. The purpose is to detect if we have a "clean suspend", or if
 /// we've rebooted from a corrupt/cold RAM state.
-#[cfg(feature="resume")]
+#[cfg(feature = "resume")]
 fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     use utralib::generated::*;
     const WORDS_PER_SECTOR: usize = 128;
@@ -363,12 +372,16 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     const WORDS_PER_PAGE: usize = PAGE_SIZE / 4;
 
     let suspend_marker = cfg.sram_start as usize + cfg.sram_size - PAGE_SIZE * 3;
-    let marker: *mut[u32; WORDS_PER_PAGE] = suspend_marker as *mut[u32; WORDS_PER_PAGE];
+    let marker: *mut [u32; WORDS_PER_PAGE] = suspend_marker as *mut [u32; WORDS_PER_PAGE];
 
     let boot_seed = CSR::new(utra::seed::HW_SEED_BASE as *mut u32);
     let seed0 = boot_seed.r(utra::seed::SEED0);
     let seed1 = boot_seed.r(utra::seed::SEED1);
-    let was_forced_suspend: bool = if unsafe{(*marker)[0]} != 0 { true } else { false };
+    let was_forced_suspend: bool = if unsafe { (*marker)[0] } != 0 {
+        true
+    } else {
+        false
+    };
 
     let mut clean = true;
     let mut hashbuf: [u32; WORDS_PER_SECTOR - 1] = [0; WORDS_PER_SECTOR - 1];
@@ -376,7 +389,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     let mut pid: u32 = 0;
     for sector in 0..NUM_SECTORS {
         for i in 0..hashbuf.len() {
-            hashbuf[i] = unsafe{(*marker)[index * WORDS_PER_SECTOR + i]};
+            hashbuf[i] = unsafe { (*marker)[index * WORDS_PER_SECTOR + i] };
         }
         // sector 0 contains the boot seeds, which we replace with our own as read out from our FPGA before computing the hash
         // it also contains the PID of the suspend/resume process manager, which we need to inject into the SATP
@@ -386,8 +399,10 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
             pid = hashbuf[3];
         }
         let hash = crate::murmur3::murmur3_32(&hashbuf, 0);
-        if hash != unsafe{(*marker)[(index+1) * WORDS_PER_SECTOR - 1]} {
-            println!("* computed 0x{:08x} - stored 0x{:08x}", hash, unsafe{(*marker)[(index+1) * (WORDS_PER_SECTOR) - 1]});
+        if hash != unsafe { (*marker)[(index + 1) * WORDS_PER_SECTOR - 1] } {
+            println!("* computed 0x{:08x} - stored 0x{:08x}", hash, unsafe {
+                (*marker)[(index + 1) * (WORDS_PER_SECTOR) - 1]
+            });
             clean = false;
         } else {
             println!("  computed 0x{:08x} - match", hash);
@@ -396,7 +411,9 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     }
     // zero out the clean suspend marker, so if something goes wrong during resume we don't try to resume again
     for i in 0..WORDS_PER_PAGE {
-        unsafe{(*marker)[i] = 0;}
+        unsafe {
+            (*marker)[i] = 0;
+        }
     }
 
     (clean, was_forced_suspend, pid)
@@ -405,7 +422,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
 /// Clears all of RAM. This is a must for systems that have suspend-to-RAM for security.
 /// It is configured to be skipped in simulation only, to accelerate the simulation times
 /// since we can initialize the RAM to zero in simulation.
-#[cfg(not(feature="simulation-only"))]
+#[cfg(not(feature = "simulation-only"))]
 fn clear_ram(cfg: &mut BootConfig) {
     // clear RAM on a cold boot.
     // RAM is persistent and battery-backed. This means secret material could potentially
@@ -413,7 +430,8 @@ fn clear_ram(cfg: &mut BootConfig) {
     // to a cold boot, but it's probably worth it. Note that it doesn't happen on a suspend/resume.
     let ram: *mut u32 = cfg.sram_start as *mut u32;
     unsafe {
-        for addr in 0..(cfg.sram_size - 8192) / 4 { // 8k is reserved for our own stack
+        for addr in 0..(cfg.sram_size - 8192) / 4 {
+            // 8k is reserved for our own stack
             ram.add(addr).write_volatile(0);
         }
     }
@@ -423,7 +441,9 @@ pub unsafe fn bzero<T>(mut sbss: *mut T, ebss: *mut T)
 where
     T: Copy,
 {
-    if VDBG {println!("ZERO: {:08x} - {:08x}", sbss as usize, ebss as usize);}
+    if VDBG {
+        println!("ZERO: {:08x} - {:08x}", sbss as usize, ebss as usize);
+    }
     while sbss < ebss {
         // NOTE(volatile) to prevent this from being transformed into `memclr`
         ptr::write_volatile(sbss, mem::zeroed());
@@ -434,7 +454,7 @@ where
 /// This function allows us to check the final loader results
 /// It will print to the console the first 32 bytes of each loaded
 /// region top/bottom, based upon extractions from the page table.
-#[cfg(feature="debug-print")]
+#[cfg(feature = "debug-print")]
 fn check_load(cfg: &mut BootConfig) {
     let args = cfg.args;
 

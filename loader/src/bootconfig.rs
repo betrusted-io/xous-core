@@ -1,7 +1,7 @@
 #[cfg(not(feature = "atsama5d27"))]
-use core::num::NonZeroUsize;
-#[cfg(not(feature = "atsama5d27"))]
 use core::mem;
+#[cfg(not(feature = "atsama5d27"))]
+use core::num::NonZeroUsize;
 
 use crate::*;
 
@@ -149,7 +149,12 @@ impl BootConfig {
     ///
     /// * If you try to map a page twice
     pub fn map_page(&mut self, root: &mut PageTable, phys: usize, virt: usize, flags: usize) {
-        if VDBG {println!("    map pa {:x} -> va {:x} (satp {:x})", phys, virt, root as *mut PageTable as u32);}
+        if VDBG {
+            println!(
+                "    map pa {:x} -> va {:x} (satp {:x})",
+                phys, virt, root as *mut PageTable as u32
+            );
+        }
         match WORD_SIZE {
             4 => self.map_page_32(root, phys, virt, flags),
             8 => panic!("map_page doesn't work on 64-bit devices"),
@@ -179,8 +184,10 @@ impl BootConfig {
         // Allocate a new level 1 pagetable entry if one doesn't exist.
         if l1_pt[vpn1] & FLG_VALID == 0 {
             let na = self.alloc() as usize;
-            if VDBG {println!("The Level 1 page table is invalid ({:08x}) @ {:08x} -- allocating a new one @ {:08x}",
-                unsafe { l1_pt.as_ptr().add(vpn1) } as usize, l1_pt[vpn1], na);}
+            if VDBG {
+                println!("The Level 1 page table is invalid ({:08x}) @ {:08x} -- allocating a new one @ {:08x}",
+                unsafe { l1_pt.as_ptr().add(vpn1) } as usize, l1_pt[vpn1], na);
+            }
             // Mark this entry as a leaf node (WRX as 0), and indicate
             // it is a valid page by setting "V".
             l1_pt[vpn1] = ((na >> 12) << 10) | FLG_VALID;
@@ -201,17 +208,18 @@ impl BootConfig {
             );
         }
         let previous_flags = l0_pt[vpn0] & 0xf;
-        l0_pt[vpn0] =
-            (ppn1 << 20) | (ppn0 << 10) | flags | previous_flags | FLG_D | FLG_A;
+        l0_pt[vpn0] = (ppn1 << 20) | (ppn0 << 10) | flags | previous_flags | FLG_D | FLG_A;
 
         // If we had to allocate a level 1 pagetable entry, ensure that it's
         // mapped into our address space, owned by PID 1.
         if let Some(addr) = new_addr {
-            if VDBG {println!(
-                ">>> Mapping new address {:08x} -> {:08x}",
-                addr.get(),
-                PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE
-            );}
+            if VDBG {
+                println!(
+                    ">>> Mapping new address {:08x} -> {:08x}",
+                    addr.get(),
+                    PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE
+                );
+            }
             self.map_page(
                 root,
                 addr.get(),
@@ -219,7 +227,9 @@ impl BootConfig {
                 FLG_R | FLG_W | FLG_VALID,
             );
             self.change_owner(1 as XousPid, addr.get());
-            if VDBG {println!("<<< Done mapping new address");}
+            if VDBG {
+                println!("<<< Done mapping new address");
+            }
         }
     }
 }

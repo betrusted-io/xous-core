@@ -173,7 +173,7 @@ impl From<u32> for TagType {
     }
 }
 impl TagType {
-    #[cfg(feature="debug-print")]
+    #[cfg(feature = "debug-print")]
     pub fn to_str(&self) -> &'static str {
         match self {
             TagType::IniE => "IniE",
@@ -191,8 +191,7 @@ fn copy_processes(cfg: &mut BootConfig) {
     for tag in cfg.args.iter() {
         let tag_type = TagType::from(tag.name);
         match tag_type {
-            TagType::IniF |
-            TagType::IniE => {
+            TagType::IniF | TagType::IniE => {
                 _pid += 1;
                 let mut top = core::ptr::null_mut::<u8>();
 
@@ -202,9 +201,19 @@ fn copy_processes(cfg: &mut BootConfig) {
                         .add(inie.load_offset as usize / mem::size_of::<usize>())
                 } as *const u8;
 
-                println!("\n\n{} {} has {} sections", tag_type.to_str(), _pid, inie.sections.len());
-                println!("Initial top: {:x}, extra_pages: {:x}, init_size: {:x}, base_addr: {:x}",
-                    cfg.get_top() as *mut u8 as u32, cfg.extra_pages, cfg.init_size, cfg.base_addr as u32);
+                println!(
+                    "\n\n{} {} has {} sections",
+                    tag_type.to_str(),
+                    _pid,
+                    inie.sections.len()
+                );
+                println!(
+                    "Initial top: {:x}, extra_pages: {:x}, init_size: {:x}, base_addr: {:x}",
+                    cfg.get_top() as *mut u8 as u32,
+                    cfg.extra_pages,
+                    cfg.init_size,
+                    cfg.base_addr as u32
+                );
 
                 let mut last_page_vaddr = 0;
                 let mut last_section_perfect_fit = false;
@@ -236,8 +245,10 @@ fn copy_processes(cfg: &mut BootConfig) {
                         let mut dst_page_vaddr = section.virt as usize;
                         let mut bytes_to_copy = section.len();
 
-                        if (last_page_vaddr & !(PAGE_SIZE - 1)) != (dst_page_vaddr & !(PAGE_SIZE - 1))
-                        || last_section_perfect_fit {
+                        if (last_page_vaddr & !(PAGE_SIZE - 1))
+                            != (dst_page_vaddr & !(PAGE_SIZE - 1))
+                            || last_section_perfect_fit
+                        {
                             // this condition is always true for the first section's first iteration, because
                             // current_vpage_addr starts as NULL; thus we are guaranteed to always
                             // trigger the page allocate/zero mechanism the first time through the loop
@@ -251,17 +262,15 @@ fn copy_processes(cfg: &mut BootConfig) {
                             cfg.extra_pages += 1;
                             top = cfg.get_top() as *mut u8;
                             unsafe {
-                                bzero(
-                                top,
-                                top.add(PAGE_SIZE as usize)
-                                );
+                                bzero(top, top.add(PAGE_SIZE as usize));
                             }
                         }
 
                         // Copy the start copying the source data into virtual memory, until the current
                         // page is exhausted.
                         while bytes_to_copy > 0 {
-                            let bytes_remaining_in_vpage = PAGE_SIZE - (dst_page_vaddr & (PAGE_SIZE - 1));
+                            let bytes_remaining_in_vpage =
+                                PAGE_SIZE - (dst_page_vaddr & (PAGE_SIZE - 1));
                             let copyable_bytes = bytes_remaining_in_vpage.min(bytes_to_copy);
                             last_section_perfect_fit = bytes_remaining_in_vpage == bytes_to_copy;
                             if !section.no_copy() {
@@ -279,18 +288,15 @@ fn copy_processes(cfg: &mut BootConfig) {
                             bytes_to_copy -= copyable_bytes;
                             dst_page_vaddr += copyable_bytes;
 
-                            if copyable_bytes == bytes_remaining_in_vpage
-                            && bytes_to_copy > 0 {
+                            if copyable_bytes == bytes_remaining_in_vpage && bytes_to_copy > 0 {
                                 // we've reached the end of the vpage, and there's more to copy:
                                 // grab a new page
                                 cfg.extra_pages += 1;
                                 top = cfg.get_top() as *mut u8;
-                                if bytes_to_copy < PAGE_SIZE { // pre-zero out the page if the remaining data won't fill it.
+                                if bytes_to_copy < PAGE_SIZE {
+                                    // pre-zero out the page if the remaining data won't fill it.
                                     unsafe {
-                                        bzero(
-                                        top,
-                                        top.add(PAGE_SIZE as usize)
-                                        );
+                                        bzero(top, top.add(PAGE_SIZE as usize));
                                     }
                                 }
                             }
@@ -302,13 +308,18 @@ fn copy_processes(cfg: &mut BootConfig) {
                     } else {
                         top = cfg.get_top() as *mut u8;
                         // forward the FLASH address pointer by the length of the section.
-                        src_paddr = unsafe {src_paddr.add(section.len())};
+                        src_paddr = unsafe { src_paddr.add(section.len()) };
                     }
 
                     if VDBG {
                         println!("Looping to the next section");
-                        println!("top: {:x}, extra_pages: {:x}, init_size: {:x}, base_addr: {:x}",
-                            cfg.get_top() as *mut u8 as u32, cfg.extra_pages, cfg.init_size, cfg.base_addr as u32);
+                        println!(
+                            "top: {:x}, extra_pages: {:x}, init_size: {:x}, base_addr: {:x}",
+                            cfg.get_top() as *mut u8 as u32,
+                            cfg.extra_pages,
+                            cfg.init_size,
+                            cfg.base_addr as u32
+                        );
                         println!("last_page_vaddr: {:x}", last_page_vaddr);
                     }
                 }
@@ -319,10 +330,14 @@ fn copy_processes(cfg: &mut BootConfig) {
 
                 // TEXT SECTION
                 // Round it off to a page boundary
-                let load_size_rounded = (prog.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+                let load_size_rounded =
+                    (prog.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
                 cfg.extra_pages += load_size_rounded / PAGE_SIZE;
                 let top = cfg.get_top();
-                println!("\n\nKernel top: {:x}, extra_pages: {:x}", top as u32, cfg.extra_pages);
+                println!(
+                    "\n\nKernel top: {:x}, extra_pages: {:x}",
+                    top as u32, cfg.extra_pages
+                );
                 unsafe {
                     // Copy the program to the target address, rounding it off to the load size.
                     let src_addr = cfg
@@ -360,7 +375,8 @@ fn copy_processes(cfg: &mut BootConfig) {
                 unsafe {
                     // Copy the program to the target address, rounding it off to the load size.
                     let src_addr = cfg.base_addr.add(
-                        (prog.load_offset + prog.text_size + 4) as usize / mem::size_of::<usize>() - 1,
+                        (prog.load_offset + prog.text_size + 4) as usize / mem::size_of::<usize>()
+                            - 1,
                     );
                     println!(
                         "    Copying DATA from {:08x}-{:08x} to {:08x}-{:08x} ({} bytes long)",
@@ -384,9 +400,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                     )
                 }
             }
-            _ => {
-
-            }
+            _ => {}
         }
     }
 }
@@ -395,14 +409,16 @@ unsafe fn memcpy<T>(dest: *mut T, src: *const T, count: usize)
 where
     T: Copy,
 {
-    if VDBG {println!(
-        "COPY (align {}): {:08x} - {:08x} {} {:08x} - {:08x}",
-        mem::size_of::<T>(),
-        src as usize,
-        src as usize + count,
-        count,
-        dest as usize,
-        dest as usize + count
-    );}
+    if VDBG {
+        println!(
+            "COPY (align {}): {:08x} - {:08x} {} {:08x} - {:08x}",
+            mem::size_of::<T>(),
+            src as usize,
+            src as usize + count,
+            count,
+            dest as usize,
+            dest as usize + count
+        );
+    }
     core::ptr::copy_nonoverlapping(src, dest, count / mem::size_of::<T>());
 }

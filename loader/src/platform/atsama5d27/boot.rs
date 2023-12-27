@@ -5,18 +5,18 @@
 use core::mem;
 use core::num::NonZeroUsize;
 
+use crate::consts::{
+    EXCEPTION_STACK_TOP, FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, GUARD_MEMORY_BYTES, IRQ_STACK_TOP,
+    KERNEL_ARGUMENT_OFFSET, KERNEL_STACK_PAGE_COUNT, LOADER_CODE_ADDRESS, PAGE_TABLE_OFFSET,
+};
+use crate::platform::atsama5d27::load::InitialProcess;
+use crate::{bzero, println, BootConfig, XousPid, PAGE_SIZE, WORD_SIZE};
 use armv7::structures::paging::{
-    PageTable as L2PageTable, TranslationTable, TranslationTableDescriptor,
-    TranslationTableType, PageTableDescriptor, PageTableType,
-    TranslationTableMemory, PageTableMemory,
+    PageTable as L2PageTable, PageTableDescriptor, PageTableMemory, PageTableType,
+    TranslationTable, TranslationTableDescriptor, TranslationTableMemory, TranslationTableType,
     PAGE_TABLE_FLAGS, SMALL_PAGE_FLAGS,
 };
 use armv7::{PhysicalAddress, VirtualAddress};
-use crate::consts::{FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, GUARD_MEMORY_BYTES, KERNEL_ARGUMENT_OFFSET, LOADER_CODE_ADDRESS, PAGE_TABLE_OFFSET, KERNEL_STACK_PAGE_COUNT, EXCEPTION_STACK_TOP, IRQ_STACK_TOP};
-use crate::{
-    bzero, println, BootConfig, XousPid, PAGE_SIZE, WORD_SIZE,
-};
-use crate::platform::atsama5d27::load::InitialProcess;
 
 const DEBUG_PAGE_MAPPING: bool = false;
 macro_rules! dprint {
@@ -393,9 +393,12 @@ pub fn map_kernel_to_processes(
     kernel_irq_sp: usize,
     krn_struct_start: usize,
 ) {
-    let processes = unsafe { core::mem::transmute::<_, &[InitialProcess]>( &*cfg.processes) };
+    let processes = unsafe { core::mem::transmute::<_, &[InitialProcess]>(&*cfg.processes) };
 
-    assert_ne!(kernel_exception_sp, 0, "No exception stack allocated for the kernel!");
+    assert_ne!(
+        kernel_exception_sp, 0,
+        "No exception stack allocated for the kernel!"
+    );
 
     for process in processes[1..].iter() {
         println!("Mapping kernel (PID1) text to process PID{}", process.asid);
@@ -404,53 +407,50 @@ pub fn map_kernel_to_processes(
         for addr in (0..ktext_size).step_by(PAGE_SIZE) {
             let phys = ktext_offset + addr;
             let virt = ktext_virt_offset + addr;
-            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
-
-            cfg.map_page(
-                translation_table,
-                phys,
-                virt,
-                FLG_VALID | FLG_R | FLG_X,
+            println!(
+                "MAP ({:08x}): {:08x} -> {:08x}",
+                translation_table as usize, virt, phys
             );
+
+            cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_X);
         }
         println!("Mapping kernel (PID1) data to process PID{}", process.asid);
         println!("Offset: {:08x}, size: {:08x}", kdata_offset, kdata_size);
         for addr in (0..kdata_size).step_by(PAGE_SIZE) {
             let phys = kdata_offset + addr;
             let virt = kdata_virt_offset + addr;
-            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
-
-            cfg.map_page(
-                translation_table,
-                phys,
-                virt,
-                FLG_VALID | FLG_R | FLG_W,
+            println!(
+                "MAP ({:08x}): {:08x} -> {:08x}",
+                translation_table as usize, virt, phys
             );
+
+            cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_W);
         }
 
-        println!("Mapping kernel exception stack pages to the process PID{}", process.asid);
+        println!(
+            "Mapping kernel exception stack pages to the process PID{}",
+            process.asid
+        );
         for i in 0..KERNEL_STACK_PAGE_COUNT {
-            let virt = EXCEPTION_STACK_TOP - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * i);
-            let phys = kernel_exception_sp - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * (i + 1));
-            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
-            cfg.map_page(
-                translation_table,
-                phys,
-                virt,
-                FLG_VALID | FLG_R | FLG_W,
+            let virt =
+                EXCEPTION_STACK_TOP - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * i);
+            let phys =
+                kernel_exception_sp - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * (i + 1));
+            println!(
+                "MAP ({:08x}): {:08x} -> {:08x}",
+                translation_table as usize, virt, phys
             );
+            cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_W);
         }
 
         println!("Mapping irq stack page to the process PID{}", process.asid);
         let virt = IRQ_STACK_TOP;
         let phys = kernel_irq_sp;
-        println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
-        cfg.map_page(
-            translation_table,
-            phys,
-            virt,
-            FLG_VALID | FLG_R | FLG_W,
+        println!(
+            "MAP ({:08x}): {:08x} -> {:08x}",
+            translation_table as usize, virt, phys
         );
+        cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_W);
 
         // TODO: For now, make the UART visible for all the processes.
         //       Later on we may reuse the mapping made by the kernel.
@@ -458,7 +458,10 @@ pub fn map_kernel_to_processes(
         for i in 0..4 {
             let virt = 0xffcf_0000 + (i * PAGE_SIZE);
             let phys = 0xf802_0000 + (i * PAGE_SIZE);
-            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
+            println!(
+                "MAP ({:08x}): {:08x} -> {:08x}",
+                translation_table as usize, virt, phys
+            );
             cfg.map_page(
                 translation_table,
                 phys,
