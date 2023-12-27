@@ -11,6 +11,7 @@ use locales::t;
 use modals::Modals;
 use signal_ws::SignalWS;
 use std::io::{Error, ErrorKind};
+use std::time::Duration;
 pub use trust_mode::TrustMode;
 use tungstenite::Message;
 
@@ -152,7 +153,7 @@ impl Manager {
         match SignalWS::new_provision(&host) {
             Ok(mut ws) => {
                 log::info!("provisioning websocket established to {host}");
-                match ws.read() {
+                match ws.read(Some(Duration::from_millis(5000))) {
                     Ok(Message::Binary(uuid)) => {
                         log::info!("received Provisioning UUID message from host");
                         let uuid = libsignal::ProvisioningUuid::decode(uuid).id.clone();
@@ -173,7 +174,7 @@ impl Manager {
                                         Some(device_link_uri.as_str()),
                                     )
                                     .expect("qrcode failed");
-                                match ws.read() {
+                                match ws.read(Some(Duration::from_millis(5000))) {
                                     Ok(Message::Binary(registration)) => {
                                         log::info!("Registration message received from host");
                                         ws.close();
