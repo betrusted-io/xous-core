@@ -2,7 +2,7 @@ mod service_environment;
 
 use crate::manager::libsignal::{DeviceNameUtil, ProvisionMessage};
 use pddb::Pddb;
-use service_environment::ServiceEnvironment;
+pub use service_environment::ServiceEnvironment;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::str::FromStr;
 
@@ -24,7 +24,7 @@ pub struct Account {
     pni_service_id: Option<String>,
     profile_key: Option<String>,
     registered: bool,
-    service_environment: ServiceEnvironment,
+    service_environment: Option<ServiceEnvironment>,
     storage_key: Option<String>,
     store_last_receive_timestamp: i64,
     store_manifest_version: i64,
@@ -86,12 +86,7 @@ impl Account {
         set(&pddb, pddb_dict, PNI_SERVICE_ID_KEY, None)?;
         set(&pddb, pddb_dict, PROFILE_KEY_KEY, None)?;
         set(&pddb, pddb_dict, REGISTERED_KEY, Some(&false.to_string()))?;
-        set(
-            &pddb,
-            pddb_dict,
-            SERVICE_ENVIRONMENT_KEY,
-            Some(&ServiceEnvironment::Staging.to_string()),
-        )?;
+        set(&pddb, pddb_dict, SERVICE_ENVIRONMENT_KEY, None)?;
         set(&pddb, pddb_dict, STORAGE_KEY_KEY, None)?;
         set(
             &pddb,
@@ -152,7 +147,7 @@ impl Account {
                 Ok(pni_service_id),
                 Ok(profile_key),
                 Ok(Some(registered)),
-                Ok(Some(service_environment)),
+                Ok(service_environment),
                 Ok(storage_key),
                 Ok(Some(store_last_receive_timestamp)),
                 Ok(Some(store_manifest_version)),
@@ -174,7 +169,8 @@ impl Account {
                 pni_service_id: pni_service_id,
                 profile_key: profile_key,
                 registered: registered.parse().unwrap(),
-                service_environment: ServiceEnvironment::from_str(&service_environment).unwrap(),
+                service_environment: service_environment
+                    .map(|se| ServiceEnvironment::from_str(&se).unwrap()),
                 storage_key: storage_key,
                 store_last_receive_timestamp: store_last_receive_timestamp.parse().unwrap(),
                 store_manifest_version: store_manifest_version.parse().unwrap(),
@@ -220,6 +216,7 @@ impl Account {
     pub fn link(
         &mut self,
         device_name: &str,
+        service_environment: &str,
         provisioning_msg: ProvisionMessage,
     ) -> Result<bool, Error> {
         // TODO complete link pre-checks
@@ -257,6 +254,7 @@ impl Account {
             ),
         )?;
         self.set(REGISTERED_KEY, Some(&false.to_string()))?;
+        self.set(SERVICE_ENVIRONMENT_KEY, Some(service_environment))?;
         self.set(STORAGE_KEY_KEY, None)?;
         self.set(STORE_LAST_RECEIVE_TIMESTAMP_KEY, Some("0"))?;
         self.set(STORE_MANIFEST_VERSION_KEY, Some("-1"))?;
@@ -330,7 +328,7 @@ impl Account {
                 PROFILE_KEY_KEY => Ok(self.profile_key = owned_value),
                 REGISTERED_KEY => Ok(self.registered = owned_value.unwrap().parse().unwrap()),
                 SERVICE_ENVIRONMENT_KEY => Ok(self.service_environment =
-                    ServiceEnvironment::from_str(&value.unwrap()).unwrap()),
+                    Some(ServiceEnvironment::from_str(&value.unwrap()).unwrap())),
                 STORAGE_KEY_KEY => Ok(self.storage_key = owned_value),
                 _ => {
                     log::warn!("invalid key: {key}");

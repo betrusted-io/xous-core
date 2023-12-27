@@ -4,7 +4,7 @@ mod link_state;
 mod signal_ws;
 mod trust_mode;
 
-use crate::{Account, DEFAULT_DEVICE_NAME, DEFAULT_HOST_NAME};
+use crate::{Account, ServiceEnvironment, DEFAULT_DEVICE_NAME, DEFAULT_HOST_NAME};
 use group_permission::GroupPermission;
 use link_state::LinkState;
 use locales::t;
@@ -143,12 +143,20 @@ impl Manager {
     /// # Arguments
     /// * `name` - Optionally specify a name to describe this new device (defaults to "xous").
     /// * `host` - Optionally specify a host to connect to (defaults to "signal.org").
+    /// * `service_environment` - Optionally specify a service_environment to connect to (defaults to "Live").
     ///
     #[allow(dead_code)]
-    pub fn link(&mut self, name: Option<&str>, host: Option<&str>) -> Result<bool, Error> {
+    pub fn link(
+        &mut self,
+        name: Option<&str>,
+        host: Option<&str>,
+        service_environment: Option<&str>,
+    ) -> Result<bool, Error> {
         // insert default values as required
         let name = name.unwrap_or(DEFAULT_DEVICE_NAME);
         let host = host.unwrap_or(DEFAULT_HOST_NAME);
+        let live_service_environment = ServiceEnvironment::Live.to_string();
+        let service_environment = service_environment.unwrap_or(&live_service_environment);
         let link_err = Error::new(ErrorKind::Other, "failed to link device");
         match SignalWS::new_provision(&host) {
             Ok(mut ws) => {
@@ -180,6 +188,7 @@ impl Manager {
                                         ws.close();
                                         match self.account.link(
                                             name,
+                                            service_environment,
                                             libsignal::ProvisionMessage::decode(
                                                 identity_key_pair,
                                                 registration,

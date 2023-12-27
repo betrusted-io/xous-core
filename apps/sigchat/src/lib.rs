@@ -2,7 +2,7 @@ mod account;
 pub mod api;
 mod manager;
 
-use crate::account::Account;
+use crate::account::{Account, ServiceEnvironment};
 use crate::manager::{Manager, TrustMode};
 pub use api::*;
 use chat::Chat;
@@ -218,7 +218,11 @@ impl<'a> SigChat<'a> {
                 self.chat
                     .set_status_text(t!("sigchat.status.connecting", locales::LANG));
                 self.chat.set_busy_state(true);
-                match manager.link(Some(&name), Some(&host)) {
+                match manager.link(
+                    Some(&name),
+                    Some(&host),
+                    Some(&ServiceEnvironment::Staging.to_string()),
+                ) {
                     Ok(true) => {
                         log::info!("Linked Signal Account");
                         self.chat.set_busy_state(false);
