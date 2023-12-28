@@ -40,13 +40,30 @@ impl SignalWS {
     }
 
     pub fn close(&mut self) {
-        if let Ok(mut ws) = self.ws.lock() {
-            ws.close(None)
-                .unwrap_or_else(|e| log::warn!("failed to close websocket: {e}"));
-            // TODO close properly https://docs.rs/tungstenite/0.20.1/tungstenite/protocol/struct.WebSocket.html
-            ws.flush()
-                .unwrap_or_else(|e| log::warn!("failed to flush websocket: {e}"));
-        };
+        log::info!("attempting to close websocket connection");
+        let ws = self.ws.clone();
+        thread::spawn(move || loop {
+            if let Ok(mut ws) = ws.lock() {
+                ws.close(None)
+                    .unwrap_or_else(|e| log::warn!("failed to close websocket: {e}"));
+                loop {
+                    match ws.flush() {
+                        Ok(()) => (),
+                        Err(
+                            tungstenite::Error::ConnectionClosed
+                            | tungstenite::Error::AlreadyClosed,
+                        ) => {
+                            log::info!("websocket connection closed");
+                            break;
+                        }
+                        Err(e) => {
+                            log::warn!("{e}");
+                            break;
+                        }
+                    }
+                }
+            };
+        });
     }
 
     /// Reads a msg from the websocket with optional timeout
@@ -67,7 +84,8 @@ impl SignalWS {
                 let ws = self.ws.clone();
                 thread::spawn(move || {
                     if let Ok(mut ws) = ws.lock() {
-                        tx.send(ws.read()).unwrap();
+                        tx.send(ws.read())
+                            .unwrap_or_else(|e| log::warn!("failed to forward ws msg: {e}"));
                     }
                 });
                 match rx.recv_timeout(duration) {

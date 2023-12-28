@@ -161,7 +161,7 @@ impl Manager {
         match SignalWS::new_provision(&host) {
             Ok(mut ws) => {
                 log::info!("provisioning websocket established to {host}");
-                match ws.read(Some(Duration::from_millis(5000))) {
+                let result = match ws.read(Some(Duration::from_millis(5000))) {
                     Ok(Message::Binary(uuid)) => {
                         log::info!("received Provisioning UUID message from host");
                         let uuid = libsignal::ProvisioningUuid::decode(uuid).id.clone();
@@ -185,7 +185,6 @@ impl Manager {
                                 match ws.read(Some(Duration::from_millis(5000))) {
                                     Ok(Message::Binary(registration)) => {
                                         log::info!("Registration message received from host");
-                                        ws.close();
                                         match self.account.link(
                                             name,
                                             service_environment,
@@ -225,7 +224,9 @@ impl Manager {
                         log::warn!("{e}");
                         Err(link_err)
                     }
-                }
+                };
+                ws.close();
+                result
             }
             Err(e) => {
                 log::info!("failed to connect to server: {}", e);
