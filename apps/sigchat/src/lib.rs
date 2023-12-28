@@ -2,14 +2,15 @@ mod account;
 pub mod api;
 mod manager;
 
-use crate::account::{Account, ServiceEnvironment};
-use crate::manager::{Manager, TrustMode};
+use crate::account::{Account, ServiceEnvironment, DEFAULT_HOST};
+use crate::manager::{Config, Manager, TrustMode};
 pub use api::*;
 use chat::Chat;
 use locales::t;
 use modals::Modals;
 use std::io::{Error, ErrorKind};
 use tls::Tls;
+use url::{Host, Url};
 
 /// PDDB Dict for sigchat keys
 const SIGCHAT_ACCOUNT: &str = "sigchat.account";
@@ -105,6 +106,7 @@ impl<'a> SigChat<'a> {
     ///
     fn account_setup(&mut self) -> Result<Account, Error> {
         log::info!("Attempting to setup a Signal Account");
+        let service_environment = ServiceEnvironment::Staging;
         self.modals
             .add_list_item(t!("sigchat.account.link", locales::LANG))
             .expect("failed add list item");
@@ -121,8 +123,9 @@ impl<'a> SigChat<'a> {
             Ok(index) => match index {
                 0 => {
                     let host = self.host_modal();
-                    match self.probe_host(&host) {
-                        true => Ok(self.account_link(&host)?),
+                    let config = Config::new(host, service_environment);
+                    match self.probe_host(config.url()) {
+                        true => Ok(self.account_link(&config)?),
                         false => Err(Error::new(
                             ErrorKind::Other,
                             "failed to trust host certificate",
@@ -131,8 +134,9 @@ impl<'a> SigChat<'a> {
                 }
                 1 => {
                     let host = self.host_modal();
-                    match self.probe_host(&host) {
-                        true => Ok(self.account_register(&host)?),
+                    let config = Config::new(host, service_environment);
+                    match self.probe_host(config.url()) {
+                        true => Ok(self.account_register(&config)?),
                         false => Err(Error::new(
                             ErrorKind::Other,
                             "failed to trust host certificate",
@@ -170,7 +174,7 @@ impl<'a> SigChat<'a> {
             host = match self
                 .modals
                 .alert_builder(t!("sigchat.account.host.name", locales::LANG))
-                .field(Some(DEFAULT_HOST_NAME.to_string()), None)
+                .field(Some(DEFAULT_HOST.to_string()), None)
                 .build()
             {
                 Ok(text) => match Host::parse(&text.content()[0].content.to_string()) {
@@ -190,7 +194,7 @@ impl<'a> SigChat<'a> {
                         None
                     }
                 },
-                _ => Host::parse(DEFAULT_HOST_NAME).ok(),
+                _ => Host::parse(DEFAULT_HOST).ok(),
             }
         }
         host.unwrap()
@@ -204,12 +208,12 @@ impl<'a> SigChat<'a> {
     /// # Returns
     /// true if at least 1 Certificate Authority is trusted
     ///
-    fn probe_host(&self, host: &str) -> bool {
+    fn probe_host(&self, url: &Url) -> bool {
         self.chat
             .set_status_text(t!("sigchat.status.probing", locales::LANG));
         self.chat.set_busy_state(true);
         let tls = Tls::new();
-        if tls.accessible(host, true) {
+        if tls.accessible(url.host_str().unwrap(), true) {
             self.chat.set_busy_state(false);
             true
         } else {
@@ -230,17 +234,17 @@ impl<'a> SigChat<'a> {
     /// commences - culminating by presenting a qr-code to be scanned by the primary device.
     ///
     /// # Arguments
-    /// * `host` - the Signal server host name or ip-address
+    /// * `config` - Signal configuration - host server and Live/Staging environment
     ///
     /// # Returns
     /// Account struct stored in pddb
     ///
-    pub fn account_link(&mut self, host: &str) -> Result<Account, Error> {
+    pub fn account_link(&mut self, config: &Config) -> Result<Account, Error> {
         log::info!("Attempting to Link to an existing Signal Account");
         self.chat
             .set_status_text(t!("sigchat.status.initializing", locales::LANG));
         self.chat.set_busy_state(true);
-        match Account::new(SIGCHAT_ACCOUNT) {
+        match Account::new(SIGCHAT_ACCOUNT, config.host(), config.service_environment()) {
             Ok(account) => {
                 let mut manager = Manager::new(account, TrustMode::OnFirstUse);
                 let name = self.name_modal(
@@ -250,11 +254,7 @@ impl<'a> SigChat<'a> {
                 self.chat
                     .set_status_text(t!("sigchat.status.connecting", locales::LANG));
                 self.chat.set_busy_state(true);
-                match manager.link(
-                    Some(&name),
-                    Some(&host),
-                    Some(&ServiceEnvironment::Staging.to_string()),
-                ) {
+                match manager.link(&name) {
                     Ok(true) => {
                         log::info!("Linked Signal Account");
                         self.chat.set_busy_state(false);
@@ -327,7 +327,11 @@ impl<'a> SigChat<'a> {
     /// The phone number must include the country calling code, i.e. the number must start with a "+" sign.
     /// Warning: this will disable the authentication of your phone as a primary device.
     ///
-    pub fn account_register(&mut self, _host: &str) -> Result<Account, Error> {
+    /// # Arguments
+    ///
+    /// * `config` - Signal configuration - host server and Live/Staging environment
+    ///
+    pub fn account_register(&mut self, config: &Config) -> Result<Account, Error> {
         log::info!("Attempting to Register a new Signal Account");
         self.modals
             .show_notification(&"sorry - registration is not implemented yet", None)
@@ -335,7 +339,7 @@ impl<'a> SigChat<'a> {
         match self.number_modal() {
             Ok(number) => {
                 log::info!("registration phone number = {:?}", number);
-                match Account::new(SIGCHAT_ACCOUNT) {
+                match Account::new(SIGCHAT_ACCOUNT, config.host(), config.service_environment()) {
                     Ok(mut account) => match account.set_number(&number.to_string()) {
                         Ok(_number) => {
                             self.manager = Some(Manager::new(account, TrustMode::OnFirstUse));

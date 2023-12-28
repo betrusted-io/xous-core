@@ -1,9 +1,8 @@
-use rkyv::{Archive, Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
 // The server environment to use:
-#[derive(Archive, Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug)]
 pub enum ServiceEnvironment {
     Live,
     Staging,

@@ -6,9 +6,10 @@ use std::thread;
 use std::time::Duration;
 use tls::Tls;
 use tungstenite::{Message, WebSocket};
+use url::Url;
 
-const PROVISIONING_PATH: &str = "/v1/websocket/provisioning/";
-const REGISTRATION_PATH: &str = "/v1/registration";
+const PROVISIONING_PATH: [&str; 4] = ["v1", "websocket", "provisioning", ""];
+const REGISTRATION_PATH: [&str; 3] = ["v1", "registration", ""];
 
 #[allow(dead_code)]
 pub struct SignalWS {
@@ -21,8 +22,8 @@ impl SignalWS {
         todo!();
     }
 
-    fn new(server: &str) -> Result<Self, Error> {
-        match SignalWS::connect(server) {
+    fn new(url: &Url) -> Result<Self, Error> {
+        match SignalWS::connect(url) {
             Ok(ws) => Ok(Self {
                 ws: Arc::new(Mutex::new(ws)),
             }),
@@ -30,13 +31,21 @@ impl SignalWS {
         }
     }
 
-    pub fn new_provision(host: &str) -> Result<Self, Error> {
-        Ok(Self::new(&format!("wss://{host}{}", PROVISIONING_PATH))?)
+    pub fn new_provision(url: &mut Url) -> Result<Self, Error> {
+        url.set_scheme("wss").expect("failed to set scheme");
+        url.path_segments_mut()
+            .expect("failed to add path")
+            .extend(&PROVISIONING_PATH);
+        Ok(Self::new(&url)?)
     }
 
     #[allow(dead_code)]
-    pub fn new_register(host: &str) -> Result<Self, Error> {
-        Ok(Self::new(&format!("wss://{host}{}", REGISTRATION_PATH))?)
+    pub fn new_register(url: &mut Url) -> Result<Self, Error> {
+        url.set_scheme("wss").expect("failed to set scheme");
+        url.path_segments_mut()
+            .expect("failed to add path")
+            .extend(&REGISTRATION_PATH);
+        Ok(Self::new(&url)?)
     }
 
     pub fn close(&mut self) {
@@ -122,53 +131,49 @@ impl SignalWS {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn send(&mut self, _message: Message) -> Result<(), Error> {
+        todo!()
+    }
+
     /// Make a websocket connection to host server
     ///
     /// # Arguments
-    /// * `server` - server
+    /// * `url` - url of Signal server
     ///
     /// # Returns
     ///
-    fn connect(server: &str) -> Result<WebSocket<StreamOwned<ClientConnection, TcpStream>>, Error> {
-        log::info!("connecting websocket");
-        match url::Url::parse(server) {
-            Ok(url) => {
-                log::info!("attempting websocket connection to {}", url.as_str());
-                let host = url.host_str().expect("failed to extract host from url");
-                match TcpStream::connect((host, 443)) {
-                    Ok(sock) => {
-                        log::info!("tcp connected to {host}");
-                        let xtls = Tls::new();
-                        match xtls.stream_owned(host, sock) {
-                            Ok(tls_stream) => {
-                                log::info!("tls configured");
-                                match tungstenite::client(url, tls_stream) {
-                                    Ok((socket, response)) => {
-                                        log::info!("Websocket connected to: {}", server);
-                                        log::info!("Response HTTP code: {}", response.status());
-                                        Ok(socket)
-                                    }
-                                    Err(e) => {
-                                        log::info!("failed to connect websocket: {}", e);
-                                        Err(Error::from(ErrorKind::ConnectionRefused))
-                                    }
-                                }
+    fn connect(url: &Url) -> Result<WebSocket<StreamOwned<ClientConnection, TcpStream>>, Error> {
+        log::info!("attempting websocket connection to {}", url.as_str());
+        let host = url.host_str().expect("failed to extract host from url");
+        match TcpStream::connect((host, 443)) {
+            Ok(sock) => {
+                log::info!("tcp connected to {host}");
+                let xtls = Tls::new();
+                match xtls.stream_owned(host, sock) {
+                    Ok(tls_stream) => {
+                        log::info!("tls configured");
+                        match tungstenite::client(url, tls_stream) {
+                            Ok((socket, response)) => {
+                                log::info!("Websocket connected to: {}", url.as_str());
+                                log::info!("Response HTTP code: {}", response.status());
+                                Ok(socket)
                             }
                             Err(e) => {
-                                log::warn!("failed to configure tls: {e}");
-                                Err(e)
+                                log::info!("failed to connect websocket: {}", e);
+                                Err(Error::from(ErrorKind::ConnectionRefused))
                             }
                         }
                     }
                     Err(e) => {
-                        log::warn!("failed to connect tcp: {e}");
+                        log::warn!("failed to configure tls: {e}");
                         Err(e)
                     }
                 }
             }
             Err(e) => {
-                log::info!("failed to parse server url: {e}");
-                Err(Error::new(ErrorKind::InvalidData, e))
+                log::warn!("failed to connect tcp: {e}");
+                Err(e)
             }
         }
     }

@@ -1,10 +1,12 @@
+mod config;
 mod group_permission;
 pub mod libsignal; // stub
 mod link_state;
 mod signal_ws;
 mod trust_mode;
 
-use crate::{Account, ServiceEnvironment, DEFAULT_DEVICE_NAME, DEFAULT_HOST_NAME};
+use crate::Account;
+pub use config::Config;
 use group_permission::GroupPermission;
 use link_state::LinkState;
 use locales::t;
@@ -22,6 +24,7 @@ use tungstenite::Message;
 #[allow(dead_code)]
 pub struct Manager {
     account: Account,
+    config: Config,
     trust_mode: TrustMode,
     websocket: Option<SignalWS>,
     log_verbose: bool,
@@ -37,8 +40,13 @@ impl Manager {
     /// * `account` - Specify your phone number, that will be your identifier. The phone number must include the country calling code, i.e. the number must start with a "+" sign.
     ///
     pub fn new(account: Account, trust_mode: TrustMode) -> Manager {
+        let config = Config::new(
+            account.host().clone(),
+            account.service_environment().clone(),
+        );
         Manager {
             account,
+            config,
             trust_mode,
             websocket: None,
             log_verbose: false,
@@ -141,24 +149,15 @@ impl Manager {
     /// 7. checking and saving account details
     ///
     /// # Arguments
-    /// * `name` - Optionally specify a name to describe this new device (defaults to "xous").
-    /// * `host` - Optionally specify a host to connect to (defaults to "signal.org").
-    /// * `service_environment` - Optionally specify a service_environment to connect to (defaults to "Live").
+    /// * `name` - name to describe this new device
+    /// * `config` - Signal configuration - host server and Live/Staging environment
+    /// * `service_environment` - service_environment to connect to on host
     ///
     #[allow(dead_code)]
-    pub fn link(
-        &mut self,
-        name: Option<&str>,
-        host: Option<&str>,
-        service_environment: Option<&str>,
-    ) -> Result<bool, Error> {
-        // insert default values as required
-        let name = name.unwrap_or(DEFAULT_DEVICE_NAME);
-        let host = host.unwrap_or(DEFAULT_HOST_NAME);
-        let live_service_environment = ServiceEnvironment::Live.to_string();
-        let service_environment = service_environment.unwrap_or(&live_service_environment);
+    pub fn link(&mut self, name: &str) -> Result<bool, Error> {
         let link_err = Error::new(ErrorKind::Other, "failed to link device");
-        match SignalWS::new_provision(&host) {
+        let mut host = self.config.url().clone();
+        match SignalWS::new_provision(&mut host) {
             Ok(mut ws) => {
                 log::info!("provisioning websocket established to {host}");
                 let result = match ws.read(Some(Duration::from_millis(5000))) {
@@ -187,7 +186,6 @@ impl Manager {
                                         log::info!("Registration message received from host");
                                         match self.account.link(
                                             name,
-                                            service_environment,
                                             libsignal::ProvisionMessage::decode(
                                                 identity_key_pair,
                                                 registration,
