@@ -120,10 +120,7 @@ impl<'a> SigChat<'a> {
         match self.modals.get_radio_index() {
             Ok(index) => match index {
                 0 => {
-                    let host = self.name_modal(
-                        DEFAULT_HOST_NAME,
-                        t!("sigchat.account.host.name", locales::LANG),
-                    );
+                    let host = self.host_modal();
                     match self.probe_host(&host) {
                         true => Ok(self.account_link(&host)?),
                         false => Err(Error::new(
@@ -133,10 +130,7 @@ impl<'a> SigChat<'a> {
                     }
                 }
                 1 => {
-                    let host = self.name_modal(
-                        DEFAULT_HOST_NAME,
-                        t!("sigchat.account.host.name", locales::LANG),
-                    );
+                    let host = self.host_modal();
                     match self.probe_host(&host) {
                         true => Ok(self.account_register(&host)?),
                         false => Err(Error::new(
@@ -162,6 +156,44 @@ impl<'a> SigChat<'a> {
                 ))
             }
         }
+    }
+
+    /// Prompt for a host name from the user
+    ///
+    /// # Returns
+    ///
+    /// the host provided by the user
+    ///
+    fn host_modal(&self) -> Host {
+        let mut host = None;
+        while host.is_none() {
+            host = match self
+                .modals
+                .alert_builder(t!("sigchat.account.host.name", locales::LANG))
+                .field(Some(DEFAULT_HOST_NAME.to_string()), None)
+                .build()
+            {
+                Ok(text) => match Host::parse(&text.content()[0].content.to_string()) {
+                    Ok(host) => match host {
+                        Host::Domain(..) => Some(host),
+                        _ => {
+                            self.modals
+                                .show_notification(t!("sigchat.host.invalid", locales::LANG), None)
+                                .expect("notification failed");
+                            None
+                        }
+                    },
+                    Err(_) => {
+                        self.modals
+                            .show_notification(t!("sigchat.host.invalid", locales::LANG), None)
+                            .expect("notification failed");
+                        None
+                    }
+                },
+                _ => Host::parse(DEFAULT_HOST_NAME).ok(),
+            }
+        }
+        host.unwrap()
     }
 
     /// Probe host for tls Certificate Authority chain of trust

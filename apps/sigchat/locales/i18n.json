@@ -35,6 +35,10 @@
         "en": "Setup Signal on this device.",
         "en-tts": "Setup Signal on this device."
     },
+    "sigchat.host.invalid": {
+        "en": "Invalid host format",
+        "en-tts": "Invalid host format"
+    },
     "sigchat.menu.close": {
         "en": "Close menu",
         "en-tts": "Close menu"
