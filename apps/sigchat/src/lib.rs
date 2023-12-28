@@ -226,10 +226,15 @@ impl<'a> SigChat<'a> {
                     Ok(true) => {
                         log::info!("Linked Signal Account");
                         self.chat.set_busy_state(false);
+                        Ok(Account::read(SIGCHAT_ACCOUNT)?)
                     }
                     Ok(false) => {
                         log::info!("failed to link Signal Account");
                         self.chat.set_busy_state(false);
+                        Err(Error::new(
+                            ErrorKind::Other,
+                            "failed to link Signal Account",
+                        ))
                     }
                     Err(e) => {
                         log::warn!("error while linking Signal Account: {e}");
@@ -240,6 +245,10 @@ impl<'a> SigChat<'a> {
                         self.modals
                             .show_notification(&format!("{}", e), None)
                             .expect("notification failed");
+                        Err(Error::new(
+                            ErrorKind::Other,
+                            "error while linking Signal Account",
+                        ))
                     }
                 }
             }
@@ -251,9 +260,12 @@ impl<'a> SigChat<'a> {
                 self.modals
                     .show_notification(t!("sigchat.account.failed", locales::LANG), None)
                     .expect("notification failed");
+                Err(Error::new(
+                    ErrorKind::Other,
+                    "failed to create new Account in pddb",
+                ))
             }
-        };
-        Ok(Account::read(SIGCHAT_ACCOUNT)?)
+        }
     }
 
     /// Prompt a name from the user
