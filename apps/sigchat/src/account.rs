@@ -5,6 +5,7 @@ use pddb::Pddb;
 pub use service_environment::ServiceEnvironment;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::str::FromStr;
+use url::Host;
 
 #[allow(dead_code)]
 pub struct Account {
@@ -15,6 +16,7 @@ pub struct Account {
     aci_service_id: Option<String>,
     device_id: u32,
     encrypted_device_name: Option<String>,
+    host: Host,
     is_multi_device: bool,
     number: Option<String>,
     password: Option<String>,
@@ -31,11 +33,14 @@ pub struct Account {
     store_manifest: Option<String>,
 }
 
+pub const DEFAULT_HOST: &str = "signal.org";
+
 const ACI_IDENTITY_PRIVATE_KEY: &str = "aci.identity.private";
 const ACI_IDENTITY_PUBLIC_KEY: &str = "aci.identity.public";
 const ACI_SERVICE_ID_KEY: &str = "aci.service_id";
 const DEVICE_ID_KEY: &str = "device_id";
 const ENCRYPTED_DEVICE_NAME_KEY: &str = "encrypted_device_name";
+const HOST_KEY: &str = "host";
 const IS_MULTI_DEVICE_KEY: &str = "is_multi_device";
 const NUMBER_KEY: &str = "number";
 const PASSWORD_KEY: &str = "password";
@@ -52,18 +57,18 @@ const STORE_MANIFEST_VERSION_KEY: &str = "store_manifest_version";
 const STORE_MANIFEST_KEY: &str = "store_manifest";
 
 impl Account {
-    // Create a new Account stored in pddb with default values
-    //
-    // This function saves default values for each field in the pddb
-    // and then calls read() to load the values into the Account struct
-    //
-    // # Arguments
-    // * `pddb_dict` - the pddb dictionary name to hold the Account
-    //
-    // # Returns
-    //
-    // a new Account with default values
-    //
+    /// Create a new Account stored in pddb with default values
+    ///
+    /// This function saves default values for each field in the pddb
+    /// and then calls read() to load the values into the Account struct
+    ///
+    /// # Arguments
+    /// * `pddb_dict` - pddb dictionary name to hold the Account
+    ///
+    /// # Returns
+    ///
+    /// a new Account with default values
+    ///
     pub fn new(pddb_dict: &str) -> Result<Account, Error> {
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
@@ -72,6 +77,7 @@ impl Account {
         set(&pddb, pddb_dict, ACI_SERVICE_ID_KEY, None)?;
         set(&pddb, pddb_dict, DEVICE_ID_KEY, Some("0"))?;
         set(&pddb, pddb_dict, ENCRYPTED_DEVICE_NAME_KEY, None)?;
+        set(&pddb, pddb_dict, HOST_KEY, Some(DEFAULT_HOST))?;
         set(
             &pddb,
             pddb_dict,
@@ -117,6 +123,7 @@ impl Account {
             get(&pddb, pddb_dict, ACI_SERVICE_ID_KEY),
             get(&pddb, pddb_dict, DEVICE_ID_KEY),
             get(&pddb, pddb_dict, ENCRYPTED_DEVICE_NAME_KEY),
+            get(&pddb, pddb_dict, HOST_KEY),
             get(&pddb, pddb_dict, IS_MULTI_DEVICE_KEY),
             get(&pddb, pddb_dict, NUMBER_KEY),
             get(&pddb, pddb_dict, PASSWORD_KEY),
@@ -138,6 +145,7 @@ impl Account {
                 Ok(aci_service_id),
                 Ok(Some(device_id)),
                 Ok(encrypted_device_name),
+                Ok(Some(host)),
                 Ok(Some(is_multi_device)),
                 Ok(number),
                 Ok(password),
@@ -160,6 +168,7 @@ impl Account {
                 aci_service_id: aci_service_id,
                 device_id: device_id.parse().unwrap(),
                 encrypted_device_name: encrypted_device_name,
+                host: Host::parse(&host).unwrap(),
                 is_multi_device: is_multi_device.parse().unwrap(),
                 number: number,
                 password: password,
@@ -176,26 +185,27 @@ impl Account {
                 store_manifest_version: store_manifest_version.parse().unwrap(),
                 store_manifest: store_manifest,
             }),
-            (Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
-            (_, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
-            (_, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
-            (_, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
-            (_, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
-            (_, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
-            (_, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
-            (_, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _) => Err(e),
-            (_, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _) => Err(e),
-            (_, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _) => Err(e),
-            (_, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _) => Err(e),
-            (_, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _) => Err(e),
-            (_, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _) => Err(e),
-            (_, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _) => Err(e),
-            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _) => Err(e),
-            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _) => Err(e),
-            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _) => Err(e),
-            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _) => Err(e),
-            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e)) => Err(e),
-            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => {
+            (Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _, _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e), _) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, Err(e)) => Err(e),
+            (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) => {
                 Err(Error::from(ErrorKind::InvalidData))
             }
         }
@@ -216,7 +226,8 @@ impl Account {
     pub fn link(
         &mut self,
         device_name: &str,
-        service_environment: &str,
+        host: &Host,
+        service_environment: &ServiceEnvironment,
         provisioning_msg: ProvisionMessage,
     ) -> Result<bool, Error> {
         // TODO complete link pre-checks
@@ -237,6 +248,7 @@ impl Account {
                 aci.djb_private_key,
             )),
         )?;
+        self.set(HOST_KEY, Some(&host.to_string()))?;
         self.set(IS_MULTI_DEVICE_KEY, Some(&true.to_string()))?;
         self.set(NUMBER_KEY, Some(&provisioning_msg.number))?;
         self.set(PASSWORD_KEY, Some("STUB 32 bytes"))?;
@@ -254,7 +266,10 @@ impl Account {
             ),
         )?;
         self.set(REGISTERED_KEY, Some(&false.to_string()))?;
-        self.set(SERVICE_ENVIRONMENT_KEY, Some(service_environment))?;
+        self.set(
+            SERVICE_ENVIRONMENT_KEY,
+            Some(&service_environment.to_string()),
+        )?;
         self.set(STORAGE_KEY_KEY, None)?;
         self.set(STORE_LAST_RECEIVE_TIMESTAMP_KEY, Some("0"))?;
         self.set(STORE_MANIFEST_VERSION_KEY, Some("-1"))?;
