@@ -1,5 +1,4 @@
 use crate::*;
-use crate::hid::AppHID;
 use crate::hid::AppHIDConfig;
 use num_traits::*;
 use usb_device_xous::KeyboardLedsReport;
@@ -14,7 +13,6 @@ use xous_semver::SemVer;
 use core::num::NonZeroU8;
 use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use std::sync::Arc;
-use std::sync::Mutex;
 use utralib::generated::*;
 
 use usb_device::prelude::*;
@@ -295,26 +293,17 @@ pub(crate) fn main_hw() -> ! {
     const TRNG_BACKOFF_MS: u32 = 1;
     const TRNG_BACKOFF_MAX_MS: u32 = 1000; // cap on how far we backoff the polling rate
 
-    // stores the descriptor that has been selected for the current HIDv2 view.
-    let selected_hidv2_descriptor = Arc::new(Mutex::new(None));
-
     let usb_hidv2_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     let hidv2_alloc = UsbBusAllocator::new(usb_hidv2_dev);
+    
+    let mut hidv2 = hid::AppHID::new(
+        UsbVidPid(0x1209, 0x3613),
+        &serial_number,
+        &hidv2_alloc,
+        AppHIDConfig::default(), 
+        10,
+    );
 
-    let mut hidv2_class = UsbHidClassBuilder::new()
-            .add_device(
-                AppHIDConfig::default(),
-            )
-            .build(&hidv2_alloc);
-        
-
-    let mut hidv2_dev = UsbDeviceBuilder::new(&hidv2_alloc, UsbVidPid(0x1209, 0x3613))
-        .manufacturer("Kosagi")
-        .product("Precursor")
-        .serial_number(&serial_number)
-        .build();
-
-    let mut hidv2_queue = VecDeque::<HIDReport>::new();
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -471,7 +460,7 @@ pub(crate) fn main_hw() -> ! {
                         serial_device.force_reset()
                     },
                     Views::HIDv2 => {
-                        hidv2_dev.force_reset()
+                        hidv2.force_reset()
                     }
                 }.unwrap_or_else(|err| {
                     log::warn!("USB reset for view {:?} on resume failed: {:?}", view, err)
@@ -704,20 +693,9 @@ pub(crate) fn main_hw() -> ! {
                         None
                     },
                     Views::HIDv2 => {
-                        if hidv2_dev.poll(&mut [&mut hidv2_class]) {
-                            if selected_hidv2_descriptor.lock().unwrap().is_none() {
-                                continue;
-                            }                    
-
-                            let hidv2_device = hidv2_class.device::<AppHID<'_, _>, _>();
-                            match hidv2_device.read_report(){
-                                Ok(report) => {
-                                    hidv2_queue.push_back(report);
-                                    log::info!("report pushed to vecdeque: {:?}", report);
-                                }
-                                Err(err) => log::debug!("hidv2 read report error: {:?}", err),
-                            }
-
+                        match hidv2.poll() {
+                            Ok(_) => (),
+                            Err(error) => log::error!("hidv2 read report error: {:?}", error),
                         }
 
                         None
@@ -752,7 +730,7 @@ pub(crate) fn main_hw() -> ! {
                     #[cfg(feature="mass-storage")]
                     Views::MassStorage => ums_device.state() == UsbDeviceState::Suspend,
                     Views::Serial => serial_device.state() == UsbDeviceState::Suspend,
-                    Views::HIDv2 => hidv2_dev.state() == UsbDeviceState::Suspend,
+                    Views::HIDv2 => hidv2.state() == UsbDeviceState::Suspend,
                 };
                 if is_suspend {
                     log::info!("suspend detected");
@@ -1067,7 +1045,7 @@ pub(crate) fn main_hw() -> ! {
                     #[cfg(feature="mass-storage")]
                     Views::MassStorage => xous::return_scalar(msg.sender, ums_device.state() as usize).unwrap(),
                     Views::Serial => xous::return_scalar(msg.sender, serial_device.state() as usize).unwrap(),
-                    Views::HIDv2 => xous::return_scalar(msg.sender, hidv2_dev.state() as usize).unwrap(),
+                    Views::HIDv2 => xous::return_scalar(msg.sender, hidv2.state() as usize).unwrap(),
                 }
             }),
             Some(Opcode::SendKeyCode) => msg_blocking_scalar_unpack!(msg, code0, code1, code2, autoup, {
@@ -1485,30 +1463,20 @@ pub(crate) fn main_hw() -> ! {
                 };
                 let data = buffer.to_original::<HIDReportDescriptorMessage, _>().unwrap();
 
-                let mut selected_hidv2_descriptor = selected_hidv2_descriptor.lock().unwrap();
-                *selected_hidv2_descriptor = Some(Vec::from(&data.descriptor[..data.len]));
-
-                log::debug!("descriptor being set: {:?}", &selected_hidv2_descriptor.as_ref().unwrap()[..data.len]);
-
-                let hidv2_device = hidv2_class.device::<AppHID<'_, _>, _>();
-
-                match hidv2_device.set_device_descriptor(selected_hidv2_descriptor.as_ref().unwrap().clone()) {
+                // TODO(gsora): do something with the error
+                match hidv2.set_device_report(Vec::from(&data.descriptor[..data.len])) {
                     Ok(_) => (),
-                    Err(err) => {
-                        log::error!("can't set hidv2 device descriptor: {:?}", err);
-                        continue;
+                    Err(error) => {
+                        log::error!("cannot set hidv2 device report: {:?}", error);
                     },
-                };
-
-                log::debug!("successfully set new hidv2 descriptor");
-
-                hidv2_dev.force_reset().ok();
+                }
             }
             Some(Opcode::HIDUnsetDescriptor) => {
-                *selected_hidv2_descriptor.lock().unwrap() = None;
-                hidv2_queue.clear();
-                hidv2_dev.force_reset().ok();
-                xous::return_scalar(msg.sender, 0).expect("cannot return hid app unset descriptor to sender")
+                // TODO(gsora): do something with the error
+                match hidv2.reset_device_report() {
+                    Ok(_) => (),
+                    Err(error) => log::error!("cannot reset hidv2 device report: {:?}", error),
+                }
             }
             Some(Opcode::HIDReadReport) => {
                 let mut buffer = unsafe {
@@ -1517,11 +1485,11 @@ pub(crate) fn main_hw() -> ! {
 
                 let mut data = buffer.to_original::<HIDReportMessage, _>().unwrap();
 
-                if selected_hidv2_descriptor.lock().unwrap().is_none() {
+                if !hidv2.descriptor_set() {
                     buffer.replace(HIDReportMessage::default()).expect("couldn't serialize return");
                     continue
                 } else {
-                    match hidv2_queue.pop_front() {
+                    match hidv2.read_report() {
                         Some(report) => {
                             data.data = report;
                             data.has_data = true;
@@ -1533,7 +1501,7 @@ pub(crate) fn main_hw() -> ! {
                 buffer.replace(data).expect("couldn't serialize return");
             },
             Some(Opcode::HIDWriteReport) => {
-                if selected_hidv2_descriptor.lock().unwrap().is_none() {
+                if !hidv2.descriptor_set() {
                     log::warn!("trying to write a HID report with no descriptor set!");
                     continue
                 }
@@ -1543,9 +1511,7 @@ pub(crate) fn main_hw() -> ! {
                 };
                 let data = buffer.to_original::<HIDReport, _>().unwrap();
 
-                log::info!("HIDWriteReport: {:?}", data);
-                let hidv2_device = hidv2_class.device::<AppHID<'_, _>, _>();
-                hidv2_device.write_report(&data).ok();
+                hidv2.write_report(data);
             },
             Some(Opcode::Quit) => {
                 log::warn!("Quit received, goodbye world!");

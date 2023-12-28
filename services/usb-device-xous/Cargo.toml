@@ -40,6 +40,7 @@ usbd-serial = "0.1.1"
 
 ghostfat = "0.5.0"
 fugit = "0.3.7"
+frunk_core = "0.4.2"
 
 [dependencies.usb-device]
 # see top level Cargo.toml for patch.crates-io directive to help with dev work

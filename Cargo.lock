@@ -5292,6 +5292,7 @@ version = "0.1.0"
 dependencies = [
  "bitfield",
  "embedded-time",
+ "frunk_core",
  "fugit",
  "ghostfat",
  "keyboard",
