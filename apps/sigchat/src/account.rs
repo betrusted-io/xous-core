@@ -1,6 +1,6 @@
 mod service_environment;
 
-use crate::manager::libsignal::{DeviceNameUtil, ProvisionMessage};
+use crate::manager::libsignal::{DeviceNameUtil, ProvisionMessage, SignalServiceAddress};
 use pddb::Pddb;
 pub use service_environment::ServiceEnvironment;
 use std::io::{Error, ErrorKind, Read, Write};
@@ -231,16 +231,36 @@ impl Account {
         Ok(())
     }
 
+    /// link to an existing Signal Account as a secondary device
+    ///
+    /// Confirm that the state of the Signal Account is OK before linking
+    /// https://github.com/AsamK/signal-cli/blob/375bdb79485ec90beb9a154112821a4657740b7a/lib/src/main/java/org/asamk/signal/manager/internal/ProvisioningManagerImpl.java#L200-L239
+    ///
+    /// # Arguments
+    ///
+    /// * `device_name` - name to describe this new device
+    /// * `provisioning_msg` - obtained from the Signal server
+    ///
+    /// # Returns
+    ///
+    /// true on success
+    ///
     pub fn link(
         &mut self,
         device_name: &str,
         provisioning_msg: ProvisionMessage,
     ) -> Result<bool, Error> {
-        // TODO complete link pre-checks
         // Check if this device can be relinked
-        // check not primary
-        // check not registered in another environment
-        // check account state with server
+        if self.is_primary_device() {
+            log::warn!("failed to link device as already registered as primary");
+            return Ok(false);
+        }
+        // TODO complete link pre-checks
+        // } else if self.is_registered()
+        // && self.service_environment() != provisioning_msg.service_environment{
+        //     log::warn!("failed to link device as already registered in different Service Environment");
+        //     return Ok(false);
+        // }
 
         let aci = provisioning_msg.aci;
         self.set(ACI_IDENTITY_PRIVATE_KEY, Some(&aci.djb_private_key.key))?;
@@ -277,6 +297,7 @@ impl Account {
         self.set(STORE_MANIFEST_KEY, None)?;
 
         // TODO complete registration setup
+        // https://github.com/AsamK/signal-cli/blob/375bdb79485ec90beb9a154112821a4657740b7a/lib/src/main/java/org/asamk/signal/manager/storage/SignalAccount.java#L270-L306
         // getRecipientTrustedResolver().resolveSelfRecipientTrusted(getSelfRecipientAddress());
         // getSenderKeyStore().deleteAll();
         // trustSelfIdentity(ServiceIdType.ACI);
@@ -286,11 +307,19 @@ impl Account {
         // clearAllPreKeys();
         // getKeyValueStore().storeEntry(lastRecipientsRefresh, null);
 
-        Ok(false)
+        Ok(true)
     }
 
     pub fn host(&self) -> &Host {
         &self.host
+    }
+
+    pub fn is_primary_device(&self) -> bool {
+        self.device_id == SignalServiceAddress::DEFAULT_DEVICE_ID
+    }
+
+    pub fn is_registered(&self) -> bool {
+        self.registered
     }
 
     #[allow(dead_code)]

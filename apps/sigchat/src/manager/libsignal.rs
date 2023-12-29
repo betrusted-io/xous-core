@@ -1,6 +1,15 @@
 // this is a stub for a wrapped libsignal
 
-// org.whispersystems.signalservice.api.util.DeviceNameUtil;
+
+// use org.whispersystems.signalservice.api.push.SignalServiceAddress;
+pub struct SignalServiceAddress {}
+impl SignalServiceAddress {
+    pub const DEFAULT_DEVICE_ID: u32 = 0;
+}
+
+////////////////////////////////////////////////////////
+
+// use org.whispersystems.signalservice.api.util.DeviceNameUtil;
 pub struct DeviceNameUtil {}
 impl DeviceNameUtil {
     pub fn encrypt_device_name(_device_name: &str, _aci_private_key: IdentityKey) -> String {
