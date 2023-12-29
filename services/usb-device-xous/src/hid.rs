@@ -138,13 +138,13 @@ impl<'a, B: UsbBus> AppHID<'a, B> {
         config: AppHIDConfig<'a>,
         max_stored_reports: usize,
     ) -> Self {
+        let class = UsbHidClassBuilder::new().add_device(config).build(alloc);
+
         let device = UsbDeviceBuilder::new(alloc, vid_pid)
             .manufacturer("Kosagi")
             .product("Precursor")
             .serial_number(&serial_number)
             .build();
-
-        let class = UsbHidClassBuilder::new().add_device(config).build(alloc);
 
         AppHID {
             max_stored_reports,
