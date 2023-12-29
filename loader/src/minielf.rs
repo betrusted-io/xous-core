@@ -129,12 +129,12 @@ impl MiniElf {
             let tt_address = allocator.alloc() as usize;
             let tt = unsafe { &mut *(tt_address as *mut PageTable) };
 
-            allocator.change_owner(pid as XousPid, tt_address);
             allocator.map_page(
                 tt,
                 tt_address,
                 PAGE_TABLE_ROOT_OFFSET,
                 FLG_R | FLG_W | FLG_VALID,
+                pid as XousPid,
             );
 
             (tt, tt_address)
@@ -156,6 +156,7 @@ impl MiniElf {
                     tt_address + offset,
                     PAGE_TABLE_ROOT_OFFSET + offset,
                     FLG_R | FLG_W | FLG_VALID,
+                    pid as XousPid,
                 );
             }
 
@@ -173,8 +174,8 @@ impl MiniElf {
             thread_address,
             CONTEXT_OFFSET,
             FLG_R | FLG_W | FLG_VALID,
+            pid,
         );
-        allocator.change_owner(pid as XousPid, thread_address as usize);
 
         // Allocate stack pages.
         println!("    Stack");
@@ -187,8 +188,8 @@ impl MiniElf {
                     sp_page,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     FLG_U | FLG_R | FLG_W | FLG_VALID,
+                    pid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             } else {
                 // Reserve every other stack page other than the 1st page.
                 allocator.map_page(
@@ -196,6 +197,7 @@ impl MiniElf {
                     0,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     FLG_U | FLG_R | FLG_W,
+                    pid,
                 );
             }
         }
@@ -242,8 +244,7 @@ impl MiniElf {
                     if VDBG {
                         println!("1       {:08x} -> {:08x}", top as usize, this_page);
                     }
-                    allocator.map_page(tt, top as usize, this_page, flag_defaults);
-                    allocator.change_owner(pid as XousPid, top as usize);
+                    allocator.map_page(tt, top as usize, this_page, flag_defaults, pid as XousPid);
                     allocated_bytes += PAGE_SIZE;
                     top -= PAGE_SIZE;
                     this_page += PAGE_SIZE;
@@ -291,8 +292,7 @@ impl MiniElf {
                     if VDBG {
                         println!("2       {:08x} -> {:08x}", top as usize, this_page);
                     }
-                    allocator.map_page(tt, top as usize, this_page, flag_defaults);
-                    allocator.change_owner(pid as XousPid, top as usize);
+                    allocator.map_page(tt, top as usize, this_page, flag_defaults, pid as XousPid);
                     allocated_bytes += PAGE_SIZE;
                     top -= PAGE_SIZE;
                     this_page += PAGE_SIZE;
@@ -305,8 +305,7 @@ impl MiniElf {
                     if VDBG {
                         println!("3       {:08x} -> {:08x}", top as usize, this_page);
                     }
-                    allocator.map_page(tt, top as usize, this_page, flag_defaults);
-                    allocator.change_owner(pid as XousPid, top as usize);
+                    allocator.map_page(tt, top as usize, this_page, flag_defaults, pid as XousPid);
                     allocated_bytes += PAGE_SIZE;
                     top -= PAGE_SIZE;
                 }
@@ -362,9 +361,8 @@ impl MiniElf {
                 while pages_to_map > 0 {
                     let map_phys_addr =
                         (image_phys_base + section_map_phys_offset) & !(PAGE_SIZE - 1);
-                    allocator.map_page(tt, map_phys_addr, virt_page, flag_defaults);
+                    allocator.map_page(tt, map_phys_addr, virt_page, flag_defaults, pid as XousPid);
                     last_mapped_xip = virt_page;
-                    allocator.change_owner(pid as XousPid, top as usize);
 
                     section_map_phys_offset += PAGE_SIZE;
                     virt_page += PAGE_SIZE;

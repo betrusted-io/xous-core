@@ -148,21 +148,42 @@ impl BootConfig {
     /// # Panics
     ///
     /// * If you try to map a page twice
-    pub fn map_page(&mut self, root: &mut PageTable, phys: usize, virt: usize, flags: usize) {
+    pub fn map_page(
+        &mut self,
+        root: &mut PageTable,
+        phys: usize,
+        virt: usize,
+        flags: usize,
+        owner: XousPid,
+    ) {
         if VDBG {
             println!(
                 "    map pa {:x} -> va {:x} (satp {:x})",
                 phys, virt, root as *mut PageTable as u32
             );
         }
+        assert!(
+            !(phys == 0 && flags & FLG_VALID != 0),
+            "cannot map zero page"
+        );
+        if flags & FLG_VALID != 0 {
+            self.change_owner(owner, phys);
+        }
         match WORD_SIZE {
-            4 => self.map_page_32(root, phys, virt, flags),
+            4 => self.map_page_32(root, phys, virt, flags, owner),
             8 => panic!("map_page doesn't work on 64-bit devices"),
             _ => panic!("unrecognized word size: {}", WORD_SIZE),
         }
     }
 
-    pub fn map_page_32(&mut self, root: &mut PageTable, phys: usize, virt: usize, flags: usize) {
+    pub fn map_page_32(
+        &mut self,
+        root: &mut PageTable,
+        phys: usize,
+        virt: usize,
+        flags: usize,
+        owner: XousPid,
+    ) {
         let ppn1 = (phys >> 22) & ((1 << 12) - 1);
         let ppn0 = (phys >> 12) & ((1 << 10) - 1);
         let ppo = (phys) & ((1 << 12) - 1);
@@ -225,8 +246,8 @@ impl BootConfig {
                 addr.get(),
                 PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE,
                 FLG_R | FLG_W | FLG_VALID,
+                owner,
             );
-            self.change_owner(1 as XousPid, addr.get());
             if VDBG {
                 println!("<<< Done mapping new address");
             }

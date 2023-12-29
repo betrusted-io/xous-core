@@ -97,8 +97,8 @@ impl ProgramDescription {
                 tt_address + offset,
                 PAGE_TABLE_ROOT_OFFSET + offset,
                 FLG_R | FLG_W | FLG_VALID,
+                pid as XousPid,
             );
-            allocator.change_owner(pid as XousPid, tt_address);
         }
 
         // Allocate context for this process
@@ -112,8 +112,8 @@ impl ProgramDescription {
             thread_address,
             CONTEXT_OFFSET,
             FLG_R | FLG_W | FLG_VALID,
+            pid as XousPid,
         );
-        allocator.change_owner(pid as XousPid, thread_address);
 
         // Allocate stack pages.
         let total_stack_pages = if is_kernel {
@@ -137,8 +137,8 @@ impl ProgramDescription {
                     sp_page,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             } else {
                 // Reserve every page other than the 1st stack page
                 allocator.map_page(
@@ -146,6 +146,7 @@ impl ProgramDescription {
                     0,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults & !FLG_VALID,
+                    pid as XousPid,
                 );
             }
 
@@ -162,8 +163,8 @@ impl ProgramDescription {
                     sp_page,
                     (EXCEPTION_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             }
         }
 
@@ -183,8 +184,8 @@ impl ProgramDescription {
                     sp_page,
                     (IRQ_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             }
         }
 
@@ -216,8 +217,8 @@ impl ProgramDescription {
                 load_offset + offset + rounded_data_bss,
                 self.text_offset as usize + offset,
                 flag_defaults | FLG_X | FLG_VALID,
+                pid as XousPid,
             );
-            allocator.change_owner(pid as XousPid, load_offset + offset + rounded_data_bss);
         }
 
         // Map the process data section into RAM.
