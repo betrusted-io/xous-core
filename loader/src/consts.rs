@@ -13,4 +13,4 @@ pub const KERNEL_STACK_TOP: usize = 0xfff8_0000;
 pub const KERNEL_LOAD_OFFSET: usize = 0xffd0_0000;
 pub const KERNEL_STACK_PAGE_COUNT: usize = 1;
 pub const KERNEL_ARGUMENT_OFFSET: usize = 0xffc0_0000;
-pub const GUARD_MEMORY_BYTES: usize = 2 * crate::PAGE_SIZE;
+pub const GUARD_MEMORY_BYTES: usize = 3 * crate::PAGE_SIZE;
