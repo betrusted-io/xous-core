@@ -166,7 +166,15 @@ impl BootConfig {
         phys: usize,
         virt: usize,
         flags: usize,
+        pid: XousPid,
     ) {
+        assert!(
+            !(phys == 0 && flags & FLG_VALID != 0),
+            "cannot map zero page"
+        );
+        if flags & FLG_VALID != 0 {
+            self.change_owner(owner, phys);
+        }
         match WORD_SIZE {
             4 => self.map_page_32(translation_table, phys, virt, flags),
             8 => panic!("map_page doesn't work on 64-bit devices"),
@@ -180,6 +188,7 @@ impl BootConfig {
         phys: usize,
         virt: usize,
         flags: usize,
+        pid: XousPid,
     ) {
         dprintln!(
             "PageTable: {:p} {:08x}",
@@ -320,8 +329,8 @@ impl BootConfig {
                         addr.get(),
                         page_virt_addr,
                         FLG_R | FLG_W | FLG_VALID,
+                        pid,
                     );
-                    self.change_owner(1 as XousPid, addr.get());
                     dprintln!("<<< Done mapping new address");
                 }
             }
@@ -348,6 +357,7 @@ pub fn map_structs_to_kernel(cfg: &mut BootConfig, table_addr: usize, krn_struct
         LOADER_CODE_ADDRESS,
         LOADER_CODE_ADDRESS,
         FLG_R | FLG_X | FLG_VALID,
+        1 as XousPid,
     );
 
     // Map the last stack page (4K) to the kernel to make it visible from the trampoline code
@@ -358,6 +368,7 @@ pub fn map_structs_to_kernel(cfg: &mut BootConfig, table_addr: usize, krn_struct
         0x200ff000,
         0x200ff000,
         FLG_R | FLG_X | FLG_VALID,
+        1 as XousPid,
     );
 
     // Identity map the page that contains kernel arguments
@@ -367,6 +378,7 @@ pub fn map_structs_to_kernel(cfg: &mut BootConfig, table_addr: usize, krn_struct
         0x20100000,
         0x20100000,
         FLG_R | FLG_X | FLG_VALID,
+        1 as XousPid,
     );
 
     for addr in (0..cfg.init_size - GUARD_MEMORY_BYTES).step_by(PAGE_SIZE) {
@@ -375,8 +387,8 @@ pub fn map_structs_to_kernel(cfg: &mut BootConfig, table_addr: usize, krn_struct
             addr + krn_struct_start,
             addr + KERNEL_ARGUMENT_OFFSET,
             FLG_R | FLG_W | FLG_VALID,
+            1 as XousPid,
         );
-        cfg.change_owner(1 as XousPid, addr + krn_struct_start);
     }
 }
 
@@ -412,7 +424,13 @@ pub fn map_kernel_to_processes(
                 translation_table as usize, virt, phys
             );
 
-            cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_X);
+            cfg.map_page(
+                translation_table,
+                phys,
+                virt,
+                FLG_VALID | FLG_R | FLG_X,
+                1 as XousPid,
+            );
         }
         println!("Mapping kernel (PID1) data to process PID{}", process.asid);
         println!("Offset: {:08x}, size: {:08x}", kdata_offset, kdata_size);
@@ -424,7 +442,13 @@ pub fn map_kernel_to_processes(
                 translation_table as usize, virt, phys
             );
 
-            cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_W);
+            cfg.map_page(
+                translation_table,
+                phys,
+                virt,
+                FLG_VALID | FLG_R | FLG_W,
+                1 as XousPid,
+            );
         }
 
         println!(
@@ -440,7 +464,13 @@ pub fn map_kernel_to_processes(
                 "MAP ({:08x}): {:08x} -> {:08x}",
                 translation_table as usize, virt, phys
             );
-            cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_W);
+            cfg.map_page(
+                translation_table,
+                phys,
+                virt,
+                FLG_VALID | FLG_R | FLG_W,
+                1 as XousPid,
+            );
         }
 
         println!("Mapping irq stack page to the process PID{}", process.asid);
@@ -450,7 +480,13 @@ pub fn map_kernel_to_processes(
             "MAP ({:08x}): {:08x} -> {:08x}",
             translation_table as usize, virt, phys
         );
-        cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_W);
+        cfg.map_page(
+            translation_table,
+            phys,
+            virt,
+            FLG_VALID | FLG_R | FLG_W,
+            1 as XousPid,
+        );
 
         // TODO: For now, make the UART visible for all the processes.
         //       Later on we may reuse the mapping made by the kernel.
@@ -467,6 +503,7 @@ pub fn map_kernel_to_processes(
                 phys,
                 virt,
                 FLG_VALID | FLG_R | FLG_W | FLG_X,
+                1 as XousPid,
             );
         }
 
@@ -477,6 +514,7 @@ pub fn map_kernel_to_processes(
                 addr + krn_struct_start,
                 addr + KERNEL_ARGUMENT_OFFSET,
                 FLG_R | FLG_W | FLG_VALID,
+                1 as XousPid,
             );
             cfg.change_owner(1 as XousPid, addr + krn_struct_start);
         }
