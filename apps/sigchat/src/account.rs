@@ -7,6 +7,18 @@ use std::io::{Error, ErrorKind, Read, Write};
 use std::str::FromStr;
 use url::Host;
 
+/// The Account struct is architected as a cache over a pddb dictionary.
+///
+/// * Creating a new Account inherently involves writing to pddb
+/// * Each field has a 1:1 relationship with a pddb.key.
+/// * Field values are able to be set individually
+///
+/// Steps to ensure consistency:
+/// * the default values in a new Account are first written to pddb, and then read back into the struct.
+/// * all fields must be successfully read from pddb or read fails with Error
+/// * setting a value requires a successful writes to pddb before updating the field
+///
+
 #[allow(dead_code)]
 pub struct Account {
     pddb: Pddb,
@@ -64,6 +76,8 @@ impl Account {
     ///
     /// # Arguments
     /// * `pddb_dict` - pddb dictionary name to hold the Account
+    /// * `host` - Signal host server (immutable)
+    /// * `service_environment` - Signal service-environment (immutable)
     ///
     /// # Returns
     ///
