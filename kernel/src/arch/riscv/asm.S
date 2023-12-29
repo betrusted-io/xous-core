@@ -49,10 +49,10 @@ _start:
     // restore the SIM with the value previously socked away by the interrupt handler routine during the suspend half
     jal         ra, _enable_all_irqs
 
-    // set scause to simulate an interrupt's occurrence -- this makes the resume "feel like" an interrupt
+    // set scause to simulate an interrupt's occurence -- this makes the resume "feel like" an interrupt
     // vectored into the same routine that caused the suspend, but without having gone through the typical
     // interrupt handler mechanisms
-    li          t0, 0x80000009
+    li          t0, 0x80000000
     csrw        scause, t0
 
     // this is the same path the suspend interrupt took, but we set it up manually
@@ -154,11 +154,11 @@ _xous_resume_context:
     move        sp, a0
 
     LOAD        x1, 0*REGBYTES(sp)
-
     // Clear any reservations, invalidating any atomic operations
 #ifndef SKIP_MULTICORE
     sc.w	    zero, x1, 0*REGBYTES(sp)
 #endif
+
     // Skip SP for now
     LOAD        x3, 2*REGBYTES(sp)
     LOAD        x4, 3*REGBYTES(sp)
@@ -211,7 +211,6 @@ _xous_syscall_return_result:
     csrw        sepc, t0
 
     LOAD        x1, 0*REGBYTES(sp)
-
     // An atomic operation is broken up into multiple instructions.
     // A program first issues a `lr` instruction, which basically
     // raises a flag saying that an atomic operation is now live. It
