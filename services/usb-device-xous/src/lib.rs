@@ -412,7 +412,8 @@ impl UsbHid {
         ).unwrap();
     }
 
-    // HID v2
+    /// Sets the userland application HID device descriptor.
+    /// It cannot be longer than 1024 bytes. 
     pub fn connect_hid_app(&self, descriptor: Vec<u8>) -> Result<(), xous::Error> {
         if descriptor.len() > MAX_HID_REPORT_DESCRIPTOR_LEN {
             return Err(xous::Error::OutOfMemory)
@@ -433,6 +434,8 @@ impl UsbHid {
         Ok(())
     }
 
+    /// Unset the userland application HID device descriptor and discards the cached 
+    /// reports.
     pub fn disconnect_hid_app(&self) -> Result<(), xous::Error> {
         match send_message(self.conn, Message::new_blocking_scalar(
             Opcode::HIDUnsetDescriptor.to_usize().unwrap(), 
@@ -443,6 +446,7 @@ impl UsbHid {
         }
     }
 
+    /// Reads a HID report off the USB bus.
     pub fn read_report(&self) -> Result<HIDReport, xous::Error> {
         let report = HIDReportMessage::default();
 
@@ -451,22 +455,22 @@ impl UsbHid {
         
         let report = buf.as_flat::<HIDReportMessage, _>().unwrap();
 
-        match report.has_data {
-            true => {
+        match &report.data {
+            rkyv::core_impl::ArchivedOption::Some(data) => {
                 let mut ret = HIDReport::default();
 
-                // copy the data back
-                for (&s, d) in report.data.0[..report.data.0.len() as usize].iter().zip(ret.0.iter_mut()) {
+                for (&s, d) in data.0[..data.0.len() as usize].iter().zip(ret.0.iter_mut()) {
                     *d = s;
                 }
 
                 Ok(ret)
                 
             },
-            false => Err(xous::Error::UnknownError),
+            rkyv::core_impl::ArchivedOption::None => Err(xous::Error::UnknownError),
         }
     }
 
+    /// Writes a HID report on the USB bus.
     pub fn write_report(&self, report: HIDReport) -> Result<(), xous::Error> {
         let buf = Buffer::into_buf(report).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::HIDWriteReport.to_u32().unwrap()).map(|_| ())?;
