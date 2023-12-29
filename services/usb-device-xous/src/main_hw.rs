@@ -1463,7 +1463,9 @@ pub(crate) fn main_hw() -> ! {
                 };
                 let data = buffer.to_original::<HIDReportDescriptorMessage, _>().unwrap();
 
-                // TODO(gsora): do something with the error
+                // This branch can only error if data.descriptor is longer than the 
+                // expected maximum.
+                // The userland library checks this for us already.
                 match hidv2.set_device_report(Vec::from(&data.descriptor[..data.len])) {
                     Ok(_) => (),
                     Err(error) => {
@@ -1472,31 +1474,24 @@ pub(crate) fn main_hw() -> ! {
                 }
             }
             Some(Opcode::HIDUnsetDescriptor) => {
-                // TODO(gsora): do something with the error
                 match hidv2.reset_device_report() {
                     Ok(_) => (),
                     Err(error) => log::error!("cannot reset hidv2 device report: {:?}", error),
                 }
             }
             Some(Opcode::HIDReadReport) => {
+                if !hidv2.descriptor_set() {
+                    log::warn!("trying to read a HID report with no descriptor set!");
+                    continue
+                }
+
                 let mut buffer = unsafe {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                 };
 
                 let mut data = buffer.to_original::<HIDReportMessage, _>().unwrap();
 
-                if !hidv2.descriptor_set() {
-                    buffer.replace(HIDReportMessage::default()).expect("couldn't serialize return");
-                    continue
-                } else {
-                    match hidv2.read_report() {
-                        Some(report) => {
-                            data.data = report;
-                            data.has_data = true;
-                        }
-                        _ => ()
-                    }
-                }
+                data.data = hidv2.read_report();
 
                 buffer.replace(data).expect("couldn't serialize return");
             },

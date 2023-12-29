@@ -174,6 +174,5 @@ impl Default for HIDReport {
 
 #[derive(Debug, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct HIDReportMessage {
-    pub data: HIDReport,
-    pub has_data: bool,
+    pub data: Option<HIDReport>,
 }
