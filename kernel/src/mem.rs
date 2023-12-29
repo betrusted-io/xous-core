@@ -842,7 +842,7 @@ impl MemoryManager {
         Ok(())
     }
 
-    #[cfg(baremetal)]
+    #[cfg(all(baremetal, target_arch = "riscv32"))]
     pub fn check_for_duplicates(&self) {
         use crate::services::SystemServices;
 
