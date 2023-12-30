@@ -179,35 +179,47 @@ impl<'a, B: UsbBus> AppHID<'a, B> {
         let hidv2_device = self.class.device::<AppHIDDevice<'_, _>, _>();
         match hidv2_device.read_report() {
             Ok(report) => {
-                let result = {
+                let result = 'result_scope : {
                     let reports_stored = self.incoming_reports.len();
-                    if reports_stored <= self.max_stored_reports {
-                        return Ok(());
+                    if reports_stored < self.max_stored_reports {
+                        break 'result_scope Ok(());
                     }
 
-                    self.incoming_reports.pop_back().unwrap();
-                    Err(AppHIDError::OldestReportDropped)
+                    self.incoming_reports.pop_front().unwrap();
+                    break 'result_scope Err(AppHIDError::OldestReportDropped)
                 };
 
                 self.incoming_reports.push_back(report);
                 result
             }
-            Err(err) => Err(AppHIDError::UsbError(err)),
+            Err(err) => {
+                // If we have something that isn't WouldBlock, maybe stuff's about to blow up: return to caller.
+                if !matches!(err, UsbError::WouldBlock) {
+                    return Err(AppHIDError::UsbError(err));
+                }
+
+                return Ok(());
+            }
         }
     }
 
     /// Sets the device descriptor report, which will be then sent to the host.
     /// This method forces a device reset, hence re-enumeration from the host.
     pub fn set_device_report(&mut self, descriptor: Vec<u8>) -> Result<(), AppHIDError> {
+        let descr_len = descriptor.len();
         let hidv2_device = self.class.device::<AppHIDDevice<'_, _>, _>();
         hidv2_device
             .set_device_descriptor(descriptor)
             .map_err(|e| AppHIDError::UsbError(e))
             .and_then(|_| {
-                Ok({
-                    *self.device_descr_set.lock().unwrap() = true;
-                    self.device.force_reset().ok();
-                })
+                *self.device_descr_set.lock().unwrap() = match descr_len {
+                    0 => false,
+                    _ => true,
+                };
+
+                self.device.force_reset().ok();
+
+                Ok(())
             })
     }
 
@@ -215,11 +227,7 @@ impl<'a, B: UsbBus> AppHID<'a, B> {
     /// This method forces a device reset, hence re-enumeration from the host.
     pub fn reset_device_report(&mut self) -> Result<(), AppHIDError> {
         self.incoming_reports.clear();
-        self.set_device_report(vec![]).and_then(|_| {
-            Ok({
-                *self.device_descr_set.lock().unwrap() = false;
-            })
-        })
+        self.set_device_report(vec![])
     }
 
     /// Returns true if there is a device descriptor set for the AppHID.
@@ -233,7 +241,7 @@ impl<'a, B: UsbBus> AppHID<'a, B> {
             return None;
         }
 
-        self.incoming_reports.pop_back()
+        self.incoming_reports.pop_front()
     }
 
     /// Writes a HID report on the USB bus.

@@ -695,7 +695,7 @@ pub(crate) fn main_hw() -> ! {
                     Views::HIDv2 => {
                         match hidv2.poll() {
                             Ok(_) => (),
-                            Err(error) => log::error!("hidv2 read report error: {:?}", error),
+                            Err(error) => log::error!("hidv2 poll error: {:?}", error),
                         }
 
                         None
@@ -1505,6 +1505,9 @@ pub(crate) fn main_hw() -> ! {
                     Buffer::from_memory_message(msg.body.memory_message().unwrap())
                 };
                 let data = buffer.to_original::<HIDReport, _>().unwrap();
+
+
+                log::info!("report to be written to USB: {:?}", data);
 
                 hidv2.write_report(data);
             },
