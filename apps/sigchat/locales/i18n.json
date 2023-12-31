@@ -20,8 +20,8 @@
         "en-tts": "Please provide a name for this device"
     },
     "sigchat.account.link.scan": {
-        "en": "Please scan with primary Signal device, and then",
-        "en-tts": "Please scan with primary Signal device, and then"
+        "en": "1. Open Signal on your phone\n2. Tap into settings, then tap `Linked Devices`\n3. Tap ⊕ or `Link New Device` and scan",
+        "en-tts": "1. Open Signal on your phone\n2. Tap into settings, then tap `Linked Devices`\n3. Tap ⊕ or `Link New Device` and scan"
     },
     "sigchat.account.offline": {
         "en": "Read Signal offline",
