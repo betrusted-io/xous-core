@@ -5,7 +5,7 @@ use crate::arch::process::InitialProcess;
 use crate::mem::MemoryManager;
 use core::fmt;
 use riscv::register::satp;
-#[cfg(feature="gdb-stub")]
+#[cfg(feature = "gdb-stub")]
 use riscv::register::sstatus;
 use xous_kernel::{MemoryFlags, PID};
 
@@ -259,12 +259,16 @@ impl MemoryMapping {
     }
 
     /// Get the "PID" (actually, ASID) from the current mapping
-    pub fn get_pid(&self) -> PID {
-        PID::new((self.satp >> 22 & ((1 << 9) - 1)) as _).unwrap()
+    pub fn get_pid(&self) -> Option<PID> {
+        PID::new((self.satp >> 22 & ((1 << 9) - 1)) as _)
+    }
+
+    pub fn is_allocated(&self) -> bool {
+        self.get_pid().is_some()
     }
 
     pub fn is_kernel(&self) -> bool {
-        self.get_pid().get() == 1
+        self.get_pid().map(|v| v.get() == 1).unwrap_or(false)
     }
 
     /// Set this mapping as the systemwide mapping.
@@ -279,8 +283,54 @@ impl MemoryMapping {
         Ok(())
     }
 
+    pub fn phys_to_virt(&self, phys: usize) -> Result<Option<u32>, xous_kernel::Error> {
+        let mut found = None;
+        let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
+        if phys & PAGE_SIZE - 1 != 0 {
+            return Err(xous_kernel::Error::BadAlignment);
+        }
+        for (i, l1_entry) in l1_pt.entries.iter().enumerate() {
+            if *l1_entry == 0 {
+                continue;
+            }
+            let _superpage_addr = i as u32 * (1 << 22);
+
+            // Page 1023 is only available to PID1
+            if i == 1023 && !self.is_kernel() {
+                continue;
+            }
+            let l0_pt = unsafe { &mut (*((PAGE_TABLE_OFFSET + i * 4096) as *mut LeafPageTable)) };
+            for (j, l0_entry) in l0_pt.entries.iter().enumerate() {
+                if *l0_entry & 0x7 == 0 {
+                    continue;
+                }
+                let _page_addr = j as u32 * (1 << 12);
+                let virt_addr = _superpage_addr + _page_addr;
+                let phys_addr = (*l0_entry >> 10) << 12;
+                let valid = (l0_entry & MMUFlags::VALID.bits()) != 0;
+                let shared = (l0_entry & MMUFlags::S.bits()) != 0;
+                if phys_addr == phys && (valid || shared) {
+                    if found.is_none() {
+                        found = Some(virt_addr);
+                    } else {
+                        println!("Page is mapped twice within process {:08x}!", phys_addr);
+                        return Err(xous_kernel::Error::MemoryInUse);
+                    }
+                }
+            }
+        }
+        Ok(found)
+    }
+
     pub fn print_map(&self) {
-        println!("Memory Maps for PID {}:", self.get_pid());
+        if !self.is_allocated() {
+            println!("Process isn't allocated!");
+            return;
+        }
+        println!(
+            "Memory Maps for PID {}:",
+            self.get_pid().map(|v| v.get()).unwrap_or(0)
+        );
         let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
         for (i, l1_entry) in l1_pt.entries.iter().enumerate() {
             if *l1_entry == 0 {
@@ -723,7 +773,7 @@ pub fn move_page_inner(
     result
 }
 
-/// Determine if a page has been lent.
+/// Determine if a virtual page has been lent.
 pub fn page_is_lent(src_addr: *mut u8) -> bool {
     pagetable_entry(src_addr as usize).map_or(
         false,

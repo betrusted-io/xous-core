@@ -56,12 +56,18 @@ pub fn phase_2(cfg: &mut BootConfig) {
             }
             #[cfg(feature = "atsama5d27")]
             {
-                (ktext_offset, kdata_offset, kernel_exception_sp, kernel_irq_sp) = xkrn.load(cfg, process_offset - load_size_rounded, 1);
+                (
+                    ktext_offset,
+                    kdata_offset,
+                    kernel_exception_sp,
+                    kernel_irq_sp,
+                ) = xkrn.load(cfg, process_offset - load_size_rounded, 1);
                 (ktext_size, kdata_size, ktext_virt_offset, kdata_virt_offset) = (
                     (xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1),
-                    (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)),
+                    (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1)
+                        & !(PAGE_SIZE - 1)),
                     xkrn.text_offset as usize,
-                    xkrn.data_offset as usize
+                    xkrn.data_offset as usize,
                 );
             }
             process_offset -= load_size_rounded;
@@ -91,8 +97,8 @@ pub fn phase_2(cfg: &mut BootConfig) {
                 addr + krn_struct_start,
                 addr + KERNEL_ARGUMENT_OFFSET,
                 FLG_R | FLG_W | FLG_VALID,
+                1 as XousPid,
             );
-            cfg.change_owner(1 as XousPid, (addr + krn_struct_start) as usize);
         }
 
         // Copy the kernel's "MMU Page 1023" into every process.
@@ -109,7 +115,11 @@ pub fn phase_2(cfg: &mut BootConfig) {
     #[cfg(feature = "atsama5d27")]
     {
         // Map boot-generated kernel structures into the kernel
-        crate::platform::atsama5d27::boot::map_structs_to_kernel(cfg, krn_l1_pt_addr, krn_struct_start);
+        crate::platform::atsama5d27::boot::map_structs_to_kernel(
+            cfg,
+            krn_l1_pt_addr,
+            krn_struct_start,
+        );
         crate::platform::atsama5d27::boot::map_kernel_to_processes(
             cfg,
             ktext_offset,
@@ -196,7 +206,11 @@ impl ProgramDescription {
         let pid_idx = (pid - 1) as usize;
         let is_kernel = pid == 1;
         let flag_defaults = FLG_R | FLG_W | FLG_VALID | if is_kernel { 0 } else { FLG_U };
-        let stack_addr = if is_kernel { KERNEL_STACK_TOP } else { USER_STACK_TOP } - 16;
+        let stack_addr = if is_kernel {
+            KERNEL_STACK_TOP
+        } else {
+            USER_STACK_TOP
+        } - 16;
         if is_kernel {
             assert!(self.text_offset as usize == KERNEL_LOAD_OFFSET);
             assert!(((self.text_offset + self.text_size) as usize) < EXCEPTION_STACK_TOP);
@@ -221,13 +235,23 @@ impl ProgramDescription {
 
         // Turn the satp address into a pointer
         let satp = unsafe { &mut *(satp_address as *mut PageTable) };
-        allocator.map_page(satp, satp_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W | FLG_VALID);
-        allocator.change_owner(pid as XousPid, satp_address as usize);
+        allocator.map_page(
+            satp,
+            satp_address,
+            PAGE_TABLE_ROOT_OFFSET,
+            FLG_R | FLG_W | FLG_VALID,
+            pid as XousPid,
+        );
 
         // Allocate context for this process
         let thread_address = allocator.alloc() as usize;
-        allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID);
-        allocator.change_owner(pid as XousPid, thread_address as usize);
+        allocator.map_page(
+            satp,
+            thread_address,
+            CONTEXT_OFFSET,
+            FLG_R | FLG_W | FLG_VALID,
+            pid as XousPid,
+        );
 
         // Allocate stack pages.
         for i in 0..if is_kernel {
@@ -242,8 +266,8 @@ impl ProgramDescription {
                     sp_page,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             } else {
                 // Reserve every page other than the 1st stack page
                 allocator.map_page(
@@ -251,6 +275,7 @@ impl ProgramDescription {
                     0,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults & !FLG_VALID,
+                    pid as XousPid,
                 );
             }
 
@@ -262,8 +287,8 @@ impl ProgramDescription {
                     sp_page,
                     (EXCEPTION_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             }
         }
 
@@ -282,43 +307,52 @@ impl ProgramDescription {
 
         // let load_size_rounded = (self.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         for offset in (0..self.text_size as usize).step_by(PAGE_SIZE) {
-            if VDBG {println!(
-                "   TEXT: Mapping {:08x} -> {:08x}",
-                load_offset + offset + rounded_data_bss,
-                self.text_offset as usize + offset
-            );}
+            if VDBG {
+                println!(
+                    "   TEXT: Mapping {:08x} -> {:08x}",
+                    load_offset + offset + rounded_data_bss,
+                    self.text_offset as usize + offset
+                );
+            }
             allocator.map_page(
                 satp,
                 load_offset + offset + rounded_data_bss,
                 self.text_offset as usize + offset,
                 flag_defaults | FLG_X | FLG_VALID,
+                pid as XousPid,
             );
-            allocator.change_owner(pid as XousPid, load_offset + offset + rounded_data_bss);
         }
 
         // Map the process data section into RAM.
         for offset in (0..(self.data_size + self.bss_size) as usize).step_by(PAGE_SIZE as usize) {
             // let page_addr = allocator.alloc();
-            if VDBG {println!(
-                "   DATA: Mapping {:08x} -> {:08x}",
-                load_offset + offset,
-                self.data_offset as usize + offset
-            );}
+            if VDBG {
+                println!(
+                    "   DATA: Mapping {:08x} -> {:08x}",
+                    load_offset + offset,
+                    self.data_offset as usize + offset
+                );
+            }
             allocator.map_page(
                 satp,
                 load_offset + offset,
                 self.data_offset as usize + offset,
                 flag_defaults,
+                pid as XousPid,
             );
-            allocator.change_owner(pid as XousPid, load_offset as usize + offset);
         }
 
         // Allocate pages for .bss, if necessary
 
         // Our "earlyprintk" equivalent
         if cfg!(feature = "earlyprintk") && is_kernel {
-            allocator.map_page(satp, 0xF000_2000, 0xffcf_0000, FLG_R | FLG_W | FLG_VALID);
-            allocator.change_owner(pid as XousPid, 0xF000_2000);
+            allocator.map_page(
+                satp,
+                0xF000_2000,
+                0xffcf_0000,
+                FLG_R | FLG_W | FLG_VALID,
+                pid as XousPid,
+            );
         }
 
         let process = &mut allocator.processes[pid_idx];

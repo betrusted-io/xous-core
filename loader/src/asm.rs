@@ -1,14 +1,14 @@
-use core::arch::asm;
 use crate::platform;
+use core::arch::asm;
 // Assembly stubs for entering into the loader, and exiting it.
 
 // Note: inline constants are not yet stable in Rust: https://github.com/rust-lang/rust/pull/104087
 #[link_section = ".text.init"]
 #[export_name = "_start"]
 pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     let _kernel_args = _kernel_args;
-    #[cfg(any(feature="cramium-soc", feature="cramium-fpga"))]
+    #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
     let _kernel_args = _start as *const usize as usize + platform::KERNEL_OFFSET;
     unsafe {
         asm! (
@@ -53,9 +53,9 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
 /// This is only used in debug mode
 pub extern "C" fn abort() {
     unsafe {
-        asm! (
+        asm!(
             "300:", // abort
-                "j 300b",
+            "j 300b",
             options(noreturn)
         );
     }
@@ -122,4 +122,3 @@ pub extern "C" fn start_kernel(
         );
     }
 }
-

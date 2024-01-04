@@ -254,51 +254,19 @@ impl MemoryManager {
         // println!("Allocating page for PID {}", pid);
         unsafe {
             let end_point = self.ram_size / PAGE_SIZE;
-            let starting_point = self.last_ram_page;
+            let starting_point = self.last_ram_page.max(end_point);
             for (allocation, index) in MEMORY_ALLOCATIONS[starting_point..end_point]
                 .iter_mut()
                 .zip(starting_point..)
                 .chain(MEMORY_ALLOCATIONS[..starting_point].iter_mut().zip(0..))
             {
-                // println!(
-                //     "    Checking {:08x}...",
-                //     index * PAGE_SIZE + self.ram_start as usize
-                // );
                 if allocation.is_none() {
                     *allocation = Some(pid);
                     self.last_ram_page = index + 1;
-                    // if self.last_ram_page >= end_point {
-                    //     self.last_ram_page = 0;
-                    // }
                     let page = index * PAGE_SIZE + self.ram_start;
                     return Ok(page);
                 }
             }
-            // for (index, allocation) in MEMORY_ALLOCATIONS
-            //     [self.last_ram_page..((self.ram_size as usize) / PAGE_SIZE)]
-            //     .iter_mut()
-            //     .enumerate()
-            // {
-            //     println!("    1. Checking {:08x}...", (self.last_ram_page + index) * PAGE_SIZE + self.ram_start as usize);
-            //     if allocation.is_none() {
-            //         *allocation = Some(pid);
-            //         self.last_ram_page = self.last_ram_page + index + 1;
-            //         let page = (self.last_ram_page + index) * PAGE_SIZE + self.ram_start;
-            //         return Ok(page);
-            //     }
-            // }
-            // for (index, allocation) in MEMORY_ALLOCATIONS[..self.last_ram_page]
-            //     .iter_mut()
-            //     .enumerate()
-            // {
-            //     println!("    2. Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
-            //     if allocation.is_none() {
-            //         *allocation = Some(pid);
-            //         self.last_ram_page = index + 1;
-            //         let page = index * PAGE_SIZE + self.ram_start;
-            //         return Ok(page);
-            //     }
-            // }
         }
         Err(xous_kernel::Error::OutOfMemory)
     }
@@ -872,6 +840,107 @@ impl MemoryManager {
         }
 
         Ok(())
+    }
+
+    #[cfg(all(baremetal, target_arch = "riscv32"))]
+    pub fn check_for_duplicates(&self) {
+        use crate::services::SystemServices;
+
+        SystemServices::with(|system_services| {
+            let current_pid = system_services.current_pid();
+
+            // Actiavte the debugging process and iterate through it,
+            // noting down each active thread.
+            for phys in (self.ram_start..self.ram_start + self.ram_size).step_by(PAGE_SIZE) {
+                let mut owner = None;
+                for pid in 1..crate::services::MAX_PROCESS_COUNT {
+                    let pid = PID::new(pid as u8).unwrap();
+                    let Ok(process) = system_services.get_process(pid) else {
+                        continue;
+                    };
+                    let Ok(_) = process.activate() else {
+                        continue;
+                    };
+                    match MemoryMapping::current().phys_to_virt(phys) {
+                        Err(e) => {
+                            println!("!!! ERROR {:?} !!!", e);
+                            continue;
+                        }
+                        Ok(None) => continue,
+                        Ok(Some(virt)) => {
+                            let allocation_offset = (phys - self.ram_start) / PAGE_SIZE;
+                            let existing_owner = unsafe { MEMORY_ALLOCATIONS[allocation_offset] };
+                            if existing_owner != Some(pid) {
+                                let is_lent = {
+                                    if let Some(existing_owner) = existing_owner {
+                                        system_services
+                                            .get_process(existing_owner)
+                                            .unwrap()
+                                            .activate()
+                                            .unwrap();
+                                        let is_lent = if let Ok(Some(owned_address)) =
+                                            MemoryMapping::current().phys_to_virt(phys)
+                                        {
+                                            crate::arch::mem::page_is_lent(owned_address as *mut u8)
+                                        } else {
+                                            false
+                                        };
+                                        system_services
+                                            .get_process(pid)
+                                            .unwrap()
+                                            .activate()
+                                            .unwrap();
+                                        is_lent
+                                    } else {
+                                        false
+                                    }
+                                };
+                                println!(
+                                    "!!! 0x{:08x} is owned by {} ({}) but is mapped to {} ({}) -- {}",
+                                    phys,
+                                    existing_owner.map(|v| v.get() as isize).unwrap_or(-1),
+                                    existing_owner
+                                        .map(|v| system_services
+                                            .process_name(v)
+                                            .unwrap_or("<unknown>"))
+                                        .unwrap_or("<none>"),
+                                    pid.get(),
+                                    system_services.process_name(pid).unwrap_or("<unknown>"),
+                                    if is_lent { "page is lent" } else { "duplicate!" },
+                                );
+                            }
+                            if !crate::arch::mem::page_is_lent(virt as *mut u8) {
+                                if owner.is_none() {
+                                    owner = Some((pid, virt));
+                                } else {
+                                    println!(
+                                    "!!! DUPLICATE !!! Page {:08x} owned by both {} ({}) @ {:08x} and {} ({}) @ {:08x}",
+                                    phys,
+                                    owner.map(|v| v.0.get() as isize).unwrap_or(-1),
+                                    owner
+                                        .map(|v| system_services
+                                            .process_name(v.0)
+                                            .unwrap_or("<unknown>"))
+                                        .unwrap_or("<none>"),
+                                    owner.map(|v| v.1).unwrap_or(0),
+                                    pid.get(),
+                                    system_services.process_name(pid).unwrap_or("<unknown>"),
+                                    virt,
+                                );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Restore the previous PID
+            system_services
+                .get_process(current_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
+        })
     }
 }
 

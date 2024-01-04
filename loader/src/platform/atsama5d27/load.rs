@@ -2,11 +2,12 @@
 // SPDX-FileCopyrightText: 2023 Foundation Devices, Inc <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::consts::{CONTEXT_OFFSET, EXCEPTION_STACK_TOP, FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, KERNEL_LOAD_OFFSET, PAGE_TABLE_ROOT_OFFSET, USER_AREA_END, USER_STACK_TOP, KERNEL_STACK_PAGE_COUNT, KERNEL_STACK_TOP, IRQ_STACK_PAGE_COUNT, IRQ_STACK_TOP};
-use crate::{
-    println, BootConfig, ProgramDescription,
-    XousPid, PAGE_SIZE, STACK_PAGE_COUNT, VDBG,
+use crate::consts::{
+    CONTEXT_OFFSET, EXCEPTION_STACK_TOP, FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X,
+    IRQ_STACK_PAGE_COUNT, IRQ_STACK_TOP, KERNEL_LOAD_OFFSET, KERNEL_STACK_PAGE_COUNT,
+    KERNEL_STACK_TOP, PAGE_TABLE_ROOT_OFFSET, USER_AREA_END, USER_STACK_TOP,
 };
+use crate::{println, BootConfig, ProgramDescription, XousPid, PAGE_SIZE, STACK_PAGE_COUNT, VDBG};
 use armv7::structures::paging::TranslationTableMemory;
 
 #[repr(C)]
@@ -32,15 +33,23 @@ impl ProgramDescription {
     /// either on SPI flash or in RAM.  The `load_offset` argument
     /// that is passed in should be used instead of `self.load_offset`
     /// for this reason.
-    pub fn load(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid)
-                -> (usize, usize, usize, usize) {
+    pub fn load(
+        &self,
+        allocator: &mut BootConfig,
+        load_offset: usize,
+        pid: XousPid,
+    ) -> (usize, usize, usize, usize) {
         assert_ne!(pid, 0, "PID must not be 0");
 
         println!("Mapping PID {} into offset {:08x}", pid, load_offset);
         let pid_idx = (pid - 1) as usize;
         let is_kernel = pid == 1;
         let flag_defaults = FLG_R | FLG_W | FLG_VALID | if is_kernel { 0 } else { FLG_U };
-        let stack_addr = if is_kernel { KERNEL_STACK_TOP } else { USER_STACK_TOP } - 16;
+        let stack_addr = if is_kernel {
+            KERNEL_STACK_TOP
+        } else {
+            USER_STACK_TOP
+        } - 16;
         if is_kernel {
             println!(
                 "self.text_offset: {:08x}, KERNEL_LOAD_OFFSET: {:08x}",
@@ -66,7 +75,10 @@ impl ProgramDescription {
         // Allocate physical pages for L1 translation table
         let tt_address = allocator.alloc_l1_page_table(pid) as usize;
         if VDBG {
-            println!("Setting {:08x} as translation table address for PID {}", tt_address, pid);
+            println!(
+                "Setting {:08x} as translation table address for PID {}",
+                tt_address, pid
+            );
         }
 
         allocator.processes[pid_idx].ttbr0 = tt_address;
@@ -75,14 +87,18 @@ impl ProgramDescription {
         // Map all four pages of the translation table to the kernel address space
         for offset in 0..4 {
             let offset = offset * PAGE_SIZE;
-            println!("Map L1 pages: {:08x} -> {:08x}", tt_address + offset, PAGE_TABLE_ROOT_OFFSET + offset);
+            println!(
+                "Map L1 pages: {:08x} -> {:08x}",
+                tt_address + offset,
+                PAGE_TABLE_ROOT_OFFSET + offset
+            );
             allocator.map_page(
                 translation_table,
                 tt_address + offset,
                 PAGE_TABLE_ROOT_OFFSET + offset,
                 FLG_R | FLG_W | FLG_VALID,
+                pid as XousPid,
             );
-            allocator.change_owner(pid as XousPid, tt_address);
         }
 
         // Allocate context for this process
@@ -96,8 +112,8 @@ impl ProgramDescription {
             thread_address,
             CONTEXT_OFFSET,
             FLG_R | FLG_W | FLG_VALID,
+            pid as XousPid,
         );
-        allocator.change_owner(pid as XousPid, thread_address);
 
         // Allocate stack pages.
         let total_stack_pages = if is_kernel {
@@ -121,8 +137,8 @@ impl ProgramDescription {
                     sp_page,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             } else {
                 // Reserve every page other than the 1st stack page
                 allocator.map_page(
@@ -130,6 +146,7 @@ impl ProgramDescription {
                     0,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults & !FLG_VALID,
+                    pid as XousPid,
                 );
             }
 
@@ -146,8 +163,8 @@ impl ProgramDescription {
                     sp_page,
                     (EXCEPTION_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             }
         }
 
@@ -167,8 +184,8 @@ impl ProgramDescription {
                     sp_page,
                     (IRQ_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             }
         }
 
@@ -200,8 +217,8 @@ impl ProgramDescription {
                 load_offset + offset + rounded_data_bss,
                 self.text_offset as usize + offset,
                 flag_defaults | FLG_X | FLG_VALID,
+                pid as XousPid,
             );
-            allocator.change_owner(pid as XousPid, load_offset + offset + rounded_data_bss);
         }
 
         // Map the process data section into RAM.

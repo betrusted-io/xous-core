@@ -5,18 +5,18 @@
 use core::mem;
 use core::num::NonZeroUsize;
 
+use crate::consts::{
+    EXCEPTION_STACK_TOP, FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, GUARD_MEMORY_BYTES, IRQ_STACK_TOP,
+    KERNEL_ARGUMENT_OFFSET, KERNEL_STACK_PAGE_COUNT, LOADER_CODE_ADDRESS, PAGE_TABLE_OFFSET,
+};
+use crate::platform::atsama5d27::load::InitialProcess;
+use crate::{bzero, println, BootConfig, XousPid, PAGE_SIZE, WORD_SIZE};
 use armv7::structures::paging::{
-    PageTable as L2PageTable, TranslationTable, TranslationTableDescriptor,
-    TranslationTableType, PageTableDescriptor, PageTableType,
-    TranslationTableMemory, PageTableMemory,
+    PageTable as L2PageTable, PageTableDescriptor, PageTableMemory, PageTableType,
+    TranslationTable, TranslationTableDescriptor, TranslationTableMemory, TranslationTableType,
     PAGE_TABLE_FLAGS, SMALL_PAGE_FLAGS,
 };
 use armv7::{PhysicalAddress, VirtualAddress};
-use crate::consts::{FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, GUARD_MEMORY_BYTES, KERNEL_ARGUMENT_OFFSET, LOADER_CODE_ADDRESS, PAGE_TABLE_OFFSET, KERNEL_STACK_PAGE_COUNT, EXCEPTION_STACK_TOP, IRQ_STACK_TOP};
-use crate::{
-    bzero, println, BootConfig, XousPid, PAGE_SIZE, WORD_SIZE,
-};
-use crate::platform::atsama5d27::load::InitialProcess;
 
 const DEBUG_PAGE_MAPPING: bool = false;
 macro_rules! dprint {
@@ -166,7 +166,15 @@ impl BootConfig {
         phys: usize,
         virt: usize,
         flags: usize,
+        pid: XousPid,
     ) {
+        assert!(
+            !(phys == 0 && flags & FLG_VALID != 0),
+            "cannot map zero page"
+        );
+        if flags & FLG_VALID != 0 {
+            self.change_owner(owner, phys);
+        }
         match WORD_SIZE {
             4 => self.map_page_32(translation_table, phys, virt, flags),
             8 => panic!("map_page doesn't work on 64-bit devices"),
@@ -180,6 +188,7 @@ impl BootConfig {
         phys: usize,
         virt: usize,
         flags: usize,
+        pid: XousPid,
     ) {
         dprintln!(
             "PageTable: {:p} {:08x}",
@@ -320,8 +329,8 @@ impl BootConfig {
                         addr.get(),
                         page_virt_addr,
                         FLG_R | FLG_W | FLG_VALID,
+                        pid,
                     );
-                    self.change_owner(1 as XousPid, addr.get());
                     dprintln!("<<< Done mapping new address");
                 }
             }
@@ -348,6 +357,7 @@ pub fn map_structs_to_kernel(cfg: &mut BootConfig, table_addr: usize, krn_struct
         LOADER_CODE_ADDRESS,
         LOADER_CODE_ADDRESS,
         FLG_R | FLG_X | FLG_VALID,
+        1 as XousPid,
     );
 
     // Map the last stack page (4K) to the kernel to make it visible from the trampoline code
@@ -358,6 +368,7 @@ pub fn map_structs_to_kernel(cfg: &mut BootConfig, table_addr: usize, krn_struct
         0x200ff000,
         0x200ff000,
         FLG_R | FLG_X | FLG_VALID,
+        1 as XousPid,
     );
 
     // Identity map the page that contains kernel arguments
@@ -367,6 +378,7 @@ pub fn map_structs_to_kernel(cfg: &mut BootConfig, table_addr: usize, krn_struct
         0x20100000,
         0x20100000,
         FLG_R | FLG_X | FLG_VALID,
+        1 as XousPid,
     );
 
     for addr in (0..cfg.init_size - GUARD_MEMORY_BYTES).step_by(PAGE_SIZE) {
@@ -375,8 +387,8 @@ pub fn map_structs_to_kernel(cfg: &mut BootConfig, table_addr: usize, krn_struct
             addr + krn_struct_start,
             addr + KERNEL_ARGUMENT_OFFSET,
             FLG_R | FLG_W | FLG_VALID,
+            1 as XousPid,
         );
-        cfg.change_owner(1 as XousPid, addr + krn_struct_start);
     }
 }
 
@@ -393,9 +405,12 @@ pub fn map_kernel_to_processes(
     kernel_irq_sp: usize,
     krn_struct_start: usize,
 ) {
-    let processes = unsafe { core::mem::transmute::<_, &[InitialProcess]>( &*cfg.processes) };
+    let processes = unsafe { core::mem::transmute::<_, &[InitialProcess]>(&*cfg.processes) };
 
-    assert_ne!(kernel_exception_sp, 0, "No exception stack allocated for the kernel!");
+    assert_ne!(
+        kernel_exception_sp, 0,
+        "No exception stack allocated for the kernel!"
+    );
 
     for process in processes[1..].iter() {
         println!("Mapping kernel (PID1) text to process PID{}", process.asid);
@@ -404,13 +419,17 @@ pub fn map_kernel_to_processes(
         for addr in (0..ktext_size).step_by(PAGE_SIZE) {
             let phys = ktext_offset + addr;
             let virt = ktext_virt_offset + addr;
-            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
+            println!(
+                "MAP ({:08x}): {:08x} -> {:08x}",
+                translation_table as usize, virt, phys
+            );
 
             cfg.map_page(
                 translation_table,
                 phys,
                 virt,
                 FLG_VALID | FLG_R | FLG_X,
+                1 as XousPid,
             );
         }
         println!("Mapping kernel (PID1) data to process PID{}", process.asid);
@@ -418,38 +437,55 @@ pub fn map_kernel_to_processes(
         for addr in (0..kdata_size).step_by(PAGE_SIZE) {
             let phys = kdata_offset + addr;
             let virt = kdata_virt_offset + addr;
-            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
+            println!(
+                "MAP ({:08x}): {:08x} -> {:08x}",
+                translation_table as usize, virt, phys
+            );
 
             cfg.map_page(
                 translation_table,
                 phys,
                 virt,
                 FLG_VALID | FLG_R | FLG_W,
+                1 as XousPid,
             );
         }
 
-        println!("Mapping kernel exception stack pages to the process PID{}", process.asid);
+        println!(
+            "Mapping kernel exception stack pages to the process PID{}",
+            process.asid
+        );
         for i in 0..KERNEL_STACK_PAGE_COUNT {
-            let virt = EXCEPTION_STACK_TOP - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * i);
-            let phys = kernel_exception_sp - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * (i + 1));
-            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
+            let virt =
+                EXCEPTION_STACK_TOP - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * i);
+            let phys =
+                kernel_exception_sp - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * (i + 1));
+            println!(
+                "MAP ({:08x}): {:08x} -> {:08x}",
+                translation_table as usize, virt, phys
+            );
             cfg.map_page(
                 translation_table,
                 phys,
                 virt,
                 FLG_VALID | FLG_R | FLG_W,
+                1 as XousPid,
             );
         }
 
         println!("Mapping irq stack page to the process PID{}", process.asid);
         let virt = IRQ_STACK_TOP;
         let phys = kernel_irq_sp;
-        println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
+        println!(
+            "MAP ({:08x}): {:08x} -> {:08x}",
+            translation_table as usize, virt, phys
+        );
         cfg.map_page(
             translation_table,
             phys,
             virt,
             FLG_VALID | FLG_R | FLG_W,
+            1 as XousPid,
         );
 
         // TODO: For now, make the UART visible for all the processes.
@@ -458,12 +494,16 @@ pub fn map_kernel_to_processes(
         for i in 0..4 {
             let virt = 0xffcf_0000 + (i * PAGE_SIZE);
             let phys = 0xf802_0000 + (i * PAGE_SIZE);
-            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
+            println!(
+                "MAP ({:08x}): {:08x} -> {:08x}",
+                translation_table as usize, virt, phys
+            );
             cfg.map_page(
                 translation_table,
                 phys,
                 virt,
                 FLG_VALID | FLG_R | FLG_W | FLG_X,
+                1 as XousPid,
             );
         }
 
@@ -474,6 +514,7 @@ pub fn map_kernel_to_processes(
                 addr + krn_struct_start,
                 addr + KERNEL_ARGUMENT_OFFSET,
                 FLG_R | FLG_W | FLG_VALID,
+                1 as XousPid,
             );
             cfg.change_owner(1 as XousPid, addr + krn_struct_start);
         }

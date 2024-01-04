@@ -3,11 +3,19 @@
 // To make changes, see <xous_root>/services/graphics-server/src/blitstr2/codegen/main.go
 
 pub mod emoji;
+
 pub mod zh;
+
 pub mod ja;
+
 pub mod kr;
+
 pub mod bold;
+
 pub mod mono;
+
 pub mod regular;
+
 pub mod tall;
+
 pub mod small;

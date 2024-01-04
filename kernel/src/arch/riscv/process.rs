@@ -81,6 +81,21 @@ struct ProcessImpl {
     threads: [Thread; MAX_THREAD],
 }
 
+/// Compile-time assertion that the procesor-specific Process implementation
+/// is a multiple of the page size.
+fn _assert_processimpl_is_page_sized() {
+    unsafe {
+        mem::transmute::<ProcessImpl, [u8; crate::mem::PAGE_SIZE]>(ProcessImpl {
+            scratch: 0,
+            hardware_thread: 0,
+            inner: Default::default(),
+            last_tid_allocated: 0,
+            _padding: [0; 13],
+            threads: [Default::default(); MAX_THREAD],
+        });
+    }
+}
+
 /// Singleton process table. Each process in the system gets allocated from this table.
 struct ProcessTable {
     /// The process upon which the current syscall is operating
@@ -294,10 +309,10 @@ impl Process {
     }
 
     pub fn set_thread_result(&mut self, thread_nr: TID, result: xous_kernel::Result) {
-        let vals = unsafe { mem::transmute::<_, [usize; 8]>(result) };
+        let vals = result.to_args();
         let thread = self.thread_mut(thread_nr);
-        for (idx, reg) in vals.iter().enumerate() {
-            thread.registers[9 + idx] = *reg;
+        for (src, dest) in vals.iter().zip(thread.registers[9..].iter_mut()) {
+            *dest = *src;
         }
     }
 
@@ -365,7 +380,7 @@ impl Process {
 
         let thread = &mut process.threads[tid];
 
-        thread.sepc = unsafe { core::mem::transmute::<_, usize>(thread_init.call) };
+        thread.sepc = thread_init.call as usize;
         thread.registers[1] = thread_init.stack.as_ptr() as usize + thread_init.stack.len();
         thread.registers[9] = thread_init.arg1;
         thread.registers[10] = thread_init.arg2;
@@ -410,7 +425,7 @@ impl Process {
         new_tid: TID,
         setup: ThreadInit,
     ) -> Result<(), xous_kernel::Error> {
-        let entrypoint = unsafe { core::mem::transmute::<_, usize>(setup.call) };
+        let entrypoint = setup.call as usize;
         // Create the new context and set it to run in the new address space.
         let pid = self.pid.get();
         let thread = self.thread_mut(new_tid);

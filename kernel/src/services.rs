@@ -509,47 +509,29 @@ impl SystemServices {
     pub fn get_process(&self, pid: PID) -> Result<&Process, xous_kernel::Error> {
         // PID0 doesn't exist -- process IDs are offset by 1.
         let pid_idx = pid.get() as usize - 1;
-        if cfg!(baremetal) && self.processes[pid_idx].mapping.get_pid() != pid {
-            klog!(
-                "Process doesn't match ({} vs {})",
-                self.processes[pid_idx].mapping.get_pid(),
-                pid
-            );
-            return Err(xous_kernel::Error::ProcessNotFound);
+        if cfg!(baremetal) && self.processes[pid_idx].mapping.get_pid() != Some(pid) {
+            Err(xous_kernel::Error::ProcessNotFound)
+        } else if self.processes[pid_idx].state == ProcessState::Free {
+            Err(xous_kernel::Error::ProcessNotFound)
+        } else {
+            Ok(&self.processes[pid_idx])
         }
-        Ok(&self.processes[pid_idx])
     }
 
     pub fn get_process_mut(&mut self, pid: PID) -> Result<&mut Process, xous_kernel::Error> {
         // PID0 doesn't exist -- process IDs are offset by 1.
         let pid_idx = pid.get() as usize - 1;
-
-        // if self.processes[pid_idx].mapping.get_pid() != pid {
-        //     println!(
-        //         "Process doesn't match ({} vs {})",
-        //         self.processes[pid_idx].mapping.get_pid(),
-        //         pid
-        //     );
-        //     return Err(xous_kernel::Error::ProcessNotFound);
-        // }
-        Ok(&mut self.processes[pid_idx])
+        if cfg!(baremetal) && self.processes[pid_idx].mapping.get_pid() != Some(pid) {
+            Err(xous_kernel::Error::ProcessNotFound)
+        } else if self.processes[pid_idx].state == ProcessState::Free {
+            Err(xous_kernel::Error::ProcessNotFound)
+        } else {
+            Ok(&mut self.processes[pid_idx])
+        }
     }
 
     pub fn current_pid(&self) -> PID {
         arch::process::current_pid()
-        // PID0 doesn't exist -- process IDs are offset by 1.
-        // assert_eq!(
-        //     self.processes[pid as usize - 1].mapping,
-        //     MemoryMapping::current(),
-        //     "process memory map doesn't match -- current_pid: {}",
-        //     pid
-        // );
-        // assert_eq!(
-        //     pid, self.pid,
-        //     "current pid {} doesn't match arch pid: {}",
-        //     self.pid, pid
-        // );
-        // pid
     }
 
     /// Create a stack frame in the specified process and jump to it.

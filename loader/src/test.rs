@@ -132,7 +132,11 @@ fn parse_args_bin() {
 
     let mut ka_iter = ka.iter();
     let ka_first = ka_iter.next().expect("kernel args has no first tag");
-    assert_eq!(ka_first.name, u32::from_le_bytes(*b"XArg"), "first tag was not valid");
+    assert_eq!(
+        ka_first.name,
+        u32::from_le_bytes(*b"XArg"),
+        "first tag was not valid"
+    );
     assert_eq!(ka_first.size, 20, "first tag had invalid size");
     assert_eq!(ka_first.data[1], 1, "tag version number unexpected");
 
@@ -293,11 +297,7 @@ fn verify_program(cfg: &BootConfig, pid: usize, arg: &crate::args::KernelArgumen
             if section.no_copy() {
                 assert!(word == 0, "bss is {:08x}, not 0 @ {:08x}", word, addr);
             } else {
-                let check_word = unsafe {
-                    (cfg.base_addr as *mut u8)
-                        .add(program_offset)
-                        .read()
-                };
+                let check_word = unsafe { (cfg.base_addr as *mut u8).add(program_offset).read() };
                 program_offset += 1;
                 assert!(
                     word == check_word,
