@@ -68,6 +68,9 @@ rand = {version = "0.8.5", features = ["getrandom"]}
 # pddb testing
 rand_chacha = {version = "0.3.1", optional = true}
 
+# for lock tests
+rand_xorshift = "0.3.0"
+
 # for ditherpunk testing
 png = {version = "0.17.5", optional = true}
 tracking-allocator = {version = "0.3.0", optional = true}
@@ -79,7 +82,7 @@ tls = {path = "../../libs/tls", optional = true}
 url = {version = "2.2.2", optional = true}
 # for testing ring math functions
 # note requirement for patch to xous-ring in workspace Cargo.toml
-ring = {version = "0.16.20", optional = true}   
+ring = {version = "0.16.20", optional = true}
 
 # for websocket testing
 tungstenite = {version = "0.20.0", optional = true, features = ["rustls-tls-webpki-roots"]}
@@ -132,4 +135,5 @@ websocket = ["tls", "tungstenite", "url"]
 shellperf = ["ring", "perflib", "xous/v2p", "random-pick"] # this also needs the project-wide "perfcounter" feature to be selected. shellchat is the exclusive manager of the performance counter, do not use with e.g. "vaultperf" feature
 extra-tests = []
 mass-storage = []
+locktests = [] # for debugging some specific `std` tests cherry-picked out of the test suite
 default = [] # "debugprint"

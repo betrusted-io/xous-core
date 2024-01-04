@@ -15,6 +15,31 @@ use std::time::Instant;
 
 static AUDIO_OQC: AtomicBool = AtomicBool::new(false);
 
+/// Test-only replacement for `rand::thread_rng()`, which is unusable for
+/// us, as we want to allow running stdlib tests on tier-3 targets which may
+/// not have `getrandom` support.
+///
+/// Does a bit of a song and dance to ensure that the seed is different on
+/// each call (as some tests sadly rely on this), but doesn't try that hard.
+///
+/// This is duplicated in the `core`, `alloc` test suites (as well as
+/// `std`'s integration tests), but figuring out a mechanism to share these
+/// seems far more painful than copy-pasting a 7 line function a couple
+/// times, given that even under a perma-unstable feature, I don't think we
+/// want to expose types from `rand` from `std`.
+#[track_caller]
+#[cfg(feature="locktests")]
+pub(crate) fn test_rng() -> rand_xorshift::XorShiftRng {
+    use core::hash::{BuildHasher, Hash, Hasher};
+    use core::convert::TryInto;
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    core::panic::Location::caller().hash(&mut hasher);
+    let hc64 = hasher.finish();
+    let seed_vec = [hc64.to_le_bytes(), 0x0102030405060708u64.to_le_bytes()].concat();
+    let seed: [u8; 16] = seed_vec.as_slice().try_into().unwrap();
+    rand::SeedableRng::from_seed(seed)
+}
+
 #[derive(Debug)]
 pub struct Test {
     state: u32,
@@ -140,6 +165,112 @@ impl<'a> ShellCmdApi<'a> for Test {
                     env.ticktimer.sleep_ms(5000).unwrap();
                     write!(ret, "Duration (ms): {}\n", now.elapsed().as_millis()).unwrap();
                     write!(ret, "end elapsed_ms {}\n", env.ticktimer.elapsed_ms()).unwrap();
+                }
+                #[cfg(feature="locktests")]
+                "frob" => {
+                    const N: u32 = 10;
+                    const M: usize = if cfg!(miri) { 10000 } else { 100000 };
+                    use std::sync::RwLock;
+                    use std::thread;
+                    use std::sync::mpsc::channel;
+                    use rand::Rng;
+
+                    log::info!("start frobbing");
+                    let r = Arc::new(RwLock::new(()));
+
+                    let (tx, rx) = channel::<()>();
+                    for _ in 0..N {
+                        let tx = tx.clone();
+                        let r = r.clone();
+                        thread::spawn(move || {
+                            let mut rng = test_rng();
+                            for _ in 0..M {
+                                if rng.gen_bool(1.0 / (N as f64)) {
+                                    drop(r.write().unwrap());
+                                } else {
+                                    drop(r.read().unwrap());
+                                }
+                            }
+                            drop(tx);
+                        });
+                    }
+                    drop(tx);
+                    let _ = rx.recv();
+                    log::info!("end frobbing");
+                }
+                #[cfg(feature="locktests")]
+                "futz" => {
+                    const AMT: u32 = if cfg!(miri) { 100 } else { 100_000 };
+                    const NTHREADS: u32 = 2;
+                    let rx_count: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+                    let (tx, rx) = std::sync::mpsc::channel::<i32>();
+
+                    log::info!("start futzing");
+                    let t = std::thread::spawn(move || {
+                        for i in 0..AMT * NTHREADS {
+                            assert_eq!(rx.recv().unwrap(), 1);
+                            rx_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            if i % 1000 == 0 {
+                                log::info!("rx {}", rx_count.load(Ordering::SeqCst));
+                            }
+                        }
+                        match rx.try_recv() {
+                            Ok(..) => panic!(),
+                            _ => {}
+                        }
+                    });
+
+                    log::info!("starting futz tx");
+                    for _ in 0..NTHREADS {
+                        let tx = tx.clone();
+                        std::thread::spawn(move || {
+                            for i in 0..AMT {
+                                tx.send(1).unwrap();
+                                if i % 1000 == 0 {
+                                    log::info!("sent 1000");
+                                }
+                            }
+                        });
+                    }
+                    drop(tx);
+                    log::info!("waiting for futz to join");
+                    t.join().ok().expect("thread panicked");
+                    log::info!("futz done");
+                }
+                #[cfg(feature="locktests")]
+                "frobnicate" => {
+                    use core::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+                    use std::thread;
+
+                    const LOOPS_PER_THREAD: usize = 2_000_000_000;
+                    const THREAD_COUNT: usize = 5;
+
+                    static TEST_ATOM: AtomicUsize = AtomicUsize::new(1);
+
+                    fn atom_test(_id: usize, count: usize) {
+                        for _idx in 0..count {
+                            while TEST_ATOM.compare_exchange(1, 5, SeqCst, SeqCst).is_err() {
+                                thread::yield_now();
+                                thread::yield_now();
+                            }
+                            assert_eq!(TEST_ATOM.swap(1, SeqCst), 5);
+                            /* if idx % 500_000 == 0 {
+                                log::info!("{}", idx);
+                            } */
+                        }
+                    }
+                    log::info!("Starting atom test...");
+                    let mut joiners = vec![];
+
+                    for tid in 0..THREAD_COUNT {
+                        joiners.push(thread::spawn(move || atom_test(tid, LOOPS_PER_THREAD)));
+                    }
+                    log::info!("Waiting for joins...");
+                    for j in joiners {
+                        j.join().unwrap();
+                    }
+
+                    log::info!("Done!");
                 }
                 "factory" => {
                     self.start_time = match env.llio.get_rtc_secs() {

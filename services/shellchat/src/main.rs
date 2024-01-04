@@ -383,12 +383,12 @@ enum ShellOpcode {
 // nothing prevents the two from being the same, other than naming conventions
 pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_"; // used internally by xous-names
 fn main () -> ! {
-    #[cfg(not(feature="ditherpunk"))]
+    #[cfg(not(any(feature="ditherpunk", feature="locktests")))]
     wrapped_main();
 
-    #[cfg(feature="ditherpunk")]
-    let stack_size = 2048 * 1024;
-    #[cfg(feature="ditherpunk")]
+    #[cfg(any(feature="ditherpunk", feature="locktests"))]
+    let stack_size = 8192 * 1024;
+    #[cfg(any(feature="ditherpunk", feature="locktests"))]
     std::thread::Builder::new()
         .stack_size(stack_size)
         .spawn(wrapped_main)
