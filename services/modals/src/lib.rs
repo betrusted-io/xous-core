@@ -94,7 +94,8 @@ impl<'a> AlertModalBuilder<'a> {
                 final_placeholders = Some(pl)
             }
             0 => (),
-            _ => panic!("somehow len of placeholders was neither zero or >= 1...?"),
+            // Note: if you are getting an error on compilation, this line below is required for Rust < 1.75.0
+            // _ => panic!("somehow len of placeholders was neither zero or >= 1...?"),
         }
 
         let mut spec = ManagedPromptWithTextResponse {
