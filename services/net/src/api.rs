@@ -19,6 +19,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use xous_semver::SemVer;
 
 // republish this so we can decode the icmpv4 error codes
+#[allow(unused_imports)]
 pub use smoltcp::wire::Icmpv4DstUnreachable;
 
 // note: this name cannot be changed, because it is baked into `libstd`

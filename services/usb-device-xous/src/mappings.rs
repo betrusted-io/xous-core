@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(unused_imports)]
 pub use xous_usb_hid::page::Keyboard as UsbKeyCode;
 
 #[cfg(any(feature="precursor", feature="renode"))]

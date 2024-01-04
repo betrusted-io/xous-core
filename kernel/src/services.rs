@@ -4,6 +4,7 @@
 use crate::arch;
 use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
+#[cfg(not(any(windows, unix)))]
 pub use crate::arch::process::Thread;
 use crate::platform;
 use xous_kernel::arch::ProcessStartup;

@@ -14,6 +14,7 @@ use std::convert::TryInto;
 
 pub use cipher::{BlockSizeUser, BlockClosure, ParBlocksSizeUser, BlockBackend,
     BlockEncrypt, BlockDecrypt, consts::U16, inout::InOut, generic_array::GenericArray,
+    BlockCipher
 };
 pub(crate) type BatchBlocks = GenericArray<Block, U16>;
 
