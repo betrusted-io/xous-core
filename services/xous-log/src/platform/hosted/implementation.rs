@@ -71,20 +71,6 @@ impl OutputWriter {
     pub fn putc(&self, c: u8) {
         self.tx.send(ControlMessage::Byte(c)).unwrap();
     }
-
-    /// Write a buffer to the output and return the number of
-    /// bytes written. This is mostly compatible with `std::io::Write`,
-    /// except it is infallible.
-    pub fn write(&mut self, buf: &[u8]) -> usize {
-        for c in buf {
-            self.putc(*c);
-        }
-        buf.len()
-    }
-
-    pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> {
-        Ok(self.write(buf))
-    }
 }
 
 impl Write for OutputWriter {
