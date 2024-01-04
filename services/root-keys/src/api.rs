@@ -144,7 +144,6 @@ pub enum RootkeyResult {
 }
 
 /// AES operation definitions
-pub use cipher::{BlockCipher, consts::U16};
 use keyboard::KeyMap;
 use zeroize::Zeroize;
 

@@ -26,7 +26,7 @@ impl MemoryMapping {
     }
 
     /// Get the "PID" (actually, ASID) from the current mapping
-    pub fn get_pid(self) -> PID {
+    pub fn get_pid(self) -> Option<PID> {
         unimplemented!()
     }
 

@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: MIT
 // SPDX-LIcense-Identifier: Apache 2.0
 
+#![allow(unused_imports)]
+
 mod bool_pack;
 pub use bool_pack::*;
 

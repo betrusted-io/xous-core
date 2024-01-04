@@ -441,6 +441,9 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Fix an issue where uninitialized memory is being returned from the kernel due to a pointer assumed to be pointing to `usize` actually pointing to `u8`, thus having its length incorrectly divided by the size of a `usize`
 
 ## New in 0.9.16
+- Incorporate more stability fixes and formatting changes from @xobs
+- Clean up warning and breakages due to Rust 1.75.0. Note that cleaning up one warning forces the code to be
+  backward-incompatible with earlier versions of Rust. 😖
 
 ## Roadmap
 - Lots of testing and bug fixes
