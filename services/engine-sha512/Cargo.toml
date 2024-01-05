@@ -32,4 +32,5 @@ precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 event_wait = [] # in theory, event_wait should be more efficient, but the OS overhead is greater than the computation.
+std = []
 default = []
