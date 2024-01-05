@@ -108,6 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &loader_pkey,
             matches.is_present("defile"),
             &minver,
+            false
         )?;
     }
 
@@ -131,6 +132,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &kernel_pkey,
             matches.is_present("defile"),
             &minver,
+            true,
         )?;
     }
     Ok(())
