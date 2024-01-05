@@ -1350,6 +1350,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6919815d73839e7ad218de758883aae3a257ba6759ce7a9992501efbb53d705c"
 dependencies = [
  "const-oid",
+ "pem-rfc7468",
 ]
 
 [[package]]
@@ -1543,6 +1544,7 @@ dependencies = [
  "curve25519-dalek",
  "ed25519",
  "rand 0.7.3",
+ "serde",
  "sha2 0.9.8",
  "zeroize",
 ]
@@ -2712,6 +2714,7 @@ dependencies = [
  "curve25519-dalek-loader",
  "ed25519-dalek-loader",
  "lazy_static",
+ "sha2-loader",
  "utralib",
 ]
 
@@ -3391,6 +3394,15 @@ dependencies = [
  "base64 0.13.0",
  "once_cell",
  "regex",
+]
+
+[[package]]
+name = "pem-rfc7468"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01de5d978f34aa4b2296576379fcc416034702fd94117c56ffd8a1a767cefb30"
+dependencies = [
+ "base64ct",
 ]
 
 [[package]]
@@ -5015,14 +5027,18 @@ dependencies = [
 name = "tools"
 version = "0.1.0"
 dependencies = [
+ "base64 0.20.0",
  "bitflags 1.3.2",
  "clap 2.34.0",
  "crc",
  "csv",
+ "ed25519-dalek",
  "env_logger 0.7.1",
  "log",
  "pem",
+ "pkcs8",
  "ring",
+ "sha2 0.9.8",
  "svd2utra",
  "xmas-elf",
  "xous-semver",
