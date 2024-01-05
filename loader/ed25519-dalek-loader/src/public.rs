@@ -189,7 +189,9 @@ impl PublicKey {
         D: Digest<OutputSize = U64>,
     {
         let signature = InternalSignature::try_from(signature)?;
-
+        // The prehash needs to be finalized before we create a new hasher instance. We
+        // only have one hardware hasher available.
+        let prehash = prehashed_message.finalize();
         let mut h: Sha512 = Sha512::default();
         let R: EdwardsPoint;
         let k: Scalar;
@@ -205,7 +207,7 @@ impl PublicKey {
         h.update(ctx);
         h.update(signature.R.as_bytes());
         h.update(self.as_bytes());
-        h.update(prehashed_message.finalize().as_slice());
+        h.update(prehash.as_slice());
 
         k = Scalar::from_hash(h);
         R = EdwardsPoint::vartime_double_scalar_mul_basepoint(&k, &(minus_A), &signature.s);
