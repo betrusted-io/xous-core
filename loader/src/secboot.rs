@@ -1,14 +1,17 @@
 use crate::println;
+use sha2_loader::Sha512;
+use ed25519_dalek_loader::Digest;
 
 use crate::SIGBLOCK_SIZE;
 
-const VERSION_STR: &'static str = "Xous OS Loader v0.9.5\n\r";
+const VERSION_STR: &'static str = "Xous OS Loader v0.9.6\n\r";
 // v0.9.0 -- initial version
 // v0.9.1 -- booting with hw acceleration, and "simplest signature" check on the entire xous.img blob
 // v0.9.2 -- add version and length check between header and signed area
 // v0.9.3 -- add lockout of key ROM in die() routine
 // v0.9.4 -- monorepo conversion
 // v0.9.5 -- multiplatform conversion and phase 1 optimization
+// v0.9.6 -- convert signature check to pre-hash signature (see #472 https://github.com/betrusted-io/xous-core/issues/472)
 
 pub const STACK_LEN: u32 = 8192 - (7 * 4); // 7 words for backup kernel args
 pub const STACK_TOP: u32 = 0x4100_0000 - STACK_LEN;
@@ -403,11 +406,18 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
         let protected_len =
             u32::from_le_bytes(image[signed_len as usize - 4..].try_into().unwrap());
         // check that the signed versions match the version reported in the header
-        if sig.version != 1 || (sig.version != protected_version) {
-            gfx.msg(
-                "Check fail: mismatch on signature record version numbering.\n\r",
-                &mut cursor,
-            );
+        if sig.version != 2 || (sig.version != protected_version) {
+            if sig.version == 1 {
+                gfx.msg(
+                    "v1 signature found, but v2 required.\n\rIs your kernel up to date?\n\r",
+                    &mut cursor,
+                );
+            } else {
+                gfx.msg(
+                    "Check fail: mismatch on signature record version numbering.\n\r",
+                    &mut cursor,
+                );
+            }
             println!("Check fail: mismatch on signature record version numbering.\n\r");
             println!("sig.version: {}", sig.version);
             println!("protected_version: {}", protected_version);
@@ -435,13 +445,16 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
         }
 
         let ed25519_signature = ed25519_dalek_loader::Signature::from(sig.signature);
-        use ed25519_dalek_loader::Verifier;
         gfx.msg("Checking signature...\n\r", &mut cursor);
-        if pubkey.verify(image, &ed25519_signature).is_ok() {
+        let mut h: Sha512 = Sha512::new();
+        h.update(&image);
+        if pubkey.verify_prehashed(h, None, &ed25519_signature).is_ok() {
             gfx.msg("Signature check passed\n\r", &mut cursor);
             println!("Signature check passed");
             break;
         } else {
+            gfx.msg("Downgrading security...\n\r", &mut cursor);
+            println!("Downgrading security...");
             // signature didn't work out, setup the next key and try it
             match keyloc {
                 KeyLoc::SelfSignPub => {
