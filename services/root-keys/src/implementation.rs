@@ -226,6 +226,11 @@ impl<'a> RootKeys {
             4096, // map just the backup block
             xous::MemoryFlags::R,
         ).expect("couldn't map in the kernel region");
+        // This is a good assumption, but calling it out here -- we're mapping a region that is assumed to
+        // match HEADER_TOTAL_SIZE, but part of the reason we hard code the number is because KERNEL_BACKUP_OFFSET
+        // is in the xous crate (maybe it shouldn't be?) and is hard-coded to 4096 (0x1000), so for now we have
+        // this assert to catch a consistency problem in assumptions down the road.
+        assert!(HEADER_TOTAL_SIZE == 4096);
         // determine the ostensible length of the kernel from an unprotected length hint. This is
         // later verified to match the signed version that is contained within the block that is mapped
         // in this address.
