@@ -1,4 +1,5 @@
-pub(crate) const SERVER_NAME_SHA512: &str = "_Sha512 hardware accelerator server_";
+#[allow(dead_code)]
+pub(crate) const SERVER_NAME_SHA512: &str = "_Sha512 hardware accelerator server_"; // not used in hosted config
 mod rkyv_enum;
 pub use rkyv_enum::*;
 
