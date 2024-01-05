@@ -23,6 +23,7 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants;
 use sha2::{FallbackStrategy, Sha256, Sha512, Sha512Trunc256};
 use digest::Digest;
+use crate::sha512_digest::Sha512Prehash;
 use graphics_server::BulkRead;
 use core::mem::size_of;
 use core::cell::RefCell;
@@ -156,7 +157,13 @@ pub(crate) struct RootKeys {
     staging_base: u32,
     loader_code_mr: xous::MemoryRange,
     loader_code_base: u32,
-    kernel_mr: xous::MemoryRange,
+    /// Window to the signature region of the kernel
+    kernel_sig_mr: xous::MemoryRange,
+    /// Window for backup data page
+    kernel_backup_mr: xous::MemoryRange,
+    /// Window for end of kernel. Needed for updating the appended kernel length field in the signing process.
+    kernel_end_mr: xous::MemoryRange,
+    kernel_end_base_offset: u32,
     kernel_base: u32,
     /// regions of RAM that holds all plaintext passwords, keys, and temp data. stuck in two well-defined page so we can
     /// zero-ize it upon demand, without guessing about stack frames and/or Rust optimizers removing writes
@@ -207,10 +214,30 @@ impl<'a> RootKeys {
             xous::LOADER_CODE_LEN as usize,
             xous::MemoryFlags::R,
         ).expect("couldn't map in the loader code region");
-        let kernel = xous::syscall::map_memory(
+        let kernel_sig = xous::syscall::map_memory(
             Some(NonZeroUsize::new((xous::KERNEL_LOC + xous::FLASH_PHYS_BASE) as usize).unwrap()),
             None,
-            xous::KERNEL_LEN as usize,
+            4096, // map just the signature header region, so we can use it to check values
+            xous::MemoryFlags::R,
+        ).expect("couldn't map in the kernel region");
+        let kernel_backup = xous::syscall::map_memory(
+            Some(NonZeroUsize::new((xous::KERNEL_LOC + xous::FLASH_PHYS_BASE + KERNEL_BACKUP_OFFSET) as usize).unwrap()),
+            None,
+            4096, // map just the backup block
+            xous::MemoryFlags::R,
+        ).expect("couldn't map in the kernel region");
+        // determine the ostensible length of the kernel from an unprotected length hint. This is
+        // later verified to match the signed version that is contained within the block that is mapped
+        // in this address.
+        let kernel_region = unsafe { kernel_sig.as_slice::<u8>() };
+        let sig_region = &kernel_region[..core::mem::size_of::<SignatureInFlash>()];
+        let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()}; // this pointer better not be null, we just created it!
+        let kernel_len = sig_rec.signed_len as usize; // this length is an unchecked guideline
+        let kernel_end_base_offset = (kernel_len + SIGBLOCK_SIZE as usize - 8) & !0xFFF;
+        let kernel_end_mr = xous::syscall::map_memory(
+            Some(NonZeroUsize::new((xous::KERNEL_LOC + xous::FLASH_PHYS_BASE) as usize + kernel_end_base_offset).unwrap()),
+            None,
+            8192, // map two blocks, because the record could straddle the block boundary
             xous::MemoryFlags::R,
         ).expect("couldn't map in the kernel region");
 
@@ -253,7 +280,10 @@ impl<'a> RootKeys {
             staging_base: xous::SOC_STAGING_GW_LOC,
             loader_code_mr: loader_code,
             loader_code_base: xous::LOADER_LOC,
-            kernel_mr: kernel,
+            kernel_sig_mr: kernel_sig,
+            kernel_backup_mr: kernel_backup,
+            kernel_end_mr: kernel_end_mr,
+            kernel_end_base_offset: kernel_end_base_offset as u32,
             kernel_base: xous::KERNEL_LOC,
             sensitive_data: RefCell::new(sensitive_data),
             pass_cache,
@@ -293,10 +323,24 @@ impl<'a> RootKeys {
         unsafe { self.loader_code_mr.as_slice::<u8>() }
     }
     pub fn loader_base(&self) -> u32 { self.loader_code_base }
-    pub fn kernel(&self) -> &[u8] {
-        unsafe { self.kernel_mr.as_slice::<u8>() }
+    pub fn kernel_sig(&self) -> &[u8] {
+        unsafe { self.kernel_sig_mr.as_slice::<u8>() }
     }
-    pub fn kernel_base(&self) -> u32 { self.kernel_base }
+    pub fn kernel_backup(&self) -> &[u8] {
+        unsafe { self.kernel_backup_mr.as_slice::<u8>() }
+    }
+    pub fn kernel_end(&self) -> &[u8] {
+        unsafe { self.kernel_end_mr.as_slice::<u8>() }
+    }
+    pub fn kernel_hash(&self) -> Sha512Prehash {
+        let mut ph = Sha512Prehash::new();
+        // TODO: get the prehash of the kernel area from the loader, and load it here.
+        ph.set_prehash([0u8; 64]);
+        todo!()
+    }
+    pub fn kernel_sig_base(&self) -> u32 { self.kernel_base }
+    pub fn kernel_backup_base(&self) -> u32 { self.kernel_base + KERNEL_BACKUP_OFFSET }
+    pub fn kernel_end_base(&self) -> u32 { self.kernel_base + self.kernel_end_base_offset }
 
     /// takes a root key and computes the current rollback state of the key by hashing it
     /// MAX_ROLLBACK_LIMIT - GLOBAL_ROLLBACK times.
@@ -2413,17 +2457,20 @@ impl<'a> RootKeys {
     }
 
     pub fn sign_kernel(&self, signing_key: &Keypair) -> (Signature, u32) {
-        let kernel_region = self.kernel();
+        let kernel_sig_region = self.kernel_sig();
+        let kernel_end_region = self.kernel_end();
+        assert!(kernel_end_region.len() % 4096 == 0); // this must be aligned to a page boundary.
+        let end_mask = kernel_end_region.len() - 1;
 
         // First, find the advertised length in the unchecked header, then, check it against the length in the signed region of the kernel
-        let sig_region = &kernel_region[..core::mem::size_of::<SignatureInFlash>()];
+        let sig_region = &kernel_sig_region[..core::mem::size_of::<SignatureInFlash>()];
         let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()}; // this pointer better not be null, we just created it!
 
         let kernel_len = sig_rec.signed_len as usize; // this length is an unchecked guideline
         let protected_len = u32::from_le_bytes(
-            kernel_region[
-                SIGBLOCK_SIZE as usize + kernel_len as usize - 4 ..
-                SIGBLOCK_SIZE as usize + kernel_len as usize
+            kernel_end_region[
+                (SIGBLOCK_SIZE as usize + kernel_len as usize - 4) & end_mask ..
+                (SIGBLOCK_SIZE as usize + kernel_len as usize) & end_mask
             ].try_into().unwrap());
 
         // we now have a checked length derived from a region of the kernel that is signed, confirm that it matches the advertised length
@@ -2439,12 +2486,22 @@ impl<'a> RootKeys {
         for (&src, dst) in (kernel_len as u32 - 4).to_le_bytes().iter().zip(len_data[4..].iter_mut()) {
             *dst = src;
         }
-        log::info!("kernel len area before: {:x?}", &(self.kernel()[SIGBLOCK_SIZE as usize + kernel_len-8..SIGBLOCK_SIZE as usize + kernel_len]));
-        self.spinor.patch(self.kernel(), self.kernel_base(), &len_data, SIGBLOCK_SIZE + kernel_len as u32 - 8)
-            .expect("couldn't patch length area");
-        log::info!("kernel len area after: {:x?}", &(self.kernel()[SIGBLOCK_SIZE as usize + kernel_len-8..SIGBLOCK_SIZE as usize + kernel_len]));
+        log::info!(
+            "kernel len area before: {:x?}",
+            &(self.kernel_end()[(SIGBLOCK_SIZE as usize + kernel_len-8) & end_mask..(SIGBLOCK_SIZE as usize + kernel_len) & end_mask]));
+        self.spinor.patch(
+            self.kernel_end(),
+            self.kernel_end_base(),
+            &len_data,
+            (SIGBLOCK_SIZE + kernel_len as u32 - 8) & end_mask as u32
+        ).expect("couldn't patch length area");
+        log::info!("kernel len area after: {:x?}", &(self.kernel_sig()[SIGBLOCK_SIZE as usize + kernel_len-8..SIGBLOCK_SIZE as usize + kernel_len]));
 
-        (signing_key.sign(&kernel_region[SIGBLOCK_SIZE as usize..SIGBLOCK_SIZE as usize + kernel_len]), kernel_len as u32)
+        (
+            signing_key.sign_prehashed(self.kernel_hash(), None)
+            .expect("Error computing pre-hash signature"),
+            kernel_len as u32
+        )
     }
 
     /// the public key must already be in the cache -- this version is used by the init routine, before the keys are written
@@ -2457,8 +2514,8 @@ impl<'a> RootKeys {
         };
         log::debug!("pubkey as reconstituted: {:x?}", pubkey);
 
-        let kernel_region = self.kernel();
-        let sig_region = &kernel_region[..core::mem::size_of::<SignatureInFlash>()];
+        let kernel_sig_region = self.kernel_sig();
+        let sig_region = &kernel_sig_region[..core::mem::size_of::<SignatureInFlash>()];
         let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()}; // this pointer better not be null, we just created it!
         let sig = Signature::from_bytes(&sig_rec.signature).expect("Signature malformed");
 
@@ -2467,7 +2524,8 @@ impl<'a> RootKeys {
         log::debug!("verifying with signature {:x?}", sig_rec.signature);
         log::debug!("verifying with pubkey {:x?}", pubkey.to_bytes());
 
-        match pubkey.verify_strict(&kernel_region[SIGBLOCK_SIZE as usize..SIGBLOCK_SIZE as usize + kern_len], &sig) {
+        let hash = self.kernel_hash();
+        match pubkey.verify_prehashed(hash, None, &sig) {
             Ok(()) => true,
             Err(e) => {
                 log::error!("error verifying signature: {:?}", e);
@@ -2629,10 +2687,10 @@ impl<'a> RootKeys {
                 log::info!("loader sig area after: {:x?}", &(self.loader_code()[..0x80]));
             }
             SignatureType::Kernel => {
-                log::info!("kernel sig area before: {:x?}", &(self.kernel()[..0x80]));
-                self.spinor.patch(self.kernel(), self.kernel_base(), &sig_region, 0)
+                log::info!("kernel sig area before: {:x?}", &(self.kernel_sig()[..0x80]));
+                self.spinor.patch(self.kernel_sig(), self.kernel_sig_base(), &sig_region, 0)
                     .map_err(|_| RootkeyResult::FlashError)?;
-                log::info!("kernel sig area after: {:x?}", &(self.kernel()[..0x80]));
+                log::info!("kernel sig area after: {:x?}", &(self.kernel_sig()[..0x80]));
             }
             SignatureType::Gateware => {
                 log::info!("gateware sig area before: {:x?}", &(self.gateware()[SELFSIG_OFFSET..SELFSIG_OFFSET + core::mem::size_of::<SignatureInFlash>()]));
@@ -2783,8 +2841,8 @@ impl<'a> RootKeys {
         ).expect("couldn't erase backup region");
     }
     pub fn read_backup_header(&mut self) -> Option<BackupHeader> {
-        let kernel = self.kernel();
-        let backup = &kernel[KERNEL_BACKUP_OFFSET as usize..KERNEL_BACKUP_OFFSET as usize + size_of::<BackupHeader>()];
+        let region = self.kernel_backup();
+        let backup = &region[..size_of::<BackupHeader>()];
         let mut header = BackupHeader::default();
         header.as_mut().copy_from_slice(backup);
         if (header.version & BACKUP_VERSION_MASK) == (BACKUP_VERSION & BACKUP_VERSION_MASK) {
@@ -2901,10 +2959,10 @@ impl<'a> RootKeys {
             page[PAGE_LEN - cs_slice.len()..].copy_from_slice(cs_slice);
         }
         self.spinor.patch(
-            self.kernel(),
-            self.kernel_base(),
+            self.kernel_backup(),
+            self.kernel_backup_base(),
             &page,
-            xous::KERNEL_BACKUP_OFFSET
+            0
         ).map_err(|_| xous::Error::InternalError)?;
         Ok(())
     }
@@ -2916,10 +2974,10 @@ impl<'a> RootKeys {
         block[..size_of::<BackupHeader>()].copy_from_slice(header.as_ref());
         block[size_of::<BackupHeader>()..].copy_from_slice(backup_ct.as_ref());
         self.spinor.patch(
-            self.kernel(),
-            self.kernel_base(),
+            self.kernel_backup(),
+            self.kernel_backup_base(),
             &block,
-            xous::KERNEL_BACKUP_OFFSET
+            0
         ).map_err(|_| xous::Error::InternalError)?;
         Ok(())
     }
@@ -2927,24 +2985,21 @@ impl<'a> RootKeys {
         let mut header = BackupHeader::default();
         let mut ct = backups::BackupDataCt::default();
         header.as_mut().copy_from_slice(
-            &self.kernel()[
-                xous::KERNEL_BACKUP_OFFSET as usize ..
-                xous::KERNEL_BACKUP_OFFSET as usize + size_of::<BackupHeader>()
-        ]);
+            &self.kernel_backup()[..size_of::<BackupHeader>()]);
         ct.as_mut().copy_from_slice(
-        &self.kernel()[
-            xous::KERNEL_BACKUP_OFFSET as usize + size_of::<BackupHeader>()..
-            xous::KERNEL_BACKUP_OFFSET as usize + size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()
+        &self.kernel_backup()[
+            size_of::<BackupHeader>()
+            ..size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()
         ]);
         Ok((header, ct))
     }
     pub fn erase_backup(&mut self) {
         let blank = [0xffu8; size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()];
         self.spinor.patch(
-            self.kernel(),
-            self.kernel_base(),
+            self.kernel_backup(),
+            self.kernel_backup_base(),
             &blank,
-            xous::KERNEL_BACKUP_OFFSET
+            0
         ).expect("couldn't erase backup region");
     }
 }
