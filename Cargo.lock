@@ -4908,6 +4908,8 @@ dependencies = [
  "log",
  "xous 0.9.56 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
+ "xous-api-names",
+ "xous-api-susres",
 ]
 
 [[package]]
