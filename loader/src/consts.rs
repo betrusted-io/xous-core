@@ -1,6 +1,7 @@
 pub const BACKUP_ARGS_ADDR: usize = crate::platform::RAM_BASE + crate::platform::RAM_SIZE - 0x2000;
 
 pub const USER_STACK_TOP: usize = 0x8000_0000;
+pub const USER_STACK_PADDING: usize = 16;
 pub const PAGE_TABLE_OFFSET: usize = 0xff40_0000;
 pub const PAGE_TABLE_ROOT_OFFSET: usize = 0xff80_0000;
 pub const CONTEXT_OFFSET: usize = 0xff80_1000;

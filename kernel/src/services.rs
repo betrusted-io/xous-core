@@ -31,8 +31,6 @@ const MINIELF_FLG_NC: u8 = 2;
 const MINIELF_FLG_X: u8 = 4;
 #[cfg(baremetal)]
 const MINIELF_FLG_EHF: u8 = 8;
-#[cfg(baremetal)]
-const MINIELF_FLG_EHH: u8 = 0x10;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ExceptionHandler {
@@ -414,25 +412,26 @@ impl SystemServices {
                 //   - Process #1 is the kernel
                 // Any changes to this will break this code!
                 let mut eh_frame = 0;
-                let mut eh_frame_size = 0;
-                let mut eh_frame_header = 0;
-                let mut eh_frame_header_size = 0;
                 if let Some(arg) = arg_iter.next() {
                     for section in arg.data.chunks_exact(2) {
                         let flags = (section[1] >> 24) as u8;
                         if flags & MINIELF_FLG_EHF != 0 {
                             eh_frame = section[0];
-                            eh_frame_size = section[1] & 0xFF_FFFF;
-                        } else if flags & MINIELF_FLG_EHH != 0 {
-                            eh_frame_header = section[0];
-                            eh_frame_header_size = section[1] & 0xFF_FFFF;
                         }
                     }
                 }
 
+                let arg0 = eh_frame as _;
+                #[cfg(target_arch = "riscv32")]
+                let arg1 = init.env as _;
+                #[cfg(not(target_arch = "riscv32"))]
+                let arg1 = 0;
+                let arg2 = 0;
+                let arg3 = 0;
+
                 // end of assumption area
                 process.state = ProcessState::Setup(ThreadInit::new(
-                    unsafe { core::mem::transmute::<usize, _>(init.entrypoint) },
+                    init.entrypoint as _,
                     unsafe {
                         MemoryRange::new(
                             init.sp - crate::arch::process::DEFAULT_STACK_SIZE,
@@ -440,10 +439,10 @@ impl SystemServices {
                         )
                         .unwrap()
                     },
-                    eh_frame as _,
-                    eh_frame_size as _,
-                    eh_frame_header as _,
-                    eh_frame_header_size as _,
+                    arg0,
+                    arg1,
+                    arg2,
+                    arg3,
                 ));
             }
             // log_process_update(file!(), line!(), process, old_state);

@@ -52,7 +52,7 @@ _start:
     // set scause to simulate an interrupt's occurrence -- this makes the resume "feel like" an interrupt
     // vectored into the same routine that caused the suspend, but without having gone through the typical
     // interrupt handler mechanisms
-    li          t0, 0x80000000
+    li          t0, 0x80000009
     csrw        scause, t0
 
     // this is the same path the suspend interrupt took, but we set it up manually

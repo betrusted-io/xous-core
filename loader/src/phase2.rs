@@ -11,6 +11,36 @@ pub fn phase_2(cfg: &mut BootConfig) {
     let mut process_offset = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
     println!("\n\nPhase2: Processess start out @ {:08x}", process_offset);
 
+    // Construct an environment block. This will be used by processes
+    // to access environment variables and system parameters. This
+    // is hardcoded for now, and can be expanded later.
+    #[rustfmt::skip]
+    let mut env = [
+        0x41, 0x70, 0x70, 0x50, // 'AppP' indicating application parameters
+        0x08, 0x00, 0x00, 0x00, // Size of AppP tag contents
+        0xb2, 0x00, 0x00, 0x00, // Size of entire AppP block including all tags
+        0x02, 0x00, 0x00, 0x00, // Number of tags present
+        0x45, 0x6e, 0x76, 0x42, // 'EnvB' indicating an environment block
+        0x9a, 0x00, 0x00, 0x00, // Number of bytes that follows for the environment block
+        0x01, 0x00, // Number of environment variables
+        0x14, 0x00, // Length of name of first variable
+        // Name of first variable 'ROOT_FILESYSTEM_HASH':
+        0x52, 0x4f, 0x4f, 0x54, 0x5f, 0x46, 0x49, 0x4c, 0x45, 0x53, 0x59, 0x53, 0x54, 0x45, 0x4d,
+        0x5f, 0x48, 0x41, 0x53, 0x48,
+        // Length of the contents of the first variable
+        0x80, 0x00,
+        // Root filesystem hash contents begin here:
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x41, 0x42, 0x43, 0x44, 0x45, 0x30, 0x30,
+    ];
+
     // Go through all Init processes and the kernel, setting up their
     // page tables and mapping memory to them.
     let mut pid = 2;
@@ -34,14 +64,14 @@ pub fn phase_2(cfg: &mut BootConfig) {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
             println!("\n\nCopying IniE program into memory");
-            let allocated = inie.load(cfg, process_offset, pid, false);
+            let allocated = inie.load(cfg, process_offset, pid, &env, false);
             println!("IniE Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"IniF") {
             let inif = MiniElf::new(&tag);
             println!("\n\nMapping IniF program into memory");
-            let allocated = inif.load(cfg, process_offset, pid, true);
+            let allocated = inif.load(cfg, process_offset, pid, &env, true);
             println!("IniF Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
@@ -260,6 +290,8 @@ impl ProgramDescription {
             STACK_PAGE_COUNT
         } {
             if i == 0 {
+                // Pre-allocate the first stack offset, since it
+                // will definitely be used
                 let sp_page = allocator.alloc() as usize;
                 allocator.map_page(
                     satp,
@@ -358,6 +390,7 @@ impl ProgramDescription {
         let process = &mut allocator.processes[pid_idx];
         process.entrypoint = self.entrypoint as usize;
         process.sp = stack_addr;
+        process.env = 0;
         process.satp = 0x8000_0000 | ((pid as usize) << 22) | (satp_address >> 12);
     }
 }
