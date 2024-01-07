@@ -83,7 +83,9 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // kernel args must be validated because tampering with them can change critical assumptions about
     // how data is loaded into memory
     #[cfg(feature = "secboot")]
-    if !secboot::validate_xous_img(signed_buffer as *const u32) {
+    let mut fs_prehash = [0u8; 64];
+    #[cfg(feature = "secboot")]
+    if !secboot::validate_xous_img(signed_buffer as *const u32, &mut fs_prehash) {
         loop {}
     };
     // the kernel arg buffer is SIG_BLOCK_SIZE into the signed region
@@ -95,10 +97,10 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // But for now, the basic "validate everything as a blob" is perhaps good enough to
     // armor code-at-rest against front-line patching attacks.
     let kab = KernelArguments::new(arg_buffer);
-    boot_sequence(kab, signature);
+    boot_sequence(kab, signature, fs_prehash);
 }
 
-fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
+fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -> ! {
     // Store the initial boot config on the stack.  We don't know
     // where in heap this memory will go.
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
@@ -124,7 +126,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         #[cfg(not(feature = "simulation-only"))]
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
-        phase_2(&mut cfg);
+        phase_2(&mut cfg, &fs_prehash);
         #[cfg(feature = "debug-print")]
         if VDBG {
             check_load(&mut cfg);
@@ -138,7 +140,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         println!("No suspend marker found, doing a cold boot!");
         clear_ram(&mut cfg);
         phase_1(&mut cfg);
-        phase_2(&mut cfg);
+        phase_2(&mut cfg, &fs_prehash);
         #[cfg(feature = "debug-print")]
         if VDBG {
             check_load(&mut cfg);
