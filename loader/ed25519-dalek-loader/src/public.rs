@@ -13,7 +13,6 @@ use core::convert::TryFrom;
 use core::fmt::Debug;
 
 use curve25519_dalek_loader::constants;
-use curve25519_dalek_loader::digest::generic_array::typenum::U64;
 use curve25519_dalek_loader::digest::Digest;
 use curve25519_dalek_loader::edwards::CompressedEdwardsY;
 use curve25519_dalek_loader::edwards::EdwardsPoint;
@@ -179,19 +178,23 @@ impl PublicKey {
     ///
     /// [rfc8032]: https://tools.ietf.org/html/rfc8032#section-5.1
     #[allow(non_snake_case)]
-    pub fn verify_prehashed<D>(
+    pub fn verify_prehashed(
         &self,
-        prehashed_message: D,
+        // note: this used to be D: Digest<OutputSize = U64>, but because we have only
+        // one hardware hasher, this has to be finalized before handing down to the function.
+        prehashed_message: &[u8],
         context: Option<&[u8]>,
         signature: &ed25519::Signature,
     ) -> Result<(), SignatureError>
-    where
-        D: Digest<OutputSize = U64>,
     {
+        // This assert does a run-time check on what would otherwise be a static check in Rust
+        // due to the original type bounds on this function. However, because we have to finalize
+        // the hash (due to there being only a single hardware hash engine) prior to passing into
+        // this function, we also erase the type information. This assert somewhat makes up for that.
+        assert!(prehashed_message.len() == 64, "Incorrect pre-hash length");
+
         let signature = InternalSignature::try_from(signature)?;
-        // The prehash needs to be finalized before we create a new hasher instance. We
-        // only have one hardware hasher available.
-        let prehash = prehashed_message.finalize();
+
         let mut h: Sha512 = Sha512::default();
         let R: EdwardsPoint;
         let k: Scalar;
@@ -207,7 +210,7 @@ impl PublicKey {
         h.update(ctx);
         h.update(signature.R.as_bytes());
         h.update(self.as_bytes());
-        h.update(prehash.as_slice());
+        h.update(prehashed_message);
 
         k = Scalar::from_hash(h);
         R = EdwardsPoint::vartime_double_scalar_mul_basepoint(&k, &(minus_A), &signature.s);
