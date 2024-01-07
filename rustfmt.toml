@@ -15,6 +15,43 @@ ignore = [
   "services/shellchat",
   "services/spinor",
   "services/susres",
+  "services/pddb",
 ]
-# Note: run this on Linux to fix Windows changing .rs files to +x:
-# find . -name "*.rs" -exec chmod -x {} \;
+# Notes:
+# - @generated in the first five lines of a file suppresses formatting for generated files!
+# - run this on Linux to fix Windows changing .rs files to +x:
+#      `find . -name "*.rs" -exec chmod -x {} \;`
+
+# I can't rely on contributors using .editorconfig
+newline_style = "Unix"
+# require the shorthand instead of it being optional
+use_field_init_shorthand = true
+# outdated default — `?` was unstable at the time
+# additionally the `try!` macro is deprecated now
+use_try_shorthand = true
+# Computers in the 90's had 132 column displays[1], and the displays were 1/6th the area.
+# 110 columns doesn't seem like a big stretch...
+# [1] https://en.wikipedia.org/wiki/VGA_text_mode
+max_width = 110
+# Max to use the max width for everything or Default. See https://rust-lang.github.io/rustfmt/?version=v1.4.38&search=#use_small_heuristics
+use_small_heuristics = "Max"
+
+# Unstable features below
+unstable_features = true
+version = "Two"
+# code can be 110 characters, why not comments?
+comment_width = 110
+# quicker manual lookup
+group_imports = "StdExternalCrate"
+# why use an attribute if a normal doc comment would suffice?
+normalize_doc_attributes = true
+# why not?
+format_code_in_doc_comments = true
+format_macro_bodies = true
+format_macro_matchers = true
+format_strings = false
+wrap_comments = true
+fn_single_line = true
+reorder_impl_items = true
+reorder_imports = false
+reorder_modules = false

@@ -23,5 +23,8 @@
         "**/.DS_Store": true,
         "**/Thumbs.db": true
     },
+    "rust-analyzer.rustfmt.extraArgs": [
+        "+nightly"
+    ],
     "cSpell.language": "en,fr"
 }
