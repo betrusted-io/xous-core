@@ -152,6 +152,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if gdb_stub {
         builder.add_kernel_feature("gdb-stub");
     }
+    if env::args().filter(|x| x == "--debug-loader").count() != 0 {
+        builder.add_loader_feature("debug-print");
+    }
 
     // ---- now process the verb plus position dependent arguments ----
     let mut args = env::args();
@@ -450,6 +453,7 @@ fn print_help() {
     [--no-timestamp]
     [--no-verify]
     [--gdb-stub]
+    [--debug-loader]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
@@ -467,6 +471,7 @@ be merged in with explicit app/service treatment with the following flags:
 [--no-timestamp]         Do not include a timestamp in the build. By default, `ticktimer` is rebuilt on every run to encode a timestamp.
 [--no-verify]            Do not verify that local sources match crates.io downloaded sources
 [--gdb-stub]             Build the kernel with GDB support
+[--debug-loader]         Enable debug printing in the loader
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.

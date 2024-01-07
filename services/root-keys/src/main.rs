@@ -4,6 +4,7 @@
 mod api;
 use api::*;
 mod backups;
+mod sha512_digest;
 
 use xous::{msg_scalar_unpack, send_message, msg_blocking_scalar_unpack};
 #[cfg(feature = "policy-menu")]

@@ -4,7 +4,7 @@ use crate::*;
 ///
 /// Set up all the page tables, allocating new root page tables for SATPs and corresponding
 /// sub-pages starting from the base of previously copied process data.
-pub fn phase_2(cfg: &mut BootConfig) {
+pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
     let args = cfg.args;
 
     // This is the offset in RAM where programs are loaded from.
@@ -38,8 +38,24 @@ pub fn phase_2(cfg: &mut BootConfig) {
         0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
         0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
         0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-        0x30, 0x41, 0x42, 0x43, 0x44, 0x45, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
     ];
+    // Convert the fs_prehash into a hex ascii string, suitable for environment variables
+    // The initial loader environment is hard-coded, so we use a hard-coded offset for the string
+    // destination. It was a deliberate decision to not include a generic environment variable
+    // handler in the loader because we want to keep the loader compact and with a small attack
+    // surface; a generic environment handling routine would add significant size without much
+    // benefit.
+    //
+    // Note that the main purpose for environment variables is for test & debug tooling, where
+    // single programs are run in hosted or emulated environments with arguments passed for fast
+    // debugging. The sole purpose for the environment variable in the loader's context is to
+    // pass this computed hash onto the userspace environments.
+    const HEX_DIGITS: [u8; 16] = *b"0123456789abcdef";
+    for (i, &byte) in fs_prehash.iter().enumerate() {
+        env[env.len() - 128 + i * 2] = HEX_DIGITS[(byte >> 4) as usize];
+        env[env.len() - 128 + i * 2 + 1] = HEX_DIGITS[(byte & 0xF) as usize];
+    }
 
     // Go through all Init processes and the kernel, setting up their
     // page tables and mapping memory to them.
