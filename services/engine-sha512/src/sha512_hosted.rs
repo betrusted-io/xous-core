@@ -1,5 +1,6 @@
 //! SHA-512
 use crate::consts::{H384, H512, H512_TRUNC_224, H512_TRUNC_256, STATE_LEN};
+use crate::FallbackStrategy;
 use block_buffer::BlockBuffer;
 use core::slice::from_ref;
 use digest::consts::{U128, U28, U32, U48, U64};
@@ -136,7 +137,13 @@ impl Reset for Sha384 {
 pub struct Sha512Trunc256 {
     engine: Engine512,
 }
-
+impl Sha512Trunc256 {
+    pub fn new_with_strategy(_strat: FallbackStrategy) -> Self {
+        Sha512Trunc256 {
+            engine: Engine512::new(&H512_TRUNC_256),
+        }
+    }
+}
 impl Default for Sha512Trunc256 {
     fn default() -> Self {
         Sha512Trunc256 {
