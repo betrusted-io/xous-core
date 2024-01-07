@@ -95,6 +95,7 @@ impl MiniElf {
         allocator: &mut BootConfig,
         load_offset: usize,
         pid: XousPid,
+        params: &[u8],
         xip: bool,
     ) -> usize {
         println!("Mapping PID {} starting at offset {:08x}", pid, load_offset);
@@ -121,7 +122,7 @@ impl MiniElf {
         // The load offset is the end of this process.  Shift it down by one page
         // so we get the start of the first page.
         let mut top = load_offset - PAGE_SIZE;
-        let stack_addr = USER_STACK_TOP - 16;
+        let stack_addr = USER_STACK_TOP - USER_STACK_PADDING;
 
         // Allocate a page to handle the top-level memory translation
         #[cfg(not(feature = "atsama5d27"))]
@@ -183,6 +184,12 @@ impl MiniElf {
             if i == 0 {
                 // For the initial stack frame, allocate a valid page
                 let sp_page = allocator.alloc() as usize;
+                // Copy the params block into this first page
+                let sp_page_slice = unsafe { slice::from_raw_parts_mut(sp_page as *mut u8, PAGE_SIZE) };
+                let params_start = sp_page_slice.len() - params.len();
+                sp_page_slice[params_start..].copy_from_slice(params);
+
+                // Attach the page to the process
                 allocator.map_page(
                     tt,
                     sp_page,
@@ -377,7 +384,8 @@ impl MiniElf {
 
         let process = &mut allocator.processes[pid as usize - 1];
         process.entrypoint = self.entry_point as usize;
-        process.sp = stack_addr;
+        process.sp = (stack_addr - params.len()) & !0xf;
+        process.env = stack_addr - params.len() + USER_STACK_PADDING;
         #[cfg(not(feature = "atsama5d27"))]
         {
             process.satp = 0x8000_0000 | ((pid as usize) << 22) | (_tt_address >> 12);

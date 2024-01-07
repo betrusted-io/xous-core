@@ -17,6 +17,9 @@ pub struct InitialProcess {
 
     /// Address of the top of the stack
     pub sp: usize,
+
+    /// Address of the start of the env block
+    pub env: usize,
 }
 
 /// Phase 1:
