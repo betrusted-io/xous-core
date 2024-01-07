@@ -19,6 +19,7 @@ impl Sha512Prehash {
             hash: None
         }
     }
+    #[allow(dead_code)] // not used in hosted mode
     pub fn set_prehash(&mut self, hash: [u8; 64]) {
         self.hash = Some(hash);
     }
