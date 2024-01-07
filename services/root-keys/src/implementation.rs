@@ -219,13 +219,13 @@ impl<'a> RootKeys {
             None,
             4096, // map just the signature header region, so we can use it to check values
             xous::MemoryFlags::R,
-        ).expect("couldn't map in the kernel region");
+        ).expect("couldn't map in the kernel signature region");
         let kernel_backup = xous::syscall::map_memory(
             Some(NonZeroUsize::new((xous::KERNEL_LOC + xous::FLASH_PHYS_BASE + KERNEL_BACKUP_OFFSET) as usize).unwrap()),
             None,
             4096, // map just the backup block
             xous::MemoryFlags::R,
-        ).expect("couldn't map in the kernel region");
+        ).expect("couldn't map in the kernel backup region");
         // This is a good assumption, but calling it out here -- we're mapping a region that is assumed to
         // match HEADER_TOTAL_SIZE, but part of the reason we hard code the number is because KERNEL_BACKUP_OFFSET
         // is in the xous crate (maybe it shouldn't be?) and is hard-coded to 4096 (0x1000), so for now we have
@@ -238,13 +238,14 @@ impl<'a> RootKeys {
         let sig_region = &kernel_region[..core::mem::size_of::<SignatureInFlash>()];
         let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()}; // this pointer better not be null, we just created it!
         let kernel_len = sig_rec.signed_len as usize; // this length is an unchecked guideline
-        let kernel_end_base_offset = (kernel_len + SIGBLOCK_SIZE as usize - 8) & !0xFFF;
+        let map_len = 0x2000; // map two blocks, because the record could straddle the block boundary
+        let kernel_end_base_offset = (kernel_len + SIGBLOCK_SIZE as usize - 8) & !(map_len - 1);
         let kernel_end_mr = xous::syscall::map_memory(
             Some(NonZeroUsize::new((xous::KERNEL_LOC + xous::FLASH_PHYS_BASE) as usize + kernel_end_base_offset).unwrap()),
             None,
-            8192, // map two blocks, because the record could straddle the block boundary
+            map_len,
             xous::MemoryFlags::R,
-        ).expect("couldn't map in the kernel region");
+        ).expect("couldn't map in the kernel end region");
 
         let mut sensitive_data = xous::syscall::map_memory(
             None,
@@ -339,9 +340,22 @@ impl<'a> RootKeys {
     }
     pub fn kernel_hash(&self) -> Sha512Prehash {
         let mut ph = Sha512Prehash::new();
-        // TODO: get the prehash of the kernel area from the loader, and load it here.
-        ph.set_prehash([0u8; 64]);
-        todo!()
+        if let Some(hash_str) = std::env::vars()
+            .find(|(key, _value)| key == "ROOT_FILESYSTEM_HASH")
+            .map(|(_key, value)| value)
+        {
+            log::info!("loader-generated hash environment string: {}", hash_str);
+            let hash = hex::decode(hash_str).expect("Couldn't decode loader hash from environment variables!");
+            for &b in hash.iter() {
+                if b != 0 {
+                    ph.set_prehash(hash[..64].try_into().unwrap());
+                    return ph
+                }
+            }
+        } else {
+            panic!("No hash was set by the loader!");
+        }
+        panic!("Hash was found, but invalid (contains default value)");
     }
     pub fn kernel_sig_base(&self) -> u32 { self.kernel_base }
     pub fn kernel_backup_base(&self) -> u32 { self.kernel_base + KERNEL_BACKUP_OFFSET }
@@ -2485,7 +2499,7 @@ impl<'a> RootKeys {
 
         // force the records to match our measured values
         let mut len_data = [0u8; 8];
-        for (&src, dst) in SIG_VERSION.to_le_bytes().iter().zip(len_data[..4].iter_mut()) {
+        for (&src, dst) in SIG_KERNEL_VERSION.to_le_bytes().iter().zip(len_data[..4].iter_mut()) {
             *dst = src;
         }
         for (&src, dst) in (kernel_len as u32 - 4).to_le_bytes().iter().zip(len_data[4..].iter_mut()) {
@@ -2500,8 +2514,11 @@ impl<'a> RootKeys {
             &len_data,
             (SIGBLOCK_SIZE + kernel_len as u32 - 8) & end_mask as u32
         ).expect("couldn't patch length area");
-        log::info!("kernel len area after: {:x?}", &(self.kernel_sig()[SIGBLOCK_SIZE as usize + kernel_len-8..SIGBLOCK_SIZE as usize + kernel_len]));
-
+        log::info!("kernel len area after: {:x?}",
+            &(self.kernel_end()[
+                (SIGBLOCK_SIZE as usize + kernel_len-8) & end_mask ..
+                (SIGBLOCK_SIZE as usize + kernel_len) & end_mask
+                ]));
         (
             signing_key.sign_prehashed(self.kernel_hash(), None)
             .expect("Error computing pre-hash signature"),
@@ -2678,7 +2695,6 @@ impl<'a> RootKeys {
         // map a structure onto the signature region, so we can do something sane when writing stuff to it
         let signature: &mut SignatureInFlash = unsafe{(sig_region.as_mut_ptr() as *mut SignatureInFlash).as_mut().unwrap()}; // this pointer better not be null, we just created it!
 
-        signature.version = SIG_VERSION;
         signature.signed_len = len;
         signature.signature = sig.to_bytes();
         log::debug!("sig: {:x?}", sig.to_bytes());
@@ -2686,18 +2702,21 @@ impl<'a> RootKeys {
 
         match sig_type {
             SignatureType::Loader => {
+                signature.version = SIG_LOADER_VERSION;
                 log::info!("loader sig area before: {:x?}", &(self.loader_code()[..0x80]));
                 self.spinor.patch(self.loader_code(), self.loader_base(), &sig_region, 0)
                     .map_err(|_| RootkeyResult::FlashError)?;
                 log::info!("loader sig area after: {:x?}", &(self.loader_code()[..0x80]));
             }
             SignatureType::Kernel => {
+                signature.version = SIG_KERNEL_VERSION;
                 log::info!("kernel sig area before: {:x?}", &(self.kernel_sig()[..0x80]));
                 self.spinor.patch(self.kernel_sig(), self.kernel_sig_base(), &sig_region, 0)
                     .map_err(|_| RootkeyResult::FlashError)?;
                 log::info!("kernel sig area after: {:x?}", &(self.kernel_sig()[..0x80]));
             }
             SignatureType::Gateware => {
+                signature.version = SIG_LOADER_VERSION;
                 log::info!("gateware sig area before: {:x?}", &(self.gateware()[SELFSIG_OFFSET..SELFSIG_OFFSET + core::mem::size_of::<SignatureInFlash>()]));
                 self.spinor.patch(self.gateware(), self.gateware_base(), &sig_region, (SELFSIG_OFFSET) as u32)
                     .map_err(|_| RootkeyResult::FlashError)?;
