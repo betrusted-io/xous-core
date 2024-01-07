@@ -2,10 +2,10 @@
 // This generates the SEMVER data that is displayed when quering `xous ver`
 // It also generates timestamps, if demanded.
 
-use std::io::{Write, Read};
-use std::fs::OpenOptions;
-use std::process::Command;
 use chrono::Local;
+use std::fs::OpenOptions;
+use std::io::{Read, Write};
+use std::process::Command;
 
 pub(crate) fn generate_version(add_timestamp: bool) {
     let output = if cfg!(target_os = "windows") {
