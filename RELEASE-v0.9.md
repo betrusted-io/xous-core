@@ -444,6 +444,20 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Incorporate more stability fixes and formatting changes from @xobs
 - Clean up warning and breakages due to Rust 1.75.0. Note that cleaning up one warning forces the code to be
   backward-incompatible with earlier versions of Rust. 😖
+- Fixed a long-dormant bug in a kernel asm.S that came to light with the clean-up pass of the kernel (see #474)
+- A kernel patch was introduced by @xobs which ensures that every page is owned by only one process. As a result,
+  it was discovered that XIP processes have been broken, because XIP processes map their code space into their own
+  process space, but their code space was also mapped into `root-keys` so that it can inspect the code for signing.
+  This has been fixed, see [#472](https://github.com/betrusted-io/xous-core/issues/472) for an extensive discussion,
+  but the TL;DR is that the kernel is now signed using ed25519ph (the pre-hash version of the algorithm), and the
+  hash is computed by the loader at boot time. This also closes a TOCTOU between when the loader verifies the
+  filesystem signature before jumping to the kernel, at the expense of being more vulnerable to any breaks in SHA-512,
+  or a runtime break in the `root-keys` process that gains an arbitrary write primitive and is able to remodel
+  the stored hash value before it is signed.
+- Environment variables are now a feature of programs. They are stashed just beyond the top of stack by the loader.
+  They are mostly intended for test & debug tooling, where the loader is in the host environment, but this mechanism
+  is also used to resolve the above issue.
+
 
 ## Roadmap
 - Lots of testing and bug fixes
