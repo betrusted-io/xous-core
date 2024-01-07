@@ -271,7 +271,7 @@ impl Keyrom {
 
 // returns true if the kernel is valid
 // side-effects the "devboot" register in the gfx engine if devkeys were detected
-pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
+pub fn validate_xous_img(xous_img_offset: *const u32, fs_prehash: &mut [u8; 64]) -> bool {
     // reset the SHA block, in case we're coming out of a warm reset
     let mut sha = CSR::new(utra::sha512::HW_SHA512_BASE as *mut u32);
     sha.wfo(utra::sha512::POWER_ON, 1);
@@ -448,7 +448,11 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
         gfx.msg("Checking signature...\n\r", &mut cursor);
         let mut h: Sha512 = Sha512::new();
         h.update(&image);
-        if pubkey.verify_prehashed(h, None, &ed25519_signature).is_ok() {
+        // The prehash needs to be finalized before we create a new hasher instance. We
+        // only have one hardware hasher available.
+        let prehash = h.finalize();
+        if pubkey.verify_prehashed(prehash.as_slice(), None, &ed25519_signature).is_ok() {
+            fs_prehash.copy_from_slice(prehash.as_slice());
             gfx.msg("Signature check passed\n\r", &mut cursor);
             println!("Signature check passed");
             break;
