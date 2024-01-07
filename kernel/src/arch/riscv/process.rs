@@ -127,6 +127,9 @@ pub struct InitialProcess {
 
     /// Address of the top of the stack
     pub sp: usize,
+
+    /// Address of the environment block
+    pub env: usize,
 }
 
 impl InitialProcess {
