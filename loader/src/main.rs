@@ -84,6 +84,8 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // how data is loaded into memory
     #[cfg(feature = "secboot")]
     let mut fs_prehash = [0u8; 64];
+    #[cfg(not(feature = "secboot"))]
+    let fs_prehash = [0u8; 64];
     #[cfg(feature = "secboot")]
     if !secboot::validate_xous_img(signed_buffer as *const u32, &mut fs_prehash) {
         loop {}
