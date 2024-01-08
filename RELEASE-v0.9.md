@@ -459,6 +459,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Environment variables are now a feature of programs. They are stashed just beyond the top of stack by the loader.
   They are mostly intended for test & debug tooling, where the loader is in the host environment, but this mechanism
   is also used to resolve the above issue.
+- `sigchat` can now link up to an existing account - thanks to huge PR by @nhoj
+- `xtask` can accept out-of-tree apps using a syntax like `cargo xtask app-image sigchat:path-to-elf-file` thanks to PR by @kotval
 
 
 ## Roadmap
