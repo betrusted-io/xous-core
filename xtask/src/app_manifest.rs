@@ -1,19 +1,19 @@
 // This module supports generating the app menus from the JSON manifest in the apps/ directory.
 
-use std::{
-    fs::{OpenOptions, File},
-    io::{Read, Write},
-    string::String,
-    fmt::Write as StdWrite,
-};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+use std::{
+    fmt::Write as StdWrite,
+    fs::{File, OpenOptions},
+    io::{Read, Write},
+    string::String,
+};
 
 #[derive(Deserialize, Serialize, Debug)]
 struct AppManifest {
     context_name: String,
     menu_name: HashMap<String, HashMap<String, String>>,
-    submenu: Option::<u8>,
+    submenu: Option<u8>,
 }
 #[derive(Deserialize, Serialize, Debug)]
 struct Locales {
@@ -89,9 +89,14 @@ pub(crate) fn generate_app_menus(apps: &Vec<String>) {
         gam_tokens,
         "\npub const EXPECTED_APP_CONTEXTS: &[&'static str] = &["
     )
-	.unwrap();
+    .unwrap();
     for (app_name, manifest) in working_set.iter() {
-        writeln!(gam_tokens, "    APP_NAME_{},", app_name.to_uppercase().replace("-", "_"),).unwrap();
+        writeln!(
+            gam_tokens,
+            "    APP_NAME_{},",
+            app_name.to_uppercase().replace("-", "_"),
+        )
+        .unwrap();
         if let Some(menu_count) = manifest.submenu {
             for i in 0..menu_count {
                 writeln!(

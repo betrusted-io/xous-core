@@ -22,7 +22,7 @@ impl BuildStream {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CrateSpec {
     /// name of the crate
     Local(String, bool),
@@ -30,8 +30,8 @@ pub enum CrateSpec {
     CratesIo(String, String, bool),
     /// a prebuilt package: (name of executable, URL for download)
     Prebuilt(String, String, bool),
-    /// a prebuilt binary, done using command line tools
-    BinaryFile(String, bool),
+    /// a prebuilt binary, done using command line tools: (Optional name, path)
+    BinaryFile(Option<String>, String, bool),
     /// an empty entry
     None,
 }
@@ -41,16 +41,17 @@ impl CrateSpec {
             CrateSpec::Local(_s, xip) => *xip,
             CrateSpec::CratesIo(_n, _v, xip) => *xip,
             CrateSpec::Prebuilt(_n, _u, xip) => *xip,
-            CrateSpec::BinaryFile(_path, xip) => *xip,
+            CrateSpec::BinaryFile(_n, _path, xip) => *xip,
             _ => false
         }
     }
     pub fn set_xip(&mut self, xip: bool) {
         *self = match self {
+            //TODO: why do these to_strings need to be here?
             CrateSpec::Local(s, _xip) => CrateSpec::Local(s.to_string(), xip),
             CrateSpec::CratesIo(n, v, _xip) => CrateSpec::CratesIo(n.to_string(), v.to_string(), xip),
             CrateSpec::Prebuilt(n, u, _xip) => CrateSpec::Prebuilt(n.to_string(), u.to_string(), xip),
-            CrateSpec::BinaryFile(path, _xip) => CrateSpec::BinaryFile(path.to_string(), xip),
+            CrateSpec::BinaryFile(n, path, _xip) => CrateSpec::BinaryFile(n.as_ref().or(None).cloned(), path.to_string(), xip),
             CrateSpec::None => CrateSpec::None,
         }
     }
@@ -59,19 +60,15 @@ impl CrateSpec {
             CrateSpec::Local(s, _xip) => Some(s.to_string()),
             CrateSpec::CratesIo(n, _v, _xip) => Some(n.to_string()),
             CrateSpec::Prebuilt(n, _u, _xip) => Some(n.to_string()),
-            CrateSpec::BinaryFile(path, _xip) => Some(path.to_string()),
+            CrateSpec::BinaryFile(n, path, _xip) => {
+                if let Some(name) = n {
+                    Some(name.to_string())
+                }
+                else {
+                    Some(path.to_string())
+                }
+            },
             _ => None,
-        }
-    }
-}
-impl Clone for CrateSpec {
-    fn clone(&self) -> CrateSpec {
-        match self {
-            CrateSpec::Local(s, xip) => CrateSpec::Local(s.to_string(), *xip),
-            CrateSpec::CratesIo(n, v, xip) => CrateSpec::CratesIo(n.to_string(), v.to_string(), *xip),
-            CrateSpec::Prebuilt(n, u, xip) => CrateSpec::Prebuilt(n.to_string(), u.to_string(), *xip),
-            CrateSpec::BinaryFile(path, xip) => CrateSpec::BinaryFile(path.to_string(), *xip),
-            CrateSpec::None => CrateSpec::None,
         }
     }
 }
@@ -99,7 +96,13 @@ impl From<&str> for CrateSpec {
         // Note that this is after a test for the '#' character, so that disambiguates URL slashes
         // It does mean that files with a '#' character in them are mistaken for URL coded paths, and '@' as remote crates.
         } else if spec.contains('/') || spec.contains('\\') {
-            CrateSpec::BinaryFile(spec.to_string(), false)
+            //optionally a BinaryFile can have a name associated with it as "name:path"
+            if spec.find(':').is_some() {
+                    let (name,path) = spec.split_once(':').unwrap();
+                    CrateSpec::BinaryFile(Some(name.to_string()), path.to_string(), false)
+            } else {
+                CrateSpec::BinaryFile(None, spec.to_string(), false)
+            }
         } else {
             CrateSpec::Local(spec.to_string(), false)
         }
@@ -323,7 +326,6 @@ impl Builder {
         }
         self
     }
-
     /// add a feature to be passed on to services
     pub fn add_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
         self.features.push(feature.into());
@@ -595,6 +597,12 @@ impl Builder {
             match app {
                 CrateSpec::Local(name, _xip) => app_names.push(name.into()),
                 CrateSpec::CratesIo(name, _version, _xip) => app_names.push(name.into()),
+                CrateSpec::BinaryFile(name, _location, _xip) => {
+                    // if binary file has a name, ensure it ends up in the app menu
+                    if let Some(n) = name {
+                        app_names.push(n.to_string())
+                    } else {}
+                },
                 _ => {}
             }
         }
@@ -930,7 +938,7 @@ impl Builder {
         let mut paths = Vec::<String>::new();
         for item in [&self.services[..], &self.apps[..]].concat() {
             match item {
-                CrateSpec::BinaryFile(path, _xip) => {
+                CrateSpec::BinaryFile(_name, path, _xip) => {
                     paths.push(path);
                 }
                 _ => {}
