@@ -454,6 +454,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   filesystem signature before jumping to the kernel, at the expense of being more vulnerable to any breaks in SHA-512,
   or a runtime break in the `root-keys` process that gains an arbitrary write primitive and is able to remodel
   the stored hash value before it is signed.
+- An update to `precursorupdater` is needed to recognize v2 kernel signatures (needs to be <= v0.1.5). Upgrade using
+  `python3 -m pip install --upgrade precursorupdater`
 - Environment variables are now a feature of programs. They are stashed just beyond the top of stack by the loader.
   They are mostly intended for test & debug tooling, where the loader is in the host environment, but this mechanism
   is also used to resolve the above issue.
