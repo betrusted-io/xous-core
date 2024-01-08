@@ -36,6 +36,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 rustls = { version = "0.21.7" }
 serde = { version = "1.0", features = [ "derive" ] }
 tls = { path = "../../libs/tls" }
+tungstenite = "0.20.1"
 ureq = { version = "2.7.1", features = ["json"] }
 url = "2.2.2"
 

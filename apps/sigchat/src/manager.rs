@@ -1,12 +1,21 @@
+mod config;
 mod group_permission;
+pub mod libsignal; // stub
 mod link_state;
+mod signal_ws;
 mod trust_mode;
 
 use crate::Account;
+pub use config::Config;
 use group_permission::GroupPermission;
 use link_state::LinkState;
-use std::io::Error;
+use locales::t;
+use modals::Modals;
+use signal_ws::SignalWS;
+use std::io::{Error, ErrorKind};
+use std::time::Duration;
 pub use trust_mode::TrustMode;
+use tungstenite::Message;
 
 // Structure modeled on signal-cli by AsamK <asamk@gmx.de> and contributors - https://github.com/AsamK/signal-cli.
 // signal-cli is a commandline interface for libsignal-service-java. It supports registering, verifying, sending and receiving messages.
@@ -14,8 +23,10 @@ pub use trust_mode::TrustMode;
 
 #[allow(dead_code)]
 pub struct Manager {
-    account:Account,
+    account: Account,
+    config: Config,
     trust_mode: TrustMode,
+    websocket: Option<SignalWS>,
     log_verbose: bool,
     log_scrub: bool,
     log_send: bool,
@@ -29,9 +40,15 @@ impl Manager {
     /// * `account` - Specify your phone number, that will be your identifier. The phone number must include the country calling code, i.e. the number must start with a "+" sign.
     ///
     pub fn new(account: Account, trust_mode: TrustMode) -> Manager {
+        let config = Config::new(
+            account.host().clone(),
+            account.service_environment().clone(),
+        );
         Manager {
             account,
+            config,
             trust_mode,
+            websocket: None,
             log_verbose: false,
             log_scrub: false,
             log_send: false,
@@ -122,12 +139,98 @@ impl Manager {
 
     /// Link to an existing device, instead of registering a new number. This shows a "sgnl://linkdevice?uuid=…​" URI. If you want to connect to another signal-cli instance, you can just use this URI. If you want to link to an Android/iOS device, create a QR code with the URI (e.g. with qrencode) and scan that in the Signal app.
     ///
+    /// Linking sigchat to an existing Signal Account involves:
+    /// 1. establishing a tls connection to the Signal Provisioning websocket server
+    /// 2. obtaining a uuid via the websocket
+    /// 3. generating a key-pair
+    /// 4. displaying a uri as a qr-code (containing the uuid and pub_key)
+    /// 5. scanning the qr-code with the primary Signal device
+    /// 6. obtaining device registration via the websocket
+    /// 7. checking and saving account details
+    ///
     /// # Arguments
-    /// * `name` - Optionally specify a name to describe this new device. By default "cli" will be used.
+    /// * `name` - name to describe this new device
+    /// * `config` - Signal configuration - host server and Live/Staging environment
+    /// * `service_environment` - service_environment to connect to on host
     ///
     #[allow(dead_code)]
-    pub fn link(_name: &str) -> Result<(), Error> {
-        todo!();
+    pub fn link(&mut self, name: &str) -> Result<bool, Error> {
+        let link_err = Error::new(ErrorKind::Other, "failed to link device");
+        let mut host = self.config.url().clone();
+        match SignalWS::new_provision(&mut host) {
+            Ok(mut ws) => {
+                log::info!("provisioning websocket established to {host}");
+                let result = match ws.read(Some(Duration::from_millis(5000))) {
+                    Ok(Message::Binary(uuid)) => {
+                        log::info!("received Provisioning UUID message from host");
+                        let uuid = libsignal::ProvisioningUuid::decode(uuid).id.clone();
+                        let identity_key_pair = libsignal::generate_identity_key_pair();
+                        let pub_key = identity_key_pair.djb_identity_key.key.clone();
+                        match url::Url::parse_with_params(
+                            "sgnl://linkdevice",
+                            &[("uuid", &uuid.as_str()), ("pub_key", &pub_key.as_str())],
+                        ) {
+                            Ok(device_link_uri) => {
+                                log::info!("device_link_uri: {device_link_uri}");
+                                let xns = xous_names::XousNames::new().unwrap();
+                                let modals =
+                                    Modals::new(&xns).expect("can't connect to Modals server");
+                                modals
+                                    .show_notification(
+                                        t!("sigchat.account.link.scan", locales::LANG),
+                                        Some(device_link_uri.as_str()),
+                                    )
+                                    .expect("qrcode failed");
+                                match ws.read(Some(Duration::from_millis(5000))) {
+                                    Ok(Message::Binary(registration)) => {
+                                        log::info!("Registration message received from host");
+                                        match self.account.link(
+                                            name,
+                                            libsignal::ProvisionMessage::decode(
+                                                identity_key_pair,
+                                                registration,
+                                            ),
+                                        ) {
+                                            Ok(result) => Ok(result),
+                                            Err(e) => {
+                                                log::warn!("linking error: {e}");
+                                                Ok(false)
+                                            }
+                                        }
+                                    }
+                                    Ok(_) => {
+                                        log::warn!("unexpected Provisioning msg");
+                                        Err(link_err)
+                                    }
+                                    Err(e) => {
+                                        log::warn!("{e}");
+                                        Err(link_err)
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::info!("{}", format!("{e}"));
+                                Err(link_err)
+                            }
+                        }
+                    }
+                    Ok(_) => {
+                        log::warn!("unexpected Provisioning msg.");
+                        Err(link_err)
+                    }
+                    Err(e) => {
+                        log::warn!("{e}");
+                        Err(link_err)
+                    }
+                };
+                ws.close();
+                result
+            }
+            Err(e) => {
+                log::info!("failed to connect to server: {}", e);
+                Err(e)
+            }
+        }
     }
 
     /// Link another device to this device. Only works, if this is the primary device.

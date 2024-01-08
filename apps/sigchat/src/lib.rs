@@ -2,13 +2,15 @@ mod account;
 pub mod api;
 mod manager;
 
-use crate::account::Account;
-use crate::manager::{Manager, TrustMode};
+use crate::account::{Account, ServiceEnvironment, DEFAULT_HOST};
+use crate::manager::{Config, Manager, TrustMode};
 pub use api::*;
 use chat::Chat;
 use locales::t;
 use modals::Modals;
 use std::io::{Error, ErrorKind};
+use tls::Tls;
+use url::{Host, Url};
 
 /// PDDB Dict for sigchat keys
 const SIGCHAT_ACCOUNT: &str = "sigchat.account";
@@ -47,31 +49,64 @@ impl<'a> SigChat<'a> {
 
     /// Connect to the Signal servers
     ///
-    pub fn connect(&mut self) -> bool {
+    /// The process first waits for an active WiFi connection, and then
+    /// initiates a Signal Account Manager with the Signal Account struct stored
+    /// in the pddb (or kicks off the Account setup process otherwise). The
+    /// Account Manager orchestrates the interaction with the Signal host server.
+    ///
+    /// # Returns
+    /// true on a successful connection to a Signal Account/Server
+    ///
+    pub fn connect(&mut self) -> Result<bool, Error> {
         log::info!("Attempting connect to Signal server");
         if self.wifi() {
             if self.manager.is_none() {
-                self.account_setup();
+                log::info!("Setting up Signal Account Manager");
+                let account = match Account::read(SIGCHAT_ACCOUNT) {
+                    Ok(account) => account,
+                    Err(_) => self.account_setup()?,
+                };
+                self.chat
+                    .set_status_text(t!("sigchat.status.connecting", locales::LANG));
+                self.chat.set_busy_state(true);
+                self.manager = Some(Manager::new(account, TrustMode::OnFirstUse));
+                self.chat.set_busy_state(false);
             }
-            if let Some(_manager) = &self.manager {
-                log::info!("Signal manager OK" );
+            if self.manager.is_some() {
+                log::info!("Signal Account Manager OK");
+                self.chat
+                    .set_status_text(t!("sigchat.status.online", locales::LANG));
+                Ok(true)
             } else {
-                self.modals
-                    .show_notification(t!("sigchat.account.failed", locales::LANG), None)
-                    .expect("notification failed");
-            };
+                log::info!("failed to setup Signal Account Manager");
+                self.chat
+                    .set_status_text(t!("sigchat.status.offline", locales::LANG));
+                Ok(false)
+            }
         } else {
             self.modals
                 .show_notification(t!("sigchat.wifi.warning", locales::LANG), None)
                 .expect("notification failed");
+            Ok(false)
         }
-        self.dialogue_set(None);
-        false
     }
 
-    /// Setup a Signal Account via Registration or Linking
+    /// Setup a Signal Account via Registration or Linking,
+    /// or abort setup and read existing chat Dialogues in pddb
     ///
-    fn account_setup(&mut self) {
+    /// The user can choose to:
+    /// 1. Link to an existing Signal Account
+    /// 2. Register a new Signal Account
+    /// 3. Abort account setup to read existing Signal Dialogues stored in the pddb
+    /// The online options involve nominating the Signal host server,
+    /// and probing the host for trusted tlls Certificate Authorities.
+    ///
+    /// # Returns
+    /// Account struct stored in pddb
+    ///
+    fn account_setup(&mut self) -> Result<Account, Error> {
+        log::info!("Attempting to setup a Signal Account");
+        let service_environment = ServiceEnvironment::Staging;
         self.modals
             .add_list_item(t!("sigchat.account.link", locales::LANG))
             .expect("failed add list item");
@@ -79,15 +114,114 @@ impl<'a> SigChat<'a> {
             .add_list_item(t!("sigchat.account.register", locales::LANG))
             .expect("failed add list item");
         self.modals
+            .add_list_item(t!("sigchat.account.offline", locales::LANG))
+            .expect("failed add list item");
+        self.modals
             .get_radiobutton(t!("sigchat.account.title", locales::LANG))
             .expect("failed radiobutton modal");
         match self.modals.get_radio_index() {
             Ok(index) => match index {
-                0 => self.account_link(),
-                1 => self.account_register(),
-                _ => log::warn!("invalid index"),
+                0 => {
+                    let host = self.host_modal();
+                    let config = Config::new(host, service_environment);
+                    match self.probe_host(config.url()) {
+                        true => Ok(self.account_link(&config)?),
+                        false => Err(Error::new(
+                            ErrorKind::Other,
+                            "failed to trust host certificate",
+                        )),
+                    }
+                }
+                1 => {
+                    let host = self.host_modal();
+                    let config = Config::new(host, service_environment);
+                    match self.probe_host(config.url()) {
+                        true => Ok(self.account_register(&config)?),
+                        false => Err(Error::new(
+                            ErrorKind::Other,
+                            "failed to trust host certificate",
+                        )),
+                    }
+                }
+                2 => {
+                    log::info!("account setup aborted");
+                    Err(Error::new(ErrorKind::Other, "account setup aborted"))
+                }
+                _ => {
+                    log::warn!("invalid index");
+                    Err(Error::new(ErrorKind::Other, "invalid radio index"))
+                }
             },
-            Err(e) => log::warn!("failed to select register/link {:?}", e),
+            Err(e) => {
+                log::warn!("failed to present account setup radio buttons: {:?}", e);
+                Err(Error::new(
+                    ErrorKind::Other,
+                    "failed to present account setup radio buttons",
+                ))
+            }
+        }
+    }
+
+    /// Prompt for a host name from the user
+    ///
+    /// # Returns
+    ///
+    /// the host provided by the user
+    ///
+    fn host_modal(&self) -> Host {
+        let mut host = None;
+        while host.is_none() {
+            host = match self
+                .modals
+                .alert_builder(t!("sigchat.account.host.name", locales::LANG))
+                .field(Some(DEFAULT_HOST.to_string()), None)
+                .build()
+            {
+                Ok(text) => match Host::parse(&text.content()[0].content.to_string()) {
+                    Ok(host) => match host {
+                        Host::Domain(..) => Some(host),
+                        _ => {
+                            self.modals
+                                .show_notification(t!("sigchat.host.invalid", locales::LANG), None)
+                                .expect("notification failed");
+                            None
+                        }
+                    },
+                    Err(_) => {
+                        self.modals
+                            .show_notification(t!("sigchat.host.invalid", locales::LANG), None)
+                            .expect("notification failed");
+                        None
+                    }
+                },
+                _ => Host::parse(DEFAULT_HOST).ok(),
+            }
+        }
+        host.unwrap()
+    }
+
+    /// Probe host for tls Certificate Authority chain of trust
+    ///
+    /// # Arguments
+    /// * `host` - the dns name or ip address of a Signal server
+    ///
+    /// # Returns
+    /// true if at least 1 Certificate Authority is trusted
+    ///
+    fn probe_host(&self, url: &Url) -> bool {
+        self.chat
+            .set_status_text(t!("sigchat.status.probing", locales::LANG));
+        self.chat.set_busy_state(true);
+        let tls = Tls::new();
+        if tls.accessible(url.host_str().unwrap(), true) {
+            self.chat.set_busy_state(false);
+            true
+        } else {
+            self.modals
+                .show_notification(t!("sigchat.account.abort", locales::LANG), None)
+                .expect("abort failed");
+            self.chat.set_busy_state(false);
+            false
         }
     }
 
@@ -96,10 +230,95 @@ impl<'a> SigChat<'a> {
     /// Signal allows to link additional devices to your primary device (e.g. Signal-Android).
     /// Note that currently Signal allows up to three linked devices per primary.
     ///
-    pub fn account_link(&self) {
-        self.modals
-            .show_notification(&"sorry - linking is not implemented yet", None)
-            .expect("notification failed");
+    /// The user must provide a name for the current device before the Link process
+    /// commences - culminating by presenting a qr-code to be scanned by the primary device.
+    ///
+    /// # Arguments
+    /// * `config` - Signal configuration - host server and Live/Staging environment
+    ///
+    /// # Returns
+    /// Account struct stored in pddb
+    ///
+    pub fn account_link(&mut self, config: &Config) -> Result<Account, Error> {
+        log::info!("Attempting to Link to an existing Signal Account");
+        self.chat
+            .set_status_text(t!("sigchat.status.initializing", locales::LANG));
+        self.chat.set_busy_state(true);
+        match Account::new(SIGCHAT_ACCOUNT, config.host(), config.service_environment()) {
+            Ok(account) => {
+                let mut manager = Manager::new(account, TrustMode::OnFirstUse);
+                let name = self.name_modal(
+                    DEFAULT_DEVICE_NAME,
+                    t!("sigchat.account.link.name", locales::LANG),
+                );
+                self.chat
+                    .set_status_text(t!("sigchat.status.connecting", locales::LANG));
+                self.chat.set_busy_state(true);
+                match manager.link(&name) {
+                    Ok(true) => {
+                        log::info!("Linked Signal Account");
+                        self.chat.set_busy_state(false);
+                        Ok(Account::read(SIGCHAT_ACCOUNT)?)
+                    }
+                    Ok(false) => {
+                        log::info!("failed to link Signal Account");
+                        self.chat.set_busy_state(false);
+                        Err(Error::new(
+                            ErrorKind::Other,
+                            "failed to link Signal Account",
+                        ))
+                    }
+                    Err(e) => {
+                        log::warn!("error while linking Signal Account: {e}");
+                        Account::delete(SIGCHAT_ACCOUNT).unwrap_or_else(|e| {
+                            log::warn!("failed to delete unregistered account from pddb: {e}")
+                        });
+                        self.chat.set_busy_state(false);
+                        self.modals
+                            .show_notification(&format!("{}", e), None)
+                            .expect("notification failed");
+                        Err(Error::new(
+                            ErrorKind::Other,
+                            "error while linking Signal Account",
+                        ))
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!(
+                    "failed to create new Account in pddb:{} : {e}",
+                    SIGCHAT_ACCOUNT
+                );
+                self.modals
+                    .show_notification(t!("sigchat.account.failed", locales::LANG), None)
+                    .expect("notification failed");
+                Err(Error::new(
+                    ErrorKind::Other,
+                    "failed to create new Account in pddb",
+                ))
+            }
+        }
+    }
+
+    /// Prompt a name from the user
+    ///
+    /// # Arguments
+    /// * `default_name` - A name suggested to the user
+    /// * `prompt` - A prompt to explain what is being requested
+    ///
+    /// # Returns
+    /// the name provided by the user
+    ///
+    fn name_modal(&self, default_name: &str, prompt: &str) -> String {
+        match self
+            .modals
+            .alert_builder(prompt)
+            .field(Some(default_name.to_string()), None)
+            .build()
+        {
+            Ok(text) => text.content()[0].content.to_string(),
+            _ => default_name.to_string(),
+        }
     }
 
     /// Register a new Signal Account with this as the primary device.
@@ -108,27 +327,31 @@ impl<'a> SigChat<'a> {
     /// The phone number must include the country calling code, i.e. the number must start with a "+" sign.
     /// Warning: this will disable the authentication of your phone as a primary device.
     ///
-    pub fn account_register(&mut self) {
+    /// # Arguments
+    ///
+    /// * `config` - Signal configuration - host server and Live/Staging environment
+    ///
+    pub fn account_register(&mut self, config: &Config) -> Result<Account, Error> {
+        log::info!("Attempting to Register a new Signal Account");
         self.modals
             .show_notification(&"sorry - registration is not implemented yet", None)
             .expect("notification failed");
         match self.number_modal() {
             Ok(number) => {
                 log::info!("registration phone number = {:?}", number);
-                match Account::new(SIGCHAT_ACCOUNT) {
-                    Ok(mut account) => {
-                        match account.set_number(&number.to_string()) {
-                            Ok(_number) => {
-                                self.manager = Some(Manager::new(account, TrustMode::OnFirstUse));
-                            }
-                            Err(e) => log::warn!("failed to set Account number: {e}"),
+                match Account::new(SIGCHAT_ACCOUNT, config.host(), config.service_environment()) {
+                    Ok(mut account) => match account.set_number(&number.to_string()) {
+                        Ok(_number) => {
+                            self.manager = Some(Manager::new(account, TrustMode::OnFirstUse));
                         }
-                    }
+                        Err(e) => log::warn!("failed to set Account number: {e}"),
+                    },
                     Err(e) => log::warn!("failed to create new Account: {e}"),
                 }
             }
             Err(e) => log::warn!("failed to get phone number: {e}"),
         }
+        Err(Error::new(ErrorKind::Other, "not implmented"))
     }
 
     /// Attempts to obtain a phone number from the user.
@@ -172,6 +395,9 @@ impl<'a> SigChat<'a> {
     ///
     /// If wifi is not connected then a modal offers to "Connect to wifi?"
     /// and tries for 10 seconds before representing.
+    ///
+    /// # Returns
+    /// true when wifi is connected
     ///
     pub fn wifi(&self) -> bool {
         if HOSTED_MODE {

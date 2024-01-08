@@ -62,22 +62,6 @@ fn wrapped_main() -> ! {
 
     let cid = xous::connect(sid).unwrap();
     chat.menu_add(MenuItem {
-        name: xous_ipc::String::from_str(t!("sigchat.register", locales::LANG)),
-        action_conn: Some(cid),
-        action_opcode: SigchatOp::Menu as u32,
-        action_payload: MenuPayload::Scalar([MenuOp::Register as u32, 0, 0, 0]),
-        close_on_select: true,
-    })
-    .expect("failed add menu");
-    chat.menu_add(MenuItem {
-        name: xous_ipc::String::from_str(t!("sigchat.link", locales::LANG)),
-        action_conn: Some(cid),
-        action_opcode: SigchatOp::Menu as u32,
-        action_payload: MenuPayload::Scalar([MenuOp::Link as u32, 0, 0, 0]),
-        close_on_select: true,
-    })
-    .expect("failed add menu");
-    chat.menu_add(MenuItem {
         name: xous_ipc::String::from_str(t!("sigchat.menu.close", locales::LANG)),
         action_conn: Some(cid),
         action_opcode: SigchatOp::Menu as u32,
@@ -100,7 +84,13 @@ fn wrapped_main() -> ! {
                         Some(Event::Focus) => {
                             if first_focus {
                                 first_focus = false;
-                                sigchat.connect();
+                                match sigchat.connect() {
+                                    Ok(true) => log::info!("connected to Signal Account"),
+                                    Ok(false) => log::info!("not connected to Signal Account"),
+                                    Err(e) => {
+                                        log::warn!("error while connecting to Signal Account: {e}")
+                                    }
+                                }
                             }
                             sigchat.redraw();
                         }
@@ -112,9 +102,7 @@ fn wrapped_main() -> ! {
                 log::info!("got Chat Menu Click");
                 xous::msg_scalar_unpack!(msg, menu_code, _, _, _, {
                     match FromPrimitive::from_usize(menu_code) {
-                        Some(MenuOp::Link) => sigchat.account_link(),
                         Some(MenuOp::Noop) => {}
-                        Some(MenuOp::Register) => sigchat.account_register(),
                         _ => (),
                     }
                 });
