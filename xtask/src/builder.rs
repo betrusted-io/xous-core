@@ -72,17 +72,6 @@ impl CrateSpec {
         }
     }
 }
-//impl Clone for CrateSpec {
-//    fn clone(&self) -> CrateSpec {
-//        match self {
-//            CrateSpec::Local(s, xip) => CrateSpec::Local(s.to_string(), *xip),
-//            CrateSpec::CratesIo(n, v, xip) => CrateSpec::CratesIo(n.to_string(), v.to_string(), *xip),
-//            CrateSpec::Prebuilt(n, u, xip) => CrateSpec::Prebuilt(n.to_string(), u.to_string(), *xip),
-//            CrateSpec::BinaryFile(n, path, xip) => CrateSpec::BinaryFile(n.as_ref(), path.to_string(), *xip),
-//            CrateSpec::None => CrateSpec::None,
-//        }
-//    }
-//}
 impl From<&str> for CrateSpec {
     fn from(spec: &str) -> CrateSpec {
         // remote crates are specified as "name@version", i.e. "xous-names@0.9.9"
@@ -337,10 +326,6 @@ impl Builder {
         }
         self
     }
-    ///// Add an app binary build out of souce tree
-    //pub fn add_external_apps<'a>(&'a mut self, app_list: &Vec::<String>) -> &'a mut Builder{
-    //
-    //}
     /// add a feature to be passed on to services
     pub fn add_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
         self.features.push(feature.into());

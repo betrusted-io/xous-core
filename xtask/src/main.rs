@@ -127,9 +127,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     builder.add_apps(&extra_apps);
     let extra_services = get_flag("--service")?;
     builder.add_services(&extra_services);
-    //Should we have such a flag?
-    //let external_apps = get_flag("--external_app")?;
-    //builder.add_external_apps(&external_apps);
     // extract features, and especially track language features
     let features = get_flag("--feature")?;
     let mut language_set = false;
