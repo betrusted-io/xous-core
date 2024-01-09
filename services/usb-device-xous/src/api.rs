@@ -164,6 +164,7 @@ pub struct HIDReportDescriptorMessage {
 }
 
 #[derive(Copy, Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[repr(C, align(8))]
 pub struct HIDReport(pub [u8; 64]);
 
 impl Default for HIDReport {
