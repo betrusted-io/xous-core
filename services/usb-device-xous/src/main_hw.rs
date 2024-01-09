@@ -301,7 +301,7 @@ pub(crate) fn main_hw() -> ! {
         &serial_number,
         &hidv2_alloc,
         AppHIDConfig::default(), 
-        10,
+        100, // 100 * 64 bytes = 6.4kb, quite the backlog
     );
 
 
