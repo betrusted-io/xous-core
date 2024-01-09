@@ -461,6 +461,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   is also used to resolve the above issue.
 - `sigchat` can now link up to an existing account - thanks to huge PR by @nhoj
 - `xtask` can accept out-of-tree apps using a syntax like `cargo xtask app-image sigchat:path-to-elf-file` thanks to PR by @kotval. This allows apps like `sigchat` to have AGPL licensing without contaminating `xous-core`
+- `sigchat` moved to its own repo with AGPL licensing: https://github.com/betrusted-io/sigchat
 
 
 ## Roadmap
