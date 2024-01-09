@@ -218,8 +218,6 @@ fn start_hid_thread() -> Sender<bool> {
                             _ => log::error!("error while reading report! {:#?}", err),
                         },
                         Ok(report) => {
-                            log::info!("report! {:#?}", report);
-                            log::info!("echoing back");
                             usbd.write_report(report).unwrap();
                         }
                     };
