@@ -34,5 +34,6 @@ format_strings = false
 wrap_comments = true
 fn_single_line = true
 reorder_impl_items = true
-reorder_imports = false
-reorder_modules = false
+# this helps with merges, even though it destroys logical cohesion
+reorder_imports = true
+reorder_modules = true
