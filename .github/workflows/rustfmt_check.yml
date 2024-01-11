@@ -1,0 +1,19 @@
+# From https://github.com/samblenny/autofmt-demo/blob/main/.github/workflows/rustfmt_check.yml
+name: rustfmt_check
+on: push
+jobs:
+  rustfmt_check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch source
+        uses: actions/checkout@v4
+
+      - name: Install rustfmt from nightly toolchain
+        run: |
+          rustup toolchain install nightly
+          rustup component add rustfmt --toolchain nightly
+
+      - name: Run cargo +nightly fmt --check
+        run: cargo +nightly fmt --check
+
+      - run: echo "status = ${{ job.status }}"
