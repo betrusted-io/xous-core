@@ -1,20 +1,31 @@
 {
-    "rust-analyzer.cargo.target":"riscv32imac-unknown-xous-elf",
-    "rust-analyzer.check.overrideCommand":[
+    "rust-analyzer.cargo.target": "riscv32imac-unknown-xous-elf",
+    "rust-analyzer.check.overrideCommand": [
         "cargo",
         "check",
-        "--target", "riscv32imac-unknown-xous-elf",
-        "--target-dir", "target/analyzer",
-        "--features", "precursor",
-        "--features", "utralib/precursor",
-        "--features", "utralib/precursor-pvt",
-        "--message-format", "json"
+        "--target",
+        "riscv32imac-unknown-xous-elf",
+        "--target-dir",
+        "target/analyzer",
+        "--features",
+        "precursor",
+        "--features",
+        "utralib/precursor",
+        "--features",
+        "utralib/precursor-pvt",
+        "--message-format",
+        "json"
     ],
     "rust-analyzer.server.extraEnv": {
         "XOUS_SVD_FILE": "../precursors/soc.svd"
     },
-    "rust-analyzer.cargo.features": ["precursor", "mass-storage"],
-    "rust-analyzer.files.excludeDirs": ["./loader/**"],
+    "rust-analyzer.cargo.features": [
+        "precursor",
+        "mass-storage"
+    ],
+    "rust-analyzer.files.excludeDirs": [
+        "./loader/**"
+    ],
     "files.exclude": {
         "**/.git": true,
         "**/.svn": true,
@@ -26,6 +37,7 @@
     "rust-analyzer.rustfmt.extraArgs": [
         "+nightly"
     ],
+    "files.trimTrailingWhitespace": true,
     "editor.formatOnSave": true,
     "cSpell.language": "en,fr"
 }
