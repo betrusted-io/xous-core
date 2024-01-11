@@ -79,7 +79,6 @@ members = [
   "apps/mtxchat",
   "apps/mtxcli",
   "apps/repl",
-  "apps/sigchat",
   "apps/vault",
   "apps/vault/tools/vaultbackup-rs",
   "apps/transientdisk",

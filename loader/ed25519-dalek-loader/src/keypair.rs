@@ -320,14 +320,14 @@ impl Keypair {
     /// ```
     ///
     /// [rfc8032]: https://tools.ietf.org/html/rfc8032#section-5.1
-    pub fn verify_prehashed<D>(
+    pub fn verify_prehashed(
         &self,
-        prehashed_message: D,
+        // note: this used to be D: Digest<OutputSize = U64>, but because we have only
+        // one hardware hasher, this has to be finalized before handing down to the function.
+        prehashed_message: &[u8],
         context: Option<&[u8]>,
         signature: &ed25519::Signature,
     ) -> Result<(), SignatureError>
-    where
-        D: Digest<OutputSize = U64>,
     {
         self.public.verify_prehashed(prehashed_message, context, signature)
     }

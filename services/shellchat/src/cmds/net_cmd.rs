@@ -2,8 +2,7 @@ use crate::{CommonEnv, ShellCmdApi};
 use com::api::NET_MTU;
 use net::NetPingCallback;
 use num_traits::*;
-use std::io::Read;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::{IpAddr, TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -22,7 +21,10 @@ use net::XousServerId;
 use perflib::*;
 
 #[cfg(feature = "websocket")]
-use tungstenite::{stream::MaybeTlsStream, WebSocket};
+use {
+    tls::Tls,
+    tungstenite::{stream::MaybeTlsStream, WebSocket},
+};
 
 pub struct NetCmd {
     callback_id: Option<u32>,
@@ -415,21 +417,40 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 #[cfg(feature = "websocket")]
                 "ws" => {
                     if self.ws.is_none() {
-                        let url = url::Url::parse("wss://awake.noskills.club/ws").expect("Can't parse");
-                        match tungstenite::connect(url) {
-                            Ok((socket, response)) => {
-                                log::info!("Connected to the server");
-                                log::info!("Response HTTP code: {}", response.status());
-                                log::info!("Response contains the following headers:");
-                                for (ref header, _value) in response.headers() {
-                                    log::info!("* {}", header);
+                        let server = "wss://awake.noskills.club/ws";
+                        let url = url::Url::parse(server).expect("Can't parse");
+                        log::info!("attempting websocket connection to {}", url.as_str());
+                        let host = url.host_str().expect("failed to extract host from url");
+                        match TcpStream::connect((host, 443)) {
+                            Ok(sock) => {
+                                log::info!("tcp connected to {host}");
+                                let xtls = Tls::new();
+                                match xtls.stream_owned(host, sock) {
+                                    Ok(tls_stream) => {
+                                        log::info!("tls configured");
+                                        match tungstenite::client(url, tls_stream) {
+                                            Ok((_socket, response)) => {
+                                                log::info!("Websocket connected to: {}", server);
+                                                log::info!(
+                                                    "Response HTTP code: {}",
+                                                    response.status()
+                                                );
+                                                log::info!(
+                                                    "Response contains the following headers:"
+                                                );
+                                                for (ref header, _value) in response.headers() {
+                                                    log::info!("* {}", header);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                log::info!("failed to connect websocket: {}", e)
+                                            }
+                                        }
+                                    }
+                                    Err(e) => log::warn!("failed to configure tls: {e}"),
                                 }
-                                self.ws = Some(socket);
                             }
-                            Err(e) => {
-                                log::warn!("failed to connect to ws server: {e}");
-                                write!(ret, "failed to connect to ws server: {e}").ok();
-                            }
+                            Err(e) => log::warn!("failed to connect tcp: {e}"),
                         }
                     }
                     let mut err = false;

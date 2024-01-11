@@ -682,7 +682,7 @@ def main():
         while True:
             # first try the stable branch and see if it meets the version requirement
             kernel = get_with_progress(url + 'xous-' + language + '.img', 'Kernel')
-            if int.from_bytes(kernel[:4], 'little') != 1:
+            if int.from_bytes(kernel[:4], 'little') != 1 and int.from_bytes(kernel[:4], 'little') != 2:
                 print("Downloaded kernel image has unexpected signature version. Aborting.")
                 exit(1)
             kern_len = int.from_bytes(kernel[4:8], 'little') + 0x1000

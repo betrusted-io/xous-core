@@ -85,7 +85,7 @@ url = {version = "2.2.2", optional = true}
 ring = {version = "0.16.20", optional = true}
 
 # for websocket testing
-tungstenite = {version = "0.20.0", optional = true, features = ["rustls-tls-webpki-roots"]}
+tungstenite = {version = "0.20.0", optional = true}
 
 # for performance testing
 perflib = {path="../../tools/perflib", optional = true}

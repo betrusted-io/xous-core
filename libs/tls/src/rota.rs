@@ -142,9 +142,7 @@ fn add_der_header(tag: Tag, naked: &Vec<u8>) -> Result<Vec<u8>, Error> {
         Ok(header) => {
             let mut buff: [u8; 32] = [0u8; 32];
             match header.encode_to_slice(&mut buff) {
-                Ok(der) => {
-                    Ok([der, naked].concat())
-                }
+                Ok(der) => Ok([der, naked].concat()),
                 Err(_) => Err(Error::new(
                     ErrorKind::InvalidData,
                     "der parse failed: encode",

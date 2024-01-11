@@ -6,7 +6,9 @@ use core::mem::size_of;
 
 pub(crate) const SERVER_NAME_KEYS: &str     = "_Root key server and update manager_";
 #[allow(dead_code)]
-pub(crate) const SIG_VERSION: u32 = 1;
+pub(crate) const SIG_LOADER_VERSION: u32 = 1; // standard ed25519 signature
+#[allow(dead_code)]
+pub(crate) const SIG_KERNEL_VERSION: u32 = 2; // ed25519ph signature
 
 #[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]

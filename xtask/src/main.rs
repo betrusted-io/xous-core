@@ -60,22 +60,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // A base set of packages. This is all you need for a normal
     // operating system that can run libstd
     let base_pkgs = [
-        "xous-ticktimer",  // "well known" service: thread scheduling
-        "xous-log",        // "well known" service: debug logging
-        "xous-names",      // "well known" service: manage inter-server connection lookup
-        "xous-susres",     // ticktimer registers with susres to coordinate time continuity across sleeps
-    ].to_vec();
+        "xous-ticktimer", // "well known" service: thread scheduling
+        "xous-log",       // "well known" service: debug logging
+        "xous-names",     // "well known" service: manage inter-server connection lookup
+        "xous-susres", // ticktimer registers with susres to coordinate time continuity across sleeps
+    ]
+    .to_vec();
     // minimal set of packages to do bare-iron graphical I/O
     let gfx_base_pkgs = [
         &base_pkgs[..],
         &[
-            "graphics-server",  // raw (unprotected) frame buffer primitives
-            "early_settings",   // required by keyboard
-            "keyboard",         // required by graphics-server
-            "spinor",           // required by keyboard - to save key mapping
-            "llio",             // required by spinor
-        ]
-    ].concat();
+            "graphics-server", // raw (unprotected) frame buffer primitives
+            "early_settings",  // required by keyboard
+            "keyboard",        // required by graphics-server
+            "spinor",          // required by keyboard - to save key mapping
+            "llio",            // required by spinor
+        ],
+    ]
+    .concat();
     // packages in the user image - most of the services at this layer have cross-dependencies
     let user_pkgs = [
         &gfx_base_pkgs[..],
@@ -103,16 +105,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "pddb",
             // usb services
             "usb-device-xous",
-        ]
-    ].concat();
-    // for fast testing of compilation targets of the PDDB to real hardware
-    let pddb_dev_pkgs = [
-        &base_pkgs[..],
-        &[
-            "pddb",
-            "sha2",
         ],
-    ].concat();
+    ]
+    .concat();
+    // for fast testing of compilation targets of the PDDB to real hardware
+    let pddb_dev_pkgs = [&base_pkgs[..], &["pddb", "sha2"]].concat();
     // for fast checking of AES hardware accelerator
     let aestest_pkgs = ["xous-ticktimer", "xous-log", "aes-test"].to_vec();
 
@@ -145,12 +142,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         builder.add_kernel_feature(&feature);
     }
 
-    if !language_set { // the default language is english
+    if !language_set {
+        // the default language is english
         track_language_changes("en")?;
     }
     let gdb_stub = env::args().filter(|x| x == "--gdb-stub").count() != 0;
     if gdb_stub {
         builder.add_kernel_feature("gdb-stub");
+    }
+    if env::args().filter(|x| x == "--debug-loader").count() != 0 {
+        builder.add_loader_feature("debug-print");
     }
 
     // ---- now process the verb plus position dependent arguments ----
@@ -167,112 +168,130 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // ----- renode configs --------
         Some("renode-image") => {
-            builder.target_renode()
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .add_apps(&get_cratespecs());
+            builder
+                .target_renode()
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_apps(&get_cratespecs());
         }
         Some("renode-image-debug") => {
-            builder.target_renode()
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .stream(BuildStream::Debug)
-                   .add_apps(&get_cratespecs());
+            builder
+                .target_renode()
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .stream(BuildStream::Debug)
+                .add_apps(&get_cratespecs());
         }
         Some("renode-test") => {
-            builder.target_renode()
-                   .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                   .add_services(&get_cratespecs());
+            builder
+                .target_renode()
+                .add_services(&base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&get_cratespecs());
         }
         Some("libstd-test") => {
-            builder.target_renode()
-                   .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                   .add_services(&get_cratespecs());
+            builder
+                .target_renode()
+                .add_services(&base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&get_cratespecs());
             builder.add_loader_feature("renode-bypass");
         }
         Some("libstd-net") => {
-            builder.target_renode()
-                   .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                   .add_services(&get_cratespecs());
-            builder.add_loader_feature("renode-bypass")
-                   .add_loader_feature("renode-minimal");
-            builder.add_service("net", false)
+            builder
+                .target_renode()
+                .add_services(&base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&get_cratespecs());
+            builder
+                .add_loader_feature("renode-bypass")
+                .add_loader_feature("renode-minimal");
+            builder
+                .add_service("net", false)
                 .add_service("com", false)
                 .add_service("llio", false)
                 .add_service("dns", false);
         }
         Some("renode-aes-test") => {
-            builder.target_renode()
-                   .add_services(&aestest_pkgs.into_iter().map(String::from).collect())
-                   .add_services(&get_cratespecs());
+            builder
+                .target_renode()
+                .add_services(&aestest_pkgs.into_iter().map(String::from).collect())
+                .add_services(&get_cratespecs());
         }
         Some("ffi-test") => {
-            builder.target_renode()
-                   .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
-                   .add_services(&get_cratespecs());
+            builder
+                .target_renode()
+                .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&get_cratespecs());
             builder.add_service("ffi-test", false);
             builder.add_loader_feature("renode-bypass");
         }
 
         // ------- hosted mode configs -------
         Some("run") => {
-            builder.target_hosted()
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .add_feature("pddbtest")
-                   .add_feature("ditherpunk")
-                   .add_feature("tracking-alloc")
-                   .add_feature("tls")
-                   // .add_feature("test-rekey")
-                   .add_apps(&get_cratespecs());
+            builder
+                .target_hosted()
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_feature("pddbtest")
+                .add_feature("ditherpunk")
+                .add_feature("tracking-alloc")
+                .add_feature("tls")
+                // .add_feature("test-rekey")
+                .add_apps(&get_cratespecs());
         }
         Some("pddb-ci") => {
-            builder.target_hosted()
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .add_feature("pddb/ci")
-                   .add_feature("pddb/deterministic");
+            builder
+                .target_hosted()
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_feature("pddb/ci")
+                .add_feature("pddb/deterministic");
         }
         Some("pddb-btest") => {
-            builder.target_hosted()
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .add_feature("pddbtest")
-                   .add_feature("autobasis")  // this will make secret basis tracking synthetic and automated for stress testing
-                   .add_feature("autobasis-ci")
-                   .add_feature("pddb/deterministic");
+            builder
+                .target_hosted()
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_feature("pddbtest")
+                .add_feature("autobasis") // this will make secret basis tracking synthetic and automated for stress testing
+                .add_feature("autobasis-ci")
+                .add_feature("pddb/deterministic");
         }
         Some("hosted-debug") => {
-            builder.target_hosted()
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .add_feature("pddbtest")
-                   .add_feature("ditherpunk")
-                   .add_feature("tracking-alloc")
-                   .add_feature("tls")
-                   .stream(BuildStream::Debug)
-                   .add_apps(&get_cratespecs());
+            builder
+                .target_hosted()
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_feature("pddbtest")
+                .add_feature("ditherpunk")
+                .add_feature("tracking-alloc")
+                .add_feature("tls")
+                .stream(BuildStream::Debug)
+                .add_apps(&get_cratespecs());
         }
         Some("gfx-dev") => {
-            builder.target_hosted()
-                   .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
-                   .add_services(&get_cratespecs())
-                   .add_feature("graphics-server/gfx-testing");
-        },
+            builder
+                .target_hosted()
+                .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&get_cratespecs())
+                .add_feature("graphics-server/gfx-testing");
+        }
         Some("hosted-ci") => {
-            builder.target_hosted()
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .hosted_build_only()
-                   .add_apps(&get_cratespecs());
+            builder
+                .target_hosted()
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .hosted_build_only()
+                .add_apps(&get_cratespecs());
         }
 
         // ------ Precursor hardware image configs ------
         Some("app-image") => {
-            builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .add_feature("mass-storage") // add this in by default to help with testing
-                   .add_apps(&get_cratespecs());
+            builder
+                .target_precursor(PRECURSOR_SOC_VERSION)
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_feature("mass-storage") // add this in by default to help with testing
+                .add_apps(&get_cratespecs());
         }
         Some("app-image-xip") => {
-            builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   //.add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .add_feature("mass-storage"); // add this in by default to help with testing
+            builder
+                .target_precursor(PRECURSOR_SOC_VERSION)
+                //.add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_feature("mass-storage"); // add this in by default to help with testing
             for service in user_pkgs {
-                if (service != "shellchat") && (service != "ime-plugin-shell" && (service != "net")) {
+                if (service != "shellchat") && (service != "ime-plugin-shell" && (service != "net"))
+                {
                     builder.add_service(service, false);
                 } else {
                     builder.add_service(service, true);
@@ -295,26 +314,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // ` python3 .\..\usb_update.py --dump v2p.txt --dump-file .\ring_aes_8.bin`
             // where the `v2p.txt` file contains a virtual to physical mapping that is generated by the `perflib` framework and
             // formatted in a fashion that can be automatically extracted by the usb_update script.
-            builder.target_precursor("c809403-perflib")
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .add_apps(&get_cratespecs())
-                   .add_feature("perfcounter")
-                   .add_kernel_feature("v2p");
+            builder
+                .target_precursor("c809403-perflib")
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_apps(&get_cratespecs())
+                .add_feature("perfcounter")
+                .add_kernel_feature("v2p");
         }
         Some("dvt-image") => {
             // this image targets a mostly deprecated DVT hardware generation. The purpose of it is to re-use some
             // of the now-defunct hardware for eFuse code testing, especially since FPGAs have gotten very scarce.
             // Once the eFuse path is validated, we could remove this target.
-            let mut services: Vec<String> = user_pkgs
-                .into_iter()
-                .map(String::from).collect();
+            let mut services: Vec<String> = user_pkgs.into_iter().map(String::from).collect();
             services.retain(|x| x != "codec"); // codec is not compatible with DVT boards
 
-            builder.target_precursor("2753c12-dvt")
-                   .add_services(&services)
-                   .add_feature("no-codec")
-                   .add_feature("dvt")
-                   .add_apps(&get_cratespecs());
+            builder
+                .target_precursor("2753c12-dvt")
+                .add_services(&services)
+                .add_feature("no-codec")
+                .add_feature("dvt")
+                .add_apps(&get_cratespecs());
         }
         Some("tts") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION);
@@ -332,50 +351,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_feature("braille");
         }
         Some("tiny") => {
-            builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                   .add_services(&get_cratespecs());
+            builder
+                .target_precursor(PRECURSOR_SOC_VERSION)
+                .add_services(&base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&get_cratespecs());
         }
         Some("usbdev") => {
-            builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                   .add_services(&get_cratespecs());
+            builder
+                .target_precursor(PRECURSOR_SOC_VERSION)
+                .add_services(&base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&get_cratespecs());
             //builder.add_service("usb-test");
             builder.add_service("usb-device-xous", false);
         }
         Some("pddb-dev") => {
-            builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&pddb_dev_pkgs.into_iter().map(String::from).collect())
-                   .add_services(&get_cratespecs());
-        },
+            builder
+                .target_precursor(PRECURSOR_SOC_VERSION)
+                .add_services(&pddb_dev_pkgs.into_iter().map(String::from).collect())
+                .add_services(&get_cratespecs());
+        }
         Some("trng-test") => {
-            builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .add_feature("urandomtest");
-        },
+            builder
+                .target_precursor(PRECURSOR_SOC_VERSION)
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_feature("urandomtest");
+        }
         Some("ro-test") => {
-            builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .add_feature("ringosctest");
+            builder
+                .target_precursor(PRECURSOR_SOC_VERSION)
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_feature("ringosctest");
         }
         Some("av-test") => {
-            builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                   .add_feature("avalanchetest");
+            builder
+                .target_precursor(PRECURSOR_SOC_VERSION)
+                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_feature("avalanchetest");
         }
-	Some("compile-apps") => {
-	    builder.target_precursor_no_image(PRECURSOR_SOC_VERSION)
-		.add_services(&gfx_base_pkgs.into_iter().map(String::from).collect());
-	}
+        Some("compile-apps") => {
+            builder
+                .target_precursor_no_image(PRECURSOR_SOC_VERSION)
+                .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect());
+        }
 
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
-            let cramium_pkgs = [
-                "xous-log",
-                "xous-names",
-                "xous-ticktimer",
-                "cram-console",
-            ].to_vec();
+            let cramium_pkgs =
+                ["xous-log", "xous-names", "xous-ticktimer", "cram-console"].to_vec();
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),
@@ -389,7 +411,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // ------ ARM hardware image configs ------
         Some("arm-tiny") => {
-            builder.target_arm()
+            builder
+                .target_arm()
                 .add_services(&vec![
                     "xous-log".to_string(),
                     "xous-ticktimer".to_string(),
@@ -450,12 +473,17 @@ fn print_help() {
     [--no-timestamp]
     [--no-verify]
     [--gdb-stub]
+    [--debug-loader]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
    [name@version]        crate 'name' to be fetched from crates.io at the specified version
    [name#URL]            pre-built binary crate of 'name' downloaded from a server at 'URL'
    [path-to-binary]      file path to a prebuilt binary image on local machine.
+                         Files in '.' must be specified as './file' to avoid confusion with local source
+   [name:path-to-binary] file path to a prebuilt binary image on local machine which will be renamed.
+                         This is useful if the binary image is an app since the name will be required
+                         for registration with the gam.
                          Files in '.' must be specified as './file' to avoid confusion with local source
 
 The [cratespecs] list is treated as apps or services based on the context of [verb]. Additional crates can
@@ -467,6 +495,7 @@ be merged in with explicit app/service treatment with the following flags:
 [--no-timestamp]         Do not include a timestamp in the build. By default, `ticktimer` is rebuilt on every run to encode a timestamp.
 [--no-verify]            Do not verify that local sources match crates.io downloaded sources
 [--gdb-stub]             Build the kernel with GDB support
+[--debug-loader]         Enable debug printing in the loader
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.
@@ -538,16 +567,19 @@ fn get_flag(flag: &str) -> Result<Vec<String>, DynError> {
     for arg in args {
         if arg == flag {
             flag_found = true;
-            continue
+            continue;
         }
         if flag_found {
             if arg.starts_with('-') {
-                eprintln!("Malformed arguments. Expected argument after flag {}, but found {}", flag, arg);
+                eprintln!(
+                    "Malformed arguments. Expected argument after flag {}, but found {}",
+                    flag, arg
+                );
                 return Err("Bad arguments".into());
             }
             list.push(arg);
             flag_found = false;
-            continue
+            continue;
         }
     }
     Ok(list)

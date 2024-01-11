@@ -40,7 +40,7 @@ dependencies = [
 name = "aes"
 version = "0.8.1"
 dependencies = [
- "cipher 0.4.3",
+ "cipher 0.4.4",
 ]
 
 [[package]]
@@ -51,7 +51,7 @@ checksum = "ae0784134ba9375416d469ec31e7c5f9fa94405049cf08c5ce5b4698be673e0d"
 dependencies = [
  "aead",
  "aes 0.8.1",
- "cipher 0.4.3",
+ "cipher 0.4.4",
  "ctr",
  "polyval",
  "subtle",
@@ -488,7 +488,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e412e2cd0f2b2d93e02543ceae7917b3c70331573df19ee046bcbc35e45e87d7"
 dependencies = [
  "byteorder",
- "cipher 0.4.3",
+ "cipher 0.4.4",
 ]
 
 [[package]]
@@ -563,7 +563,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26b52a9543ae338f279b96b0b9fed9c8093744685043739079ce85cd58f289a6"
 dependencies = [
- "cipher 0.4.3",
+ "cipher 0.4.4",
 ]
 
 [[package]]
@@ -679,9 +679,9 @@ dependencies = [
 
 [[package]]
 name = "cipher"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1873270f8f7942c191139cb8a40fd228da6c3fd2fc376d7e92d47aa14aeb59e"
+checksum = "773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad"
 dependencies = [
  "crypto-common",
  "inout",
@@ -1180,7 +1180,7 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d14f329cfbaf5d0e06b5e87fff7e265d2673c5ea7d2c27691a2c107db1442a0"
 dependencies = [
- "cipher 0.4.3",
+ "cipher 0.4.4",
 ]
 
 [[package]]
@@ -1350,6 +1350,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6919815d73839e7ad218de758883aae3a257ba6759ce7a9992501efbb53d705c"
 dependencies = [
  "const-oid",
+ "pem-rfc7468",
 ]
 
 [[package]]
@@ -1543,6 +1544,7 @@ dependencies = [
  "curve25519-dalek",
  "ed25519",
  "rand 0.7.3",
+ "serde",
  "sha2 0.9.8",
  "zeroize",
 ]
@@ -2712,6 +2714,7 @@ dependencies = [
  "curve25519-dalek-loader",
  "ed25519-dalek-loader",
  "lazy_static",
+ "sha2-loader",
  "utralib",
 ]
 
@@ -3349,7 +3352,7 @@ dependencies = [
  "bitfield",
  "bitflags 1.3.2",
  "blowfish 0.9.1",
- "cipher 0.4.3",
+ "cipher 0.4.4",
  "digest 0.9.0",
  "gam",
  "hex 0.4.3",
@@ -3391,6 +3394,15 @@ dependencies = [
  "base64 0.13.0",
  "once_cell",
  "regex",
+]
+
+[[package]]
+name = "pem-rfc7468"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01de5d978f34aa4b2296576379fcc416034702fd94117c56ffd8a1a767cefb30"
+dependencies = [
+ "base64ct",
 ]
 
 [[package]]
@@ -4067,7 +4079,7 @@ dependencies = [
  "aes-kw",
  "blowfish 0.8.0",
  "byteorder",
- "cipher 0.4.3",
+ "cipher 0.4.4",
  "com",
  "curve25519-dalek",
  "digest 0.9.0",
@@ -4515,42 +4527,6 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
- "xous-api-ticktimer",
- "xous-ipc 0.9.56 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "sigchat"
-version = "0.1.0"
-dependencies = [
- "chat",
- "codec",
- "com",
- "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?rev=891bdd3ca8e41f81510d112483e178aea3e3a921)",
- "content-plugin-api",
- "gam",
- "graphics-server",
- "ime-plugin-api",
- "ime-plugin-shell",
- "llio",
- "locales",
- "log",
- "modals",
- "net",
- "num-derive",
- "num-traits",
- "pddb",
- "percent-encoding",
- "rkyv",
- "rustls",
- "serde",
- "tls",
- "trng",
- "ureq",
- "url",
- "xous 0.9.56 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-api-log",
- "xous-api-names",
  "xous-api-ticktimer",
  "xous-ipc 0.9.56 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -5017,14 +4993,18 @@ dependencies = [
 name = "tools"
 version = "0.1.0"
 dependencies = [
+ "base64 0.20.0",
  "bitflags 1.3.2",
  "clap 2.34.0",
  "crc",
  "csv",
+ "ed25519-dalek",
  "env_logger 0.7.1",
  "log",
  "pem",
+ "pkcs8",
  "ring",
+ "sha2 0.9.8",
  "svd2utra",
  "xmas-elf",
  "xous-semver",
@@ -5154,9 +5134,9 @@ dependencies = [
 
 [[package]]
 name = "tungstenite"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e862a1c4128df0112ab625f55cd5c934bcb4312ba80b39ae4b4835a3fd58e649"
+checksum = "9e3dac10fd62eaf6617d3a904ae222845979aec67c615d1c842b4002c7666fb9"
 dependencies = [
  "byteorder",
  "bytes",
@@ -5165,12 +5145,10 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.8.5",
- "rustls",
  "sha1",
  "thiserror",
  "url",
  "utf-8",
- "webpki-roots 0.24.0",
 ]
 
 [[package]]

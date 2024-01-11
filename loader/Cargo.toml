@@ -11,6 +11,7 @@ curve25519-dalek-loader = { path = "curve25519-dalek-loader", default-features =
 utralib = { version = "0.1.23", optional = true, default-features = false }
 armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", optional = true }
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
+sha2-loader = { path = "./sha2-loader", default-features = false, optional = true }
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
@@ -20,8 +21,8 @@ branch = "main"
 lazy_static = "1.4.0"
 
 [features]
-precursor = ["utralib/precursor", "ed25519-dalek-loader/precursor", "curve25519-dalek-loader/precursor", "resume", "secboot"]
-renode = ["utralib/renode", "ed25519-dalek-loader/renode", "curve25519-dalek-loader/renode", "resume", "secboot"]
+precursor = ["utralib/precursor", "ed25519-dalek-loader/precursor", "curve25519-dalek-loader/precursor", "resume", "secboot", "sha2-loader"]
+renode = ["utralib/renode", "ed25519-dalek-loader/renode", "curve25519-dalek-loader/renode", "resume", "secboot", "sha2-loader"]
 cramium-soc = ["utralib/cramium-soc", "debug-print", "simulation-only"]
 cramium-fpga = ["utralib/cramium-fpga", "debug-print", "simulation-only"]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
