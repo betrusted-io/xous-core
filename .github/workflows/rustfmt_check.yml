@@ -15,8 +15,8 @@ jobs:
 
       - name: Ensure the `main` branch rustfmt is applied for the run
         run: |
-          git fetch --no-tags --prune --no-recurse-submodules --depth=1 origin origin/main
-          git checkout main rustfmt.toml
+          git fetch --no-tags --prune --no-recurse-submodules --depth=1 origin main
+          git checkout origin/main rustfmt.toml
 
       - name: Run cargo +nightly fmt --check
         run: cargo +nightly fmt --check
