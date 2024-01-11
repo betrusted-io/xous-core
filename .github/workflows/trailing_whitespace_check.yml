@@ -11,6 +11,6 @@ jobs:
       - name: Check .rs files for trailing whitespace
         run: >
           find . -name '*.rs' -print0
-          | xargs -0 grep -c --with-filename '[ \t]$'
+          | xargs -0 grep -c --with-filename -P '[ \t]$'
           | grep -v ':0$'
           | perl -e 'while(<>){print;$n+=1};if($n>0){exit 1;};print "PASS\n";'
