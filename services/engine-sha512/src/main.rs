@@ -4,28 +4,27 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::*;
+use core::sync::atomic::{AtomicBool, Ordering};
 
+use api::*;
+use log::info;
 use num_traits::{FromPrimitive, ToPrimitive};
 use xous::msg_blocking_scalar_unpack;
 use xous_ipc::Buffer;
 
-use log::info;
-
-use core::sync::atomic::{AtomicBool, Ordering};
-
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation {
-    use crate::api::Sha2Config;
-    use utralib::generated::*;
-    #[cfg(feature = "event_wait")]
-    use crate::api::Opcode;
     #[cfg(feature = "event_wait")]
     use num_traits::*;
+    use utralib::generated::*;
 
-    // Note: there is no susres manager for the Sha512 engine, because its state cannot be saved through a full power off
-    // instead, we try to delay a suspend until the caller is finished hashing, and if not, we note that and return a failure
-    // for the hash result.
+    #[cfg(feature = "event_wait")]
+    use crate::api::Opcode;
+    use crate::api::Sha2Config;
+
+    // Note: there is no susres manager for the Sha512 engine, because its state cannot be saved through a
+    // full power off instead, we try to delay a suspend until the caller is finished hashing, and if not,
+    // we note that and return a failure for the hash result.
     pub(crate) struct Engine512 {
         csr: utralib::CSR<u32>,
         fifo: xous::MemoryRange,
@@ -43,19 +42,21 @@ mod implementation {
     #[cfg(feature = "event_wait")]
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
         let engine512 = unsafe { &mut *(arg as *mut Engine512) };
-        // note we are done and clear the pending request, as this is used as a "wait" until interrupt mechanism with xous::wait_event()
-        // this message may not be strictly necessary but we added it in an attempt to get the wait_event() to pick up the
-        // interrupt; unfortunately, the interrupt completes before wait_event() finishes processing.
+        // note we are done and clear the pending request, as this is used as a "wait" until interrupt
+        // mechanism with xous::wait_event() this message may not be strictly necessary but we added
+        // it in an attempt to get the wait_event() to pick up the interrupt; unfortunately, the
+        // interrupt completes before wait_event() finishes processing.
         if let Some(conn) = engine512.handler_conn {
-            xous::try_send_message(conn,
-                xous::Message::new_scalar(Opcode::IrqEvent.to_usize().unwrap(), 0, 0, 0, 0)).map(|_|()).unwrap();
+            xous::try_send_message(
+                conn,
+                xous::Message::new_scalar(Opcode::IrqEvent.to_usize().unwrap(), 0, 0, 0, 0),
+            )
+            .map(|_| ())
+            .unwrap();
         } else {
             log::error!("|handle_event_irq: COM interrupt, but no connection for notification!")
         }
-        engine512.csr.wo(
-            utra::sha512::EV_PENDING,
-            engine512.csr.r(utra::sha512::EV_PENDING),
-        );
+        engine512.csr.wo(utra::sha512::EV_PENDING, engine512.csr.r(utra::sha512::EV_PENDING));
     }
 
     impl Engine512 {
@@ -76,30 +77,21 @@ mod implementation {
             .expect("couldn't map Engine512 CSR range");
 
             #[cfg(not(feature = "event_wait"))]
-            let engine512 = Engine512 {
-                csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                fifo,
-            };
+            let engine512 = Engine512 { csr: CSR::new(csr.as_mut_ptr() as *mut u32), fifo };
 
             #[cfg(feature = "event_wait")]
-            let engine512 = Engine512 {
-                csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                fifo,
-                handler_conn: _handler_conn,
-            };
+            let engine512 =
+                Engine512 { csr: CSR::new(csr.as_mut_ptr() as *mut u32), fifo, handler_conn: _handler_conn };
             engine512
         }
 
-        pub (crate) fn init(&mut self) {
+        pub(crate) fn init(&mut self) {
             #[cfg(feature = "event_wait")]
-            xous::claim_interrupt(
-                utra::sha512::SHA512_IRQ,
-                handle_irq,
-                self as *mut Engine512 as *mut usize,
-            )
-            .expect("couldn't claim irq");
+            xous::claim_interrupt(utra::sha512::SHA512_IRQ, handle_irq, self as *mut Engine512 as *mut usize)
+                .expect("couldn't claim irq");
             // note: we can't use a "susres" manager here because this block has un-suspendable state
-            // instead, we rely on every usage of this mechanism to explicitly set this enable bit before relying upon it
+            // instead, we rely on every usage of this mechanism to explicitly set this enable bit before
+            // relying upon it
             #[cfg(feature = "event_wait")]
             self.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
 
@@ -183,17 +175,15 @@ mod implementation {
             self.csr.wfo(utra::sha512::POWER_ON, 1);
             #[cfg(feature = "event_wait")]
             {
-                self.csr.wo(
-                    utra::sha512::EV_PENDING,
-                    self.csr.r(utra::sha512::EV_PENDING),
-                );
+                self.csr.wo(utra::sha512::EV_PENDING, self.csr.r(utra::sha512::EV_PENDING));
                 self.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
                 log::trace!("starting sha512_done");
                 self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
                 while self.csr.rf(utra::sha512::FIFO_RUNNING) == 1 {
-                    // race condition between when this kicks off, and when the IRQ event comes in; in the end,
-                    // the overhead of wait_event() is longer than it takes for the computation to finish,
-                    // so the interrupt arrives *before* this call happens.
+                    // race condition between when this kicks off, and when the IRQ event comes in; in the
+                    // end, the overhead of wait_event() is longer than it takes for the
+                    // computation to finish, so the interrupt arrives *before* this call
+                    // happens.
                     xous::wait_event();
                 }
                 log::info!("moving on");
@@ -202,7 +192,8 @@ mod implementation {
             {
                 self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
                 while self.csr.rf(utra::sha512::EV_PENDING_SHA512_DONE) == 0 {
-                    // don't even call the OS idle, the computation is 2us and the syscall takes longer than that.
+                    // don't even call the OS idle, the computation is 2us and the syscall takes longer than
+                    // that.
                 }
                 self.csr.wfo(utra::sha512::EV_PENDING_SHA512_DONE, 1);
             }
@@ -249,9 +240,7 @@ mod implementation {
 
         pub(crate) fn is_idle(&mut self) -> bool {
             self.csr.wfo(utra::sha512::POWER_ON, 1);
-            if self.csr.rf(utra::sha512::CONFIG_SHA_EN) == 0
-                && self.csr.rf(utra::sha512::FIFO_RUNNING) == 0
-            {
+            if self.csr.rf(utra::sha512::CONFIG_SHA_EN) == 0 && self.csr.rf(utra::sha512::FIFO_RUNNING) == 0 {
                 self.csr.wfo(utra::sha512::POWER_ON, 0);
                 true
             } else {
@@ -265,27 +254,30 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "xous"))]
 mod implementation {
-    use crate::Sha2Config;
     use log::info;
+
+    use crate::Sha2Config;
 
     pub(crate) struct Engine512 {}
 
     impl Engine512 {
-        pub(crate) fn new(_handler_conn: Option<xous::CID>) -> Engine512 {
-            Engine512 {}
-        }
+        pub(crate) fn new(_handler_conn: Option<xous::CID>) -> Engine512 { Engine512 {} }
+
         pub(crate) fn init(&mut self) {}
+
         pub(crate) fn suspend(&self) {}
+
         pub(crate) fn resume(&self) {}
+
         pub(crate) fn reset(&self) {}
+
         pub(crate) fn setup(&mut self, _config: Sha2Config) {}
+
         pub(crate) fn update(&mut self, _buf: &[u8]) {}
-        pub(crate) fn finalize(&mut self) -> ([u8; 64], u64) {
-            ([0; 64], 0)
-        }
-        pub(crate) fn is_idle(&mut self) -> bool {
-            false
-        }
+
+        pub(crate) fn finalize(&mut self) -> ([u8; 64], u64) { ([0; 64], 0) }
+
+        pub(crate) fn is_idle(&mut self) -> bool { false }
     }
 }
 
@@ -299,8 +291,13 @@ fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(susres_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Late), &xns, api::SusResOps::SuspendResume as u32, sr_cid)
-        .expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(
+        Some(susres::SuspendOrder::Late),
+        &xns,
+        api::SusResOps::SuspendResume as u32,
+        sr_cid,
+    )
+    .expect("couldn't create suspend/resume object");
 
     log::trace!("starting Sha512 suspend/resume manager loop");
     loop {
@@ -312,11 +309,7 @@ fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 while HASH_IN_PROGRESS.load(Ordering::Relaxed) {
                     xous::yield_slice();
                 }
-                if susres
-                    .suspend_until_resume(token)
-                    .expect("couldn't execute suspend/resume")
-                    == false
-                {
+                if susres.suspend_until_resume(token).expect("couldn't execute suspend/resume") == false {
                     SUSPEND_FAILURE.store(true, Ordering::Relaxed);
                 } else {
                     SUSPEND_FAILURE.store(false, Ordering::Relaxed);
@@ -345,14 +338,12 @@ fn main() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     // anyone is allowed to connect to this service; authentication by tokens used
-    let engine512_sid = xns
-        .register_name(api::SERVER_NAME_SHA512, None)
-        .expect("can't register server");
+    let engine512_sid = xns.register_name(api::SERVER_NAME_SHA512, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", engine512_sid);
 
-    #[cfg(feature="event_wait")]
+    #[cfg(feature = "event_wait")]
     let mut engine512 = Box::new(Engine512::new(xous::connect(engine512_sid).ok()));
-    #[cfg(not(feature="event_wait"))]
+    #[cfg(not(feature = "event_wait"))]
     let mut engine512 = Box::new(Engine512::new(None));
     engine512.init();
 
@@ -362,14 +353,8 @@ fn main() -> ! {
     // we can't save hardware state of a hash, so the hash MUST finish before we can suspend.
     let susres_mgr_sid = xous::create_server().unwrap();
     let (sid0, sid1, sid2, sid3) = susres_mgr_sid.to_u32();
-    xous::create_thread_4(
-        susres_thread,
-        sid0 as usize,
-        sid1 as usize,
-        sid2 as usize,
-        sid3 as usize,
-    )
-    .expect("couldn't start susres handler thread");
+    xous::create_thread_4(susres_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize)
+        .expect("couldn't start susres handler thread");
 
     let mut client_id: Option<[u32; 3]> = None;
     let mut mode: Option<Sha2Config> = None;
@@ -412,8 +397,7 @@ fn main() -> ! {
                 }
             }),
             Some(Opcode::Update) => {
-                let buffer =
-                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let update = buffer.as_flat::<Sha2Update, _>().unwrap();
                 match client_id {
                     Some(id) => {
@@ -422,7 +406,9 @@ fn main() -> ! {
                         }
                     }
                     _ => {
-                        log::error!("Received a SHA-2 block, but the client ID did not match! Ignoring block.");
+                        log::error!(
+                            "Received a SHA-2 block, but the client ID did not match! Ignoring block."
+                        );
                     }
                 }
             }
@@ -431,9 +417,8 @@ fn main() -> ! {
                     log::info!("sha512 job {}", job_count); // leave this here for now so we can confirm HW accel is being used when we think it is!
                 }
                 job_count += 1;
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut finalized = buffer.to_original::<Sha2Finalize, _>().unwrap();
                 match client_id {
                     Some(id) => {
@@ -465,14 +450,10 @@ fn main() -> ! {
                         }
                     }
                     _ => {
-                        log::error!(
-                            "Received a SHA-2 finalize call, but we aren't doing a hash. Ignoring."
-                        );
+                        log::error!("Received a SHA-2 finalize call, but we aren't doing a hash. Ignoring.");
                     }
                 }
-                buffer
-                    .replace(finalized)
-                    .expect("couldn't return hash result");
+                buffer.replace(finalized).expect("couldn't return hash result");
             }
             Some(Opcode::IsIdle) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if engine512.is_idle() {
@@ -510,11 +491,8 @@ fn main() -> ! {
     // clean up our program
     log::trace!("main loop exit, destroying servers");
     let quitconn = xous::connect(susres_mgr_sid).unwrap();
-    xous::send_message(
-        quitconn,
-        xous::Message::new_scalar(SusResOps::Quit.to_usize().unwrap(), 0, 0, 0, 0),
-    )
-    .unwrap();
+    xous::send_message(quitconn, xous::Message::new_scalar(SusResOps::Quit.to_usize().unwrap(), 0, 0, 0, 0))
+        .unwrap();
     unsafe {
         xous::disconnect(quitconn).unwrap();
     }

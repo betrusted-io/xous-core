@@ -4,57 +4,38 @@
   License is Apache 2.0
 */
 #![allow(clippy::many_single_char_names)]
-use crate::consts::{BLOCK_LEN, K64X2};
 use core::convert::TryInto;
 
-fn add(a: [u64; 2], b: [u64; 2]) -> [u64; 2] {
-    [a[0].wrapping_add(b[0]), a[1].wrapping_add(b[1])]
-}
+use crate::consts::{BLOCK_LEN, K64X2};
+
+fn add(a: [u64; 2], b: [u64; 2]) -> [u64; 2] { [a[0].wrapping_add(b[0]), a[1].wrapping_add(b[1])] }
 
 /// Not an intrinsic, but works like an unaligned load.
-fn sha512load(v0: [u64; 2], v1: [u64; 2]) -> [u64; 2] {
-    [v1[1], v0[0]]
-}
+fn sha512load(v0: [u64; 2], v1: [u64; 2]) -> [u64; 2] { [v1[1], v0[0]] }
 
 /// Performs 2 rounds of the SHA-512 message schedule update.
 #[inline(never)] // bunnie: reduce binary size
 pub fn sha512_schedule_x2(v0: [u64; 2], v1: [u64; 2], v4to5: [u64; 2], v7: [u64; 2]) -> [u64; 2] {
     // sigma 0
-    fn sigma0(x: u64) -> u64 {
-        ((x << 63) | (x >> 1)) ^ ((x << 56) | (x >> 8)) ^ (x >> 7)
-    }
+    fn sigma0(x: u64) -> u64 { ((x << 63) | (x >> 1)) ^ ((x << 56) | (x >> 8)) ^ (x >> 7) }
 
     // sigma 1
-    fn sigma1(x: u64) -> u64 {
-        ((x << 45) | (x >> 19)) ^ ((x << 3) | (x >> 61)) ^ (x >> 6)
-    }
+    fn sigma1(x: u64) -> u64 { ((x << 45) | (x >> 19)) ^ ((x << 3) | (x >> 61)) ^ (x >> 6) }
 
     let [w1, w0] = v0;
     let [_, w2] = v1;
     let [w10, w9] = v4to5;
     let [w15, w14] = v7;
 
-    let w16 = sigma1(w14)
-        .wrapping_add(w9)
-        .wrapping_add(sigma0(w1))
-        .wrapping_add(w0);
-    let w17 = sigma1(w15)
-        .wrapping_add(w10)
-        .wrapping_add(sigma0(w2))
-        .wrapping_add(w1);
+    let w16 = sigma1(w14).wrapping_add(w9).wrapping_add(sigma0(w1)).wrapping_add(w0);
+    let w17 = sigma1(w15).wrapping_add(w10).wrapping_add(sigma0(w2)).wrapping_add(w1);
 
     [w17, w16]
 }
 
 /// Performs one round of the SHA-512 message block digest.
 #[inline(never)] // bunnie: reduce binary size
-pub fn sha512_digest_round(
-    ae: [u64; 2],
-    bf: [u64; 2],
-    cg: [u64; 2],
-    dh: [u64; 2],
-    wk0: u64,
-) -> [u64; 2] {
+pub fn sha512_digest_round(ae: [u64; 2], bf: [u64; 2], cg: [u64; 2], dh: [u64; 2], wk0: u64) -> [u64; 2] {
     macro_rules! big_sigma0 {
         ($a:expr) => {
             ($a.rotate_right(28) ^ $a.rotate_right(34) ^ $a.rotate_right(39))
@@ -82,21 +63,9 @@ pub fn sha512_digest_round(
     let [d0, h0] = dh;
 
     // a round
-    let x0 = big_sigma1!(e0)
-        .wrapping_add(bool3ary_202!(e0, f0, g0))
-        .wrapping_add(wk0)
-        .wrapping_add(h0);
+    let x0 = big_sigma1!(e0).wrapping_add(bool3ary_202!(e0, f0, g0)).wrapping_add(wk0).wrapping_add(h0);
     let y0 = big_sigma0!(a0).wrapping_add(bool3ary_232!(a0, b0, c0));
-    let (a1, _, _, _, e1, _, _, _) = (
-        x0.wrapping_add(y0),
-        a0,
-        b0,
-        c0,
-        x0.wrapping_add(d0),
-        e0,
-        f0,
-        g0,
-    );
+    let (a1, _, _, _, e1, _, _, _) = (x0.wrapping_add(y0), a0, b0, c0, x0.wrapping_add(d0), e0, f0, g0);
 
     [a1, e1]
 }

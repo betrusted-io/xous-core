@@ -1,14 +1,14 @@
 //! SHA-512
 mod soft;
-use crate::consts::*;
-use soft::compress;
+use core::sync::atomic::{AtomicU32, Ordering};
 
-use crate::api::*;
 use num_traits::ToPrimitive;
+use soft::compress;
 use xous::{send_message, Message};
 use xous_ipc::Buffer;
 
-use core::sync::atomic::{AtomicU32, Ordering};
+use crate::api::*;
+use crate::consts::*;
 /// we have to make the HW_CONN static because the Digest crate assumes you can clone objects
 /// and recycle them. However, it's not a problem for every server to have a unique connection
 /// to the hasher service, if that's what it comes down to. The burden for tracking connections is on the
@@ -18,8 +18,9 @@ static HW_CONN: AtomicU32 = AtomicU32::new(0);
 /// a unique-enough random ID number to prove we own our connection to the hashing engine hardware
 static TOKEN: [AtomicU32; 3] = [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)];
 
-use block_buffer::BlockBuffer;
 use core::slice::from_ref;
+
+use block_buffer::BlockBuffer;
 use digest::consts::{U128, U28, U32, U48, U64};
 use digest::generic_array::GenericArray;
 use digest::{BlockInput, FixedOutputDirty, Reset, Update};
@@ -39,13 +40,7 @@ struct Engine512 {
 }
 
 impl Engine512 {
-    fn new(h: &[u64; STATE_LEN]) -> Engine512 {
-        Engine512 {
-            len: 0,
-            buffer: Default::default(),
-            state: *h,
-        }
-    }
+    fn new(h: &[u64; STATE_LEN]) -> Engine512 { Engine512 { len: 0, buffer: Default::default(), state: *h } }
 
     fn update(&mut self, input: &[u8]) {
         self.len += (input.len() as u128) << 3;
@@ -55,8 +50,7 @@ impl Engine512 {
 
     fn finish(&mut self) {
         let s = &mut self.state;
-        self.buffer
-            .len128_padding_be(self.len, |d| compress512(s, from_ref(d)));
+        self.buffer.len128_padding_be(self.len, |d| compress512(s, from_ref(d)));
     }
 
     fn reset(&mut self, h: &[u64; crate::consts::STATE_LEN]) {
@@ -95,11 +89,7 @@ macro_rules! sha512_comms {
             )
             .expect("Couldn't make IsIdle query");
             if let xous::Result::Scalar1(result) = response {
-                if result != 0 {
-                    Ok(true)
-                } else {
-                    Ok(false)
-                }
+                if result != 0 { Ok(true) } else { Ok(false) }
             } else {
                 Err(xous::Error::InternalError)
             }
@@ -107,36 +97,21 @@ macro_rules! sha512_comms {
         pub fn acquire_suspend_lock(&self) -> Result<bool, xous::Error> {
             let response = send_message(
                 self.ensure_conn(),
-                Message::new_blocking_scalar(
-                    Opcode::AcquireSuspendLock.to_usize().unwrap(),
-                    0,
-                    0,
-                    0,
-                    0,
-                ),
+                Message::new_blocking_scalar(Opcode::AcquireSuspendLock.to_usize().unwrap(), 0, 0, 0, 0),
             )
             .expect("Couldn't issue AcquireSuspendLock message");
             if let xous::Result::Scalar1(result) = response {
-                if result != 0 {
-                    Ok(true)
-                } else {
-                    Ok(false)
-                }
+                if result != 0 { Ok(true) } else { Ok(false) }
             } else {
                 Err(xous::Error::InternalError)
             }
         }
         pub fn abort_suspend(&self) -> Result<(), xous::Error> {
-            // we ignore the result and just turn it into () once we get anything back, as abort_suspend "can't fail"
+            // we ignore the result and just turn it into () once we get anything back, as abort_suspend
+            // "can't fail"
             send_message(
                 self.ensure_conn(),
-                Message::new_blocking_scalar(
-                    Opcode::AbortSuspendLock.to_usize().unwrap(),
-                    0,
-                    0,
-                    0,
-                    0,
-                ),
+                Message::new_blocking_scalar(Opcode::AbortSuspendLock.to_usize().unwrap(), 0, 0, 0, 0),
             )
             .map(|_| ())
         }
@@ -215,6 +190,9 @@ pub struct Sha512 {
     length: u64,
 }
 impl Sha512 {
+    // make all the boilerplate comms code shared between all sizes of digest
+    sha512_comms!();
+
     // use this function instead of default for more control over configuration of the hardware engine
     pub fn new() -> Self {
         Sha512 {
@@ -225,6 +203,7 @@ impl Sha512 {
             length: 0,
         }
     }
+
     pub fn new_with_strategy(strat: FallbackStrategy) -> Self {
         Sha512 {
             use_soft: false,
@@ -234,8 +213,6 @@ impl Sha512 {
             length: 0,
         }
     }
-    // make all the boilerplate comms code shared between all sizes of digest
-    sha512_comms!();
 }
 
 impl Default for Sha512 {
@@ -268,7 +245,8 @@ impl Update for Sha512 {
             self.engine.update(input.as_ref());
         } else {
             for chunk in input.as_ref().chunks(3968) {
-                // one SHA512 block (128 bytes) short of 4096 to give space for struct overhead in page remap handling
+                // one SHA512 block (128 bytes) short of 4096 to give space for struct overhead in page remap
+                // handling
                 let mut update = Sha2Update {
                     id: [
                         TOKEN[0].load(Ordering::Relaxed),
@@ -311,19 +289,15 @@ impl FixedOutputDirty for Sha512 {
                 result: Sha2Result::Uninitialized,
                 length_in_bits: None,
             };
-            let mut buf =
-                Buffer::into_buf(result).expect("couldn't map memory for the return buffer");
-            buf.lend_mut(self.ensure_conn(), Opcode::Finalize.to_u32().unwrap())
-                .expect("couldn't finalize");
+            let mut buf = Buffer::into_buf(result).expect("couldn't map memory for the return buffer");
+            buf.lend_mut(self.ensure_conn(), Opcode::Finalize.to_u32().unwrap()).expect("couldn't finalize");
 
             let returned: Sha2Finalize = buf.to_original().expect("couldn't decode return buffer");
             match returned.result {
                 Sha2Result::Sha512Result(s) => {
                     log::debug!("bits hashed: {}", self.length);
                     if self.length
-                        != returned
-                            .length_in_bits
-                            .expect("hardware did not return a length field!")
+                        != returned.length_in_bits.expect("hardware did not return a length field!")
                     {
                         panic!("Sha512 hardware did not hash as many bits as we had expected!")
                     }
@@ -377,6 +351,9 @@ pub struct Sha512Trunc256 {
     length: u64,
 }
 impl Sha512Trunc256 {
+    // make all the boilerplate comms code shared between all sizes of digest
+    sha512_comms!();
+
     // use this function instead of default for more control over configuration of the hardware engine
     pub fn new() -> Self {
         Sha512Trunc256 {
@@ -387,6 +364,7 @@ impl Sha512Trunc256 {
             length: 0,
         }
     }
+
     pub fn new_with_strategy(strat: FallbackStrategy) -> Self {
         Sha512Trunc256 {
             use_soft: false,
@@ -396,8 +374,6 @@ impl Sha512Trunc256 {
             length: 0,
         }
     }
-    // make all the boilerplate comms code shared between all sizes of digest
-    sha512_comms!();
 }
 
 impl Drop for Sha512Trunc256 {
@@ -409,9 +385,7 @@ impl Drop for Sha512Trunc256 {
 }
 
 impl Default for Sha512Trunc256 {
-    fn default() -> Self {
-        Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware)
-    }
+    fn default() -> Self { Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware) }
 }
 
 impl BlockInput for Sha512Trunc256 {
@@ -425,7 +399,8 @@ impl Update for Sha512Trunc256 {
             self.engine.update(input.as_ref());
         } else {
             for chunk in input.as_ref().chunks(3968) {
-                // one SHA512 block (128 bytes) short of 4096 to give space for struct overhead in page remap handling
+                // one SHA512 block (128 bytes) short of 4096 to give space for struct overhead in page remap
+                // handling
                 let mut update = Sha2Update {
                     id: [
                         TOKEN[0].load(Ordering::Relaxed),
@@ -468,18 +443,14 @@ impl FixedOutputDirty for Sha512Trunc256 {
                 result: Sha2Result::Uninitialized,
                 length_in_bits: None,
             };
-            let mut buf =
-                Buffer::into_buf(result).expect("couldn't map memory for the return buffer");
-            buf.lend_mut(self.ensure_conn(), Opcode::Finalize.to_u32().unwrap())
-                .expect("couldn't finalize");
+            let mut buf = Buffer::into_buf(result).expect("couldn't map memory for the return buffer");
+            buf.lend_mut(self.ensure_conn(), Opcode::Finalize.to_u32().unwrap()).expect("couldn't finalize");
 
             let returned: Sha2Finalize = buf.to_original().expect("couldn't decode return buffer");
             match returned.result {
                 Sha2Result::Sha512Trunc256Result(s) => {
                     if self.length
-                        != returned
-                            .length_in_bits
-                            .expect("hardware did not return a length field!")
+                        != returned.length_in_bits.expect("hardware did not return a length field!")
                     {
                         panic!("Sha512 hardware did not hash as many bits as we had expected!")
                     }
@@ -515,8 +486,8 @@ impl Reset for Sha512Trunc256 {
 }
 
 //////////////////////////////////////////////
-//////////////// the following modes are software-only emulation, as we currently do not have the constants in hardware to support these.
-//////////////////////////////////////////////
+//////////////// the following modes are software-only emulation, as we currently do not have the constants in
+//////////////// hardware to support these. //////////////////////////////
 
 /// The SHA-512 hash algorithm with the SHA-384 initial hash value. The result
 /// is truncated to 384 bits.
@@ -526,11 +497,7 @@ pub struct Sha384 {
 }
 
 impl Default for Sha384 {
-    fn default() -> Self {
-        Sha384 {
-            engine: Engine512::new(&H384),
-        }
-    }
+    fn default() -> Self { Sha384 { engine: Engine512::new(&H384) } }
 }
 
 impl BlockInput for Sha384 {
@@ -538,9 +505,7 @@ impl BlockInput for Sha384 {
 }
 
 impl Update for Sha384 {
-    fn update(&mut self, input: impl AsRef<[u8]>) {
-        self.engine.update(input.as_ref());
-    }
+    fn update(&mut self, input: impl AsRef<[u8]>) { self.engine.update(input.as_ref()); }
 }
 
 impl FixedOutputDirty for Sha384 {
@@ -556,9 +521,7 @@ impl FixedOutputDirty for Sha384 {
 }
 
 impl Reset for Sha384 {
-    fn reset(&mut self) {
-        self.engine.reset(&H384);
-    }
+    fn reset(&mut self) { self.engine.reset(&H384); }
 }
 
 /// The SHA-512 hash algorithm with the SHA-512/224 initial hash value.
@@ -569,11 +532,7 @@ pub struct Sha512Trunc224 {
 }
 
 impl Default for Sha512Trunc224 {
-    fn default() -> Self {
-        Sha512Trunc224 {
-            engine: Engine512::new(&H512_TRUNC_224),
-        }
-    }
+    fn default() -> Self { Sha512Trunc224 { engine: Engine512::new(&H512_TRUNC_224) } }
 }
 
 impl BlockInput for Sha512Trunc224 {
@@ -581,9 +540,7 @@ impl BlockInput for Sha512Trunc224 {
 }
 
 impl Update for Sha512Trunc224 {
-    fn update(&mut self, input: impl AsRef<[u8]>) {
-        self.engine.update(input.as_ref());
-    }
+    fn update(&mut self, input: impl AsRef<[u8]>) { self.engine.update(input.as_ref()); }
 }
 
 impl FixedOutputDirty for Sha512Trunc224 {
@@ -600,9 +557,7 @@ impl FixedOutputDirty for Sha512Trunc224 {
 }
 
 impl Reset for Sha512Trunc224 {
-    fn reset(&mut self) {
-        self.engine.reset(&H512_TRUNC_224);
-    }
+    fn reset(&mut self) { self.engine.reset(&H512_TRUNC_224); }
 }
 
 opaque_debug::implement!(Sha384);

@@ -1,13 +1,14 @@
 //! SHA-256
 mod soft;
-use soft::compress;
-
-use crate::consts::{H224, H256, STATE_LEN};
-use block_buffer::BlockBuffer;
 use core::slice::from_ref;
+
+use block_buffer::BlockBuffer;
 use digest::consts::{U28, U32, U64};
 use digest::generic_array::GenericArray;
 use digest::{BlockInput, FixedOutputDirty, Reset, Update};
+use soft::compress;
+
+use crate::consts::{H224, H256, STATE_LEN};
 
 type BlockSize = U64;
 
@@ -21,13 +22,7 @@ struct Engine256 {
 }
 
 impl Engine256 {
-    fn new(h: &[u32; STATE_LEN]) -> Engine256 {
-        Engine256 {
-            len: 0,
-            buffer: Default::default(),
-            state: *h,
-        }
-    }
+    fn new(h: &[u32; STATE_LEN]) -> Engine256 { Engine256 { len: 0, buffer: Default::default(), state: *h } }
 
     fn update(&mut self, input: &[u8]) {
         // Assumes that input.len() can be converted to u64 without overflow
@@ -39,8 +34,7 @@ impl Engine256 {
     fn finish(&mut self) {
         let s = &mut self.state;
         let l = self.len;
-        self.buffer
-            .len64_padding_be(l, |b| compress256(s, from_ref(b)));
+        self.buffer.len64_padding_be(l, |b| compress256(s, from_ref(b)));
     }
 
     fn reset(&mut self, h: &[u32; STATE_LEN]) {
@@ -57,11 +51,7 @@ pub struct Sha256 {
 }
 
 impl Default for Sha256 {
-    fn default() -> Self {
-        Sha256 {
-            engine: Engine256::new(&H256),
-        }
-    }
+    fn default() -> Self { Sha256 { engine: Engine256::new(&H256) } }
 }
 
 impl BlockInput for Sha256 {
@@ -69,9 +59,7 @@ impl BlockInput for Sha256 {
 }
 
 impl Update for Sha256 {
-    fn update(&mut self, input: impl AsRef<[u8]>) {
-        self.engine.update(input.as_ref());
-    }
+    fn update(&mut self, input: impl AsRef<[u8]>) { self.engine.update(input.as_ref()); }
 }
 
 impl FixedOutputDirty for Sha256 {
@@ -87,9 +75,7 @@ impl FixedOutputDirty for Sha256 {
 }
 
 impl Reset for Sha256 {
-    fn reset(&mut self) {
-        self.engine.reset(&H256);
-    }
+    fn reset(&mut self) { self.engine.reset(&H256); }
 }
 
 /// The SHA-256 hash algorithm with the SHA-224 initial hash value. The result
@@ -100,11 +86,7 @@ pub struct Sha224 {
 }
 
 impl Default for Sha224 {
-    fn default() -> Self {
-        Sha224 {
-            engine: Engine256::new(&H224),
-        }
-    }
+    fn default() -> Self { Sha224 { engine: Engine256::new(&H224) } }
 }
 
 impl BlockInput for Sha224 {
@@ -112,9 +94,7 @@ impl BlockInput for Sha224 {
 }
 
 impl Update for Sha224 {
-    fn update(&mut self, input: impl AsRef<[u8]>) {
-        self.engine.update(input.as_ref());
-    }
+    fn update(&mut self, input: impl AsRef<[u8]>) { self.engine.update(input.as_ref()); }
 }
 
 impl FixedOutputDirty for Sha224 {
@@ -130,9 +110,7 @@ impl FixedOutputDirty for Sha224 {
 }
 
 impl Reset for Sha224 {
-    fn reset(&mut self) {
-        self.engine.reset(&H224);
-    }
+    fn reset(&mut self) { self.engine.reset(&H224); }
 }
 
 opaque_debug::implement!(Sha224);

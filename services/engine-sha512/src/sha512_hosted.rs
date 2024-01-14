@@ -1,11 +1,13 @@
 //! SHA-512
-use crate::consts::{H384, H512, H512_TRUNC_224, H512_TRUNC_256, STATE_LEN};
-use crate::FallbackStrategy;
-use block_buffer::BlockBuffer;
 use core::slice::from_ref;
+
+use block_buffer::BlockBuffer;
 use digest::consts::{U128, U28, U32, U48, U64};
 use digest::generic_array::GenericArray;
 use digest::{BlockInput, FixedOutputDirty, Reset, Update};
+
+use crate::consts::{H384, H512, H512_TRUNC_224, H512_TRUNC_256, STATE_LEN};
+use crate::FallbackStrategy;
 
 type BlockSize = U128;
 
@@ -19,13 +21,7 @@ struct Engine512 {
 }
 
 impl Engine512 {
-    fn new(h: &[u64; STATE_LEN]) -> Engine512 {
-        Engine512 {
-            len: 0,
-            buffer: Default::default(),
-            state: *h,
-        }
-    }
+    fn new(h: &[u64; STATE_LEN]) -> Engine512 { Engine512 { len: 0, buffer: Default::default(), state: *h } }
 
     fn update(&mut self, input: &[u8]) {
         self.len += (input.len() as u128) << 3;
@@ -35,8 +31,7 @@ impl Engine512 {
 
     fn finish(&mut self) {
         let s = &mut self.state;
-        self.buffer
-            .len128_padding_be(self.len, |d| compress512(s, from_ref(d)));
+        self.buffer.len128_padding_be(self.len, |d| compress512(s, from_ref(d)));
     }
 
     fn reset(&mut self, h: &[u64; STATE_LEN]) {
@@ -53,11 +48,7 @@ pub struct Sha512 {
 }
 
 impl Default for Sha512 {
-    fn default() -> Self {
-        Sha512 {
-            engine: Engine512::new(&H512),
-        }
-    }
+    fn default() -> Self { Sha512 { engine: Engine512::new(&H512) } }
 }
 
 impl BlockInput for Sha512 {
@@ -65,9 +56,7 @@ impl BlockInput for Sha512 {
 }
 
 impl Update for Sha512 {
-    fn update(&mut self, input: impl AsRef<[u8]>) {
-        self.engine.update(input.as_ref());
-    }
+    fn update(&mut self, input: impl AsRef<[u8]>) { self.engine.update(input.as_ref()); }
 }
 
 impl FixedOutputDirty for Sha512 {
@@ -83,9 +72,7 @@ impl FixedOutputDirty for Sha512 {
 }
 
 impl Reset for Sha512 {
-    fn reset(&mut self) {
-        self.engine.reset(&H512);
-    }
+    fn reset(&mut self) { self.engine.reset(&H512); }
 }
 
 /// The SHA-512 hash algorithm with the SHA-384 initial hash value. The result
@@ -96,11 +83,7 @@ pub struct Sha384 {
 }
 
 impl Default for Sha384 {
-    fn default() -> Self {
-        Sha384 {
-            engine: Engine512::new(&H384),
-        }
-    }
+    fn default() -> Self { Sha384 { engine: Engine512::new(&H384) } }
 }
 
 impl BlockInput for Sha384 {
@@ -108,9 +91,7 @@ impl BlockInput for Sha384 {
 }
 
 impl Update for Sha384 {
-    fn update(&mut self, input: impl AsRef<[u8]>) {
-        self.engine.update(input.as_ref());
-    }
+    fn update(&mut self, input: impl AsRef<[u8]>) { self.engine.update(input.as_ref()); }
 }
 
 impl FixedOutputDirty for Sha384 {
@@ -126,9 +107,7 @@ impl FixedOutputDirty for Sha384 {
 }
 
 impl Reset for Sha384 {
-    fn reset(&mut self) {
-        self.engine.reset(&H384);
-    }
+    fn reset(&mut self) { self.engine.reset(&H384); }
 }
 
 /// The SHA-512 hash algorithm with the SHA-512/256 initial hash value. The
@@ -139,17 +118,11 @@ pub struct Sha512Trunc256 {
 }
 impl Sha512Trunc256 {
     pub fn new_with_strategy(_strat: FallbackStrategy) -> Self {
-        Sha512Trunc256 {
-            engine: Engine512::new(&H512_TRUNC_256),
-        }
+        Sha512Trunc256 { engine: Engine512::new(&H512_TRUNC_256) }
     }
 }
 impl Default for Sha512Trunc256 {
-    fn default() -> Self {
-        Sha512Trunc256 {
-            engine: Engine512::new(&H512_TRUNC_256),
-        }
-    }
+    fn default() -> Self { Sha512Trunc256 { engine: Engine512::new(&H512_TRUNC_256) } }
 }
 
 impl BlockInput for Sha512Trunc256 {
@@ -157,9 +130,7 @@ impl BlockInput for Sha512Trunc256 {
 }
 
 impl Update for Sha512Trunc256 {
-    fn update(&mut self, input: impl AsRef<[u8]>) {
-        self.engine.update(input.as_ref());
-    }
+    fn update(&mut self, input: impl AsRef<[u8]>) { self.engine.update(input.as_ref()); }
 }
 
 impl FixedOutputDirty for Sha512Trunc256 {
@@ -175,9 +146,7 @@ impl FixedOutputDirty for Sha512Trunc256 {
 }
 
 impl Reset for Sha512Trunc256 {
-    fn reset(&mut self) {
-        self.engine.reset(&H512_TRUNC_256);
-    }
+    fn reset(&mut self) { self.engine.reset(&H512_TRUNC_256); }
 }
 
 /// The SHA-512 hash algorithm with the SHA-512/224 initial hash value.
@@ -188,11 +157,7 @@ pub struct Sha512Trunc224 {
 }
 
 impl Default for Sha512Trunc224 {
-    fn default() -> Self {
-        Sha512Trunc224 {
-            engine: Engine512::new(&H512_TRUNC_224),
-        }
-    }
+    fn default() -> Self { Sha512Trunc224 { engine: Engine512::new(&H512_TRUNC_224) } }
 }
 
 impl BlockInput for Sha512Trunc224 {
@@ -200,9 +165,7 @@ impl BlockInput for Sha512Trunc224 {
 }
 
 impl Update for Sha512Trunc224 {
-    fn update(&mut self, input: impl AsRef<[u8]>) {
-        self.engine.update(input.as_ref());
-    }
+    fn update(&mut self, input: impl AsRef<[u8]>) { self.engine.update(input.as_ref()); }
 }
 
 impl FixedOutputDirty for Sha512Trunc224 {
@@ -219,9 +182,7 @@ impl FixedOutputDirty for Sha512Trunc224 {
 }
 
 impl Reset for Sha512Trunc224 {
-    fn reset(&mut self) {
-        self.engine.reset(&H512_TRUNC_224);
-    }
+    fn reset(&mut self) { self.engine.reset(&H512_TRUNC_224); }
 }
 
 opaque_debug::implement!(Sha384);
