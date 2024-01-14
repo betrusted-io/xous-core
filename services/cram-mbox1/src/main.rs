@@ -1,5 +1,5 @@
-use utralib::generated::*;
 use num_traits::*;
+use utralib::generated::*;
 
 pub struct Mailbox {
     csr: utralib::CSR<u32>,
@@ -14,16 +14,17 @@ impl Mailbox {
     pub unsafe fn send_unguarded(&mut self, data: &[u32]) {
         let status = self.csr.r(utra::mailbox::STATUS);
         if status & self.csr.ms(utra::mailbox::STATUS_RX_ERR, 1) != 0
-        || status & self.csr.ms(utra::mailbox::STATUS_TX_ERR, 1) != 0 {
+            || status & self.csr.ms(utra::mailbox::STATUS_TX_ERR, 1) != 0
+        {
             log::warn!("Rx/Tx err was encountered: {:x}", status);
         }
         if status & self.csr.ms(utra::mailbox::STATUS_TX_WORDS, !0) != 0 {
             log::warn!("Tx register is not empty: {:x}", status);
         }
         // defer aborts until this interaction is done
-        self.csr.wo(utra::mailbox::EV_ENABLE,
-            self.csr.r(utra::mailbox::EV_ENABLE) &
-            !self.csr.ms(utra::mailbox::EV_ENABLE_ABORT_INIT, 1)
+        self.csr.wo(
+            utra::mailbox::EV_ENABLE,
+            self.csr.r(utra::mailbox::EV_ENABLE) & !self.csr.ms(utra::mailbox::EV_ENABLE_ABORT_INIT, 1),
         );
         // interact with the FIFO
         for &d in data {
@@ -31,24 +32,27 @@ impl Mailbox {
         }
         self.csr.wfo(utra::mailbox::DONE_DONE, 1);
         // re-enable aborts
-        self.csr.wo(utra::mailbox::EV_ENABLE,
-            self.csr.r(utra::mailbox::EV_ENABLE) |
-            self.csr.ms(utra::mailbox::EV_ENABLE_ABORT_INIT, 1)
+        self.csr.wo(
+            utra::mailbox::EV_ENABLE,
+            self.csr.r(utra::mailbox::EV_ENABLE) | self.csr.ms(utra::mailbox::EV_ENABLE_ABORT_INIT, 1),
         );
     }
+
     pub fn get(&mut self, ret: &mut [u32]) -> usize {
         let status = self.csr.r(utra::mailbox::STATUS);
         if status & self.csr.ms(utra::mailbox::STATUS_RX_ERR, 1) != 0
-        || status & self.csr.ms(utra::mailbox::STATUS_TX_ERR, 1) != 0 {
+            || status & self.csr.ms(utra::mailbox::STATUS_TX_ERR, 1) != 0
+        {
             log::warn!("Rx/Tx err was encountered: {:x}", status);
         }
         // defer aborts until this interaction is done
-        self.csr.wo(utra::mailbox::EV_ENABLE,
-            self.csr.r(utra::mailbox::EV_ENABLE) &
-            !self.csr.ms(utra::mailbox::EV_ENABLE_ABORT_INIT, 1)
+        self.csr.wo(
+            utra::mailbox::EV_ENABLE,
+            self.csr.r(utra::mailbox::EV_ENABLE) & !self.csr.ms(utra::mailbox::EV_ENABLE_ABORT_INIT, 1),
         );
         // interact with the FIFO
-        // note: this only works because rx_words is the LSB of the register. We don't have to shift the MS'd value.
+        // note: this only works because rx_words is the LSB of the register. We don't have to shift the MS'd
+        // value.
         let rx_words = status & self.csr.ms(utra::mailbox::STATUS_RX_WORDS, !0);
         let rx_words_checked = if rx_words as usize > ret.len() {
             log::warn!("rx_words {} is more than ret.len() {}", rx_words, ret.len());
@@ -64,12 +68,13 @@ impl Mailbox {
             let _ = self.csr.rf(utra::mailbox::RDATA_RDATA);
         }
         // re-enable aborts
-        self.csr.wo(utra::mailbox::EV_ENABLE,
-            self.csr.r(utra::mailbox::EV_ENABLE) |
-            self.csr.ms(utra::mailbox::EV_ENABLE_ABORT_INIT, 1)
+        self.csr.wo(
+            utra::mailbox::EV_ENABLE,
+            self.csr.r(utra::mailbox::EV_ENABLE) | self.csr.ms(utra::mailbox::EV_ENABLE_ABORT_INIT, 1),
         );
         rx_words_checked
     }
+
     pub fn abort(&mut self) {
         log::warn!("abort initiated");
         self.csr.wfo(utra::mailbox::CONTROL_ABORT, 1);
@@ -91,30 +96,43 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
     let mbox = unsafe { &mut *(arg as *mut Mailbox) };
 
     let pending = mbox.csr.r(utra::mailbox::EV_PENDING);
-    mbox.csr
-        .wo(utra::mailbox::EV_PENDING, pending);
+    mbox.csr.wo(utra::mailbox::EV_PENDING, pending);
 
     if pending & mbox.csr.ms(utra::mailbox::EV_PENDING_ERROR, 1) != 0 {
         let status = mbox.csr.r(utra::mb_client::STATUS); // this clears the error
-        xous::try_send_message(mbox.cid, xous::Message::new_scalar(
-            Opcode::ProtocolError.to_usize().unwrap(), pending as usize, status as usize, 0, 0)
-        ).ok();
+        xous::try_send_message(
+            mbox.cid,
+            xous::Message::new_scalar(
+                Opcode::ProtocolError.to_usize().unwrap(),
+                pending as usize,
+                status as usize,
+                0,
+                0,
+            ),
+        )
+        .ok();
     }
     if pending & mbox.csr.ms(utra::mailbox::EV_PENDING_ABORT_INIT, 1) != 0 {
         mbox.abort_pending = true;
-        xous::try_send_message(mbox.cid, xous::Message::new_scalar(
-            Opcode::AbortInit.to_usize().unwrap(), pending as usize, 0, 0, 0)
-        ).ok();
+        xous::try_send_message(
+            mbox.cid,
+            xous::Message::new_scalar(Opcode::AbortInit.to_usize().unwrap(), pending as usize, 0, 0, 0),
+        )
+        .ok();
     }
     if pending & mbox.csr.ms(utra::mailbox::EV_PENDING_ABORT_DONE, 1) != 0 {
-        xous::try_send_message(mbox.cid, xous::Message::new_scalar(
-            Opcode::AbortDone.to_usize().unwrap(), pending as usize, 0, 0, 0)
-        ).ok();
+        xous::try_send_message(
+            mbox.cid,
+            xous::Message::new_scalar(Opcode::AbortDone.to_usize().unwrap(), pending as usize, 0, 0, 0),
+        )
+        .ok();
     }
     if pending & mbox.csr.ms(utra::mailbox::EV_PENDING_AVAILABLE, 1) != 0 {
-        xous::try_send_message(mbox.cid, xous::Message::new_scalar(
-            Opcode::Incoming.to_usize().unwrap(), pending as usize, 0, 0, 0)
-        ).ok();
+        xous::try_send_message(
+            mbox.cid,
+            xous::Message::new_scalar(Opcode::Incoming.to_usize().unwrap(), pending as usize, 0, 0, 0),
+        )
+        .ok();
     }
 }
 
@@ -126,7 +144,7 @@ fn main() {
     let mbox_sid = xns.register_name("_mbox_", None).expect("can't register server");
     let mbox_cid = xous::connect(mbox_sid).unwrap();
 
-    #[cfg(feature="cramium-fpga")]
+    #[cfg(feature = "cramium-fpga")]
     let csr = xous::syscall::map_memory(
         xous::MemoryAddress::new(utra::main::HW_MAIN_BASE),
         None,
@@ -134,10 +152,10 @@ fn main() {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map Core Control CSR range");
-    #[cfg(feature="cramium-fpga")]
+    #[cfg(feature = "cramium-fpga")]
     let mut core_csr = CSR::new(csr.as_mut_ptr() as *mut u32);
 
-    #[cfg(feature="cramium-fpga")]
+    #[cfg(feature = "cramium-fpga")]
     core_csr.wfo(utra::main::REPORT_REPORT, 0x600d_0000);
 
     let mbox_csr = xous::syscall::map_memory(
@@ -149,12 +167,8 @@ fn main() {
     .expect("couldn't map Core User CSR range");
     let mbox = CSR::new(mbox_csr.as_mut_ptr() as *mut u32);
 
-    let mut mailbox = Mailbox {
-        csr: mbox,
-        cid: mbox_cid,
-        abort_pending: false,
-    };
-    #[cfg(not(feature="ext"))]
+    let mut mailbox = Mailbox { csr: mbox, cid: mbox_cid, abort_pending: false };
+    #[cfg(not(feature = "ext"))]
     mailbox.csr.wfo(utra::mailbox::LOOPBACK_LOOPBACK, 1);
     xous::claim_interrupt(
         utra::mailbox::MAILBOX_IRQ,
@@ -181,9 +195,11 @@ fn main() {
     log::info!("starting mbox test");
     let mut msg_opt = None;
     let mut return_type = 0;
-    xous::send_message(mailbox.cid, xous::Message::new_scalar(
-        Opcode::RunTest.to_usize().unwrap(), 1, 0, 0, 0)
-    ).ok();
+    xous::send_message(
+        mailbox.cid,
+        xous::Message::new_scalar(Opcode::RunTest.to_usize().unwrap(), 1, 0, 0, 0),
+    )
+    .ok();
 
     let mut test_array = [0u32; 1024];
     let mut ret_array = [0u32; 1024];
@@ -192,12 +208,9 @@ fn main() {
     let mut abort_done_seen = false;
     let mut expect_error = false; // when testing overflows explicitly
     loop {
-        xous::reply_and_receive_next_legacy(mbox_sid, &mut msg_opt, &mut return_type)
-            .unwrap();
+        xous::reply_and_receive_next_legacy(mbox_sid, &mut msg_opt, &mut return_type).unwrap();
         let msg = msg_opt.as_mut().unwrap();
-        match num_traits::FromPrimitive::from_usize(msg.body.id())
-            .unwrap_or(Opcode::InvalidCall)
-        {
+        match num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidCall) {
             Opcode::RunTest => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     // core_csr.wfo(utra::main::REPORT_REPORT, scalar.arg1 as u32); // indicate the test start
@@ -208,7 +221,7 @@ fn main() {
                             //   word 0: msb = # of words sent; lsb is test sequence number
                             //   word 1: "generator" value
                             test_array[0] = 0x1_0001;
-                            unsafe{mailbox.send_unguarded(&test_array[0..1])};
+                            unsafe { mailbox.send_unguarded(&test_array[0..1]) };
                         }
                         2 => {
                             test_array[0] = 0x10_0002; // 16 words sent, test sequence 2
@@ -216,11 +229,11 @@ fn main() {
                                 *t = generator;
                                 generator += 1;
                             }
-                            unsafe{mailbox.send_unguarded(&test_array[0..16])};
+                            unsafe { mailbox.send_unguarded(&test_array[0..16]) };
                         }
                         3 => {
                             test_array[0] = 0x1_0003; // 1 word sent, test sequence 3
-                            unsafe{mailbox.send_unguarded(&test_array[0..1])};
+                            unsafe { mailbox.send_unguarded(&test_array[0..1]) };
                         }
                         4 => {
                             test_array[0] = 0x0400_0004; // 1024 words sent, test sequence 4
@@ -229,12 +242,12 @@ fn main() {
                                 generator += 1;
                             }
                             expect_error = true;
-                            unsafe{mailbox.send_unguarded(&test_array[0..1024])};
+                            unsafe { mailbox.send_unguarded(&test_array[0..1024]) };
                         }
                         5 => {
                             expect_error = false;
                             test_array[0] = 0x1_0005; // 1 word sent, test sequence 5
-                            unsafe{mailbox.send_unguarded(&test_array[0..1])};
+                            unsafe { mailbox.send_unguarded(&test_array[0..1]) };
                         }
                         6 => {
                             test_array[0] = 0x8_0006; // 8 words sent, test sequence 6
@@ -242,13 +255,13 @@ fn main() {
                                 *t = generator;
                                 generator += 1;
                             }
-                            unsafe{mailbox.send_unguarded(&test_array[0..8])};
+                            unsafe { mailbox.send_unguarded(&test_array[0..8]) };
                             mailbox.abort();
                         }
                         7 => {
                             if !abort_done_seen {
                                 log::error!("We did not see an abort ack");
-                                #[cfg(feature="cramium-fpga")]
+                                #[cfg(feature = "cramium-fpga")]
                                 core_csr.wfo(utra::main::REPORT_REPORT, 0xdead_0007);
                                 break;
                             }
@@ -258,7 +271,7 @@ fn main() {
                                 *t = generator;
                                 generator += 1;
                             }
-                            unsafe{mailbox.send_unguarded(&test_array[0..2])};
+                            unsafe { mailbox.send_unguarded(&test_array[0..2]) };
                         }
                         8 => {
                             abort_init_seen = false;
@@ -267,7 +280,7 @@ fn main() {
                                 *t = generator;
                                 generator += 1;
                             }
-                            unsafe{mailbox.send_unguarded(&test_array[0..4])};
+                            unsafe { mailbox.send_unguarded(&test_array[0..4]) };
                         }
                         9 => {
                             if !abort_init_seen {
@@ -280,18 +293,18 @@ fn main() {
                                 *t = generator;
                                 generator += 1;
                             }
-                            unsafe{mailbox.send_unguarded(&test_array[0..3])};
+                            unsafe { mailbox.send_unguarded(&test_array[0..3]) };
                         }
                         10 => {
                             for (i, d) in test_array.iter_mut().enumerate() {
                                 *d = i as u32;
                             }
                             test_array[0] = 0x0400_000A; // 1024 words sent, test sequence 10
-                            unsafe{mailbox.send_unguarded(&test_array)};
+                            unsafe { mailbox.send_unguarded(&test_array) };
                         }
                         11 => {
                             log::info!("Last test done");
-                            #[cfg(feature="cramium-fpga")]
+                            #[cfg(feature = "cramium-fpga")]
                             core_csr.wfo(utra::main::REPORT_REPORT, 0x600d_000a);
                             break;
                         }
@@ -314,9 +327,17 @@ fn main() {
                     if check_results(&test_array, &ret_array, count) {
                         let last_seq_no = test_array[0] & 0xffff;
                         log::info!("Test {} passed", last_seq_no);
-                        xous::send_message(mailbox.cid, xous::Message::new_scalar(
-                            Opcode::RunTest.to_usize().unwrap(), last_seq_no as usize + 1, 0, 0, 0)
-                        ).ok();
+                        xous::send_message(
+                            mailbox.cid,
+                            xous::Message::new_scalar(
+                                Opcode::RunTest.to_usize().unwrap(),
+                                last_seq_no as usize + 1,
+                                0,
+                                0,
+                                0,
+                            ),
+                        )
+                        .ok();
                     } else {
                         log::error!("Aborting test, errors encountered");
                         break;
@@ -333,9 +354,17 @@ fn main() {
                 mailbox.csr.wfo(utra::mailbox::CONTROL_ABORT, 1);
                 // initiate the next test in the sequence
                 let last_seq_no = test_array[0] & 0xffff;
-                xous::send_message(mailbox.cid, xous::Message::new_scalar(
-                    Opcode::RunTest.to_usize().unwrap(), last_seq_no as usize + 1, 0, 0, 0)
-                ).ok();
+                xous::send_message(
+                    mailbox.cid,
+                    xous::Message::new_scalar(
+                        Opcode::RunTest.to_usize().unwrap(),
+                        last_seq_no as usize + 1,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .ok();
             }
             Opcode::AbortDone => {
                 abort_done_seen = true;
@@ -343,14 +372,26 @@ fn main() {
                 log::info!("abort protocol done");
                 // initiate the next test in the sequence
                 let last_seq_no = test_array[0] & 0xffff;
-                xous::send_message(mailbox.cid, xous::Message::new_scalar(
-                    Opcode::RunTest.to_usize().unwrap(), last_seq_no as usize + 1, 0, 0, 0)
-                ).ok();
+                xous::send_message(
+                    mailbox.cid,
+                    xous::Message::new_scalar(
+                        Opcode::RunTest.to_usize().unwrap(),
+                        last_seq_no as usize + 1,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .ok();
             }
             Opcode::ProtocolError => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     if !expect_error {
-                        log::error!("Protocol error received: {:x}, {:x}, aborting test", scalar.arg1, scalar.arg2);
+                        log::error!(
+                            "Protocol error received: {:x}, {:x}, aborting test",
+                            scalar.arg1,
+                            scalar.arg2
+                        );
                         break;
                     } else {
                         log::info!("Expected protocol error received: {:x}, {:x}", scalar.arg1, scalar.arg2);
@@ -369,12 +410,11 @@ fn main() {
         }
     }
 
-    #[cfg(feature="cramium-fpga")]
+    #[cfg(feature = "cramium-fpga")]
     core_csr.wfo(utra::main::SUCCESS_SUCCESS, 1);
-    #[cfg(feature="cramium-fpga")]
+    #[cfg(feature = "cramium-fpga")]
     core_csr.wfo(utra::main::DONE_DONE, 1); // this should stop the simulation
 }
-
 
 fn check_results(test_array: &[u32], ret_array: &[u32], count: usize) -> bool {
     let test_len = (test_array[0] >> 16) as usize;
@@ -385,7 +425,8 @@ fn check_results(test_array: &[u32], ret_array: &[u32], count: usize) -> bool {
     let mut errcnt = 0;
     for (index, (&tx, &rx)) in test_array[0..test_len].iter().zip(&ret_array[0..test_len]).enumerate() {
         if rx != tx ^ 0xAAAA_0000 {
-            if errcnt < 16 { // limit log spew
+            if errcnt < 16 {
+                // limit log spew
                 log::error!("Test failure at {}: {:x}->{:x}", index, tx ^ 0xAAAA_0000, rx);
             }
             errcnt += 1;
