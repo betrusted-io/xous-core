@@ -1,8 +1,9 @@
-use quick_xml::events::Event;
-use quick_xml::Reader;
-use quick_xml::name::QName;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
+
+use quick_xml::events::Event;
+use quick_xml::name::QName;
+use quick_xml::Reader;
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -112,14 +113,9 @@ fn parse_usize(value: &[u8]) -> Result<usize, ParseError> {
 
 fn extract_contents<T: BufRead>(reader: &mut Reader<T>) -> Result<String, ParseError> {
     let mut buf = Vec::new();
-    let contents = reader
-        .read_event_into(&mut buf)
-        .map_err(|_| ParseError::UnexpectedTag)?;
+    let contents = reader.read_event_into(&mut buf).map_err(|_| ParseError::UnexpectedTag)?;
     match contents {
-        Event::Text(t) => t
-            .unescape()
-            .map(|s| s.to_string())
-            .map_err(|_| ParseError::NonUTF8),
+        Event::Text(t) => t.unescape().map(|s| s.to_string()).map_err(|_| ParseError::NonUTF8),
         _ => Err(ParseError::UnexpectedTag),
     }
 }
@@ -158,10 +154,7 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
     })
 }
 
-fn generate_fields<T: BufRead>(
-    reader: &mut Reader<T>,
-    fields: &mut Vec<Field>,
-) -> Result<(), ParseError> {
+fn generate_fields<T: BufRead>(reader: &mut Reader<T>, fields: &mut Vec<Field>) -> Result<(), ParseError> {
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
@@ -193,13 +186,10 @@ fn generate_register<T: BufRead>(reader: &mut Reader<T>) -> Result<Register, Par
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let tag_binding = e.local_name().as_ref().to_vec();
-                let tag_name = std::str::from_utf8(&tag_binding)
-                        .map_err(|_| ParseError::NonUTF8)?;
+                let tag_name = std::str::from_utf8(&tag_binding).map_err(|_| ParseError::NonUTF8)?;
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
-                    "addressOffset" => {
-                        offset = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
-                    }
+                    "addressOffset" => offset = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     "fields" => generate_fields(reader, &mut fields)?,
                     _ => (),
                 }
@@ -233,8 +223,7 @@ fn generate_interrupts<T: BufRead>(
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let tag_binding = e.local_name().as_ref().to_vec();
-                let tag_name = std::str::from_utf8(&tag_binding)
-                    .map_err(|_| ParseError::NonUTF8)?;
+                let tag_name = std::str::from_utf8(&tag_binding).map_err(|_| ParseError::NonUTF8)?;
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
                     "value" => value = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
@@ -294,13 +283,10 @@ fn generate_peripheral<T: BufRead>(reader: &mut Reader<T>) -> Result<Peripheral,
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let tag_binding = e.local_name().as_ref().to_vec();
-                let tag_name = std::str::from_utf8(&tag_binding)
-                    .map_err(|_| ParseError::NonUTF8)?;
+                let tag_name = std::str::from_utf8(&tag_binding).map_err(|_| ParseError::NonUTF8)?;
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
-                    "baseAddress" => {
-                        base = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
-                    }
+                    "baseAddress" => base = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     "size" => size = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     "registers" => generate_registers(reader, &mut registers)?,
                     "interrupt" => generate_interrupts(reader, &mut interrupts)?,
@@ -358,13 +344,10 @@ fn generate_memory_region<T: BufRead>(reader: &mut Reader<T>) -> Result<MemoryRe
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let tag_binding = e.local_name().as_ref().to_vec();
-                let tag_name = std::str::from_utf8(&tag_binding)
-                    .map_err(|_| ParseError::NonUTF8)?;
+                let tag_name = std::str::from_utf8(&tag_binding).map_err(|_| ParseError::NonUTF8)?;
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
-                    "baseAddress" => {
-                        base = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
-                    }
+                    "baseAddress" => base = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     "size" => size = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     _ => (),
                 }
@@ -394,9 +377,7 @@ fn parse_memory_regions<T: BufRead>(
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => match e.name() {
-                QName(b"memoryRegion") => description
-                    .memory_regions
-                    .push(generate_memory_region(reader)?),
+                QName(b"memoryRegion") => description.memory_regions.push(generate_memory_region(reader)?),
                 _ => panic!("unexpected tag in <memoryRegions>: {:?}", e),
             },
             Ok(Event::End(ref e)) => match e.name() {
@@ -431,9 +412,7 @@ fn generate_constants<T: BufRead>(
                                     .expect("constant: error parsing attribute value");
                                 match att_name {
                                     _ if att_name == "name" => constant_descriptor.name = att_value,
-                                    _ if att_name == "value" => {
-                                        constant_descriptor.value = att_value
-                                    }
+                                    _ if att_name == "value" => constant_descriptor.value = att_value,
                                     _ => panic!("unexpected attribute name"),
                                 }
                             }
@@ -525,11 +504,7 @@ fn print_memory_regions<U: Write>(
         let region_size = if region.size < 4096 {
             4096
         } else {
-            if region.size & 4095 != 0 {
-                region.size + 4096 - (region.size & 4095)
-            } else {
-                region.size
-            }
+            if region.size & 4095 != 0 { region.size + 4096 - (region.size & 4095) } else { region.size }
         };
 
         // Ignore the CSR region, since we explicitly define registers there.
@@ -543,11 +518,7 @@ fn print_memory_regions<U: Write>(
             continue;
         }
 
-        writeln!(
-            out,
-            "{}: Memory.MappedMemory @ sysbus 0x{:08x}",
-            region_name, region.base
-        )?;
+        writeln!(out, "{}: Memory.MappedMemory @ sysbus 0x{:08x}", region_name, region.base)?;
         writeln!(out, "    size: 0x{:08x}", region_size)?;
         writeln!(out)?;
     }
@@ -572,11 +543,7 @@ fn print_peripherals<U: Write>(
         //     peripheral.size
         // };
         if let Some(renode_device) = cs_peripherals.get(lc_name.as_str()) {
-            writeln!(
-                out,
-                "{}: {} @ sysbus 0x{:08x}",
-                lc_name, renode_device, peripheral.base
-            )?;
+            writeln!(out, "{}: {} @ sysbus 0x{:08x}", lc_name, renode_device, peripheral.base)?;
 
             // TODO: Get the frequency from the `constants` table under `CONFIG_CLOCK_FREQUENCY`
             if lc_name == "timer0" {
@@ -610,11 +577,7 @@ fn print_peripherals<U: Write>(
                 writeln!(out, "    IRQ -> cpu @ {}", 1000 + irq.value)?;
             }
         } else {
-            writeln!(
-                out,
-                "// Unrecognized peripheral: {} @ 0x{:08x}",
-                lc_name, peripheral.base
-            )?;
+            writeln!(out, "// Unrecognized peripheral: {} @ 0x{:08x}", lc_name, peripheral.base)?;
         }
         writeln!(out)?;
     }

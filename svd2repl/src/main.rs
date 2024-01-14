@@ -3,7 +3,7 @@ mod generate;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().count() != 3 {
         println!("Usage: svd2repl <input SVD> <output repl>");
-        return Ok(())
+        return Ok(());
     }
     let svd_filename = std::env::args().nth(1).ok_or("Must specify SVD input filename")?;
     let generated_filename = std::env::args().nth(2).ok_or("Must specify destination utralib filename")?;
