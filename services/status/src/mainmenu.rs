@@ -1,9 +1,10 @@
+use std::sync::{Arc, Mutex};
+
 use gam::*;
 use locales::t;
-use root_keys::RootKeys;
-use std::sync::{Arc, Mutex};
-use xous_ipc::String;
 use num_traits::*;
+use root_keys::RootKeys;
+use xous_ipc::String;
 
 use crate::StatusOpcode;
 
@@ -122,7 +123,7 @@ pub fn create_main_menu(
         close_on_select: true,
     });
 
-    #[cfg(feature="efuse")]
+    #[cfg(feature = "efuse")]
     if keys.lock().unwrap().is_zero_key().unwrap() == Some(true) {
         menuitems.push(MenuItem {
             name: String::from_str(t!("mainmenu.backup_key", locales::LANG)),
