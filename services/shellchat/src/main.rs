@@ -29,60 +29,60 @@ the four-step instructions embedded within the file, starting around line 40.
 
 Check for more detailed docs under Modules/cmds "Shell Chat" below
 */
-use log::info;
-
 use core::fmt::Write;
 use core::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread;
 
 use gam::UxRegistration;
-use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, PixelColor};
+use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
+use log::info;
 use xous::MessageEnvelope;
 use xous_ipc::Buffer;
-
-use std::thread;
-use std::sync::Arc;
 
 #[doc = include_str!("../README.md")]
 mod cmds;
 use cmds::*;
 
-#[cfg(not(feature="no-codec"))]
+#[cfg(not(feature = "no-codec"))]
 mod oqc_test;
 
-#[cfg(feature="nettest")]
+#[cfg(feature = "nettest")]
 mod nettests;
+
+#[cfg(feature = "tracking-alloc")]
+use std::alloc::System;
 
 #[cfg(target_os = "xous")] // only draw "please wait" when not in hosted mode
 use locales::t;
-#[cfg(feature="tts")]
+#[cfg(feature = "tracking-alloc")]
+use tracking_allocator::{AllocationGroupId, AllocationTracker, Allocator};
+#[cfg(feature = "tts")]
 use tts_frontend::*;
-
-#[cfg(feature="tracking-alloc")]
-use tracking_allocator::{
-    AllocationGroupId, AllocationTracker, Allocator,
-};
-#[cfg(feature="tracking-alloc")]
-use std::alloc::System;
-#[cfg(feature="tracking-alloc")]
+#[cfg(feature = "tracking-alloc")]
 #[global_allocator]
 static GLOBAL: Allocator<System> = Allocator::system();
-#[cfg(feature="tracking-alloc")]
+#[cfg(feature = "tracking-alloc")]
 use core::sync::atomic::AtomicIsize;
-#[cfg(feature="tracking-alloc")]
+#[cfg(feature = "tracking-alloc")]
 struct StdoutTracker {
     pub total: AtomicIsize,
 }
 
-#[cfg(feature="tracking-alloc")]
+#[cfg(feature = "tracking-alloc")]
 impl AllocationTracker for StdoutTracker {
     fn allocated(&self, addr: usize, size: usize, group_id: AllocationGroupId) {
-        // Allocations have all the pertinent information upfront, which you may or may not want to store for further
-        // analysis. Notably, deallocations also know how large they are, and what group ID they came from, so you
-        // typically don't have to store much data for correlating deallocations with their original allocation.
+        // Allocations have all the pertinent information upfront, which you may or may not want to store for
+        // further analysis. Notably, deallocations also know how large they are, and what group ID
+        // they came from, so you typically don't have to store much data for correlating
+        // deallocations with their original allocation.
         self.total.store(self.total.load(Ordering::SeqCst) + size as isize, Ordering::SeqCst);
         println!(
             "allocation -> total={} addr=0x{:0x} size={} group_id={:?}",
-            self.total.load(Ordering::SeqCst), addr, size, group_id
+            self.total.load(Ordering::SeqCst),
+            addr,
+            size,
+            group_id
         );
     }
 
@@ -93,15 +93,20 @@ impl AllocationTracker for StdoutTracker {
         source_group_id: AllocationGroupId,
         current_group_id: AllocationGroupId,
     ) {
-        // When a deallocation occurs, as mentioned above, you have full access to the address, size of the allocation,
-        // as well as the group ID the allocation was made under _and_ the active allocation group ID.
+        // When a deallocation occurs, as mentioned above, you have full access to the address, size of the
+        // allocation, as well as the group ID the allocation was made under _and_ the active
+        // allocation group ID.
         //
-        // This can be useful beyond just the obvious "track how many current bytes are allocated by the group", instead
-        // going further to see the chain of where allocations end up, and so on.
+        // This can be useful beyond just the obvious "track how many current bytes are allocated by the
+        // group", instead going further to see the chain of where allocations end up, and so on.
         self.total.store(self.total.load(Ordering::SeqCst) - size as isize, Ordering::SeqCst);
         println!(
             "deallocation -> total={} addr=0x{:0x} size={} source_group_id={:?} current_group_id={:?}",
-            self.total.load(Ordering::SeqCst), addr, size, source_group_id, current_group_id
+            self.total.load(Ordering::SeqCst),
+            addr,
+            size,
+            source_group_id,
+            current_group_id
         );
     }
 }
@@ -122,7 +127,7 @@ struct Repl {
     msg: Option<MessageEnvelope>,
 
     // record our input history
-    history: Vec::<History>,
+    history: Vec<History>,
     history_len: usize,
     content: Gid,
     gam: gam::Gam,
@@ -130,7 +135,7 @@ struct Repl {
     // variables that define our graphical attributes
     screensize: Point,
     bubble_width: u16,
-    margin: Point, // margin to edge of canvas
+    margin: Point,        // margin to edge of canvas
     bubble_margin: Point, // margin of text in bubbles
     bubble_radius: u16,
     bubble_space: i16, // spacing between text bubbles
@@ -140,27 +145,32 @@ struct Repl {
 
     // our security token for making changes to our record on the GAM
     token: [u32; 4],
-    #[cfg(feature="tts")]
+    #[cfg(feature = "tts")]
     tts: TtsFrontend,
 }
-impl Repl{
+impl Repl {
     fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self {
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
 
-        let token = gam.register_ux(UxRegistration {
-            app_name: xous_ipc::String::<128>::from_str(gam::APP_NAME_SHELLCHAT),
-            ux_type: gam::UxType::Chat,
-            #[cfg(not(feature="tts"))]
-            predictor: Some(xous_ipc::String::<64>::from_str(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL)),
-            #[cfg(feature="tts")]
-            predictor: Some(xous_ipc::String::<64>::from_str(ime_plugin_tts::SERVER_NAME_IME_PLUGIN_TTS)),
-            listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!
-            redraw_id: ShellOpcode::Redraw.to_u32().unwrap(),
-            gotinput_id: Some(ShellOpcode::Line.to_u32().unwrap()),
-            audioframe_id: None,
-            rawkeys_id: None,
-            focuschange_id: Some(ShellOpcode::ChangeFocus.to_u32().unwrap()),
-        }).expect("couldn't register Ux context for shellchat");
+        let token = gam
+            .register_ux(UxRegistration {
+                app_name: xous_ipc::String::<128>::from_str(gam::APP_NAME_SHELLCHAT),
+                ux_type: gam::UxType::Chat,
+                #[cfg(not(feature = "tts"))]
+                predictor: Some(xous_ipc::String::<64>::from_str(
+                    ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL,
+                )),
+                #[cfg(feature = "tts")]
+                predictor: Some(xous_ipc::String::<64>::from_str(ime_plugin_tts::SERVER_NAME_IME_PLUGIN_TTS)),
+                listener: sid.to_array(), /* note disclosure of our SID to the GAM -- the secret is now
+                                           * shared with the GAM! */
+                redraw_id: ShellOpcode::Redraw.to_u32().unwrap(),
+                gotinput_id: Some(ShellOpcode::Line.to_u32().unwrap()),
+                audioframe_id: None,
+                rawkeys_id: None,
+                focuschange_id: Some(ShellOpcode::ChangeFocus.to_u32().unwrap()),
+            })
+            .expect("couldn't register Ux context for shellchat");
 
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
         log::trace!("content canvas {:?}", content);
@@ -181,7 +191,7 @@ impl Repl{
             bubble_space: 4,
             env: CmdEnv::new(xns),
             token: token.unwrap(),
-            #[cfg(feature="tts")]
+            #[cfg(feature = "tts")]
             tts: TtsFrontend::new(xns).unwrap(),
         }
     }
@@ -193,9 +203,7 @@ impl Repl{
         Ok(())
     }
 
-    fn msg(&mut self, message: MessageEnvelope) {
-        self.msg = Some(message);
-    }
+    fn msg(&mut self, message: MessageEnvelope) { self.msg = Some(message); }
 
     fn circular_push(&mut self, item: History) {
         if self.history.len() >= self.history_len {
@@ -209,10 +217,7 @@ impl Repl{
         let debug1 = false;
         // if we had an input string, do something
         if let Some(local) = &self.input {
-            let input_history = History {
-                text: local.to_string(),
-                is_input: true,
-            };
+            let input_history = History { text: local.to_string(), is_input: true };
             self.circular_push(input_history);
         }
 
@@ -221,7 +226,8 @@ impl Repl{
         // side effect our commands
 
         // redraw UI once upon accepting all input
-        if !was_callback { // don't need to redraw on a callback, save some cycles
+        if !was_callback {
+            // don't need to redraw on a callback, save some cycles
             self.redraw(init_done).expect("can't redraw");
         }
 
@@ -229,17 +235,19 @@ impl Repl{
         // take the input and pass it on to the various command parsers, and attach result
         if let Some(local) = &self.input {
             log::trace!("processing line: {}", local);
-            if let Some(res) = self.env.dispatch(Some(&mut xous_ipc::String::<1024>::from_str(&local)), None).expect("command dispatch failed") {
-                #[cfg(feature="tts")]
+            if let Some(res) = self
+                .env
+                .dispatch(Some(&mut xous_ipc::String::<1024>::from_str(&local)), None)
+                .expect("command dispatch failed")
+            {
+                #[cfg(feature = "tts")]
                 {
                     let mut output = t!("shellchat.output-tts", locales::LANG).to_string();
                     output.push_str(res.as_str().unwrap_or("UTF-8 error"));
                     self.tts.tts_simple(&output).unwrap();
                 }
-                let output_history = History {
-                    text: String::from(res.as_str().unwrap_or("UTF-8 Error")),
-                    is_input: false
-                };
+                let output_history =
+                    History { text: String::from(res.as_str().unwrap_or("UTF-8 Error")), is_input: false };
                 self.circular_push(output_history);
             } else {
                 dirty = false;
@@ -247,16 +255,14 @@ impl Repl{
         } else if let Some(msg) = &self.msg {
             log::trace!("processing callback msg: {:?}", msg);
             if let Some(res) = self.env.dispatch(None, Some(msg)).expect("callback failed") {
-                #[cfg(feature="tts")]
+                #[cfg(feature = "tts")]
                 {
                     let mut output = t!("shellchat.output-tts", locales::LANG).to_string();
                     output.push_str(res.as_str().unwrap_or("UTF-8 error"));
                     self.tts.tts_simple(&output).unwrap();
                 }
-                let output_history = History {
-                    text: String::from(res.as_str().unwrap_or("UTF-8 Error")),
-                    is_input: false
-                };
+                let output_history =
+                    History { text: String::from(res.as_str().unwrap_or("UTF-8 Error")), is_input: false };
                 self.circular_push(output_history);
             } else {
                 dirty = false;
@@ -280,15 +286,18 @@ impl Repl{
     }
 
     fn clear_area(&self) {
-        self.gam.draw_rectangle(self.content,
-            Rectangle::new_with_style(Point::new(0, 0), self.screensize,
-            DrawStyle {
-                fill_color: Some(PixelColor::Light),
-                stroke_color: None,
-                stroke_width: 0
-            }
-        )).expect("can't clear content area");
+        self.gam
+            .draw_rectangle(
+                self.content,
+                Rectangle::new_with_style(
+                    Point::new(0, 0),
+                    self.screensize,
+                    DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 },
+                ),
+            )
+            .expect("can't clear content area");
     }
+
     fn redraw(&mut self, _init_done: bool) -> Result<(), xous::Error> {
         log::trace!("going into redraw");
         self.clear_area();
@@ -297,12 +306,10 @@ impl Repl{
         if !_init_done {
             let mut init_tv = TextView::new(
                 self.content,
-                TextBounds::CenteredTop(
-                    Rectangle::new(
-                        Point::new(0, self.screensize.y / 3 - 64),
-                        Point::new(self.screensize.x, self.screensize.y / 3)
-                    )
-                )
+                TextBounds::CenteredTop(Rectangle::new(
+                    Point::new(0, self.screensize.y / 3 - 64),
+                    Point::new(self.screensize.x, self.screensize.y / 3),
+                )),
             );
             init_tv.style = graphics_server::GlyphStyle::Bold;
             init_tv.draw_border = false;
@@ -318,18 +325,20 @@ impl Repl{
         // iterator returns from oldest to newest
         // .rev() iterator is from newest to oldest
         for h in self.history.iter().rev() {
-            let mut bubble_tv =
-                if h.is_input {
-                    TextView::new(self.content,
+            let mut bubble_tv = if h.is_input {
+                TextView::new(
+                    self.content,
                     TextBounds::GrowableFromBr(
                         Point::new(self.screensize.x - self.margin.x, bubble_baseline),
-                        self.bubble_width))
-                } else {
-                    TextView::new(self.content,
-                        TextBounds::GrowableFromBl(
-                            Point::new(self.margin.x, bubble_baseline),
-                            self.bubble_width))
-                };
+                        self.bubble_width,
+                    ),
+                )
+            } else {
+                TextView::new(
+                    self.content,
+                    TextBounds::GrowableFromBl(Point::new(self.margin.x, bubble_baseline), self.bubble_width),
+                )
+            };
             if h.is_input {
                 bubble_tv.border_width = 1;
             } else {
@@ -340,14 +349,15 @@ impl Repl{
             bubble_tv.rounded_border = Some(self.bubble_radius);
             bubble_tv.style = gam::SYSTEM_STYLE;
             bubble_tv.margin = self.bubble_margin;
-            bubble_tv.ellipsis = false; bubble_tv.insertion = None;
+            bubble_tv.ellipsis = false;
+            bubble_tv.insertion = None;
             write!(bubble_tv.text, "{}", h.text.as_str()).expect("couldn't write history text to TextView");
             log::trace!("posting {}", bubble_tv.text);
             self.gam.post_textview(&mut bubble_tv).expect("couldn't render bubble textview");
 
             if let Some(bounds) = bubble_tv.bounds_computed {
-                // we only subtract 1x of the margin because the bounds were computed from a "bottom right" that already counted
-                // the margin once.
+                // we only subtract 1x of the margin because the bounds were computed from a "bottom right"
+                // that already counted the margin once.
                 bubble_baseline -= (bounds.br.y - bounds.tl.y) + self.bubble_space + self.bubble_margin.y;
                 if bubble_baseline <= 0 {
                     // don't draw history that overflows the top of the screen
@@ -365,7 +375,7 @@ impl Repl{
 }
 
 ////////////////// local message passing from Ux Callback
-use num_traits::{ToPrimitive, FromPrimitive};
+use num_traits::{FromPrimitive, ToPrimitive};
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 enum ShellOpcode {
@@ -382,19 +392,14 @@ enum ShellOpcode {
 
 // nothing prevents the two from being the same, other than naming conventions
 pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_"; // used internally by xous-names
-fn main () -> ! {
-    #[cfg(not(any(feature="ditherpunk", feature="locktests")))]
+fn main() -> ! {
+    #[cfg(not(any(feature = "ditherpunk", feature = "locktests")))]
     wrapped_main();
 
-    #[cfg(any(feature="ditherpunk", feature="locktests"))]
+    #[cfg(any(feature = "ditherpunk", feature = "locktests"))]
     let stack_size = 8192 * 1024;
-    #[cfg(any(feature="ditherpunk", feature="locktests"))]
-    std::thread::Builder::new()
-        .stack_size(stack_size)
-        .spawn(wrapped_main)
-        .unwrap()
-        .join()
-        .unwrap()
+    #[cfg(any(feature = "ditherpunk", feature = "locktests"))]
+    std::thread::Builder::new().stack_size(stack_size).spawn(wrapped_main).unwrap().join().unwrap()
 }
 fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
@@ -406,7 +411,7 @@ fn wrapped_main() -> ! {
     let shch_sid = xns.register_name(SERVER_NAME_SHELLCHAT, None).expect("can't register server");
     //log::trace!("registered with NS -- {:?}", shch_sid);
 
-    #[cfg(feature="tts")]
+    #[cfg(feature = "tts")]
     let tts = TtsFrontend::new(&xns).unwrap();
 
     let mut repl = Repl::new(&xns, shch_sid);
@@ -423,9 +428,11 @@ fn wrapped_main() -> ! {
             let pddb = pddb::Pddb::new();
             pddb.mount_attempted_blocking();
             pddb_init_done.store(true, Ordering::SeqCst);
-            xous::send_message(main_conn,
-                xous::Message::new_scalar(ShellOpcode::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
-            ).ok();
+            xous::send_message(
+                main_conn,
+                xous::Message::new_scalar(ShellOpcode::Redraw.to_usize().unwrap(), 0, 0, 0, 0),
+            )
+            .ok();
         }
     });
 
@@ -437,14 +444,14 @@ fn wrapped_main() -> ! {
     }
     loop {
         let msg = xous::receive_message(shch_sid).unwrap();
-        let shell_op: Option::<ShellOpcode> = FromPrimitive::from_usize(msg.body.id());
+        let shell_op: Option<ShellOpcode> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("Shellchat got message {:?}", msg);
         match shell_op {
             Some(ShellOpcode::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
                 log::trace!("shell got input line: {}", s.as_str());
-                #[cfg(feature="tts")]
+                #[cfg(feature = "tts")]
                 {
                     let mut input = t!("shellchat.input-tts", locales::LANG).to_string();
                     input.push_str(s.as_str());
@@ -482,7 +489,8 @@ fn wrapped_main() -> ! {
             }
         }
         if update_repl {
-            repl.update(was_callback, pddb_init_done.load(Ordering::SeqCst)).expect("REPL had problems updating");
+            repl.update(was_callback, pddb_init_done.load(Ordering::SeqCst))
+                .expect("REPL had problems updating");
             update_repl = false;
         }
         log::trace!("reached bottom of main loop");
@@ -495,7 +503,7 @@ fn wrapped_main() -> ! {
     xous::terminate_process(0)
 }
 
-#[cfg(feature="autobasis-ci")]
+#[cfg(feature = "autobasis-ci")]
 fn autobasis_launcher(sid: xous::SID) {
     let _ = std::thread::spawn({
         let conn = xous::connect(sid).unwrap();

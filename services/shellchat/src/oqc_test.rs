@@ -1,9 +1,10 @@
-use num_traits::*;
-use keyboard::{RowCol, KeyRawStates};
-use core::sync::atomic::{AtomicU32, Ordering, AtomicBool};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
-pub(crate) const SERVER_NAME_OQC: &str     = "_Outgoing Quality Check Test Program_";
+use keyboard::{KeyRawStates, RowCol};
+use num_traits::*;
+
+pub(crate) const SERVER_NAME_OQC: &str = "_Outgoing Quality Check Test Program_";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum OqcOp {
@@ -21,7 +22,7 @@ static SERVER_STARTED: AtomicBool = AtomicBool::new(false);
 pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
     // only start the server once!
     if SERVER_STARTED.load(Ordering::SeqCst) {
-        return
+        return;
     }
     SERVER_STARTED.store(true, Ordering::SeqCst);
 
@@ -31,10 +32,7 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
 
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     //let kbd = keyboard::Keyboard::new(&xns).unwrap();
-    kbd.register_raw_listener(
-        SERVER_NAME_OQC,
-        OqcOp::KeyCode.to_usize().unwrap()
-    );
+    kbd.register_raw_listener(SERVER_NAME_OQC, OqcOp::KeyCode.to_usize().unwrap());
     let com = com::Com::new(&xns).unwrap();
     let llio = llio::Llio::new(&xns);
     let gam = gam::Gam::new(&xns).unwrap();
@@ -63,19 +61,22 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
                     gam.selftest(8_000); // 12_000 by default
 
                     // now start the keyboard test
-                    timeout = if timeout_set > 120_000 {
-                        120_000
-                    } else {
-                        timeout_set as u64
-                    };
+                    timeout = if timeout_set > 120_000 { 120_000 } else { timeout_set as u64 };
                     start_time = ticktimer.elapsed_ms();
                     last_redraw_time = start_time;
                     log::info!("raising modal");
                     render_string(&mut bot_str, &remaining, timeout - (ticktimer.elapsed_ms() - start_time));
-                    modal.dynamic_notification(None, Some(bot_str.as_str())).expect("couldn't raise test modal");
+                    modal
+                        .dynamic_notification(None, Some(bot_str.as_str()))
+                        .expect("couldn't raise test modal");
 
                     // start a thread that advances the timer when not hitting keys
-                    xous::create_thread_2(ping_thread, xous::connect(oqc_sid).unwrap() as usize, timeout as usize).unwrap();
+                    xous::create_thread_2(
+                        ping_thread,
+                        xous::connect(oqc_sid).unwrap() as usize,
+                        timeout as usize,
+                    )
+                    .unwrap();
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
                     xous::return_scalar(msg.sender, 0).unwrap();
@@ -93,20 +94,21 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
                         let buffer = unsafe {
                             xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap())
                         };
-                        let krs = buffer.to_original::<[(u8, u8); 32],_>().unwrap();
+                        let krs = buffer.to_original::<[(u8, u8); 32], _>().unwrap();
                         let mut rawstates = KeyRawStates::new();
                         for &(r, c) in krs[..16].iter() {
                             if r != 255 || c != 255 {
-                                rawstates.keydowns.push(RowCol{r, c});
+                                rawstates.keydowns.push(RowCol { r, c });
                             }
                         }
                         for &(r, c) in krs[16..].iter() {
-                            if r!= 255 || c != 255 {
-                                rawstates.keyups.push(RowCol{r, c});
+                            if r != 255 || c != 255 {
+                                rawstates.keyups.push(RowCol { r, c });
                             }
                         }
 
-                        if rawstates.keydowns.len() > 0 { // only worry about keydowns
+                        if rawstates.keydowns.len() > 0 {
+                            // only worry about keydowns
                             for &key in rawstates.keydowns.iter() {
                                 for (rc, hit) in remaining.iter_mut() {
                                     if *rc == key {
@@ -114,9 +116,12 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
                                     }
                                 }
                             }
-                            if elapsed - last_redraw_time > 100 { // rate limit redraws to 10Hz
+                            if elapsed - last_redraw_time > 100 {
+                                // rate limit redraws to 10Hz
                                 render_string(&mut bot_str, &remaining, timeout - (elapsed - start_time));
-                                modal.dynamic_notification_update(None, Some(bot_str.as_str())).expect("couldn't update test modal");
+                                modal
+                                    .dynamic_notification_update(None, Some(bot_str.as_str()))
+                                    .expect("couldn't update test modal");
                                 last_redraw_time = elapsed;
                                 llio.vibe(llio::VibePattern::Short).unwrap();
                             }
@@ -149,11 +154,12 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
                     }
                 } else {
                     // simply ignore the reports in
-                    // we have to register our key listener early on, otherwise the rootkeys won't work for normal use
-                    // we do want the keyboard listener slots to be fully occupied, otherwise something nefarious could
-                    // squat the unused port...
+                    // we have to register our key listener early on, otherwise the rootkeys won't work for
+                    // normal use we do want the keyboard listener slots to be fully
+                    // occupied, otherwise something nefarious could squat the unused
+                    // port...
                 }
-            },
+            }
             Some(OqcOp::Status) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let _ = match passing {
                     None => xous::return_scalar(msg.sender, 0),
@@ -164,11 +170,11 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
             Some(OqcOp::UxGutter) => {
                 // log::info!("gutter");
                 // an intentional NOP for UX actions that require a destintation but need no action
-            },
+            }
             Some(OqcOp::ModalRedraw) => {
                 // log::info!("modal redraw handler");
                 // test_modal.redraw();
-            },
+            }
             Some(OqcOp::ModalKeys) => xous::msg_scalar_unpack!(msg, _k1, _k2, _k3, _k4, {
                 // log::info!("modal keys message, ignoring");
                 // ignore keys, we have our own key routine
@@ -193,7 +199,7 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
     log::trace!("quitting oqc server");
 }
 
-fn populate_vectors() -> Vec::<(RowCol, bool)> {
+fn populate_vectors() -> Vec<(RowCol, bool)> {
     let mut vectors = Vec::<(RowCol, bool)>::new();
     vectors.push((RowCol::new(0, 0), false));
     vectors.push((RowCol::new(0, 1), false));
@@ -321,7 +327,7 @@ fn map_codes(code: RowCol) -> &'static str {
     }
 }
 
-fn render_string(txt: &mut String, remaining: &Vec::<(RowCol, bool)>, time_remaining: u64) {
+fn render_string(txt: &mut String, remaining: &Vec<(RowCol, bool)>, time_remaining: u64) {
     txt.clear();
     let mut keyrowstrs: [String; 7] = [
         String::from("▶ "),
@@ -338,12 +344,36 @@ fn render_string(txt: &mut String, remaining: &Vec::<(RowCol, bool)>, time_remai
             let draw_row = match code.r {
                 0 | 4 => 2,
                 1 => 3,
-                5 => if code.c != 2 {3} else {0},
+                5 => {
+                    if code.c != 2 {
+                        3
+                    } else {
+                        0
+                    }
+                }
                 2 => 4,
-                6 => if code.c != 4 {4} else {0},
-                3 => if code.c <= 4 {5} else { if code.c == 6 {0} else {1} }
+                6 => {
+                    if code.c != 4 {
+                        4
+                    } else {
+                        0
+                    }
+                }
+                3 => {
+                    if code.c <= 4 {
+                        5
+                    } else {
+                        if code.c == 6 { 0 } else { 1 }
+                    }
+                }
                 7 => 5,
-                8 => if code.c >= 5 {6} else { if code.c <= 1 {1} else {0} },
+                8 => {
+                    if code.c >= 5 {
+                        6
+                    } else {
+                        if code.c <= 1 { 1 } else { 0 }
+                    }
+                }
                 _ => 6,
             };
             keyrowstrs[draw_row].push_str(map_codes(code));
@@ -371,7 +401,9 @@ fn ping_thread(conn: usize, timeout: usize) {
     krs_ser[0] = (254, 254);
     while tt.elapsed_ms() - start < timeout as u64 {
         tt.sleep_ms(2000).unwrap();
-        let buf = xous_ipc::Buffer::into_buf(krs_ser).or(Err(xous::Error::InternalError)).expect("couldn't serialize krs buffer");
+        let buf = xous_ipc::Buffer::into_buf(krs_ser)
+            .or(Err(xous::Error::InternalError))
+            .expect("couldn't serialize krs buffer");
         buf.send(conn as xous::CID, OqcOp::KeyCode.to_u32().unwrap()).expect("couldn't send raw scancodes");
     }
 }

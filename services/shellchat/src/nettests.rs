@@ -1,11 +1,10 @@
 use std::io::{ErrorKind, IoSlice, IoSliceMut, Read, Write};
 use std::net::*;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::channel;
 use std::thread;
 use std::time::{Duration, Instant};
-
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub(crate) fn start_batch_tests() {
     let netmgr = net::NetManager::new();
@@ -36,15 +35,15 @@ pub(crate) fn start_batch_tests() {
 
                 // This test can fail if there is a ticktimer scheduling error:
                 /*
-                    INFO:shellchat::nettests: ################################################## write_close (services\shellchat\src\nettests.rs:35)
-                    INFO:shellchat::nettests: ++++++++++++++++++++++++++create server (services\shellchat\src\nettests.rs:252)
-                    INFO:shellchat::nettests: ++++++++++++++++++++++++++try to establish connection (services\shellchat\src\nettests.rs:265)
-                    INFO:shellchat::nettests: ++++++++++++++++++++++++++established (services\shellchat\src\nettests.rs:267)
-                    INFO:shellchat::nettests: ----------------------------create and drop connection to server (services\shellchat\src\nettests.rs:257)
-                    INFO:shellchat::nettests: ----------------------------signal that we should proceed to send the data to the closed server (services\shellchat\src\nettests.rs:262)
-                    ERR :xous_ticktimer: requested to wake 1 entries, which is more than the current 2 waiting entries (services\xous-ticktimer\src\main.rs:429)
-                       -- hangs here forever.
-                 */
+                   INFO:shellchat::nettests: ################################################## write_close (services\shellchat\src\nettests.rs:35)
+                   INFO:shellchat::nettests: ++++++++++++++++++++++++++create server (services\shellchat\src\nettests.rs:252)
+                   INFO:shellchat::nettests: ++++++++++++++++++++++++++try to establish connection (services\shellchat\src\nettests.rs:265)
+                   INFO:shellchat::nettests: ++++++++++++++++++++++++++established (services\shellchat\src\nettests.rs:267)
+                   INFO:shellchat::nettests: ----------------------------create and drop connection to server (services\shellchat\src\nettests.rs:257)
+                   INFO:shellchat::nettests: ----------------------------signal that we should proceed to send the data to the closed server (services\shellchat\src\nettests.rs:262)
+                   ERR :xous_ticktimer: requested to wake 1 entries, which is more than the current 2 waiting entries (services\xous-ticktimer\src\main.rs:429)
+                      -- hangs here forever.
+                */
                 log::info!("################################################## write_close");
                 tt.sleep_ms(PRINT_DELAY).ok();
                 write_close();
@@ -127,12 +126,16 @@ pub(crate) fn start_batch_tests() {
             log::info!("################################################## multiple_connect_serial");
             tt.sleep_ms(PRINT_DELAY).ok();
             multiple_connect_serial();
-            log::info!("################################################## multiple_connect_interleaved_greedy_schedule");
+            log::info!(
+                "################################################## multiple_connect_interleaved_greedy_schedule"
+            );
             tt.sleep_ms(PRINT_DELAY).ok();
             netmgr.set_debug_level(log::LevelFilter::Debug);
             multiple_connect_interleaved_greedy_schedule();
             netmgr.set_debug_level(log::LevelFilter::Info);
-            log::info!("################################################## multiple_connect_interleaved_lazy_schedule");
+            log::info!(
+                "################################################## multiple_connect_interleaved_lazy_schedule"
+            );
             tt.sleep_ms(PRINT_DELAY).ok();
             netmgr.set_debug_level(log::LevelFilter::Trace);
             multiple_connect_interleaved_lazy_schedule();
@@ -146,7 +149,6 @@ pub(crate) fn start_batch_tests() {
     });
 }
 
-
 static PORT: AtomicUsize = AtomicUsize::new(0);
 
 fn base_port() -> u16 { 19600 }
@@ -156,9 +158,7 @@ pub fn next_test_ip4() -> SocketAddr {
     SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), port))
 }
 
-fn each_ip(f: &mut dyn FnMut(SocketAddr)) {
-    f(next_test_ip4());
-}
+fn each_ip(f: &mut dyn FnMut(SocketAddr)) { f(next_test_ip4()); }
 
 macro_rules! t {
     ($e:expr) => {
@@ -172,27 +172,27 @@ macro_rules! t {
 fn bind_error() {
     match TcpListener::bind("1.1.1.1:9999") {
         Ok(..) => panic!(),
-        Err(e) =>
-        {
+        Err(e) => {
             assert_eq!(e.kind(), ErrorKind::AddrNotAvailable); // this will break on earlier versions of stdlib
         }
     }
 }
 
 fn connect_error() {
-    match TcpStream::connect(("0.0.0.0",1)) {
+    match TcpStream::connect(("0.0.0.0", 1)) {
         Ok(..) => panic!(),
         Err(e) => {
             log::info!("connect_error is {:?}", e);
             assert!(
-            e.kind() == ErrorKind::ConnectionRefused
+                e.kind() == ErrorKind::ConnectionRefused
                 || e.kind() == ErrorKind::InvalidInput // this is how we will report it in 1.62.1
                 || e.kind() == ErrorKind::AddrInUse
                 || e.kind() == ErrorKind::AddrNotAvailable, // this is how it's reported on Windows
-            "bad error: {} {:?}",
-            e,
-            e.kind()
-        )},
+                "bad error: {} {:?}",
+                e,
+                e.kind()
+            )
+        }
     }
 }
 
@@ -289,7 +289,9 @@ fn write_close() {
             // it is stuck on FinWait2
             // the Listener is not responding with an ACK
             tx.send(()).unwrap();
-            log::info!("----------------------------signal that we should proceed to send the data to the closed server");
+            log::info!(
+                "----------------------------signal that we should proceed to send the data to the closed server"
+            );
         });
 
         log::info!("++++++++++++++++++++++++++try to establish connection");
@@ -306,7 +308,8 @@ fn write_close() {
                     e.kind() == ErrorKind::ConnectionReset
                         || e.kind() == ErrorKind::BrokenPipe
                         || e.kind() == ErrorKind::ConnectionAborted,
-                    "unknown error: {}", e
+                    "unknown error: {}",
+                    e
                 );
             }
         }
@@ -379,7 +382,6 @@ fn multiple_connect_interleaved_greedy_schedule() {
     }
 }
 
-
 fn multiple_connect_interleaved_lazy_schedule() {
     const MAX: usize = 3;
     each_ip(&mut |addr| {
@@ -413,7 +415,6 @@ fn multiple_connect_interleaved_lazy_schedule() {
         t.join().ok().expect("thread panicked");
     }
 }
-
 
 fn partial_read() {
     each_ip(&mut |addr| {
@@ -486,7 +487,6 @@ fn write_vectored() {
         }
     })
 }
-
 
 fn tcp_clone_smoke() {
     each_ip(&mut |addr| {
@@ -669,7 +669,6 @@ fn clone_accept_concurrent() {
     })
 }
 
-
 // FIXME: re-enabled openbsd tests once their socket timeout code
 //        no longer has rounding errors.
 // VxWorks ignores SO_SNDTIMEO.
@@ -720,11 +719,7 @@ fn test_read_timeout() {
     let mut buf = [0; 10];
     let start = Instant::now();
     let kind = stream.read_exact(&mut buf).err().expect("expected error").kind();
-    assert!(
-        kind == ErrorKind::WouldBlock || kind == ErrorKind::TimedOut,
-        "unexpected_error: {:?}",
-        kind
-    );
+    assert!(kind == ErrorKind::WouldBlock || kind == ErrorKind::TimedOut, "unexpected_error: {:?}", kind);
     assert!(start.elapsed() > Duration::from_millis(400));
     drop(listener);
 }
@@ -745,11 +740,7 @@ fn test_read_with_timeout() {
 
     let start = Instant::now();
     let kind = stream.read_exact(&mut buf).err().expect("expected error").kind();
-    assert!(
-        kind == ErrorKind::WouldBlock || kind == ErrorKind::TimedOut,
-        "unexpected_error: {:?}",
-        kind
-    );
+    assert!(kind == ErrorKind::WouldBlock || kind == ErrorKind::TimedOut, "unexpected_error: {:?}", kind);
     assert!(start.elapsed() > Duration::from_millis(400));
     drop(listener);
 }

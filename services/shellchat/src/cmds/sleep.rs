@@ -1,6 +1,8 @@
-use crate::{ShellCmdApi,CommonEnv};
-use xous_ipc::String;
 use std::thread;
+
+use xous_ipc::String;
+
+use crate::{CommonEnv, ShellCmdApi};
 
 #[derive(Debug)]
 pub struct Sleep {
@@ -8,9 +10,7 @@ pub struct Sleep {
 }
 impl Sleep {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        Sleep {
-            susres: susres::Susres::new_without_hook(&xns).unwrap(),
-        }
+        Sleep { susres: susres::Susres::new_without_hook(&xns).unwrap() }
     }
 }
 
@@ -41,9 +41,15 @@ fn kill_thread(bounce: usize) {
 }
 
 impl<'a> ShellCmdApi<'a> for Sleep {
-    cmd_api!(sleep); // inserts boilerplate for command API
+    cmd_api!(sleep);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    // inserts boilerplate for command API
+
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         use core::fmt::Write;
 
         let mut ret = String::<1024>::new();
@@ -70,7 +76,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                         Err(xous::Error::Timeout) => {
                             write!(ret, "Couldn't suspend, a server was blocking suspend.\n").ok();
                         }
-                        Ok(_) => {},
+                        Ok(_) => {}
                         Err(e) => {
                             write!(ret, "Unknown error on suspend: {:?}", e).ok();
                         }
@@ -98,11 +104,16 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                                 match susres.initiate_suspend() {
                                     Err(xous::Error::Timeout) => {
                                         timeouts += 1;
-                                        log::warn!("Couldn't suspend, a server was blocking suspend. ({}/{})\n", timeouts, iters);
-                                        // wait enough time for the wakeup alarm to have happened before resuming the cycle
+                                        log::warn!(
+                                            "Couldn't suspend, a server was blocking suspend. ({}/{})\n",
+                                            timeouts,
+                                            iters
+                                        );
+                                        // wait enough time for the wakeup alarm to have happened before
+                                        // resuming the cycle
                                         ticktimer.sleep_ms(6000).unwrap();
                                     }
-                                    Ok(_) => {},
+                                    Ok(_) => {}
                                     Err(e) => {
                                         log::error!("Unknown error on suspend: {:?}", e);
                                     }
@@ -112,12 +123,18 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                             }
                         }
                     });
-                    write!(ret, "Starting suspend/resume stress test. Hard reboot required to exit.").unwrap();
+                    write!(ret, "Starting suspend/resume stress test. Hard reboot required to exit.")
+                        .unwrap();
                 }
                 "now" => {
-                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 1.5V
+                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
+                        // 1.5V
                         // if power is plugged in, deny powerdown request
-                        write!(ret, "System can't sleep while charging. Unplug charging cable and try again.").unwrap();
+                        write!(
+                            ret,
+                            "System can't sleep while charging. Unplug charging cable and try again."
+                        )
+                        .unwrap();
                     } else {
                         if Ok(true) == env.gam.powerdown_request() {
                             let pddb = pddb::Pddb::new();
@@ -148,7 +165,8 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                     }
                 }
                 "ship" => {
-                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 1.5V
+                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
+                        // 1.5V
                         // if power is plugged in, deny powerdown request
                         write!(ret, "System can't go into ship mode while charging. Unplug charging cable and try again.").unwrap();
                     } else {
@@ -179,7 +197,11 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                 "coldboot" => {
                     if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                         // if power is plugged in, deny powerdown request
-                        write!(ret, "System can't cold boot while charging. Unplug charging cable and try again.").unwrap();
+                        write!(
+                            ret,
+                            "System can't cold boot while charging. Unplug charging cable and try again."
+                        )
+                        .unwrap();
                     } else {
                         if Ok(true) == env.gam.powerdown_request() {
                             let pddb = pddb::Pddb::new();
@@ -214,7 +236,8 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                         // if power is plugged in, deny powerdown request
                         write!(ret, "Unplug charging cable and try again.").unwrap();
                     } else {
-                        write!(ret, "Killing this device in 3 seconds, then bouncing into ship mode\n").unwrap();
+                        write!(ret, "Killing this device in 3 seconds, then bouncing into ship mode\n")
+                            .unwrap();
                         xous::create_thread_1(kill_thread, 1).unwrap();
                     }
                 }
@@ -232,7 +255,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                     env.llio.gpio_debug_wakeup(true).unwrap();
                     write!(ret, "Connecting CRG powerdown to GPIO0, wakeup interrupt to GPIO1").unwrap();
                 }
-                _ =>  write!(ret, "{}", helpstring).unwrap(),
+                _ => write!(ret, "{}", helpstring).unwrap(),
             }
         } else {
             write!(ret, "{}", helpstring).unwrap();

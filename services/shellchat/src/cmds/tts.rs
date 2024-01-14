@@ -1,24 +1,28 @@
-use crate::{ShellCmdApi, CommonEnv};
-use xous_ipc::String;
-use tts_frontend::*;
 use core::fmt::Write;
+
+use tts_frontend::*;
+use xous_ipc::String;
+
+use crate::{CommonEnv, ShellCmdApi};
 
 #[derive(Debug)]
 pub struct Tts {
     pub fe: TtsFrontend,
 }
 impl Tts {
-    pub fn new(xns: &xous_names::XousNames) -> Tts {
-        Tts {
-            fe: TtsFrontend::new(xns).unwrap(),
-        }
-    }
+    pub fn new(xns: &xous_names::XousNames) -> Tts { Tts { fe: TtsFrontend::new(xns).unwrap() } }
 }
 
 impl<'a> ShellCmdApi<'a> for Tts {
-    cmd_api!(tts); // inserts boilerplate for command API
+    cmd_api!(tts);
 
-    fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    // inserts boilerplate for command API
+
+    fn process(
+        &mut self,
+        args: String<1024>,
+        _env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         let helpstring = "tts options: speak";
 
@@ -35,14 +39,12 @@ impl<'a> ShellCmdApi<'a> for Tts {
                     write!(ret, "{}", helpstring).unwrap();
                 }
             }
-
         } else {
             write!(ret, "{}", helpstring).unwrap();
         }
         Ok(Some(ret))
     }
 }
-
 
 fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>) {
     for (i, tok) in tokens.enumerate() {

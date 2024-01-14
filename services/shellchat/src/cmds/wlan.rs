@@ -1,7 +1,9 @@
-use crate::{CommonEnv, ShellCmdApi};
 use core::fmt::Write;
 use std::io::Write as PddbWrite;
+
 use xous_ipc::String;
+
+use crate::{CommonEnv, ShellCmdApi};
 
 #[derive(Debug)]
 pub struct Wlan {
@@ -9,9 +11,7 @@ pub struct Wlan {
     current_pass: Option<std::string::String>,
 }
 impl Wlan {
-    pub fn new() -> Self {
-        Wlan { current_ssid: None, current_pass: None }
-    }
+    pub fn new() -> Self { Wlan { current_ssid: None, current_pass: None } }
 }
 
 /**
@@ -26,7 +26,9 @@ wlan shell command:
 - status: get wlan radio status (power state? connected? AP info?)
 */
 impl<'a> ShellCmdApi<'a> for Wlan {
-    cmd_api!(wlan); // inserts boilerplate for command API
+    cmd_api!(wlan);
+
+    // inserts boilerplate for command API
 
     fn process(
         &mut self,
@@ -65,8 +67,13 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                         let _ = match env.com.wlan_set_ssid(val.as_str().expect("not valid utf-8")) {
                             Ok(_) => {
                                 self.current_ssid = Some(std::string::String::from(val.as_str().unwrap()));
-                                write!(ret, "wlan setssid {}.\nConnection manager paused during configuration.", val).unwrap()
-                            },
+                                write!(
+                                    ret,
+                                    "wlan setssid {}.\nConnection manager paused during configuration.",
+                                    val
+                                )
+                                .unwrap()
+                            }
                             Err(_) => write!(ret, "Error: SSID too long for WF200").unwrap(),
                         };
                     }
@@ -78,8 +85,13 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     let _ = match env.com.wlan_set_pass(val.as_str().expect("not valid utf-8")) {
                         Ok(_) => {
                             self.current_pass = Some(std::string::String::from(val.as_str().unwrap()));
-                            write!(ret, "wlan setpass {}.\nConnection manager paused during configuration.", val).unwrap()
-                        },
+                            write!(
+                                ret,
+                                "wlan setpass {}.\nConnection manager paused during configuration.",
+                                val
+                            )
+                            .unwrap()
+                        }
                         Err(_) => write!(ret, "Error: passphrase too long for WF200").unwrap(),
                     };
                 }
@@ -88,19 +100,33 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     if let Some(ssid) = &self.current_ssid {
                         if let Some(pass) = &self.current_pass {
                             match pddb.get(
-                                net::AP_DICT_NAME, &ssid, None,
-                                true, true, Some(com::api::WF200_PASS_MAX_LEN), Some(||{})) {
+                                net::AP_DICT_NAME,
+                                &ssid,
+                                None,
+                                true,
+                                true,
+                                Some(com::api::WF200_PASS_MAX_LEN),
+                                Some(|| {}),
+                            ) {
                                 Ok(mut entry) => {
                                     match entry.write(&pass.as_bytes()) {
                                         Ok(len) => {
                                             if len != pass.len() {
-                                                write!(ret, "PDDB wrote only {} of {} bytes of password", len, pass.len()).unwrap();
+                                                write!(
+                                                    ret,
+                                                    "PDDB wrote only {} of {} bytes of password",
+                                                    len,
+                                                    pass.len()
+                                                )
+                                                .unwrap();
                                             } else {
-                                                // for now, we should always call flush at the end of a routine; perhaps in the
+                                                // for now, we should always call flush at the end of a
+                                                // routine; perhaps in the
                                                 // future we'll have a timer that automatically syncs the pddb
                                                 entry.flush().expect("couldn't sync pddb cache");
                                                 write!(ret, "SSID/pass combo saved to PDDB.\nConnection manager started.").unwrap();
-                                                // restart the connection manager now that the key combo has been committed
+                                                // restart the connection manager now that the key combo has
+                                                // been committed
                                                 env.netmgr.connection_manager_run().unwrap();
                                             }
                                         }
@@ -108,7 +134,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                                             write!(ret, "PDDB error storing key: {:?}", e).unwrap();
                                         }
                                     }
-                                },
+                                }
                                 Err(e) => {
                                     write!(ret, "PDDB error creating key: {:?}", e).unwrap();
                                 }
@@ -138,7 +164,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     let _ = match env.com.wlan_join() {
                         Ok(_) => {
                             write!(ret, "wlan join.\nConnection manager still paused, use `save` to resume connection manager.").unwrap();
-                        },
+                        }
                         Err(e) => write!(ret, "Error: {:?}", e).unwrap(),
                     };
                 }
@@ -152,9 +178,14 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                 "status" => {
                     let _ = match env.com.wlan_status() {
                         Ok(msg) => {
-                            log::info!("{}WLAN.STATUS,{:?},{}", xous::BOOKEND_START, std::net::IpAddr::from(msg.ipv4.addr), xous::BOOKEND_END);
+                            log::info!(
+                                "{}WLAN.STATUS,{:?},{}",
+                                xous::BOOKEND_START,
+                                std::net::IpAddr::from(msg.ipv4.addr),
+                                xous::BOOKEND_END
+                            );
                             write!(ret, "{:?}\n{:x?}", msg, msg)
-                        },
+                        }
                         Err(e) => write!(ret, "Error: {:?}", e),
                     };
                 }

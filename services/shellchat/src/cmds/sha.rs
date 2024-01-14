@@ -1,12 +1,11 @@
-use crate::{ShellCmdApi, CommonEnv};
+use core::sync::atomic::{AtomicU32, Ordering};
+
+use digest::Digest;
+use num_traits::*;
+use sha2::*;
 use xous_ipc::String;
 
-use sha2::*;
-use digest::Digest;
-
-use num_traits::*;
-
-use core::sync::atomic::{AtomicU32, Ordering};
+use crate::{CommonEnv, ShellCmdApi};
 static CB_ID: AtomicU32 = AtomicU32::new(0);
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -71,18 +70,22 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             Some(BenchOp::StartSha512Hw) | Some(BenchOp::StartSha512Sw) => {
                 let mut hw_mode = true;
                 let mut hasher = match FromPrimitive::from_usize(msg.body.id()) {
-                    Some(BenchOp::StartSha512Sw) => {hw_mode = false; sha2::Sha512::new_with_strategy(FallbackStrategy::SoftwareOnly)},
+                    Some(BenchOp::StartSha512Sw) => {
+                        hw_mode = false;
+                        sha2::Sha512::new_with_strategy(FallbackStrategy::SoftwareOnly)
+                    }
                     _ => sha2::Sha512::new_with_strategy(FallbackStrategy::WaitForHardware),
                 };
                 let mut accumulator = [0 as u8; 64];
                 for i in 0..TEST_ITERS {
                     //log::debug!("iter {}", i);
-                    // pick a random length for the test -- this helps to exercise corner cases in the hash handler core
+                    // pick a random length for the test -- this helps to exercise corner cases in the hash
+                    // handler core
                     let iterlen = if TEST_FIXED_LEN {
                         TEST_MAX_LEN
                     } else {
                         if i < TEST_MAX_LEN - 2 {
-                            (dataset[i] as usize) | ((dataset[i+1] as usize) << 8) % TEST_MAX_LEN
+                            (dataset[i] as usize) | ((dataset[i + 1] as usize) << 8) % TEST_MAX_LEN
                         } else {
                             TEST_MAX_LEN
                         }
@@ -100,19 +103,24 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     }
                     *previous = current;
                 }
-                xous::send_message(callback_conn,
-                    xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
-                    if pass {1} else {0},
-                    if first_time {1} else {0},
-                    if hw_mode {1} else {0}, 0)
-                ).unwrap();
+                xous::send_message(
+                    callback_conn,
+                    xous::Message::new_scalar(
+                        CB_ID.load(Ordering::Relaxed) as usize,
+                        if pass { 1 } else { 0 },
+                        if first_time { 1 } else { 0 },
+                        if hw_mode { 1 } else { 0 },
+                        0,
+                    ),
+                )
+                .unwrap();
                 first_time = false;
                 log::debug!("accumulated result: {:x?}", last_result);
-            },
+            }
             Some(BenchOp::Quit) => {
                 log::info!("quitting benchmark thread");
                 break;
-            },
+            }
             None => {
                 log::error!("received unknown opcode");
             }
@@ -135,7 +143,14 @@ impl Sha {
         let cb_id = env.register_handler(String::<256>::from_str("sha"));
         CB_ID.store(cb_id, Ordering::Relaxed);
 
-        xous::create_thread_4(benchmark_thread, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+        xous::create_thread_4(
+            benchmark_thread,
+            sid_tuple.0 as usize,
+            sid_tuple.1 as usize,
+            sid_tuple.2 as usize,
+            sid_tuple.3 as usize,
+        )
+        .unwrap();
         Sha {
             susres: susres::Susres::new_without_hook(&xns).unwrap(),
             benchmark_cid: xous::connect(sid).unwrap(),
@@ -145,9 +160,15 @@ impl Sha {
 }
 
 impl<'a> ShellCmdApi<'a> for Sha {
-    cmd_api!(sha); // inserts boilerplate for command API
+    cmd_api!(sha);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    // inserts boilerplate for command API
+
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
         let helpstring = "sha [check] [check256] [hwbench] [swbench] [susres]";
@@ -157,13 +178,15 @@ impl<'a> ShellCmdApi<'a> for Sha {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "check" => {
-                    // check the sha512 operation with the test string from the OpenTitan reference implementation
+                    // check the sha512 operation with the test string from the OpenTitan reference
+                    // implementation
                     const K_DATA: &'static [u8; 142] = b"Every one suspects himself of at least one of the cardinal virtues, and this is mine: I am one of the few honest people that I have ever known";
                     const K_EXPECTED_DIGEST: [u8; 64] = [
-                       0x7a,0x72,0x6b,0xd1,0xc0,0x78,0xfc,0x02,0x7b,0xc9,0xe6,0x79,0x32,0x0a,0x57,0x18,
-                       0x51,0x20,0xe9,0xb2,0x71,0x88,0x3b,0x11,0xdf,0xfe,0x69,0x01,0xb2,0x47,0x09,0x4c,
-                       0x31,0xd0,0x4a,0xd0,0x4a,0x09,0x67,0x1a,0x01,0x50,0x12,0x40,0xc3,0x8c,0x5f,0xab,
-                       0x3a,0x3a,0x6d,0xf3,0x7a,0x7d,0xbd,0xff,0x6d,0xd8,0xbb,0x73,0x5d,0x46,0xe8,0xf7,
+                        0x7a, 0x72, 0x6b, 0xd1, 0xc0, 0x78, 0xfc, 0x02, 0x7b, 0xc9, 0xe6, 0x79, 0x32, 0x0a,
+                        0x57, 0x18, 0x51, 0x20, 0xe9, 0xb2, 0x71, 0x88, 0x3b, 0x11, 0xdf, 0xfe, 0x69, 0x01,
+                        0xb2, 0x47, 0x09, 0x4c, 0x31, 0xd0, 0x4a, 0xd0, 0x4a, 0x09, 0x67, 0x1a, 0x01, 0x50,
+                        0x12, 0x40, 0xc3, 0x8c, 0x5f, 0xab, 0x3a, 0x3a, 0x6d, 0xf3, 0x7a, 0x7d, 0xbd, 0xff,
+                        0x6d, 0xd8, 0xbb, 0x73, 0x5d, 0x46, 0xe8, 0xf7,
                     ];
 
                     let mut pass: bool = true;
@@ -172,7 +195,7 @@ impl<'a> ShellCmdApi<'a> for Sha {
                     hasher.update(K_DATA);
                     let digest = hasher.finalize();
 
-                    for(&expected, result) in K_EXPECTED_DIGEST.iter().zip(digest) {
+                    for (&expected, result) in K_EXPECTED_DIGEST.iter().zip(digest) {
                         if expected != result {
                             pass = false;
                         }
@@ -184,20 +207,23 @@ impl<'a> ShellCmdApi<'a> for Sha {
                     }
                 }
                 "check256" => {
-                    // check the sha512 operation with the test string from the OpenTitan reference implementation
+                    // check the sha512 operation with the test string from the OpenTitan reference
+                    // implementation
                     const K_DATA: &'static [u8; 142] = b"Every one suspects himself of at least one of the cardinal virtues, and this is mine: I am one of the few honest people that I have ever known";
                     const K_EXPECTED_DIGEST_256: [u8; 32] = [
-                        0x3d,0xfb,0xf2,0x09,0x57,0x9a,0xfe,0x4e,0xb9,0x1c,0xaf,0xe6,0xf5,0x8a,0x53,0x56,
-                        0xcc,0xc4,0xce,0x36,0xf1,0xed,0x77,0x44,0xe9,0x52,0x34,0x7f,0x79,0x61,0x9a,0x9f,
-                     ];
+                        0x3d, 0xfb, 0xf2, 0x09, 0x57, 0x9a, 0xfe, 0x4e, 0xb9, 0x1c, 0xaf, 0xe6, 0xf5, 0x8a,
+                        0x53, 0x56, 0xcc, 0xc4, 0xce, 0x36, 0xf1, 0xed, 0x77, 0x44, 0xe9, 0x52, 0x34, 0x7f,
+                        0x79, 0x61, 0x9a, 0x9f,
+                    ];
 
                     let mut pass: bool = true;
-                    let mut hasher = sha2::Sha512Trunc256::new_with_strategy(FallbackStrategy::WaitForHardware);
+                    let mut hasher =
+                        sha2::Sha512Trunc256::new_with_strategy(FallbackStrategy::WaitForHardware);
 
                     hasher.update(K_DATA);
                     let digest = hasher.finalize();
 
-                    for(&expected, result) in K_EXPECTED_DIGEST_256.iter().zip(digest) {
+                    for (&expected, result) in K_EXPECTED_DIGEST_256.iter().zip(digest) {
                         if expected != result {
                             pass = false;
                         }
@@ -211,25 +237,41 @@ impl<'a> ShellCmdApi<'a> for Sha {
                 "hwbench" => {
                     let start = env.ticktimer.elapsed_ms();
                     self.start_time = Some(start);
-                    xous::send_message(self.benchmark_cid,
-                        xous::Message::new_scalar(BenchOp::StartSha512Hw.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).unwrap();
-                    write!(ret, "Starting Sha512 hardware benchmark with {} iters, {} max_len, {} fixed_len", TEST_ITERS, TEST_MAX_LEN, TEST_FIXED_LEN).unwrap();
+                    xous::send_message(
+                        self.benchmark_cid,
+                        xous::Message::new_scalar(BenchOp::StartSha512Hw.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .unwrap();
+                    write!(
+                        ret,
+                        "Starting Sha512 hardware benchmark with {} iters, {} max_len, {} fixed_len",
+                        TEST_ITERS, TEST_MAX_LEN, TEST_FIXED_LEN
+                    )
+                    .unwrap();
                 }
                 "swbench" => {
                     let start = env.ticktimer.elapsed_ms();
                     self.start_time = Some(start);
-                    xous::send_message(self.benchmark_cid,
-                        xous::Message::new_scalar(BenchOp::StartSha512Sw.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).unwrap();
-                    write!(ret, "Starting Sha512 software benchmark with {} iters, {} max_len, {} fixed_len", TEST_ITERS, TEST_MAX_LEN, TEST_FIXED_LEN).unwrap();
+                    xous::send_message(
+                        self.benchmark_cid,
+                        xous::Message::new_scalar(BenchOp::StartSha512Sw.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .unwrap();
+                    write!(
+                        ret,
+                        "Starting Sha512 software benchmark with {} iters, {} max_len, {} fixed_len",
+                        TEST_ITERS, TEST_MAX_LEN, TEST_FIXED_LEN
+                    )
+                    .unwrap();
                 }
                 "susres" => {
                     let start = env.ticktimer.elapsed_ms();
                     self.start_time = Some(start);
-                    xous::send_message(self.benchmark_cid,
-                        xous::Message::new_scalar(BenchOp::StartSha512Hw.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).unwrap();
+                    xous::send_message(
+                        self.benchmark_cid,
+                        xous::Message::new_scalar(BenchOp::StartSha512Hw.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .unwrap();
                     let wait_time = (env.trng.get_u32().unwrap() % 2000) + 500; // at least half a second wait, up to 2 seconds
                     env.ticktimer.sleep_ms(wait_time as _).unwrap();
                     self.susres.initiate_suspend().unwrap();
@@ -239,14 +281,17 @@ impl<'a> ShellCmdApi<'a> for Sha {
                     write!(ret, "{}", helpstring).unwrap();
                 }
             }
-
         } else {
             write!(ret, "{}", helpstring).unwrap();
         }
         Ok(Some(ret))
     }
 
-    fn callback(&mut self, msg: &xous::MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(
+        &mut self,
+        msg: &xous::MessageEnvelope,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         use core::fmt::Write;
 
         log::debug!("benchmark callback");
@@ -262,11 +307,21 @@ impl<'a> ShellCmdApi<'a> for Sha {
             } else {
                 if pass != 0 {
                     write!(ret, "[{}] match to previous pass: {}ms/hash", modestr, elapsed).unwrap();
-                    log::info!("{}BENCH,SHA,PASS,{}ms/hash,{}", xous::BOOKEND_START, elapsed, xous::BOOKEND_END);
+                    log::info!(
+                        "{}BENCH,SHA,PASS,{}ms/hash,{}",
+                        xous::BOOKEND_START,
+                        elapsed,
+                        xous::BOOKEND_END
+                    );
                 } else {
                     // pass was 0, we failed
                     write!(ret, "[{}] FAILED match to previous pass: {}ms/hash", modestr, elapsed).unwrap();
-                    log::info!("{}BENCH,SHA,FAIL,{}ms/hash,{}", xous::BOOKEND_START, elapsed, xous::BOOKEND_END);
+                    log::info!(
+                        "{}BENCH,SHA,FAIL,{}ms/hash,{}",
+                        xous::BOOKEND_START,
+                        elapsed,
+                        xous::BOOKEND_END
+                    );
                 }
             }
         });
