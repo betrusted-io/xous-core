@@ -71,6 +71,7 @@ members = [
   "services/net",
   "services/dns",
   "services/log-test-client",
+  "services/test-spawn",
   "services/modals",
   "services/early_settings",
   "apps/app-loader",

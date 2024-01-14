@@ -4820,6 +4820,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-spawn"
+version = "0.1.0"
+dependencies = [
+ "xous 0.9.56 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
