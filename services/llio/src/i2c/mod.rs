@@ -7,7 +7,7 @@ mod hosted;
 #[cfg(not(target_os = "xous"))]
 pub use crate::i2c::hosted::*;
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod hardware;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub(crate) use crate::i2c::hardware::*;

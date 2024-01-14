@@ -4,24 +4,25 @@
 mod api;
 use api::*;
 mod i2c;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod llio_hw;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 use llio_hw::*;
 
 #[cfg(not(target_os = "xous"))]
 mod llio_hosted;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
+use std::thread;
+
 #[cfg(not(target_os = "xous"))]
 use llio_hosted::*;
-use crate::RTC_PWR_MODE;
 use num_traits::*;
-use xous_ipc::Buffer;
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack, Message, try_send_message};
 use xous::messages::sender::Sender;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, try_send_message, Message, CID};
+use xous_ipc::Buffer;
 
-use std::thread;
+use crate::RTC_PWR_MODE;
 
 // This is slower than most timeout specifiers, but it's easier to debug
 // when the check interval isn't creating a ton of log spew.
@@ -31,7 +32,7 @@ enum PumpOp {
     Pump,
 }
 
-fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBool>) {
+fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc<AtomicBool>) {
     let xns = xous_names::XousNames::new().unwrap();
 
     let handler_conn = xous::connect(i2c_sid).expect("couldn't make handler connection for i2c");
@@ -40,7 +41,13 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
 
     // register a suspend/resume listener
     let self_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, I2cOpcode::SuspendResume as u32, self_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(
+        Some(susres::SuspendOrder::Later),
+        &xns,
+        I2cOpcode::SuspendResume as u32,
+        self_cid,
+    )
+    .expect("couldn't create suspend/resume object");
 
     // timeout watcher
     let run = Arc::new(AtomicBool::new(false));
@@ -52,7 +59,8 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
         let run = run.clone();
         let cid = run_cid.clone();
         let main_cid = self_cid.clone();
-        // there is a hazard that msb/lsb is split once every 40 or so days for the precise moment of the rollover. meh?
+        // there is a hazard that msb/lsb is split once every 40 or so days for the precise moment of the
+        // rollover. meh?
         let target_msb = target_msb.clone();
         let target_lsb = target_lsb.clone();
         move || {
@@ -63,11 +71,26 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
                     Some(PumpOp::Pump) => msg_scalar_unpack!(msg, _, _, _, _, {
                         tt.sleep_ms(POLL_INTERVAL_MS).unwrap();
                         if run.load(Ordering::SeqCst) {
-                            let target_time = target_lsb.load(Ordering::SeqCst) as u64 | (target_msb.load(Ordering::SeqCst) as u64) << 32;
+                            let target_time = target_lsb.load(Ordering::SeqCst) as u64
+                                | (target_msb.load(Ordering::SeqCst) as u64) << 32;
                             if tt.elapsed_ms() >= target_time {
-                                try_send_message(main_cid, Message::new_scalar(I2cOpcode::I2cTimeout.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                                try_send_message(
+                                    main_cid,
+                                    Message::new_scalar(
+                                        I2cOpcode::I2cTimeout.to_usize().unwrap(),
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                    ),
+                                )
+                                .ok();
                             }
-                            try_send_message(cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                            try_send_message(
+                                cid,
+                                Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0),
+                            )
+                            .ok();
                         }
                     }),
                     _ => log::error!("Unrecognized message: {:?}", msg),
@@ -77,12 +100,12 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
     });
 
     let mut suspend_pending_token: Option<usize> = None;
-    let mut blocking_callers: Vec::<Sender> = Vec::new();
+    let mut blocking_callers: Vec<Sender> = Vec::new();
     let mut i2c_mutex_acquired = false;
     log::trace!("starting i2c main loop");
     loop {
         let msg = xous::receive_message(i2c_sid).unwrap();
-        let opcode: Option::<I2cOpcode> = FromPrimitive::from_usize(msg.body.id());
+        let opcode: Option<I2cOpcode> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("{:?}", opcode);
         match opcode {
             Some(I2cOpcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
@@ -127,7 +150,7 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
                     log::debug!("i2c mutex: blocking {:x?}", msg.sender);
                     blocking_callers.push(msg.sender);
                 }
-            },
+            }
             Some(I2cOpcode::I2cMutexRelease) => {
                 assert!(i2c_mutex_acquired == true, "i2c mutex was released when none was acquired");
                 let maybe_next = if !blocking_callers.is_empty() {
@@ -146,10 +169,14 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
                 if !i2c_mutex_acquired {
                     xous::return_scalar(msg.sender, 1).ok(); // acknowledge the release, after the mutex is marked false
                 }
-                // the somewhat awkward structure is because we want to guarantee the release of mutex before ack, while
-                // also guaranteeing that the ack happens before we allow the next thread to proceed
+                // the somewhat awkward structure is because we want to guarantee the release of mutex before
+                // ack, while also guaranteeing that the ack happens before we allow the next
+                // thread to proceed
                 if let Some(next) = maybe_next {
-                    assert!(i2c_mutex_acquired == true, "logic bug in passing mutex acquisition to next thread");
+                    assert!(
+                        i2c_mutex_acquired == true,
+                        "logic bug in passing mutex acquisition to next thread"
+                    );
                     log::debug!("i2c mutex: unblocking {:x?}", next);
                     xous::return_scalar(next, 1).ok(); // this unblocks the waiting thread, and immediately hands the quantum to that thread
                 }
@@ -159,7 +186,9 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
             }),
             Some(I2cOpcode::I2cTxRx) => {
                 if !i2c_mutex_acquired {
-                    log::warn!("TxRx operation was initiated without an acquired mutex. This is only allowed as the last operation before a shutdown.");
+                    log::warn!(
+                        "TxRx operation was initiated without an acquired mutex. This is only allowed as the last operation before a shutdown."
+                    );
                 }
                 i2c.initiate(msg);
                 // update the timeout interval to whatever was specified by the transaction
@@ -167,11 +196,15 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
                     target_msb.store((expiry >> 32) as u32, Ordering::SeqCst);
                     target_lsb.store(expiry as u32, Ordering::SeqCst);
                     run.store(true, Ordering::SeqCst);
-                    try_send_message(run_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                    try_send_message(
+                        run_cid,
+                        Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .ok();
                 }
-            },
+            }
             Some(I2cOpcode::I2cIsBusy) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                let busy = if i2c.is_busy() {1} else {0};
+                let busy = if i2c.is_busy() { 1 } else { 0 };
                 xous::return_scalar(msg.sender, busy as _).expect("couldn't return I2cIsBusy");
             }),
             Some(I2cOpcode::I2cTimeout) => {
@@ -206,7 +239,6 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc::<AtomicBoo
     xous::destroy_server(i2c_sid).unwrap();
 }
 
-
 #[derive(Copy, Clone, Debug)]
 struct ScalarCallback {
     server_to_cb_cid: CID,
@@ -235,7 +267,8 @@ fn main() -> ! {
     // - oqc-test (for testing the vibe motor)
     // - net (for COM interrupt dispatch)
     // - pddb also allocates a connection, but then releases it, to read the DNA field.
-    // We've migrated the I2C function out (which is arguably the most sensitive bit), so we can now set this more safely to unrestriced connection counts.
+    // We've migrated the I2C function out (which is arguably the most sensitive bit), so we can now set this
+    // more safely to unrestriced connection counts.
     let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", llio_sid);
 
@@ -243,10 +276,11 @@ fn main() -> ! {
     // - codec
     // - time server
     // - llio
-    // I2C can be used to set time, which can have security implications; we are more strict on counting who can have access to this resource.
-    #[cfg(all(any(feature="precursor", feature="renode"), not(feature="dvt")))]
+    // I2C can be used to set time, which can have security implications; we are more strict on counting who
+    // can have access to this resource.
+    #[cfg(all(any(feature = "precursor", feature = "renode"), not(feature = "dvt")))]
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(3)).expect("can't register I2C thread");
-    #[cfg(all(any(feature="precursor", feature="renode"), feature="dvt"))] // dvt build has less in it
+    #[cfg(all(any(feature = "precursor", feature = "renode"), feature = "dvt"))] // dvt build has less in it
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(2)).expect("can't register I2C thread");
     #[cfg(not(target_os = "xous"))]
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(1)).expect("can't register I2C thread");
@@ -276,7 +310,9 @@ fn main() -> ! {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Late), &xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres =
+        susres::Susres::new(Some(susres::SuspendOrder::Late), &xns, Opcode::SuspendResume as u32, sr_cid)
+            .expect("couldn't create suspend/resume object");
     let mut latest_activity = 0;
 
     let mut usb_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
@@ -296,21 +332,22 @@ fn main() -> ! {
     log::debug!("starting main loop");
     loop {
         let msg = xous::receive_message(llio_sid).unwrap();
-        let opcode: Option::<Opcode> = FromPrimitive::from_usize(msg.body.id());
+        let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("{:?}", opcode);
         match opcode {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 let mut dummy = [0u8; 1];
-                // make the last transaction to I2C a "read", so that any subsequent noise reads the device, instead of writing junk to the registers
-                // the address 0xc is chosen to put it far "after" any critical registers
+                // make the last transaction to I2C a "read", so that any subsequent noise reads the device,
+                // instead of writing junk to the registers the address 0xc is chosen to put
+                // it far "after" any critical registers
                 i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, 0xC, &mut dummy).expect("RTC access error");
 
                 llio.suspend();
-                #[cfg(feature="tts")]
+                #[cfg(feature = "tts")]
                 llio.tts_sleep_indicate(); // this happens after the suspend call because we don't want the sleep indicator to be restored on resume
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 llio.resume();
-                #[cfg(feature="tts")]
+                #[cfg(feature = "tts")]
                 llio.vibe(VibePattern::Double);
             }),
             Some(Opcode::CrgMode) => msg_scalar_unpack!(msg, _mode, _, _, _, {
@@ -320,7 +357,8 @@ fn main() -> ! {
                 llio.gpio_dout(d as u32);
             }),
             Some(Opcode::GpioDataIn) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                xous::return_scalar(msg.sender, llio.gpio_din() as usize).expect("couldn't return gpio data in");
+                xous::return_scalar(msg.sender, llio.gpio_din() as usize)
+                    .expect("couldn't return gpio data in");
             }),
             Some(Opcode::GpioDataDrive) => msg_scalar_unpack!(msg, d, _, _, _, {
                 llio.gpio_drive(d as u32);
@@ -332,17 +370,18 @@ fn main() -> ! {
                 llio.gpio_int_as_falling(d as u32);
             }),
             Some(Opcode::GpioIntPending) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                xous::return_scalar(msg.sender, llio.gpio_int_pending() as usize).expect("couldn't return gpio pending vector");
+                xous::return_scalar(msg.sender, llio.gpio_int_pending() as usize)
+                    .expect("couldn't return gpio pending vector");
             }),
             Some(Opcode::GpioIntEna) => msg_scalar_unpack!(msg, d, _, _, _, {
                 llio.gpio_int_ena(d as u32);
             }),
             Some(Opcode::DebugPowerdown) => msg_scalar_unpack!(msg, arg, _, _, _, {
-                let ena = if arg == 0 {false} else {true};
+                let ena = if arg == 0 { false } else { true };
                 llio.debug_powerdown(ena);
             }),
             Some(Opcode::DebugWakeup) => msg_scalar_unpack!(msg, arg, _, _, _, {
-                let ena = if arg == 0 {false} else {true};
+                let ena = if arg == 0 { false } else { true };
                 llio.debug_wakeup(ena);
             }),
             Some(Opcode::UartMux) => msg_scalar_unpack!(msg, mux, _, _, _, {
@@ -393,9 +432,15 @@ fn main() -> ! {
             Some(Opcode::PowerCryptoStatus) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let (_, sha, engine, force) = llio.power_crypto_status();
                 let mut ret = 0;
-                if sha { ret |= 1 };
-                if engine { ret |= 2 };
-                if force { ret |= 4 };
+                if sha {
+                    ret |= 1
+                };
+                if engine {
+                    ret |= 2
+                };
+                if force {
+                    ret |= 4
+                };
                 xous::return_scalar(msg.sender, ret).expect("couldn't return crypto unit power status");
             }),
             Some(Opcode::PowerSelf) => msg_scalar_unpack!(msg, power_on, _, _, _, {
@@ -489,10 +534,10 @@ fn main() -> ! {
             }),
             Some(Opcode::EventComHappened) => {
                 send_event(&com_cb_conns, 0);
-            },
+            }
             Some(Opcode::EventUsbHappened) => {
                 send_event(&usb_cb_conns, 0);
-            },
+            }
             Some(Opcode::GpioIntHappened) => msg_scalar_unpack!(msg, channel, _, _, _, {
                 send_event(&gpio_cb_conns, channel as usize);
             }),
@@ -501,16 +546,19 @@ fn main() -> ! {
                 latest_activity = activity as u32;
             }),
             Some(Opcode::GetActivity) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                #[cfg(any(feature="precursor", feature="renode"))]
+                #[cfg(any(feature = "precursor", feature = "renode"))]
                 {
                     let period = llio.activity_get_period() as u32;
-                    // log::debug!("activity/period: {}/{}, {:.2}%", latest_activity, period, (latest_activity as f32 / period as f32) * 100.0);
-                    xous::return_scalar2(msg.sender, latest_activity as usize, period as usize).expect("couldn't return activity");
+                    // log::debug!("activity/period: {}/{}, {:.2}%", latest_activity, period, (latest_activity
+                    // as f32 / period as f32) * 100.0);
+                    xous::return_scalar2(msg.sender, latest_activity as usize, period as usize)
+                        .expect("couldn't return activity");
                 }
                 #[cfg(not(target_os = "xous"))] // fake an activity
                 {
                     let period = 12_000;
-                    xous::return_scalar2(msg.sender, latest_activity as usize, period as usize).expect("couldn't return activity");
+                    xous::return_scalar2(msg.sender, latest_activity as usize, period as usize)
+                        .expect("couldn't return activity");
                     latest_activity += period / 20;
                     latest_activity %= period;
                 }
@@ -519,7 +567,7 @@ fn main() -> ! {
                 ec_ready = ready != 0;
             }),
             Some(Opcode::EventEcIsReady) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                xous::return_scalar(msg.sender, if ec_ready {1} else {0}).ok();
+                xous::return_scalar(msg.sender, if ec_ready { 1 } else { 0 }).ok();
             }),
             Some(Opcode::SetWakeupAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
                 if delay > u8::MAX as usize {
@@ -531,7 +579,12 @@ fn main() -> ! {
                 i2c.i2c_mutex_acquire();
                 // set clock units to 1 second, output pulse length to ~218ms
                 // and program the elapsed time (TIMERB_CLK is followed by TIMERB)
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB_CLK, &[(TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]).expect("RTC access error");
+                i2c.i2c_write(
+                    ABRTCMC_I2C_ADR,
+                    ABRTCMC_TIMERB_CLK,
+                    &[(TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()],
+                )
+                .expect("RTC access error");
                 // program elapsed time
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB, &[seconds]).expect("RTC access error");
                 // enable timerb countdown interrupt, also clears any prior interrupt flag
@@ -542,7 +595,8 @@ fn main() -> ! {
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
                 i2c.i2c_mutex_release();
 
-                // this readback, even though it just goes to debug, seems necessary to get the values to "stick" in the RTC.
+                // this readback, even though it just goes to debug, seems necessary to get the values to
+                // "stick" in the RTC.
                 let mut d = [0u8; 0x14];
                 i2c.i2c_mutex_acquire();
                 i2c.i2c_read_no_repeated_start(ABRTCMC_I2C_ADR, 0, &mut d).ok();
@@ -561,15 +615,16 @@ fn main() -> ! {
                 i2c.i2c_mutex_release();
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
-            #[cfg(any(feature="precursor", feature="renode"))]
+            #[cfg(any(feature = "precursor", feature = "renode"))]
             Some(Opcode::GetRtcValue) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 // There is a possibility that the RTC hardware is actually in an invalid state.
                 // Thus, this will return a u64 which is formatted as follows:
                 // [63] - invalid (0 for valid, 1 for invalid)
                 // [62:0] - time in seconds
-                // This is okay because 2^63 is much larger than the total number of seconds trackable by the RTC hardware.
-                // The RTC hardware can only count up to 100 years before rolling over, which is 3.1*10^9 seconds.
-                // Note that we start the RTC at somewhere between 0-10 years, so in practice, a user can expect between 90-100 years
+                // This is okay because 2^63 is much larger than the total number of seconds trackable by the
+                // RTC hardware. The RTC hardware can only count up to 100 years before
+                // rolling over, which is 3.1*10^9 seconds. Note that we start the RTC at
+                // somewhere between 0-10 years, so in practice, a user can expect between 90-100 years
                 // of continuous uptime service out of the RTC.
                 let mut settings = [0u8; 8];
                 let mut aborted = false;
@@ -580,27 +635,33 @@ fn main() -> ! {
                         Ok(llio::I2cStatus::ResponseReadOk) => {
                             i2c.i2c_mutex_release();
                             break;
-                        },
+                        }
                         Err(xous::Error::ServerQueueFull) => {
                             i2c.i2c_mutex_release();
-                            // give it a short pause before trying again, to avoid hammering the I2C bus at busy times
+                            // give it a short pause before trying again, to avoid hammering the I2C bus at
+                            // busy times
                             tt.sleep_ms(38).unwrap();
 
-                            xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
+                            xous::return_scalar2(msg.sender, 0x8000_0000, 0)
+                                .expect("couldn't return to caller");
                             aborted = true;
                             break;
-                        },
+                        }
                         _ => {
                             log::error!("Couldn't read seconds from RTC!");
                             // reset the hardware driver, in case that's the problem
-                            // this will reset the mutex to not acquired, even if someone else is using it. Very dangerous!
-                            unsafe{i2c.i2c_driver_reset();}
+                            // this will reset the mutex to not acquired, even if someone else is using it.
+                            // Very dangerous!
+                            unsafe {
+                                i2c.i2c_driver_reset();
+                            }
                             tt.sleep_ms(37).unwrap(); // short pause in case the upset was caused by too much activity
 
-                            xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
+                            xous::return_scalar2(msg.sender, 0x8000_0000, 0)
+                                .expect("couldn't return to caller");
                             aborted = true;
                             break;
-                        },
+                        }
                     };
                 }
                 // this continue has to be outside the above loop to avoid a double-free error!
@@ -620,31 +681,32 @@ fn main() -> ! {
                         None => {
                             // ensure nobody else is using the I2C block
                             i2c.i2c_mutex_acquire();
-                            // this will reset the mutex to not acquired, even if someone else is using it. Very dangerous!
-                            unsafe{i2c.i2c_driver_reset();}
+                            // this will reset the mutex to not acquired, even if someone else is using it.
+                            // Very dangerous!
+                            unsafe {
+                                i2c.i2c_driver_reset();
+                            }
 
                             tt.sleep_ms(37).unwrap(); // short pause in case the upset was caused by too much activity
                             // re-acquire the mutex, because it was released by the driver reset
                             i2c.i2c_mutex_acquire();
-                            let secs = if to_binary(settings[1] & 0x7f) < 60 {
-                                settings[1] & 0x7f
-                            } else {
-                                0
-                            };
+                            let secs =
+                                if to_binary(settings[1] & 0x7f) < 60 { settings[1] & 0x7f } else { 0 };
                             if to_binary(settings[7]) > 99 {
                                 settings[7] = settings[7] & 0x7f;
                             }
                             if to_binary(settings[3]) > 23 {
                                 settings[3] = settings[3] & 0x1f;
                             }
-                            // do a "hot reset" -- just clears error flags, but does our best to avoid rewriting time
-                            // if a lot of values are wrong, it means that the RTC had garbage written to it on the
+                            // do a "hot reset" -- just clears error flags, but does our best to avoid
+                            // rewriting time if a lot of values are wrong, it
+                            // means that the RTC had garbage written to it on the
                             // previous shutdown. This at least gets us *working* again, but time is lost.
                             let reset_values = [
-                                0x0, // clear all interrupts, return to normal operations
-                                0x0, // clear all interrupts
-                                RTC_PWR_MODE,  // reset power mode
-                                secs,  // write the seconds register back without the error flag
+                                0x0,          // clear all interrupts, return to normal operations
+                                0x0,          // clear all interrupts
+                                RTC_PWR_MODE, // reset power mode
+                                secs,         // write the seconds register back without the error flag
                                 settings[2] & 0x7f,
                                 settings[3], // requires a fix interpreting BCD
                                 settings[4] & 0x3F,
@@ -652,7 +714,8 @@ fn main() -> ! {
                                 settings[6] & 0x1F,
                                 settings[7], // this requires a fix interpreting BCD, which is above
                             ];
-                            i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL1, &reset_values).expect("RTC access error");
+                            i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL1, &reset_values)
+                                .expect("RTC access error");
                             i2c.i2c_mutex_release();
                         }
                     }
@@ -660,7 +723,9 @@ fn main() -> ! {
                     if retries > 10 {
                         // this will likely cause an upstream failure, because a lot of logic can't proceed
                         // without a valid resolution to the RTC setting!
-                        log::error!("rtc_to_seconds() never returned a valid value. Returning an error, that may result in a panic...");
+                        log::error!(
+                            "rtc_to_seconds() never returned a valid value. Returning an error, that may result in a panic..."
+                        );
                         xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
                         aborted = true;
                         break;
@@ -672,10 +737,12 @@ fn main() -> ! {
                 if aborted || total_secs == 0 {
                     continue;
                 } else {
-                    xous::return_scalar2(msg.sender,
+                    xous::return_scalar2(
+                        msg.sender,
                         ((total_secs >> 32) & 0xFFFF_FFFF) as usize,
                         (total_secs & 0xFFFF_FFFF) as usize,
-                    ).expect("couldn't return to caller");
+                    )
+                    .expect("couldn't return to caller");
                 }
             }),
             #[cfg(not(target_os = "xous"))]
@@ -683,19 +750,26 @@ fn main() -> ! {
                 use chrono::prelude::*;
                 let now = Local::now();
                 let total_secs = now.timestamp_millis() / 1000 - 148409348; // sets the offset to something like 1974, which is roughly where an RTC value ends up in reality
-                xous::return_scalar2(msg.sender,
+                xous::return_scalar2(
+                    msg.sender,
                     ((total_secs >> 32) & 0xFFFF_FFFF) as usize,
                     (total_secs & 0xFFFF_FFFF) as usize,
-                ).expect("couldn't return to caller");
+                )
+                .expect("couldn't return to caller");
                 // use the tt variable so we don't get a warning
                 let _ = tt.elapsed_ms();
             }),
             Some(Opcode::Quit) => {
                 log::info!("Received quit opcode, exiting.");
                 let dropconn = xous::connect(i2c_sid).unwrap();
-                xous::send_message(dropconn,
-                    xous::Message::new_scalar(I2cOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-                unsafe{xous::disconnect(dropconn).unwrap();}
+                xous::send_message(
+                    dropconn,
+                    xous::Message::new_scalar(I2cOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .unwrap();
+                unsafe {
+                    xous::disconnect(dropconn).unwrap();
+                }
                 break;
             }
             None => {
@@ -737,10 +811,14 @@ fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
 fn unhook(cb_conns: &mut [Option<ScalarCallback>; 32]) {
     for entry in cb_conns.iter_mut() {
         if let Some(scb) = entry {
-            xous::send_message(scb.server_to_cb_cid,
-                xous::Message::new_blocking_scalar(EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)
-            ).unwrap();
-            unsafe{xous::disconnect(scb.server_to_cb_cid).unwrap();}
+            xous::send_message(
+                scb.server_to_cb_cid,
+                xous::Message::new_blocking_scalar(EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0),
+            )
+            .unwrap();
+            unsafe {
+                xous::disconnect(scb.server_to_cb_cid).unwrap();
+            }
         }
         *entry = None;
     }
@@ -748,19 +826,30 @@ fn unhook(cb_conns: &mut [Option<ScalarCallback>; 32]) {
 fn send_event(cb_conns: &[Option<ScalarCallback>; 32], which: usize) {
     for entry in cb_conns.iter() {
         if let Some(scb) = entry {
-            // note that the "which" argument is only used for GPIO events, to indicate which pin had the event
-            match xous::try_send_message(scb.server_to_cb_cid,
-                xous::Message::new_scalar(EventCallback::Event.to_usize().unwrap(),
-                   scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, which, 0)
+            // note that the "which" argument is only used for GPIO events, to indicate which pin had the
+            // event
+            match xous::try_send_message(
+                scb.server_to_cb_cid,
+                xous::Message::new_scalar(
+                    EventCallback::Event.to_usize().unwrap(),
+                    scb.cb_to_client_cid as usize,
+                    scb.cb_to_client_id as usize,
+                    which,
+                    0,
+                ),
             ) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     match e {
                         xous::Error::ServerQueueFull => {
-                            // this triggers if an interrupt storm happens. This could be perfectly natural and/or
-                            // "expected", and the "best" behavior is probably to drop the events, but leave a warning.
+                            // this triggers if an interrupt storm happens. This could be perfectly natural
+                            // and/or "expected", and the "best" behavior is
+                            // probably to drop the events, but leave a warning.
                             // Examples of this would be a ping flood overwhelming the network stack.
-                            log::warn!("Attempted to send event, but destination queue is full. Event was dropped: {:?}", scb);
+                            log::warn!(
+                                "Attempted to send event, but destination queue is full. Event was dropped: {:?}",
+                                scb
+                            );
                         }
                         xous::Error::ServerNotFound => {
                             log::warn!("Event callback subscriber has died. Event was dropped: {:?}", scb);
@@ -780,10 +869,11 @@ fn send_event(cb_conns: &[Option<ScalarCallback>; 32], which: usize) {
 //   --test-threads=1 so we can see the output in sequence
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::{DateTime, Utc};
     use llio::rtc_to_seconds;
     use rand::Rng;
+
+    use super::*;
 
     fn to_bcd(binary: u8) -> u8 {
         let mut lsd: u8 = binary % 10;
@@ -800,18 +890,20 @@ mod tests {
     #[test]
     fn test_rtc_to_secs() {
         let mut rng = rand::thread_rng();
-        let rtc_base = DateTime::<Utc>::from_utc(chrono::NaiveDate::from_ymd(2000, 1, 1)
-        .and_hms(0, 0, 0), Utc);
+        let rtc_base =
+            DateTime::<Utc>::from_utc(chrono::NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0), Utc);
 
         // test every year, every month, every day, with a random time stamp
         for year in 0..99 {
             for month in 1..=12 {
                 let days = match month {
                     1 => 1..=31,
-                    2 => if (year % 4) == 0 {
-                        1..=29
-                    } else {
-                        1..=28
+                    2 => {
+                        if (year % 4) == 0 {
+                            1..=29
+                        } else {
+                            1..=28
+                        }
                     }
                     3 => 1..=31,
                     4 => 1..=30,
@@ -823,15 +915,18 @@ mod tests {
                     10 => 1..=31,
                     11 => 1..=30,
                     12 => 1..=31,
-                    _ => {panic!("invalid month")},
+                    _ => {
+                        panic!("invalid month")
+                    }
                 };
                 for day in days {
                     let h = rng.gen_range(0..24);
                     let m = rng.gen_range(0..60);
                     let s = rng.gen_range(0..60);
                     let rtc_test = DateTime::<Utc>::from_utc(
-                        chrono::NaiveDate::from_ymd(2000 + year, month, day)
-                    .and_hms(h, m, s), Utc);
+                        chrono::NaiveDate::from_ymd(2000 + year, month, day).and_hms(h, m, s),
+                        Utc,
+                    );
 
                     let diff = rtc_test.signed_duration_since(rtc_base);
                     let settings = [
@@ -846,11 +941,14 @@ mod tests {
                     ];
                     if diff.num_seconds() != rtc_to_seconds(&settings).unwrap() as i64 {
                         println!("{} vs {}", diff.num_seconds(), rtc_to_seconds(&settings).unwrap());
-                        println!("Duration to {}/{}/{}-{}:{}:{} -- {}",
+                        println!(
+                            "Duration to {}/{}/{}-{}:{}:{} -- {}",
                             2000 + year,
                             month,
                             day,
-                            h, m, s,
+                            h,
+                            m,
+                            s,
                             diff.num_seconds()
                         );
                     }

@@ -1,10 +1,13 @@
+use core::sync::atomic::{AtomicU32, Ordering};
+
+use num_traits::*;
 use xous::CID;
 use xous_ipc::Buffer;
-use num_traits::*;
-use core::sync::atomic::{AtomicU32, Ordering};
+
 use crate::api::*;
 
-// these exist outside the I2C struct because it needs to synchronize across multiple object instances within the same process
+// these exist outside the I2C struct because it needs to synchronize across multiple object instances within
+// the same process
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Debug)]
@@ -16,20 +19,21 @@ impl I2c {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(SERVER_NAME_I2C).expect("Can't connect to I2C");
-        I2c {
-            conn,
-            timeout_ms: 150,
-        }
+        I2c { conn, timeout_ms: 150 }
     }
-    /// Safety: caller must ensure that there are no I2C actions in flight. This resets the mutex to not acquired.
+
+    /// Safety: caller must ensure that there are no I2C actions in flight. This resets the mutex to not
+    /// acquired.
     pub unsafe fn i2c_driver_reset(&mut self) {
-        xous::send_message(self.conn,
-            xous::Message::new_blocking_scalar(I2cOpcode::I2cDriverReset.to_usize().unwrap(), 0, 0, 0, 0)
-        ).expect("error handling i2c driver reset");
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(I2cOpcode::I2cDriverReset.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .expect("error handling i2c driver reset");
     }
-    pub fn i2c_set_timeout(&mut self, timeout: u32) {
-        self.timeout_ms = timeout;
-    }
+
+    pub fn i2c_set_timeout(&mut self, timeout: u32) { self.timeout_ms = timeout; }
+
     /// Blocks if another I2C operation is in progress, and resumes once the mutex is released
     /// This *must* be called before doing any I2C transaction -- even if a single action. This
     /// operation exists because multiple I2C operations may have to be executed in sequence without
@@ -39,15 +43,20 @@ impl I2c {
     /// The mutex sharing is collaborative, so someone without the mutex could, in theory, just
     /// barge in and perform an operation.
     pub fn i2c_mutex_acquire(&self) {
-        xous::send_message(self.conn,
-            xous::Message::new_blocking_scalar(I2cOpcode::I2cMutexAcquire.to_usize().unwrap(), 0, 0, 0, 0)
-        ).expect("error handling i2c mutex acquire");
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(I2cOpcode::I2cMutexAcquire.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .expect("error handling i2c mutex acquire");
     }
+
     /// Must be called after acquire to release the mutex, otherwise the block retains a hold on the system.
     pub fn i2c_mutex_release(&self) {
-        xous::send_message(self.conn,
-            xous::Message::new_blocking_scalar(I2cOpcode::I2cMutexRelease.to_usize().unwrap(), 0, 0, 0, 0)
-        ).expect("error handling i2c mutex release");
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(I2cOpcode::I2cMutexRelease.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .expect("error handling i2c mutex release");
     }
 
     /// initiate an i2c write. This is always a blocking call. In practice, it turns out it's not terribly
@@ -56,14 +65,14 @@ impl I2c {
     /// even if the write "takes a long time"
     pub fn i2c_write(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<I2cStatus, xous::Error> {
         if data.len() > I2C_MAX_LEN - 1 {
-            return Err(xous::Error::OutOfMemory)
+            return Err(xous::Error::OutOfMemory);
         }
         let mut transaction = I2cTransaction::new();
 
         let mut txbuf = [0; I2C_MAX_LEN];
         txbuf[0] = adr;
         for i in 0..data.len() {
-            txbuf[i+1] = data[i];
+            txbuf[i + 1] = data[i];
         }
         transaction.bus_addr = dev;
         transaction.txbuf = Some(txbuf);
@@ -74,9 +83,7 @@ impl I2c {
         buf.lend_mut(self.conn, I2cOpcode::I2cTxRx.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let result = buf.to_original::<I2cResult, _>().unwrap();
         match result.status {
-            I2cStatus::ResponseWriteOk => {
-                Ok(I2cStatus::ResponseWriteOk)
-            }
+            I2cStatus::ResponseWriteOk => Ok(I2cStatus::ResponseWriteOk),
             _ => {
                 log::error!("I2C error: {:?}", result);
                 Err(xous::Error::InternalError)
@@ -88,7 +95,7 @@ impl I2c {
     /// addressing and reading the device.
     pub fn i2c_read(&mut self, dev: u8, adr: u8, data: &mut [u8]) -> Result<I2cStatus, xous::Error> {
         if data.len() > I2C_MAX_LEN - 1 {
-            return Err(xous::Error::OutOfMemory)
+            return Err(xous::Error::OutOfMemory);
         }
         let mut transaction = I2cTransaction::new();
         let mut txbuf = [0; I2C_MAX_LEN];
@@ -119,9 +126,14 @@ impl I2c {
     }
 
     /// initiate an i2c read, but for devices that don't support repeated starts, such as the AB-RTCMC-32.768
-    pub fn i2c_read_no_repeated_start(&mut self, dev: u8, adr: u8, data: &mut [u8]) -> Result<I2cStatus, xous::Error> {
+    pub fn i2c_read_no_repeated_start(
+        &mut self,
+        dev: u8,
+        adr: u8,
+        data: &mut [u8],
+    ) -> Result<I2cStatus, xous::Error> {
         if data.len() > I2C_MAX_LEN - 1 {
-            return Err(xous::Error::OutOfMemory)
+            return Err(xous::Error::OutOfMemory);
         }
         let mut transaction = I2cTransaction::new();
         let mut txbuf = [0; I2C_MAX_LEN];
@@ -151,13 +163,14 @@ impl I2c {
             }
         }
     }
-
 }
 
 impl Drop for I2c {
     fn drop(&mut self) {
         if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
-            unsafe{xous::disconnect(self.conn).ok();}
+            unsafe {
+                xous::disconnect(self.conn).ok();
+            }
         }
     }
 }

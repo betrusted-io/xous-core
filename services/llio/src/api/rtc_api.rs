@@ -219,7 +219,9 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     const MONTHS: usize = 6;
     const YEARS: usize = 7;
     if ((settings[CTL3] & 0xE0) != crate::RTC_PWR_MODE) // power switchover setting should be initialized
-    || (settings[SECS] & 0x80 != 0) { // clock integrity should be guaranteed
+    || (settings[SECS] & 0x80 != 0)
+    {
+        // clock integrity should be guaranteed
         log::error!("RTC is in an uninitialized state!, {:x?}", settings);
         return None;
     }
@@ -230,7 +232,8 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     || (to_binary(settings[HOURS]) > 23) // 24 hour mode is default and assumed
     || (to_binary(settings[DAYS]) > 31) || (to_binary(settings[DAYS]) == 0)
     || (to_binary(settings[MONTHS]) > 12) || (to_binary(settings[MONTHS]) == 0)
-    || (to_binary(settings[YEARS]) > 99) {
+    || (to_binary(settings[YEARS]) > 99)
+    {
         log::error!("RTC has invalid digits!: {:?}", settings);
         return None;
     }
@@ -241,20 +244,22 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     const SECS_PER_DAY: u64 = 86400;
     // DAYS is checked to be 1-31, so, it's safe to subtract 1 here
     total_secs += (to_binary(settings[DAYS]) as u64 - 1) * SECS_PER_DAY;
-    // this will iterate from 0 through 11; december never has an offset added, because its contribution is directly measured in DAYS
+    // this will iterate from 0 through 11; december never has an offset added, because its contribution is
+    // directly measured in DAYS
     for month in 0..to_binary(settings[MONTHS]) {
         match month {
             0 => total_secs += 0u64,
             1 => total_secs += 31u64 * SECS_PER_DAY,
             2 => {
-                // per spec sheet: 1) If the year counter contains a value which is exactly divisible by 4 (including the year 00),
-                // the AB-RTCMC-32.768kHz-B5ZE-S3 compensates for leap years by adding a 29th day to February.
+                // per spec sheet: 1) If the year counter contains a value which is exactly divisible by 4
+                // (including the year 00), the AB-RTCMC-32.768kHz-B5ZE-S3 compensates for
+                // leap years by adding a 29th day to February.
                 if (to_binary(settings[YEARS]) % 4) == 0 {
                     total_secs += 29u64 * SECS_PER_DAY;
                 } else {
                     total_secs += 28u64 * SECS_PER_DAY;
                 };
-            },
+            }
             3 => total_secs += 31u64 * SECS_PER_DAY,
             4 => total_secs += 30u64 * SECS_PER_DAY,
             5 => total_secs += 31u64 * SECS_PER_DAY,
@@ -282,6 +287,4 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     Some(total_secs)
 }
 
-pub fn to_binary(bcd: u8) -> u8 {
-    (bcd & 0xf) + ((bcd >> 4) * 10)
-}
+pub fn to_binary(bcd: u8) -> u8 { (bcd & 0xf) + ((bcd >> 4) * 10) }

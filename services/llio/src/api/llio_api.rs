@@ -1,4 +1,4 @@
-pub(crate) const SERVER_NAME_LLIO: &str      = "_Low Level I/O manager_";
+pub(crate) const SERVER_NAME_LLIO: &str = "_Low Level I/O manager_";
 // //////////////////////////////// VIBE
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum VibePattern {
