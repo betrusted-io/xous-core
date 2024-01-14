@@ -3,9 +3,7 @@ use crate::vex::*;
 /// AES-128 round keys
 pub(crate) type VexKeys128 = [u32; 60];
 
-pub fn aes128_enc_key_schedule(user_key: &[u8]) -> VexKeys128 {
-    set_encrypt_key_inner_128(user_key, true)
-}
+pub fn aes128_enc_key_schedule(user_key: &[u8]) -> VexKeys128 { set_encrypt_key_inner_128(user_key, true) }
 
 fn set_encrypt_key_inner_128(user_key: &[u8], swap_final: bool) -> VexKeys128 {
     let mut rk: VexKeys128 = [0; 60];
