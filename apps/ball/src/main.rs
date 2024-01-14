@@ -65,7 +65,8 @@ fn main() -> ! {
                     ball.update();
                 }
             }
-            Some(AppOp::Pump) => { // this is a blocking scalar so that pump calls don't initiate faster than the app can draw
+            Some(AppOp::Pump) => {
+                // this is a blocking scalar so that pump calls don't initiate faster than the app can draw
                 if into_allow_redraw {
                     ball.focus();
                     into_allow_redraw = false;
@@ -92,29 +93,32 @@ fn main() -> ! {
                         allow_redraw = false; // this instantly terminates future updates, even if Pump messages are in our input queue
                         xous::send_message(
                             cid_to_pump,
-                            Message::new_scalar(PumpOp::Stop.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).expect("couldn't send stop message to the pump thread");
+                            Message::new_scalar(PumpOp::Stop.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .expect("couldn't send stop message to the pump thread");
                     }
                     gam::FocusState::Foreground => {
                         into_allow_redraw = true;
                         allow_redraw = true;
                         xous::send_message(
                             cid_to_pump,
-                            Message::new_scalar(PumpOp::Run.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).expect("couldn't send run message to the pump thread");
+                            Message::new_scalar(PumpOp::Run.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .expect("couldn't send run message to the pump thread");
                     }
                 }
             }),
             Some(AppOp::Quit) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 xous::send_message(
                     cid_to_pump,
-                    Message::new_blocking_scalar(PumpOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)
-                ).expect("couldn't send run message to the pump thread");
-                unsafe{xous::disconnect(cid_to_pump).ok()};
+                    Message::new_blocking_scalar(PumpOp::Quit.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't send run message to the pump thread");
+                unsafe { xous::disconnect(cid_to_pump).ok() };
                 xous::return_scalar(msg.sender, 1).expect("couldn't acknowledge quit message");
                 break;
             }),
-            _ => log::error!("couldn't convert opcode: {:?}", msg)
+            _ => log::error!("couldn't convert opcode: {:?}", msg),
         }
     }
     // clean up our program
