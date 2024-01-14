@@ -2,16 +2,16 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::*;
-
-use xous_ipc::Buffer;
-use xous::{msg_scalar_unpack, Message, send_message};
-use num_traits::*;
-use codec::{ZERO_PCM, VolumeOps, FrameRing};
-use xous_tts_backend::*;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
+use api::*;
+use codec::{FrameRing, VolumeOps, ZERO_PCM};
+use num_traits::*;
+use xous::{msg_scalar_unpack, send_message, Message};
+use xous_ipc::Buffer;
+use xous_tts_backend::*;
 
 const DEFAULT_WPM: u32 = 350;
 const WAIT_INTERVAL: usize = 50; // milliseconds to wait before polling if a phrase is finished.
@@ -58,18 +58,24 @@ fn main() -> ! {
                 let msg = xous::receive_message(wav_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(WaveOp::Return) => {
-                        // check to see if we need to apply backpressure on the synthesizer. If so, this is where we pause
-                        let mut capacity = { // put this in a block of its own to ensure the lock goes out of scope after we have measured the length
+                        // check to see if we need to apply backpressure on the synthesizer. If so, this is
+                        // where we pause
+                        let mut capacity = {
+                            // put this in a block of its own to ensure the lock goes out of scope after we
+                            // have measured the length
                             wavbuf.lock().unwrap().len()
                         };
                         while capacity > MAX_BUF_DEPTH {
-                            // this effectively stalls the tts engine because the buffer sent to us is a `lend`, which is blocking.
-                            // by blocking this thread from copying the memory, we also block the synthesizer from generating more samples.
+                            // this effectively stalls the tts engine because the buffer sent to us is a
+                            // `lend`, which is blocking. by blocking this thread
+                            // from copying the memory, we also block the synthesizer from generating more
+                            // samples.
                             log::info!("synth backpressure");
                             tt.sleep_ms(DRAIN_INTERVAL).unwrap();
                             capacity = wavbuf.lock().unwrap().len();
                         }
-                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let buffer =
+                            unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let wavdat = buffer.to_original::<TtsBackendData, _>().unwrap();
                         let mut buf = wavbuf.lock().unwrap();
                         for &d in wavdat.data[..wavdat.len as usize].iter() {
@@ -77,26 +83,29 @@ fn main() -> ! {
                         }
                         match wavdat.control {
                             Some(TtsBeControl::End) => {
-                                // the buffer can still be quite full at this point, we have to wait until it drains naturally
+                                // the buffer can still be quite full at this point, we have to wait until it
+                                // drains naturally
                                 synth_done.store(true, Ordering::SeqCst);
                             }
                             Some(TtsBeControl::Abort) => {
-                                // clear the playback buffer and indicate we're done, because we want to stop the playback too.
+                                // clear the playback buffer and indicate we're done, because we want to stop
+                                // the playback too.
                                 log::info!("abort received");
                                 buf.clear();
                                 synth_done.store(true, Ordering::SeqCst);
                             }
                             None => {
                                 // more data can arrive after done is set true if a new synthesis was
-                                // kicked off that aborts the current run. reflect that in the synth_done state.
+                                // kicked off that aborts the current run. reflect that in the synth_done
+                                // state.
                                 synth_done.store(false, Ordering::SeqCst);
                             }
                         }
-                    },
+                    }
                     Some(WaveOp::Quit) => {
                         xous::return_scalar(msg.sender, 1).unwrap();
                         break;
-                    },
+                    }
                     _ => {
                         log::warn!("message unknown: {:?}", msg);
                     }
@@ -117,56 +126,63 @@ fn main() -> ! {
             loop {
                 let msg = xous::receive_message(cb_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
-                    Some(CallbackOp::Callback) => msg_scalar_unpack!(msg, free_play, _available_rec, _, routing_id, {
-                        if routing_id == codec::AUDIO_CB_ROUTING_ID {
-                            let mut frames: FrameRing = FrameRing::new();
-                            let frames_to_push = if frames.writeable_count() < free_play {
-                                frames.writeable_count()
-                            } else {
-                                free_play
-                            };
-                            frame_count += frames_to_push as u32;
-                            log::trace!("f{} p{}", frame_count, frames_to_push);
-                            let mut locked_buf = wavbuf.lock().unwrap();
-                            if just_initiated.load(Ordering::SeqCst) {
-                                // prevent stutter if the synth buffer isn't ready yet and we got an early fill request from the codec
-                                if locked_buf.len() < codec::FIFO_DEPTH {
-                                    for _ in 0..frames_to_push {
-                                        let frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
+                    Some(CallbackOp::Callback) => {
+                        msg_scalar_unpack!(msg, free_play, _available_rec, _, routing_id, {
+                            if routing_id == codec::AUDIO_CB_ROUTING_ID {
+                                let mut frames: FrameRing = FrameRing::new();
+                                let frames_to_push = if frames.writeable_count() < free_play {
+                                    frames.writeable_count()
+                                } else {
+                                    free_play
+                                };
+                                frame_count += frames_to_push as u32;
+                                log::trace!("f{} p{}", frame_count, frames_to_push);
+                                let mut locked_buf = wavbuf.lock().unwrap();
+                                if just_initiated.load(Ordering::SeqCst) {
+                                    // prevent stutter if the synth buffer isn't ready yet and we got an early
+                                    // fill request from the codec
+                                    if locked_buf.len() < codec::FIFO_DEPTH {
+                                        for _ in 0..frames_to_push {
+                                            let frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32
+                                                | (ZERO_PCM as u32) << 16;
+                                                codec::FIFO_DEPTH];
+                                            frames.nq_frame(frame).unwrap();
+                                        }
+                                        codec.swap_frames(&mut frames).unwrap();
+                                        continue;
+                                    } else {
+                                        just_initiated.store(false, Ordering::SeqCst);
+                                    }
+                                }
+                                for _ in 0..frames_to_push {
+                                    let mut frame: [u32; codec::FIFO_DEPTH] =
+                                        [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
+                                    if locked_buf.len() >= frame.len() || synth_done.load(Ordering::SeqCst) {
+                                        for sample in frame.iter_mut() {
+                                            let samp = locked_buf.pop_front().unwrap_or(ZERO_PCM);
+                                            let left = samp as u16;
+                                            let right = samp as u16;
+                                            *sample = right as u32 | (left as u32) << 16;
+                                        }
                                         frames.nq_frame(frame).unwrap();
+                                    } else {
+                                        log::trace!("ran out of frames during tts fill");
+                                        break;
                                     }
-                                    codec.swap_frames(&mut frames).unwrap();
-                                    continue;
-                                } else {
-                                    just_initiated.store(false, Ordering::SeqCst);
+                                }
+                                codec.swap_frames(&mut frames).unwrap();
+                                // detect if the buffer is empty and the synthesizer has indicated it's
+                                // finished
+                                if (locked_buf.len() == 0) && synth_done.load(Ordering::SeqCst) {
+                                    codec.pause().unwrap();
                                 }
                             }
-                            for _ in 0..frames_to_push {
-                                let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
-                                if locked_buf.len() >= frame.len() || synth_done.load(Ordering::SeqCst) {
-                                    for sample in frame.iter_mut() {
-                                        let samp = locked_buf.pop_front().unwrap_or(ZERO_PCM);
-                                        let left = samp as u16;
-                                        let right = samp as u16;
-                                        *sample = right as u32 | (left as u32) << 16;
-                                    }
-                                    frames.nq_frame(frame).unwrap();
-                                } else {
-                                    log::trace!("ran out of frames during tts fill");
-                                    break;
-                                }
-                            }
-                            codec.swap_frames(&mut frames).unwrap();
-                            // detect if the buffer is empty and the synthesizer has indicated it's finished
-                            if (locked_buf.len() == 0) && synth_done.load(Ordering::SeqCst) {
-                                codec.pause().unwrap();
-                            }
-                        }
-                    }),
+                        })
+                    }
                     Some(CallbackOp::Quit) => {
                         xous::return_scalar(msg.sender, 1).unwrap();
                         break;
-                    },
+                    }
                     None => {
                         log::error!("couldn't convert opcode: {:?}", msg);
                     }
@@ -183,12 +199,7 @@ fn main() -> ! {
     codec.hook_frame_callback(CallbackOp::Callback.to_u32().unwrap(), cb_cid).unwrap();
 
     let mut wpm = DEFAULT_WPM;
-    tts_be.tts_config(
-        wav_sid.to_array(),
-        WaveOp::Return.to_u32().unwrap(),
-        None,
-        Some(wpm)
-    ).unwrap();
+    tts_be.tts_config(wav_sid.to_array(), WaveOp::Return.to_u32().unwrap(), None, Some(wpm)).unwrap();
     loop {
         let msg = xous::receive_message(tts_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
@@ -202,7 +213,7 @@ fn main() -> ! {
                 just_initiated.store(true, Ordering::SeqCst);
                 log::trace!("resuming codec");
                 codec.resume().unwrap();
-            },
+            }
             Some(Opcode::TextToSpeechBlocking) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let msg = buffer.to_original::<TtsFrontendMsg, _>().unwrap();
@@ -221,27 +232,33 @@ fn main() -> ! {
                     // this actually waits until the playing is fully done
                     tt.sleep_ms(WAIT_INTERVAL).unwrap();
                 }
-            },
+            }
             Some(Opcode::CodecStop) => {
                 log::info!("stop called. Immediate stop and loss of audio data.");
                 codec.abort().unwrap();
             }
             Some(Opcode::SetWordsPerMinute) => msg_scalar_unpack!(msg, wpm_arg, _, _, _, {
                 wpm = wpm_arg as u32;
-                tts_be.tts_config(wav_sid.to_array(), WaveOp::Return.to_u32().unwrap(), None, Some(wpm)).unwrap();
+                tts_be
+                    .tts_config(wav_sid.to_array(), WaveOp::Return.to_u32().unwrap(), None, Some(wpm))
+                    .unwrap();
             }),
             Some(Opcode::Quit) => {
-                send_message(wav_cid,
-                    Message::new_blocking_scalar(WaveOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)
-                ).expect("couldn't send quit to callback handler");
-                send_message(cb_cid,
-                    Message::new_blocking_scalar(WaveOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)
-                ).expect("couldn't send quit to callback handler");
-                unsafe{xous::disconnect(wav_cid).ok()};
-                unsafe{xous::disconnect(cb_cid).ok()};
+                send_message(
+                    wav_cid,
+                    Message::new_blocking_scalar(WaveOp::Quit.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't send quit to callback handler");
+                send_message(
+                    cb_cid,
+                    Message::new_blocking_scalar(WaveOp::Quit.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't send quit to callback handler");
+                unsafe { xous::disconnect(wav_cid).ok() };
+                unsafe { xous::disconnect(cb_cid).ok() };
                 log::warn!("Quit received, goodbye world!");
                 break;
-            },
+            }
             None => {
                 log::error!("couldn't convert opcode: {:?}", msg);
             }
