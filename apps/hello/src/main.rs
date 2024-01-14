@@ -2,10 +2,11 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 use core::fmt::Write;
+
 use graphics_server::api::GlyphStyle;
 use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
-use num_traits::*;
 use locales::t;
+use num_traits::*;
 #[cfg(feature = "tts")]
 use tts_frontend::*;
 
@@ -51,12 +52,8 @@ impl Hello {
             .expect("Could not register GAM UX")
             .unwrap();
 
-        let content = gam
-            .request_content_canvas(gam_token)
-            .expect("Could not get content canvas");
-        let screensize = gam
-            .get_canvas_bounds(content)
-            .expect("Could not get canvas dimensions");
+        let content = gam.request_content_canvas(gam_token).expect("Could not get content canvas");
+        let screensize = gam.get_canvas_bounds(content).expect("Could not get canvas dimensions");
         Self {
             gam,
             _gam_token: gam_token,
@@ -75,11 +72,7 @@ impl Hello {
                 Rectangle::new_with_style(
                     Point::new(0, 0),
                     self.screensize,
-                    DrawStyle {
-                        fill_color: Some(PixelColor::Light),
-                        stroke_color: None,
-                        stroke_width: 0,
-                    },
+                    DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 },
                 ),
             )
             .expect("can't clear content area");
@@ -105,13 +98,12 @@ impl Hello {
         text_view.clear_area = true;
         text_view.rounded_border = Some(3);
         text_view.style = GlyphStyle::Regular;
-        write!(text_view.text, "{}", t!("helloworld.hello", locales::LANG)).expect("Could not write to text view");
-        #[cfg(feature="tts")]
+        write!(text_view.text, "{}", t!("helloworld.hello", locales::LANG))
+            .expect("Could not write to text view");
+        #[cfg(feature = "tts")]
         self.tts.tts_simple(t!("helloworld.hello", locales::LANG)).unwrap();
 
-        self.gam
-            .post_textview(&mut text_view)
-            .expect("Could not render text view");
+        self.gam.post_textview(&mut text_view).expect("Could not render text view");
         self.gam.redraw().expect("Could not redraw screen");
     }
 }
@@ -124,9 +116,7 @@ fn main() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
 
     // Register the server with xous
-    let sid = xns
-        .register_name(SERVER_NAME_HELLO, None)
-        .expect("can't register server");
+    let sid = xns.register_name(SERVER_NAME_HELLO, None).expect("can't register server");
 
     let mut hello = Hello::new(&xns, sid);
 
