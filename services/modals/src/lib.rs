@@ -5,14 +5,15 @@ use api::*;
 #[cfg(feature = "ditherpunk")]
 pub mod tests;
 
-use bit_field::BitField;
 use core::cell::Cell;
-use gam::*;
-use num_traits::*;
-#[cfg(feature = "ditherpunk")]
-use std::convert::TryInto;
 #[cfg(feature = "ditherpunk")]
 use std::cmp::max;
+#[cfg(feature = "ditherpunk")]
+use std::convert::TryInto;
+
+use bit_field::BitField;
+use gam::*;
+use num_traits::*;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
 
@@ -42,6 +43,7 @@ impl<'a> AlertModalBuilder<'a> {
         }
         self
     }
+
     /// Placeholders provided in this method persist when any keys are pressed, instead of disappearing.
     /// This is useful for "edit" functions.
     pub fn field_placeholder_persist(
@@ -57,6 +59,7 @@ impl<'a> AlertModalBuilder<'a> {
         }
         self
     }
+
     pub fn set_growable(&'a mut self) -> &'a mut Self {
         self.growable = true;
         self
@@ -109,11 +112,8 @@ impl<'a> AlertModalBuilder<'a> {
         // question: do we want to add a retry limit?
         loop {
             let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
-            buf.lend_mut(
-                self.modals.conn,
-                Opcode::PromptWithTextResponse.to_u32().unwrap(),
-            )
-            .or(Err(xous::Error::InternalError))?;
+            buf.lend_mut(self.modals.conn, Opcode::PromptWithTextResponse.to_u32().unwrap())
+                .or(Err(xous::Error::InternalError))?;
             match buf.to_original::<TextEntryPayloads, _>() {
                 Ok(response) => {
                     let mut form_validation_failed = false;
@@ -121,9 +121,7 @@ impl<'a> AlertModalBuilder<'a> {
                         if let Some(validator) = validator {
                             if let Some(err_msg) = validator(response.content()[index]) {
                                 spec.prompt.clear();
-                                spec.prompt
-                                    .append(err_msg.as_str().unwrap_or("UTF-8 error"))
-                                    .ok();
+                                spec.prompt.append(err_msg.as_str().unwrap_or("UTF-8 error")).ok();
                                 form_validation_failed = true;
                                 break; // one of the validator failed
                             }
@@ -134,7 +132,8 @@ impl<'a> AlertModalBuilder<'a> {
                         continue; // leave the modal as it is
                     }
 
-                    // If we're here all non-None validators returned okay, or no validators were specified in the first place at all.
+                    // If we're here all non-None validators returned okay, or no validators were specified in
+                    // the first place at all.
                     send_message(
                         self.modals.conn,
                         Message::new_blocking_scalar(
@@ -150,7 +149,8 @@ impl<'a> AlertModalBuilder<'a> {
                     return Ok(response);
                 }
                 _ => {
-                    // we send the valid response token even in this case because we want the modals server to move on and not get stuck on this error.
+                    // we send the valid response token even in this case because we want the modals server to
+                    // move on and not get stuck on this error.
                     send_message(
                         self.modals.conn,
                         Message::new_blocking_scalar(
@@ -178,17 +178,12 @@ pub struct Modals {
 impl Modals {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
-        let conn = xns
-            .request_connection_blocking(api::SERVER_NAME_MODALS)
-            .expect("Can't connect to Modals server");
+        let conn =
+            xns.request_connection_blocking(api::SERVER_NAME_MODALS).expect("Can't connect to Modals server");
         let trng = trng::Trng::new(&xns).unwrap();
         let mut token = [0u32; 4];
         trng.fill_buf(&mut token).unwrap();
-        Ok(Modals {
-            conn,
-            token,
-            have_lock: Cell::new(false),
-        })
+        Ok(Modals { conn, token, have_lock: Cell::new(false) })
     }
 
     pub fn alert_builder(&self, prompt: &str) -> AlertModalBuilder {
@@ -202,11 +197,7 @@ impl Modals {
     }
 
     /// this blocks until the notification has been acknowledged.
-    pub fn show_notification(
-        &self,
-        notification: &str,
-        qrtext: Option<&str>,
-    ) -> Result<(), xous::Error> {
+    pub fn show_notification(&self, notification: &str, qrtext: Option<&str>) -> Result<(), xous::Error> {
         self.lock();
         let qrtext = match qrtext {
             Some(text) => Some(xous_ipc::String::from_str(text)),
@@ -215,11 +206,10 @@ impl Modals {
         let spec = ManagedNotification {
             token: self.token,
             message: xous_ipc::String::from_str(notification),
-            qrtext: qrtext,
+            qrtext,
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
-        buf.lend(self.conn, Opcode::Notification.to_u32().unwrap())
-            .or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::Notification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         self.unlock();
         Ok(())
     }
@@ -227,14 +217,10 @@ impl Modals {
     /// this blocks until the notification has been acknowledged. It will attempt to render up to 256 bits
     /// of `data` in bip39 format. Data must conform to the codeable lengths by BIP39, or else the routine
     /// will return immediately with an `InvalidString` error without showing any dialog box.
-    pub fn show_bip39(
-        &self,
-        caption: Option<&str>,
-        data: &Vec::<u8>,
-    ) -> Result<(), xous::Error> {
+    pub fn show_bip39(&self, caption: Option<&str>, data: &Vec<u8>) -> Result<(), xous::Error> {
         match data.len() {
             16 | 20 | 24 | 28 | 32 => (),
-            _ => return Err(xous::Error::InvalidString)
+            _ => return Err(xous::Error::InvalidString),
         }
         self.lock();
         let mut bip39_data = [0u8; 32];
@@ -243,39 +229,32 @@ impl Modals {
         }
         let spec = ManagedBip39 {
             token: self.token,
-            caption: if let Some(c) = caption {Some(xous_ipc::String::from_str(c))} else {None},
+            caption: if let Some(c) = caption { Some(xous_ipc::String::from_str(c)) } else { None },
             bip39_data,
-            bip39_len: if data.len() <= 32 {data.len() as u32} else {32},
+            bip39_len: if data.len() <= 32 { data.len() as u32 } else { 32 },
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
-        buf.lend(self.conn, Opcode::Bip39.to_u32().unwrap())
-            .or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::Bip39.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         self.unlock();
         Ok(())
     }
 
-    pub fn input_bip39(
-        &self,
-        prompt: Option<&str>,
-    ) -> Result<Vec::<u8>, xous::Error> {
+    pub fn input_bip39(&self, prompt: Option<&str>) -> Result<Vec<u8>, xous::Error> {
         self.lock();
         let spec = ManagedBip39 {
             token: self.token,
-            caption: if let Some(c) = prompt {Some(xous_ipc::String::from_str(c))} else {None},
+            caption: if let Some(c) = prompt { Some(xous_ipc::String::from_str(c)) } else { None },
             bip39_data: [0u8; 32],
             bip39_len: 0,
         };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.conn, Opcode::Bip39Input.to_u32().unwrap())
-            .or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::Bip39Input.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let result = buf.to_original::<ManagedBip39, _>().or(Err(xous::Error::InternalError))?;
         self.unlock();
         if result.bip39_len == 0 {
             Err(xous::Error::InvalidString)
         } else {
-            Ok(
-                result.bip39_data[..result.bip39_len as usize].to_vec()
-            )
+            Ok(result.bip39_data[..result.bip39_len as usize].to_vec())
         }
     }
 
@@ -289,12 +268,8 @@ impl Modals {
         // center image in modal
         const BORDER: u32 = 3;
         let margin = Point::new(
-            (BORDER + max(0, (gam::IMG_MODAL_WIDTH - 2 * BORDER - bm_width) / 2))
-                .try_into()
-                .unwrap(),
-            (BORDER + max(0, (gam::IMG_MODAL_HEIGHT - 2 * BORDER - bm_height) / 2))
-                .try_into()
-                .unwrap(),
+            (BORDER + max(0, (gam::IMG_MODAL_WIDTH - 2 * BORDER - bm_width) / 2)).try_into().unwrap(),
+            (BORDER + max(0, (gam::IMG_MODAL_HEIGHT - 2 * BORDER - bm_height) / 2)).try_into().unwrap(),
         );
         bm.translate(margin);
 
@@ -306,24 +281,14 @@ impl Modals {
             tiles[t] = Some(*tile);
         }
 
-        let spec = ManagedImage {
-            token: self.token,
-            tiles: tiles,
-        };
+        let spec = ManagedImage { token: self.token, tiles };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
-        buf.lend(self.conn, Opcode::Image.to_u32().unwrap())
-            .or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::Image.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         self.unlock();
         Ok(())
     }
 
-    pub fn start_progress(
-        &self,
-        title: &str,
-        start: u32,
-        end: u32,
-        current: u32,
-    ) -> Result<(), xous::Error> {
+    pub fn start_progress(&self, title: &str, start: u32, end: u32, current: u32) -> Result<(), xous::Error> {
         self.lock();
         let spec = ManagedProgress {
             token: self.token,
@@ -335,8 +300,7 @@ impl Modals {
             step: 1,
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
-        buf.lend(self.conn, Opcode::StartProgress.to_u32().unwrap())
-            .or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::StartProgress.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         Ok(())
     }
 
@@ -356,11 +320,10 @@ impl Modals {
             end_work: end,
             current_work: current,
             user_interaction: true,
-            step: step,
+            step,
         };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.conn, Opcode::Slider.to_u32().unwrap())
-            .or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::Slider.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
         let orig = buf.to_original::<SliderPayload, _>().unwrap();
 
@@ -374,19 +337,14 @@ impl Modals {
     pub fn update_progress(&self, current: u32) -> Result<(), xous::Error> {
         match xous::try_send_message(
             self.conn,
-            Message::new_scalar(
-                Opcode::DoUpdateProgress.to_usize().unwrap(),
-                current as usize,
-                0,
-                0,
-                0,
-            ),
+            Message::new_scalar(Opcode::DoUpdateProgress.to_usize().unwrap(), current as usize, 0, 0, 0),
         ) {
             Ok(_) => (),
             Err(e) => {
                 log::warn!("update_progress failed with {:?}, skipping request", e);
-                // most likely issue is that the server queue is overfull because too many progress updates were sent
-                // sleep the sending thread to rate-limit requests, while discarding the current request.
+                // most likely issue is that the server queue is overfull because too many progress updates
+                // were sent sleep the sending thread to rate-limit requests, while discarding
+                // the current request.
                 xous::yield_slice()
             }
         }
@@ -416,30 +374,23 @@ impl Modals {
 
     pub fn add_list(&self, items: Vec<&str>) -> Result<(), xous::Error> {
         for (_, text) in items.iter().enumerate() {
-            self.add_list_item(text)
-                .or(Err(xous::Error::InternalError))?;
+            self.add_list_item(text).or(Err(xous::Error::InternalError))?;
         }
         Ok(())
     }
 
     pub fn add_list_item(&self, item: &str) -> Result<(), xous::Error> {
         self.lock();
-        let itemname = ManagedListItem {
-            token: self.token,
-            item: ItemName::new(item),
-        };
+        let itemname = ManagedListItem { token: self.token, item: ItemName::new(item) };
         let buf = Buffer::into_buf(itemname).or(Err(xous::Error::InternalError))?;
-        buf.lend(self.conn, Opcode::AddModalItem.to_u32().unwrap())
-            .or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::AddModalItem.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         Ok(())
     }
 
     pub fn get_radiobutton(&self, prompt: &str) -> Result<String, xous::Error> {
         self.lock();
-        let spec = ManagedPromptWithFixedResponse {
-            token: self.token,
-            prompt: xous_ipc::String::from_str(prompt),
-        };
+        let spec =
+            ManagedPromptWithFixedResponse { token: self.token, prompt: xous_ipc::String::from_str(prompt) };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::PromptWithFixedResponse.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
@@ -449,19 +400,14 @@ impl Modals {
     }
 
     pub fn get_radio_index(&self) -> Result<usize, xous::Error> {
-        let msg =
-            Message::new_blocking_scalar(Opcode::GetModalIndex.to_usize().unwrap(), 0, 0, 0, 0);
+        let msg = Message::new_blocking_scalar(Opcode::GetModalIndex.to_usize().unwrap(), 0, 0, 0, 0);
         match send_message(self.conn, msg) {
             Ok(xous::Result::Scalar1(bitfield)) => {
                 let mut i = 0;
                 while (i < u32::bit_length()) & !bitfield.get_bit(i) {
                     i = i + 1;
                 }
-                if i < u32::bit_length() {
-                    Ok(i)
-                } else {
-                    Err(xous::Error::InternalError)
-                }
+                if i < u32::bit_length() { Ok(i) } else { Err(xous::Error::InternalError) }
             }
             _ => Err(xous::Error::InternalError),
         }
@@ -469,10 +415,8 @@ impl Modals {
 
     pub fn get_checkbox(&self, prompt: &str) -> Result<Vec<String>, xous::Error> {
         self.lock();
-        let spec = ManagedPromptWithFixedResponse {
-            token: self.token,
-            prompt: xous_ipc::String::from_str(prompt),
-        };
+        let spec =
+            ManagedPromptWithFixedResponse { token: self.token, prompt: xous_ipc::String::from_str(prompt) };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::PromptWithMultiResponse.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
@@ -489,8 +433,7 @@ impl Modals {
 
     pub fn get_check_index(&self) -> Result<Vec<usize>, xous::Error> {
         let mut ret = Vec::<usize>::new();
-        let msg =
-            Message::new_blocking_scalar(Opcode::GetModalIndex.to_usize().unwrap(), 0, 0, 0, 0);
+        let msg = Message::new_blocking_scalar(Opcode::GetModalIndex.to_usize().unwrap(), 0, 0, 0, 0);
         match send_message(self.conn, msg) {
             Ok(xous::Result::Scalar1(bitfield)) => {
                 let mut i = 0;
@@ -506,30 +449,19 @@ impl Modals {
         }
     }
 
-    pub fn dynamic_notification(
-        &self,
-        title: Option<&str>,
-        text: Option<&str>,
-    ) -> Result<(), xous::Error> {
+    pub fn dynamic_notification(&self, title: Option<&str>, text: Option<&str>) -> Result<(), xous::Error> {
         self.lock();
         let spec = DynamicNotification {
             token: self.token,
-            title: if let Some(t) = title {
-                Some(xous_ipc::String::from_str(t))
-            } else {
-                None
-            },
-            text: if let Some(t) = text {
-                Some(xous_ipc::String::from_str(t))
-            } else {
-                None
-            },
+            title: if let Some(t) = title { Some(xous_ipc::String::from_str(t)) } else { None },
+            text: if let Some(t) = text { Some(xous_ipc::String::from_str(t)) } else { None },
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::DynamicNotification.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
         Ok(())
     }
+
     pub fn dynamic_notification_update(
         &self,
         title: Option<&str>,
@@ -537,25 +469,15 @@ impl Modals {
     ) -> Result<(), xous::Error> {
         let spec = DynamicNotification {
             token: self.token,
-            title: if let Some(t) = title {
-                Some(xous_ipc::String::from_str(t))
-            } else {
-                None
-            },
-            text: if let Some(t) = text {
-                Some(xous_ipc::String::from_str(t))
-            } else {
-                None
-            },
+            title: if let Some(t) = title { Some(xous_ipc::String::from_str(t)) } else { None },
+            text: if let Some(t) = text { Some(xous_ipc::String::from_str(t)) } else { None },
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
-        buf.lend(
-            self.conn,
-            Opcode::UpdateDynamicNotification.to_u32().unwrap(),
-        )
-        .or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::UpdateDynamicNotification.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
         Ok(())
     }
+
     pub fn dynamic_notification_close(&self) -> Result<(), xous::Error> {
         send_message(
             self.conn,
@@ -599,40 +521,39 @@ impl Modals {
         }
         self.have_lock.set(true);
     }
-    fn unlock(&self) {
-        self.have_lock.set(false);
-    }
-    pub fn conn(&self) -> CID {
-        self.conn
-    }
+
+    fn unlock(&self) { self.have_lock.set(false); }
+
+    pub fn conn(&self) -> CID { self.conn }
+
     /// Don't leak this token outside of your server, otherwise, another server can pretend to be you and
     /// steal your modal information!
-    pub fn token(&self) -> [u32; 4] {
-        self.token
-    }
+    pub fn token(&self) -> [u32; 4] { self.token }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Modals {
     fn drop(&mut self) {
-        // the connection to the server side must be reference counted, so that multiple instances of this object within
-        // a single process do not end up de-allocating the CID on other threads before they go out of scope.
-        // Note to future me: you want this. Don't get rid of it because you think, "nah, nobody will ever make more than one copy of this object".
+        // the connection to the server side must be reference counted, so that multiple instances of this
+        // object within a single process do not end up de-allocating the CID on other threads before
+        // they go out of scope. Note to future me: you want this. Don't get rid of it because you
+        // think, "nah, nobody will ever make more than one copy of this object".
         if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe {
                 xous::disconnect(self.conn).unwrap();
             }
         }
-        // if there was object-specific state (such as a one-time use server for async callbacks, specific to the object instance),
-        // de-allocate those items here. They don't need a reference count because they are object-specific
+        // if there was object-specific state (such as a one-time use server for async callbacks, specific to
+        // the object instance), de-allocate those items here. They don't need a reference count
+        // because they are object-specific
     }
 }
 
 /// If a dynamic notification is active, this will block and return only if one of two
 /// conditions are met:
-/// 1. a key is pressed, in which case, the `Some(char)` is the key pressed. If there is a
-///    "fat finger" event, only the first character is reported.
+/// 1. a key is pressed, in which case, the `Some(char)` is the key pressed. If there is a "fat finger" event,
+///    only the first character is reported.
 /// 2. the dynamic notification is closed, in which case a `None` is reported.
 ///
 /// This function is "broken out" so that it can be called from a thread without having

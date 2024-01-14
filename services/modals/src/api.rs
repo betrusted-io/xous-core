@@ -66,7 +66,8 @@ pub struct ManagedProgress {
     // these are automatcally turned into percentages on a scale of 0->100%
     /// starting quanta to track (e.g. starting sector for erase).
     pub start_work: u32,
-    /// end quanta to track (e.g. ending sector for erase). end is by definition the larger number than start.
+    /// end quanta to track (e.g. ending sector for erase). end is by definition the larger number than
+    /// start.
     pub end_work: u32,
     /// current quanta of work. Used to int the bar, updates are just a scalar with the same value.
     pub current_work: u32,
@@ -101,16 +102,18 @@ pub(crate) enum Opcode {
     Notification = 2,
     /// bip39 coded notification
     Bip39 = 31, // ---- note op number
-    Bip39Input = 32, // ----- note op number
+    Bip39Input = 32,  // ----- note op number
     Bip39Return = 33, // ----- note op number
     SliderReturn = 34,
     Slider = 35,
     /// display an image
     #[cfg(feature = "ditherpunk")]
     Image = 3,
-    /// dynamic notification - a simple non-interactive notification that allows its text to be dynamically updated
+    /// dynamic notification - a simple non-interactive notification that allows its text to be dynamically
+    /// updated
     DynamicNotification = 4,
-    /// listen to dynamic notification - a blocking call, meant to be called from a separate thread from the control loop
+    /// listen to dynamic notification - a blocking call, meant to be called from a separate thread from the
+    /// control loop
     ListenToDynamicNotification = 5,
 
     /// ask a question, get a free-form answer back
