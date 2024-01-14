@@ -8,22 +8,21 @@ pub struct Uart {
 impl Uart {
     fn put_digit(&mut self, d: u8) {
         let nyb = d & 0xF;
-        let c = if nyb < 10 {
-            nyb + 0x30
-        } else {
-            nyb + 0x61 - 10
-        };
+        let c = if nyb < 10 { nyb + 0x30 } else { nyb + 0x61 - 10 };
         assert!(c >= 0x30, "conversion failed!");
         self.putc(c);
     }
+
     pub fn put_hex(&mut self, c: u8) {
         self.put_digit(c >> 4);
         self.put_digit(c & 0xF);
     }
+
     pub fn newline(&mut self) {
         self.putc(0xa);
         self.putc(0xd);
     }
+
     pub fn print_hex_word(&mut self, word: u32) {
         for &byte in word.to_be_bytes().iter() {
             self.put_hex(byte);
@@ -42,7 +41,6 @@ impl Uart {
             self.putc(c);
         }
     }
-
 }
 
 use core::fmt::{Error, Write};
@@ -74,9 +72,7 @@ mod debug_print_hardware {
     #[macro_export]
     #[allow(unused_variables)]
     macro_rules! print {
-        ($($args:tt)+) => ({
-            ()
-        });
+        ($($args:tt)+) => {{ () }};
     }
 }
 
