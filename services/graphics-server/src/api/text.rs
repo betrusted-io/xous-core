@@ -1,6 +1,8 @@
-use crate::api::{Gid, Point, Rectangle, GlyphStyle, Cursor};
-use xous_ipc::String;
 use core::ops::Add;
+
+use xous_ipc::String;
+
+use crate::api::{Cursor, Gid, GlyphStyle, Point, Rectangle};
 
 /// coordinates are local to the canvas, not absolute to the screen
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -27,18 +29,10 @@ impl TextBounds {
                 r.translate(by);
                 TextBounds::BoundingBox(r)
             }
-            TextBounds::GrowableFromBr(origin, width) => {
-                TextBounds::GrowableFromBr(origin.add(by), width)
-            }
-            TextBounds::GrowableFromTl(origin, width) => {
-                TextBounds::GrowableFromTl(origin.add(by), width)
-            }
-            TextBounds::GrowableFromBl(origin, width) => {
-                TextBounds::GrowableFromBl(origin.add(by), width)
-            }
-            TextBounds::GrowableFromTr(origin, width) => {
-                TextBounds::GrowableFromTr(origin.add(by), width)
-            }
+            TextBounds::GrowableFromBr(origin, width) => TextBounds::GrowableFromBr(origin.add(by), width),
+            TextBounds::GrowableFromTl(origin, width) => TextBounds::GrowableFromTl(origin.add(by), width),
+            TextBounds::GrowableFromBl(origin, width) => TextBounds::GrowableFromBl(origin.add(by), width),
+            TextBounds::GrowableFromTr(origin, width) => TextBounds::GrowableFromTr(origin.add(by), width),
             TextBounds::CenteredTop(mut r) => {
                 r.translate(by);
                 TextBounds::BoundingBox(r)
@@ -83,22 +77,27 @@ pub const TEXTVIEW_DEFAULT_STYLE: GlyphStyle = GlyphStyle::Regular;
 
 #[derive(Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TextView {
-    // this is the operation as specified for the GAM. Note this is different from the "op" when sent to graphics-server
-    // only the GAM should be sending TextViews to the graphics-server, and a different coding scheme is used for that link.
+    // this is the operation as specified for the GAM. Note this is different from the "op" when sent to
+    // graphics-server only the GAM should be sending TextViews to the graphics-server, and a different
+    // coding scheme is used for that link.
     operation: TextOp,
-    canvas: Gid,                      // GID of the canvas to draw on
-    pub clip_rect: Option<Rectangle>, // this is set by the GAM to the canvas' clip_rect; needed by gfx for drawing. Note this is in screen coordinates.
+    canvas: Gid, // GID of the canvas to draw on
+    pub clip_rect: Option<Rectangle>, /* this is set by the GAM to the canvas' clip_rect; needed by gfx
+                  * for drawing. Note this is in screen coordinates. */
 
     pub untrusted: bool, // render content with random stipples to indicate the strings within are untrusted
     pub token: Option<[u32; 4]>, // optional 128-bit token which is presented to prove a field's trustability
-    pub invert: bool, // only trusted, token-validated TextViews will have the invert bit respected
+    pub invert: bool,    // only trusted, token-validated TextViews will have the invert bit respected
 
     // offsets for text drawing -- exactly one of the following options should be specified
     // note that the TextBounds coordinate system is local to the canvas, not the screen
     pub bounds_hint: TextBounds,
-    pub bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified. This is local to the canvas.
-    pub overflow: Option<bool>, // indicates if the text has overflowed the canvas, set by the drawing routine
-    dry_run: bool, // callers should not set; use TexOp to select. gam-side bookkeepping, set to true if no drawing is desired and we just want to compute the bounds
+    pub bounds_computed: Option<Rectangle>, /* is Some(Rectangle) if bounds have been computed and text
+                                             * has not been modified. This is local to the canvas. */
+    pub overflow: Option<bool>, /* indicates if the text has overflowed the canvas, set by the drawing
+                                 * routine */
+    dry_run: bool, /* callers should not set; use TexOp to select. gam-side bookkeepping, set to true if
+                    * no drawing is desired and we just want to compute the bounds */
 
     pub style: GlyphStyle,
     pub cursor: Cursor,
@@ -146,29 +145,20 @@ impl TextView {
             busy_animation_state: None,
         }
     }
-    pub fn dry_run(&self) -> bool {
-        self.dry_run
-    }
-    pub fn set_dry_run(&mut self, dry_run: bool) {
-        self.dry_run = dry_run;
-    }
-    pub fn set_op(&mut self, op: TextOp) {
-        self.operation = op;
-    }
-    pub fn get_op(&self) -> TextOp {
-        self.operation
-    }
-    pub fn get_canvas_gid(&self) -> Gid {
-        self.canvas
-    }
 
-    pub fn to_str(&self) -> &str {
-        self.text.as_str().unwrap()
-    }
+    pub fn dry_run(&self) -> bool { self.dry_run }
 
-    pub fn clear_str(&mut self) {
-        self.text.clear()
-    }
+    pub fn set_dry_run(&mut self, dry_run: bool) { self.dry_run = dry_run; }
+
+    pub fn set_op(&mut self, op: TextOp) { self.operation = op; }
+
+    pub fn get_op(&self) -> TextOp { self.operation }
+
+    pub fn get_canvas_gid(&self) -> Gid { self.canvas }
+
+    pub fn to_str(&self) -> &str { self.text.as_str().unwrap() }
+
+    pub fn clear_str(&mut self) { self.text.clear() }
 
     pub fn populate_from(&mut self, t: &TextView) {
         self.canvas = t.canvas;
@@ -196,14 +186,13 @@ impl TextView {
 
 // Allow a `&TextView` to be used anywhere that expects a `&str`
 impl AsRef<str> for TextView {
-    fn as_ref(&self) -> &str {
-        self.to_str()
-    }
+    fn as_ref(&self) -> &str { self.to_str() }
 }
 
 impl core::fmt::Debug for TextView {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        // this should definitely be extended to print more relevant data, but for now just render the string itself
+        // this should definitely be extended to print more relevant data, but for now just render the string
+        // itself
         write!(
             f,
             "{:?}, {:?}, {:?}, {:?}, dry_run: {:?}, {}",
@@ -219,9 +208,7 @@ impl core::fmt::Debug for TextView {
 
 // allow printing of the text
 impl core::fmt::Display for TextView {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.to_str())
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, "{}", self.to_str()) }
 }
 
 // allow `write!()` macro on a` &TextView`

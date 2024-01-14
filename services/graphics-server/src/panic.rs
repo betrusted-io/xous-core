@@ -1,6 +1,6 @@
-use std::thread;
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread;
 
 use utralib::generated::*;
 
@@ -13,21 +13,21 @@ const PANIC_STD_SERVER: &[u8; 16] = b"panic-to-screen!";
 ///
 /// Some simplifying assumptions include:
 ///   - Only Latin, monospace (16-px wide) characters from the `mono` font set.
-///   - Panics occupy a fixed area in the center of the screen, that can only hold
-///     a limited amount of text: 304-px x 384-px text area = 40 char x 24 lines = 960 chars
+///   - Panics occupy a fixed area in the center of the screen, that can only hold a limited amount of
+///     text: 304-px x 384-px text area = 40 char x 24 lines = 960 chars
 ///   - The Panic frame is slightly larger to give a cosmetic border
 ///   - Panics are black background with white text to distinguish them as secured system messages.
 ///   - Panics can't be dismissed, and should persist even if other threads are capable of running.
-///   - The Panic handler can conflict with the regular display routines because it unsafely
-///     creates a copy of all the hardware access structures. Thus there is a variable
-///     shared with the parent thread to stop redraws permanently in the case of a panic.
+///   - The Panic handler can conflict with the regular display routines because it unsafely creates a
+///     copy of all the hardware access structures. Thus there is a variable shared with the parent
+///     thread to stop redraws permanently in the case of a panic.
 ///
 /// Note that the frame buffer is 336 px wide, which is 10.5 32-bit words.
 /// The excess 16 bits are the dirty bit field.
-
 use crate::{
-    backend::{FB_WIDTH_PIXELS, FB_WIDTH_WORDS, FB_SIZE},
-    api::{PixelColor, GlyphSprite}, blitstr2::NULL_GLYPH_SPRITE
+    api::{GlyphSprite, PixelColor},
+    backend::{FB_SIZE, FB_WIDTH_PIXELS, FB_WIDTH_WORDS},
+    blitstr2::NULL_GLYPH_SPRITE,
 };
 /// How far down the screen the panic box draws
 const TOP_OFFSET: usize = 48;
@@ -45,15 +45,11 @@ const BOTTOM_LINE: usize = TOP_OFFSET + HEIGHT_CHARS * GLYPH_HEIGHT + TEXT_MARGI
 const LEFT_EDGE: usize = (FB_WIDTH_PIXELS - (WIDTH_CHARS * GLYPH_WIDTH + TEXT_MARGIN * 2)) / 2; // 24
 const RIGHT_EDGE: usize = FB_WIDTH_PIXELS - LEFT_EDGE; // 312
 
-pub(crate) fn panic_handler_thread(
-    is_panic: Arc::<AtomicBool>,
-    hwfb: u32,
-    control: u32,
-) {
+pub(crate) fn panic_handler_thread(is_panic: Arc<AtomicBool>, hwfb: u32, control: u32) {
     thread::spawn({
         move || {
-            let panic_server = xous::create_server_with_address(PANIC_STD_SERVER)
-            .expect("Couldn't create panic server");
+            let panic_server =
+                xous::create_server_with_address(PANIC_STD_SERVER).expect("Couldn't create panic server");
 
             let mut display = unsafe { PanicDisplay::new(hwfb, control) };
             loop {
@@ -76,14 +72,12 @@ pub(crate) fn panic_handler_thread(
                 let len = match body.valid {
                     Some(v) => v,
                     None => continue, // ignore, don't fail
-                }.get();
-                let s = unsafe{core::str::from_utf8_unchecked(
-                    &body.buf.as_slice()[..len]
-                )};
+                }
+                .get();
+                let s = unsafe { core::str::from_utf8_unchecked(&body.buf.as_slice()[..len]) };
                 display.append_string(s);
                 display.update_dirty();
             }
-
         }
     });
 }
@@ -93,7 +87,7 @@ struct PanicDisplay<'a> {
     /// hardware framebuffer (no double buffering)
     fb: &'a mut [u32],
     /// hardware register copy (very dangerous)
-    csr: CSR::<u32>,
+    csr: CSR<u32>,
     /// current x/y position of the latest character to add to the panic box
     x: usize,
     y: usize,
@@ -115,15 +109,16 @@ impl<'a> PanicDisplay<'a> {
             y: TEXT_MARGIN,
         }
     }
+
     /// commits the data in the framebuffer to the screen
     fn update_dirty(&mut self) {
         self.csr.wfo(utra::memlcd::COMMAND_UPDATEDIRTY, 1);
         while self.busy() {}
     }
+
     /// indicates if a commit is in progress
-    fn busy(&self) -> bool {
-        self.csr.rf(utra::memlcd::BUSY_BUSY) == 1
-    }
+    fn busy(&self) -> bool { self.csr.rf(utra::memlcd::BUSY_BUSY) == 1 }
+
     fn put_pixel(&mut self, x: usize, y: usize, color: PixelColor) {
         if color == PixelColor::Light {
             self.fb[(x + y * FB_WIDTH_WORDS * 32) / 32] |= 1 << (x % 32)
@@ -133,6 +128,7 @@ impl<'a> PanicDisplay<'a> {
         // set the dirty bit on the line that contains the pixel
         self.fb[y * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
     }
+
     /// draw a black rectangle into which all the characters are placed. This could
     /// probably be optimized to do its work in words instead of as pixels, but it works.
     fn panic_rectangle(&mut self) {
@@ -142,13 +138,13 @@ impl<'a> PanicDisplay<'a> {
             }
         }
     }
+
     /// Blit a glyph
     /// Examples of word alignment for destination frame buffer:
     /// 1. Fits in word: xr:1..7   => (data[0].bit_30)->(data[0].bit_26), mask:0x7c00_0000
     /// 2. Spans words:  xr:30..36 => (data[0].bit_01)->(data[1].bit_29), mask:[0x0000_0003,0xe000_000]
     ///
     /// This is copied out of the blitstr2 module and adapted for the panic handler.
-    ///
     fn draw_glyph(&mut self, x: usize, y: usize, gs: GlyphSprite) {
         const SPRITE_PX: i16 = 16;
         const SPRITE_WORDS: i16 = 8;
@@ -202,12 +198,15 @@ impl<'a> PanicDisplay<'a> {
                     partial_mask_lo = ones as u32;
                     partial_mask_hi = (ones >> 32) as u32;
                 }
-                // XOR glyph pixels onto destination buffer. Note that despite the masks above, we will not render
-                // partial glyphs that cross the absolute bounds of the left and right edge of the screen.
+                // XOR glyph pixels onto destination buffer. Note that despite the masks above, we will not
+                // render partial glyphs that cross the absolute bounds of the left and right
+                // edge of the screen.
                 if x0 >= 0 && x1 < FB_WIDTH_PIXELS as i16 {
-                    self.fb[(row_base + dest_low_word) as usize] ^= (pattern << (32 - px_in_dest_low_word)) & partial_mask_lo;
+                    self.fb[(row_base + dest_low_word) as usize] ^=
+                        (pattern << (32 - px_in_dest_low_word)) & partial_mask_lo;
                     if wide > px_in_dest_low_word {
-                        self.fb[(row_base + dest_high_word) as usize] ^= (pattern >> px_in_dest_low_word) & partial_mask_hi;
+                        self.fb[(row_base + dest_high_word) as usize] ^=
+                            (pattern >> px_in_dest_low_word) & partial_mask_hi;
                     }
                 }
                 self.fb[(row_base as usize + FB_WIDTH_WORDS - 1) as usize] |= 0x1_0000; // set the dirty bit on the line
@@ -217,7 +216,9 @@ impl<'a> PanicDisplay<'a> {
             row_base += FB_WIDTH_WORDS as i16;
         }
     }
-    /// start laying out the string from the top left and just wrap character by character, considering newlines
+
+    /// start laying out the string from the top left and just wrap character by character, considering
+    /// newlines
     fn append_string(&mut self, s: &str) {
         for ch in s.chars() {
             if ch == '\n' {

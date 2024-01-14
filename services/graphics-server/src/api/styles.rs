@@ -7,43 +7,19 @@ pub enum PixelColor {
 }
 
 impl From<bool> for PixelColor {
-    fn from(pc: bool) -> Self {
-        if pc {
-            PixelColor::Dark
-        } else {
-            PixelColor::Light
-        }
-    }
+    fn from(pc: bool) -> Self { if pc { PixelColor::Dark } else { PixelColor::Light } }
 }
 
 impl From<PixelColor> for bool {
-    fn from(pc: PixelColor) -> bool {
-        if pc == PixelColor::Dark {
-            true
-        } else {
-            false
-        }
-    }
+    fn from(pc: PixelColor) -> bool { if pc == PixelColor::Dark { true } else { false } }
 }
 
 impl From<usize> for PixelColor {
-    fn from(pc: usize) -> Self {
-        if pc == 0 {
-            PixelColor::Light
-        } else {
-            PixelColor::Dark
-        }
-    }
+    fn from(pc: usize) -> Self { if pc == 0 { PixelColor::Light } else { PixelColor::Dark } }
 }
 
 impl From<PixelColor> for usize {
-    fn from(pc: PixelColor) -> usize {
-        if pc == PixelColor::Light {
-            0
-        } else {
-            1
-        }
-    }
+    fn from(pc: PixelColor) -> usize { if pc == PixelColor::Light { 0 } else { 1 } }
 }
 
 /// Style properties for an object
@@ -61,29 +37,18 @@ pub struct DrawStyle {
 
 impl DrawStyle {
     pub fn new(fill: PixelColor, stroke: PixelColor, width: i16) -> Self {
-        Self {
-            fill_color: Some(fill),
-            stroke_color: Some(stroke),
-            stroke_width: width,
-        }
+        Self { fill_color: Some(fill), stroke_color: Some(stroke), stroke_width: width }
     }
 
     /// Create a new style with a given stroke value and defaults for everything else
     pub fn stroke_color(stroke_color: PixelColor) -> Self {
-        Self {
-            stroke_color: Some(stroke_color),
-            ..DrawStyle::default()
-        }
+        Self { stroke_color: Some(stroke_color), ..DrawStyle::default() }
     }
 }
 
 impl Default for DrawStyle {
     fn default() -> Self {
-        Self {
-            fill_color: Some(PixelColor::Dark),
-            stroke_color: Some(PixelColor::Dark),
-            stroke_width: 1,
-        }
+        Self { fill_color: Some(PixelColor::Dark), stroke_color: Some(PixelColor::Dark), stroke_width: 1 }
     }
 }
 

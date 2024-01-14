@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 use super::cliprect::ClipRect;
-use crate::GlyphSprite;
 #[allow(unused_imports)]
-use super::{LINES, WORDS_PER_LINE, WIDTH, FrBuf};
+use super::{FrBuf, LINES, WIDTH, WORDS_PER_LINE};
 use crate::api::Point;
+use crate::GlyphSprite;
 
 /// Null glyph to use when everything else fails
 pub const NULL_GLYPH: [u32; 8] = [0, 0x5500AA, 0x5500AA, 0x5500AA, 0x5500AA, 0x5500AA, 0, 0];
@@ -29,7 +29,6 @@ pub const REPLACEMENT: char = '\u{FFFD}';
 /// Examples of word alignment for destination frame buffer:
 /// 1. Fits in word: xr:1..7   => (data[0].bit_30)->(data[0].bit_26), mask:0x7c00_0000
 /// 2. Spans words:  xr:30..36 => (data[0].bit_01)->(data[1].bit_29), mask:[0x0000_0003,0xe000_000]
-///
 pub fn xor_glyph(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: ClipRect) {
     const SPRITE_PX: i16 = 16;
     const SPRITE_WORDS: i16 = 8;
@@ -47,9 +46,15 @@ pub fn xor_glyph(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: Clip
     }
     // Calculate word alignment for destination buffer
     let x0 = p.x;
-    if x0 >= cr.max.x as i16 { log::trace!("out the right"); return } // out the right hand side
+    if x0 >= cr.max.x as i16 {
+        log::trace!("out the right");
+        return;
+    } // out the right hand side
     let x1 = p.x + wide - 1;
-    if x1 < cr.min.x as i16 { log::trace!("out the left"); return } // out the left hand side
+    if x1 < cr.min.x as i16 {
+        log::trace!("out the left");
+        return;
+    } // out the left hand side
     let dest_low_word = x0 >> 5;
     let dest_high_word = x1 >> 5;
     let px_in_dest_low_word = 32 - (x0 & 0x1f);
@@ -90,15 +95,19 @@ pub fn xor_glyph(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: Clip
             // partial glyphs that cross the absolute bounds of the left and right edge of the screen.
             if x0 >= 0 && x1 < WIDTH as i16 {
                 if xor {
-                    fb[(row_base + dest_low_word) as usize] ^= (pattern << (32 - px_in_dest_low_word)) & partial_mask_lo;
+                    fb[(row_base + dest_low_word) as usize] ^=
+                        (pattern << (32 - px_in_dest_low_word)) & partial_mask_lo;
                 } else {
-                    fb[(row_base + dest_low_word) as usize] &= 0xffff_ffff ^ ((pattern << (32 - px_in_dest_low_word)) & partial_mask_lo);
+                    fb[(row_base + dest_low_word) as usize] &=
+                        0xffff_ffff ^ ((pattern << (32 - px_in_dest_low_word)) & partial_mask_lo);
                 }
                 if wide > px_in_dest_low_word {
                     if xor {
-                        fb[(row_base + dest_high_word) as usize] ^= (pattern >> px_in_dest_low_word) & partial_mask_hi;
+                        fb[(row_base + dest_high_word) as usize] ^=
+                            (pattern >> px_in_dest_low_word) & partial_mask_hi;
                     } else {
-                        fb[(row_base + dest_high_word) as usize] &= 0xffff_ffff ^ ((pattern >> px_in_dest_low_word) & partial_mask_hi);
+                        fb[(row_base + dest_high_word) as usize] &=
+                            0xffff_ffff ^ ((pattern >> px_in_dest_low_word) & partial_mask_hi);
                     }
                 }
             } else {
@@ -115,7 +124,6 @@ pub fn xor_glyph(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: Clip
 }
 
 /// Blit a glyph that is based off of 32x sprites.
-///
 pub fn xor_glyph_large(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: ClipRect) {
     const SPRITE_PX: i16 = 32;
     const SPRITE_WORDS: i16 = 8;
@@ -135,9 +143,15 @@ pub fn xor_glyph_large(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr
     }
     // Calculate word alignment for destination buffer
     let x0 = p.x;
-    if x0 >= cr.max.x as i16 { log::trace!("out the right"); return } // out the right hand side
+    if x0 >= cr.max.x as i16 {
+        log::trace!("out the right");
+        return;
+    } // out the right hand side
     let x1 = p.x + (wide << 1) - 1;
-    if x1 < cr.min.x as i16 { log::trace!("out the left"); return } // out the left hand side
+    if x1 < cr.min.x as i16 {
+        log::trace!("out the left");
+        return;
+    } // out the left hand side
     let dest_low_word = x0 >> 5;
     let mut dest_high_word = x1 >> 5;
     // fixup case where a glyph is very narrow and and gs.wide / 2 is rounded down to 0.
@@ -174,15 +188,19 @@ pub fn xor_glyph_large(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr
             // XOR glyph pixels onto destination buffer
             if x0 >= 0 && x1_2x < WIDTH as i16 {
                 if xor {
-                    fb[(row_base + dest_low_word) as usize] ^= (src << (32 - px_in_dest_low_word)) & partial_mask_lo;
+                    fb[(row_base + dest_low_word) as usize] ^=
+                        (src << (32 - px_in_dest_low_word)) & partial_mask_lo;
                 } else {
-                    fb[(row_base + dest_low_word) as usize] &= 0xffff_ffff ^ ((src << (32 - px_in_dest_low_word)) & partial_mask_lo);
+                    fb[(row_base + dest_low_word) as usize] &=
+                        0xffff_ffff ^ ((src << (32 - px_in_dest_low_word)) & partial_mask_lo);
                 }
                 if (wide << 1) >= px_in_dest_low_word {
                     if xor {
-                        fb[(row_base + dest_high_word) as usize] ^= (src >> px_in_dest_low_word) & partial_mask_hi;
+                        fb[(row_base + dest_high_word) as usize] ^=
+                            (src >> px_in_dest_low_word) & partial_mask_hi;
                     } else {
-                        fb[(row_base + dest_high_word) as usize] &= 0xffff_ffff ^ ((src >> px_in_dest_low_word) & partial_mask_hi);
+                        fb[(row_base + dest_high_word) as usize] &=
+                            0xffff_ffff ^ ((src >> px_in_dest_low_word) & partial_mask_hi);
                     }
                 }
             }
@@ -196,7 +214,6 @@ pub fn xor_glyph_large(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr
 ///
 /// This is similar to xor_glyph(). But, instead of using 16px sprites for input
 /// and output, this takes 16px sprites as input and blits 32px sprites as output.
-///
 pub fn xor_glyph_2x(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: ClipRect) {
     const SPRITE_PX: i16 = 16;
     const SPRITE_WORDS: i16 = 8;
@@ -214,9 +231,15 @@ pub fn xor_glyph_2x(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: C
     }
     // Calculate word alignment for destination buffer
     let x0 = p.x;
-    if x0 >= cr.max.x as i16 { log::trace!("out the right"); return } // out the right hand side
+    if x0 >= cr.max.x as i16 {
+        log::trace!("out the right");
+        return;
+    } // out the right hand side
     let x1 = p.x + (wide << 1) - 1;
-    if x1 < cr.min.x as i16 { log::trace!("out the left"); return } // out the left hand side
+    if x1 < cr.min.x as i16 {
+        log::trace!("out the left");
+        return;
+    } // out the left hand side
     let dest_low_word = x0 >> 5;
     let mut dest_high_word = x1 >> 5;
     if dest_high_word == dest_low_word {
@@ -264,15 +287,19 @@ pub fn xor_glyph_2x(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: C
             // XOR glyph pixels onto destination buffer
             if x0 >= 0 && x1_2x < WIDTH as i16 {
                 if xor {
-                    fb[(row_base + dest_low_word) as usize] ^= (src << (32 - px_in_dest_low_word)) & partial_mask_lo;
+                    fb[(row_base + dest_low_word) as usize] ^=
+                        (src << (32 - px_in_dest_low_word)) & partial_mask_lo;
                 } else {
-                    fb[(row_base + dest_low_word) as usize] &= 0xffff_ffff ^ ((src << (32 - px_in_dest_low_word)) & partial_mask_lo);
+                    fb[(row_base + dest_low_word) as usize] &=
+                        0xffff_ffff ^ ((src << (32 - px_in_dest_low_word)) & partial_mask_lo);
                 }
                 if (wide << 1) >= px_in_dest_low_word {
                     if xor {
-                        fb[(row_base + dest_high_word) as usize] ^= (src >> px_in_dest_low_word) & partial_mask_hi;
+                        fb[(row_base + dest_high_word) as usize] ^=
+                            (src >> px_in_dest_low_word) & partial_mask_hi;
                     } else {
-                        fb[(row_base + dest_high_word) as usize] &= 0xffff_ffff ^ ((src >> px_in_dest_low_word) & partial_mask_hi);
+                        fb[(row_base + dest_high_word) as usize] &=
+                            0xffff_ffff ^ ((src >> px_in_dest_low_word) & partial_mask_hi);
                     }
                 }
             }

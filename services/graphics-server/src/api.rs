@@ -26,12 +26,12 @@ pub mod glyphstyle;
 pub use glyphstyle::*;
 pub mod blitstr2;
 pub use blitstr2::*;
-#[cfg(feature="ditherpunk")]
+#[cfg(feature = "ditherpunk")]
 pub mod tile;
-#[cfg(feature="ditherpunk")]
-pub use tile::*;
-
 use std::hash::{Hash, Hasher};
+
+#[cfg(feature = "ditherpunk")]
+pub use tile::*;
 
 pub const LINES: i16 = 536;
 pub const WIDTH: i16 = 336;
@@ -43,12 +43,9 @@ pub struct Gid {
     gid: [u32; 4],
 }
 impl Gid {
-    pub fn new(id: [u32; 4]) -> Self {
-        Gid { gid: id }
-    }
-    pub fn gid(&self) -> [u32; 4] {
-        self.gid
-    }
+    pub fn new(id: [u32; 4]) -> Self { Gid { gid: id } }
+
+    pub fn gid(&self) -> [u32; 4] { self.gid }
 }
 impl Hash for Gid {
     fn hash<H>(&self, state: &mut H)
@@ -79,7 +76,7 @@ pub(crate) enum Opcode {
     RoundedRectangle, //(RoundedRectangle),
 
     /// Paint a Bitmap Tile
-    #[cfg(feature="ditherpunk")]
+    #[cfg(feature = "ditherpunk")]
     Tile,
 
     /// Draw a circle with a specified radius
@@ -132,7 +129,7 @@ pub enum ClipObjectType {
     Rect(Rectangle),
     RoundRect(RoundedRectangle),
     XorLine(Line),
-    #[cfg(feature="ditherpunk")]
+    #[cfg(feature = "ditherpunk")]
     Tile(Tile),
 }
 
@@ -144,21 +141,18 @@ pub struct ClipObject {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ClipObjectList {
-    // ClipObject is 28 bytes, so 32 of these takes 896 bytes, which is less than a 4k page (the minimum amount that gets remapped)
-    // we limit the length to 32 so we can use the Default initializer to set the None's on the array, otherwise it gets a bit painful.
-    pub list: [Option::<ClipObject>; 32],
+    // ClipObject is 28 bytes, so 32 of these takes 896 bytes, which is less than a 4k page (the minimum
+    // amount that gets remapped) we limit the length to 32 so we can use the Default initializer to set
+    // the None's on the array, otherwise it gets a bit painful.
+    pub list: [Option<ClipObject>; 32],
     free: usize,
 }
 impl ClipObjectList {
-    pub fn default() -> ClipObjectList {
-        ClipObjectList {
-            list: Default::default(),
-            free: 0,
-        }
-    }
+    pub fn default() -> ClipObjectList { ClipObjectList { list: Default::default(), free: 0 } }
+
     pub fn push(&mut self, item: ClipObjectType, clip: Rectangle) -> Result<(), ClipObjectType> {
         if self.free < self.list.len() {
-            self.list[self.free] = Some(ClipObject {clip, obj: item});
+            self.list[self.free] = Some(ClipObject { clip, obj: item });
             self.free += 1;
             Ok(())
         } else {
@@ -185,11 +179,5 @@ pub struct BulkRead {
     pub len: u32, // used to return the length read out of the font map
 }
 impl BulkRead {
-    pub fn default() -> BulkRead {
-        BulkRead {
-            buf: [0; 7936],
-            from_offset: 0,
-            len: 7936,
-        }
-    }
+    pub fn default() -> BulkRead { BulkRead { buf: [0; 7936], from_offset: 0, len: 7936 } }
 }

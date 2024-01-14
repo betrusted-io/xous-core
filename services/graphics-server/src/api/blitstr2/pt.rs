@@ -11,9 +11,7 @@ pub struct Pt {
 
 impl Pt {
     /// Make a new point
-    pub fn new(x: i16, y: i16) -> Pt {
-        Pt { x, y }
-    }
+    pub fn new(x: i16, y: i16) -> Pt { Pt { x, y } }
 }
 
 #[cfg(test)]
