@@ -170,6 +170,7 @@ fn handle_console_irq(_irq_no: usize, arg: *mut usize) {
 
 pub struct OutputWriter {}
 
+#[allow(dead_code)]
 impl OutputWriter {
     pub fn putc(&self, c: u8) {
         #[cfg(feature = "cramium-fpga")]

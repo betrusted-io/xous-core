@@ -92,7 +92,7 @@ impl LoadedProg {
         pio_sm: &mut PioSharedState,
     ) -> Result<Self, PioError> {
         let offset = pio_sm.add_program(&program)?;
-        Ok({ LoadedProg { program, offset: offset as usize, entry_point: None } })
+        Ok(LoadedProg { program, offset: offset as usize, entry_point: None })
     }
 
     pub fn load_with_entrypoint(
@@ -101,7 +101,7 @@ impl LoadedProg {
         pio_sm: &mut PioSharedState,
     ) -> Result<Self, PioError> {
         let offset = pio_sm.add_program(&program)?;
-        Ok({ LoadedProg { program, offset: offset as usize, entry_point: Some(entry_point) } })
+        Ok(LoadedProg { program, offset: offset as usize, entry_point: Some(entry_point) })
     }
 
     pub fn entry(&self) -> usize {

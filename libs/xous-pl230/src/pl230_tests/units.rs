@@ -85,15 +85,18 @@ pub fn basic_tests(pl230: &mut Pl230) -> bool {
         report_api("progress as baseptr[2]", unsafe { cc_struct.channels.as_ptr().read() }.control);
         timeout += 1;
     }
-    #[rustfmt::skip]
-    unsafe {core::arch::asm!(
+
+    unsafe {
+        #[rustfmt::skip]
+        core::arch::asm!(
         ".word 0x500F",
         "nop",
         "nop",
         "nop",
         "nop",
         "nop",
-    ); }
+    );
+    }
 
     // manual flushing, as a sanity check of cache flush if needed
     /*
