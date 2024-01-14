@@ -5,18 +5,19 @@
 use core::mem;
 use core::num::NonZeroUsize;
 
+use armv7::structures::paging::{
+    PageTable as L2PageTable, PageTableDescriptor, PageTableMemory, PageTableType, TranslationTable,
+    TranslationTableDescriptor, TranslationTableMemory, TranslationTableType, PAGE_TABLE_FLAGS,
+    SMALL_PAGE_FLAGS,
+};
+use armv7::{PhysicalAddress, VirtualAddress};
+
 use crate::consts::{
     EXCEPTION_STACK_TOP, FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, GUARD_MEMORY_BYTES, IRQ_STACK_TOP,
     KERNEL_ARGUMENT_OFFSET, KERNEL_STACK_PAGE_COUNT, LOADER_CODE_ADDRESS, PAGE_TABLE_OFFSET,
 };
 use crate::platform::atsama5d27::load::InitialProcess;
 use crate::{bzero, println, BootConfig, XousPid, PAGE_SIZE, WORD_SIZE};
-use armv7::structures::paging::{
-    PageTable as L2PageTable, PageTableDescriptor, PageTableMemory, PageTableType,
-    TranslationTable, TranslationTableDescriptor, TranslationTableMemory, TranslationTableType,
-    PAGE_TABLE_FLAGS, SMALL_PAGE_FLAGS,
-};
-use armv7::{PhysicalAddress, VirtualAddress};
 
 const DEBUG_PAGE_MAPPING: bool = false;
 macro_rules! dprint {
@@ -38,8 +39,7 @@ impl BootConfig {
     pub fn get_top(&self) -> *mut usize {
         let val = unsafe {
             self.sram_start.add(
-                (self.sram_size - self.init_size - self.extra_pages * PAGE_SIZE)
-                    / mem::size_of::<usize>(),
+                (self.sram_size - self.init_size - self.extra_pages * PAGE_SIZE) / mem::size_of::<usize>(),
             )
         };
         assert!((val as usize) >= (self.sram_start as usize));
@@ -61,15 +61,11 @@ impl BootConfig {
         let pg = self.get_top();
         unsafe {
             // Grab the page address and zero it out
-            bzero(
-                pg as *mut usize,
-                pg.add(PAGE_SIZE / mem::size_of::<usize>()) as *mut usize,
-            );
+            bzero(pg as *mut usize, pg.add(PAGE_SIZE / mem::size_of::<usize>()) as *mut usize);
         }
         // Mark this page as in-use by the kernel
         let extra_bytes = self.extra_pages * PAGE_SIZE;
-        self.runtime_page_tracker[(self.sram_size - (extra_bytes + self.init_size)) / PAGE_SIZE] =
-            1;
+        self.runtime_page_tracker[(self.sram_size - (extra_bytes + self.init_size)) / PAGE_SIZE] = 1;
 
         dprintln!("Allocated a physical page: {:08x}", pg as usize);
 
@@ -94,7 +90,10 @@ impl BootConfig {
 
             if is_aligned {
                 return if num_alloc_pages != 4 {
-                    dprintln!("Allocated a dummy page (aligned but not enough pages allocated yet): {:08x}", allocated_page_ptr as usize);
+                    dprintln!(
+                        "Allocated a dummy page (aligned but not enough pages allocated yet): {:08x}",
+                        allocated_page_ptr as usize
+                    );
 
                     // Allocate 4 more pages for a whole L1 translation table
                     for _ in 0..4 {
@@ -107,20 +106,14 @@ impl BootConfig {
                         self.change_owner(pid, allocated_page_ptr as usize);
                     }
 
-                    dprintln!(
-                        "Allocated a L1 page table at {:08x}",
-                        allocated_page_ptr as usize
-                    );
+                    dprintln!("Allocated a L1 page table at {:08x}", allocated_page_ptr as usize);
 
                     allocated_page_ptr
                 } else {
                     allocated_page_ptr
                 };
             } else {
-                dprintln!(
-                    "Allocated a dummy page for alignment: {:08x}",
-                    allocated_page_ptr as usize
-                );
+                dprintln!("Allocated a dummy page for alignment: {:08x}", allocated_page_ptr as usize);
             }
         }
 
@@ -148,10 +141,7 @@ impl BootConfig {
             }
             rpt_offset += rlen / PAGE_SIZE;
         }
-        panic!(
-            "Tried to change region {:08x} that isn't in defined memory!",
-            addr
-        );
+        panic!("Tried to change region {:08x} that isn't in defined memory!", addr);
     }
 
     /// Map the given page to the specified process table.  If necessary,
@@ -168,10 +158,7 @@ impl BootConfig {
         flags: usize,
         pid: XousPid,
     ) {
-        assert!(
-            !(phys == 0 && flags & FLG_VALID != 0),
-            "cannot map zero page"
-        );
+        assert!(!(phys == 0 && flags & FLG_VALID != 0), "cannot map zero page");
         if flags & FLG_VALID != 0 {
             self.change_owner(owner, phys);
         }
@@ -190,11 +177,7 @@ impl BootConfig {
         flags: usize,
         pid: XousPid,
     ) {
-        dprintln!(
-            "PageTable: {:p} {:08x}",
-            translation_table,
-            translation_table as usize
-        );
+        dprintln!("PageTable: {:p} {:08x}", translation_table, translation_table as usize);
         dprint!("MAP: p0x{:08x} -> v0x{:08x} ", phys, virt);
         print_flags(flags);
         dprintln!();
@@ -210,13 +193,7 @@ impl BootConfig {
         assert!(vpn2 < 256);
         assert!(ppn2 < 256);
 
-        dprintln!(
-            "vpn1: {:04x}, vpn2: {:02x}, ppn2: {:08x}, phys frame addr: {:08x}",
-            vpn1,
-            vpn2,
-            ppn2,
-            p
-        );
+        dprintln!("vpn1: {:04x}, vpn2: {:02x}, ppn2: {:08x}, phys frame addr: {:08x}", vpn1, vpn2, ppn2, p);
 
         let mut tt = TranslationTable::new(translation_table);
         let tt = unsafe { tt.table_mut() };
@@ -230,11 +207,10 @@ impl BootConfig {
 
             let na = self.alloc();
             let phys = PhysicalAddress::from_ptr(na);
-            let entry_flags = u32::from(PAGE_TABLE_FLAGS::VALID::Enable)
-                | u32::from(PAGE_TABLE_FLAGS::DOMAIN.val(0xf));
-            let descriptor =
-                TranslationTableDescriptor::new(TranslationTableType::Page, phys, entry_flags)
-                    .expect("tt descriptor");
+            let entry_flags =
+                u32::from(PAGE_TABLE_FLAGS::VALID::Enable) | u32::from(PAGE_TABLE_FLAGS::DOMAIN.val(0xf));
+            let descriptor = TranslationTableDescriptor::new(TranslationTableType::Page, phys, entry_flags)
+                .expect("tt descriptor");
             dprintln!("New TT descriptor: {:032b}", descriptor);
             tt[vpn1] = descriptor;
 
@@ -255,24 +231,13 @@ impl BootConfig {
 
                 let existing_l2_entry = l2_pt[vpn2];
 
-                dprintln!(
-                    "({:08x}) l2_pt[{:08x}] = {:032b}",
-                    l2_phys_addr,
-                    vpn2,
-                    existing_l2_entry
-                );
+                dprintln!("({:08x}) l2_pt[{:08x}] = {:032b}", l2_phys_addr, vpn2, existing_l2_entry);
 
                 if existing_l2_entry.get_type() == PageTableType::SmallPage {
-                    let mapped_addr = existing_l2_entry
-                        .get_addr()
-                        .expect("invalid l2 entry")
-                        .as_u32() as usize;
+                    let mapped_addr =
+                        existing_l2_entry.get_addr().expect("invalid l2 entry").as_u32() as usize;
 
-                    dprintln!(
-                        "L2 entry {:02x} already mapped to {:08x}",
-                        vpn2,
-                        mapped_addr
-                    );
+                    dprintln!("L2 entry {:02x} already mapped to {:08x}", vpn2, mapped_addr);
 
                     // Ensure the entry hasn't already been mapped to a different address.
                     if mapped_addr != p {
@@ -308,12 +273,7 @@ impl BootConfig {
                 )
                 .expect("new l2 entry");
                 l2_pt[vpn2] = new_entry;
-                dprintln!(
-                    "new ({:08x}) l2_pt[{:08x}] = {:032b}",
-                    l2_phys_addr,
-                    vpn2,
-                    l2_pt[vpn2]
-                );
+                dprintln!("new ({:08x}) l2_pt[{:08x}] = {:032b}", l2_phys_addr, vpn2, l2_pt[vpn2]);
 
                 // If we had to allocate a translation table (L1) entry, ensure that it's
                 // mapped into our address space, owned by PID 1.
@@ -335,10 +295,7 @@ impl BootConfig {
                 }
             }
 
-            _ => panic!(
-                "Invalid translation table entry type: {:?}",
-                existing_entry.get_type()
-            ),
+            _ => panic!("Invalid translation table entry type: {:?}", existing_entry.get_type()),
         }
     }
 }
@@ -363,23 +320,11 @@ pub fn map_structs_to_kernel(cfg: &mut BootConfig, table_addr: usize, krn_struct
     // Map the last stack page (4K) to the kernel to make it visible from the trampoline code
     // Otherwise some arguments passed via stack won't be available after the MMU is turned on
     dprintln!("Making the loader stack visible");
-    cfg.map_page(
-        translation_table,
-        0x200ff000,
-        0x200ff000,
-        FLG_R | FLG_X | FLG_VALID,
-        1 as XousPid,
-    );
+    cfg.map_page(translation_table, 0x200ff000, 0x200ff000, FLG_R | FLG_X | FLG_VALID, 1 as XousPid);
 
     // Identity map the page that contains kernel arguments
     dprintln!("Making the kernel arguments visible");
-    cfg.map_page(
-        translation_table,
-        0x20100000,
-        0x20100000,
-        FLG_R | FLG_X | FLG_VALID,
-        1 as XousPid,
-    );
+    cfg.map_page(translation_table, 0x20100000, 0x20100000, FLG_R | FLG_X | FLG_VALID, 1 as XousPid);
 
     for addr in (0..cfg.init_size - GUARD_MEMORY_BYTES).step_by(PAGE_SIZE) {
         cfg.map_page(
@@ -407,10 +352,7 @@ pub fn map_kernel_to_processes(
 ) {
     let processes = unsafe { core::mem::transmute::<_, &[InitialProcess]>(&*cfg.processes) };
 
-    assert_ne!(
-        kernel_exception_sp, 0,
-        "No exception stack allocated for the kernel!"
-    );
+    assert_ne!(kernel_exception_sp, 0, "No exception stack allocated for the kernel!");
 
     for process in processes[1..].iter() {
         println!("Mapping kernel (PID1) text to process PID{}", process.asid);
@@ -419,74 +361,33 @@ pub fn map_kernel_to_processes(
         for addr in (0..ktext_size).step_by(PAGE_SIZE) {
             let phys = ktext_offset + addr;
             let virt = ktext_virt_offset + addr;
-            println!(
-                "MAP ({:08x}): {:08x} -> {:08x}",
-                translation_table as usize, virt, phys
-            );
+            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
 
-            cfg.map_page(
-                translation_table,
-                phys,
-                virt,
-                FLG_VALID | FLG_R | FLG_X,
-                1 as XousPid,
-            );
+            cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_X, 1 as XousPid);
         }
         println!("Mapping kernel (PID1) data to process PID{}", process.asid);
         println!("Offset: {:08x}, size: {:08x}", kdata_offset, kdata_size);
         for addr in (0..kdata_size).step_by(PAGE_SIZE) {
             let phys = kdata_offset + addr;
             let virt = kdata_virt_offset + addr;
-            println!(
-                "MAP ({:08x}): {:08x} -> {:08x}",
-                translation_table as usize, virt, phys
-            );
+            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
 
-            cfg.map_page(
-                translation_table,
-                phys,
-                virt,
-                FLG_VALID | FLG_R | FLG_W,
-                1 as XousPid,
-            );
+            cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_W, 1 as XousPid);
         }
 
-        println!(
-            "Mapping kernel exception stack pages to the process PID{}",
-            process.asid
-        );
+        println!("Mapping kernel exception stack pages to the process PID{}", process.asid);
         for i in 0..KERNEL_STACK_PAGE_COUNT {
-            let virt =
-                EXCEPTION_STACK_TOP - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * i);
-            let phys =
-                kernel_exception_sp - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * (i + 1));
-            println!(
-                "MAP ({:08x}): {:08x} -> {:08x}",
-                translation_table as usize, virt, phys
-            );
-            cfg.map_page(
-                translation_table,
-                phys,
-                virt,
-                FLG_VALID | FLG_R | FLG_W,
-                1 as XousPid,
-            );
+            let virt = EXCEPTION_STACK_TOP - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * i);
+            let phys = kernel_exception_sp - (PAGE_SIZE * KERNEL_STACK_PAGE_COUNT) + (PAGE_SIZE * (i + 1));
+            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
+            cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_W, 1 as XousPid);
         }
 
         println!("Mapping irq stack page to the process PID{}", process.asid);
         let virt = IRQ_STACK_TOP;
         let phys = kernel_irq_sp;
-        println!(
-            "MAP ({:08x}): {:08x} -> {:08x}",
-            translation_table as usize, virt, phys
-        );
-        cfg.map_page(
-            translation_table,
-            phys,
-            virt,
-            FLG_VALID | FLG_R | FLG_W,
-            1 as XousPid,
-        );
+        println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
+        cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_W, 1 as XousPid);
 
         // TODO: For now, make the UART visible for all the processes.
         //       Later on we may reuse the mapping made by the kernel.
@@ -494,17 +395,8 @@ pub fn map_kernel_to_processes(
         for i in 0..4 {
             let virt = 0xffcf_0000 + (i * PAGE_SIZE);
             let phys = 0xf802_0000 + (i * PAGE_SIZE);
-            println!(
-                "MAP ({:08x}): {:08x} -> {:08x}",
-                translation_table as usize, virt, phys
-            );
-            cfg.map_page(
-                translation_table,
-                phys,
-                virt,
-                FLG_VALID | FLG_R | FLG_W | FLG_X,
-                1 as XousPid,
-            );
+            println!("MAP ({:08x}): {:08x} -> {:08x}", translation_table as usize, virt, phys);
+            cfg.map_page(translation_table, phys, virt, FLG_VALID | FLG_R | FLG_W | FLG_X, 1 as XousPid);
         }
 
         println!("Mapping kernel structures to PID{}", process.asid);

@@ -1,7 +1,7 @@
-use crate::println;
-use sha2_loader::Sha512;
 use ed25519_dalek_loader::Digest;
+use sha2_loader::Sha512;
 
+use crate::println;
 use crate::SIGBLOCK_SIZE;
 
 const VERSION_STR: &'static str = "Xous OS Loader v0.9.6\n\r";
@@ -38,7 +38,7 @@ const FB_WIDTH_WORDS: usize = 11;
 const FB_WIDTH_PIXELS: usize = 336;
 const FB_LINES: usize = 536;
 const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
-                                                  // this font is from the embedded graphics crate https://docs.rs/embedded-graphics/0.7.1/embedded_graphics/
+// this font is from the embedded graphics crate https://docs.rs/embedded-graphics/0.7.1/embedded_graphics/
 const FONT_IMAGE: &'static [u8] = include_bytes!("font6x12_1bpp.raw");
 const CHAR_HEIGHT: u32 = 12;
 const CHAR_WIDTH: u32 = 6;
@@ -51,23 +51,16 @@ struct Gfx {
 }
 impl<'a> Gfx {
     pub fn init(&mut self, clk_mhz: u32) {
-        self.csr
-            .wfo(utra::memlcd::PRESCALER_PRESCALER, (clk_mhz / 2_000_000) - 1);
+        self.csr.wfo(utra::memlcd::PRESCALER_PRESCALER, (clk_mhz / 2_000_000) - 1);
     }
+
     #[allow(dead_code)]
-    pub fn update_all(&mut self) {
-        self.csr.wfo(utra::memlcd::COMMAND_UPDATEALL, 1);
-    }
-    pub fn update_dirty(&mut self) {
-        self.csr.wfo(utra::memlcd::COMMAND_UPDATEDIRTY, 1);
-    }
-    pub fn busy(&self) -> bool {
-        if self.csr.rf(utra::memlcd::BUSY_BUSY) == 1 {
-            true
-        } else {
-            false
-        }
-    }
+    pub fn update_all(&mut self) { self.csr.wfo(utra::memlcd::COMMAND_UPDATEALL, 1); }
+
+    pub fn update_dirty(&mut self) { self.csr.wfo(utra::memlcd::COMMAND_UPDATEDIRTY, 1); }
+
+    pub fn busy(&self) -> bool { if self.csr.rf(utra::memlcd::BUSY_BUSY) == 1 { true } else { false } }
+
     pub fn flush(&mut self) {
         self.update_dirty();
         while self.busy() {}
@@ -76,9 +69,8 @@ impl<'a> Gfx {
             self.fb[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] &= 0x0000_FFFF;
         }
     }
-    pub fn set_devboot(&mut self) {
-        self.csr.wfo(utra::memlcd::DEVBOOT_DEVBOOT, 1);
-    }
+
+    pub fn set_devboot(&mut self) { self.csr.wfo(utra::memlcd::DEVBOOT_DEVBOOT, 1); }
 
     fn char_offset(&self, c: char) -> u32 {
         let fallback = ' ' as u32 - ' ' as u32;
@@ -90,6 +82,7 @@ impl<'a> Gfx {
         }
         fallback
     }
+
     fn put_digit(&mut self, d: u8, pos: &mut Point) {
         let mut buf: [u8; 4] = [0; 4]; // stack buffer for the character encoding
         let nyb = d & 0xF;
@@ -99,15 +92,18 @@ impl<'a> Gfx {
             self.msg(((nyb + 0x61 - 10) as char).encode_utf8(&mut buf), pos);
         }
     }
+
     fn put_hex(&mut self, c: u8, pos: &mut Point) {
         self.put_digit(c >> 4, pos);
         self.put_digit(c & 0xF, pos);
     }
+
     pub fn hex_word(&mut self, word: u32, pos: &mut Point) {
         for &byte in word.to_be_bytes().iter() {
             self.put_hex(byte, pos);
         }
     }
+
     pub fn msg(&mut self, text: &'a str, pos: &mut Point) {
         // this routine is adapted from the embedded graphics crate https://docs.rs/embedded-graphics/0.7.1/embedded_graphics/
         let char_per_row = FONT_IMAGE_WIDTH / CHAR_WIDTH;
@@ -132,10 +128,8 @@ impl<'a> Gfx {
                 // + Character row offset (row 0 = 0, row 1 = (192 * 8) = 1536)
                 // + X offset for the pixel block that comprises this char
                 // + Y offset for pixel block
-                let bitmap_bit_index = char_x
-                    + (FONT_IMAGE_WIDTH * char_y)
-                    + char_walk_x
-                    + (char_walk_y * FONT_IMAGE_WIDTH);
+                let bitmap_bit_index =
+                    char_x + (FONT_IMAGE_WIDTH * char_y) + char_walk_x + (char_walk_y * FONT_IMAGE_WIDTH);
 
                 let bitmap_byte = bitmap_bit_index / 8;
                 let bitmap_bit = 7 - (bitmap_bit_index % 8);
@@ -183,6 +177,7 @@ impl<'a> Gfx {
         pos.x += x_update;
         self.flush();
     }
+
     pub fn draw_pixel(&mut self, pix: Point, color: Color) {
         let mut clip_y: usize = pix.y as usize;
         if clip_y >= FB_LINES {
@@ -212,11 +207,8 @@ enum KeyLoc {
     ThirdPartyPub = 0x20,
 }
 impl Keyrom {
-    pub fn new() -> Self {
-        Keyrom {
-            csr: CSR::new(utra::keyrom::HW_KEYROM_BASE as *mut u32),
-        }
-    }
+    pub fn new() -> Self { Keyrom { csr: CSR::new(utra::keyrom::HW_KEYROM_BASE as *mut u32) } }
+
     fn key_is_zero(&mut self, key_base: KeyLoc) -> bool {
         for offset in key_base as u32..key_base as u32 + 8 {
             self.csr.wfo(utra::keyrom::ADDRESS_ADDRESS, offset as u32);
@@ -226,17 +218,12 @@ impl Keyrom {
         }
         true
     }
+
     fn key_is_dev(&mut self, key_base: KeyLoc) -> bool {
         for offset in 0..8 {
-            self.csr.wfo(
-                utra::keyrom::ADDRESS_ADDRESS,
-                offset as u32 + key_base as u32,
-            );
+            self.csr.wfo(utra::keyrom::ADDRESS_ADDRESS, offset as u32 + key_base as u32);
             let kval = self.csr.rf(utra::keyrom::DATA_DATA);
-            self.csr.wfo(
-                utra::keyrom::ADDRESS_ADDRESS,
-                offset as u32 + KeyLoc::DevPub as u32,
-            );
+            self.csr.wfo(utra::keyrom::ADDRESS_ADDRESS, offset as u32 + KeyLoc::DevPub as u32);
             let dkval = self.csr.rf(utra::keyrom::DATA_DATA);
             if kval != dkval {
                 return false;
@@ -244,16 +231,11 @@ impl Keyrom {
         }
         true
     }
-    fn read_ed25519(
-        &mut self,
-        key_base: KeyLoc,
-    ) -> Result<ed25519_dalek_loader::PublicKey, &'static str> {
+
+    fn read_ed25519(&mut self, key_base: KeyLoc) -> Result<ed25519_dalek_loader::PublicKey, &'static str> {
         let mut pk_bytes: [u8; 32] = [0; 32];
         for (offset, pk_word) in pk_bytes.chunks_exact_mut(4).enumerate() {
-            self.csr.wfo(
-                utra::keyrom::ADDRESS_ADDRESS,
-                key_base as u32 + offset as u32,
-            );
+            self.csr.wfo(utra::keyrom::ADDRESS_ADDRESS, key_base as u32 + offset as u32);
             let word = self.csr.rf(utra::keyrom::DATA_DATA);
             for (&src_byte, dst_byte) in word.to_be_bytes().iter().zip(pk_word.iter_mut()) {
                 *dst_byte = src_byte;
@@ -261,6 +243,7 @@ impl Keyrom {
         }
         ed25519_dalek_loader::PublicKey::from_bytes(&pk_bytes).or(Err("invalid public key"))
     }
+
     /// locks all the keys from future read-out
     pub fn lock(&mut self) {
         for i in 0..256 {
@@ -280,10 +263,7 @@ pub fn validate_xous_img(xous_img_offset: *const u32, fs_prehash: &mut [u8; 64])
     // conjure the signature struct directly out of memory. super unsafe.
     let sig_ptr = xous_img_offset as *const SignatureInFlash;
     let sig: &SignatureInFlash = unsafe { sig_ptr.as_ref().unwrap() };
-    let mut cursor = Point {
-        x: LEFT_MARGIN,
-        y: (FB_LINES as i16 / 2) + 10,
-    }; // draw on bottom half
+    let mut cursor = Point { x: LEFT_MARGIN, y: (FB_LINES as i16 / 2) + 10 }; // draw on bottom half
 
     // clear screen to all black
     let mut gfx = Gfx {
@@ -310,7 +290,8 @@ pub fn validate_xous_img(xous_img_offset: *const u32, fs_prehash: &mut [u8; 64])
         // this will emit a warning -- we want that. this is not a natural or intended normal code exit!
     }
     // insert a pattern of alternating 0101/1010 to create a "gray effect" on the bottom half of the fb
-    // note that the gray has "stripes" every 32 bits but it's visually easier to look at than stripes every other bit
+    // note that the gray has "stripes" every 32 bits but it's visually easier to look at than stripes every
+    // other bit
     let (_top, bottom) = gfx.fb.split_at_mut(gfx.fb.len() / 2);
     for (i, word) in bottom.iter_mut().enumerate() {
         if i % 2 == 0 {
@@ -341,7 +322,8 @@ pub fn validate_xous_img(xous_img_offset: *const u32, fs_prehash: &mut [u8; 64])
                     // self-signing key takes priority
                     if keyrom.key_is_dev(KeyLoc::SelfSignPub) {
                         println!("Self-signed key slot, but with developer public key.");
-                        // mainly to protect against devs who were debugging and just stuck a dev key in the secure slot, and forgot to remove it.
+                        // mainly to protect against devs who were debugging and just stuck a dev key in the
+                        // secure slot, and forgot to remove it.
                         gfx.msg("DEVELOPER KEY DETECTED\n\r", &mut cursor);
                         gfx.set_devboot();
                     }
@@ -398,13 +380,9 @@ pub fn validate_xous_img(xous_img_offset: *const u32, fs_prehash: &mut [u8; 64])
 
         // extract the version and length from the signed region
         use core::convert::TryInto;
-        let protected_version = u32::from_le_bytes(
-            image[signed_len as usize - 8..signed_len as usize - 4]
-                .try_into()
-                .unwrap(),
-        );
-        let protected_len =
-            u32::from_le_bytes(image[signed_len as usize - 4..].try_into().unwrap());
+        let protected_version =
+            u32::from_le_bytes(image[signed_len as usize - 8..signed_len as usize - 4].try_into().unwrap());
+        let protected_len = u32::from_le_bytes(image[signed_len as usize - 4..].try_into().unwrap());
         // check that the signed versions match the version reported in the header
         if sig.version != 2 || (sig.version != protected_version) {
             if sig.version == 1 {
@@ -413,10 +391,7 @@ pub fn validate_xous_img(xous_img_offset: *const u32, fs_prehash: &mut [u8; 64])
                     &mut cursor,
                 );
             } else {
-                gfx.msg(
-                    "Check fail: mismatch on signature record version numbering.\n\r",
-                    &mut cursor,
-                );
+                gfx.msg("Check fail: mismatch on signature record version numbering.\n\r", &mut cursor);
             }
             println!("Check fail: mismatch on signature record version numbering.\n\r");
             println!("sig.version: {}", sig.version);
@@ -429,10 +404,7 @@ pub fn validate_xous_img(xous_img_offset: *const u32, fs_prehash: &mut [u8; 64])
             die();
         }
         if protected_len != signed_len - 4 {
-            gfx.msg(
-                "Check fail: mismatch on header length vs protected length.\n\r",
-                &mut cursor,
-            );
+            gfx.msg("Check fail: mismatch on header length vs protected length.\n\r", &mut cursor);
             println!("Check fail: mismatch on header length vs protected length.\n\r");
             println!("signed_len - 4: {}", signed_len - 4);
             println!("protected_len: {}", protected_len);
@@ -494,10 +466,7 @@ pub fn validate_xous_img(xous_img_offset: *const u32, fs_prehash: &mut [u8; 64])
         }
         unused_stack_words += 1;
     }
-    println!(
-        "Free stack after signature check: {} bytes",
-        unused_stack_words * 4
-    );
+    println!("Free stack after signature check: {} bytes", unused_stack_words * 4);
     gfx.msg("Free stack after sigcheck: 0x", &mut cursor);
     gfx.hex_word(unused_stack_words * 4, &mut cursor);
 
@@ -508,8 +477,9 @@ pub fn validate_xous_img(xous_img_offset: *const u32, fs_prehash: &mut [u8; 64])
     sha_csr.wfo(utra::sha512::POWER_ON, 0); // cut power to the SHA block; this is the expected default state after the bootloader is done.
     let mut engine_csr = CSR::new(utra::engine::HW_ENGINE_BASE as *mut u32);
     engine_csr.wfo(utra::engine::POWER_ON, 0); // cut power to the engine block; this is the expected default state after the bootloader is done.
-                                               // note that removing power does *not* clear the RF or microcode state -- data can leak from the bootloader
-                                               // into other areas because of this! (but I think it's OK because we just mess around with public keys here)
+    // note that removing power does *not* clear the RF or microcode state -- data can leak from the
+    // bootloader into other areas because of this! (but I think it's OK because we just mess around with
+    // public keys here)
 
     true
 }
@@ -530,10 +500,7 @@ fn die() {
             power.rmwf(utra::power::POWER_SELF, 0);
 
             // ship mode is the safest mode -- suitable for long-term storage (~years)
-            com.wfo(
-                utra::com::TX_TX,
-                com_rs::ComState::POWER_SHIPMODE.verb as u32,
-            );
+            com.wfo(utra::com::TX_TX, com_rs::ComState::POWER_SHIPMODE.verb as u32);
             while com.rf(utra::com::STATUS_TIP) == 1 {}
             let _ = com.rf(utra::com::RX_RX); // discard the RX result
             start = ticktimer.rf(utra::ticktimer::TIME0_TIME);

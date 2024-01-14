@@ -2,12 +2,11 @@ use core::{mem, slice};
 
 #[cfg(feature = "atsama5d27")]
 use armv7::structures::paging::TranslationTableMemory;
-
 #[cfg(all(feature = "atsama5d27", feature = "debug-print"))]
 use armv7::{
     structures::paging::{
-        InMemoryRegister, PageTableDescriptor, Readable, TranslationTableDescriptor,
-        TranslationTableType, SMALL_PAGE_FLAGS,
+        InMemoryRegister, PageTableDescriptor, Readable, TranslationTableDescriptor, TranslationTableType,
+        SMALL_PAGE_FLAGS,
     },
     VirtualAddress,
 };
@@ -55,9 +54,7 @@ impl MiniElfSection {
         le_bytes as usize
     }
 
-    pub fn no_copy(&self) -> bool {
-        self.size_and_flags & (1 << 25) != 0
-    }
+    pub fn no_copy(&self) -> bool { self.size_and_flags & (1 << 25) != 0 }
 }
 
 /// Describes a Mini ELF file, suitable for loading into RAM
@@ -109,8 +106,7 @@ impl MiniElf {
         // the page offsets line up for XIP sections. This assert confirms this necessary pre-condition.
         if xip {
             assert!(
-                (image_phys_base & (PAGE_SIZE - 1))
-                    == self.sections[0].virt as usize & (PAGE_SIZE - 1),
+                (image_phys_base & (PAGE_SIZE - 1)) == self.sections[0].virt as usize & (PAGE_SIZE - 1),
                 "Image generator did not align load offsets to page offsets!"
             );
         }
@@ -170,13 +166,7 @@ impl MiniElf {
         // Allocate thread 1 for this process
         let thread_address = allocator.alloc() as usize;
         println!("    Thread 1 @ {:08x}", thread_address);
-        allocator.map_page(
-            tt,
-            thread_address,
-            CONTEXT_OFFSET,
-            FLG_R | FLG_W | FLG_VALID,
-            pid,
-        );
+        allocator.map_page(tt, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID, pid);
 
         // Allocate stack pages.
         println!("    Stack");
@@ -257,8 +247,7 @@ impl MiniElf {
                     this_page += PAGE_SIZE;
 
                     // Part 1: Copy the first chunk over.
-                    let mut first_chunk_size =
-                        PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
+                    let mut first_chunk_size = PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
                     if first_chunk_size > section.len() {
                         first_chunk_size = section.len();
                     }
@@ -357,17 +346,12 @@ impl MiniElf {
                     pages_to_map -= 1;
                 }
                 if VDBG {
-                    println!(
-                        "section is 0x{:x} bytes long; mapping {} pages",
-                        section.len(),
-                        pages_to_map
-                    );
+                    println!("section is 0x{:x} bytes long; mapping {} pages", section.len(), pages_to_map);
                 }
 
                 // --- map FLASH pages to virtual memory ---
                 while pages_to_map > 0 {
-                    let map_phys_addr =
-                        (image_phys_base + section_map_phys_offset) & !(PAGE_SIZE - 1);
+                    let map_phys_addr = (image_phys_base + section_map_phys_offset) & !(PAGE_SIZE - 1);
                     allocator.map_page(tt, map_phys_addr, virt_page, flag_defaults, pid as XousPid);
                     last_mapped_xip = virt_page;
 
@@ -418,12 +402,14 @@ impl MiniElf {
         let mut section_offset = 0;
         for (index, section) in self.sections.iter().enumerate() {
             if let Some(dest_offset) = pt_walk(tt, section.virt as usize) {
-                println!("  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), 0x{:x}(PA dst) len {}/0x{:x}",
+                println!(
+                    "  Section {} start 0x{:x}(PA src), 0x{:x}(VA dst), 0x{:x}(PA dst) len {}/0x{:x}",
                     index,
                     section_offset + image_phys_base,
                     section.virt as usize,
                     dest_offset,
-                    section.len(), section.len()
+                    section.len(),
+                    section.len()
                 );
                 // dumping routines
                 let dump_pa_src = section_offset + image_phys_base;
@@ -432,7 +418,8 @@ impl MiniElf {
                 dump_addr(dump_pa_src, "    Src [:20]  ");
                 dump_addr(dump_pa_dst, "    Dst [:20]  ");
                 dump_addr(dump_pa_src + section.len() - 20, "    Src [-20:] ");
-                // recompute the end section mapping, because PA/VA mappings don't have to be linear (in fact they go in the opposite direction)
+                // recompute the end section mapping, because PA/VA mappings don't have to be linear (in fact
+                // they go in the opposite direction)
                 if let Some(pa_dst_end) = dump_pa_end_dst {
                     dump_addr(pa_dst_end, "    Dst [-20:] ");
                 } else {
@@ -493,15 +480,13 @@ pub fn pt_walk(root: usize, va: usize) -> Option<usize> {
     assert!(vpn1 < 4096);
     assert!(vpn2 < 256);
 
-    let existing_l1_entry = unsafe {
-        ((root as *mut u32).add(vpn1) as *mut TranslationTableDescriptor).read_volatile()
-    };
+    let existing_l1_entry =
+        unsafe { ((root as *mut u32).add(vpn1) as *mut TranslationTableDescriptor).read_volatile() };
     if existing_l1_entry.get_type() == TranslationTableType::Invalid {
         return None;
     }
     let l2_pt_addr = (existing_l1_entry.as_u32() & 0xfff) + vpn1 as u32 * PAGE_SIZE as u32;
-    let existing_l2_entry_addr =
-        unsafe { (l2_pt_addr as *mut u32).add(vpn2) as *mut PageTableDescriptor };
+    let existing_l2_entry_addr = unsafe { (l2_pt_addr as *mut u32).add(vpn2) as *mut PageTableDescriptor };
     let current_entry: PageTableDescriptor = unsafe { existing_l2_entry_addr.read_volatile() };
     let flags_u32 = current_entry.get_flags().expect("flags");
     let flags: InMemoryRegister<u32, SMALL_PAGE_FLAGS::Register> = InMemoryRegister::new(flags_u32);

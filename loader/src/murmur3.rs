@@ -68,19 +68,11 @@ mod tests {
                 slice: &[0x34333231, 0x38373635], // "12345678",
                 hash_32: 0x91b313ce,
             },
-            Result {
-                slice: &[],
-                hash_32: 0,
-            },
+            Result { slice: &[], hash_32: 0 },
         ];
 
         for test in &tests {
-            assert_eq!(
-                murmur3_32(test.slice, 0),
-                test.hash_32,
-                "Failed on slice {:x?}",
-                test.slice
-            );
+            assert_eq!(murmur3_32(test.slice, 0), test.hash_32, "Failed on slice {:x?}", test.slice);
         }
     }
 }

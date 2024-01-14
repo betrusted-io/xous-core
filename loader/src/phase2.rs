@@ -102,16 +102,11 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             }
             #[cfg(feature = "atsama5d27")]
             {
-                (
-                    ktext_offset,
-                    kdata_offset,
-                    kernel_exception_sp,
-                    kernel_irq_sp,
-                ) = xkrn.load(cfg, process_offset - load_size_rounded, 1);
+                (ktext_offset, kdata_offset, kernel_exception_sp, kernel_irq_sp) =
+                    xkrn.load(cfg, process_offset - load_size_rounded, 1);
                 (ktext_size, kdata_size, ktext_virt_offset, kdata_virt_offset) = (
                     (xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1),
-                    (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1)
-                        & !(PAGE_SIZE - 1)),
+                    (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)),
                     xkrn.text_offset as usize,
                     xkrn.data_offset as usize,
                 );
@@ -161,11 +156,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
     #[cfg(feature = "atsama5d27")]
     {
         // Map boot-generated kernel structures into the kernel
-        crate::platform::atsama5d27::boot::map_structs_to_kernel(
-            cfg,
-            krn_l1_pt_addr,
-            krn_struct_start,
-        );
+        crate::platform::atsama5d27::boot::map_structs_to_kernel(cfg, krn_l1_pt_addr, krn_struct_start);
         crate::platform::atsama5d27::boot::map_kernel_to_processes(
             cfg,
             ktext_offset,
@@ -198,10 +189,7 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
             println!();
         }
     }
-    println!(
-        "Runtime Page Tracker: {} bytes",
-        cfg.runtime_page_tracker.len()
-    );
+    println!("Runtime Page Tracker: {} bytes", cfg.runtime_page_tracker.len());
     // mark pages used by suspend/resume according to their needs
     cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 1; // claim the loader stack -- do not allow tampering, as it contains backup kernel args
     cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 1; // 8k in total (to allow for digital signatures to be computed)
@@ -252,17 +240,12 @@ impl ProgramDescription {
         let pid_idx = (pid - 1) as usize;
         let is_kernel = pid == 1;
         let flag_defaults = FLG_R | FLG_W | FLG_VALID | if is_kernel { 0 } else { FLG_U };
-        let stack_addr = if is_kernel {
-            KERNEL_STACK_TOP
-        } else {
-            USER_STACK_TOP
-        } - 16;
+        let stack_addr = if is_kernel { KERNEL_STACK_TOP } else { USER_STACK_TOP } - 16;
         if is_kernel {
             assert!(self.text_offset as usize == KERNEL_LOAD_OFFSET);
             assert!(((self.text_offset + self.text_size) as usize) < EXCEPTION_STACK_TOP);
             assert!(
-                ((self.data_offset + self.data_size + self.bss_size) as usize)
-                    < EXCEPTION_STACK_TOP - 16
+                ((self.data_offset + self.data_size + self.bss_size) as usize) < EXCEPTION_STACK_TOP - 16
             );
             assert!(self.data_offset as usize >= KERNEL_LOAD_OFFSET);
         } else {
@@ -291,20 +274,10 @@ impl ProgramDescription {
 
         // Allocate context for this process
         let thread_address = allocator.alloc() as usize;
-        allocator.map_page(
-            satp,
-            thread_address,
-            CONTEXT_OFFSET,
-            FLG_R | FLG_W | FLG_VALID,
-            pid as XousPid,
-        );
+        allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID, pid as XousPid);
 
         // Allocate stack pages.
-        for i in 0..if is_kernel {
-            KERNEL_STACK_PAGE_COUNT
-        } else {
-            STACK_PAGE_COUNT
-        } {
+        for i in 0..if is_kernel { KERNEL_STACK_PAGE_COUNT } else { STACK_PAGE_COUNT } {
             if i == 0 {
                 // Pre-allocate the first stack offset, since it
                 // will definitely be used
@@ -350,8 +323,7 @@ impl ProgramDescription {
         // Either this is on SPI flash at an aligned address, or it
         // has been copied into RAM already.  This is why we ignore `self.load_offset`
         // and use the `load_offset` parameter instead.
-        let rounded_data_bss =
-            ((self.data_size + self.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let rounded_data_bss = ((self.data_size + self.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
 
         // let load_size_rounded = (self.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         for offset in (0..self.text_size as usize).step_by(PAGE_SIZE) {
@@ -394,13 +366,7 @@ impl ProgramDescription {
 
         // Our "earlyprintk" equivalent
         if cfg!(feature = "earlyprintk") && is_kernel {
-            allocator.map_page(
-                satp,
-                0xF000_2000,
-                0xffcf_0000,
-                FLG_R | FLG_W | FLG_VALID,
-                pid as XousPid,
-            );
+            allocator.map_page(satp, 0xF000_2000, 0xffcf_0000, FLG_R | FLG_W | FLG_VALID, pid as XousPid);
         }
 
         let process = &mut allocator.processes[pid_idx];

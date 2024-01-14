@@ -23,14 +23,14 @@ mod phase1;
 mod phase2;
 mod platform;
 
+use core::{mem, ptr, slice};
+
 use asm::*;
 use bootconfig::BootConfig;
 use consts::*;
 use minielf::*;
 use phase1::{phase_1, InitialProcess};
 use phase2::{phase_2, ProgramDescription};
-
-use core::{mem, ptr, slice};
 
 pub type XousPid = u8;
 pub const PAGE_SIZE: usize = 4096;
@@ -109,11 +109,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
     #[cfg(feature = "platform-tests")]
     platform::platform_tests();
 
-    let mut cfg = BootConfig {
-        base_addr: args.base as *const usize,
-        args,
-        ..Default::default()
-    };
+    let mut cfg = BootConfig { base_addr: args.base as *const usize, args, ..Default::default() };
     read_initial_config(&mut cfg);
 
     // check to see if we are recovering from a clean suspend or not
@@ -184,7 +180,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         resume_csr.wfo(utra::susres::EV_ENABLE_SOFT_INT, 1); // ensure that the soft interrupt is enabled for the kernel to kick
         println!("clean suspend marker found, doing a resume!");
 
-        // trigger the interrupt; it's not immediately handled, but rather checked later on by the kernel on clean resume
+        // trigger the interrupt; it's not immediately handled, but rather checked later on by the kernel on
+        // clean resume
         resume_csr.wfo(utra::susres::INTERRUPT_INTERRUPT, 1);
     }
 
@@ -202,8 +199,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
         let _tt_addr = { cfg.processes[0].ttbr0 };
         println!(
             "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x})",
-            cfg.processes[0].entrypoint, _tt_addr, cfg.processes[0].sp,
-            arg_offset, ip_offset, rpt_offset,
+            cfg.processes[0].entrypoint, _tt_addr, cfg.processes[0].sp, arg_offset, ip_offset, rpt_offset,
         );
 
         // save a copy of the computed kernel registers at the bottom of the page reserved
@@ -281,8 +277,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
                     println!("0x{:08x}", (*backup_args)[i]);
                 }
             }
-            let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF
-                | (((susres_pid as usize) & 0x1FF) << 22);
+            let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF | (((susres_pid as usize) & 0x1FF) << 22);
             //let satp = (*backup_args)[3];
             println!(
                 "Adjusting SATP to the sures process. Was: 0x{:08x} now: 0x{:08x}",
@@ -347,14 +342,9 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
             }
         } else if tag.name == u32::from_le_bytes(*b"XKrn") {
             assert!(!kernel_seen, "kernel appears twice");
-            assert!(
-                tag.size as usize == mem::size_of::<ProgramDescription>(),
-                "invalid XKrn size"
-            );
+            assert!(tag.size as usize == mem::size_of::<ProgramDescription>(), "invalid XKrn size");
             kernel_seen = true;
-        } else if tag.name == u32::from_le_bytes(*b"IniE")
-            || tag.name == u32::from_le_bytes(*b"IniF")
-        {
+        } else if tag.name == u32::from_le_bytes(*b"IniE") || tag.name == u32::from_le_bytes(*b"IniF") {
             assert!(tag.size >= 4, "invalid Init size");
             init_seen = true;
             cfg.init_process_count += 1;
@@ -381,11 +371,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     let boot_seed = CSR::new(utra::seed::HW_SEED_BASE as *mut u32);
     let seed0 = boot_seed.r(utra::seed::SEED0);
     let seed1 = boot_seed.r(utra::seed::SEED1);
-    let was_forced_suspend: bool = if unsafe { (*marker)[0] } != 0 {
-        true
-    } else {
-        false
-    };
+    let was_forced_suspend: bool = if unsafe { (*marker)[0] } != 0 { true } else { false };
 
     let mut clean = true;
     let mut hashbuf: [u32; WORDS_PER_SECTOR - 1] = [0; WORDS_PER_SECTOR - 1];
@@ -395,8 +381,9 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
         for i in 0..hashbuf.len() {
             hashbuf[i] = unsafe { (*marker)[index * WORDS_PER_SECTOR + i] };
         }
-        // sector 0 contains the boot seeds, which we replace with our own as read out from our FPGA before computing the hash
-        // it also contains the PID of the suspend/resume process manager, which we need to inject into the SATP
+        // sector 0 contains the boot seeds, which we replace with our own as read out from our FPGA before
+        // computing the hash it also contains the PID of the suspend/resume process manager, which we
+        // need to inject into the SATP
         if sector == 0 {
             hashbuf[1] = seed0;
             hashbuf[2] = seed1;
@@ -413,7 +400,8 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
         }
         index += 1;
     }
-    // zero out the clean suspend marker, so if something goes wrong during resume we don't try to resume again
+    // zero out the clean suspend marker, so if something goes wrong during resume we don't try to resume
+    // again
     for i in 0..WORDS_PER_PAGE {
         unsafe {
             (*marker)[i] = 0;

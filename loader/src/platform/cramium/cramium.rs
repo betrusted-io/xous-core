@@ -26,18 +26,21 @@ impl Duart {
         duart_csr.wfo(duart::UART_CTL_EN, 1);
         Duart { csr: duart_csr }
     }
+
     pub fn putc(&mut self, ch: char) {
         while self.csr.rf(duart::UART_BUSY_BUSY) != 0 {
             // spin wait
         }
         // the code here bypasses a lot of checks to simulate very fast write cycles so
         // that the read waitback actually returns something other than not busy.
-        // unsafe {(duart::HW_DUART_BASE as *mut u32).write_volatile(ch as u32) }; // this line really ensures we have to readback something, but it causes double-printing
+        // unsafe {(duart::HW_DUART_BASE as *mut u32).write_volatile(ch as u32) }; // this line really ensures
+        // we have to readback something, but it causes double-printing
         while unsafe { (duart::HW_DUART_BASE as *mut u32).add(2).read_volatile() } != 0 {
             // wait
         }
         unsafe { (duart::HW_DUART_BASE as *mut u32).write_volatile(ch as u32) };
     }
+
     pub fn puts(&mut self, s: &str) {
         for c in s.as_bytes() {
             self.putc(*c as char);
@@ -54,9 +57,7 @@ fn test_duart() {
 }
 
 #[cfg(feature = "platform-tests")]
-pub fn platform_tests() {
-    test_duart();
-}
+pub fn platform_tests() { test_duart(); }
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() {
@@ -131,18 +132,10 @@ pub fn early_init() {
     let iox_csr = utra::iox::HW_IOX_BASE as *mut u32;
     unsafe {
         iox_csr.add(0).write_volatile(0b00_00_00_01_01_00_00_00); // PAL AF1 on PA3/PA4
-        iox_csr
-            .add(0x1c / core::mem::size_of::<u32>())
-            .write_volatile(0x1400); // PDH
-        iox_csr
-            .add(0x148 / core::mem::size_of::<u32>())
-            .write_volatile(0x10); // PA4 output
-        iox_csr
-            .add(0x148 / core::mem::size_of::<u32>() + 3)
-            .write_volatile(0xffff); // PD
-        iox_csr
-            .add(0x160 / core::mem::size_of::<u32>())
-            .write_volatile(0x8); // PA3 pullup
+        iox_csr.add(0x1c / core::mem::size_of::<u32>()).write_volatile(0x1400); // PDH
+        iox_csr.add(0x148 / core::mem::size_of::<u32>()).write_volatile(0x10); // PA4 output
+        iox_csr.add(0x148 / core::mem::size_of::<u32>() + 3).write_volatile(0xffff); // PD
+        iox_csr.add(0x160 / core::mem::size_of::<u32>()).write_volatile(0x8); // PA3 pullup
     }
     udma_ctrl.wo(utra::udma_ctrl::REG_CG, 1);
 
@@ -150,10 +143,7 @@ pub fn early_init() {
     let freq: u32 = 100_000_000;
     let clk_counter: u32 = (freq + baudrate / 2) / baudrate;
     let mut udma_uart = CSR::new(utra::udma_uart_0::HW_UDMA_UART_0_BASE as *mut u32);
-    udma_uart.wo(
-        utra::udma_uart_0::REG_UART_SETUP,
-        0x0306 | (clk_counter << 16),
-    );
+    udma_uart.wo(utra::udma_uart_0::REG_UART_SETUP, 0x0306 | (clk_counter << 16));
 
     /*
     // send a test string to confirm the UART is configured

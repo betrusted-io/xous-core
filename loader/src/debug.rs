@@ -12,6 +12,7 @@ impl Uart {
         while uart.r(utra::uart::TXFULL) != 0 {}
         uart.wo(utra::uart::RXTX, c as u32)
     }
+
     #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
     pub fn putc(&self, c: u8) {
         let base = utra::duart::HW_DUART_BASE as *mut u32;
@@ -82,11 +83,7 @@ macro_rules! println
 
 pub fn print_pagetable(root: usize) {
     use crate::PageTable;
-    println!(
-        "Memory Maps (SATP: {:08x}  Root: {:08x}):",
-        root,
-        root << 12
-    );
+    println!("Memory Maps (SATP: {:08x}  Root: {:08x}):", root, root << 12);
     let l1_pt = unsafe { &mut (*((root << 12) as *mut PageTable)) };
     for (i, l1_entry) in l1_pt.entries.iter().enumerate() {
         if *l1_entry == 0 {

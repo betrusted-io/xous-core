@@ -2,13 +2,14 @@
 // SPDX-FileCopyrightText: 2023 Foundation Devices, Inc <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use armv7::structures::paging::TranslationTableMemory;
+
 use crate::consts::{
-    CONTEXT_OFFSET, EXCEPTION_STACK_TOP, FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X,
-    IRQ_STACK_PAGE_COUNT, IRQ_STACK_TOP, KERNEL_LOAD_OFFSET, KERNEL_STACK_PAGE_COUNT,
-    KERNEL_STACK_TOP, PAGE_TABLE_ROOT_OFFSET, USER_AREA_END, USER_STACK_TOP,
+    CONTEXT_OFFSET, EXCEPTION_STACK_TOP, FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, IRQ_STACK_PAGE_COUNT,
+    IRQ_STACK_TOP, KERNEL_LOAD_OFFSET, KERNEL_STACK_PAGE_COUNT, KERNEL_STACK_TOP, PAGE_TABLE_ROOT_OFFSET,
+    USER_AREA_END, USER_STACK_TOP,
 };
 use crate::{println, BootConfig, ProgramDescription, XousPid, PAGE_SIZE, STACK_PAGE_COUNT, VDBG};
-use armv7::structures::paging::TranslationTableMemory;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -45,11 +46,7 @@ impl ProgramDescription {
         let pid_idx = (pid - 1) as usize;
         let is_kernel = pid == 1;
         let flag_defaults = FLG_R | FLG_W | FLG_VALID | if is_kernel { 0 } else { FLG_U };
-        let stack_addr = if is_kernel {
-            KERNEL_STACK_TOP
-        } else {
-            USER_STACK_TOP
-        } - 16;
+        let stack_addr = if is_kernel { KERNEL_STACK_TOP } else { USER_STACK_TOP } - 16;
         if is_kernel {
             println!(
                 "self.text_offset: {:08x}, KERNEL_LOAD_OFFSET: {:08x}",
@@ -58,8 +55,7 @@ impl ProgramDescription {
             assert_eq!(self.text_offset as usize, KERNEL_LOAD_OFFSET);
             assert!(((self.text_offset + self.text_size) as usize) < EXCEPTION_STACK_TOP);
             assert!(
-                ((self.data_offset + self.data_size + self.bss_size) as usize)
-                    < EXCEPTION_STACK_TOP - 16
+                ((self.data_offset + self.data_size + self.bss_size) as usize) < EXCEPTION_STACK_TOP - 16
             );
             assert!(self.data_offset as usize >= KERNEL_LOAD_OFFSET);
         } else {
@@ -75,10 +71,7 @@ impl ProgramDescription {
         // Allocate physical pages for L1 translation table
         let tt_address = allocator.alloc_l1_page_table(pid) as usize;
         if VDBG {
-            println!(
-                "Setting {:08x} as translation table address for PID {}",
-                tt_address, pid
-            );
+            println!("Setting {:08x} as translation table address for PID {}", tt_address, pid);
         }
 
         allocator.processes[pid_idx].ttbr0 = tt_address;
@@ -87,11 +80,7 @@ impl ProgramDescription {
         // Map all four pages of the translation table to the kernel address space
         for offset in 0..4 {
             let offset = offset * PAGE_SIZE;
-            println!(
-                "Map L1 pages: {:08x} -> {:08x}",
-                tt_address + offset,
-                PAGE_TABLE_ROOT_OFFSET + offset
-            );
+            println!("Map L1 pages: {:08x} -> {:08x}", tt_address + offset, PAGE_TABLE_ROOT_OFFSET + offset);
             allocator.map_page(
                 translation_table,
                 tt_address + offset,
@@ -116,11 +105,7 @@ impl ProgramDescription {
         );
 
         // Allocate stack pages.
-        let total_stack_pages = if is_kernel {
-            KERNEL_STACK_PAGE_COUNT
-        } else {
-            STACK_PAGE_COUNT
-        };
+        let total_stack_pages = if is_kernel { KERNEL_STACK_PAGE_COUNT } else { STACK_PAGE_COUNT };
 
         if VDBG {
             println!("Mapping {} stack pages for PID {}", total_stack_pages, pid);
@@ -199,8 +184,7 @@ impl ProgramDescription {
         // Either this is on SPI flash at an aligned address, or it
         // has been copied into RAM already.  This is why we ignore `self.load_offset`
         // and use the `load_offset` parameter instead.
-        let rounded_data_bss =
-            ((self.data_size + self.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let rounded_data_bss = ((self.data_size + self.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
 
         // let load_size_rounded = (self.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         let text_phys_offset = load_offset + rounded_data_bss;
