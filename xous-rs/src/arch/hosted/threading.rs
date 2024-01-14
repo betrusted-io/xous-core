@@ -11,9 +11,7 @@ thread_local!(pub static THREAD_ID: RefCell<Option<TID>> = RefCell::new(None));
 pub struct ThreadInit {}
 pub struct WaitHandle<T>(std::thread::JoinHandle<T>);
 
-pub fn thread_to_args(call: usize, _init: &ThreadInit) -> [usize; 8] {
-    [call, 0, 0, 0, 0, 0, 0, 0]
-}
+pub fn thread_to_args(call: usize, _init: &ThreadInit) -> [usize; 8] { [call, 0, 0, 0, 0, 0, 0, 0] }
 
 pub fn args_to_thread(
     _a1: usize,
@@ -169,10 +167,7 @@ where
 }
 
 /// Spawn a new thread with the given thread ID.
-pub fn create_thread_post<F, U>(
-    f: F,
-    thread_id: TID,
-) -> core::result::Result<WaitHandle<U>, crate::Error>
+pub fn create_thread_post<F, U>(f: F, thread_id: TID) -> core::result::Result<WaitHandle<U>, crate::Error>
 where
     F: FnOnce() -> U,
     F: Send + 'static,
@@ -188,11 +183,7 @@ where
 }
 
 pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
-    joiner
-        .0
-        .join()
-        .map(|_| Result::Ok)
-        .map_err(|_| crate::Error::InternalError)
+    joiner.0.join().map(|_| Result::Ok).map_err(|_| crate::Error::InternalError)
 }
 
 static FAKE_THREAD_COUNTER: AtomicUsize = AtomicUsize::new(65536);

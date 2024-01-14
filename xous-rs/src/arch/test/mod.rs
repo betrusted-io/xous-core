@@ -15,9 +15,7 @@ pub use mem::*;
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessKey([u8; 16]);
 impl ProcessKey {
-    pub fn new(key: [u8; 16]) -> ProcessKey {
-        ProcessKey(key)
-    }
+    pub fn new(key: [u8; 16]) -> ProcessKey { ProcessKey(key) }
 }
 
 impl core::fmt::Display for ProcessKey {
@@ -58,10 +56,7 @@ where
     F: FnOnce(),
 {
     pub fn new(name: &str, main: F) -> ProcessArgsAsThread<F> {
-        ProcessArgsAsThread {
-            main,
-            name: name.to_owned(),
-        }
+        ProcessArgsAsThread { main, name: name.to_owned() }
     }
 }
 pub struct ProcessHandleAsThread(std::thread::JoinHandle<()>);
@@ -79,11 +74,7 @@ where
     // Ensure there is a connection, because after this function returns
     // we'll make a syscall with CreateProcess(). This should only need
     // to happen for PID1.
-    Ok(ProcessInit {
-        key: PROCESS_KEY
-            .with(|pk| *pk.borrow())
-            .unwrap_or_else(default_process_key),
-    })
+    Ok(ProcessInit { key: PROCESS_KEY.with(|pk| *pk.borrow()).unwrap_or_else(default_process_key) })
 }
 
 pub fn create_process_post_as_thread<F>(
@@ -138,12 +129,7 @@ pub struct ProcessArgs {
 }
 
 impl ProcessArgs {
-    pub fn new(name: &str, command: String) -> ProcessArgs {
-        ProcessArgs {
-            command,
-            name: name.to_owned(),
-        }
-    }
+    pub fn new(name: &str, command: String) -> ProcessArgs { ProcessArgs { command, name: name.to_owned() } }
 }
 
 /// This is returned when a process is created
@@ -154,26 +140,18 @@ pub struct ProcessStartup {
 }
 
 impl ProcessStartup {
-    pub fn new(pid: crate::PID) -> Self {
-        ProcessStartup { pid }
-    }
+    pub fn new(pid: crate::PID) -> Self { ProcessStartup { pid } }
 
-    pub fn pid(&self) -> crate::PID {
-        self.pid
-    }
+    pub fn pid(&self) -> crate::PID { self.pid }
 }
 
 impl core::fmt::Display for ProcessStartup {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.pid)
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, "{}", self.pid) }
 }
 
 impl From<&[usize; 7]> for ProcessStartup {
     fn from(src: &[usize; 7]) -> ProcessStartup {
-        ProcessStartup {
-            pid: crate::PID::new(src[0] as _).unwrap(),
-        }
+        ProcessStartup { pid: crate::PID::new(src[0] as _).unwrap() }
     }
 }
 
@@ -185,9 +163,7 @@ impl From<[usize; 8]> for ProcessStartup {
 }
 
 impl From<&ProcessStartup> for [usize; 7] {
-    fn from(startup: &ProcessStartup) -> [usize; 7] {
-        [startup.pid.get() as _, 0, 0, 0, 0, 0, 0]
-    }
+    fn from(startup: &ProcessStartup) -> [usize; 7] { [startup.pid.get() as _, 0, 0, 0, 0, 0, 0] }
 }
 
 impl From<&ProcessInit> for [usize; 7] {
@@ -206,6 +182,7 @@ impl From<&ProcessInit> for [usize; 7] {
 
 impl TryFrom<[usize; 7]> for ProcessInit {
     type Error = crate::Error;
+
     fn try_from(src: [usize; 7]) -> core::result::Result<ProcessInit, crate::Error> {
         let mut exploded = vec![];
         for word in src[0..4].into_iter() {
@@ -213,9 +190,7 @@ impl TryFrom<[usize; 7]> for ProcessInit {
         }
         let mut key = [0u8; 16];
         key.copy_from_slice(&exploded);
-        Ok(ProcessInit {
-            key: ProcessKey(key),
-        })
+        Ok(ProcessInit { key: ProcessKey(key) })
     }
 }
 
@@ -230,11 +205,7 @@ pub fn create_process_pre(_args: &ProcessArgs) -> core::result::Result<ProcessIn
     // Ensure there is a connection, because after this function returns
     // we'll make a syscall with CreateProcess(). This should only need
     // to happen for PID1.
-    Ok(ProcessInit {
-        key: PROCESS_KEY
-            .with(|pk| *pk.borrow())
-            .unwrap_or_else(default_process_key),
-    })
+    Ok(ProcessInit { key: PROCESS_KEY.with(|pk| *pk.borrow()).unwrap_or_else(default_process_key) })
 }
 
 pub fn create_process_post(
@@ -275,13 +246,7 @@ pub fn wait_process(mut joiner: ProcessHandle) -> crate::SysCallResult {
         .0
         .wait()
         .or(Err(crate::Error::InternalError))
-        .and_then(|e| {
-            if e.success() {
-                Ok(crate::Result::Ok)
-            } else {
-                Err(crate::Error::UnknownError)
-            }
-        })
+        .and_then(|e| if e.success() { Ok(crate::Result::Ok) } else { Err(crate::Error::UnknownError) })
 }
 
 pub struct WaitHandle<T>(std::thread::JoinHandle<T>);
@@ -293,9 +258,7 @@ struct ServerConnection {
     mailbox: Arc<Mutex<HashMap<TID, Result>>>,
 }
 
-pub fn thread_to_args(call: usize, _init: &ThreadInit) -> [usize; 8] {
-    [call, 0, 0, 0, 0, 0, 0, 0]
-}
+pub fn thread_to_args(call: usize, _init: &ThreadInit) -> [usize; 8] { [call, 0, 0, 0, 0, 0, 0, 0] }
 
 pub fn process_to_args(call: usize, init: &ProcessInit) -> [usize; 8] {
     [
@@ -338,9 +301,7 @@ pub fn args_to_process(
     v.extend_from_slice(&(a4 as u32).to_le_bytes());
     let mut key = [0u8; 16];
     key.copy_from_slice(&v);
-    Ok(ProcessInit {
-        key: ProcessKey(key),
-    })
+    Ok(ProcessInit { key: ProcessKey(key) })
 }
 
 thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<Option<SocketAddr>> = RefCell::new(None));
@@ -362,9 +323,7 @@ fn default_xous_address() -> SocketAddr {
 }
 
 fn default_process_key() -> ProcessKey {
-    std::env::var("XOUS_PROCESS_KEY")
-        .map(|s| s.as_str().into())
-        .unwrap_or(ProcessKey([0u8; 16]))
+    std::env::var("XOUS_PROCESS_KEY").map(|s| s.as_str().into()).unwrap_or(ProcessKey([0u8; 16]))
 }
 
 pub fn set_process_key(new_key: &[u8; 16]) {
@@ -382,9 +341,7 @@ pub fn set_xous_address(new_address: SocketAddr) {
 
 /// Get the network address for this particular thread.
 fn xous_address() -> SocketAddr {
-    NETWORK_CONNECT_ADDRESS
-        .with(|nca| *nca.borrow())
-        .unwrap_or_else(default_xous_address)
+    NETWORK_CONNECT_ADDRESS.with(|nca| *nca.borrow()).unwrap_or_else(default_xous_address)
 }
 
 pub fn create_thread_0_pre<U>(_f: &fn() -> U) -> core::result::Result<ThreadInit, crate::Error>
@@ -528,18 +485,14 @@ where
     Ok(ThreadInit {})
 }
 
-pub fn create_thread_post<F, U>(
-    f: F,
-    thread_id: TID,
-) -> core::result::Result<WaitHandle<U>, crate::Error>
+pub fn create_thread_post<F, U>(f: F, thread_id: TID) -> core::result::Result<WaitHandle<U>, crate::Error>
 where
     F: FnOnce() -> U,
     F: Send + 'static,
     U: Send + 'static,
 {
     let server_address = xous_address();
-    let server_connection =
-        XOUS_SERVER_CONNECTION.with(|xsc| xsc.borrow().as_ref().unwrap().clone());
+    let server_connection = XOUS_SERVER_CONNECTION.with(|xsc| xsc.borrow().as_ref().unwrap().clone());
     let process_id = PROCESS_ID.with(|pid| *pid.borrow());
     let call_for_thread = CALL_FOR_THREAD.with(|cft| cft.borrow().clone());
     Ok(std::thread::Builder::new()
@@ -556,11 +509,7 @@ where
 }
 
 pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
-    joiner
-        .0
-        .join()
-        .map(|_| Result::Ok)
-        .map_err(|_| crate::Error::InternalError)
+    joiner.0.join().map(|_| Result::Ok).map_err(|_| crate::Error::InternalError)
 }
 
 pub fn ensure_connection() -> core::result::Result<(), crate::Error> {
@@ -569,9 +518,7 @@ pub fn ensure_connection() -> core::result::Result<(), crate::Error> {
         if xsc.is_none() {
             NETWORK_CONNECT_ADDRESS.with(|nca| {
                 let addr = nca.borrow().unwrap_or_else(default_xous_address);
-                let pid1_key = PROCESS_KEY
-                    .with(|pk| *pk.borrow())
-                    .unwrap_or_else(default_process_key);
+                let pid1_key = PROCESS_KEY.with(|pk| *pk.borrow()).unwrap_or_else(default_process_key);
                 match xous_connect_impl(addr, &pid1_key) {
                     Ok(a) => {
                         *xsc = Some(a);
@@ -586,10 +533,7 @@ pub fn ensure_connection() -> core::result::Result<(), crate::Error> {
     })
 }
 
-fn xous_connect_impl(
-    addr: SocketAddr,
-    key: &ProcessKey,
-) -> core::result::Result<ServerConnection, ()> {
+fn xous_connect_impl(addr: SocketAddr, key: &ProcessKey) -> core::result::Result<ServerConnection, ()> {
     // eprintln!("Opening connection to Xous server @ {} with key {:?}...", addr, key);
     assert_ne!(&key.0, &[0u8; 16]);
     match TcpStream::connect(addr) {
@@ -633,27 +577,18 @@ pub fn syscall(call: SysCall) -> SysCallResult {
             let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
 
             let mut xsc_borrowed = xsc.borrow_mut();
-            let xsc_asmut = xsc_borrowed.as_mut().expect("not connected to server (did you forget to create a thread with xous::create_thread()?)");
+            let xsc_asmut = xsc_borrowed.as_mut().expect(
+                "not connected to server (did you forget to create a thread with xous::create_thread()?)",
+            );
             loop {
-                _xous_syscall_to(
-                    nr,
-                    a1,
-                    a2,
-                    a3,
-                    a4,
-                    a5,
-                    a6,
-                    a7,
-                    &call,
-                    xsc_asmut
-                );
+                _xous_syscall_to(nr, a1, a2, a3, a4, a5, a6, a7, &call, xsc_asmut);
                 _xous_syscall_result(&mut ret, *tid.borrow(), xsc_asmut);
                 match ret {
                     Result::Error(e) => return Err(e),
                     Result::RetryCall => (),
                     other => return Ok(other),
                 }
-                        std::thread::sleep(std::time::Duration::from_millis(50));
+                std::thread::sleep(std::time::Duration::from_millis(50));
             }
         })
     })
@@ -719,8 +654,7 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
 
         // Read the Thread ID, which comes across first, followed by the 8 words of
         // the message data.
-        let msg_thread_id =
-            usize::from_le_bytes(raw_bytes_chunks.next().unwrap().try_into().unwrap());
+        let msg_thread_id = usize::from_le_bytes(raw_bytes_chunks.next().unwrap().try_into().unwrap());
         for (pkt_word, word) in pkt.iter_mut().zip(raw_bytes_chunks) {
             *pkt_word = usize::from_le_bytes(word.try_into().unwrap());
         }
@@ -751,9 +685,7 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
         let call = CALL_FOR_THREAD.with(|cft| {
             let cft_borrowed = cft.borrow();
             let mut cft_mtx = cft_borrowed.lock().unwrap();
-            cft_mtx
-                .remove(&msg_thread_id)
-                .expect("thread didn't declare whether it has data")
+            cft_mtx.remove(&msg_thread_id).expect("thread didn't declare whether it has data")
         });
 
         // If the client is passing us memory, remap the array to our own space.
@@ -772,8 +704,7 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
                     assert_eq!(data.len(), data.capacity());
                     let len = data.len();
                     let addr = data.as_mut_ptr();
-                    memory_message.buf =
-                        unsafe { crate::MemoryRange::new(addr as _, len).unwrap() };
+                    memory_message.buf = unsafe { crate::MemoryRange::new(addr as _, len).unwrap() };
                 }
                 _ => (),
             }
@@ -787,11 +718,7 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
                 let mut data = unsafe { slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()) };
 
                 // If it's a Borrow, verify the contents haven't changed.
-                let previous_data = if call.is_borrow() {
-                    Some(data.to_vec())
-                } else {
-                    None
-                };
+                let previous_data = if call.is_borrow() { Some(data.to_vec()) } else { None };
 
                 if let Err(e) = stream.read_exact(&mut data) {
                     eprintln!("Server shut down: {}", e);
@@ -814,8 +741,7 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
             // If we're returning memory to the Server, then reconstitute the buffer we just passed,
             // and Drop it so it can be freed.
             if call.is_return_memory() {
-                let rebuilt =
-                    unsafe { Vec::from_raw_parts(mem.as_mut_ptr(), mem.len(), mem.len()) };
+                let rebuilt = unsafe { Vec::from_raw_parts(mem.as_mut_ptr(), mem.len(), mem.len()) };
                 drop(rebuilt);
             }
         }

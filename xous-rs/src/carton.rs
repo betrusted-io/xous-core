@@ -27,8 +27,7 @@ impl<'a> Carton<'a> {
         unsafe {
             core::ptr::copy(src_mem, new_mem.as_mut_ptr(), bytes.len());
         };
-        let valid =
-            unsafe { MemoryRange::new(new_mem.as_mut_ptr() as usize, bytes.len()).unwrap() };
+        let valid = unsafe { MemoryRange::new(new_mem.as_mut_ptr() as usize, bytes.len()).unwrap() };
         Carton {
             range: new_mem,
             slice: unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), bytes.len()) },
@@ -41,48 +40,29 @@ impl<'a> Carton<'a> {
         // Leak the memory buffer, since it will be taken care of
         // when the MemoryMessage is dropped.
         self.should_drop = false;
-        MemoryMessage {
-            id,
-            buf: self.valid,
-            offset: None,
-            valid: None,
-        }
+        MemoryMessage { id, buf: self.valid, offset: None, valid: None }
     }
 
     /// Perform an immutable lend of this Carton to the specified server.
     /// This function will block until the server returns.
     pub fn lend(&self, connection: CID, id: usize) -> Result<crate::Result, Error> {
-        let msg = MemoryMessage {
-            id,
-            buf: self.valid,
-            offset: None,
-            valid: None,
-        };
+        let msg = MemoryMessage { id, buf: self.valid, offset: None, valid: None };
         crate::send_message(connection, Message::Borrow(msg))
     }
 
     /// Perform a mutable lend of this Carton to the server.
     pub fn lend_mut(&mut self, connection: CID, id: usize) -> Result<crate::Result, Error> {
-        let msg = MemoryMessage {
-            id,
-            buf: self.valid,
-            offset: None,
-            valid: None,
-        };
+        let msg = MemoryMessage { id, buf: self.valid, offset: None, valid: None };
         crate::send_message(connection, Message::MutableBorrow(msg))
     }
 }
 
 impl<'a> AsRef<MemoryRange> for Carton<'a> {
-    fn as_ref(&self) -> &MemoryRange {
-        &self.valid
-    }
+    fn as_ref(&self) -> &MemoryRange { &self.valid }
 }
 
 impl<'a> AsRef<[u8]> for Carton<'a> {
-    fn as_ref(&self) -> &[u8] {
-        self.slice
-    }
+    fn as_ref(&self) -> &[u8] { self.slice }
 }
 
 impl<'a> Drop for Carton<'a> {

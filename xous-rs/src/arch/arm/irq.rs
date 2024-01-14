@@ -1,6 +1,7 @@
 /// These are Xous-specific IRQ numbers that doesn't directly correspond to the chip's IRQ numbers.
 /// In fact, there are 70+ interrupt sources in ATSAMA5D27 that won't fit in the 32 bit map used in Xous.
-/// The current solution is to pick a subset of 32 interrupts that are most likely to be used by Xous and specify them here.
+/// The current solution is to pick a subset of 32 interrupts that are most likely to be used by Xous and
+/// specify them here.
 #[derive(Debug)]
 pub enum IrqNumber {
     PeriodicIntervalTimer = 0,
@@ -11,19 +12,19 @@ pub enum IrqNumber {
     Uart3 = 4,
     Uart4 = 5,
 
-    Pioa  = 6,
-    Piob  = 7,
-    Pioc  = 8,
-    Piod  = 9,
+    Pioa = 6,
+    Piob = 7,
+    Pioc = 8,
+    Piod = 9,
 
-    Isi   = 10,
-    Lcdc  = 11,
+    Isi = 10,
+    Lcdc = 11,
 
     Uhphs = 12,
     Udphs = 13,
 
-    Tc0   = 14,
-    Tc1   = 15,
+    Tc0 = 14,
+    Tc1 = 15,
 }
 
 impl TryFrom<usize> for IrqNumber {
@@ -54,7 +55,7 @@ impl TryFrom<usize> for IrqNumber {
             14 => Ok(Tc0),
             15 => Ok(Tc1),
 
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }

@@ -7,51 +7,33 @@ pub struct MemoryFlags {
 }
 
 impl MemoryFlags {
+    /// Marks the page as the 'device' page for on-chip peripherals.
+    pub const DEV: Self = Self { bits: 0b0001_0000 };
     const FLAGS_ALL: usize = 0b111111;
-
     /// Free this memory
     pub const FREE: Self = Self { bits: 0b0000_0000 };
-
+    /// Allow the CPU to read from this page.
+    pub const R: Self = Self { bits: 0b0000_0010 };
     /// Immediately allocate this memory.  Otherwise it will
     /// be demand-paged.  This is implicitly set when `phys`
     /// is not 0.
     pub const RESERVE: Self = Self { bits: 0b0000_0001 };
-
-    /// Allow the CPU to read from this page.
-    pub const R: Self = Self { bits: 0b0000_0010 };
-
     /// Allow the CPU to write to this page.
     pub const W: Self = Self { bits: 0b0000_0100 };
-
     /// Allow the CPU to execute from this page.
     pub const X: Self = Self { bits: 0b0000_1000 };
 
-    /// Marks the page as the 'device' page for on-chip peripherals.
-    pub const DEV: Self = Self { bits: 0b0001_0000 };
-
-    pub fn bits(&self) -> usize {
-        self.bits
-    }
+    pub fn bits(&self) -> usize { self.bits }
 
     pub fn from_bits(raw: usize) -> Option<MemoryFlags> {
-        if raw > Self::FLAGS_ALL {
-            None
-        } else {
-            Some(MemoryFlags { bits: raw })
-        }
+        if raw > Self::FLAGS_ALL { None } else { Some(MemoryFlags { bits: raw }) }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.bits == 0
-    }
+    pub fn is_empty(&self) -> bool { self.bits == 0 }
 
-    pub fn empty() -> MemoryFlags {
-        MemoryFlags { bits: 0 }
-    }
+    pub fn empty() -> MemoryFlags { MemoryFlags { bits: 0 } }
 
-    pub fn all() -> MemoryFlags {
-        MemoryFlags { bits: Self::FLAGS_ALL }
-    }
+    pub fn all() -> MemoryFlags { MemoryFlags { bits: Self::FLAGS_ALL } }
 }
 
 // impl core::fmt::Debug for MemoryFlags {
@@ -87,15 +69,11 @@ impl MemoryFlags {
 // }
 
 impl core::fmt::Binary for MemoryFlags {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Binary::fmt(&self.bits, f)
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result { core::fmt::Binary::fmt(&self.bits, f) }
 }
 
 impl core::fmt::Octal for MemoryFlags {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Octal::fmt(&self.bits, f)
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result { core::fmt::Octal::fmt(&self.bits, f) }
 }
 
 impl core::fmt::LowerHex for MemoryFlags {
@@ -115,19 +93,13 @@ impl core::ops::BitOr for MemoryFlags {
 
     /// Returns the union of the two sets of flags.
     #[inline]
-    fn bitor(self, other: MemoryFlags) -> Self {
-        Self {
-            bits: self.bits | other.bits,
-        }
-    }
+    fn bitor(self, other: MemoryFlags) -> Self { Self { bits: self.bits | other.bits } }
 }
 
 impl core::ops::BitOrAssign for MemoryFlags {
     /// Adds the set of flags.
     #[inline]
-    fn bitor_assign(&mut self, other: Self) {
-        self.bits |= other.bits;
-    }
+    fn bitor_assign(&mut self, other: Self) { self.bits |= other.bits; }
 }
 
 impl core::ops::BitXor for MemoryFlags {
@@ -135,19 +107,13 @@ impl core::ops::BitXor for MemoryFlags {
 
     /// Returns the left flags, but with all the right flags toggled.
     #[inline]
-    fn bitxor(self, other: Self) -> Self {
-        Self {
-            bits: self.bits ^ other.bits,
-        }
-    }
+    fn bitxor(self, other: Self) -> Self { Self { bits: self.bits ^ other.bits } }
 }
 
 impl core::ops::BitXorAssign for MemoryFlags {
     /// Toggles the set of flags.
     #[inline]
-    fn bitxor_assign(&mut self, other: Self) {
-        self.bits ^= other.bits;
-    }
+    fn bitxor_assign(&mut self, other: Self) { self.bits ^= other.bits; }
 }
 
 impl core::ops::BitAnd for MemoryFlags {
@@ -155,19 +121,13 @@ impl core::ops::BitAnd for MemoryFlags {
 
     /// Returns the intersection between the two sets of flags.
     #[inline]
-    fn bitand(self, other: Self) -> Self {
-        Self {
-            bits: self.bits & other.bits,
-        }
-    }
+    fn bitand(self, other: Self) -> Self { Self { bits: self.bits & other.bits } }
 }
 
 impl core::ops::BitAndAssign for MemoryFlags {
     /// Disables all flags disabled in the set.
     #[inline]
-    fn bitand_assign(&mut self, other: Self) {
-        self.bits &= other.bits;
-    }
+    fn bitand_assign(&mut self, other: Self) { self.bits &= other.bits; }
 }
 
 impl core::ops::Sub for MemoryFlags {
@@ -175,19 +135,13 @@ impl core::ops::Sub for MemoryFlags {
 
     /// Returns the set difference of the two sets of flags.
     #[inline]
-    fn sub(self, other: Self) -> Self {
-        Self {
-            bits: self.bits & !other.bits,
-        }
-    }
+    fn sub(self, other: Self) -> Self { Self { bits: self.bits & !other.bits } }
 }
 
 impl core::ops::SubAssign for MemoryFlags {
     /// Disables all flags enabled in the set.
     #[inline]
-    fn sub_assign(&mut self, other: Self) {
-        self.bits &= !other.bits;
-    }
+    fn sub_assign(&mut self, other: Self) { self.bits &= !other.bits; }
 }
 
 impl core::ops::Not for MemoryFlags {
@@ -195,7 +149,5 @@ impl core::ops::Not for MemoryFlags {
 
     /// Returns the complement of this set of flags.
     #[inline]
-    fn not(self) -> Self {
-        Self { bits: !self.bits } & MemoryFlags { bits: 15 }
-    }
+    fn not(self) -> Self { Self { bits: !self.bits } & MemoryFlags { bits: 15 } }
 }

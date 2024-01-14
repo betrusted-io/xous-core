@@ -1,15 +1,14 @@
+use core::convert::{TryFrom, TryInto};
+
 use super::CHILD_PROCESS_ADDRESS;
 pub use crate::PID;
-use core::convert::{TryFrom, TryInto};
 
 /// A 16-byte random nonce that identifies this process to the kernel. This
 /// is usually provided through the environment variable `XOUS_PROCESS_KEY`.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessKey(pub(crate) [u8; 16]);
 impl ProcessKey {
-    pub fn new(key: [u8; 16]) -> ProcessKey {
-        ProcessKey(key)
-    }
+    pub fn new(key: [u8; 16]) -> ProcessKey { ProcessKey(key) }
 }
 
 impl core::fmt::Display for ProcessKey {
@@ -45,12 +44,7 @@ pub struct ProcessArgs {
 }
 
 impl ProcessArgs {
-    pub fn new(name: &str, command: String) -> ProcessArgs {
-        ProcessArgs {
-            command,
-            name: name.to_owned(),
-        }
-    }
+    pub fn new(name: &str, command: String) -> ProcessArgs { ProcessArgs { command, name: name.to_owned() } }
 }
 
 impl From<&ProcessInit> for [usize; 7] {
@@ -69,6 +63,7 @@ impl From<&ProcessInit> for [usize; 7] {
 
 impl TryFrom<[usize; 7]> for ProcessInit {
     type Error = crate::Error;
+
     fn try_from(src: [usize; 7]) -> core::result::Result<ProcessInit, crate::Error> {
         let mut exploded = vec![];
         for word in src[0..4].iter() {
@@ -76,9 +71,7 @@ impl TryFrom<[usize; 7]> for ProcessInit {
         }
         let mut key = [0u8; 16];
         key.copy_from_slice(&exploded);
-        Ok(ProcessInit {
-            key: ProcessKey(key),
-        })
+        Ok(ProcessInit { key: ProcessKey(key) })
     }
 }
 
@@ -90,26 +83,18 @@ pub struct ProcessStartup {
 }
 
 impl ProcessStartup {
-    pub fn new(pid: crate::PID) -> Self {
-        ProcessStartup { pid }
-    }
+    pub fn new(pid: crate::PID) -> Self { ProcessStartup { pid } }
 
-    pub fn pid(&self) -> crate::PID {
-        self.pid
-    }
+    pub fn pid(&self) -> crate::PID { self.pid }
 }
 
 impl core::fmt::Display for ProcessStartup {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.pid)
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, "{}", self.pid) }
 }
 
 impl From<&[usize; 7]> for ProcessStartup {
     fn from(src: &[usize; 7]) -> ProcessStartup {
-        ProcessStartup {
-            pid: crate::PID::new(src[0] as _).unwrap(),
-        }
+        ProcessStartup { pid: crate::PID::new(src[0] as _).unwrap() }
     }
 }
 
@@ -121,9 +106,7 @@ impl From<[usize; 8]> for ProcessStartup {
 }
 
 impl From<&ProcessStartup> for [usize; 7] {
-    fn from(startup: &ProcessStartup) -> [usize; 7] {
-        [startup.pid.get() as _, 0, 0, 0, 0, 0, 0]
-    }
+    fn from(startup: &ProcessStartup) -> [usize; 7] { [startup.pid.get() as _, 0, 0, 0, 0, 0, 0] }
 }
 
 #[derive(Debug)]
@@ -174,11 +157,5 @@ pub fn wait_process(mut joiner: ProcessHandle) -> crate::SysCallResult {
         .0
         .wait()
         .or(Err(crate::Error::InternalError))
-        .and_then(|e| {
-            if e.success() {
-                Ok(crate::Result::Ok)
-            } else {
-                Err(crate::Error::UnknownError)
-            }
-        })
+        .and_then(|e| if e.success() { Ok(crate::Result::Ok) } else { Err(crate::Error::UnknownError) })
 }

@@ -24,9 +24,7 @@ pub fn map_memory_post(
     Ok(unsafe { MemoryRange::new(new_mem.get(), range.len()).unwrap() })
 }
 
-pub fn unmap_memory_pre(_range: &MemoryRange) -> core::result::Result<(), Error> {
-    Ok(())
-}
+pub fn unmap_memory_pre(_range: &MemoryRange) -> core::result::Result<(), Error> { Ok(()) }
 
 pub fn unmap_memory_post(range: MemoryRange) -> core::result::Result<(), Error> {
     let layout = Layout::from_size_align(range.len(), 4096).unwrap();

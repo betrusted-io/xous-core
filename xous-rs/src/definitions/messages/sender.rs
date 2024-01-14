@@ -6,13 +6,9 @@ pub struct Sender {
 }
 
 impl Sender {
-    pub fn to_usize(&self) -> usize {
-        self.data
-    }
+    pub fn to_usize(&self) -> usize { self.data }
 
-    pub fn from_usize(data: usize) -> Self {
-        Sender { data }
-    }
+    pub fn from_usize(data: usize) -> Self { Sender { data } }
 
     pub fn pid(&self) -> Option<PID> {
         let pid_u8 = ((self.data >> 24) & 0xff) as u8;

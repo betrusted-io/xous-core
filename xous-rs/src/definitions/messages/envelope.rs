@@ -40,9 +40,7 @@ impl Envelope {
         unsafe { core::ptr::read(&manual_self.body) }
     }
 
-    pub fn id(&self) -> MessageId {
-        self.body.id()
-    }
+    pub fn id(&self) -> MessageId { self.body.id() }
 
     /// Take this message and forward it to another server.
     ///
@@ -56,11 +54,7 @@ impl Envelope {
     ///
     /// If there is an error, then the original Envelope is returned along with the resulting
     /// error.
-    pub fn forward(
-        mut self,
-        connection: CID,
-        id: MessageId,
-    ) -> Result<(), (Envelope, crate::Error)> {
+    pub fn forward(mut self, connection: CID, id: MessageId) -> Result<(), (Envelope, crate::Error)> {
         use core::mem::ManuallyDrop;
 
         // Update our ID to match the newly-sent message. Reuse the same message struct.
@@ -91,10 +85,7 @@ impl Envelope {
                     return Err((ManuallyDrop::into_inner(manual_self), e));
                 }
 
-                Err((
-                    ManuallyDrop::into_inner(manual_self),
-                    crate::Error::MemoryInUse,
-                ))
+                Err((ManuallyDrop::into_inner(manual_self), crate::Error::MemoryInUse))
             }
             Message::BlockingScalar(_) => {
                 let result = crate::send_message(connection, body);
@@ -113,10 +104,7 @@ impl Envelope {
                     }
                     return Ok(());
                 }
-                Err((
-                    ManuallyDrop::into_inner(manual_self),
-                    crate::Error::MemoryInUse,
-                ))
+                Err((ManuallyDrop::into_inner(manual_self), crate::Error::MemoryInUse))
             }
 
             Message::Borrow(_) | Message::MutableBorrow(_) | Message::Scalar(_) => {

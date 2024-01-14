@@ -1,6 +1,6 @@
 use crate::{
-    map_memory, send_message, unmap_memory, Error, MemoryMessage, MemoryRange, MemorySize, Message,
-    Result, CID,
+    map_memory, send_message, unmap_memory, Error, MemoryMessage, MemoryRange, MemorySize, Message, Result,
+    CID,
 };
 
 /// A buffered String suitable for sending across as a message
@@ -26,23 +26,13 @@ pub struct StringBuffer<'a> {
 impl<'a> StringBuffer<'a> {
     /// Create a new StringBuffer with no backing. This will get
     /// resized as soon as data is written to it.
-    pub fn new() -> Self {
-        StringBuffer {
-            bytes: None,
-            length: 0,
-            should_free: true,
-            memory_message: None,
-        }
-    }
+    pub fn new() -> Self { StringBuffer { bytes: None, length: 0, should_free: true, memory_message: None } }
 
     /// Create a new StringBuffer with enough space to hold
     /// `usize` characters
     pub fn with_capacity(capacity: usize) -> Self {
-        let remainder = if ((capacity & 0xFFF) == 0) && (capacity > 0) {
-            0
-        } else {
-            0x1000 - (capacity & 0xFFF)
-        };
+        let remainder =
+            if ((capacity & 0xFFF) == 0) && (capacity > 0) { 0 } else { 0x1000 - (capacity & 0xFFF) };
 
         let flags = crate::MemoryFlags::R | crate::MemoryFlags::W;
 
@@ -90,14 +80,10 @@ impl<'a> StringBuffer<'a> {
         let new_slice = if rounded_new_capacity > 0 {
             let new_mem = map_memory(None, None, rounded_new_capacity, flags)
                 .expect("Buffer: error in new()/map_memory");
-            let new_slice = unsafe {
-                core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), rounded_new_capacity)
-            };
+            let new_slice =
+                unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), rounded_new_capacity) };
             // Copy the existing string to the new slice
-            for (dest_byte, src_byte) in new_slice
-                .iter_mut()
-                .zip(self.as_bytes()[0..self.len()].iter())
-            {
+            for (dest_byte, src_byte) in new_slice.iter_mut().zip(self.as_bytes()[0..self.len()].iter()) {
                 *dest_byte = *src_byte;
             }
             Some(new_slice)
@@ -108,8 +94,7 @@ impl<'a> StringBuffer<'a> {
         if let Some(old_slice) = self.bytes.take() {
             let old_addr = old_slice.as_ptr();
             let old_length = old_slice.len();
-            unmap_memory(unsafe { MemoryRange::new(old_addr as usize, old_length).unwrap() })
-                .unwrap();
+            unmap_memory(unsafe { MemoryRange::new(old_addr as usize, old_length).unwrap() }).unwrap();
         }
         self.bytes = new_slice;
 
@@ -119,37 +104,19 @@ impl<'a> StringBuffer<'a> {
         }
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        if let Some(bytes) = &self.bytes {
-            bytes
-        } else {
-            &[]
-        }
-    }
+    pub fn as_bytes(&self) -> &[u8] { if let Some(bytes) = &self.bytes { bytes } else { &[] } }
 
     pub fn as_bytes_mut(&mut self) -> &mut [u8] {
-        if let Some(bytes) = self.bytes.as_mut() {
-            bytes
-        } else {
-            &mut []
-        }
+        if let Some(bytes) = self.bytes.as_mut() { bytes } else { &mut [] }
     }
 
     pub fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
-        if let Some(bytes) = &self.bytes {
-            core::str::from_utf8(&bytes[0..self.len()])
-        } else {
-            Ok("")
-        }
+        if let Some(bytes) = &self.bytes { core::str::from_utf8(&bytes[0..self.len()]) } else { Ok("") }
     }
 
-    pub fn len(&self) -> usize {
-        self.length as usize
-    }
+    pub fn len(&self) -> usize { self.length as usize }
 
-    pub fn is_empty(&self) -> bool {
-        self.length == 0
-    }
+    pub fn is_empty(&self) -> bool { self.length == 0 }
 
     /// Clear the contents of this String and set the length to 0
     pub fn clear(&mut self) {
@@ -169,8 +136,7 @@ impl<'a> StringBuffer<'a> {
 
     fn create_memory_message(&self, id: u32) -> MemoryMessage {
         if let Some(bytes) = &self.bytes {
-            let backing_store =
-                unsafe { MemoryRange::new(bytes.as_ptr() as _, bytes.len()).unwrap() };
+            let backing_store = unsafe { MemoryRange::new(bytes.as_ptr() as _, bytes.len()).unwrap() };
             MemoryMessage {
                 id: id as usize,
                 buf: backing_store,
@@ -189,10 +155,7 @@ impl<'a> StringBuffer<'a> {
     pub unsafe fn from_memory_message(mem: &'a MemoryMessage) -> Self {
         StringBuffer {
             // range: mem.buf,
-            bytes: Some(core::slice::from_raw_parts_mut(
-                mem.buf.as_mut_ptr(),
-                mem.buf.len(),
-            )),
+            bytes: Some(core::slice::from_raw_parts_mut(mem.buf.as_mut_ptr(), mem.buf.len())),
             length: mem.valid.map(|v| v.get()).unwrap_or(0) as u32,
             // offset: mem.offset,
             should_free: false,
@@ -207,10 +170,7 @@ impl<'a> StringBuffer<'a> {
     pub unsafe fn from_memory_message_mut(mem: &'a mut MemoryMessage) -> Self {
         StringBuffer {
             // range: mem.buf,
-            bytes: Some(core::slice::from_raw_parts_mut(
-                mem.buf.as_mut_ptr(),
-                mem.buf.len(),
-            )),
+            bytes: Some(core::slice::from_raw_parts_mut(mem.buf.as_mut_ptr(), mem.buf.len())),
             length: mem.valid.map(|v| v.get()).unwrap_or(0) as u32,
             // valid: mem.buf,
             // offset: mem.offset,
@@ -249,6 +209,7 @@ impl<'a> StringBuffer<'a> {
 
 impl<'a> core::str::FromStr for StringBuffer<'a> {
     type Err = &'static str;
+
     fn from_str(src: &str) -> core::result::Result<StringBuffer<'a>, &'static str> {
         let mut s = Self::with_capacity(src.len());
         // Copy the string into our backing store.
@@ -269,15 +230,11 @@ impl<'a> core::str::FromStr for StringBuffer<'a> {
 }
 
 impl<'a> Default for StringBuffer<'a> {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl<'a> core::fmt::Display for StringBuffer<'a> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.to_str())
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, "{}", self.to_str()) }
 }
 
 impl<'a> core::fmt::Write for StringBuffer<'a> {
@@ -299,21 +256,16 @@ impl<'a> core::fmt::Write for StringBuffer<'a> {
 }
 
 impl<'a> core::fmt::Debug for StringBuffer<'a> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.to_str())
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, "{}", self.to_str()) }
 }
 
 impl<'a> core::convert::AsRef<str> for StringBuffer<'a> {
-    fn as_ref(&self) -> &str {
-        self.to_str()
-    }
+    fn as_ref(&self) -> &str { self.to_str() }
 }
 
 impl<'a> PartialEq for StringBuffer<'a> {
     fn eq(&self, other: &Self) -> bool {
-        self.length == other.length
-            && self.as_bytes()[..self.len()] == other.as_bytes()[..other.len()]
+        self.length == other.length && self.as_bytes()[..self.len()] == other.as_bytes()[..other.len()]
     }
 }
 
@@ -322,9 +274,8 @@ impl<'a> Eq for StringBuffer<'a> {}
 impl<'a> Drop for StringBuffer<'a> {
     fn drop(&mut self) {
         if self.should_free && !self.as_bytes().is_empty() {
-            let range = unsafe {
-                MemoryRange::new(self.as_bytes().as_ptr() as _, self.as_bytes().len()).unwrap()
-            };
+            let range =
+                unsafe { MemoryRange::new(self.as_bytes().as_ptr() as _, self.as_bytes().len()).unwrap() };
             unmap_memory(range).expect("Buffer: failed to drop memory");
         }
     }

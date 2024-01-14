@@ -73,13 +73,9 @@ impl MemoryMessage {
         let offset = MemoryAddress::new(offset);
         let valid = MemorySize::new(valid);
 
-        Some(MemoryMessage {
-            id,
-            buf,
-            offset,
-            valid,
-        })
+        Some(MemoryMessage { id, buf, offset, valid })
     }
+
     pub fn to_usize(&self) -> [usize; 5] {
         [
             self.id,
@@ -103,24 +99,11 @@ pub struct ScalarMessage {
 }
 
 impl ScalarMessage {
-    pub fn from_usize(
-        id: usize,
-        arg1: usize,
-        arg2: usize,
-        arg3: usize,
-        arg4: usize,
-    ) -> ScalarMessage {
-        ScalarMessage {
-            id,
-            arg1,
-            arg2,
-            arg3,
-            arg4,
-        }
+    pub fn from_usize(id: usize, arg1: usize, arg2: usize, arg3: usize, arg4: usize) -> ScalarMessage {
+        ScalarMessage { id, arg1, arg2, arg3, arg4 }
     }
-    pub fn to_usize(&self) -> [usize; 5] {
-        [self.id, self.arg1, self.arg2, self.arg3, self.arg4]
-    }
+
+    pub fn to_usize(&self) -> [usize; 5] { [self.id, self.arg1, self.arg2, self.arg3, self.arg4] }
 }
 
 #[repr(usize)]
@@ -135,20 +118,8 @@ pub enum Message {
 unsafe impl Send for Message {}
 
 impl Message {
-    pub fn new_scalar(
-        id: usize,
-        arg1: usize,
-        arg2: usize,
-        arg3: usize,
-        arg4: usize,
-    ) -> crate::Message {
-        Message::Scalar(crate::ScalarMessage {
-            id,
-            arg1,
-            arg2,
-            arg3,
-            arg4,
-        })
+    pub fn new_scalar(id: usize, arg1: usize, arg2: usize, arg3: usize, arg4: usize) -> crate::Message {
+        Message::Scalar(crate::ScalarMessage { id, arg1, arg2, arg3, arg4 })
     }
 
     pub fn new_blocking_scalar(
@@ -158,13 +129,7 @@ impl Message {
         arg3: usize,
         arg4: usize,
     ) -> crate::Message {
-        Message::BlockingScalar(crate::ScalarMessage {
-            id,
-            arg1,
-            arg2,
-            arg3,
-            arg4,
-        })
+        Message::BlockingScalar(crate::ScalarMessage { id, arg1, arg2, arg3, arg4 })
     }
 
     pub fn new_lend(
@@ -173,12 +138,7 @@ impl Message {
         offset: Option<MemoryAddress>,
         valid: Option<MemorySize>,
     ) -> crate::Message {
-        Message::Borrow(crate::MemoryMessage {
-            id,
-            buf,
-            offset,
-            valid,
-        })
+        Message::Borrow(crate::MemoryMessage { id, buf, offset, valid })
     }
 
     pub fn new_lend_mut(
@@ -187,12 +147,7 @@ impl Message {
         offset: Option<MemoryAddress>,
         valid: Option<MemorySize>,
     ) -> crate::Message {
-        Message::MutableBorrow(crate::MemoryMessage {
-            id,
-            buf,
-            offset,
-            valid,
-        })
+        Message::MutableBorrow(crate::MemoryMessage { id, buf, offset, valid })
     }
 
     /// Determine whether the specified Message will block
@@ -211,13 +166,9 @@ impl Message {
         }
     }
 
-    pub fn is_scalar(&self) -> bool {
-        !self.has_memory()
-    }
+    pub fn is_scalar(&self) -> bool { !self.has_memory() }
 
-    pub fn memory(&self) -> Option<&MemoryRange> {
-        self.memory_message().map(|msg| &msg.buf)
-    }
+    pub fn memory(&self) -> Option<&MemoryRange> { self.memory_message().map(|msg| &msg.buf) }
 
     pub fn memory_message(&self) -> Option<&MemoryMessage> {
         match self {
@@ -242,13 +193,11 @@ impl Message {
 
     pub fn scalar_message_mut(&mut self) -> Option<&mut ScalarMessage> {
         match self {
-            Message::MutableBorrow(_)
-            | Message::Borrow(_)
-            | Message::Move(_)
-            | Message::Scalar(_) => None,
+            Message::MutableBorrow(_) | Message::Borrow(_) | Message::Move(_) | Message::Scalar(_) => None,
             Message::BlockingScalar(scalar) => Some(scalar),
         }
     }
+
     pub(crate) fn message_type(&self) -> usize {
         match *self {
             Message::MutableBorrow(_) => 1,
@@ -283,14 +232,13 @@ impl Message {
             Message::Scalar(m) => (3, m.to_usize()),
             Message::BlockingScalar(m) => (4, m.to_usize()),
         };
-        [
-            ret.0, ret.1[0], ret.1[1], ret.1[2], ret.1[3], ret.1[4],
-        ]
+        [ret.0, ret.1[0], ret.1[1], ret.1[2], ret.1[3], ret.1[4]]
     }
 }
 
 impl TryFrom<(usize, usize, usize, usize, usize, usize)> for Message {
     type Error = ();
+
     fn try_from(
         value: (usize, usize, usize, usize, usize, usize),
     ) -> core::result::Result<Self, Self::Error> {

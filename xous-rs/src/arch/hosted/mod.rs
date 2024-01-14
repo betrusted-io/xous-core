@@ -106,13 +106,9 @@ lazy_static::lazy_static! {
     pub static ref CHILD_PROCESS_ADDRESS: Arc<Mutex<SocketAddr>> = Arc::new(Mutex::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0)));
 }
 
-pub fn set_xous_address(new_address: SocketAddr) {
-    *CHILD_PROCESS_ADDRESS.lock().unwrap() = new_address;
-}
+pub fn set_xous_address(new_address: SocketAddr) { *CHILD_PROCESS_ADDRESS.lock().unwrap() = new_address; }
 
-pub fn set_thread_id(new_tid: TID) {
-    THREAD_ID.with(|tid| *tid.borrow_mut() = Some(new_tid));
-}
+pub fn set_thread_id(new_tid: TID) { THREAD_ID.with(|tid| *tid.borrow_mut() = Some(new_tid)); }
 
 #[derive(PartialEq)]
 enum CallMemoryKind {
@@ -151,11 +147,7 @@ pub fn syscall(call: SysCall) -> SysCallResult {
             panic!("call had memory, but was unrecognized")
         };
 
-        SERVER_CONNECTION
-            .call_mem_tracker
-            .lock()
-            .unwrap()
-            .insert(tid, (range, kind));
+        SERVER_CONNECTION.call_mem_tracker.lock().unwrap().insert(tid, (range, kind));
     }
 
     // let start_time = std::time::Instant::now();
@@ -180,7 +172,8 @@ pub fn syscall(call: SysCall) -> SysCallResult {
         //     .remove(&tid)
         //     .is_some());
         if let Some(val) = result {
-            // println!("[{:2}:{:2}] Syscall took {:7} usec: {:x?}", PROCESS_ID.get(), tid, start_time.elapsed().as_micros(), call);
+            // println!("[{:2}:{:2}] Syscall took {:7} usec: {:x?}", PROCESS_ID.get(), tid,
+            // start_time.elapsed().as_micros(), call);
             return val;
         }
 
@@ -206,8 +199,7 @@ fn read_next_syscall_result(
 
         // Read the Thread ID, which comes across first, followed by the 8 words of
         // the message data.
-        let msg_thread_id =
-            TID::from_le_bytes(raw_bytes_chunks.next().unwrap().try_into().unwrap());
+        let msg_thread_id = TID::from_le_bytes(raw_bytes_chunks.next().unwrap().try_into().unwrap());
         for (pkt_word, word) in pkt.iter_mut().zip(raw_bytes_chunks) {
             *pkt_word = usize::from_le_bytes(word.try_into().unwrap());
         }

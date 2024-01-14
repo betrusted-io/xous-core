@@ -7,28 +7,17 @@ pub struct String<const N: usize> {
 }
 
 impl<const N: usize> String<N> {
-    pub fn new() -> String<N> {
-        String {
-            bytes: [0; N],
-            len: 0,
-        }
-    }
+    pub fn new() -> String<N> { String { bytes: [0; N], len: 0 } }
 
-    pub fn as_bytes(&self) -> [u8; N] {
-        self.bytes
-    }
+    pub fn as_bytes(&self) -> [u8; N] { self.bytes }
 
     pub fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
         core::str::from_utf8(&self.bytes[0..self.len as usize])
     }
 
-    pub fn len(&self) -> usize {
-        self.len as usize
-    }
+    pub fn len(&self) -> usize { self.len as usize }
 
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
+    pub fn is_empty(&self) -> bool { self.len == 0 }
 
     /// Clear the contents of this String and set the length to 0
     pub fn clear(&mut self) {
@@ -36,9 +25,7 @@ impl<const N: usize> String<N> {
         self.bytes = [0; N];
     }
 
-    pub fn to_str(&self) -> &str {
-        unsafe { core::str::from_utf8_unchecked(&self.bytes[0..self.len()]) }
-    }
+    pub fn to_str(&self) -> &str { unsafe { core::str::from_utf8_unchecked(&self.bytes[0..self.len()]) } }
 
     pub fn push(&mut self, ch: char) -> core::result::Result<usize, Error> {
         match ch.len_utf8() {
@@ -93,13 +80,12 @@ impl<const N: usize> String<N> {
 }
 
 impl<const N: usize> Default for String<N> {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl<const N: usize> core::str::FromStr for String<N> {
     type Err = &'static str;
+
     fn from_str(src: &str) -> core::result::Result<String<N>, &'static str> {
         let mut s = Self::new();
         // Copy the string into our backing store.
@@ -119,9 +105,7 @@ impl<const N: usize> core::str::FromStr for String<N> {
 }
 
 impl<const N: usize> core::fmt::Display for String<N> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.to_str())
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, "{}", self.to_str()) }
 }
 
 impl<const N: usize> core::fmt::Write for String<N> {
@@ -137,21 +121,16 @@ impl<const N: usize> core::fmt::Write for String<N> {
 }
 
 impl<const N: usize> core::fmt::Debug for String<N> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.to_str())
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, "{}", self.to_str()) }
 }
 
 impl<const N: usize> core::convert::AsRef<str> for String<N> {
-    fn as_ref(&self) -> &str {
-        self.to_str()
-    }
+    fn as_ref(&self) -> &str { self.to_str() }
 }
 
 impl<const N: usize> PartialEq for String<N> {
     fn eq(&self, other: &Self) -> bool {
-        self.bytes[..self.len as usize] == other.bytes[..other.len as usize]
-            && self.len == other.len
+        self.bytes[..self.len as usize] == other.bytes[..other.len as usize] && self.len == other.len
     }
 }
 
