@@ -1,11 +1,12 @@
-mod bitwarden;
 mod authenticator;
+mod bitwarden;
 mod csvpass;
+use std::io::BufRead;
+use std::time::Instant;
+
 use anyhow::Result;
 use clap::Parser;
 use clap::Subcommand;
-use std::time::Instant;
-use std::io::BufRead;
 
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 
@@ -144,8 +145,11 @@ fn main() -> Result<()> {
                         let mut pw = backup::PasswordEntry::default();
 
                         if item.username.is_none() || item.site.is_none() {
-                            log::error!("(non-fatal) entry {} is missing username and/or site. Ignoring entry.", idx);
-                            continue
+                            log::error!(
+                                "(non-fatal) entry {} is missing username and/or site. Ignoring entry.",
+                                idx
+                            );
+                            continue;
                         }
                         pw.password = item.password.as_ref().unwrap_or(&String::new()).clone();
                         pw.username = item.username.as_ref().unwrap().clone();
@@ -155,10 +159,7 @@ fn main() -> Result<()> {
                         passwords.0.push(pw);
                     }
 
-                    std::fs::write(
-                        "csv_to_vault_passwords.json",
-                        serde_json::ser::to_vec(&passwords)?,
-                    )?;
+                    std::fs::write("csv_to_vault_passwords.json", serde_json::ser::to_vec(&passwords)?)?;
 
                     Ok(())
                 }
@@ -177,7 +178,7 @@ fn main() -> Result<()> {
                             Ok(()) => (),
                             Err(err) => {
                                 log::error!("entry {} is invalid: {}", idx, err);
-                                continue
+                                continue;
                             }
                         }
 
@@ -196,10 +197,8 @@ fn main() -> Result<()> {
                             t.algorithm = backup::HashAlgorithms::SHA256;
                             t.digit_count = 6;
                             t.step_seconds = 30;
-                            t.shared_secret = totp
-                                .strip_prefix("otpauth://totp/")
-                                .unwrap_or(&totp)
-                                .to_string();
+                            t.shared_secret =
+                                totp.strip_prefix("otpauth://totp/").unwrap_or(&totp).to_string();
 
                             totps.0.push(t);
                         }
@@ -211,10 +210,7 @@ fn main() -> Result<()> {
                     )?;
 
                     if totps.0.len() > 0 {
-                        std::fs::write(
-                            "bitwarden_to_vault_totps.json",
-                            serde_json::ser::to_vec(&totps)?,
-                        )?;
+                        std::fs::write("bitwarden_to_vault_totps.json", serde_json::ser::to_vec(&totps)?)?;
                     }
 
                     Ok(())
@@ -225,9 +221,7 @@ fn main() -> Result<()> {
                     for uri in std::io::BufReader::new(f).lines() {
                         let uri = url::Url::parse(&uri?)?;
                         match (uri.scheme(), uri.host_str()) {
-                            ("otpauth", Some("totp")) => {
-                                totps.0.push(authenticator::otpauth_to_entry(&uri)?)
-                            }
+                            ("otpauth", Some("totp")) => totps.0.push(authenticator::otpauth_to_entry(&uri)?),
                             ("otpauth-migration", Some("offline")) => {
                                 for t in authenticator::otpauth_migration_to_entries(&uri)? {
                                     totps.0.push(t);
@@ -239,10 +233,7 @@ fn main() -> Result<()> {
                         }
                     }
 
-                    std::fs::write(
-                        "authenticator_to_vault_totps.json",
-                        serde_json::ser::to_vec(&totps)?,
-                        )?;
+                    std::fs::write("authenticator_to_vault_totps.json", serde_json::ser::to_vec(&totps)?)?;
 
                     Ok(())
                 }
@@ -264,16 +255,17 @@ fn main() -> Result<()> {
                         Ok(we) => we,
 
                         Err(error) => match error {
-                            ctaphid::error::Error::DeviceError(
-                                ctaphid::error::DeviceError::Unknown(value),
-                            ) => {
+                            ctaphid::error::Error::DeviceError(ctaphid::error::DeviceError::Unknown(
+                                value,
+                            )) => {
                                 if value == 88 {
                                     break;
                                 }
                                 if value == 44 {
-                                    return Err(
-                                        std::io::Error::new(std::io::ErrorKind::PermissionDenied,
-                                            "Host readout is not enabled, unable to proceed!\nPlease select 'Enable host readout' from the vault context menu first."))?;
+                                    return Err(std::io::Error::new(
+                                        std::io::ErrorKind::PermissionDenied,
+                                        "Host readout is not enabled, unable to proceed!\nPlease select 'Enable host readout' from the vault context menu first.",
+                                    ))?;
                                 }
 
                                 return Err(error)?;
@@ -315,24 +307,22 @@ fn main() -> Result<()> {
                 log::debug!("sending chunk {}", idx);
                 let chunk = &chunk;
                 let chunk_bytes: Vec<u8> = chunk.into();
-                let vcres =
-                    match device.vendor_command(ctaphid::command::VendorCommand::H71, &chunk_bytes) {
-                        Ok(vcres) => vcres,
-                        Err(error) => match error {
-                            ctaphid::error::Error::DeviceError(
-                                ctaphid::error::DeviceError::Unknown(value),
-                            ) => {
-                                if value == 44 {
-                                    return Err(
-                                        std::io::Error::new(std::io::ErrorKind::PermissionDenied,
-                                            "Host readout is not enabled, unable to proceed!\nPlease select 'Enable host readout' from the vault context menu first."))?;
-                                }
-
-                                return Err(error)?;
+                let vcres = match device.vendor_command(ctaphid::command::VendorCommand::H71, &chunk_bytes) {
+                    Ok(vcres) => vcres,
+                    Err(error) => match error {
+                        ctaphid::error::Error::DeviceError(ctaphid::error::DeviceError::Unknown(value)) => {
+                            if value == 44 {
+                                return Err(std::io::Error::new(
+                                    std::io::ErrorKind::PermissionDenied,
+                                    "Host readout is not enabled, unable to proceed!\nPlease select 'Enable host readout' from the vault context menu first.",
+                                ))?;
                             }
-                            _ => return Err(error)?,
+
+                            return Err(error)?;
                         }
-                    };
+                        _ => return Err(error)?,
+                    },
+                };
 
                 if vcres.eq(backup::CONTINUE_RESPONSE) {
                     log::debug!("received CONTINUE response");

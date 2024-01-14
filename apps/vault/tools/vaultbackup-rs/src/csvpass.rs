@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use csv;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Debug, Deserialize)]
 pub struct Entry {
@@ -16,11 +16,7 @@ pub struct Items {
 
 impl Items {
     pub fn logins(&self) -> Vec<&Entry> {
-        let ret: Vec<&Entry> = self
-            .items
-            .iter()
-            .filter(|element| element.site.is_some())
-            .collect();
+        let ret: Vec<&Entry> = self.items.iter().filter(|element| element.site.is_some()).collect();
         ret
     }
 }
@@ -31,12 +27,8 @@ impl std::error::Error for CsvError {}
 pub enum CsvError {
     Err(String),
 }
-impl From::<csv::Error> for CsvError {
-    fn from(err: csv::Error) -> Self {
-        CsvError::Err(
-            format!("{:?}", err)
-        )
-    }
+impl From<csv::Error> for CsvError {
+    fn from(err: csv::Error) -> Self { CsvError::Err(format!("{:?}", err)) }
 }
 
 impl std::fmt::Display for CsvError {
@@ -63,6 +55,6 @@ impl TryFrom<std::fs::File> for Items {
                 break;
             }
         }
-        Ok(Items{ items: ret })
+        Ok(Items { items: ret })
     }
 }
