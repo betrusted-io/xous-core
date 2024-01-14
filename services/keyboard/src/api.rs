@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-pub const SERVER_NAME_KBD: &str      = "_Matrix keyboard driver_";
+pub const SERVER_NAME_KBD: &str = "_Matrix keyboard driver_";
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct ScanCode {
@@ -83,7 +83,8 @@ pub(crate) enum Opcode {
     /// set repeat delay, rate; both in ms
     SetRepeat = 4, //(u32, u32),
 
-    /// set chording interval (how long to wait for all keydowns to happen before interpreting as a chord), in ms (for braille keyboards)
+    /// set chording interval (how long to wait for all keydowns to happen before interpreting as a chord),
+    /// in ms (for braille keyboards)
     SetChordInterval = 5, //(u32),
 
     /// used by host mode emulation and debug UART to inject keys
@@ -107,7 +108,7 @@ pub(crate) enum Opcode {
 // which is the GAM.
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub(crate) struct KeyboardRegistration {
-    pub server_name: xous_ipc::String::<64>,
+    pub server_name: xous_ipc::String<64>,
     pub listener_op_id: usize,
 }
 
@@ -118,21 +119,14 @@ pub struct RowCol {
 }
 impl RowCol {
     #[allow(dead_code)]
-    pub fn new(r: u8, c: u8) -> RowCol {
-        RowCol { r, c }
-    }
+    pub fn new(r: u8, c: u8) -> RowCol { RowCol { r, c } }
 }
 
 #[derive(Debug)]
 pub struct KeyRawStates {
-    pub keydowns: Vec::<RowCol>,
-    pub keyups: Vec::<RowCol>,
+    pub keydowns: Vec<RowCol>,
+    pub keyups: Vec<RowCol>,
 }
 impl KeyRawStates {
-    pub fn new() -> Self {
-        KeyRawStates {
-            keydowns: Vec::with_capacity(16),
-            keyups: Vec::with_capacity(16),
-        }
-    }
+    pub fn new() -> Self { KeyRawStates { keydowns: Vec::with_capacity(16), keyups: Vec::with_capacity(16) } }
 }
