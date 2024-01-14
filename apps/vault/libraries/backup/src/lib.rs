@@ -1,8 +1,9 @@
-use cbor::{self, cbor_array_vec, cbor_int, cbor_map, cbor_unsigned, destructure_cbor_map};
-use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-pub const CONTINUE_RESPONSE: &[u8] = &[42,43,44,45];
+use cbor::{self, cbor_array_vec, cbor_int, cbor_map, cbor_unsigned, destructure_cbor_map};
+use serde::{Deserialize, Serialize};
+
+pub const CONTINUE_RESPONSE: &[u8] = &[42, 43, 44, 45];
 pub const OKAY_CANARY: &[u8] = &[0xca, 0xfe, 0xba, 0xbe];
 pub const ERROR_VENDOR_HANDLING: u8 = 0x35;
 pub const VENDOR_SESSION_ERROR: u8 = 0x36;
@@ -62,6 +63,8 @@ impl From<HashAlgorithms> for cbor::Value {
 }
 
 impl TryFrom<cbor::Value> for HashAlgorithms {
+    type Error = CborConversionError;
+
     fn try_from(value: cbor::Value) -> Result<Self, Self::Error> {
         let v = extract_unsigned(value)?;
         match v {
@@ -71,11 +74,11 @@ impl TryFrom<cbor::Value> for HashAlgorithms {
             _ => Err(CborConversionError::UnknownAlgorithm(v)),
         }
     }
-
-    type Error = CborConversionError;
 }
 
 impl std::str::FromStr for HashAlgorithms {
+    type Err = HashFromStrError;
+
     fn from_str(input: &str) -> Result<HashAlgorithms, Self::Err> {
         match input {
             "SHA1" => Ok(HashAlgorithms::SHA1),
@@ -84,8 +87,6 @@ impl std::str::FromStr for HashAlgorithms {
             _ => Err(HashFromStrError::UnknownHash),
         }
     }
-
-    type Err = HashFromStrError;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -112,6 +113,8 @@ impl From<TotpEntry> for cbor::Value {
 }
 
 impl TryFrom<cbor::Value> for TotpEntry {
+    type Error = CborConversionError;
+
     fn try_from(value: cbor::Value) -> Result<Self, Self::Error> {
         let rawmap = match value {
             cbor::Value::Map(m) => m,
@@ -134,33 +137,23 @@ impl TryFrom<cbor::Value> for TotpEntry {
         let digit_count = extract_unsigned(digit_count.unwrap())? as u32;
         let algorithm: HashAlgorithms = algorithm.unwrap().try_into()?;
         let name = extract_string(name.unwrap())?;
-        let hotp = extract_bool(hotp.unwrap_or(
-            cbor::Value::Simple(cbor::SimpleValue::FalseValue)
-        )).unwrap_or(false);
+        let hotp =
+            extract_bool(hotp.unwrap_or(cbor::Value::Simple(cbor::SimpleValue::FalseValue))).unwrap_or(false);
 
-        Ok(TotpEntry {
-            step_seconds,
-            shared_secret,
-            digit_count,
-            algorithm,
-            name,
-            hotp,
-        })
+        Ok(TotpEntry { step_seconds, shared_secret, digit_count, algorithm, name, hotp })
     }
-
-    type Error = CborConversionError;
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct TotpEntries(pub Vec<TotpEntry>);
 
 impl From<&TotpEntries> for cbor::Value {
-    fn from(te: &TotpEntries) -> Self {
-        cbor_array_vec!(te.0.clone())
-    }
+    fn from(te: &TotpEntries) -> Self { cbor_array_vec!(te.0.clone()) }
 }
 
 impl TryFrom<cbor::Value> for TotpEntries {
+    type Error = CborConversionError;
+
     fn try_from(value: cbor::Value) -> Result<Self, Self::Error> {
         let raw = extract_array(value)?;
         let mut ret = vec![];
@@ -171,8 +164,6 @@ impl TryFrom<cbor::Value> for TotpEntries {
 
         Ok(Self(ret))
     }
-
-    type Error = CborConversionError;
 }
 
 impl From<&TotpEntries> for Vec<u8> {
@@ -204,6 +195,8 @@ impl From<PasswordEntry> for cbor::Value {
 }
 
 impl TryFrom<cbor::Value> for PasswordEntry {
+    type Error = CborConversionError;
+
     fn try_from(value: cbor::Value) -> Result<Self, Self::Error> {
         let rawmap = match value {
             cbor::Value::Map(m) => m,
@@ -224,24 +217,15 @@ impl TryFrom<cbor::Value> for PasswordEntry {
         let password = extract_string(password.unwrap())?;
         let notes = extract_string(notes.unwrap())?;
 
-        Ok(PasswordEntry {
-            description,
-            username,
-            password,
-            notes,
-        })
+        Ok(PasswordEntry { description, username, password, notes })
     }
-
-    type Error = CborConversionError;
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct PasswordEntries(pub Vec<PasswordEntry>);
 
 impl From<&PasswordEntries> for cbor::Value {
-    fn from(te: &PasswordEntries) -> Self {
-        cbor_array_vec!(te.0.clone())
-    }
+    fn from(te: &PasswordEntries) -> Self { cbor_array_vec!(te.0.clone()) }
 }
 
 impl From<&PasswordEntries> for Vec<u8> {
@@ -254,6 +238,8 @@ impl From<&PasswordEntries> for Vec<u8> {
 }
 
 impl TryFrom<cbor::Value> for PasswordEntries {
+    type Error = CborConversionError;
+
     fn try_from(value: cbor::Value) -> Result<Self, Self::Error> {
         let raw = extract_array(value)?;
         let mut ret = vec![];
@@ -264,8 +250,6 @@ impl TryFrom<cbor::Value> for PasswordEntries {
 
         Ok(Self(ret))
     }
-
-    type Error = CborConversionError;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -313,6 +297,8 @@ impl From<DataPacket> for cbor::Value {
 }
 
 impl TryFrom<cbor::Value> for DataPacket {
+    type Error = CborConversionError;
+
     fn try_from(value: cbor::Value) -> Result<Self, Self::Error> {
         let rawmap = match value {
             cbor::Value::Map(m) => m,
@@ -339,16 +325,11 @@ impl TryFrom<cbor::Value> for DataPacket {
                 let pes: TotpEntries = shared_secret.try_into()?;
                 DataPacket::TOTP(pes)
             }
-            others => panic!(
-                "cannot convert from data packet type {} from cbor::Value!",
-                others
-            ),
+            others => panic!("cannot convert from data packet type {} from cbor::Value!", others),
         };
 
         Ok(dp)
     }
-
-    type Error = CborConversionError;
 }
 
 pub enum PayloadType {
@@ -372,6 +353,7 @@ pub enum PayloadTypeError {
 
 impl TryFrom<&Vec<u8>> for PayloadType {
     type Error = PayloadTypeError;
+
     fn try_from(u: &Vec<u8>) -> Result<PayloadType, Self::Error> {
         if u.is_empty() {
             return Err(PayloadTypeError::BadType);
@@ -508,12 +490,7 @@ impl TryFrom<cbor::Value> for Wire {
         let data = extract_byte_string(data.unwrap())?;
         let more_data = extract_bool(more_data.unwrap())?;
 
-        Ok(Self {
-            index,
-            more_data,
-            size,
-            data,
-        })
+        Ok(Self { index, more_data, size, data })
     }
 }
 
