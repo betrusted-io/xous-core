@@ -2,6 +2,9 @@
 # - run this on Linux to fix Windows changing .rs files to +x:
 #      `find . -name "*.rs" -exec chmod -x {} \;`
 
+# Don't format these vendored-in files
+ignore = ["libs/mass-storage/**"]
+
 # I can't rely on contributors using .editorconfig
 newline_style = "Unix"
 # require the shorthand instead of it being optional
