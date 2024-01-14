@@ -26,9 +26,7 @@ struct Slot {
 }
 
 impl Slot {
-    fn range(&self) -> Range<usize> {
-        (self.offset as usize)..((self.offset + self.size) as usize)
-    }
+    fn range(&self) -> Range<usize> { (self.offset as usize)..((self.offset + self.size) as usize) }
 }
 
 struct State {
@@ -77,14 +75,9 @@ fn main() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
 
-    let state = State {
-        settings_page: page_provider(),
-        spinor: spinor::Spinor::new(&xns).unwrap(),
-    };
+    let state = State { settings_page: page_provider(), spinor: spinor::Spinor::new(&xns).unwrap() };
 
-    let sid = xns
-        .register_name(SERVER_NAME_ES, None)
-        .expect("can't register server");
+    let sid = xns.register_name(SERVER_NAME_ES, None).expect("can't register server");
 
     loop {
         let msg = xous::receive_message(sid).unwrap();
