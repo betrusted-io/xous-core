@@ -12,7 +12,16 @@ pub struct LogRecord {
 
 impl Default for LogRecord {
     fn default() -> Self {
-        LogRecord { file_length: 0, file: [0u8; 128], line: None, module_length: 0, module: [0u8; 128], level: 0, args_length: 0, args: [0u8; 3820] }
+        LogRecord {
+            file_length: 0,
+            file: [0u8; 128],
+            line: None,
+            module_length: 0,
+            module: [0u8; 128],
+            level: 0,
+            args_length: 0,
+            args: [0u8; 3820],
+        }
     }
 }
 
@@ -30,7 +39,8 @@ pub enum Opcode {
     /// A `xous::StringBuffer` containing this program's name
     ProgramName = 3,
 
-    /// Try to log console output to a USB serial port. Best-effort only; failures will not crash, will not be noted
+    /// Try to log console output to a USB serial port. Best-effort only; failures will not crash, will not
+    /// be noted
     TryHookUsbMirror = 4,
     UnhookUsbMirror = 5,
 

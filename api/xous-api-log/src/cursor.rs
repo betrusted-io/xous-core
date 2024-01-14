@@ -6,15 +6,9 @@ pub struct BufferWrapper<'a> {
 }
 
 impl<'a> BufferWrapper<'a> {
-    pub fn new(buf: &'a mut [u8]) -> Self {
-        BufferWrapper {
-            buf: buf,
-            offset: 0,
-        }
-    }
-    pub fn len(&self) -> usize {
-        self.offset
-    }
+    pub fn new(buf: &'a mut [u8]) -> Self { BufferWrapper { buf, offset: 0 } }
+
+    pub fn len(&self) -> usize { self.offset }
 }
 
 impl<'a> core::fmt::Write for BufferWrapper<'a> {
