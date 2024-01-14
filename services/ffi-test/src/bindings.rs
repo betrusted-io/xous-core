@@ -19,16 +19,17 @@ pub type c_void = core::ffi::c_void;
 use xous::{send_message, Message};
 static mut KBD: Option<keyboard::Keyboard> = None;
 fn get_keys_blocking() -> Vec<char> {
-    if unsafe{KBD.is_none()} {
+    if unsafe { KBD.is_none() } {
         let xns = xous_names::XousNames::new().unwrap();
         let kbd = keyboard::Keyboard::new(&xns).unwrap();
-        unsafe{KBD = Some(kbd)};
+        unsafe { KBD = Some(kbd) };
     }
-    match send_message(unsafe{KBD.as_ref().unwrap().conn()},
+    match send_message(
+        unsafe { KBD.as_ref().unwrap().conn() },
         Message::new_blocking_scalar(
             9, // BlockingKeyboardListener
-            0, 0, 0, 0
-        )
+            0, 0, 0, 0,
+        ),
     ) {
         Ok(xous::Result::Scalar2(k1, k2)) => {
             let mut ret = Vec::<char>::new();
@@ -40,10 +41,9 @@ fn get_keys_blocking() -> Vec<char> {
             }
             ret
         }
-        Ok(_) | Err(_) => panic!("internal error: Incorrect return type")
+        Ok(_) | Err(_) => panic!("internal error: Incorrect return type"),
     }
 }
-
 
 #[export_name = "rust_getchar"]
 pub unsafe extern "C" fn rust_getchar() -> c_char {
@@ -78,11 +78,9 @@ extern "C" {
     pub fn malloc_test() -> i32;
 }
 
-static mut PUTC_BUF: Vec::<u8> = Vec::new();
+static mut PUTC_BUF: Vec<u8> = Vec::new();
 #[export_name = "libc_putchar"]
-pub unsafe extern "C" fn libc_putchar(
-    c: c_char,
-) {
+pub unsafe extern "C" fn libc_putchar(c: c_char) {
     let char = c as u8;
     if char != 0xa && char != 0xd {
         PUTC_BUF.push(char);
@@ -93,19 +91,17 @@ pub unsafe extern "C" fn libc_putchar(
     }
 }
 
-static mut C_HEAP: Vec::<Vec::<u8>> = Vec::new();
+static mut C_HEAP: Vec<Vec<u8>> = Vec::new();
 #[export_name = "malloc"]
-pub unsafe extern "C" fn malloc(
-    size: c_uint
-) -> *mut c_void {
-    // note: we might need to use `Pin` to keep the data from moving around in the heap, if we see weird behavior
-    // happening
+pub unsafe extern "C" fn malloc(size: c_uint) -> *mut c_void {
+    // note: we might need to use `Pin` to keep the data from moving around in the heap, if we see weird
+    // behavior happening
     let checked_size = if size == 0 {
         1 // at least 1 element so we can get a pointer to pass back
     } else {
         size
     };
-    let mut alloc: Vec::<u8> = Vec::with_capacity(checked_size as usize);
+    let mut alloc: Vec<u8> = Vec::with_capacity(checked_size as usize);
     for _ in 0..checked_size {
         alloc.push(0);
     }
@@ -118,9 +114,7 @@ pub unsafe extern "C" fn malloc(
 }
 
 #[export_name = "free"]
-pub unsafe extern "C" fn free(
-    ptr: *mut c_void
-) {
+pub unsafe extern "C" fn free(ptr: *mut c_void) {
     let mut region_index: Option<usize> = None;
     for (index, region) in C_HEAP.iter().enumerate() {
         if region.as_ptr() as usize == ptr as usize {
@@ -144,10 +138,7 @@ pub unsafe extern "C" fn free(
 }
 
 #[export_name = "realloc"]
-pub unsafe extern "C" fn realloc(
-    ptr: *mut c_void,
-    size: c_uint
-) -> *mut c_void {
+pub unsafe extern "C" fn realloc(ptr: *mut c_void, size: c_uint) -> *mut c_void {
     if ptr.is_null() {
         // if ptr is null, realloc() is identical to malloc()
         return malloc(size);
@@ -168,7 +159,7 @@ pub unsafe extern "C" fn realloc(
             } else {
                 size
             };
-            let mut alloc: Vec::<u8> = Vec::with_capacity(checked_size as usize);
+            let mut alloc: Vec<u8> = Vec::with_capacity(checked_size as usize);
             let ret_ptr = alloc.as_mut_ptr();
             for &src in old.iter() {
                 alloc.push(src);
@@ -185,7 +176,7 @@ pub unsafe extern "C" fn realloc(
             for region in C_HEAP.iter() {
                 log::info!("  {:x}({})", region.as_ptr() as usize, region.len());
             }
-            return ::core::ptr::null::<c_void>() as *mut c_void
+            return ::core::ptr::null::<c_void>() as *mut c_void;
         }
     }
 }
