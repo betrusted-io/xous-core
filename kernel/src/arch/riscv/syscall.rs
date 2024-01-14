@@ -1,15 +1,21 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-use riscv::register::{sepc, sstatus};
-
 use crate::services::Thread;
+use riscv::register::{sepc, sstatus};
 
 extern "C" {
     fn _xous_resume_context(regs: *const usize) -> !;
 }
 
-pub fn invoke(thread: &mut Thread, supervisor: bool, pc: usize, sp: usize, ret_addr: usize, args: &[usize]) {
+pub fn invoke(
+    thread: &mut Thread,
+    supervisor: bool,
+    pc: usize,
+    sp: usize,
+    ret_addr: usize,
+    args: &[usize],
+) {
     set_supervisor(supervisor);
     thread.registers[0] = ret_addr;
     thread.registers[1] = sp;

@@ -1,14 +1,14 @@
 use core::convert::TryFrom;
 
+use crate::arch::irq::_irq_handler_rust;
+use crate::mem::MemoryManager;
+
 use atsama5d27::{
     aic::{Aic, InterruptEntry, IrqPendingInfo, SourceKind},
     pmc::PeripheralId,
 };
 use utralib::{HW_AIC_BASE, HW_SAIC_BASE};
 use xous_kernel::{arch::irq::IrqNumber, MemoryFlags, MemoryType, PID};
-
-use crate::arch::irq::_irq_handler_rust;
-use crate::mem::MemoryManager;
 
 pub const AIC_KERNEL_ADDR: usize = 0xffca_0000;
 pub static mut AIC_KERNEL: Option<AicKernel> = None;
@@ -26,12 +26,19 @@ pub struct AicKernel {
 }
 
 impl AicKernel {
-    pub fn new(addr: usize) -> AicKernel { AicKernel { base_addr: addr, inner: None } }
+    pub fn new(addr: usize) -> AicKernel {
+        AicKernel {
+            base_addr: addr,
+            inner: None,
+        }
+    }
 
     pub fn init(&mut self) {
         let mut aic = Aic::with_alt_base_addr(self.base_addr as u32);
         aic.init();
-        aic.set_spurious_handler_fn_ptr(spurious_interrupt_handler as unsafe extern "C" fn() as usize);
+        aic.set_spurious_handler_fn_ptr(
+            spurious_interrupt_handler as unsafe extern "C" fn() as usize,
+        );
         self.inner = Some(aic);
     }
 
@@ -58,7 +65,11 @@ impl AicKernel {
     }
 
     pub fn get_pending_irqs(&self) -> IrqPendingInfo {
-        if let Some(aic) = &self.inner { aic.get_pending_irqs() } else { panic!("AIC is not initialized") }
+        if let Some(aic) = &self.inner {
+            aic.get_pending_irqs()
+        } else {
+            panic!("AIC is not initialized")
+        }
     }
 
     pub fn interrupt_completed(&mut self) {
@@ -137,7 +148,7 @@ fn peripheral_id_to_irq_no(id: PeripheralId) -> Option<IrqNumber> {
         PeripheralId::Tc0 => Some(IrqNumber::Tc0),
         PeripheralId::Tc1 => Some(IrqNumber::Tc1),
 
-        _ => return None,
+        _ => return None
     }
 }
 

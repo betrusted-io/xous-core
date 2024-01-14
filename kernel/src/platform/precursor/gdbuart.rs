@@ -2,16 +2,14 @@
 // SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-
-use utralib::generated::*;
-use xous_kernel::{MemoryFlags, MemoryType};
-
 use crate::{
     io::{SerialRead, SerialWrite},
     mem::MemoryManager,
     PID,
 };
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use utralib::generated::*;
+use xous_kernel::{MemoryFlags, MemoryType};
 
 static UART_CALLBACK_POINTER: AtomicUsize = AtomicUsize::new(0);
 static UART_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -36,7 +34,10 @@ fn gdbuart_isr(_irq_no: usize, _arg: *mut usize) {
     }
 
     let cb = unsafe { core::mem::transmute::<_, fn(&mut GdbUart)>(target) };
-    cb(&mut GdbUart { uart_csr: CSR::new(APP_UART_ADDR as *mut u32), constructed: false });
+    cb(&mut GdbUart {
+        uart_csr: CSR::new(APP_UART_ADDR as *mut u32),
+        constructed: false,
+    });
 }
 
 impl GdbUart {
@@ -46,7 +47,10 @@ impl GdbUart {
             panic!("UART has multiple consumers!");
         }
 
-        Some(GdbUart { uart_csr: CSR::new(APP_UART_ADDR as *mut u32), constructed: true })
+        Some(GdbUart {
+            uart_csr: CSR::new(APP_UART_ADDR as *mut u32),
+            constructed: true,
+        })
     }
 
     pub fn enable(&mut self) {
@@ -55,7 +59,10 @@ impl GdbUart {
     }
 
     pub fn allocate(&mut self) {
-        if UART_ALLOCATED.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_err() {
+        if UART_ALLOCATED
+            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+            .is_err()
+        {
             return;
         }
 
@@ -73,8 +80,12 @@ impl GdbUart {
                 .expect("unable to map serial port")
         });
 
-        xous_kernel::claim_interrupt(utra::app_uart::APP_UART_IRQ, gdbuart_isr, core::ptr::null_mut())
-            .expect("Couldn't claim debug interrupt");
+        xous_kernel::claim_interrupt(
+            utra::app_uart::APP_UART_IRQ,
+            gdbuart_isr,
+            core::ptr::null_mut(),
+        )
+        .expect("Couldn't claim debug interrupt");
     }
 
     #[allow(dead_code)]
@@ -83,14 +94,22 @@ impl GdbUart {
 
         // Note: This can cause an ABA error if it's multi-threaded and `.allocate()`
         // is called at the same time as `.deallocate()`.
-        if UART_ALLOCATED.compare_exchange(true, false, Ordering::Relaxed, Ordering::Relaxed).is_err() {
+        if UART_ALLOCATED
+            .compare_exchange(true, false, Ordering::Relaxed, Ordering::Relaxed)
+            .is_err()
+        {
             return;
         }
 
-        xous_kernel::rsyscall(xous_kernel::SysCall::FreeInterrupt(utra::app_uart::APP_UART_IRQ)).unwrap();
+        xous_kernel::rsyscall(xous_kernel::SysCall::FreeInterrupt(
+            utra::app_uart::APP_UART_IRQ,
+        ))
+        .unwrap();
 
         MemoryManager::with_mut(|memory_manager| {
-            memory_manager.unmap_page((APP_UART_ADDR & !4095) as *mut usize).unwrap()
+            memory_manager
+                .unmap_page((APP_UART_ADDR & !4095) as *mut usize)
+                .unwrap()
         });
     }
 }
@@ -141,7 +160,9 @@ impl gdbstub::conn::Connection for GdbUart {
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<(), Self::Error> { Ok(()) }
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
 
     fn on_session_start(&mut self) -> Result<(), Self::Error> {
         self.enable();

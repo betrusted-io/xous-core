@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod aic;
-pub mod pio;
 pub mod pmc;
 pub mod rand;
 pub mod uart;
+pub mod pio;
 
 /// atsama5d2 specific initialization.
 pub fn init() {

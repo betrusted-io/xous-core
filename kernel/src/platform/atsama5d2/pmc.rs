@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use atsama5d27::pmc::{PeripheralId, Pmc};
+use crate::mem::MemoryManager;
+
+use atsama5d27::pmc::{Pmc, PeripheralId};
 use utralib::HW_PMC_BASE;
 use xous_kernel::{MemoryFlags, MemoryType, PID};
-
-use crate::mem::MemoryManager;
 
 /// The manually chosen virtual address has to be in the top 4MiB as it is the
 /// only page shared among all processes.
@@ -20,9 +20,16 @@ pub struct PmcKernel {
 }
 
 impl PmcKernel {
-    pub fn new(addr: usize) -> PmcKernel { PmcKernel { base_addr: addr, inner: None } }
+    pub fn new(addr: usize) -> PmcKernel {
+        PmcKernel {
+            base_addr: addr,
+            inner: None,
+        }
+    }
 
-    pub fn init(&mut self) { self.inner = Some(Pmc::with_alt_base_addr(self.base_addr as u32)); }
+    pub fn init(&mut self) {
+        self.inner = Some(Pmc::with_alt_base_addr(self.base_addr as u32));
+    }
 
     pub fn enable_peripheral_clock(&mut self, periph: PeripheralId) {
         if let Some(pmc) = &mut self.inner {
@@ -98,10 +105,13 @@ pub fn enable_lcdc() {
     }
 }
 
+
 /// Enables `PIOx` peripherals to make them usable.
 pub fn enable_pio() {
     unsafe {
-        let pmc = PMC_KERNEL.as_mut().expect("PMC_KERNEL driver not initialized");
+        let pmc = PMC_KERNEL
+            .as_mut()
+            .expect("PMC_KERNEL driver not initialized");
 
         pmc.enable_peripheral_clock(PeripheralId::Pioa);
         pmc.enable_peripheral_clock(PeripheralId::Piob);

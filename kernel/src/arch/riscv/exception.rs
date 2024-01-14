@@ -84,7 +84,11 @@ pub enum RiscvException {
     /// 0 15
     StorePageFault(usize /* epc */, usize /* target address */),
 
-    ReservedFault(usize /* unknown cause number */, usize /* epc */, usize /* tval */),
+    ReservedFault(
+        usize, /* unknown cause number */
+        usize, /* epc */
+        usize, /* tval */
+    ),
 }
 
 impl fmt::Display for RiscvException {
@@ -114,39 +118,45 @@ impl fmt::Display for RiscvException {
                 write!(f, "Reserved interrupt 0x{:08x} at 0x{:08x}", code, epc)
             }
 
-            InstructionAddressMisaligned(epc, tval) => {
-                write!(f, "Misaligned address instruction 0x{:08x} at 0x{:08x}", tval, epc)
-            }
-            InstructionAccessFault(epc, tval) => {
-                write!(f, "Instruction access fault to 0x{:08x} at 0x{:08x}", tval, epc)
-            }
+            InstructionAddressMisaligned(epc, tval) => write!(
+                f,
+                "Misaligned address instruction 0x{:08x} at 0x{:08x}",
+                tval, epc
+            ),
+            InstructionAccessFault(epc, tval) => write!(
+                f,
+                "Instruction access fault to 0x{:08x} at 0x{:08x}",
+                tval, epc
+            ),
             IllegalInstruction(epc, tval) => {
                 write!(f, "Illegal instruction 0x{:08x} at 0x{:08x}", tval, epc)
             }
             Breakpoint(epc) => write!(f, "Breakpoint at 0x{:08x}", epc),
-            LoadAddressMisaligned(epc, tval) => {
-                write!(f, "Misaligned load address of 0x{:08x} at 0x{:08x}", tval, epc)
-            }
+            LoadAddressMisaligned(epc, tval) => write!(
+                f,
+                "Misaligned load address of 0x{:08x} at 0x{:08x}",
+                tval, epc
+            ),
             LoadAccessFault(epc, tval) => {
                 write!(f, "Load access fault from 0x{:08x} at 0x{:08x}", tval, epc)
             }
-            StoreAddressMisaligned(epc, tval) => {
-                write!(f, "Misaligned store address of 0x{:08x} at 0x{:08x}", tval, epc)
-            }
+            StoreAddressMisaligned(epc, tval) => write!(
+                f,
+                "Misaligned store address of 0x{:08x} at 0x{:08x}",
+                tval, epc
+            ),
             StoreAccessFault(epc, tval) => {
                 write!(f, "Store access fault to 0x{:08x} at 0x{:08x}", tval, epc)
             }
-            CallFromUMode(epc, tval) => {
-                write!(f, "Call from User mode at 0x{:08x} (???: 0x{:08x})", epc, tval)
-            }
-            CallFromSMode(epc, tval) => {
-                write!(f, "Call from Supervisor mode at 0x{:08x} (???: 0x{:08x})", epc, tval)
-            }
+            CallFromUMode(epc, tval) => write!(f, "Call from User mode at 0x{:08x} (???: 0x{:08x})", epc, tval),
+            CallFromSMode(epc, tval) => write!(f, "Call from Supervisor mode at 0x{:08x} (???: 0x{:08x})", epc, tval),
             // --reserved--
             CallFromMMode(epc) => write!(f, "Call from Machine mode at 0x{:08x}", epc),
-            InstructionPageFault(epc, tval) => {
-                write!(f, "Instruction page fault of 0x{:08x} at 0x{:08x}", tval, epc)
-            }
+            InstructionPageFault(epc, tval) => write!(
+                f,
+                "Instruction page fault of 0x{:08x} at 0x{:08x}",
+                tval, epc
+            ),
             LoadPageFault(epc, tval) => {
                 write!(f, "Load page fault of 0x{:08x} at 0x{:08x}", tval, epc)
             }
@@ -154,9 +164,11 @@ impl fmt::Display for RiscvException {
             StorePageFault(epc, tval) => {
                 write!(f, "Store page fault of 0x{:08x} at 0x{:08x}", tval, epc)
             }
-            ReservedFault(code, epc, tval) => {
-                write!(f, "Reserved interrupt 0x{:08x} with cause 0x{:08x} at 0x{:08x}", code, tval, epc)
-            }
+            ReservedFault(code, epc, tval) => write!(
+                f,
+                "Reserved interrupt 0x{:08x} with cause 0x{:08x} at 0x{:08x}",
+                code, tval, epc
+            ),
         }
     }
 }

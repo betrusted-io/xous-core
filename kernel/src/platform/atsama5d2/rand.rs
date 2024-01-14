@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::mem::MemoryManager;
+
 use atsama5d27::trng::{Enabled, StatefulTrng, Trng};
 use utralib::HW_TRNG_BASE;
 use xous_kernel::{MemoryFlags, MemoryType, PID};
-
-use crate::mem::MemoryManager;
 
 /// The manually chosen virtual address has to be in the top 4MiB as it is the
 /// only page shared among all processes.
@@ -20,9 +20,16 @@ pub struct TrngKernel {
 }
 
 impl TrngKernel {
-    pub fn new(addr: usize) -> TrngKernel { TrngKernel { base_addr: addr, inner: None } }
+    pub fn new(addr: usize) -> TrngKernel {
+        TrngKernel {
+            base_addr: addr,
+            inner: None,
+        }
+    }
 
-    pub fn init(&mut self) { self.inner = Some(Trng::with_alt_base_addr(self.base_addr as u32).enable()); }
+    pub fn init(&mut self) {
+        self.inner = Some(Trng::with_alt_base_addr(self.base_addr as u32).enable());
+    }
 
     pub fn get_u32(&mut self) -> u32 {
         if let Some(trng) = &self.inner {
@@ -48,8 +55,7 @@ pub fn init() {
     // hardware guarantees that:
     //   - TRNG will automatically power on
     //   - Both TRNGs are enabled, with conservative defaults
-    //   - Kernel FIFO will fill with TRNGs such that at least the next 512 calls to get_u32() will succeed
-    //     without delay
+    //   - Kernel FIFO will fill with TRNGs such that at least the next 512 calls to get_u32() will succeed without delay
     //   - The kernel will start a TRNG server
     //   - All further security decisions and policies are 100% delegated to this new server.
     MemoryManager::with_mut(|memory_manager| {
@@ -75,5 +81,10 @@ pub fn init() {
 
 /// Retrieve random `u32`.
 pub fn get_u32() -> u32 {
-    unsafe { TRNG_KERNEL.as_mut().expect("TRNG_KERNEL driver not initialized").get_u32() }
+    unsafe {
+        TRNG_KERNEL
+            .as_mut()
+            .expect("TRNG_KERNEL driver not initialized")
+            .get_u32()
+    }
 }

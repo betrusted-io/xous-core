@@ -25,7 +25,11 @@ fn main() {
 
     // For RISC-V and ARM, link in the startup library.
     if target.starts_with("riscv") || target.starts_with("arm") {
-        fs::copy(format!("bin/{}.a", target), out_dir.join(format!("lib{}.a", name))).unwrap();
+        fs::copy(
+            format!("bin/{}.a", target),
+            out_dir.join(format!("lib{}.a", name)),
+        )
+        .unwrap();
 
         println!("cargo:rustc-link-lib=static={}", name);
         println!("cargo:rustc-link-search={}", out_dir.display());

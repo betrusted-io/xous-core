@@ -2,14 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub const MAX_THREAD: TID = 31;
+use crate::services::ProcessInner;
 use core::cell::RefCell;
 use std::io::Write;
 use std::net::TcpStream;
 use std::thread_local;
-
 use xous_kernel::{ProcessInit, ProcessKey, ProcessStartup, ThreadInit, PID, TID};
-
-use crate::services::ProcessInner;
 
 pub const INITIAL_TID: usize = 2;
 pub const EXCEPTION_TID: usize = 1;
@@ -43,7 +41,9 @@ struct ProcessImpl {
 }
 
 impl PartialEq for Process {
-    fn eq(&self, other: &Process) -> bool { self.pid == other.pid }
+    fn eq(&self, other: &Process) -> bool {
+        self.pid == other.pid
+    }
 }
 
 struct ProcessTable {
@@ -65,7 +65,9 @@ thread_local!(
     })
 );
 
-pub fn current_pid() -> PID { PROCESS_TABLE.with(|pt| pt.borrow().current) }
+pub fn current_pid() -> PID {
+    PROCESS_TABLE.with(|pt| pt.borrow().current)
+}
 
 pub fn set_current_pid(pid: PID) {
     PROCESS_TABLE.with(|pt| {
@@ -89,7 +91,10 @@ pub fn set_current_pid(pid: PID) {
     });
 }
 
-pub fn register_connection_for_key(mut conn: TcpStream, key: ProcessKey) -> Result<PID, xous_kernel::Error> {
+pub fn register_connection_for_key(
+    mut conn: TcpStream,
+    key: ProcessKey,
+) -> Result<PID, xous_kernel::Error> {
     PROCESS_TABLE.with(|pt| {
         let mut process_table = pt.borrow_mut();
         for (pid_minus_1, process) in process_table.table.iter_mut().enumerate() {
@@ -114,7 +119,9 @@ pub struct Thread {
 }
 
 impl Default for Thread {
-    fn default() -> Self { Thread { allocated: false } }
+    fn default() -> Self {
+        Thread { allocated: false }
+    }
 }
 
 // /// Everything required to initialize a process on this platform
@@ -150,7 +157,9 @@ impl Process {
     {
         PROCESS_TABLE.with(|pt| {
             let process_table = pt.borrow();
-            let current = &process_table.table[process_table.current.get() as usize - 1].as_ref().unwrap();
+            let current = &process_table.table[process_table.current.get() as usize - 1]
+                .as_ref()
+                .unwrap();
             f(&current.inner)
         })
     }
@@ -177,7 +186,9 @@ impl Process {
     }
 
     #[allow(dead_code)]
-    pub fn current_tid(&self) -> TID { 1 }
+    pub fn current_tid(&self) -> TID {
+        1
+    }
 
     fn setup_thread_inner(thread: TID, process_table: &mut ProcessTable) {
         let current_pid_idx = process_table.current.get() as usize - 1;
@@ -187,14 +198,20 @@ impl Process {
         process.threads[thread - 1].allocated = true;
     }
 
-    pub fn retry_instruction(&mut self, _tid: TID) -> Result<(), xous_kernel::Error> { Ok(()) }
+    pub fn retry_instruction(&mut self, _tid: TID) -> Result<(), xous_kernel::Error> {
+        Ok(())
+    }
 
     pub fn setup_process(pid: PID, setup: ThreadInit) -> Result<(), xous_kernel::Error> {
         let mut tmp = Process { pid };
         tmp.setup_thread(INITIAL_TID, setup)
     }
 
-    pub fn setup_thread(&mut self, thread: TID, _setup: ThreadInit) -> Result<(), xous_kernel::Error> {
+    pub fn setup_thread(
+        &mut self,
+        thread: TID,
+        _setup: ThreadInit,
+    ) -> Result<(), xous_kernel::Error> {
         // println!(
         //     "KERNEL({}): Setting up thread {} @ {:?}",
         //     self.pid,
@@ -287,11 +304,18 @@ impl Process {
             }
 
             // If there is memory to return for this thread, also return that.
-            if let Some(buf) = process.memory_to_return.get_mut(tid - 1).and_then(|v| v.take()) {
+            if let Some(buf) = process
+                .memory_to_return
+                .get_mut(tid - 1)
+                .and_then(|v| v.take())
+            {
                 if result.memory().is_some() {
                     panic!("Result has memory and we're also returning memory!");
                 }
-                klog!("adding {} additional bytes from memory being returned", buf.len());
+                klog!(
+                    "adding {} additional bytes from memory being returned",
+                    buf.len()
+                );
                 klog!("data: {:?}", buf);
                 response.extend_from_slice(&buf);
             }
@@ -354,7 +378,12 @@ impl Process {
                 panic!("attempted to destroy PID that exceeds table index: {}", pid);
             }
             let process = process_table.table[pid_idx].as_mut().unwrap();
-            process.conn.as_mut().unwrap().shutdown(std::net::Shutdown::Both).ok();
+            process
+                .conn
+                .as_mut()
+                .unwrap()
+                .shutdown(std::net::Shutdown::Both)
+                .ok();
             process_table.table[pid_idx] = None;
             process_table.total -= 1;
             Ok(())

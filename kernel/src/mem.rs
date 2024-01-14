@@ -3,10 +3,10 @@
 
 use core::fmt;
 
-use xous_kernel::{MemoryFlags, MemoryRange, PID};
-
 pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
 use crate::arch::process::Process;
+
+use xous_kernel::{MemoryFlags, MemoryRange, PID};
 
 #[derive(Debug)]
 enum ClaimReleaseMove {
@@ -50,7 +50,9 @@ pub struct MemoryManager {
 }
 
 impl Default for MemoryManager {
-    fn default() -> Self { Self::default_hack() }
+    fn default() -> Self {
+        Self::default_hack()
+    }
 }
 
 #[cfg(not(baremetal))]
@@ -70,7 +72,12 @@ static mut EXTRA_REGIONS: &[MemoryRangeExtra] = &[];
 /// as the process entry has not yet been created.
 impl MemoryManager {
     const fn default_hack() -> Self {
-        MemoryManager { ram_start: 0, ram_size: 0, ram_name: 0, last_ram_page: 0 }
+        MemoryManager {
+            ram_start: 0,
+            ram_size: 0,
+            ram_name: 0,
+            last_ram_page: 0,
+        }
     }
 
     // /// Calls the provided function with the current inner process state.
@@ -124,9 +131,16 @@ impl MemoryManager {
         let mut args_iter = args.iter();
         let xarg_def = args_iter.next().expect("mm: no kernel arguments found");
         unsafe {
-            assert!(EXTRA_REGIONS.is_empty(), "mm: self.extra.len() was {}, not 0", EXTRA_REGIONS.len());
+            assert!(
+                EXTRA_REGIONS.is_empty(),
+                "mm: self.extra.len() was {}, not 0",
+                EXTRA_REGIONS.len()
+            );
         }
-        assert!(xarg_def.name == u32::from_le_bytes(*b"XArg"), "mm: first tag wasn't XArg");
+        assert!(
+            xarg_def.name == u32::from_le_bytes(*b"XArg"),
+            "mm: first tag wasn't XArg"
+        );
         assert!(xarg_def.data[1] == 1, "mm: XArg had unexpected version");
         self.ram_start = xarg_def.data[2] as usize;
         self.ram_size = xarg_def.data[3] as usize;
@@ -156,7 +170,9 @@ impl MemoryManager {
             }
         }
 
-        unsafe { MEMORY_ALLOCATIONS = slice::from_raw_parts_mut(base as *mut Option<PID>, mem_size) };
+        unsafe {
+            MEMORY_ALLOCATIONS = slice::from_raw_parts_mut(base as *mut Option<PID>, mem_size)
+        };
         Ok(())
     }
 
@@ -178,7 +194,9 @@ impl MemoryManager {
 
     #[cfg(all(baremetal, feature = "print-debug"))]
     pub fn print_ownership(&self) {
-        println!("Ownership ({} bytes in all):", unsafe { MEMORY_ALLOCATIONS.len() });
+        println!("Ownership ({} bytes in all):", unsafe {
+            MEMORY_ALLOCATIONS.len()
+        });
 
         let mut offset = 0;
         unsafe {
@@ -198,7 +216,11 @@ impl MemoryManager {
         for o in 0..self.ram_size / PAGE_SIZE {
             unsafe {
                 if let Some(_allocation) = MEMORY_ALLOCATIONS[offset + o] {
-                    println!("        {:08x} => {}", self.ram_size + o * PAGE_SIZE, _allocation.get());
+                    println!(
+                        "        {:08x} => {}",
+                        self.ram_size + o * PAGE_SIZE,
+                        _allocation.get()
+                    );
                 }
             }
         }
@@ -267,7 +289,8 @@ impl MemoryManager {
             let (start, end, initial) = match kind {
                 xous_kernel::MemoryType::Stack => return Err(xous_kernel::Error::BadAddress),
                 xous_kernel::MemoryType::Heap => {
-                    let new_virt = process_inner.mem_heap_base + process_inner.mem_heap_size + PAGE_SIZE;
+                    let new_virt =
+                        process_inner.mem_heap_base + process_inner.mem_heap_size + PAGE_SIZE;
                     if new_virt + size > process_inner.mem_heap_base + process_inner.mem_heap_max {
                         return Err(xous_kernel::Error::OutOfMemory);
                     }
@@ -296,8 +319,12 @@ impl MemoryManager {
                 }
                 if all_free {
                     match kind {
-                        xous_kernel::MemoryType::Default => process_inner.mem_default_last = potential_start,
-                        xous_kernel::MemoryType::Messages => process_inner.mem_message_last = potential_start,
+                        xous_kernel::MemoryType::Default => {
+                            process_inner.mem_default_last = potential_start
+                        }
+                        xous_kernel::MemoryType::Messages => {
+                            process_inner.mem_message_last = potential_start
+                        }
                         other => panic!("invalid kind: {:?}", other),
                     }
                     return Ok(potential_start as *mut u8);
@@ -314,8 +341,12 @@ impl MemoryManager {
                 }
                 if all_free {
                     match kind {
-                        xous_kernel::MemoryType::Default => process_inner.mem_default_last = potential_start,
-                        xous_kernel::MemoryType::Messages => process_inner.mem_message_last = potential_start,
+                        xous_kernel::MemoryType::Default => {
+                            process_inner.mem_default_last = potential_start
+                        }
+                        xous_kernel::MemoryType::Messages => {
+                            process_inner.mem_message_last = potential_start
+                        }
                         other => panic!("invalid kind: {:?}", other),
                     }
                     return Ok(potential_start as *mut u8);
@@ -336,7 +367,8 @@ impl MemoryManager {
     ) -> Result<xous_kernel::MemoryRange, xous_kernel::Error> {
         // If no address was specified, pick the next address that fits
         // in the "default" range
-        let virt = self.find_virtual_address(virt_ptr, size, xous_kernel::MemoryType::Default)? as usize;
+        let virt =
+            self.find_virtual_address(virt_ptr, size, xous_kernel::MemoryType::Default)? as usize;
 
         if virt & 0xfff != 0 {
             return Err(xous_kernel::Error::BadAlignment);
@@ -357,10 +389,16 @@ impl MemoryManager {
     /// Attempt to allocate a single page from the default section.
     /// Note that this will be backed by a real page.
     #[cfg(baremetal)]
-    pub fn map_zeroed_page(&mut self, pid: PID, is_user: bool) -> Result<*mut usize, xous_kernel::Error> {
-        let virt =
-            self.find_virtual_address(core::ptr::null_mut(), PAGE_SIZE, xous_kernel::MemoryType::Default)?
-                as usize;
+    pub fn map_zeroed_page(
+        &mut self,
+        pid: PID,
+        is_user: bool,
+    ) -> Result<*mut usize, xous_kernel::Error> {
+        let virt = self.find_virtual_address(
+            core::ptr::null_mut(),
+            PAGE_SIZE,
+            xous_kernel::MemoryType::Default,
+        )? as usize;
 
         // Grab the next available page.  This claims it for this process.
         let phys = self.alloc_page(pid)?;
@@ -446,7 +484,8 @@ impl MemoryManager {
             ) {
                 for unmap_offset in (0..offset).step_by(PAGE_SIZE) {
                     crate::arch::mem::unmap_page_inner(self, unmap_offset + virt as usize).ok();
-                    self.release_page((unmap_offset + phys) as *mut usize, pid).ok();
+                    self.release_page((unmap_offset + phys) as *mut usize, pid)
+                        .ok();
                 }
                 return Err(e);
             }
@@ -486,14 +525,29 @@ impl MemoryManager {
         dest_addr: *mut u8,
     ) -> Result<(), xous_kernel::Error> {
         let phys_addr = crate::arch::mem::virt_to_phys(src_addr as usize)?;
-        crate::arch::mem::move_page_inner(self, src_mapping, src_addr, dest_pid, dest_mapping, dest_addr)?;
-        self.claim_release_move(phys_addr as *mut usize, dest_pid, ClaimReleaseMove::Move(src_pid))
+        crate::arch::mem::move_page_inner(
+            self,
+            src_mapping,
+            src_addr,
+            dest_pid,
+            dest_mapping,
+            dest_addr,
+        )?;
+        self.claim_release_move(
+            phys_addr as *mut usize,
+            dest_pid,
+            ClaimReleaseMove::Move(src_pid),
+        )
     }
 
     #[allow(dead_code)]
     /// Move the page in the process mapping listing without manipulating
     /// the pagetables at all.
-    pub fn move_page_raw(&mut self, phys_addr: *mut usize, dest_pid: PID) -> Result<(), xous_kernel::Error> {
+    pub fn move_page_raw(
+        &mut self,
+        phys_addr: *mut usize,
+        dest_pid: PID,
+    ) -> Result<(), xous_kernel::Error> {
         self.claim_release_move(
             phys_addr as *mut usize,
             dest_pid,
@@ -559,7 +613,14 @@ impl MemoryManager {
         // If this page is to be writable, detach it from this process.
         // Otherwise, mark it as read-only to prevent a process from modifying
         // the page while it's borrowed.
-        crate::arch::mem::return_page_inner(self, src_mapping, src_addr, dest_pid, dest_mapping, dest_addr)
+        crate::arch::mem::return_page_inner(
+            self,
+            src_mapping,
+            src_addr,
+            dest_pid,
+            dest_mapping,
+            dest_addr,
+        )
     }
 
     #[cfg(baremetal)]
@@ -641,7 +702,8 @@ impl MemoryManager {
         // if it's not in use.
         unsafe {
             for region in EXTRA_REGIONS {
-                if addr >= (region.mem_start as usize) && addr < (region.mem_start + region.mem_size) as usize
+                if addr >= (region.mem_start as usize)
+                    && addr < (region.mem_start + region.mem_size) as usize
                 {
                     // -------------------------------
                     // FIXME: workaround to allow to share the same UART peripheral
@@ -756,7 +818,8 @@ impl MemoryManager {
 
         // Pre-check the range to ensure the new flags are valid
         for virt in (virt..(virt + size)).step_by(PAGE_SIZE) {
-            let existing_flags = crate::arch::mem::page_flags(virt).ok_or(xous_kernel::Error::MemoryInUse)?;
+            let existing_flags =
+                crate::arch::mem::page_flags(virt).ok_or(xous_kernel::Error::MemoryInUse)?;
             // If the new flags add to the range, return an error.
             if !(!existing_flags & flags).is_empty() {
                 return Err(xous_kernel::Error::MemoryInUse);
@@ -766,7 +829,8 @@ impl MemoryManager {
         // Now that the flags are validated, perform the update. This is fine as long as
         // we're unicore.
         for virt in (virt..(virt + size)).step_by(PAGE_SIZE) {
-            let existing_flags = crate::arch::mem::page_flags(virt).ok_or(xous_kernel::Error::MemoryInUse)?;
+            let existing_flags =
+                crate::arch::mem::page_flags(virt).ok_or(xous_kernel::Error::MemoryInUse)?;
             // If the new flags add to the range, return an error.
             if !(!existing_flags & flags).is_empty() {
                 return Err(xous_kernel::Error::MemoryInUse);
@@ -821,7 +885,11 @@ impl MemoryManager {
                                         } else {
                                             false
                                         };
-                                        system_services.get_process(pid).unwrap().activate().unwrap();
+                                        system_services
+                                            .get_process(pid)
+                                            .unwrap()
+                                            .activate()
+                                            .unwrap();
                                         is_lent
                                     } else {
                                         false
@@ -832,7 +900,9 @@ impl MemoryManager {
                                     phys,
                                     existing_owner.map(|v| v.get() as isize).unwrap_or(-1),
                                     existing_owner
-                                        .map(|v| system_services.process_name(v).unwrap_or("<unknown>"))
+                                        .map(|v| system_services
+                                            .process_name(v)
+                                            .unwrap_or("<unknown>"))
                                         .unwrap_or("<none>"),
                                     pid.get(),
                                     system_services.process_name(pid).unwrap_or("<unknown>"),
@@ -844,17 +914,19 @@ impl MemoryManager {
                                     owner = Some((pid, virt));
                                 } else {
                                     println!(
-                                        "!!! DUPLICATE !!! Page {:08x} owned by both {} ({}) @ {:08x} and {} ({}) @ {:08x}",
-                                        phys,
-                                        owner.map(|v| v.0.get() as isize).unwrap_or(-1),
-                                        owner
-                                            .map(|v| system_services.process_name(v.0).unwrap_or("<unknown>"))
-                                            .unwrap_or("<none>"),
-                                        owner.map(|v| v.1).unwrap_or(0),
-                                        pid.get(),
-                                        system_services.process_name(pid).unwrap_or("<unknown>"),
-                                        virt,
-                                    );
+                                    "!!! DUPLICATE !!! Page {:08x} owned by both {} ({}) @ {:08x} and {} ({}) @ {:08x}",
+                                    phys,
+                                    owner.map(|v| v.0.get() as isize).unwrap_or(-1),
+                                    owner
+                                        .map(|v| system_services
+                                            .process_name(v.0)
+                                            .unwrap_or("<unknown>"))
+                                        .unwrap_or("<none>"),
+                                    owner.map(|v| v.1).unwrap_or(0),
+                                    pid.get(),
+                                    system_services.process_name(pid).unwrap_or("<unknown>"),
+                                    virt,
+                                );
                                 }
                             }
                         }
@@ -863,7 +935,11 @@ impl MemoryManager {
             }
 
             // Restore the previous PID
-            system_services.get_process(current_pid).unwrap().activate().unwrap();
+            system_services
+                .get_process(current_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
         })
     }
 }

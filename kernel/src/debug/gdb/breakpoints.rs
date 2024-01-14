@@ -1,5 +1,5 @@
-use gdbstub::target::ext::breakpoints::{Breakpoints, SwBreakpoint, SwBreakpointOps};
 use gdbstub::target::TargetResult;
+use gdbstub::target::ext::breakpoints::{Breakpoints, SwBreakpoint, SwBreakpointOps};
 
 use super::XousTarget;
 
@@ -14,7 +14,11 @@ impl Breakpoints for XousTarget {
 }
 
 impl SwBreakpoint for XousTarget {
-    fn add_sw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> { Ok(false) }
+    fn add_sw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> {
+        Ok(false)
+    }
 
-    fn remove_sw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> { Ok(false) }
+    fn remove_sw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> {
+        Ok(false)
+    }
 }

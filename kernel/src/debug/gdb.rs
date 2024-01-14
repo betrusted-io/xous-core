@@ -41,9 +41,12 @@ trait ProcessPid {
 }
 
 impl ProcessPid for XousTarget {
-    fn pid(&self) -> Option<xous_kernel::PID> { self.pid }
-
-    fn take_pid(&mut self) -> Option<xous_kernel::PID> { self.pid.take() }
+    fn pid(&self) -> Option<xous_kernel::PID> {
+        self.pid
+    }
+    fn take_pid(&mut self) -> Option<xous_kernel::PID> {
+        self.pid.take()
+    }
 }
 
 struct MicroRingBuf<const N: usize> {
@@ -53,7 +56,13 @@ struct MicroRingBuf<const N: usize> {
 }
 
 impl<const N: usize> Default for MicroRingBuf<N> {
-    fn default() -> Self { MicroRingBuf { buffer: [0u8; N], head: 0, tail: 0 } }
+    fn default() -> Self {
+        MicroRingBuf {
+            buffer: [0u8; N],
+            head: 0,
+            tail: 0,
+        }
+    }
 }
 
 impl<const N: usize> MicroRingBuf<N> {
@@ -64,7 +73,9 @@ impl<const N: usize> MicroRingBuf<N> {
     //     self.head.wrapping_sub(self.tail) % N
     // }
 
-    pub fn is_full(&self) -> bool { (self.tail.wrapping_sub(1) % N) == self.head }
+    pub fn is_full(&self) -> bool {
+        (self.tail.wrapping_sub(1) % N) == self.head
+    }
 
     pub fn try_push(&mut self, val: u8) -> Result<(), ()> {
         if self.is_full() {
@@ -115,7 +126,12 @@ fn receive_irq(uart: &mut GdbUart) {
 }
 
 impl XousTarget {
-    pub fn new() -> XousTarget { XousTarget { pid: None, inner: cpu::XousTargetInner::default() } }
+    pub fn new() -> XousTarget {
+        XousTarget {
+            pid: None,
+            inner: cpu::XousTargetInner::default(),
+        }
+    }
 }
 
 fn state_can_accept_characters<'a, T: Target + ProcessPid, C: Connection>(
@@ -147,10 +163,8 @@ fn ensure_can_accept_characters_inner<'a, T: Target + ProcessPid, C: Connection>
                 });
             }
 
-            let Ok(new_server) =
-                gdb_stm_inner.interrupt_handled(target, Some(MultiThreadStopReason::Signal(Signal::SIGINT)))
-            else {
-                return None;
+            let Ok(new_server) = gdb_stm_inner.interrupt_handled(target, Some(MultiThreadStopReason::Signal(Signal::SIGINT))) else {
+                return None
             };
             ensure_can_accept_characters_inner(new_server, target, recurse_count - 1)
         }
@@ -161,7 +175,11 @@ fn ensure_can_accept_characters_inner<'a, T: Target + ProcessPid, C: Connection>
                 });
             }
 
-            ensure_can_accept_characters_inner(gdb_stm_inner.return_to_idle(), target, recurse_count - 1)
+            ensure_can_accept_characters_inner(
+                gdb_stm_inner.return_to_idle(),
+                target,
+                recurse_count - 1,
+            )
         }
     }
 }
@@ -199,11 +217,8 @@ fn process_character(byte: u8) {
 
     let new_server = match server {
         GdbStubStateMachine::Idle(gdb_stm_inner) => {
-            let Ok(gdb) = gdb_stm_inner
-                .incoming_data(&mut target, byte)
-                .map_err(|e| println!("gdbstub error during idle operation: {:?}", e))
-            else {
-                return;
+            let Ok(gdb) = gdb_stm_inner.incoming_data(&mut target, byte).map_err(|e| println!("gdbstub error during idle operation: {:?}", e)) else {
+                        return;
             };
             gdb
         }
@@ -246,7 +261,10 @@ fn process_character(byte: u8) {
 }
 
 pub fn report_stop(_pid: xous_kernel::PID, tid: xous_kernel::TID, _pc: usize) {
-    let Some(XousDebugState { mut target, server: gdb }) = (unsafe { GDB_STATE.take() }) else {
+    let Some(XousDebugState {
+        mut target,
+        server: gdb,
+    }) = (unsafe { GDB_STATE.take() }) else {
         println!("No GDB!");
         return;
     };
@@ -263,24 +281,35 @@ pub fn report_stop(_pid: xous_kernel::PID, tid: xous_kernel::TID, _pc: usize) {
         MultiThreadStopReason::SignalWithThread {
             signal: Signal::EXC_BREAKPOINT,
             tid: Tid::new(tid).unwrap(),
-        },
+        }
     ) else {
-        println!("Unable to report stop");
-        return;
+            println!("Unable to report stop");
+            return;
     };
 
-    unsafe { GDB_STATE = Some(XousDebugState { target, server: new_gdb }) };
+    unsafe {
+        GDB_STATE = Some(XousDebugState {
+            target,
+            server: new_gdb,
+        })
+    };
 }
 
 pub fn report_terminated(pid: xous_kernel::PID) {
-    let Some(XousDebugState { mut target, server: gdb }) = (unsafe { GDB_STATE.take() }) else {
+    let Some(XousDebugState {
+        mut target,
+        server: gdb,
+    }) = (unsafe { GDB_STATE.take() }) else {
         println!("No GDB!");
         return;
     };
 
     let new_gdb = match gdb {
         GdbStubStateMachine::Running(inner) => {
-            match inner.report_stop(&mut target, MultiThreadStopReason::Signal(Signal::EXC_BAD_ACCESS)) {
+            match inner.report_stop(
+                &mut target,
+                MultiThreadStopReason::Signal(Signal::EXC_BAD_ACCESS),
+            ) {
                 Ok(new_gdb) => new_gdb,
                 Err(e) => {
                     println!("Unable to report stop: {:?}", e);
@@ -302,7 +331,12 @@ pub fn report_terminated(pid: xous_kernel::PID) {
         }
     };
 
-    unsafe { GDB_STATE = Some(XousDebugState { target, server: new_gdb }) };
+    unsafe {
+        GDB_STATE = Some(XousDebugState {
+            target,
+            server: new_gdb,
+        })
+    };
 }
 
 pub fn init() {
