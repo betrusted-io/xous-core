@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::mem::MemoryManager;
-
-use atsama5d27::pio::{PioA, PioB, PioC, PioD, Func, PioPort, Direction};
+use atsama5d27::pio::{Direction, Func, PioA, PioB, PioC, PioD, PioPort};
 use utralib::HW_PIO_BASE;
 use xous_kernel::{MemoryFlags, MemoryType, PID};
+
+use crate::mem::MemoryManager;
 
 /// The manually chosen virtual address has to be in the top 4MiB as it is the
 /// only page shared among all processes.

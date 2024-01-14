@@ -52,26 +52,32 @@ pub mod syscall {
 }
 
 pub mod mem {
-    use crate::mem::MemoryManager;
     use xous::{Error, MemoryFlags, PID};
+
+    use crate::mem::MemoryManager;
     #[derive(Copy, Clone, Default, PartialEq)]
     pub struct MemoryMapping {}
     impl MemoryMapping {
         pub unsafe fn from_raw(&mut self, new: usize) {
             unimplemented!();
         }
+
         pub fn get_pid(&self) -> PID {
             unimplemented!();
         }
+
         pub fn current() -> MemoryMapping {
             unimplemented!();
         }
+
         pub fn activate(&self) {
             unimplemented!();
         }
+
         pub fn flags_for_address(&self, addr: usize) -> usize {
             unimplemented!();
         }
+
         pub fn reserve_address(
             &mut self,
             mm: &mut MemoryManager,
@@ -83,10 +89,7 @@ pub mod mem {
     }
 
     impl core::fmt::Debug for MemoryMapping {
-        fn fmt(
-            &self,
-            fmt: &mut core::fmt::Formatter,
-        ) -> core::result::Result<(), core::fmt::Error> {
+        fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::result::Result<(), core::fmt::Error> {
             write!(fmt, "unimplemented",)
         }
     }
@@ -124,6 +127,7 @@ impl Context {
     pub fn current() -> &'static mut Context {
         unimplemented!();
     }
+
     pub fn saved() -> &'static mut Context {
         unimplemented!();
     }
@@ -142,6 +146,7 @@ impl Context {
     pub fn get_stack(&self) -> usize {
         unimplemented!();
     }
+
     pub fn init(&mut self, entrypoint: usize, stack: usize) {}
 }
 
@@ -181,6 +186,4 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous::Result> {
     unimplemented!();
 }
 
-pub fn address_available(virt: usize) -> bool {
-    virt_to_phys(virt).is_err()
-}
+pub fn address_available(virt: usize) -> bool { virt_to_phys(virt).is_err() }

@@ -11,8 +11,6 @@ pub mod process;
 pub mod syscall;
 
 #[cfg(any(feature = "precursor", feature = "renode"))]
-use crate::mem::MemoryManager;
-#[cfg(any(feature = "precursor", feature = "renode"))]
 use utralib::generated::*;
 #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
 use xous_kernel::PID;
@@ -20,9 +18,13 @@ use xous_kernel::PID;
 use xous_kernel::{MemoryFlags, MemoryType, PID};
 
 #[cfg(any(feature = "precursor", feature = "renode"))]
+use crate::mem::MemoryManager;
+
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub const WFI_KERNEL: Wfi = Wfi {
-    // the manually chosen virtual address has to be in the top 4MiB as it is the only page shared among all processes
-    base: 0xffcd_0000 as *mut usize, // see https://github.com/betrusted-io/xous-core/blob/master/docs/memory.md
+    // the manually chosen virtual address has to be in the top 4MiB as it is the only page shared among all
+    // processes
+    base: 0xffcd_0000 as *mut usize, /* see https://github.com/betrusted-io/xous-core/blob/master/docs/memory.md */
 };
 
 #[cfg(any(feature = "precursor", feature = "renode"))]
@@ -30,9 +32,7 @@ pub struct Wfi {
     pub base: *mut usize,
 }
 
-pub fn current_pid() -> PID {
-    PID::new(satp::read().asid() as _).unwrap()
-}
+pub fn current_pid() -> PID { PID::new(satp::read().asid() as _).unwrap() }
 
 pub fn init() {
     #[cfg(any(feature = "precursor", feature = "renode"))]
