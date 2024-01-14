@@ -1,9 +1,10 @@
-use crate::*;
 use utralib::utra::rp_pio;
+
 use super::report_api;
+use crate::*;
 
 const SIM_SCALE_FACTOR: f32 = 200.0; // speedup over real time to have simulation finish in a reasonable amount of time
-const BURST_PERIOD: f32 =  562.5e-6 / SIM_SCALE_FACTOR;
+const BURST_PERIOD: f32 = 562.5e-6 / SIM_SCALE_FACTOR;
 const CARRIER_PERIOD: f32 = 38.222e3 * SIM_SCALE_FACTOR;
 pub fn carrier_burst_init(pio_sm: &mut PioSm, program: &LoadedProg, pin: usize, freq: f32) {
     pio_sm.sm_set_enabled(false);
@@ -12,8 +13,7 @@ pub fn carrier_burst_init(pio_sm: &mut PioSm, program: &LoadedProg, pin: usize, 
     // Map the SET pin group to one pin, namely the `pin`
     // parameter to this function.
     //
-    pio_sm.config_set_set_pins (pin, 1);
-
+    pio_sm.config_set_set_pins(pin, 1);
 
     // Set the pin direction to output at the PIO
     pio_sm.sm_set_pindirs_with_mask(pin, 1);
@@ -43,9 +43,10 @@ pub fn carrier_control_init(pio_sm: &mut PioSm, program: &LoadedProg, tick_rate:
     // configure the output shift register
     //
     pio_sm.config_set_out_shift(
-        true,       // shift right
-        false,      // disable autopull
-        bits_per_frame);
+        true,  // shift right
+        false, // disable autopull
+        bits_per_frame,
+    );
 
     // join the FIFOs to make a single large transmit FIFO
     //
@@ -68,7 +69,7 @@ pub fn carrier_control_init(pio_sm: &mut PioSm, program: &LoadedProg, tick_rate:
 pub fn nec_tx_init(pio_ss: &mut PioSharedState, pin_num: usize) -> PioSm {
     let mut burst_sm = pio_ss.alloc_sm().unwrap();
     let mut control_sm = pio_ss.alloc_sm().unwrap();
-
+    #[rustfmt::skip]
     let carrier_burst_prog = pio_proc::pio_asm!(
         // Generate bursts of carrier.
         //
@@ -89,7 +90,7 @@ pub fn nec_tx_init(pio_ss: &mut PioSharedState, pin_num: usize) -> PioSm {
         "    jmp x--, cycle_loop            ", // (1 more cycle)
         ".wrap                              ",
     );
-
+    #[rustfmt::skip]
     let carrier_control_prog = pio_proc::pio_asm!(
         // Transmit an encoded 32-bit frame in NEC IR format.
         //
@@ -132,19 +133,14 @@ pub fn nec_tx_init(pio_ss: &mut PioSharedState, pin_num: usize) -> PioSm {
     carrier_burst_init(&mut burst_sm, &carrier_prog, pin_num, CARRIER_PERIOD);
 
     let control_prog = LoadedProg::load(carrier_control_prog.program, pio_ss).unwrap();
-    carrier_control_init(
-        &mut control_sm,
-        &control_prog,
-        2.0 * (1.0 / BURST_PERIOD),
-        32
-    );
+    carrier_control_init(&mut control_sm, &control_prog, 2.0 * (1.0 / BURST_PERIOD), 32);
     control_sm
 }
 
 // Create a frame in `NEC` format from the provided 8-bit address and data
 //
 // Returns: a 32-bit encoded frame
-pub fn nec_encode_frame(address: u8, data: u8) -> u32{
+pub fn nec_encode_frame(address: u8, data: u8) -> u32 {
     // a normal 32-bit frame is encoded as address, inverted address, data, inverse data,
     address as u32 | (address as u32 ^ 0xff) << 8 | (data as u32) << 16 | (data as u32 ^ 0xff) << 24
 }
@@ -156,9 +152,10 @@ pub fn nec_receive_init(pio_sm: &mut PioSm, program: &LoadedProg, pin: usize, bu
     // configure the Input Shift Register
     //
     pio_sm.config_set_in_shift(
-                            true,       // shift right
-                            true,       // enable autopush
-                            32);        // autopush after 32 bits
+        true, // shift right
+        true, // enable autopush
+        32,
+    ); // autopush after 32 bits
 
     // join the FIFOs to make a single large receive FIFO
     //
@@ -189,7 +186,7 @@ pub fn nec_receive_init(pio_sm: &mut PioSm, program: &LoadedProg, pin: usize, bu
 
 pub fn nec_rx_init(pio_ss: &mut PioSharedState, pin_num: usize) -> PioSm {
     let mut rx_sm = pio_ss.alloc_sm().unwrap();
-
+    #[rustfmt::skip]
     let nec_receive = pio_proc::pio_asm!(
         // Decode IR frames in NEC format and push 32-bit words to the input FIFO.
         //
@@ -234,19 +231,16 @@ pub fn nec_rx_init(pio_ss: &mut PioSharedState, pin_num: usize) -> PioSm {
     rx_sm
 }
 
-
 // Validate a 32-bit frame and store the address and data at the locations
 // provided.
 //
 // Returns: `true` if the frame was valid, otherwise `false`
 pub fn nec_decode_frame(frame: u32, addr: &mut u8, d: &mut u8) -> bool {
-
     let [address, inverted_address, data, inverted_data] = frame.to_le_bytes();
 
     // a valid (non-extended) 'NEC' frame should contain 8 bit
     // address, inverted address, data and inverted data
-    if address != (inverted_address ^ 0xff) ||
-        data != (inverted_data ^ 0xff) {
+    if address != (inverted_address ^ 0xff) || data != (inverted_data ^ 0xff) {
         return false;
     }
 
@@ -292,4 +286,3 @@ pub fn nec_ir_loopback_test() {
 
     report_api(0x1300_600D);
 }
-

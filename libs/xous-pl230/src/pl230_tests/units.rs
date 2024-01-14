@@ -1,18 +1,16 @@
-use crate::*;
-use super::report_api;
 use utralib::*;
+
+use super::report_api;
+use crate::*;
 
 /// used to generate some test vectors
 pub fn lfsr_next(state: u32) -> u32 {
-    let bit = ((state >> 31) ^
-               (state >> 21) ^
-               (state >>  1) ^
-               (state >>  0)) & 1;
+    let bit = ((state >> 31) ^ (state >> 21) ^ (state >> 1) ^ (state >> 0)) & 1;
 
     (state << 1) + bit
 }
 
-pub fn basic_tests (pl230: &mut Pl230) -> bool {
+pub fn basic_tests(pl230: &mut Pl230) -> bool {
     report_api("channels", pl230.csr.rf(utra::pl230::STATUS_CHNLS_MINUS1) + 1);
     //report_api("id0", pl230.csr.r(utra::pl230::PERIPH_ID_0));
     //report_api("id1", pl230.csr.r(utra::pl230::PERIPH_ID_1));
@@ -21,13 +19,12 @@ pub fn basic_tests (pl230: &mut Pl230) -> bool {
     // conjure the DMA control structure in IFRAM0. In order to guarantee Rust
     // semantics, it must be initialized to 0: 4 word-sized entries * 8 channels * 2 banks = 4 * 8 * 2
     let init_ptr = utralib::HW_IFRAM0_MEM as *mut u32;
-    for i in 0..(4*8*2) {
-        unsafe {init_ptr.add(i).write_volatile(0)};
+    for i in 0..(4 * 8 * 2) {
+        unsafe { init_ptr.add(i).write_volatile(0) };
     }
     // safety: we guarantee that the pointer is aligned and initialized
-    let cc_struct: &mut ControlChannels = unsafe {
-        (utralib::HW_IFRAM0_MEM as *mut ControlChannels).as_mut().unwrap()
-    };
+    let cc_struct: &mut ControlChannels =
+        unsafe { (utralib::HW_IFRAM0_MEM as *mut ControlChannels).as_mut().unwrap() };
 
     // read the status register
     // report_api("status", pl230.csr.r(utra::pl230::STATUS));
@@ -37,23 +34,24 @@ pub fn basic_tests (pl230: &mut Pl230) -> bool {
     const DMA_LEN: usize = 16;
     // setup the PL230 to do a simple transfer between two memory regions
     // dma_mainram feature will cause us to DMA between main memory regions. This works under RTL sims.
-    #[cfg(feature="dma_mainram")]
+    #[cfg(feature = "dma_mainram")]
     let mut region_a = [0u32; DMA_LEN];
-    #[cfg(feature="dma_mainram")]
+    #[cfg(feature = "dma_mainram")]
     let region_b = [0u32; DMA_LEN];
     // The alternate is to DMA between IFRAM regions. This works under FPGA and RTL sim.
-    #[cfg(not(feature="dma_mainram"))]
-    let region_a = unsafe{core::slice::from_raw_parts_mut((utralib::HW_IFRAM0_MEM + 4096) as *mut u32, DMA_LEN)};
-    #[cfg(not(feature="dma_mainram"))]
-    let region_b = unsafe{core::slice::from_raw_parts_mut(utralib::HW_IFRAM1_MEM as *mut u32, DMA_LEN)};
+    #[cfg(not(feature = "dma_mainram"))]
+    let region_a =
+        unsafe { core::slice::from_raw_parts_mut((utralib::HW_IFRAM0_MEM + 4096) as *mut u32, DMA_LEN) };
+    #[cfg(not(feature = "dma_mainram"))]
+    let region_b = unsafe { core::slice::from_raw_parts_mut(utralib::HW_IFRAM1_MEM as *mut u32, DMA_LEN) };
     let mut state = 0x1111_1111;
     for d in region_a.iter_mut() {
         *d = state;
         state = lfsr_next(state);
     }
 
-    cc_struct.channels[0].dst_end_ptr = unsafe{region_b.as_ptr().add(region_b.len() - 1)} as u32;
-    cc_struct.channels[0].src_end_ptr = unsafe{region_a.as_ptr().add(region_a.len() - 1)} as u32;
+    cc_struct.channels[0].dst_end_ptr = unsafe { region_b.as_ptr().add(region_b.len() - 1) } as u32;
+    cc_struct.channels[0].src_end_ptr = unsafe { region_a.as_ptr().add(region_a.len() - 1) } as u32;
     let mut cc = DmaChanControl(0);
     cc.set_src_size(DmaWidth::Word as u32);
     cc.set_src_inc(DmaWidth::Word as u32);
@@ -84,10 +82,10 @@ pub fn basic_tests (pl230: &mut Pl230) -> bool {
     let mut timeout = 0;
     while (DmaChanControl(cc_struct.channels[0].control).cycle_ctrl() != 0) && timeout < 16 {
         // report_api("dma progress ", cc_struct.channels[0].control);
-        report_api("progress as baseptr[2]", unsafe{cc_struct.channels.as_ptr().read()}.control);
+        report_api("progress as baseptr[2]", unsafe { cc_struct.channels.as_ptr().read() }.control);
         timeout += 1;
     }
-
+    #[rustfmt::skip]
     unsafe {core::arch::asm!(
         ".word 0x500F",
         "nop",
@@ -125,16 +123,16 @@ pub fn basic_tests (pl230: &mut Pl230) -> bool {
     passing
 }
 
-#[cfg(feature="pio")]
+#[cfg(feature = "pio")]
 pub fn pio_test(pl230: &mut Pl230) -> bool {
     use xous_pio::*;
 
     let iox_csr = utra::iox::HW_IOX_BASE as *mut u32;
     unsafe {
-        iox_csr.add(0x8 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PBL
-        iox_csr.add(0xC / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PBH
-        iox_csr.add(0x10 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PCL
-        iox_csr.add(0x14 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101);  // PCH
+        iox_csr.add(0x8 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101); // PBL
+        iox_csr.add(0xC / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101); // PBH
+        iox_csr.add(0x10 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101); // PCL
+        iox_csr.add(0x14 / core::mem::size_of::<u32>()).write_volatile(0b0101_0101_0101_0101); // PCH
         iox_csr.add(0x200 / core::mem::size_of::<u32>()).write_volatile(0xffffffff); // PIO sel port D31-0
     }
 
@@ -144,7 +142,7 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
     let mut sm_a = pio_ss.alloc_sm().unwrap();
     pio_ss.clear_instruction_memory();
     sm_a.sm_set_enabled(false);
-
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "out pins, 0",  // 0 is 32
     );
@@ -152,10 +150,7 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
     sm_a.sm_set_enabled(false);
     a_prog.setup_default_config(&mut sm_a);
     sm_a.config_set_out_pins(0, 32);
-    sm_a.sm_set_pindirs_with_mask(
-        0xFFFF_FFFF,
-        0xFFFF_FFFF
-    );
+    sm_a.sm_set_pindirs_with_mask(0xFFFF_FFFF, 0xFFFF_FFFF);
     sm_a.config_set_clkdiv(133.0); // have it run slow so this test operates in the background
     sm_a.config_set_out_shift(false, true, 32);
     sm_a.sm_set_pindirs_with_mask(0x10, 0x10);
@@ -181,13 +176,12 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
 
     // setup control structure
     let init_ptr = utralib::HW_IFRAM0_MEM as *mut u32;
-    for i in 0..(4*8*2) {
-        unsafe {init_ptr.add(i).write_volatile(0)};
+    for i in 0..(4 * 8 * 2) {
+        unsafe { init_ptr.add(i).write_volatile(0) };
     }
     // safety: we guarantee that the pointer is aligned and initialized
-    let cc_struct: &mut ControlChannels = unsafe {
-        (utralib::HW_IFRAM0_MEM as *mut ControlChannels).as_mut().unwrap()
-    };
+    let cc_struct: &mut ControlChannels =
+        unsafe { (utralib::HW_IFRAM0_MEM as *mut ControlChannels).as_mut().unwrap() };
     pl230.csr.wfo(utra::pl230::CFG_MASTER_ENABLE, 1); // enable
 
     const DMA_LEN: usize = 1024;
@@ -200,7 +194,7 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
 
     cc_struct.channels[0].dst_end_ptr =
         (utra::rp_pio::SFR_TXF0.offset() * core::mem::size_of::<u32>() + utra::rp_pio::HW_RP_PIO_BASE) as u32;
-    cc_struct.channels[0].src_end_ptr = unsafe{region_a.as_ptr().add(region_a.len() - 1)} as u32;
+    cc_struct.channels[0].src_end_ptr = unsafe { region_a.as_ptr().add(region_a.len() - 1) } as u32;
     let mut cc = DmaChanControl(0);
     cc.set_src_size(DmaWidth::Word as u32);
     cc.set_src_inc(DmaWidth::Word as u32);
@@ -212,18 +206,19 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
     cc_struct.channels[0].control = cc.0;
 
     pl230.csr.wo(utra::pl230::CTRLBASEPTR, cc_struct.channels.as_ptr() as u32);
-    pl230.csr.wo(utra::pl230::CHNLREQMASKCLR, 1);  // don't mask the hardware request line
+    pl230.csr.wo(utra::pl230::CHNLREQMASKCLR, 1); // don't mask the hardware request line
     pl230.csr.wo(utra::pl230::CHNLUSEBURSTCLR, 1); // don't mask single request line
     pl230.csr.wo(utra::pl230::CHNLENABLESET, 1);
     report_api("pio baseptr", cc_struct.channels.as_ptr() as u32);
     report_api("pio src start", region_a.as_ptr() as u32);
-    report_api("pio dst start", unsafe{cc_struct.channels.as_ptr().read()}.dst_end_ptr);
+    report_api("pio dst start", unsafe { cc_struct.channels.as_ptr().read() }.dst_end_ptr);
 
     // setup EVC to route requests
-    report_api("mdma_base", unsafe{pl230.mdma.base()} as u32);
+    report_api("mdma_base", unsafe { pl230.mdma.base() } as u32);
     // select event number 83, which is PIO[0].
     // TODO: make this not hard-coded
-    // WTF: oddly enough, it actually maps to... channel 163??? weird. this probably indicates a bug of some sort.
+    // WTF: oddly enough, it actually maps to... channel 163??? weird. this probably indicates a bug of some
+    // sort.
     pl230.mdma.wo(utra::mdma::SFR_EVSEL_CR_EVSEL0, 163);
     // bit 0 - enable
     // bit 1 - mode: 1 is edge, 0 is level

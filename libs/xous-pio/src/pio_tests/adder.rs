@@ -1,5 +1,5 @@
-use crate::*;
 use super::report_api;
+use crate::*;
 
 pub fn adder_test() -> bool {
     report_api(0x5030_0000);
@@ -7,7 +7,7 @@ pub fn adder_test() -> bool {
     let mut pio_ss = PioSharedState::new();
 
     let mut pio_sm = pio_ss.alloc_sm().unwrap();
-
+    #[rustfmt::skip]
     let adder_prog = pio_proc::pio_asm!(
         // Pop two 32 bit integers from the TX FIFO, add them together, and push the
         // result to the TX FIFO. Autopush/pull should be disabled as we're using
