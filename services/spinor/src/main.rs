@@ -570,6 +570,7 @@ mod implementation {
         #[inline]
         fn flush_dcache(&self, _start: u32, _len: u32) {
             unsafe {
+                #[rustfmt::skip]
                 core::arch::asm!(
                     ".word 0x500F",
                     "nop",
