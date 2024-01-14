@@ -12,20 +12,20 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     // TODO: retire utralib/svd2utra from publication as well
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous@0.9.56",
-        "xous-ipc@0.9.56",
-        "xous-api-log@0.1.52",
-        "xous-api-names@0.9.54",
-        "xous-api-susres@0.9.52",
-        "xous-api-ticktimer@0.9.52",
+        "xous@0.9.57",
+        "xous-ipc@0.9.57",
+        "xous-api-log@0.1.53",
+        "xous-api-names@0.9.55",
+        "xous-api-susres@0.9.53",
+        "xous-api-ticktimer@0.9.53",
     ];
     // utra/svd2utra changes are downgraded to warnings because these now prefer to pull
     // from the local patch version, so any inconsistency simply indicates we forgot to
     // publish the packages, rather than something nefarious has happened.
     let warn_pkgs = [
         // this set is only updated if the utralib changes
-        "utralib@0.1.23",
-        "svd2utra@0.1.21",
+        "utralib@0.1.24",
+        "svd2utra@0.1.22",
     ];
     for pkg in check_pkgs {
         verify(pkg.into(), true)?;
