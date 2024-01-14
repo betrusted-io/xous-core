@@ -1,4 +1,4 @@
-#![rustfmt::skip]
+#![cfg_attr(rustfmt, rustfmt_skip)]
 // Copyright2020-2021 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");

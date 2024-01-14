@@ -13,7 +13,7 @@
 
 // Original copyright notice preserved below:
 
-#![rustfmt::skip]
+#![cfg_attr(rustfmt, rustfmt_skip)]
 // Copyright2019 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
