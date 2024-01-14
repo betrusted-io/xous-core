@@ -2,9 +2,10 @@
 // SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::mem::MemoryManager;
 use utralib::generated::*;
 use xous_kernel::{MemoryFlags, MemoryType, PID};
+
+use crate::mem::MemoryManager;
 
 /// The manually chosen virtual address has to be in the top 4MiB as it is the
 /// only page shared among all processes.
@@ -18,11 +19,7 @@ pub struct TrngKernel {
 }
 
 impl TrngKernel {
-    pub fn new(addr: usize) -> TrngKernel {
-        TrngKernel {
-            trng_kernel_csr: CSR::new(addr as *mut u32),
-        }
-    }
+    pub fn new(addr: usize) -> TrngKernel { TrngKernel { trng_kernel_csr: CSR::new(addr as *mut u32) } }
 
     pub fn init(&mut self) {
         if false {
@@ -39,11 +36,7 @@ impl TrngKernel {
             // in the connecting logic: the simulation coverage stops at the edge of the TRNG block.
             for _ in 0..4 {
                 // wait until the urandom port is initialized
-                while self
-                    .trng_kernel_csr
-                    .rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID)
-                    == 0
-                {}
+                while self.trng_kernel_csr.rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID) == 0 {}
                 // pull a dummy piece of data
                 self.trng_kernel_csr.rf(utra::trng_kernel::URANDOM_URANDOM);
             }
@@ -57,11 +50,7 @@ impl TrngKernel {
             self.trng_kernel_csr.rf(utra::trng_kernel::DATA_DATA)
         } else {
             // urandom path (recommended)
-            while self
-                .trng_kernel_csr
-                .rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID)
-                == 0
-            {}
+            while self.trng_kernel_csr.rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID) == 0 {}
             self.trng_kernel_csr.rf(utra::trng_kernel::URANDOM_URANDOM)
         }
     }
@@ -75,7 +64,8 @@ pub fn init() {
     // hardware guarantees that:
     //   - TRNG will automatically power on
     //   - Both TRNGs are enabled, with conservative defaults
-    //   - Kernel FIFO will fill with TRNGs such that at least the next 512 calls to get_u32() will succeed without delay
+    //   - Kernel FIFO will fill with TRNGs such that at least the next 512 calls to get_u32() will succeed
+    //     without delay
     //   - The kernel will start a TRNG server
     //   - All further security decisions and policies are 100% delegated to this new server.
     MemoryManager::with_mut(|memory_manager| {
@@ -101,10 +91,5 @@ pub fn init() {
 
 /// Retrieve random `u32`.
 pub fn get_u32() -> u32 {
-    unsafe {
-        TRNG_KERNEL
-            .as_mut()
-            .expect("TRNG_KERNEL driver not initialized")
-            .get_u32()
-    }
+    unsafe { TRNG_KERNEL.as_mut().expect("TRNG_KERNEL driver not initialized").get_u32() }
 }

@@ -1,3 +1,5 @@
+use core::convert::TryInto;
+
 use gdbstub::common::Tid;
 use gdbstub::target;
 use gdbstub::target::ext::base::multithread::MultiThreadBase;
@@ -5,7 +7,6 @@ use gdbstub::target::ext::base::single_register_access::SingleRegisterAccessOps;
 use gdbstub::target::TargetResult;
 
 use super::XousTarget;
-use core::convert::TryInto;
 
 impl MultiThreadBase for XousTarget {
     fn read_registers(
@@ -25,11 +26,7 @@ impl MultiThreadBase for XousTarget {
             // Actiavte the debugging process and iterate through it,
             // noting down each active thread.
             let debugging_pid = pid;
-            system_services
-                .get_process(debugging_pid)
-                .unwrap()
-                .activate()
-                .unwrap();
+            system_services.get_process(debugging_pid).unwrap().activate().unwrap();
             let process = crate::arch::process::Process::current();
             let thread = process.thread(tid.get());
             regs.x[0] = 0;
@@ -39,11 +36,7 @@ impl MultiThreadBase for XousTarget {
             regs.pc = (thread.sepc) as u32;
 
             // Restore the previous PID
-            system_services
-                .get_process(current_pid)
-                .unwrap()
-                .activate()
-                .unwrap();
+            system_services.get_process(current_pid).unwrap().activate().unwrap();
         });
         Ok(())
     }
@@ -61,11 +54,7 @@ impl MultiThreadBase for XousTarget {
             // Actiavte the debugging process and iterate through it,
             // noting down each active thread.
             let debugging_pid = pid;
-            system_services
-                .get_process(debugging_pid)
-                .unwrap()
-                .activate()
-                .unwrap();
+            system_services.get_process(debugging_pid).unwrap().activate().unwrap();
             let mut process = crate::arch::process::Process::current();
             let thread = process.thread_mut(tid.get());
             for (thr_reg, dbg_reg) in thread.registers.iter_mut().zip(regs.x[1..].iter()) {
@@ -74,11 +63,7 @@ impl MultiThreadBase for XousTarget {
             thread.sepc = (regs.pc) as usize;
 
             // Restore the previous PID
-            system_services
-                .get_process(current_pid)
-                .unwrap()
-                .activate()
-                .unwrap();
+            system_services.get_process(current_pid).unwrap().activate().unwrap();
         });
         Ok(())
     }
@@ -112,11 +97,7 @@ impl MultiThreadBase for XousTarget {
             // Actiavte the debugging process and iterate through it,
             // noting down each active thread.
             let debugging_pid = pid;
-            system_services
-                .get_process(debugging_pid)
-                .unwrap()
-                .activate()
-                .unwrap();
+            system_services.get_process(debugging_pid).unwrap().activate().unwrap();
 
             if data.len() == 2 && (start_addr & 1) == 0 {
                 let val = crate::arch::mem::peek_memory(start_addr as *mut u16).unwrap_or(0);
@@ -131,9 +112,8 @@ impl MultiThreadBase for XousTarget {
             } else if (data.len() & 3) == 0 && (start_addr & 3) == 0 {
                 let mut current_addr = current_addr;
                 for word in data.chunks_mut(4) {
-                    let bytes = crate::arch::mem::peek_memory(current_addr as *mut u32)
-                        .unwrap_or(0)
-                        .to_le_bytes();
+                    let bytes =
+                        crate::arch::mem::peek_memory(current_addr as *mut u32).unwrap_or(0).to_le_bytes();
                     for (dest, src) in word.iter_mut().zip(bytes) {
                         *dest = src;
                     }
@@ -141,17 +121,12 @@ impl MultiThreadBase for XousTarget {
                 }
             } else {
                 for (offset, b) in data.iter_mut().enumerate() {
-                    *b = crate::arch::mem::peek_memory((current_addr + offset) as *mut u8)
-                        .unwrap_or(0xff);
+                    *b = crate::arch::mem::peek_memory((current_addr + offset) as *mut u8).unwrap_or(0xff);
                 }
             }
 
             // Restore the previous PID
-            system_services
-                .get_process(current_pid)
-                .unwrap()
-                .activate()
-                .unwrap();
+            system_services.get_process(current_pid).unwrap().activate().unwrap();
         });
         Ok(())
     }
@@ -178,11 +153,7 @@ impl MultiThreadBase for XousTarget {
             // Actiavte the debugging process and iterate through it,
             // noting down each active thread.
             let debugging_pid = pid;
-            system_services
-                .get_process(debugging_pid)
-                .unwrap()
-                .activate()
-                .unwrap();
+            system_services.get_process(debugging_pid).unwrap().activate().unwrap();
 
             if data.len() == 2 && (start_addr & 1) == 0 {
                 let val = u16::from_le_bytes(data.try_into().unwrap());
@@ -200,20 +171,13 @@ impl MultiThreadBase for XousTarget {
             }
 
             // Restore the previous PID
-            system_services
-                .get_process(current_pid)
-                .unwrap()
-                .activate()
-                .unwrap();
+            system_services.get_process(current_pid).unwrap().activate().unwrap();
         });
         Ok(())
     }
 
     #[inline(always)]
-    fn list_active_threads(
-        &mut self,
-        register_thread: &mut dyn FnMut(Tid),
-    ) -> Result<(), Self::Error> {
+    fn list_active_threads(&mut self, register_thread: &mut dyn FnMut(Tid)) -> Result<(), Self::Error> {
         let Some(pid) = self.pid else {
             return Ok(());
         };
@@ -224,21 +188,13 @@ impl MultiThreadBase for XousTarget {
 
             // Actiavte the debugging process and iterate through it,
             // noting down each active thread.
-            system_services
-                .get_process(debugging_pid)
-                .unwrap()
-                .activate()
-                .unwrap();
+            system_services.get_process(debugging_pid).unwrap().activate().unwrap();
             crate::arch::process::Process::current().for_each_thread_mut(|tid, _thr| {
                 register_thread(Tid::new(tid).unwrap());
             });
 
             // Restore the previous PID
-            system_services
-                .get_process(current_pid)
-                .unwrap()
-                .activate()
-                .unwrap();
+            system_services.get_process(current_pid).unwrap().activate().unwrap();
         });
         Ok(())
     }
@@ -247,9 +203,7 @@ impl MultiThreadBase for XousTarget {
         Some(self)
     }
 
-    fn support_resume(
-        &mut self,
-    ) -> Option<target::ext::base::multithread::MultiThreadResumeOps<'_, Self>> {
+    fn support_resume(&mut self) -> Option<target::ext::base::multithread::MultiThreadResumeOps<'_, Self>> {
         Some(self)
     }
 }

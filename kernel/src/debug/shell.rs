@@ -2,11 +2,12 @@
 // SPDX-FileCopyrightText: 2023 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use core::fmt;
+
 use crate::{
     args::KernelArguments,
     io::{SerialRead, SerialWrite},
 };
-use core::fmt;
 
 /// Instance of the shell output.
 pub static mut OUTPUT: Option<Output> = None;
@@ -124,11 +125,7 @@ fn handle_character(b: u8) {
                         println!();
                     }
                 }
-                system_services
-                    .get_process(current_pid)
-                    .unwrap()
-                    .activate()
-                    .unwrap();
+                system_services.get_process(current_pid).unwrap().activate().unwrap();
             });
         }
         b'p' => {
@@ -154,11 +151,7 @@ fn handle_character(b: u8) {
                         );
                     }
                 }
-                system_services
-                    .get_process(current_pid)
-                    .unwrap()
-                    .activate()
-                    .unwrap();
+                system_services.get_process(current_pid).unwrap().activate().unwrap();
             });
         }
         b'P' => {
@@ -179,11 +172,7 @@ fn handle_character(b: u8) {
                         println!();
                     }
                 }
-                system_services
-                    .get_process(current_pid)
-                    .unwrap()
-                    .activate()
-                    .unwrap();
+                system_services.get_process(current_pid).unwrap().activate().unwrap();
             });
         }
         b'r' => {

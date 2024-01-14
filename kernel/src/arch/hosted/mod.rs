@@ -14,12 +14,11 @@ use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::thread_local;
 
+use crossbeam_channel::{unbounded, Receiver, RecvError, RecvTimeoutError, Sender};
+use xous_kernel::{ProcessInit, ProcessKey, Result, SysCall, ThreadInit, PID, TID};
+
 use crate::arch::process::Process;
 use crate::services::SystemServices;
-
-use crossbeam_channel::{unbounded, Receiver, RecvError, RecvTimeoutError, Sender};
-
-use xous_kernel::{ProcessInit, ProcessKey, Result, SysCall, ThreadInit, PID, TID};
 
 enum ThreadMessage {
     SysCall(PID, TID, SysCall),
@@ -41,9 +40,7 @@ thread_local!(static SEND_ADDR: RefCell<Option<Sender<SocketAddr>>> = RefCell::n
 thread_local!(static PID1_KEY: RefCell<[u8; 16]> = RefCell::new([0u8; 16]));
 
 #[cfg(test)]
-pub fn set_pid1_key(new_key: [u8; 16]) {
-    PID1_KEY.with(|p1k| *p1k.borrow_mut() = new_key);
-}
+pub fn set_pid1_key(new_key: [u8; 16]) { PID1_KEY.with(|p1k| *p1k.borrow_mut() = new_key); }
 
 /// Set the network address for this particular thread.
 #[cfg(test)]
@@ -84,9 +81,7 @@ fn generate_pid_key() -> [u8; 16] {
 }
 
 #[allow(dead_code)]
-pub fn current_pid() -> PID {
-    crate::arch::process::current_pid()
-}
+pub fn current_pid() -> PID { crate::arch::process::current_pid() }
 
 /// Each client gets its own connection and its own thread, which is handled here.
 fn handle_connection(
@@ -103,18 +98,14 @@ fn handle_connection(
             // so send a `Termination` message across the channel.
             if let Err(_e) = conn.read_exact(&mut raw_data) {
                 #[cfg(not(test))]
-                eprintln!(
-                    "KERNEL({}): client disconnected: {} -- shutting down virtual process",
-                    pid, _e
-                );
+                eprintln!("KERNEL({}): client disconnected: {} -- shutting down virtual process", pid, _e);
                 // sender.send(ServerMessage::Exit).ok();
                 return;
             }
 
             let mut packet_data = [0usize; 9];
-            for (bytes, word) in raw_data
-                .chunks_exact(std::mem::size_of::<usize>())
-                .zip(packet_data.iter_mut())
+            for (bytes, word) in
+                raw_data.chunks_exact(std::mem::size_of::<usize>()).zip(packet_data.iter_mut())
             {
                 *word = usize::from_le_bytes(bytes.try_into().unwrap());
             }
@@ -172,9 +163,7 @@ fn handle_connection(
                 };
             }
 
-            sender
-                .send(ThreadMessage::SysCall(pid, thread_id, call))
-                .unwrap();
+            sender.send(ThreadMessage::SysCall(pid, thread_id, call)).unwrap();
         }
     }
 
@@ -188,29 +177,23 @@ fn handle_connection(
 
     std::thread::Builder::new()
         .name(format!("PID {}: client should_exit thread", pid))
-        .spawn(move || loop {
-            if should_exit.load(Ordering::Relaxed) {
-                eprintln!("KERNEL: should_exit == 1");
-                // sender.send(ServerMessage::Exit).ok();
-                // WARNING: This functionality is unimplemented right now
-                return;
+        .spawn(move || {
+            loop {
+                if should_exit.load(Ordering::Relaxed) {
+                    eprintln!("KERNEL: should_exit == 1");
+                    // sender.send(ServerMessage::Exit).ok();
+                    // WARNING: This functionality is unimplemented right now
+                    return;
+                }
+                std::thread::park_timeout(std::time::Duration::from_millis(100));
             }
-            std::thread::park_timeout(std::time::Duration::from_millis(100));
         })
         .unwrap();
 
     conn_thread.join().unwrap();
     #[cfg(not(test))]
-    eprintln!(
-        "KERNEL({}): Finished the thread so sending TerminateProcess",
-        pid
-    );
-    chn.send(ThreadMessage::SysCall(
-        pid,
-        1,
-        xous_kernel::SysCall::TerminateProcess(0),
-    ))
-    .unwrap();
+    eprintln!("KERNEL({}): Finished the thread so sending TerminateProcess", pid);
+    chn.send(ThreadMessage::SysCall(pid, 1, xous_kernel::SysCall::TerminateProcess(0))).unwrap();
 }
 
 fn listen_thread(
@@ -249,16 +232,14 @@ fn listen_thread(
 
         // Spawn a new process. This process will start out in the "Allocated" state.
         chn.send(ThreadMessage::NewConnection(
-            conn.try_clone()
-                .expect("couldn't make a copy of the network connection for the kernel"),
+            conn.try_clone().expect("couldn't make a copy of the network connection for the kernel"),
             ProcessKey::new(access_key),
         ))
         .expect("couldn't request a new PID");
 
         // The kernel will immediately respond with a new PID.
-        let NewPidMessage::NewPid(new_pid) = new_pid_channel
-            .recv()
-            .expect("couldn't receive message from main thread");
+        let NewPidMessage::NewPid(new_pid) =
+            new_pid_channel.recv().expect("couldn't receive message from main thread");
         let conn_copy = conn.try_clone().expect("couldn't duplicate connection");
         let should_exit = should_exit.clone();
         let jh = std::thread::Builder::new()
@@ -297,38 +278,33 @@ fn listen_thread(
 
     std::thread::Builder::new()
         .name("kernel accept thread".to_owned())
-        .spawn(move || loop {
-            match listener.accept() {
-                Ok((conn, _addr)) => {
-                    conn.set_nonblocking(false).unwrap();
-                    tcp_sender.send(ClientMessage::NewConnection(conn)).unwrap();
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    match shutdown_listener_receiver
-                        .recv_timeout(std::time::Duration::from_millis(500))
-                    {
-                        Err(RecvTimeoutError::Timeout) => continue,
-                        Ok(()) | Err(RecvTimeoutError::Disconnected) => {
-                            return;
+        .spawn(move || {
+            loop {
+                match listener.accept() {
+                    Ok((conn, _addr)) => {
+                        conn.set_nonblocking(false).unwrap();
+                        tcp_sender.send(ClientMessage::NewConnection(conn)).unwrap();
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        match shutdown_listener_receiver.recv_timeout(std::time::Duration::from_millis(500)) {
+                            Err(RecvTimeoutError::Timeout) => continue,
+                            Ok(()) | Err(RecvTimeoutError::Disconnected) => {
+                                return;
+                            }
                         }
                     }
-                }
-                Err(e) => {
-                    // Windows generates this error -- WSACancelBlockingCall -- when a
-                    // connection is shut down while `accept()` is running. This should
-                    // only happen when the system is shutting down, so ignore it.
-                    if cfg!(windows) {
-                        if let Some(10004) = e.raw_os_error() {
-                            return;
+                    Err(e) => {
+                        // Windows generates this error -- WSACancelBlockingCall -- when a
+                        // connection is shut down while `accept()` is running. This should
+                        // only happen when the system is shutting down, so ignore it.
+                        if cfg!(windows) {
+                            if let Some(10004) = e.raw_os_error() {
+                                return;
+                            }
                         }
+                        eprintln!("error accepting connections: {} ({:?}) ({:?})", e, e, e.kind());
+                        return;
                     }
-                    eprintln!(
-                        "error accepting connections: {} ({:?}) ({:?})",
-                        e,
-                        e,
-                        e.kind()
-                    );
-                    return;
                 }
             }
         })
@@ -370,13 +346,10 @@ pub fn idle() -> bool {
 
     // Allocate PID1 with the key we were passed.
     let pid1_key = PID1_KEY.with(|p1k| *p1k.borrow());
-    let pid1_init = ProcessInit {
-        key: ProcessKey::new(pid1_key),
-    };
+    let pid1_init = ProcessInit { key: ProcessKey::new(pid1_key) };
     let process_1 = SystemServices::with_mut(|ss| ss.create_process(pid1_init)).unwrap();
     assert_eq!(process_1.pid().get(), 1);
-    let _tid1 =
-        SystemServices::with_mut(|ss| ss.create_thread(process_1.pid(), ThreadInit {})).unwrap();
+    let _tid1 = SystemServices::with_mut(|ss| ss.create_thread(process_1.pid(), ThreadInit {})).unwrap();
 
     let listen_addr = env::var("XOUS_LISTEN_ADDR")
         .map(|s| {
@@ -421,14 +394,11 @@ pub fn idle() -> bool {
         println!("-------+------------------");
         for arg in args {
             let process_key = generate_pid_key();
-            let init = xous_kernel::ProcessInit {
-                key: ProcessKey::new(process_key),
-            };
+            let init = xous_kernel::ProcessInit { key: ProcessKey::new(process_key) };
             let new_process = SystemServices::with_mut(|ss| ss.create_process(init)).unwrap();
             println!(" {:^5} |  {}", new_process, arg);
             let process_args = xous_kernel::ProcessArgs::new("program", arg);
-            xous_kernel::arch::create_process_post(process_args, init, new_process)
-                .expect("couldn't spawn");
+            xous_kernel::arch::create_process_post(process_args, init, new_process).expect("couldn't spawn");
         }
     }
 
@@ -437,8 +407,7 @@ pub fn idle() -> bool {
             ThreadMessage::NewConnection(conn, access_key) => {
                 // The new process should already have a PID registered. Convert its access key
                 // into a PID, and register the connection with the server.
-                let new_pid =
-                    crate::arch::process::register_connection_for_key(conn, access_key).unwrap();
+                let new_pid = crate::arch::process::register_connection_for_key(conn, access_key).unwrap();
                 // println!(
                 //     "KERNEL: Access key {:?} mapped to PID {}",
                 //     access_key, new_pid
@@ -487,12 +456,8 @@ pub fn idle() -> bool {
                     }
                     process.send(&response_vec).unwrap_or_else(|_e| {
                         // If we're unable to send data to the process, assume it's dead and terminate it.
-                        println!(
-                            "Unable to send response to process: {:?} -- terminating",
-                            _e
-                        );
-                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess(0))
-                            .ok();
+                        println!("Unable to send response to process: {:?} -- terminating", _e);
+                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess(0)).ok();
                     });
                     // println!("KERNEL: Done sending");
                 }
@@ -500,17 +465,14 @@ pub fn idle() -> bool {
                 {
                     let current_process = crate::arch::process::Process::current();
                     if current_process.thread_exists(thread_id) {
-                        SystemServices::with_mut(|ss| {
-                            ss.switch_to_thread(pid, Some(thread_id))
-                        })
-                        .unwrap();
+                        SystemServices::with_mut(|ss| ss.switch_to_thread(pid, Some(thread_id))).unwrap();
                         crate::arch::process::Process::current().set_tid(thread_id).unwrap();
                     }
                 }
 
                 // Handle the syscall within the Xous kernel
-                let response = crate::syscall::handle(pid, thread_id, false, call)
-                    .unwrap_or_else(Result::Error);
+                let response =
+                    crate::syscall::handle(pid, thread_id, false, call).unwrap_or_else(Result::Error);
 
                 // println!("KERNEL({}): Syscall response {:?}", pid, response);
                 // There's a response if it wasn't a blocked process and we're not terminating.
@@ -544,8 +506,7 @@ pub fn idle() -> bool {
                             "KERNEL({}): Unable to send response to process: {:?} -- terminating",
                             pid, _e
                         );
-                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess(0))
-                            .ok();
+                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess(0)).ok();
                     });
                     crate::arch::process::set_current_pid(existing_pid);
                     // println!(
@@ -557,9 +518,7 @@ pub fn idle() -> bool {
                 }
 
                 if is_shutdown {
-                    exit_sender
-                        .send(ExitMessage::Exit)
-                        .expect("couldn't send shutdown signal");
+                    exit_sender.send(ExitMessage::Exit).expect("couldn't send shutdown signal");
                     break;
                 }
             }
@@ -567,9 +526,7 @@ pub fn idle() -> bool {
     }
 
     // println!("Exiting Xous because the listen thread channel has closed. Waiting for thread to finish...");
-    listen_thread_handle
-        .join()
-        .expect("error waiting for listen thread to return");
+    listen_thread_handle.join().expect("error waiting for listen thread to return");
 
     // println!("Thank you for using Xous!");
     false

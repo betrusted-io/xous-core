@@ -13,19 +13,11 @@ impl MultiThreadResume for XousTarget {
         Ok(())
     }
 
-    fn support_single_step(&mut self) -> Option<MultiThreadSingleStepOps<'_, Self>> {
-        Some(self)
-    }
+    fn support_single_step(&mut self) -> Option<MultiThreadSingleStepOps<'_, Self>> { Some(self) }
 
-    fn clear_resume_actions(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
+    fn clear_resume_actions(&mut self) -> Result<(), Self::Error> { Ok(()) }
 
-    fn set_resume_action_continue(
-        &mut self,
-        _tid: Tid,
-        _signal: Option<Signal>,
-    ) -> Result<(), Self::Error> {
+    fn set_resume_action_continue(&mut self, _tid: Tid, _signal: Option<Signal>) -> Result<(), Self::Error> {
         Ok(())
     }
 }

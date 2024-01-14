@@ -1,19 +1,18 @@
+use core::convert::TryInto;
+
 use gdbstub::common::{Pid, Tid};
 use gdbstub::target;
 use gdbstub::target::ext::extended_mode::{AttachKind, ExtendedMode, ShouldTerminate};
 use gdbstub::target::{TargetError, TargetResult};
 
 use super::XousTarget;
-use core::convert::TryInto;
 
 impl ExtendedMode for XousTarget {
     fn attach(&mut self, new_pid: Pid) -> TargetResult<(), Self> {
         if let Some(previous_pid) = self.pid.take() {
             self.unpatch_stepi(Tid::new(1).unwrap()).ok();
             crate::services::SystemServices::with_mut(|system_services| {
-                system_services
-                    .resume_process_from_debug(previous_pid)
-                    .unwrap()
+                system_services.resume_process_from_debug(previous_pid).unwrap()
             });
         }
 
@@ -55,9 +54,7 @@ impl ExtendedMode for XousTarget {
         Ok(())
     }
 
-    fn query_if_attached(&mut self, _pid: Pid) -> TargetResult<AttachKind, Self> {
-        Ok(AttachKind::Attach)
-    }
+    fn query_if_attached(&mut self, _pid: Pid) -> TargetResult<AttachKind, Self> { Ok(AttachKind::Attach) }
 
     fn run(
         &mut self,

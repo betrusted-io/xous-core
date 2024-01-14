@@ -1,15 +1,17 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+use riscv::register::{scause, sepc, sstatus, stval};
+use xous_kernel::{SysCall, PID, TID};
+
 use crate::arch::current_pid;
 use crate::arch::exception::RiscvException;
 use crate::arch::mem::MemoryMapping;
 use crate::arch::process::{Process as ArchProcess, RETURN_FROM_EXCEPTION_HANDLER};
 use crate::arch::process::{Thread, EXIT_THREAD, RETURN_FROM_ISR};
 use crate::services::SystemServices;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use riscv::register::{scause, sepc, sstatus, stval};
-use xous_kernel::{SysCall, PID, TID};
 
 extern "Rust" {
     fn _xous_syscall_return_result(result: &xous_kernel::Result, context: &Thread) -> !;
@@ -30,9 +32,7 @@ fn sim_read() -> usize {
     existing
 }
 
-fn sim_write(new: usize) {
-    unsafe { core::arch::asm!("csrrw zero, 0x9C0, {0}", in(reg) new) };
-}
+fn sim_write(new: usize) { unsafe { core::arch::asm!("csrrw zero, 0x9C0, {0}", in(reg) new) }; }
 
 fn sip_read() -> usize {
     let existing: usize;
@@ -63,9 +63,7 @@ pub fn enable_irq(irq_no: usize) {
         sim_write(sim_read() | (1 << irq_no));
     } else {
         SIM_BACKING
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |existing| {
-                Some(existing | (1 << irq_no))
-            })
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |existing| Some(existing | (1 << irq_no)))
             .ok();
     }
 }
@@ -77,23 +75,17 @@ pub fn disable_irq(irq_no: usize) {
         sim_write(sim_read() & !(1 << irq_no));
     } else {
         SIM_BACKING
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |existing| {
-                Some(existing & !(1 << irq_no))
-            })
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |existing| Some(existing & !(1 << irq_no)))
             .ok();
     }
 }
 
 static mut PREVIOUS_PAIR: Option<(PID, TID)> = None;
 
-pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) {
-    PREVIOUS_PAIR = Some((pid, tid));
-}
+pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) { PREVIOUS_PAIR = Some((pid, tid)); }
 
 #[cfg(feature = "gdb-stub")]
-pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
-    PREVIOUS_PAIR.take()
-}
+pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> { PREVIOUS_PAIR.take() }
 
 /// Finish a pending ISR. Return `false` if there was none.
 fn finish_isr() -> bool {
@@ -104,19 +96,15 @@ fn finish_isr() -> bool {
     // If we hit this address, then an ISR has just returned.  Since
     // we're in an interrupt context, it is safe to access this
     // global variable.
-    let (previous_pid, previous_context) = unsafe {
-        PREVIOUS_PAIR
-            .take()
-            .expect("got RETURN_FROM_ISR with no previous PID")
-    };
+    let (previous_pid, previous_context) =
+        unsafe { PREVIOUS_PAIR.take().expect("got RETURN_FROM_ISR with no previous PID") };
     // println!(
     //     "ISR: Resuming previous pair of ({}, {})",
     //     previous_pid, previous_context
     // );
     // Switch to the previous process' address space.
     SystemServices::with_mut(|ss| {
-        ss.finish_callback_and_resume(previous_pid, previous_context)
-            .expect("unable to resume previous PID")
+        ss.finish_callback_and_resume(previous_pid, previous_context).expect("unable to resume previous PID")
     });
 
     // Re-enable interrupts now that they're handled
@@ -128,56 +116,36 @@ fn finish_isr() -> bool {
 /// Convert a RISC-V `Exception` into a Xous exception argument list.
 fn generate_exception_args(ex: &RiscvException) -> Option<[usize; 3]> {
     match *ex {
-        RiscvException::InstructionAddressMisaligned(epc, addr) => Some([
-            xous_kernel::ExceptionType::InstructionAddressMisaligned as usize,
-            epc,
-            addr,
-        ]),
-        RiscvException::InstructionAccessFault(epc, addr) => Some([
-            xous_kernel::ExceptionType::InstructionAccessFault as usize,
-            epc,
-            addr,
-        ]),
-        RiscvException::IllegalInstruction(epc, instruction) => Some([
-            xous_kernel::ExceptionType::IllegalInstruction as usize,
-            epc,
-            instruction,
-        ]),
-        RiscvException::LoadAddressMisaligned(epc, addr) => Some([
-            xous_kernel::ExceptionType::LoadAddressMisaligned as usize,
-            epc,
-            addr,
-        ]),
-        RiscvException::LoadAccessFault(epc, addr) => Some([
-            xous_kernel::ExceptionType::LoadAccessFault as usize,
-            epc,
-            addr,
-        ]),
-        RiscvException::StoreAddressMisaligned(epc, addr) => Some([
-            xous_kernel::ExceptionType::StoreAddressMisaligned as usize,
-            epc,
-            addr,
-        ]),
-        RiscvException::StoreAccessFault(epc, addr) => Some([
-            xous_kernel::ExceptionType::StoreAccessFault as usize,
-            epc,
-            addr,
-        ]),
-        RiscvException::InstructionPageFault(epc, addr) => Some([
-            xous_kernel::ExceptionType::InstructionPageFault as usize,
-            epc,
-            addr,
-        ]),
-        RiscvException::LoadPageFault(epc, addr) => Some([
-            xous_kernel::ExceptionType::LoadPageFault as usize,
-            epc,
-            addr,
-        ]),
-        RiscvException::StorePageFault(epc, addr) => Some([
-            xous_kernel::ExceptionType::StorePageFault as usize,
-            epc,
-            addr,
-        ]),
+        RiscvException::InstructionAddressMisaligned(epc, addr) => {
+            Some([xous_kernel::ExceptionType::InstructionAddressMisaligned as usize, epc, addr])
+        }
+        RiscvException::InstructionAccessFault(epc, addr) => {
+            Some([xous_kernel::ExceptionType::InstructionAccessFault as usize, epc, addr])
+        }
+        RiscvException::IllegalInstruction(epc, instruction) => {
+            Some([xous_kernel::ExceptionType::IllegalInstruction as usize, epc, instruction])
+        }
+        RiscvException::LoadAddressMisaligned(epc, addr) => {
+            Some([xous_kernel::ExceptionType::LoadAddressMisaligned as usize, epc, addr])
+        }
+        RiscvException::LoadAccessFault(epc, addr) => {
+            Some([xous_kernel::ExceptionType::LoadAccessFault as usize, epc, addr])
+        }
+        RiscvException::StoreAddressMisaligned(epc, addr) => {
+            Some([xous_kernel::ExceptionType::StoreAddressMisaligned as usize, epc, addr])
+        }
+        RiscvException::StoreAccessFault(epc, addr) => {
+            Some([xous_kernel::ExceptionType::StoreAccessFault as usize, epc, addr])
+        }
+        RiscvException::InstructionPageFault(epc, addr) => {
+            Some([xous_kernel::ExceptionType::InstructionPageFault as usize, epc, addr])
+        }
+        RiscvException::LoadPageFault(epc, addr) => {
+            Some([xous_kernel::ExceptionType::LoadPageFault as usize, epc, addr])
+        }
+        RiscvException::StorePageFault(epc, addr) => {
+            Some([xous_kernel::ExceptionType::StorePageFault as usize, epc, addr])
+        }
         _ => None,
     }
 }
@@ -204,16 +172,11 @@ pub extern "C" fn trap_handler(
 
     // If we were previously in Supervisor mode and we've just tried to write to
     // invalid memory, then we likely blew out the stack.
-    if cfg!(target_arch = "riscv32")
-        && sstatus::read().spp() == sstatus::SPP::Supervisor
-        && sc.bits() == 0xf
+    if cfg!(target_arch = "riscv32") && sstatus::read().spp() == sstatus::SPP::Supervisor && sc.bits() == 0xf
     {
         let pid = current_pid();
         let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
-        panic!(
-            "KERNEL({}): RISC-V fault: {} - maybe ran out of kernel stack?",
-            pid, ex
-        );
+        panic!("KERNEL({}): RISC-V fault: {} - maybe ran out of kernel stack?", pid, ex);
     }
 
     let pid = current_pid();
@@ -242,9 +205,8 @@ pub extern "C" fn trap_handler(
                 })
             });
 
-            let response =
-                crate::syscall::handle(pid, tid, unsafe { PREVIOUS_PAIR.is_some() }, call)
-                    .unwrap_or_else(xous_kernel::Result::Error);
+            let response = crate::syscall::handle(pid, tid, unsafe { PREVIOUS_PAIR.is_some() }, call)
+                .unwrap_or_else(xous_kernel::Result::Error);
 
             // println!("Syscall Result: {:?}", response);
             ArchProcess::with_current_mut(|p| {
@@ -261,8 +223,7 @@ pub extern "C" fn trap_handler(
             });
         }
         // Hardware interrupt
-        RiscvException::UserExternalInterrupt(_)
-        | RiscvException::SupervisorExternalInterrupt(_) => {
+        RiscvException::UserExternalInterrupt(_) | RiscvException::SupervisorExternalInterrupt(_) => {
             let irqs_pending = sip_read() & sim_read();
 
             // Safe to access globals since interrupts are disabled
@@ -285,19 +246,13 @@ pub extern "C" fn trap_handler(
         // and return right away.
         RiscvException::StorePageFault(_pc, addr) | RiscvException::LoadPageFault(_pc, addr) => {
             #[cfg(all(feature = "debug-print", feature = "print-panics"))]
-            print!(
-                "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
-                pid, ex, _pc, addr
-            );
+            print!("KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ", pid, ex, _pc, addr);
             crate::arch::mem::ensure_page_exists_inner(addr)
                 .map(|_new_page| {
                     #[cfg(all(feature = "debug-print", feature = "print-panics"))]
                     klog!("Handing page {:08x} to process", _new_page);
                     ArchProcess::with_current_mut(|process| {
-                        crate::arch::syscall::resume(
-                            current_pid().get() == 1,
-                            process.current_thread(),
-                        )
+                        crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                     });
                 })
                 .ok(); // If this fails, fall through.
@@ -306,8 +261,7 @@ pub extern "C" fn trap_handler(
         RiscvException::InstructionPageFault(RETURN_FROM_EXCEPTION_HANDLER, _offset) => {
             // This address indicates the exception handler
             SystemServices::with_mut(|ss| {
-                ss.finish_exception_handler_and_resume(pid)
-                    .expect("unable to finish exception handler")
+                ss.finish_exception_handler_and_resume(pid).expect("unable to finish exception handler")
             });
 
             // TODO: Handle the case where this happens in an ISR
@@ -367,8 +321,7 @@ pub extern "C" fn trap_handler(
 
                 // Pause for debugging, which switches to the parent process
                 SystemServices::with_mut(|ss| {
-                    ss.pause_process_for_debug(pid)
-                        .expect("couldn't debug current process");
+                    ss.pause_process_for_debug(pid).expect("couldn't debug current process");
                     crate::syscall::reset_switchto_caller();
                 });
 
@@ -429,22 +382,14 @@ pub extern "C" fn trap_handler(
     #[cfg(not(any(feature = "precursor", feature = "renode")))]
     println!(
         "{}: CPU Exception on PID {}: {}",
-        if is_kernel_failure {
-            "!!! KERNEL FAILURE !!!"
-        } else {
-            "PROGRAM HALT"
-        },
+        if is_kernel_failure { "!!! KERNEL FAILURE !!!" } else { "PROGRAM HALT" },
         pid,
         ex
     );
     #[cfg(any(feature = "precursor", feature = "renode"))]
     println!(
         "{}: CPU Exception on PID {}: {}",
-        if is_kernel_failure {
-            "!!! KERNEL FAILURE !!!"
-        } else {
-            "PROGRAM HALT"
-        },
+        if is_kernel_failure { "!!! KERNEL FAILURE !!!" } else { "PROGRAM HALT" },
         pid,
         ex
     );
@@ -466,14 +411,12 @@ pub extern "C" fn trap_handler(
     SystemServices::with_mut(|ss| {
         #[cfg(feature = "gdb-stub")]
         {
-            ss.pause_process_for_debug(pid)
-                .expect("couldn't debug current process");
+            ss.pause_process_for_debug(pid).expect("couldn't debug current process");
             crate::debug::gdb::report_terminated(pid);
             println!("Program suspended. You may inspect it using gdb.");
         }
         #[cfg(not(feature = "gdb-stub"))]
-        ss.terminate_process(pid)
-            .expect("couldn't terminate current process");
+        ss.terminate_process(pid).expect("couldn't terminate current process");
         crate::syscall::reset_switchto_caller();
     });
 

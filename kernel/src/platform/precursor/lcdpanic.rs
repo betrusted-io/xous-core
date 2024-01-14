@@ -1,12 +1,13 @@
-use crate::mem::MemoryManager;
 use utralib::generated::*;
 use xous_kernel::PID;
+
+use crate::mem::MemoryManager;
 
 const FB_WIDTH_WORDS: usize = 11;
 const FB_WIDTH_PIXELS: usize = 336;
 const FB_LINES: usize = 536;
 const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
-                                                  // this font is from the embedded graphics crate https://docs.rs/embedded-graphics/0.7.1/embedded_graphics/
+// this font is from the embedded graphics crate https://docs.rs/embedded-graphics/0.7.1/embedded_graphics/
 const FONT_IMAGE: &'static [u8] = include_bytes!("font6x12_1bpp.raw");
 const CHAR_HEIGHT: u32 = 12;
 const CHAR_WIDTH: u32 = 6;
@@ -30,10 +31,7 @@ pub struct ErrorWriter {
 impl ErrorWriter {
     pub fn new() -> Result<ErrorWriter, &'static str> {
         let gfx = Gfx::new()?;
-        let point = Point {
-            x: LEFT_MARGIN,
-            y: 15,
-        };
+        let point = Point { x: LEFT_MARGIN, y: 15 };
         Ok(ErrorWriter { gfx, point })
     }
 }
@@ -111,22 +109,15 @@ impl Gfx {
     }
 
     pub fn init(&mut self, clk_mhz: u32) {
-        self.csr
-            .wfo(utra::memlcd::PRESCALER_PRESCALER, (clk_mhz / 2_000_000) - 1);
+        self.csr.wfo(utra::memlcd::PRESCALER_PRESCALER, (clk_mhz / 2_000_000) - 1);
     }
 
     #[allow(dead_code)]
-    pub fn update_all(&mut self) {
-        self.csr.wfo(utra::memlcd::COMMAND_UPDATEALL, 1);
-    }
+    pub fn update_all(&mut self) { self.csr.wfo(utra::memlcd::COMMAND_UPDATEALL, 1); }
 
-    pub fn update_dirty(&mut self) {
-        self.csr.wfo(utra::memlcd::COMMAND_UPDATEDIRTY, 1);
-    }
+    pub fn update_dirty(&mut self) { self.csr.wfo(utra::memlcd::COMMAND_UPDATEDIRTY, 1); }
 
-    pub fn busy(&self) -> bool {
-        self.csr.rf(utra::memlcd::BUSY_BUSY) == 1
-    }
+    pub fn busy(&self) -> bool { self.csr.rf(utra::memlcd::BUSY_BUSY) == 1 }
 
     pub fn flush(&mut self) {
         self.update_dirty();
@@ -181,10 +172,8 @@ impl Gfx {
                 // + Character row offset (row 0 = 0, row 1 = (192 * 8) = 1536)
                 // + X offset for the pixel block that comprises this char
                 // + Y offset for pixel block
-                let bitmap_bit_index = char_x
-                    + (FONT_IMAGE_WIDTH * char_y)
-                    + char_walk_x
-                    + (char_walk_y * FONT_IMAGE_WIDTH);
+                let bitmap_bit_index =
+                    char_x + (FONT_IMAGE_WIDTH * char_y) + char_walk_x + (char_walk_y * FONT_IMAGE_WIDTH);
 
                 let bitmap_byte = bitmap_bit_index / 8;
                 let bitmap_bit = 7 - (bitmap_bit_index % 8);
