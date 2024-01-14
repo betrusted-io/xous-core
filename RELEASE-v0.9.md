@@ -1,4 +1,4 @@
-# Relase 0.9 notes
+# Release 0.9 notes
 
 This release signals the stabilization of most Xous APIs; however, we reserve
 the right to make breaking changes, but with some justification. You could call

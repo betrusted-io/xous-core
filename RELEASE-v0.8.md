@@ -1,4 +1,4 @@
-# Relase 0.8 notes
+# Release 0.8 notes
 
 This is the first release that attempts to stabilize the Xous APIs. Up
 until now, everything was basically experimental and could be torn up
