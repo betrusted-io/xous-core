@@ -4,8 +4,9 @@
 
 pub mod api;
 
-use api::Disconnect;
 use core::fmt::Write;
+
+use api::Disconnect;
 use num_traits::ToPrimitive;
 use xous_ipc::{Buffer, String};
 
@@ -17,9 +18,7 @@ struct ConnectRequest {
     _padding: [u8; 4096 - 4 - 64],
 }
 impl Default for ConnectRequest {
-    fn default() -> Self {
-        ConnectRequest { name: [0u8; 64], len: 0, _padding: [0u8; 4096 - 4 - 64] }
-    }
+    fn default() -> Self { ConnectRequest { name: [0u8; 64], len: 0, _padding: [0u8; 4096 - 4 - 64] } }
 }
 
 #[doc = include_str!("../README.md")]
@@ -52,11 +51,7 @@ impl XousNames {
         )
         .expect("unregistration failed");
         if let xous::Result::Scalar1(result) = response {
-            if result != 0 {
-                Ok(())
-            } else {
-                Err(xous::Error::ServerNotFound)
-            }
+            if result != 0 { Ok(()) } else { Err(xous::Error::ServerNotFound) }
         } else {
             Err(xous::Error::InternalError)
         }
@@ -66,15 +61,8 @@ impl XousNames {
     /// limit the number of connections brokered to the value in `max_conns`. This
     /// effectively blocks further services from connecting to the server in a
     /// Trust-On-First-Use (TOFU) model.
-    pub fn register_name(
-        &self,
-        name: &str,
-        max_conns: Option<u32>,
-    ) -> Result<xous::SID, xous::Error> {
-        let mut registration = api::Registration {
-            name: String::<64>::new(),
-            conn_limit: max_conns,
-        };
+    pub fn register_name(&self, name: &str, max_conns: Option<u32>) -> Result<xous::SID, xous::Error> {
+        let mut registration = api::Registration { name: String::<64>::new(), conn_limit: max_conns };
         // could also do String::from_str() but in this case we want things to fail if the string is too long.
         write!(registration.name, "{}", name).expect("name probably too long");
 
@@ -106,8 +94,7 @@ impl XousNames {
         write!(lookup_name, "{}", name).expect("name probably too long");
         let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;
 
-        buf.lend_mut(self.conn, api::Opcode::Lookup.to_u32().unwrap())
-            .or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, api::Opcode::Lookup.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
         match buf.to_original().unwrap() {
             api::Return::CID((cid, token)) => Ok((cid, token)),
@@ -115,13 +102,11 @@ impl XousNames {
             _ => Err(xous::Error::ServerNotFound),
         }
     }
+
     /// Disconnects from server with `name`. Must provide the same `token` returned on
     /// connection, or else the call will be disregarded.
     pub fn disconnect_with_token(&self, name: &str, token: [u32; 4]) -> Result<(), xous::Error> {
-        let disconnect = Disconnect {
-            name: String::<64>::from_str(name),
-            token,
-        };
+        let disconnect = Disconnect { name: String::<64>::from_str(name), token };
         let mut buf = Buffer::into_buf(disconnect).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, api::Opcode::Disconnect.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
@@ -131,6 +116,7 @@ impl XousNames {
             _ => Err(xous::Error::ServerNotFound),
         }
     }
+
     /// Requests a permanent connection to server with `name`. Xous names brokers the
     /// entire connection, so the return value is the process-local CID (connection ID);
     /// the 128-bit server ID is never revealed.
@@ -144,8 +130,7 @@ impl XousNames {
 
         let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;
 
-        buf.lend_mut(self.conn, api::Opcode::Lookup.to_u32().unwrap())
-            .or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, api::Opcode::Lookup.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
         match buf.to_original().unwrap() {
             api::Return::CID((cid, _)) => Ok(cid),
@@ -175,8 +160,12 @@ impl XousNames {
         log::debug!("connection requested {}", name);
         let msg = xous::MemoryMessage {
             id: api::Opcode::BlockingConnect.to_usize().unwrap(),
-            buf: unsafe{ // safety: `cr` is #[repr(C, align(4096))], and should be exactly on page in size
-                xous::MemoryRange::new(&mut cr as *mut _ as *mut u8 as usize, core::mem::size_of::<ConnectRequest>())?
+            buf: unsafe {
+                // safety: `cr` is #[repr(C, align(4096))], and should be exactly on page in size
+                xous::MemoryRange::new(
+                    &mut cr as *mut _ as *mut u8 as usize,
+                    core::mem::size_of::<ConnectRequest>(),
+                )?
             },
             offset: None,
             valid: xous::MemorySize::new(cr.len as usize),
@@ -201,21 +190,11 @@ impl XousNames {
     pub fn trusted_init_done(&self) -> Result<bool, xous::Error> {
         let response = xous::send_message(
             self.conn,
-            xous::Message::new_blocking_scalar(
-                api::Opcode::TrustedInitDone.to_usize().unwrap(),
-                0,
-                0,
-                0,
-                0,
-            ),
+            xous::Message::new_blocking_scalar(api::Opcode::TrustedInitDone.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .expect("couldn't query trusted_init_done");
         if let xous::Result::Scalar1(result) = response {
-            if result == 1 {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
+            if result == 1 { Ok(true) } else { Ok(false) }
         } else {
             Err(xous::Error::InternalError)
         }
@@ -226,7 +205,8 @@ use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for XousNames {
     fn drop(&mut self) {
-        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the
+        // connection.
         if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe {
                 xous::disconnect(self.conn).unwrap();

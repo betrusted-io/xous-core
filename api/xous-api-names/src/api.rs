@@ -22,7 +22,8 @@ pub enum Opcode {
     /// disconnect, given a server name and a cryptographically unique, one-time use token
     Disconnect = 4,
 
-    /// indicates if all inherently trusted slots have been occupied. Should not run untrusted code until this is the case.
+    /// indicates if all inherently trusted slots have been occupied. Should not run untrusted code until
+    /// this is the case.
     TrustedInitDone = 5,
 
     /// Connect to a Server, blocking if the Server does not exist. When the Server is started,
@@ -122,12 +123,7 @@ pub struct XousServerName {
 }
 
 impl Default for XousServerName {
-    fn default() -> Self {
-        XousServerName {
-            value: [0u8; 64],
-            length: 0,
-        }
-    }
+    fn default() -> Self { XousServerName { value: [0u8; 64], length: 0 } }
 }
 
 #[allow(dead_code)]
@@ -138,12 +134,8 @@ impl XousServerName {
         })
         .unwrap()
     }
-    pub fn new() -> XousServerName {
-        XousServerName {
-            value: [0; 64],
-            length: 0,
-        }
-    }
+
+    pub fn new() -> XousServerName { XousServerName { value: [0; 64], length: 0 } }
 
     pub fn from_str(src: &str) -> XousServerName {
         let mut s = Self::new();
@@ -164,21 +156,15 @@ impl XousServerName {
         s
     }
 
-    pub fn as_bytes(&self) -> [u8; 64] {
-        self.value
-    }
+    pub fn as_bytes(&self) -> [u8; 64] { self.value }
 
     pub fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
         core::str::from_utf8(&self.value[0..self.length as usize])
     }
 
-    pub fn len(&self) -> usize {
-        self.length as usize
-    }
+    pub fn len(&self) -> usize { self.length as usize }
 
-    pub fn is_empty(&self) -> bool {
-        self.length == 0
-    }
+    pub fn is_empty(&self) -> bool { self.length == 0 }
 
     /// Clear the contents and set the length to 0
     pub fn clear(&mut self) {
@@ -198,10 +184,7 @@ impl core::fmt::Write for XousServerName {
             Err(core::fmt::Error)?;
         }
         self.length = b.len();
-        assert!(
-            self.length < self.value.len(),
-            "incorrect length derivation!"
-        );
+        assert!(self.length < self.value.len(), "incorrect length derivation!");
 
         // Copy the string into this variable
         for (dest, src) in self.value.iter_mut().zip(s.bytes()) {
@@ -231,10 +214,7 @@ impl std::hash::Hash for XousServerName {
 impl PartialEq for XousServerName {
     fn eq(&self, other: &Self) -> bool {
         assert!(self.length < self.value.len(), "incorret length on Eq!");
-        assert!(
-            other.length < other.value.len(),
-            "incorrect length on Eq (other)!"
-        );
+        assert!(other.length < other.value.len(), "incorrect length on Eq (other)!");
         self.value[..self.length as usize] == other.value[..other.length as usize]
             && self.length == other.length
     }
@@ -243,7 +223,5 @@ impl PartialEq for XousServerName {
 impl Eq for XousServerName {}
 
 impl core::fmt::Display for XousServerName {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.to_str())
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, "{}", self.to_str()) }
 }
