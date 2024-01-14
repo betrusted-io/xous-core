@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use std::collections::BinaryHeap;
-
 use core::cmp::Ordering;
+use std::collections::BinaryHeap;
+use std::collections::HashMap;
+
 use graphics_server::*;
 use log::{error, info};
 
@@ -9,7 +9,8 @@ use log::{error, info};
 // "OnScreen" vs "Offscreen" is a layout distinction.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CanvasState {
-    // this state indicates the Canvas is on-screen and can be drawn, and may or may not need to be flushed to the screen.
+    // this state indicates the Canvas is on-screen and can be drawn, and may or may not need to be flushed
+    // to the screen.
     DrawableDirty,
     // this state indicates the Canvas is on-screen and has been flushed to the screen.
     DrawableDrawn,
@@ -17,9 +18,11 @@ pub enum CanvasState {
     NotDrawableDirty,
     // indicates that the Canvas is on-screen not drawable, and has been defaced
     NotDrawableDefaced,
-    // indicates that the Canvas was drawable, but is now off-screen and should not be drawn or considered for any computations
+    // indicates that the Canvas was drawable, but is now off-screen and should not be drawn or considered
+    // for any computations
     OffScreenDrawable,
-    // indicates that the Canvas was not drawable, but is now off-screen and shouldn to be drawn or considered for any computations
+    // indicates that the Canvas was not drawable, but is now off-screen and shouldn to be drawn or
+    // considered for any computations
     OffScreenNotDrawable,
 }
 
@@ -47,9 +50,13 @@ pub struct Canvas {
 
 #[allow(dead_code)]
 impl Canvas {
-    pub fn new(clip_rect: Rectangle, trust_level: u8,
-        trng: &trng::Trng, pan_offset: Option<Point>, canvas_type: crate::api::CanvasType) -> Result<Canvas, xous::Error> {
-
+    pub fn new(
+        clip_rect: Rectangle,
+        trust_level: u8,
+        trng: &trng::Trng,
+        pan_offset: Option<Point>,
+        canvas_type: crate::api::CanvasType,
+    ) -> Result<Canvas, xous::Error> {
         let mut gid: [u32; 4] = [0; 4];
         let g: u64 = trng.get_u64()?;
         gid[0] = g as u32;
@@ -60,60 +67,81 @@ impl Canvas {
 
         Ok(if pan_offset.is_some() {
             Canvas {
-                clip_rect, trust_level, state: Rc::new(RefCell::new(CanvasState::OffScreenDrawable)), gid: Gid::new(gid), pan_offset: pan_offset.unwrap(),
+                clip_rect,
+                trust_level,
+                state: Rc::new(RefCell::new(CanvasState::OffScreenDrawable)),
+                gid: Gid::new(gid),
+                pan_offset: pan_offset.unwrap(),
                 canvas_type,
             }
         } else {
             Canvas {
-                clip_rect, trust_level, state: Rc::new(RefCell::new(CanvasState::OffScreenDrawable)), gid: Gid::new(gid), pan_offset: Point::new(0, 0),
+                clip_rect,
+                trust_level,
+                state: Rc::new(RefCell::new(CanvasState::OffScreenDrawable)),
+                gid: Gid::new(gid),
+                pan_offset: Point::new(0, 0),
                 canvas_type,
             }
         })
     }
-    pub fn intersects(&self, other: &Canvas) -> bool {
-        self.clip_rect.intersects(other.clip_rect())
-    }
-    pub fn less_trusted_than(&self, other: &Canvas) -> bool {
-        self.trust_level() < other.trust_level()
-    }
+
+    pub fn intersects(&self, other: &Canvas) -> bool { self.clip_rect.intersects(other.clip_rect()) }
+
+    pub fn less_trusted_than(&self, other: &Canvas) -> bool { self.trust_level() < other.trust_level() }
+
     pub fn pan_offset(&self) -> Point { self.pan_offset }
+
     pub fn clip_rect(&self) -> Rectangle { self.clip_rect }
+
     pub fn set_clip(&mut self, cr: Rectangle) {
         self.clip_rect = cr;
         // I think this line is in error -- I don't remember *why* we would set this, but with this line here,
-        // any box that dynamically updates size would become instantly not drawable, with no way to restore that state.
-        // log::info!("set_clip would side effect {:?} to OffScreenDrawable", self.state.borrow());
-        // *self.state.borrow_mut() = CanvasState::OffScreenDrawable
+        // any box that dynamically updates size would become instantly not drawable, with no way to restore
+        // that state. log::info!("set_clip would side effect {:?} to OffScreenDrawable",
+        // self.state.borrow()); *self.state.borrow_mut() = CanvasState::OffScreenDrawable
     }
+
     pub fn gid(&self) -> Gid { self.gid }
+
     pub fn trust_level(&self) -> u8 { self.trust_level }
-    pub fn set_trust_level(&mut self, level: u8) {self.trust_level = level;}
+
+    pub fn set_trust_level(&mut self, level: u8) { self.trust_level = level; }
+
     pub fn state(&self) -> CanvasState { *self.state.borrow() }
+
     pub fn is_onscreen(&self) -> bool {
-        if *self.state.borrow() == CanvasState::OffScreenDrawable || *self.state.borrow() == CanvasState::OffScreenNotDrawable {
+        if *self.state.borrow() == CanvasState::OffScreenDrawable
+            || *self.state.borrow() == CanvasState::OffScreenNotDrawable
+        {
             false
         } else {
             true
         }
     }
+
     pub fn is_drawable(&self) -> bool {
         if *self.state.borrow() == CanvasState::DrawableDirty
-        || *self.state.borrow() == CanvasState::DrawableDrawn
-        || *self.state.borrow() == CanvasState::OffScreenDrawable {
+            || *self.state.borrow() == CanvasState::DrawableDrawn
+            || *self.state.borrow() == CanvasState::OffScreenDrawable
+        {
             true
         } else {
             false
         }
     }
+
     pub fn is_drawable_or_offscreen(&self) -> bool {
         if *self.state.borrow() == CanvasState::DrawableDirty
-        || *self.state.borrow() == CanvasState::DrawableDrawn
-        || *self.state.borrow() == CanvasState::OffScreenDrawable {
+            || *self.state.borrow() == CanvasState::DrawableDrawn
+            || *self.state.borrow() == CanvasState::OffScreenDrawable
+        {
             true
         } else {
             false
         }
     }
+
     pub fn set_drawable(&self, drawable: bool) {
         if drawable {
             if *self.state.borrow() == CanvasState::OffScreenNotDrawable {
@@ -129,6 +157,7 @@ impl Canvas {
             }
         }
     }
+
     pub fn set_onscreen(&self, onscreen: bool) {
         if onscreen {
             if *self.state.borrow() == CanvasState::OffScreenDrawable {
@@ -138,30 +167,44 @@ impl Canvas {
             }
             // other states are already onscreen
         } else {
-            if *self.state.borrow() == CanvasState::DrawableDirty || *self.state.borrow() == CanvasState::DrawableDrawn {
+            if *self.state.borrow() == CanvasState::DrawableDirty
+                || *self.state.borrow() == CanvasState::DrawableDrawn
+            {
                 *self.state.borrow_mut() = CanvasState::OffScreenDrawable;
-            } else if *self.state.borrow() == CanvasState::NotDrawableDirty || *self.state.borrow() == CanvasState::NotDrawableDefaced {
+            } else if *self.state.borrow() == CanvasState::NotDrawableDirty
+                || *self.state.borrow() == CanvasState::NotDrawableDefaced
+            {
                 *self.state.borrow_mut() = CanvasState::OffScreenNotDrawable;
             }
             // other states are already offscreen
         }
     }
+
     // call this after the screen has been flushed
     pub fn do_flushed(&self) -> Result<(), xous::Error> {
-        if *self.state.borrow() == CanvasState::DrawableDirty || *self.state.borrow() == CanvasState::DrawableDrawn {
+        if *self.state.borrow() == CanvasState::DrawableDirty
+            || *self.state.borrow() == CanvasState::DrawableDrawn
+        {
             *self.state.borrow_mut() = CanvasState::DrawableDrawn;
             Ok(())
         } else if *self.state.borrow() == CanvasState::NotDrawableDefaced
-        || *self.state.borrow() == CanvasState::OffScreenNotDrawable
-        || *self.state.borrow() == CanvasState::OffScreenDrawable {
+            || *self.state.borrow() == CanvasState::OffScreenNotDrawable
+            || *self.state.borrow() == CanvasState::OffScreenDrawable
+        {
             Ok(())
         } else {
-            error!("Canvas: flush happened before not drawable regions were defaced, or before initialized! {:?}", self.state);
+            error!(
+                "Canvas: flush happened before not drawable regions were defaced, or before initialized! {:?}",
+                self.state
+            );
             Err(xous::Error::UseBeforeInit)
         }
     }
+
     pub fn do_drawn(&self) -> Result<(), xous::Error> {
-        if *self.state.borrow() == CanvasState::DrawableDirty || *self.state.borrow() == CanvasState::DrawableDrawn {
+        if *self.state.borrow() == CanvasState::DrawableDirty
+            || *self.state.borrow() == CanvasState::DrawableDrawn
+        {
             *self.state.borrow_mut() = CanvasState::DrawableDirty;
             Ok(())
         } else {
@@ -169,11 +212,14 @@ impl Canvas {
             Err(xous::Error::AccessDenied)
         }
     }
+
     pub fn do_defaced(&self) -> Result<(), xous::Error> {
         if *self.state.borrow() == CanvasState::NotDrawableDirty {
             *self.state.borrow_mut() = CanvasState::NotDrawableDefaced;
             Ok(())
-        } else if *self.state.borrow() == CanvasState::DrawableDirty || *self.state.borrow() == CanvasState::DrawableDrawn {
+        } else if *self.state.borrow() == CanvasState::DrawableDirty
+            || *self.state.borrow() == CanvasState::DrawableDrawn
+        {
             info!("Canvas: drawable region was defaced. Allowing it, but this could be a logic bug");
             Ok(())
         } else {
@@ -181,44 +227,31 @@ impl Canvas {
             Err(xous::Error::DoubleFree)
         }
     }
+
     pub fn needs_defacing(&self) -> bool {
-        if *self.state.borrow() == CanvasState::NotDrawableDirty {
-            true
-        } else {
-            false
-        }
+        if *self.state.borrow() == CanvasState::NotDrawableDirty { true } else { false }
     }
+
     pub fn is_defaced(&self) -> bool {
-        if *self.state.borrow() == CanvasState::NotDrawableDefaced {
-            true
-        } else {
-            false
-        }
+        if *self.state.borrow() == CanvasState::NotDrawableDefaced { true } else { false }
     }
 }
 
 impl Ord for Canvas {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.trust_level.cmp(&other.trust_level)
-    }
+    fn cmp(&self, other: &Self) -> Ordering { self.trust_level.cmp(&other.trust_level) }
 }
 impl PartialOrd for Canvas {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
 }
 impl PartialEq for Canvas {
-    fn eq(&self, other: &Self) -> bool {
-        self.trust_level == other.trust_level
-    }
+    fn eq(&self, other: &Self) -> bool { self.trust_level == other.trust_level }
 }
 impl Eq for Canvas {}
-
 
 pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut HashMap<Gid, Canvas>) -> bool {
     // first check if any need defacing, if not, then we're done
     let mut needs_defacing = false;
-    let mut defaced = false;  // this is set if any drawing actually happens
+    let mut defaced = false; // this is set if any drawing actually happens
     for (_, c) in canvases.iter() {
         if c.needs_defacing() {
             needs_defacing = true;
@@ -226,7 +259,7 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut Hash
     }
     if needs_defacing {
         let screensize = gfx.screen_size().unwrap();
-        let screen_rect = Rectangle::new(Point::new(0, 0,), screensize);
+        let screen_rect = Rectangle::new(Point::new(0, 0), screensize);
         /*
         This routine will need to do something similar to recompute_canvases, where it extracts
         a sorted order and draws the defacement upon the canvas that requires defacing.
@@ -237,7 +270,13 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut Hash
          */
         for (_, c) in canvases.iter_mut() {
             if c.needs_defacing() {
-                log::debug!("Defacing canvas {:?}/{}/{:?} ({:x?})", c.canvas_type, c.trust_level(), c.state.borrow(), c.gid());
+                log::debug!(
+                    "Defacing canvas {:?}/{}/{:?} ({:x?})",
+                    c.canvas_type,
+                    c.trust_level(),
+                    c.state.borrow(),
+                    c.gid()
+                );
                 let clip_rect = c.clip_rect();
                 if clip_rect.intersects(screen_rect) {
                     let width = clip_rect.br().x - clip_rect.tl().x;
@@ -251,7 +290,8 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut Hash
                     if num_lines > 40 {
                         num_lines = 40;
                     }
-                    // log::debug!("deface width {} height {}, numlines {}, cliprect {:?}", width, height, num_lines, clip_rect);
+                    // log::debug!("deface width {} height {}, numlines {}, cliprect {:?}", width, height,
+                    // num_lines, clip_rect);
 
                     // draw 32 lines, of random orientation and lengths, across the clip area.
                     for _ in 0..num_lines {
@@ -282,8 +322,11 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut Hash
                             Line::new_with_style(
                                 Point::new(x, y),
                                 Point::new(x + delta_x, y + delta_y),
-                                DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1)),
-                                clip_rect).unwrap();
+                                DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1),
+                            ),
+                            clip_rect,
+                        )
+                        .unwrap();
                     }
                     defaced = true;
                 }
@@ -305,7 +348,8 @@ fn remap_rand(end_range: i32, rand: i16, source_range: i32) -> i16 {
         (((end_range as i32 * rand as i32 * 100i32) / source_range) // remap to 0:end_range*100
         - (end_range as i32 * 100i32) / 2i32) // remap to -end_range*100/2:end_range*100/2
         / 100i32 // remap to -end_range/2:end_range/2
-        + (end_range as i32 / 2) // remap to 0:end_range
+        + (end_range as i32 / 2)
+        // remap to 0:end_range
     ) as i16
 }
 
@@ -325,10 +369,18 @@ pub(crate) fn recompute_canvases(canvases: &HashMap<Gid, Canvas>) {
             let was_defaced = candidate.is_defaced(); // this prevents thrashing in the case that we're simply re-computing an existing defacement
             candidate.set_drawable(true);
             for previous in higher_clipregions.iter() {
-                log::debug!("Check candidate {:?}/{} versus {:?}/{}", candidate.canvas_type, candidate.trust_level, previous.canvas_type, previous.trust_level);
+                log::debug!(
+                    "Check candidate {:?}/{} versus {:?}/{}",
+                    candidate.canvas_type,
+                    candidate.trust_level,
+                    previous.canvas_type,
+                    previous.trust_level
+                );
                 if candidate.clip_rect().intersects(previous.clip_rect()) {
-                    log::debug!("  -> Above candidate ({:x?}) interects with ({:?}) and is less trusted, setting to not drawable",
-                        candidate.gid(), previous.gid()
+                    log::debug!(
+                        "  -> Above candidate ({:x?}) interects with ({:?}) and is less trusted, setting to not drawable",
+                        candidate.gid(),
+                        previous.gid()
                     );
                     candidate.set_drawable(false);
                     if was_defaced {

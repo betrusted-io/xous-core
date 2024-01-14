@@ -42,17 +42,9 @@ impl ColorType {
     /// in the struct
     pub(crate) fn bpp(self, bit_depth: u8) -> u8 {
         assert!((1..=16).contains(&bit_depth));
-        /*bits per pixel is amount of channels * bits per channel*/
+        /* bits per pixel is amount of channels * bits per channel */
         let ch = self.channels();
-        ch * if ch > 1 {
-            if bit_depth == 8 {
-                8
-            } else {
-                16
-            }
-        } else {
-            bit_depth
-        }
+        ch * if ch > 1 { if bit_depth == 8 { 8 } else { 16 } } else { bit_depth }
     }
 
     /// Error if invalid color type / bit depth combination for PNG.

@@ -33,16 +33,10 @@ pub struct Img {
 }
 
 impl Img {
-    pub fn new(pixels: Vec<u8>, width: usize, px_type: PixelType) -> Self {
-        Self {
-            pixels,
-            width,
-            px_type,
-        }
-    }
-    pub fn width(&self) -> usize {
-        self.width
-    }
+    pub fn new(pixels: Vec<u8>, width: usize, px_type: PixelType) -> Self { Self { pixels, width, px_type } }
+
+    pub fn width(&self) -> usize { self.width }
+
     pub fn height(&self) -> usize {
         match self.px_type {
             PixelType::U8 => self.pixels.len() / self.width,
@@ -64,7 +58,5 @@ impl Img {
 impl Deref for Img {
     type Target = Vec<u8>;
 
-    fn deref(&self) -> &Self::Target {
-        &self.pixels
-    }
+    fn deref(&self) -> &Self::Target { &self.pixels }
 }

@@ -1,13 +1,11 @@
 use std::collections::HashMap;
 
-use crate::api::CanvasType;
-use crate::Canvas;
-
 use graphics_server::*;
 
-use crate::{LayoutApi, LayoutBehavior};
-
+use crate::api::CanvasType;
 use crate::contexts::MISC_CONTEXT_DEFAULT_TRUST;
+use crate::Canvas;
+use crate::{LayoutApi, LayoutBehavior};
 const TRUST_OFFSET: u8 = 16;
 
 #[derive(Debug, Copy, Clone)]
@@ -21,7 +19,11 @@ pub(crate) struct ModalLayout {
     _modal_y_max: i16,
 }
 impl ModalLayout {
-    pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut HashMap<Gid, Canvas>) -> Result<ModalLayout, xous::Error> {
+    pub fn init(
+        gfx: &graphics_server::Gfx,
+        trng: &trng::Trng,
+        canvases: &mut HashMap<Gid, Canvas>,
+    ) -> Result<ModalLayout, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
         let height: i16 = gfx.glyph_height_hint(gam::SYSTEM_STYLE).expect("couldn't get glyph height") as i16;
@@ -30,9 +32,18 @@ impl ModalLayout {
         const MODAL_X_PAD: i16 = 20;
         // base trust - 1 so that status bar can always ride on top
         let modal_canvas = Canvas::new(
-            Rectangle::new_coords(MODAL_X_PAD, MODAL_Y_PAD, screensize.x - MODAL_X_PAD, crate::api::MODAL_Y_MAX),
-            MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET, &trng, None, CanvasType::Modal
-        ).expect("couldn't create modal canvas");
+            Rectangle::new_coords(
+                MODAL_X_PAD,
+                MODAL_Y_PAD,
+                screensize.x - MODAL_X_PAD,
+                crate::api::MODAL_Y_MAX,
+            ),
+            MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET,
+            &trng,
+            None,
+            CanvasType::Modal,
+        )
+        .expect("couldn't create modal canvas");
         let modal_gid = modal_canvas.gid();
         canvases.insert(modal_canvas.gid(), modal_canvas);
 
@@ -42,23 +53,34 @@ impl ModalLayout {
             _modal_x_pad: MODAL_X_PAD,
             modal_min_height: height,
             screensize,
-            _height: screensize.y - MODAL_Y_PAD, // start with the "maximum" size, and shrink down once items are known
+            _height: screensize.y - MODAL_Y_PAD, /* start with the "maximum" size, and shrink down once
+                                                  * items are known */
             _modal_y_max: crate::api::MODAL_Y_MAX,
         })
     }
 }
 impl LayoutApi for ModalLayout {
-    fn behavior(&self) -> LayoutBehavior {
-        LayoutBehavior::Alert
-    }
-    fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut HashMap<Gid, Canvas>) -> Result<(), xous::Error> {
+    fn behavior(&self) -> LayoutBehavior { LayoutBehavior::Alert }
+
+    fn clear(
+        &self,
+        gfx: &graphics_server::Gfx,
+        canvases: &mut HashMap<Gid, Canvas>,
+    ) -> Result<(), xous::Error> {
         let modal_canvas = canvases.get(&self.modal).expect("couldn't find modal canvas");
 
         let mut rect = modal_canvas.clip_rect();
-        rect.style = DrawStyle {fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0,};
+        rect.style = DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 };
         gfx.draw_rectangle(rect)
     }
-    fn resize_height(&mut self, _gfx: &graphics_server::Gfx, new_height: i16, _status_canvas: &Rectangle, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error> {
+
+    fn resize_height(
+        &mut self,
+        _gfx: &graphics_server::Gfx,
+        new_height: i16,
+        _status_canvas: &Rectangle,
+        canvases: &mut HashMap<Gid, Canvas>,
+    ) -> Result<Point, xous::Error> {
         let modal_canvas = canvases.get_mut(&self.modal).expect("couldn't find modal canvas");
         let orig_rect = modal_canvas.clip_rect();
 
@@ -70,19 +92,17 @@ impl LayoutApi for ModalLayout {
         if height > self.screensize.y - self.modal_y_pad {
             height = self.screensize.y - self.modal_y_pad;
         }
-        let mut modal_clip_rect = Rectangle::new_coords(orig_rect.tl().x, self.modal_y_pad, orig_rect.br().x, height);
-        modal_clip_rect.style = DrawStyle {fill_color: Some(PixelColor::Dark), stroke_color: None, stroke_width: 0,};
+        let mut modal_clip_rect =
+            Rectangle::new_coords(orig_rect.tl().x, self.modal_y_pad, orig_rect.br().x, height);
+        modal_clip_rect.style =
+            DrawStyle { fill_color: Some(PixelColor::Dark), stroke_color: None, stroke_width: 0 };
         modal_canvas.set_clip(modal_clip_rect);
         // gfx.draw_rectangle(menu_clip_rect).expect("can't clear menu");
         Ok(modal_clip_rect.br)
     }
-    fn get_gids(&self) ->Vec<crate::api::GidRecord> {
-        vec![
-            crate::api::GidRecord {
-                gid: self.modal,
-                canvas_type: CanvasType::Modal
-            },
-        ]
+
+    fn get_gids(&self) -> Vec<crate::api::GidRecord> {
+        vec![crate::api::GidRecord { gid: self.modal, canvas_type: CanvasType::Modal }]
     }
 
     fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>) {

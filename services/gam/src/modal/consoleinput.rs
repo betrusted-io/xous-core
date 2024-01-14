@@ -29,13 +29,14 @@ impl ConsoleInput {
     }
 }
 impl ActionApi for ConsoleInput {
-    fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}
-    fn height(&self, _glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
-        margin
-    }
+    fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
+
+    fn height(&self, _glyph_height: i16, margin: i16, _modal: &Modal) -> i16 { margin }
+
     fn redraw(&self, _at_height: i16, _modal: &Modal) {
         // has nothing
     }
+
     fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
         log::trace!("key_action: {}", k);
         match k {
@@ -48,10 +49,13 @@ impl ActionApi for ConsoleInput {
                 xous::yield_slice();
 
                 let buf = Buffer::into_buf(self.action_payload).expect("couldn't convert message to payload");
-                buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
+                buf.send(self.action_conn, self.action_opcode)
+                    .map(|_| ())
+                    .expect("couldn't send action message");
                 return None;
             }
-            _ => { // text entry
+            _ => {
+                // text entry
                 self.action_payload.content.push(k).expect("ran out of space storing password");
                 log::trace!("****update payload: {}", self.action_payload.content);
             }

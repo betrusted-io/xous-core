@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 
-use crate::Canvas;
-
 use graphics_server::*;
 
-use crate::{LayoutApi, LayoutBehavior};
-
 use crate::contexts::MISC_CONTEXT_DEFAULT_TRUST;
+use crate::Canvas;
+use crate::{LayoutApi, LayoutBehavior};
 const TRUST_OFFSET: u8 = 0;
 
 #[derive(Debug, Copy, Clone)]
@@ -19,7 +17,11 @@ pub(crate) struct MenuLayout {
     _height: i16,
 }
 impl MenuLayout {
-    pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut HashMap<Gid, Canvas>) -> Result<MenuLayout, xous::Error> {
+    pub fn init(
+        gfx: &graphics_server::Gfx,
+        trng: &trng::Trng,
+        canvases: &mut HashMap<Gid, Canvas>,
+    ) -> Result<MenuLayout, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
         let height: i16 = gfx.glyph_height_hint(gam::SYSTEM_STYLE).expect("couldn't get glyph height") as i16;
@@ -29,8 +31,12 @@ impl MenuLayout {
         // build for an initial size of 1 entry
         let menu_canvas = Canvas::new(
             Rectangle::new_coords(MENU_X_PAD, MENU_Y_PAD, screensize.x - MENU_X_PAD, MENU_Y_PAD + height),
-            MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET, &trng, None, crate::api::CanvasType::Menu
-        ).expect("couldn't create menu canvas");
+            MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET,
+            &trng,
+            None,
+            crate::api::CanvasType::Menu,
+        )
+        .expect("couldn't create menu canvas");
         let gid = menu_canvas.gid();
         canvases.insert(menu_canvas.gid(), menu_canvas);
 
@@ -45,17 +51,27 @@ impl MenuLayout {
     }
 }
 impl LayoutApi for MenuLayout {
-    fn behavior(&self) -> LayoutBehavior {
-        LayoutBehavior::Alert
-    }
-    fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut HashMap<Gid, Canvas>) -> Result<(), xous::Error> {
+    fn behavior(&self) -> LayoutBehavior { LayoutBehavior::Alert }
+
+    fn clear(
+        &self,
+        gfx: &graphics_server::Gfx,
+        canvases: &mut HashMap<Gid, Canvas>,
+    ) -> Result<(), xous::Error> {
         let menu_canvas = canvases.get(&self.menu).expect("couldn't find menu canvas");
 
         let mut rect = menu_canvas.clip_rect();
-        rect.style = DrawStyle {fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0,};
+        rect.style = DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 };
         gfx.draw_rectangle(rect)
     }
-    fn resize_height(&mut self, _gfx: &graphics_server::Gfx, new_height: i16, _status_canvas: &Rectangle, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error> {
+
+    fn resize_height(
+        &mut self,
+        _gfx: &graphics_server::Gfx,
+        new_height: i16,
+        _status_canvas: &Rectangle,
+        canvases: &mut HashMap<Gid, Canvas>,
+    ) -> Result<Point, xous::Error> {
         let menu_canvas = canvases.get_mut(&self.menu).expect("couldn't find menu canvas");
         let orig_rect = menu_canvas.clip_rect();
 
@@ -67,20 +83,19 @@ impl LayoutApi for MenuLayout {
         if height > self.screensize.y - self.menu_y_pad {
             height = self.screensize.y - self.menu_y_pad;
         }
-        let mut menu_clip_rect = Rectangle::new_coords(orig_rect.tl().x, self.menu_y_pad, orig_rect.br().x, height);
-        menu_clip_rect.style = DrawStyle {fill_color: Some(PixelColor::Dark), stroke_color: None, stroke_width: 0,};
+        let mut menu_clip_rect =
+            Rectangle::new_coords(orig_rect.tl().x, self.menu_y_pad, orig_rect.br().x, height);
+        menu_clip_rect.style =
+            DrawStyle { fill_color: Some(PixelColor::Dark), stroke_color: None, stroke_width: 0 };
         menu_canvas.set_clip(menu_clip_rect);
         // gfx.draw_rectangle(menu_clip_rect).expect("can't clear menu");
         Ok(menu_clip_rect.br)
     }
-    fn get_gids(&self) ->Vec<crate::api::GidRecord> {
-        vec![
-            crate::api::GidRecord {
-                gid: self.menu,
-                canvas_type: crate::api::CanvasType::Menu
-            },
-        ]
+
+    fn get_gids(&self) -> Vec<crate::api::GidRecord> {
+        vec![crate::api::GidRecord { gid: self.menu, canvas_type: crate::api::CanvasType::Menu }]
     }
+
     fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>) {
         let menu_canvas = canvases.get_mut(&self.menu).expect("couldn't find menu canvas");
         log::debug!("menu entering set_visibilty_state, {}->{}", menu_canvas.is_onscreen(), onscreen);

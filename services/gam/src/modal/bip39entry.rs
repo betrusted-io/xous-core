@@ -1,25 +1,25 @@
-use crate::*;
-use graphics_server::api::*;
-use locales::t;
-use glyphstyle::GlyphStyle;
-
-use xous_ipc::Buffer;
+use core::cell::Cell;
+use core::fmt::Write;
 use std::string::String;
 
-use core::fmt::Write;
-use core::cell::Cell;
+use glyphstyle::GlyphStyle;
+use graphics_server::api::*;
+use locales::t;
+use xous_ipc::Buffer;
+
+use crate::*;
 
 pub struct Bip39Entry {
     pub is_password: bool,
     pub action_conn: xous::CID,
     pub action_opcode: u32,
-    pub accepted_words: Vec::<String>,
+    pub accepted_words: Vec<String>,
     pub user_input: String,
-    pub payload: Option<Vec::<u8>>,
-    pub suggested_words: Vec::<String>,
-    suggestion_index: Cell::<i16>,
-    line_height: Cell::<i16>,
-    margin: Cell::<i16>,
+    pub payload: Option<Vec<u8>>,
+    pub suggested_words: Vec<String>,
+    suggestion_index: Cell<i16>,
+    line_height: Cell<i16>,
+    margin: Cell<i16>,
     gam: crate::Gam,
 }
 
@@ -49,18 +49,8 @@ impl Default for Bip39Entry {
 }
 
 impl Bip39Entry {
-    pub fn new(
-        is_password: bool,
-        action_conn: xous::CID,
-        action_opcode: u32,
-    ) -> Self {
-
-        Self {
-            is_password,
-            action_conn,
-            action_opcode,
-            ..Default::default()
-        }
+    pub fn new(is_password: bool, action_conn: xous::CID, action_opcode: u32) -> Self {
+        Self { is_password, action_conn, action_opcode, ..Default::default() }
     }
 }
 
@@ -71,10 +61,10 @@ const ACCEPTED_WORD_LINES: i16 = 5; // all 0's key requires 5 lines (abandon aba
 const STATUS_LINES: i16 = 3;
 
 impl ActionApi for Bip39Entry {
-    fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}
-    fn is_password(&self) -> bool {
-        self.is_password
-    }
+    fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
+
+    fn is_password(&self) -> bool { self.is_password }
+
     /// The total canvas height is computed with this API call
     /// The canvas height is not dynamically adjustable for modals.
     fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
@@ -129,12 +119,9 @@ impl ActionApi for Bip39Entry {
 
         overall_height
     }
+
     fn redraw(&self, at_height: i16, modal: &Modal) {
-        let color = if self.is_password {
-            PixelColor::Light
-        } else {
-            PixelColor::Dark
-        };
+        let color = if self.is_password { PixelColor::Light } else { PixelColor::Dark };
 
         let mut current_height = at_height;
         let bullet_margin = 17;
@@ -144,8 +131,12 @@ impl ActionApi for Bip39Entry {
             modal.canvas,
             TextBounds::BoundingBox(Rectangle::new(
                 Point::new(self.margin.get(), current_height),
-                Point::new(modal.canvas_width - self.margin.get(), current_height + self.line_height.get() + self.margin.get()))
-        ));
+                Point::new(
+                    modal.canvas_width - self.margin.get(),
+                    current_height + self.line_height.get() + self.margin.get(),
+                ),
+            )),
+        );
         tv.text.clear();
         tv.bounds_computed = None;
         tv.draw_border = false;
@@ -176,8 +167,12 @@ impl ActionApi for Bip39Entry {
                         modal.canvas,
                         TextBounds::BoundingBox(Rectangle::new(
                             Point::new(self.margin.get() + AESTHETIC_GAP, draw_at - 4),
-                            Point::new(modal.canvas_width - self.margin.get(), draw_at + self.line_height.get() - 4))
-                    ));
+                            Point::new(
+                                modal.canvas_width - self.margin.get(),
+                                draw_at + self.line_height.get() - 4,
+                            ),
+                        )),
+                    );
                     tv.text.clear();
                     tv.bounds_computed = None;
                     tv.draw_border = false;
@@ -192,12 +187,16 @@ impl ActionApi for Bip39Entry {
                     modal.canvas,
                     TextBounds::BoundingBox(Rectangle::new(
                         Point::new(left_text_margin, draw_at),
-                        Point::new(modal.canvas_width - (self.margin.get() + bullet_margin), draw_at + self.line_height.get()))
-                ));
+                        Point::new(
+                            modal.canvas_width - (self.margin.get() + bullet_margin),
+                            draw_at + self.line_height.get(),
+                        ),
+                    )),
+                );
                 tv.ellipsis = true;
                 tv.invert = self.is_password;
                 tv.text.clear();
-                tv.draw_border =false;
+                tv.draw_border = false;
                 tv.margin = Point::new(0, 0);
                 write!(tv, "{}", recco).ok();
                 modal.gam.post_textview(&mut tv).expect("couldn't post tv");
@@ -222,22 +221,32 @@ impl ActionApi for Bip39Entry {
                 modal.canvas,
                 TextBounds::CenteredTop(Rectangle::new(
                     Point::new(self.margin.get(), draw_at),
-                    Point::new(modal.canvas_width - self.margin.get(), draw_at + self.line_height.get() * NUM_RECCOS))
-            ));
+                    Point::new(
+                        modal.canvas_width - self.margin.get(),
+                        draw_at + self.line_height.get() * NUM_RECCOS,
+                    ),
+                )),
+            );
             tv.invert = self.is_password;
             tv.text.clear();
-            tv.draw_border =false;
+            tv.draw_border = false;
             write!(tv, "{}", guidance).ok();
             modal.gam.post_textview(&mut tv).expect("couldn't post tv");
         }
 
         current_height += self.line_height.get() * NUM_RECCOS;
         // -------- draw a divider line ----------
-        modal.gam.draw_line(modal.canvas, Line::new_with_style(
-            Point::new(self.margin.get(), current_height + self.margin.get()),
-            Point::new(modal.canvas_width - self.margin.get(), current_height + self.margin.get()),
-            DrawStyle::new(color, color, 1))
-            ).expect("couldn't draw entry line");
+        modal
+            .gam
+            .draw_line(
+                modal.canvas,
+                Line::new_with_style(
+                    Point::new(self.margin.get(), current_height + self.margin.get()),
+                    Point::new(modal.canvas_width - self.margin.get(), current_height + self.margin.get()),
+                    DrawStyle::new(color, color, 1),
+                ),
+            )
+            .expect("couldn't draw entry line");
 
         current_height += self.margin.get() * 2;
         // ------- draw word list -------
@@ -250,30 +259,40 @@ impl ActionApi for Bip39Entry {
             modal.canvas,
             TextBounds::CenteredTop(Rectangle::new(
                 Point::new(self.margin.get(), current_height),
-                Point::new(modal.canvas_width - self.margin.get(), current_height + self.line_height.get() * ACCEPTED_WORD_LINES + self.margin.get()))
-        ));
+                Point::new(
+                    modal.canvas_width - self.margin.get(),
+                    current_height + self.line_height.get() * ACCEPTED_WORD_LINES + self.margin.get(),
+                ),
+            )),
+        );
         tv.invert = self.is_password;
         tv.ellipsis = true;
         tv.text.clear();
-        tv.draw_border =false;
+        tv.draw_border = false;
         tv.style = STYLE_OVERRIDE;
         write!(tv, "{}", words).ok();
         modal.gam.post_textview(&mut tv).expect("couldn't post tv");
 
         current_height += self.line_height.get() * ACCEPTED_WORD_LINES;
         // -------- draw a divider line ----------
-        modal.gam.draw_line(modal.canvas, Line::new_with_style(
-            Point::new(self.margin.get(), current_height + self.margin.get()),
-            Point::new(modal.canvas_width - self.margin.get(), current_height + self.margin.get()),
-            DrawStyle::new(color, color, 1))
-            ).expect("couldn't draw entry line");
+        modal
+            .gam
+            .draw_line(
+                modal.canvas,
+                Line::new_with_style(
+                    Point::new(self.margin.get(), current_height + self.margin.get()),
+                    Point::new(modal.canvas_width - self.margin.get(), current_height + self.margin.get()),
+                    DrawStyle::new(color, color, 1),
+                ),
+            )
+            .expect("couldn't draw entry line");
 
         current_height += self.margin.get() * 2;
         // ------- status --------
         let mut status = String::new();
         if let Some(p) = &self.payload {
             status.push_str(t!("bip39.valid_phrase", locales::LANG));
-            status.push_str( " ");
+            status.push_str(" ");
             status.push_str(&hex::encode(&p));
         } else {
             if self.user_input.len() == 0 && self.accepted_words.len() == 0 {
@@ -288,8 +307,12 @@ impl ActionApi for Bip39Entry {
             modal.canvas,
             TextBounds::CenteredTop(Rectangle::new(
                 Point::new(self.margin.get(), current_height),
-                Point::new(modal.canvas_width - self.margin.get(), current_height + self.line_height.get() * STATUS_LINES + self.margin.get()))
-        ));
+                Point::new(
+                    modal.canvas_width - self.margin.get(),
+                    current_height + self.line_height.get() * STATUS_LINES + self.margin.get(),
+                ),
+            )),
+        );
         tv.invert = self.is_password;
         tv.text.clear();
         tv.draw_border = false;
@@ -300,7 +323,7 @@ impl ActionApi for Bip39Entry {
 
     fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
         let can_move_downwards = !(self.suggestion_index.get() + 1 == NUM_RECCOS);
-        let can_move_upwards =  !(self.suggestion_index.get() - 1 < 0);
+        let can_move_upwards = !(self.suggestion_index.get() - 1 < 0);
 
         // log::debug!("key_action: {}", k);
         match k {
@@ -316,16 +339,18 @@ impl ActionApi for Bip39Entry {
                         xous::yield_slice();
 
                         let buf = Buffer::into_buf(ret).expect("couldn't convert message to payload");
-                        buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
+                        buf.send(self.action_conn, self.action_opcode)
+                            .map(|_| ())
+                            .expect("couldn't send action message");
                     }
                 } else {
                     if self.suggested_words.len() > 0 {
-                        if (self.suggestion_index.get() as usize) < self.suggested_words.len() { // should "always" be true, but good to check
-                            self.accepted_words.push(self.suggested_words[self.suggestion_index.get() as usize].to_string());
+                        if (self.suggestion_index.get() as usize) < self.suggested_words.len() {
+                            // should "always" be true, but good to check
+                            self.accepted_words
+                                .push(self.suggested_words[self.suggestion_index.get() as usize].to_string());
                             match self.gam.bip39_to_bytes(&self.accepted_words) {
-                                Ok(data) => {
-                                    self.payload = Some(data)
-                                }
+                                Ok(data) => self.payload = Some(data),
                                 _ => self.payload = None,
                             }
                             self.user_input.clear();
@@ -348,28 +373,33 @@ impl ActionApi for Bip39Entry {
             '\u{0}' => {
                 // ignore null messages
             }
-            '\u{14}' => { // F4
+            '\u{14}' => {
+                // F4
                 // relinquish focus before returning the result
                 self.gam.relinquish_focus().unwrap();
                 xous::yield_slice();
 
                 let ret = Bip39EntryPayload::default(); // return a 0-length entry
                 let buf = Buffer::into_buf(ret).expect("couldn't convert message to payload");
-                buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
+                buf.send(self.action_conn, self.action_opcode)
+                    .map(|_| ())
+                    .expect("couldn't send action message");
                 return None;
             }
-            '\u{8}' => { // backspace
-                #[cfg(feature="tts")]
+            '\u{8}' => {
+                // backspace
+                #[cfg(feature = "tts")]
                 {
                     let xns = xous_names::XousNames::new().unwrap();
                     let tts = tts_frontend::TtsFrontend::new(&xns).unwrap();
                     tts.tts_blocking(locales::t!("input.delete-tts", locales::LANG)).unwrap();
                 }
-                if self.user_input.len() > 0 { // don't backspace if we have no string.
+                if self.user_input.len() > 0 {
+                    // don't backspace if we have no string.
                     self.user_input.pop();
                     if self.user_input.len() > 0 {
-                        self.suggested_words = self.gam.bip39_suggestions(&self.user_input)
-                            .unwrap_or(Vec::<String>::new());
+                        self.suggested_words =
+                            self.gam.bip39_suggestions(&self.user_input).unwrap_or(Vec::<String>::new());
                     } else {
                         self.suggested_words.clear();
                     }
@@ -379,28 +409,28 @@ impl ActionApi for Bip39Entry {
                     self.suggested_words.clear();
                     self.suggestion_index.set(0);
                     match self.gam.bip39_to_bytes(&self.accepted_words) {
-                        Ok(data) => {
-                            self.payload = Some(data)
-                        }
+                        Ok(data) => self.payload = Some(data),
                         _ => self.payload = None,
                     }
                 }
             }
-            _ => { // text entry
-                #[cfg(feature="tts")]
+            _ => {
+                // text entry
+                #[cfg(feature = "tts")]
                 {
                     let xns = xous_names::XousNames::new().unwrap();
                     let tts = tts_frontend::TtsFrontend::new(&xns).unwrap();
                     tts.tts_blocking(&k.to_string()).unwrap();
                 }
-                if k.is_ascii_alphabetic() { // ignore any other input, since it's invalid.
+                if k.is_ascii_alphabetic() {
+                    // ignore any other input, since it's invalid.
                     let lk = k.to_lowercase();
                     for c in lk {
                         self.user_input.push(c);
                     }
                     // now regenerate all the hints
-                    self.suggested_words = self.gam.bip39_suggestions(&self.user_input)
-                        .unwrap_or(Vec::<String>::new());
+                    self.suggested_words =
+                        self.gam.bip39_suggestions(&self.user_input).unwrap_or(Vec::<String>::new());
                     self.suggestion_index.set(0);
                 }
             }

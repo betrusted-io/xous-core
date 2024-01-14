@@ -1,12 +1,11 @@
-use crate::*;
+use core::fmt::Write;
+use std::convert::TryInto;
 
 use graphics_server::api::*;
-
-use core::fmt::Write;
 use locales::t;
-
 use qrcode::{Color, QrCode};
-use std::convert::TryInto;
+
+use crate::*;
 
 pub(crate) const QUIET_MODULES: i16 = 2;
 
@@ -32,15 +31,16 @@ impl Notification {
             gam: crate::Gam::new(&xous_names::XousNames::new().unwrap()).unwrap(),
         }
     }
+
     pub fn set_is_password(&mut self, setting: bool) {
         // this will cause text to be inverted. Untrusted entities can try to set this,
         // but the GAM should defeat this for dialog boxes outside of the trusted boot
         // set because they can't achieve a high enough trust level.
         self.is_password = setting;
     }
-    pub fn set_manual_dismiss(&mut self, setting: bool) {
-        self.manual_dismiss = setting;
-    }
+
+    pub fn set_manual_dismiss(&mut self, setting: bool) { self.manual_dismiss = setting; }
+
     pub fn set_qrcode(&mut self, setting: Option<&str>) {
         match setting {
             Some(setting) => {
@@ -49,12 +49,7 @@ impl Notification {
                     Err(_e) => QrCode::new(t!("notification.qrcode.error", locales::LANG)).unwrap(),
                 };
                 self.qrwidth = qrcode.width();
-                log::info!(
-                    "qrcode {}x{} : {} bytes ",
-                    self.qrwidth,
-                    self.qrwidth,
-                    setting.len()
-                );
+                log::info!("qrcode {}x{} : {} bytes ", self.qrwidth, self.qrwidth, setting.len());
                 self.qrcode = Vec::new();
                 for color in qrcode.to_colors().iter() {
                     match color {
@@ -69,12 +64,10 @@ impl Notification {
             }
         }
     }
+
     fn draw_text(&self, at_height: i16, modal: &Modal) {
         // prime a textview with the correct general style parameters
-        let mut tv = TextView::new(
-            modal.canvas,
-            TextBounds::BoundingBox(Rectangle::new_coords(0, 0, 1, 1)),
-        );
+        let mut tv = TextView::new(modal.canvas, TextBounds::BoundingBox(Rectangle::new_coords(0, 0, 1, 1)));
         tv.ellipsis = true;
         tv.style = modal.style;
         tv.invert = self.is_password;
@@ -88,10 +81,7 @@ impl Notification {
             (modal.canvas_width - modal.margin * 2) as u16,
         );
         write!(tv, "{}", t!("notification.dismiss", locales::LANG)).unwrap();
-        modal
-            .gam
-            .bounds_compute_textview(&mut tv)
-            .expect("couldn't simulate text size");
+        modal.gam.bounds_compute_textview(&mut tv).expect("couldn't simulate text size");
         let textwidth = if let Some(bounds) = tv.bounds_computed {
             bounds.br.x - bounds.tl.x
         } else {
@@ -101,13 +91,11 @@ impl Notification {
         tv.bounds_computed = None;
         tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
             Point::new(offset, at_height + modal.margin * 2),
-            Point::new(
-                modal.canvas_width - modal.margin,
-                at_height + modal.line_height + modal.margin * 2,
-            ),
+            Point::new(modal.canvas_width - modal.margin, at_height + modal.line_height + modal.margin * 2),
         ));
         modal.gam.post_textview(&mut tv).expect("couldn't post tv");
     }
+
     fn draw_qrcode(&self, at_height: i16, modal: &Modal) {
         // calculate pixel size of each module in the qrcode
         let qrcode_modules: i16 = self.qrwidth.try_into().unwrap();
@@ -123,11 +111,8 @@ impl Notification {
 
         let left = modal.margin + quiet_px;
         let right = left + qrcode_modules * mod_size_px;
-        let mut module = Rectangle::new_with_style(
-            Point::new(0, 0),
-            Point::new(mod_size_px-1, mod_size_px-1),
-            black,
-        );
+        let mut module =
+            Rectangle::new_with_style(Point::new(0, 0), Point::new(mod_size_px - 1, mod_size_px - 1), black);
         let step = Point::new(mod_size_px, 0);
         let cr_lf = Point::new(-qrcode_modules * mod_size_px, mod_size_px);
         let mut j: i16;
@@ -138,19 +123,15 @@ impl Notification {
                 module.translate(cr_lf);
             }
             if *stamp {
-                modal
-                    .gam
-                    .draw_rectangle(modal.canvas, module)
-                    .expect("couldn't draw qrcode module");
+                modal.gam.draw_rectangle(modal.canvas, module).expect("couldn't draw qrcode module");
             }
             module.translate(step);
         }
     }
 }
 impl ActionApi for Notification {
-    fn set_action_opcode(&mut self, op: u32) {
-        self.action_opcode = op
-    }
+    fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
+
     fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
         if self.manual_dismiss {
             let qr_height = if self.qrwidth > 0 { 300 } else { 0 };
@@ -159,6 +140,7 @@ impl ActionApi for Notification {
             margin + 5
         }
     }
+
     fn redraw(&self, at_height: i16, modal: &Modal) {
         if self.manual_dismiss {
             self.draw_text(at_height, modal);
@@ -168,11 +150,7 @@ impl ActionApi for Notification {
             }
         }
         // divider lines
-        let color = if self.is_password {
-            PixelColor::Light
-        } else {
-            PixelColor::Dark
-        };
+        let color = if self.is_password { PixelColor::Light } else { PixelColor::Dark };
 
         modal
             .gam
@@ -186,6 +164,7 @@ impl ActionApi for Notification {
             )
             .expect("couldn't draw entry line");
     }
+
     fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
         log::trace!("key_action: {}", k);
         match k {

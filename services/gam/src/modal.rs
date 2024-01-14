@@ -14,25 +14,23 @@ mod progressbar;
 pub use progressbar::*;
 mod consoleinput;
 pub use consoleinput::*;
-#[cfg(feature="ditherpunk")]
+#[cfg(feature = "ditherpunk")]
 mod image;
-#[cfg(feature="ditherpunk")]
+#[cfg(feature = "ditherpunk")]
 pub use image::*;
 mod bip39entry;
-pub use bip39entry::*;
+use core::fmt::Write;
 
+pub use bip39entry::*;
 use enum_dispatch::enum_dispatch;
+pub use graphics_server::api::GlyphStyle;
+use graphics_server::api::*;
+use num_traits::*;
+use xous_ipc::{Buffer, String};
 
 use crate::api::*;
 use crate::Gam;
 use crate::MsgForwarder;
-
-use graphics_server::api::*;
-pub use graphics_server::api::GlyphStyle;
-
-use xous_ipc::{String, Buffer};
-use num_traits::*;
-use core::fmt::Write;
 
 pub const MAX_ITEMS: usize = 8;
 
@@ -44,39 +42,38 @@ pub enum ActionType {
     CheckBoxes,
     Slider,
     Notification,
-    #[cfg(feature="ditherpunk")]
+    #[cfg(feature = "ditherpunk")]
     Image,
-    ConsoleInput
+    ConsoleInput,
 }
 
 #[enum_dispatch]
 pub trait ActionApi {
-    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {glyph_height + margin * 2}
+    fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 { glyph_height + margin * 2 }
     fn redraw(&self, _at_height: i16, _modal: &Modal) { unimplemented!() }
     fn close(&mut self) {}
     fn is_password(&self) -> bool { false }
     /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
-    fn key_action(&mut self, _key: char) -> Option<ValidatorErr> {None}
+    fn key_action(&mut self, _key: char) -> Option<ValidatorErr> { None }
     fn set_action_opcode(&mut self, _op: u32) {}
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum ModalOpcode { // if changes are made here, also update MenuOpcode
-    Redraw = 0x4000_0000, // set the high bit so that "standard" enums don't conflict with the Modal-specific opcodes
+pub enum ModalOpcode {
+    // if changes are made here, also update MenuOpcode
+    Redraw = 0x4000_0000, /* set the high bit so that "standard" enums don't conflict with the
+                           * Modal-specific opcodes */
     Rawkeys,
     Quit,
 }
 
 /// We use a new type for item names, so that it's easy to resize this as needed.
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct ItemName(String::<128>);
+pub struct ItemName(String<128>);
 impl ItemName {
-    pub fn new(name: &str) -> Self {
-        ItemName(String::<128>::from_str(name))
-    }
-    pub fn as_str(&self) -> &str {
-        self.0.as_str().expect("couldn't convert item into string")
-    }
+    pub fn new(name: &str) -> Self { ItemName(String::<128>::from_str(name)) }
+
+    pub fn as_str(&self) -> &str { self.0.as_str().expect("couldn't convert item into string") }
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
@@ -90,15 +87,15 @@ pub struct Bip39EntryPayload {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
 pub struct TextEntryPayload {
     dirty: bool,
-    pub content: String::<256>,
-    pub placeholder: Option<String::<256>>,
+    pub content: String<256>,
+    pub placeholder: Option<String<256>>,
     pub placeholder_persist: bool,
     pub insertion_point: Option<usize>,
 }
 
 impl TextEntryPayload {
     pub fn new() -> Self {
-        TextEntryPayload{
+        TextEntryPayload {
             dirty: Default::default(),
             content: Default::default(),
             placeholder: Default::default(),
@@ -107,48 +104,45 @@ impl TextEntryPayload {
         }
     }
 
-    pub fn new_with_fields(content: String::<256>, placeholder: Option<String::<256>>) -> Self {
-        TextEntryPayload { dirty: false, content: content, placeholder: placeholder, placeholder_persist: false, insertion_point: None }
+    pub fn new_with_fields(content: String<256>, placeholder: Option<String<256>>) -> Self {
+        TextEntryPayload {
+            dirty: false,
+            content,
+            placeholder,
+            placeholder_persist: false,
+            insertion_point: None,
+        }
     }
-    /// Ensures that 0's are written to the storage of this struct, and not optimized out; important for password fields.
-    pub fn volatile_clear(&mut self) {
-        self.content.volatile_clear();
-    }
-    pub fn as_str(&self) -> &str {
-        self.content.as_str().expect("couldn't convert textentry string")
-    }
+
+    /// Ensures that 0's are written to the storage of this struct, and not optimized out; important for
+    /// password fields.
+    pub fn volatile_clear(&mut self) { self.content.volatile_clear(); }
+
+    pub fn as_str(&self) -> &str { self.content.as_str().expect("couldn't convert textentry string") }
 }
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SliderPayload(pub u32);
 impl SliderPayload {
-    pub fn new(value: u32) -> Self {
-        SliderPayload(value)
-    }
+    pub fn new(value: u32) -> Self { SliderPayload(value) }
 }
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct RadioButtonPayload(pub ItemName); // returns the name of the item corresponding to the radio button selection
 impl RadioButtonPayload {
-    pub fn new(name: &str) -> Self {
-        RadioButtonPayload(ItemName::new(name))
-    }
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-    pub fn clear(&mut self) {
-        self.0.0.clear();
-    }
+    pub fn new(name: &str) -> Self { RadioButtonPayload(ItemName::new(name)) }
+
+    pub fn as_str(&self) -> &str { self.0.as_str() }
+
+    pub fn clear(&mut self) { self.0.0.clear(); }
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct CheckBoxPayload(pub [Option<ItemName>; MAX_ITEMS]); // returns a list of potential items that could be selected
 impl CheckBoxPayload {
-    pub fn new() -> Self {
-        CheckBoxPayload([None; MAX_ITEMS])
-    }
-    pub fn payload(&self) -> [Option<ItemName>; MAX_ITEMS] {
-        self.0
-    }
+    pub fn new() -> Self { CheckBoxPayload([None; MAX_ITEMS]) }
+
+    pub fn payload(&self) -> [Option<ItemName>; MAX_ITEMS] { self.0 }
+
     pub fn contains(&self, name: &str) -> bool {
         for maybe_item in self.0.iter() {
             if let Some(item) = maybe_item {
@@ -159,9 +153,10 @@ impl CheckBoxPayload {
         }
         false
     }
+
     pub fn add(&mut self, name: &str) -> bool {
         if self.contains(name) {
-            return true
+            return true;
         }
         for maybe_item in self.0.iter_mut() {
             if maybe_item.is_none() {
@@ -171,6 +166,7 @@ impl CheckBoxPayload {
         }
         false
     }
+
     pub fn remove(&mut self, name: &str) -> bool {
         for maybe_item in self.0.iter_mut() {
             if let Some(item) = maybe_item {
@@ -211,7 +207,7 @@ pub struct Modal<'a> {
     pub inverted: bool,
     pub style: GlyphStyle,
     pub helper_data: Option<Buffer<'a>>,
-    pub name: String::<128>,
+    pub name: String<128>,
 
     // optimize draw time
     top_dirty: bool,
@@ -226,29 +222,35 @@ fn recompute_canvas(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<
 
     // method:
     //   - we assume the GAM gives us an initial modal with a "maximum" height setting
-    //   - items are populated within this maximal canvas setting, and then the actual height needed is computed
+    //   - items are populated within this maximal canvas setting, and then the actual height needed is
+    //     computed
     //   - the canvas is resized to this actual height
     // problems:
-    //   - there is no sanity check on the size of the text boxes. So if you give the UX element a top_text box that's
-    //     huge, it will just overflow the canvas size and nothing else will get drawn.
+    //   - there is no sanity check on the size of the text boxes. So if you give the UX element a top_text
+    //     box that's huge, it will just overflow the canvas size and nothing else will get drawn.
 
     let mut total_height = modal.margin;
     log::trace!("step 0 total_height: {}", total_height);
     // compute height of top_text, if any
     if let Some(top_str) = top_text {
-        let mut top_tv = TextView::new(modal.canvas,
+        let mut top_tv = TextView::new(
+            modal.canvas,
             TextBounds::GrowableFromTl(
                 Point::new(modal.margin, modal.margin),
-                (modal.canvas_width - modal.margin * 2) as u16
-            ));
+                (modal.canvas_width - modal.margin * 2) as u16,
+            ),
+        );
         top_tv.draw_border = false;
         top_tv.style = style;
-        top_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
+        top_tv.margin = Point::new(0, 0); // all margin already accounted for in the raw bounds of the text drawing
         top_tv.ellipsis = false;
         top_tv.invert = modal.inverted;
         // specify a clip rect that's the biggest possible allowed. If we don't do this, the current canvas
         // bounds are used, and the operation will fail if the text has to get bigger.
-        top_tv.clip_rect = Some(Rectangle::new(Point::new(0, 0), Point::new(current_bounds.x, crate::api::MODAL_Y_MAX - 2 * modal.line_height)));
+        top_tv.clip_rect = Some(Rectangle::new(
+            Point::new(0, 0),
+            Point::new(current_bounds.x, crate::api::MODAL_Y_MAX - 2 * modal.line_height),
+        ));
         write!(top_tv.text, "{}", top_str).unwrap();
 
         log::trace!("posting top tv: {:?}", top_tv);
@@ -273,19 +275,24 @@ fn recompute_canvas(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<
     // compute height of bot_text, if any
     log::trace!("step 2 total_height: {}", total_height);
     if let Some(bot_str) = bot_text {
-        let mut bot_tv = TextView::new(modal.canvas,
+        let mut bot_tv = TextView::new(
+            modal.canvas,
             TextBounds::GrowableFromTl(
                 Point::new(modal.margin, total_height),
-                (modal.canvas_width - modal.margin * 2) as u16
-            ));
+                (modal.canvas_width - modal.margin * 2) as u16,
+            ),
+        );
         bot_tv.draw_border = false;
         bot_tv.style = style;
-        bot_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
+        bot_tv.margin = Point::new(0, 0); // all margin already accounted for in the raw bounds of the text drawing
         bot_tv.ellipsis = false;
         bot_tv.invert = modal.inverted;
         // specify a clip rect that's the biggest possible allowed. If we don't do this, the current canvas
         // bounds are used, and the operation will fail if the text has to get bigger.
-        bot_tv.clip_rect = Some(Rectangle::new(Point::new(0, 0), Point::new(current_bounds.x, crate::api::MODAL_Y_MAX - 2 * modal.line_height)));
+        bot_tv.clip_rect = Some(Rectangle::new(
+            Point::new(0, 0),
+            Point::new(current_bounds.x, crate::api::MODAL_Y_MAX - 2 * modal.line_height),
+        ));
         write!(bot_tv.text, "{}", bot_str).unwrap();
 
         log::trace!("posting bot tv: {:?}", bot_tv);
@@ -308,8 +315,8 @@ fn recompute_canvas(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<
         token_type: TokenType::App,
         token: modal.authtoken,
     };
-    // don't send the request if there is no change in the size of things. This is because the request is expensive -- it will
-    // result in a redraw of everything, plus defacement, etc.
+    // don't send the request if there is no change in the size of things. This is because the request is
+    // expensive -- it will result in a redraw of everything, plus defacement, etc.
     if new_bounds.requested != current_bounds {
         log::debug!("applying recomputed bounds of {:?}", new_bounds);
         modal.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
@@ -317,12 +324,19 @@ fn recompute_canvas(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<
 }
 
 impl<'a> Modal<'a> {
-    pub fn new(name: &str, action: ActionType, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle, margin: i16) -> Modal<'a> {
+    pub fn new(
+        name: &str,
+        action: ActionType,
+        top_text: Option<&str>,
+        bot_text: Option<&str>,
+        style: GlyphStyle,
+        margin: i16,
+    ) -> Modal<'a> {
         let xns = xous_names::XousNames::new().unwrap();
         let sid = xous::create_server().expect("can't create private modal message server");
         let gam = Gam::new(&xns).expect("can't connect to GAM");
-        let authtoken = gam.register_ux(
-            UxRegistration {
+        let authtoken = gam
+            .register_ux(UxRegistration {
                 app_name: String::<128>::from_str(name),
                 ux_type: UxType::Modal,
                 predictor: None,
@@ -332,11 +346,15 @@ impl<'a> Modal<'a> {
                 audioframe_id: None,
                 focuschange_id: None, // should always be none because we're not an app
                 rawkeys_id: Some(ModalOpcode::Rawkeys.to_u32().unwrap()),
-            }
-        ).expect("couldn't register my Ux element with GAM");
-        assert!(authtoken.is_some(), "Couldn't register modal. Did you remember to add the app_name to the tokens.rs expected boot contexts list?");
+            })
+            .expect("couldn't register my Ux element with GAM");
+        assert!(
+            authtoken.is_some(),
+            "Couldn't register modal. Did you remember to add the app_name to the tokens.rs expected boot contexts list?"
+        );
         log::debug!("requesting content canvas for modal");
-        let canvas = gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
+        let canvas =
+            gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
         let line_height = if locales::LANG == "zh" {
             // zh has no "small" style
             gam.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height hint") as i16
@@ -351,7 +369,7 @@ impl<'a> Modal<'a> {
         // to render the element.
         let inverted = match action {
             ActionType::TextEntry(_) => action.is_password(),
-            _ => false
+            _ => false,
         };
 
         // we now have a canvas that is some minimal height, but with the final width as allowed by the GAM.
@@ -368,7 +386,8 @@ impl<'a> Modal<'a> {
             margin,
             line_height,
             canvas_width: canvas_bounds.x, // memoize this, it shouldn't change
-            maximal_height: 402, // arbitrary number set for aesthetic reasons; limits growth of modals that request reflowable/growable text boxes
+            maximal_height: 402,           /* arbitrary number set for aesthetic reasons; limits growth of
+                                            * modals that request reflowable/growable text boxes */
             inverted,
             style,
             helper_data: None,
@@ -382,6 +401,7 @@ impl<'a> Modal<'a> {
         recompute_canvas(&mut modal, top_text, bot_text, style);
         modal
     }
+
     pub fn activate(&self) {
         const POLL_DELAY_MS: usize = 857;
         match self.gam.raise_modal(self.name.to_str()) {
@@ -409,18 +429,26 @@ impl<'a> Modal<'a> {
     /// messages on to a local server. The goal is to keep the local server's SID
     /// a secret. The GAM only knows the single-use SID for redraw commands; this
     /// isolates a server's private command set from the GAM.
-    pub fn spawn_helper(&mut self, private_sid: xous::SID, public_sid: xous::SID, redraw_op: u32, rawkeys_op: u32, drop_op: u32) {
+    pub fn spawn_helper(
+        &mut self,
+        private_sid: xous::SID,
+        public_sid: xous::SID,
+        redraw_op: u32,
+        rawkeys_op: u32,
+        drop_op: u32,
+    ) {
         let helper_data = MsgForwarder {
             private_sid: private_sid.to_array(),
             public_sid: public_sid.to_array(),
             redraw_op,
             rawkeys_op,
-            drop_op
+            drop_op,
         };
         let buf = Buffer::into_buf(helper_data).expect("couldn't allocate helper data for helper thread");
-        let (addr, size, offset) = unsafe{buf.to_raw_parts()};
+        let (addr, size, offset) = unsafe { buf.to_raw_parts() };
         self.helper_data = Some(buf);
-        xous::create_thread_3(crate::forwarding_thread, addr, size, offset).expect("couldn't spawn a helper thread");
+        xous::create_thread_3(crate::forwarding_thread, addr, size, offset)
+            .expect("couldn't spawn a helper thread");
     }
 
     pub fn redraw(&mut self) {
@@ -430,12 +458,23 @@ impl<'a> Modal<'a> {
         let do_redraw = self.top_dirty || self.bot_dirty || self.inverted;
         // draw the outer border
         if do_redraw {
-            self.gam.draw_rounded_rectangle(self.canvas,
-                RoundedRectangle::new(
-                    Rectangle::new_with_style(Point::new(0, 0), canvas_size,
-                        DrawStyle::new(if self.inverted{PixelColor::Dark} else {PixelColor::Light}, PixelColor::Dark, BORDER_WIDTH)
-                    ), 5
-                )).unwrap();
+            self.gam
+                .draw_rounded_rectangle(
+                    self.canvas,
+                    RoundedRectangle::new(
+                        Rectangle::new_with_style(
+                            Point::new(0, 0),
+                            canvas_size,
+                            DrawStyle::new(
+                                if self.inverted { PixelColor::Dark } else { PixelColor::Light },
+                                PixelColor::Dark,
+                                BORDER_WIDTH,
+                            ),
+                        ),
+                        5,
+                    ),
+                )
+                .unwrap();
         }
 
         let mut cur_height = self.margin;
@@ -459,7 +498,8 @@ impl<'a> Modal<'a> {
                 }
                 self.top_dirty = false;
             } else {
-                cur_height += self.top_memoized_height.expect("internal error: memoization didn't work correctly");
+                cur_height +=
+                    self.top_memoized_height.expect("internal error: memoization didn't work correctly");
             }
         } else {
             self.top_dirty = false;
@@ -468,12 +508,20 @@ impl<'a> Modal<'a> {
         let action_height = self.action.height(self.line_height, self.margin, &self);
         if !do_redraw {
             // the action area wasn't blanked, so blank it as prep for the action redraw
-            self.gam.draw_rectangle(self.canvas,
-            Rectangle::new_with_style(Point::new(BORDER_WIDTH, cur_height), Point::new(canvas_size.x - BORDER_WIDTH, cur_height + action_height),
-                DrawStyle::new(
-                    if self.inverted{PixelColor::Dark} else {PixelColor::Light},
-                    if self.inverted{PixelColor::Dark} else {PixelColor::Light}, 0)
-            )).unwrap();
+            self.gam
+                .draw_rectangle(
+                    self.canvas,
+                    Rectangle::new_with_style(
+                        Point::new(BORDER_WIDTH, cur_height),
+                        Point::new(canvas_size.x - BORDER_WIDTH, cur_height + action_height),
+                        DrawStyle::new(
+                            if self.inverted { PixelColor::Dark } else { PixelColor::Light },
+                            if self.inverted { PixelColor::Dark } else { PixelColor::Light },
+                            0,
+                        ),
+                    ),
+                )
+                .unwrap();
         }
         self.action.redraw(cur_height, &self);
         cur_height += action_height;
@@ -487,7 +535,8 @@ impl<'a> Modal<'a> {
                 }
                 self.bot_dirty = false;
             } else {
-                cur_height += self.bot_memoized_height.expect("internal error: memoization didn't work correctly");
+                cur_height +=
+                    self.bot_memoized_height.expect("internal error: memoization didn't work correctly");
             }
         } else {
             self.bot_dirty = false;
@@ -512,18 +561,23 @@ impl<'a> Modal<'a> {
 
     /// This empowers an action within a modal to potentially consume all the available height in a canvas
     /// The current implementation works if you have a "simple" TextEntry box, but it will fail if you have
-    /// stuff below it because the algorithm can't "see" the reserved space at the moment for extra items below.
-    pub fn set_growable(&mut self, state: bool) {
-        self.growable = state;
-    }
+    /// stuff below it because the algorithm can't "see" the reserved space at the moment for extra items
+    /// below.
+    pub fn set_growable(&mut self, state: bool) { self.growable = state; }
 
     /// this function will modify UX elements if any of the arguments are Some()
     /// if None, the element is unchanged.
-    /// If a text section is set to remove, but Some() is given for the update, the text is not removed, and instead replaced with the updated text.
-    pub fn modify(&mut self, update_action: Option<ActionType>,
-        update_top_text: Option<&str>, remove_top: bool,
-        update_bot_text: Option<&str>, remove_bot: bool,
-        update_style: Option<GlyphStyle>) {
+    /// If a text section is set to remove, but Some() is given for the update, the text is not removed, and
+    /// instead replaced with the updated text.
+    pub fn modify(
+        &mut self,
+        update_action: Option<ActionType>,
+        update_top_text: Option<&str>,
+        remove_top: bool,
+        update_bot_text: Option<&str>,
+        remove_bot: bool,
+        update_style: Option<GlyphStyle>,
+    ) {
         if let Some(action) = update_action {
             self.action = action;
         };
@@ -581,7 +635,6 @@ impl<'a> Modal<'a> {
         recompute_canvas(self, top_text, bot_text, style);
     }
 }
-
 
 /*
  old notes to remind myself of how I got here.

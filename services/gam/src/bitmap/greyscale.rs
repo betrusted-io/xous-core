@@ -4,8 +4,9 @@
  * author: nworbnhoj
  */
 
-use crate::PixelType;
 use std::convert::TryInto;
+
+use crate::PixelType;
 
 pub struct GreyScale<I> {
     iter: I,
@@ -13,9 +14,7 @@ pub struct GreyScale<I> {
 }
 
 impl<I: Iterator<Item = u8>> GreyScale<I> {
-    fn new(iter: I, px_type: PixelType) -> GreyScale<I> {
-        Self { iter, px_type }
-    }
+    fn new(iter: I, px_type: PixelType) -> GreyScale<I> { Self { iter, px_type } }
 }
 
 impl<I: Iterator<Item = u8>> Iterator for GreyScale<I> {
@@ -110,9 +109,7 @@ fn grey(r: Option<u8>, g: Option<u8>, b: Option<u8>) -> Option<u8> {
 
 pub trait GreyScaleIterator: Iterator<Item = u8> + Sized {
     /// converts pixels of PixelType to u8 greyscale
-    fn to_grey(self, px_type: PixelType) -> GreyScale<Self> {
-        GreyScale::new(self, px_type)
-    }
+    fn to_grey(self, px_type: PixelType) -> GreyScale<Self> { GreyScale::new(self, px_type) }
 }
 
 impl<I: Iterator<Item = u8>> GreyScaleIterator for I {}

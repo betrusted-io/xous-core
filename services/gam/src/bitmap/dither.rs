@@ -10,12 +10,12 @@
  *
  * author: nworbnhoj
  */
- 
+
 use std::cmp::max;
 use std::convert::TryInto;
 
-use crate::PixelColor;
 use crate::bitmap::BITS_PER_WORD;
+use crate::PixelColor;
 
 /// Burkes dithering diffusion scheme was chosen for its modest resource
 /// requirements with impressive quality outcome.
@@ -67,22 +67,11 @@ impl<'a, I: Iterator<Item = u8>> Dither<'a, I> {
         }
         let length: usize = width * max_dy as usize + max_dx as usize + 1;
 
-        Self {
-            iter,
-            width,
-            diffusion,
-            denominator,
-            err: vec![0i16; length],
-            origin: 0,
-            next_x: 0,
-            next_y: 0,
-        }
+        Self { iter, width, diffusion, denominator, err: vec![0i16; length], origin: 0, next_x: 0, next_y: 0 }
     }
 
     #[allow(dead_code)]
-    fn next_xy(&self) -> (usize, usize) {
-        (self.next_x, self.next_y)
-    }
+    fn next_xy(&self) -> (usize, usize) { (self.next_x, self.next_y) }
 
     fn index(&self, dx: isize, dy: isize) -> usize {
         let width: isize = self.width.try_into().unwrap();
@@ -90,15 +79,16 @@ impl<'a, I: Iterator<Item = u8>> Dither<'a, I> {
         let linear: usize = self.origin + offset;
         linear % self.err.len()
     }
-    fn err(&self) -> i16 {
-        self.err[self.origin] / self.denominator
-    }
+
+    fn err(&self) -> i16 { self.err[self.origin] / self.denominator }
+
     fn carry(&mut self, err: i16) {
         for (dx, dy, mul) in self.diffusion {
             let i = self.index(*dx, *dy);
             self.err[i] += mul * err;
         }
     }
+
     fn pixel(&mut self, grey: u8) -> PixelColor {
         let grey: i16 = grey as i16 + self.err();
         if grey < THRESHOLD {
