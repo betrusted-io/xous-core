@@ -4,10 +4,9 @@
 #[cfg(feature = "low_level_tests")]
 mod low_level_tests;
 
-use hex_literal::hex;
-
-use aes::{Aes128, Block};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+use aes::{Aes128, Block};
+use hex_literal::hex;
 
 struct AesEcbTest<'a> {
     key: &'a [u8],
@@ -17,11 +16,7 @@ struct AesEcbTest<'a> {
 
 impl<'a> AesEcbTest<'a> {
     pub fn new(key: &'a [u8], plaintext: &'a [u8], ciphertext: &'a [u8]) -> Self {
-        Self {
-            key,
-            plaintext,
-            ciphertext,
-        }
+        Self { key, plaintext, ciphertext }
     }
 
     pub fn test(&self) -> Result<(), &'static str> {
@@ -59,10 +54,7 @@ impl<'a> AesEcbTest<'a> {
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::info!(
-        "Hello, world! This is the AES client, PID {}",
-        xous::current_pid().unwrap().get()
-    );
+    log::info!("Hello, world! This is the AES client, PID {}", xous::current_pid().unwrap().get());
 
     // let key: [u8; 32] = [
     //     0x70, 0x69, 0x19, 0xa0, 0x40, 0x61, 0x05, 0x17, 0xf7, 0xff, 0xf5, 0x27, 0x2b, 0x64, 0x04,
@@ -158,11 +150,7 @@ fn main() -> ! {
         }
     }
 
-    log::error!(
-        "{} tests were run and {} errors were encountered",
-        tests.len(),
-        failures
-    );
+    log::error!("{} tests were run and {} errors were encountered", tests.len(), failures);
 
     #[cfg(feature = "low_level_tests")]
     {
