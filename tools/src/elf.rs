@@ -1,15 +1,15 @@
-use bitflags::bitflags;
-use log::debug;
 use std::fmt;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::path::Path;
+
+use bitflags::bitflags;
+use log::debug;
 use xmas_elf::program::Type as ProgramType;
 use xmas_elf::sections::ShType;
-use xmas_elf::ElfFile;
-
 // Normal ELF flags
 use xmas_elf::sections::{SHF_ALLOC, SHF_EXECINSTR, SHF_WRITE};
+use xmas_elf::ElfFile;
 
 bitflags! {
     pub struct MiniElfFlags: u8 {
@@ -103,10 +103,7 @@ pub enum ElfReadError {
     SectionRangeError,
 
     /// Section wasn't word-aligned
-    SectionNotAligned(
-        String, /* section name */
-        usize,  /* section size */
-    ),
+    SectionNotAligned(String /* section name */, usize /* section size */),
 
     /// Couldn't seek the file to write the section
     FileSeekError(std::io::Error),
@@ -139,8 +136,7 @@ pub fn read_program<P: AsRef<Path>>(filename: P) -> Result<ProgramDescription, E
     let mut b = Vec::new();
     {
         let mut fi = File::open(filename).map_err(ElfReadError::OpenElfError)?;
-        fi.read_to_end(&mut b)
-            .map_err(ElfReadError::ReadFileError)?;
+        fi.read_to_end(&mut b).map_err(ElfReadError::ReadFileError)?;
     }
     process_program(&b)
 }
@@ -196,10 +192,7 @@ pub fn process_program(b: &[u8]) -> Result<ProgramDescription, ElfReadError> {
         // that something has gone horribly wrong.
         size += (4 - (size & 3)) & 3;
         if size & 3 != 0 {
-            return Err(ElfReadError::SectionNotAligned(
-                name.to_owned(),
-                s.size() as usize,
-            ));
+            return Err(ElfReadError::SectionNotAligned(name.to_owned(), s.size() as usize));
         }
 
         if name == ".data" {
@@ -208,11 +201,7 @@ pub fn process_program(b: &[u8]) -> Result<ProgramDescription, ElfReadError> {
         } else if s.get_type() == Ok(ShType::NoBits) {
             // Add bss-type sections to the data section
             bss_size += s.size() as u32;
-            debug!(
-                "Skipping copy of {} @ {:08x} because nobits",
-                name,
-                s.address()
-            );
+            debug!("Skipping copy of {} @ {:08x} because nobits", name, s.address());
             continue;
         } else if text_offset == 0 && (s.address() != 0 || s.size() != 0) {
             text_offset = s.address() as u32;
@@ -252,17 +241,11 @@ pub fn process_program(b: &[u8]) -> Result<ProgramDescription, ElfReadError> {
             "Section start: {:02x} {:02x} {:02x} {:02x} going into offset 0x{:08x}",
             section_data[0], section_data[1], section_data[2], section_data[3], program_offset
         );
-        program_data
-            .seek(SeekFrom::Start(program_offset))
-            .map_err(ElfReadError::FileSeekError)?;
-        program_data
-            .write(section_data)
-            .map_err(ElfReadError::WriteSectionError)?;
+        program_data.seek(SeekFrom::Start(program_offset)).map_err(ElfReadError::FileSeekError)?;
+        program_data.write(section_data).map_err(ElfReadError::WriteSectionError)?;
         program_offset += section_data.len() as u64;
     }
-    let observed_size = program_data
-        .seek(SeekFrom::End(0))
-        .map_err(ElfReadError::SeekFromEndError)?;
+    let observed_size = program_data.seek(SeekFrom::End(0)).map_err(ElfReadError::SeekFromEndError)?;
 
     debug!("Text size: {} bytes", text_size);
     debug!("Text offset: {:08x}", text_offset);
@@ -286,8 +269,7 @@ pub fn read_minielf<P: AsRef<Path>>(filename: P) -> Result<MiniElf, ElfReadError
     let mut b = Vec::new();
     {
         let mut fi = File::open(filename).map_err(ElfReadError::OpenElfError)?;
-        fi.read_to_end(&mut b)
-            .map_err(ElfReadError::ReadFileError)?;
+        fi.read_to_end(&mut b).map_err(ElfReadError::ReadFileError)?;
     }
     process_minielf(&b)
 }
@@ -373,7 +355,8 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
             let section_data = s.raw_data(&elf);
             let pad_amount = if let Some(next_section) = section_iter.peek() {
                 if section_data.len() % next_section.align() as usize != 0 {
-                    let pad_amount = next_section.align() as usize - (section_data.len() % next_section.align() as usize);
+                    let pad_amount =
+                        next_section.align() as usize - (section_data.len() % next_section.align() as usize);
                     if s.address() + size + pad_amount as u64 > next_section.address() {
                         (next_section.address() - (s.address() + size)) as usize
                     } else {
@@ -390,18 +373,13 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
                 "Section start: {:02x} {:02x} {:02x} {:02x} going into offset 0x{:08x}",
                 section_data[0], section_data[1], section_data[2], section_data[3], program_offset
             );
-            program_data
-                .seek(SeekFrom::Start(program_offset))
-                .map_err(ElfReadError::FileSeekError)?;
-            program_data
-                .write(section_data)
-                .map_err(ElfReadError::WriteSectionError)?;
+            program_data.seek(SeekFrom::Start(program_offset)).map_err(ElfReadError::FileSeekError)?;
+            program_data.write(section_data).map_err(ElfReadError::WriteSectionError)?;
             program_offset += section_data.len() as u64;
 
             if pad_amount != 0 {
                 let pad = vec![0u8; pad_amount];
-                program_data.write(&pad)
-                    .map_err(ElfReadError::WriteSectionError)?;
+                program_data.write(&pad).map_err(ElfReadError::WriteSectionError)?;
                 program_offset += pad_amount as u64;
                 size += pad_amount as u64;
             }
@@ -417,9 +395,7 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
             flags,
         });
     }
-    let observed_size = program_data
-        .seek(SeekFrom::End(0))
-        .map_err(ElfReadError::SeekFromEndError)?;
+    let observed_size = program_data.seek(SeekFrom::End(0)).map_err(ElfReadError::SeekFromEndError)?;
 
     debug!("Program size: {} bytes", observed_size);
     Ok(MiniElf {

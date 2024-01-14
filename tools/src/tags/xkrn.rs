@@ -1,6 +1,7 @@
-use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 use std::fmt;
 use std::io;
+
+use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 
 #[derive(Debug)]
 pub struct XousKernel {
@@ -31,9 +32,17 @@ pub struct XousKernel {
 
 impl fmt::Display for XousKernel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "    kernel text: {} bytes long, loaded from {:08x} to {:08x} with entrypoint @ {:08x}, and {} bytes of data @ {:08x}, {} bytes of .bss",
-            self.text_size, self.load_offset, self.text_offset, self.entrypoint,
-            self.data_size, self.data_offset, self.bss_size)
+        writeln!(
+            f,
+            "    kernel text: {} bytes long, loaded from {:08x} to {:08x} with entrypoint @ {:08x}, and {} bytes of data @ {:08x}, {} bytes of .bss",
+            self.text_size,
+            self.load_offset,
+            self.text_offset,
+            self.entrypoint,
+            self.data_size,
+            self.data_offset,
+            self.bss_size
+        )
     }
 }
 
@@ -65,18 +74,17 @@ impl XousKernel {
 }
 
 impl XousArgument for XousKernel {
-    fn code(&self) -> XousArgumentCode {
-        u32::from_le_bytes(*b"XKrn")
-    }
+    fn code(&self) -> XousArgumentCode { u32::from_le_bytes(*b"XKrn") }
 
-    fn length(&self) -> XousSize {
-        28 as XousSize
-    }
+    fn length(&self) -> XousSize { 28 as XousSize }
 
     fn finalize(&mut self, offset: usize) -> usize {
         self.load_offset = offset as u32;
-        assert!(self.text_offset > 0xff00_0000,
-        "kernel text section is invalid: 0x{:08x} < 0xff000000 -- was it linked with a linker script?", self.text_offset);
+        assert!(
+            self.text_offset > 0xff00_0000,
+            "kernel text section is invalid: 0x{:08x} < 0xff000000 -- was it linked with a linker script?",
+            self.text_offset
+        );
 
         assert!(offset % crate::tags::PAGE_SIZE == 0, "XKrn load offset is not aligned");
         self.program = crate::tags::align_data_up(&self.program, 0);
@@ -84,9 +92,7 @@ impl XousArgument for XousKernel {
         self.program.len()
     }
 
-    fn last_data(&self) -> &[u8] {
-        &self.program
-    }
+    fn last_data(&self) -> &[u8] { &self.program }
 
     fn serialize(&self, output: &mut dyn io::Write) -> io::Result<usize> {
         let mut written = 0;

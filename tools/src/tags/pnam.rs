@@ -1,7 +1,8 @@
-use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::io;
+
+use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 
 #[derive(Debug)]
 pub struct ProcessNames {
@@ -20,21 +21,13 @@ impl fmt::Display for ProcessNames {
 }
 
 impl ProcessNames {
-    pub fn new() -> ProcessNames {
-        ProcessNames {
-            names: BTreeMap::new(),
-        }
-    }
+    pub fn new() -> ProcessNames { ProcessNames { names: BTreeMap::new() } }
 
-    pub fn set(&mut self, pid: u32, name: &str) {
-        self.names.insert(pid, name.to_owned());
-    }
+    pub fn set(&mut self, pid: u32, name: &str) { self.names.insert(pid, name.to_owned()); }
 }
 
 impl XousArgument for ProcessNames {
-    fn code(&self) -> XousArgumentCode {
-        u32::from_le_bytes(*b"PNam")
-    }
+    fn code(&self) -> XousArgumentCode { u32::from_le_bytes(*b"PNam") }
 
     fn length(&self) -> XousSize {
         let mut size = 0;

@@ -1,11 +1,11 @@
 use std::io::{Error, ErrorKind, Read, Write};
 use std::path::Path;
 
-use ring::signature::Ed25519KeyPair;
-use ed25519_dalek::{SecretKey, ExpandedSecretKey, PublicKey, Digest};
+use ed25519_dalek::{Digest, ExpandedSecretKey, PublicKey, SecretKey};
 use pkcs8::der::Decodable;
-use sha2::Sha512;
 use pkcs8::PrivateKeyInfo;
+use ring::signature::Ed25519KeyPair;
+use sha2::Sha512;
 
 const LOADER_VERSION: u32 = 1;
 const LOADER_PREHASH_VERSION: u32 = 2;
@@ -32,11 +32,7 @@ pub fn sign_image(
 
     // Append version information to the binary. Appending it here means it is part
     // of the signed bundle.
-    let minver_bytes = if let Some(mv) = minver {
-        mv.into()
-    } else {
-        [0u8; 16]
-    };
+    let minver_bytes = if let Some(mv) = minver { mv.into() } else { [0u8; 16] };
     let semver: [u8; 16] = match semver {
         Some(semver) => semver,
         None => SemVer::from_git()
@@ -66,8 +62,8 @@ pub fn sign_image(
     // NOTE NOTE NOTE
     // can't find a good ASN.1 ED25519 key decoder, just relying on the fact that the last
     // 32 bytes are "always" the private key. always? the private key?
-    let signing_key = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents)
-        .map_err(|e| format!("{}", e))?;
+    let signing_key =
+        Ed25519KeyPair::from_pkcs8_maybe_unchecked(&private_key.contents).map_err(|e| format!("{}", e))?;
     let signature = signing_key.sign(&source);
 
     dest_file.write_all(&LOADER_VERSION.to_le_bytes())?;
@@ -85,7 +81,9 @@ pub fn sign_image(
     // Fill the remainder of the source data
 
     if defile {
-        println!("WARNING: defiling the loader image. This corrupts the binary and should cause it to fail the signature check.");
+        println!(
+            "WARNING: defiling the loader image. This corrupts the binary and should cause it to fail the signature check."
+        );
         source[16778] ^= 0x1 // flip one bit at some random offset
     }
 
@@ -106,11 +104,7 @@ pub fn sign_image_prehash(
 
     // Append version information to the binary. Appending it here means it is part
     // of the signed bundle.
-    let minver_bytes = if let Some(mv) = minver {
-        mv.into()
-    } else {
-        [0u8; 16]
-    };
+    let minver_bytes = if let Some(mv) = minver { mv.into() } else { [0u8; 16] };
     let semver: [u8; 16] = match semver {
         Some(semver) => semver,
         None => SemVer::from_git()
@@ -141,21 +135,16 @@ pub fn sign_image_prehash(
     let mut h: Sha512 = Sha512::new();
     h.update(&source);
 
-    let private_key = PrivateKeyInfo::from_der(&private_key.contents)
-    .map_err(|e| format!("{}", e))?;
+    let private_key = PrivateKeyInfo::from_der(&private_key.contents).map_err(|e| format!("{}", e))?;
     // First 2 bytes of the `private_key` are a record specifier and length field. Check they are correct.
     assert!(private_key.private_key[0] == 0x4);
     assert!(private_key.private_key[1] == 0x20);
     // Now we can use the private key data.
-    let signing_key_compact = SecretKey::from_bytes(&private_key.private_key[2..])
-        .map_err(|e| format!("{}", e))?;
+    let signing_key_compact =
+        SecretKey::from_bytes(&private_key.private_key[2..]).map_err(|e| format!("{}", e))?;
     let public_key = PublicKey::from(&signing_key_compact);
     let signing_key = ExpandedSecretKey::from(&signing_key_compact);
-    let signature = signing_key.sign_prehashed(
-        h,
-        &public_key,
-        None
-    ).map_err(|e| format!("{}", e))?;
+    let signature = signing_key.sign_prehashed(h, &public_key, None).map_err(|e| format!("{}", e))?;
 
     dest_file.write_all(&LOADER_PREHASH_VERSION.to_le_bytes())?;
     dest_file.write_all(&(source.len() as u32).to_le_bytes())?;
@@ -172,7 +161,9 @@ pub fn sign_image_prehash(
     // Fill the remainder of the source data
 
     if defile {
-        println!("WARNING: defiling the loader image. This corrupts the binary and should cause it to fail the signature check.");
+        println!(
+            "WARNING: defiling the loader image. This corrupts the binary and should cause it to fail the signature check."
+        );
         source[16778] ^= 0x1 // flip one bit at some random offset
     }
 

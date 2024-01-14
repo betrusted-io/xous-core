@@ -1,7 +1,8 @@
-use crate::elf::MiniElfSection;
-use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 use std::fmt;
 use std::io;
+
+use crate::elf::MiniElfSection;
+use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 
 #[derive(Debug)]
 pub struct IniE {
@@ -40,23 +41,14 @@ impl IniE {
         while data.len() & 3 != 0 {
             data.push(0);
         }
-        IniE {
-            load_offset: 0,
-            entrypoint,
-            sections,
-            data,
-        }
+        IniE { load_offset: 0, entrypoint, sections, data }
     }
 }
 
 impl XousArgument for IniE {
-    fn code(&self) -> XousArgumentCode {
-        u32::from_le_bytes(*b"IniE")
-    }
+    fn code(&self) -> XousArgumentCode { u32::from_le_bytes(*b"IniE") }
 
-    fn length(&self) -> XousSize {
-        4 + 4 + (self.sections.len() * 8) as XousSize
-    }
+    fn length(&self) -> XousSize { 4 + 4 + (self.sections.len() * 8) as XousSize }
 
     fn finalize(&mut self, offset: usize) -> usize {
         self.load_offset = offset as u32;
@@ -66,9 +58,7 @@ impl XousArgument for IniE {
         self.data.len()
     }
 
-    fn last_data(&self) -> &[u8] {
-        &self.data
-    }
+    fn last_data(&self) -> &[u8] { &self.data }
 
     fn serialize(&self, output: &mut dyn io::Write) -> io::Result<usize> {
         let mut written = 0;

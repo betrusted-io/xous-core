@@ -1,7 +1,8 @@
-use crate::elf::MiniElfSection;
-use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 use std::fmt;
 use std::io;
+
+use crate::elf::MiniElfSection;
+use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 
 #[derive(Debug)]
 pub struct IniF {
@@ -38,29 +39,24 @@ impl fmt::Display for IniF {
 }
 
 impl IniF {
-    pub fn new(entrypoint: u32, sections: Vec<MiniElfSection>, mut data: Vec<u8>, alignment_offset: usize) -> IniF {
+    pub fn new(
+        entrypoint: u32,
+        sections: Vec<MiniElfSection>,
+        mut data: Vec<u8>,
+        alignment_offset: usize,
+    ) -> IniF {
         // pad the data to 4 bytes
         while data.len() & 3 != 0 {
             data.push(0);
         }
-        IniF {
-            load_offset: 0,
-            entrypoint,
-            sections,
-            data,
-            alignment_offset,
-        }
+        IniF { load_offset: 0, entrypoint, sections, data, alignment_offset }
     }
 }
 
 impl XousArgument for IniF {
-    fn code(&self) -> XousArgumentCode {
-        u32::from_le_bytes(*b"IniF")
-    }
+    fn code(&self) -> XousArgumentCode { u32::from_le_bytes(*b"IniF") }
 
-    fn length(&self) -> XousSize {
-        4 + 4 + (self.sections.len() * 8) as XousSize
-    }
+    fn length(&self) -> XousSize { 4 + 4 + (self.sections.len() * 8) as XousSize }
 
     fn finalize(&mut self, offset: usize) -> usize {
         self.load_offset = offset as u32;
@@ -70,13 +66,9 @@ impl XousArgument for IniF {
         self.data.len()
     }
 
-    fn last_data(&self) -> &[u8] {
-        &self.data
-    }
+    fn last_data(&self) -> &[u8] { &self.data }
 
-    fn alignment_offset(&self) -> usize {
-        self.alignment_offset
-    }
+    fn alignment_offset(&self) -> usize { self.alignment_offset }
 
     fn serialize(&self, output: &mut dyn io::Write) -> io::Result<usize> {
         let mut written = 0;
