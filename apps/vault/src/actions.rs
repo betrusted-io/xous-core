@@ -134,7 +134,11 @@ impl<'a> ActionManager<'a> {
         // the drawing thread promises not to change the mode of the UI when this is true
         // in return, we get to grab a copy of the operating mode variable, which allows the
         // drawing thread to proceed as it relies also on reading this shared state to draw its UI.
-        self.mode_cache = { (*self.mode.lock().unwrap()).clone() };
+        self.mode_cache = {
+            // Wrap this in a block so the lock Drops. This comment keeps rustfmt from shortening the block
+            // and then clippy from complaining about unused braces.
+            (*self.mode.lock().unwrap()).clone()
+        };
         self.action_active.store(true, Ordering::SeqCst);
         #[cfg(feature = "ux-swap-delay")]
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap(); // allow calling menu to close
@@ -1050,7 +1054,11 @@ impl<'a> ActionManager<'a> {
     }
 
     pub(crate) fn is_db_empty(&mut self) -> bool {
-        self.mode_cache = { (*self.mode.lock().unwrap()).clone() };
+        self.mode_cache = {
+            // Wrap this in a block so the lock Drops. This comment keeps rustfmt from shortening the block
+            // and then clippy from complaining about unused braces.
+            (*self.mode.lock().unwrap()).clone()
+        };
         self.item_lists.lock().unwrap().is_db_empty(self.mode_cache)
     }
 
@@ -1068,7 +1076,11 @@ impl<'a> ActionManager<'a> {
         #[cfg(feature = "vaultperf")]
         self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 0, std::line!());
 
-        self.mode_cache = { (*self.mode.lock().unwrap()).clone() };
+        self.mode_cache = {
+            // Wrap this in a block so the lock Drops. This comment keeps rustfmt from shortening the block
+            // and then clippy from complaining about unused braces.
+            (*self.mode.lock().unwrap()).clone()
+        };
         log::debug!("heap usage A: {}", heap_usage());
         match self.mode_cache {
             VaultMode::Password => {
