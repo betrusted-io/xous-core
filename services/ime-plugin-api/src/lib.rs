@@ -1,9 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 mod rkyv_enum;
-pub use rkyv_enum::*;
-
 use num_traits::{FromPrimitive, ToPrimitive};
+pub use rkyv_enum::*;
 use xous::{send_message, Message, CID};
 use xous_ipc::{Buffer, String};
 
@@ -71,8 +70,8 @@ pub enum Opcode {
     /// note that repeated calls to Unpick will have an implementation-defined behavior
     Unpick,
 
-    /// fetch the prediction at a given index, where the index is ordered from 0..N, where 0 is the most likely prediction
-    /// if there is no prediction available, just return an empty string
+    /// fetch the prediction at a given index, where the index is ordered from 0..N, where 0 is the most
+    /// likely prediction if there is no prediction available, just return an empty string
     Prediction, //(Prediction),
 
     /// return the prediction triggers used by this IME. These are characters that can indicate that a
@@ -131,10 +130,7 @@ impl PredictionApi for PredictionPlugin {
     fn unpick(&self) -> Result<(), xous::Error> {
         match self.connection {
             Some(cid) => {
-                send_message(
-                    cid,
-                    Message::new_scalar(Opcode::Unpick.to_usize().unwrap(), 0, 0, 0, 0),
-                )?;
+                send_message(cid, Message::new_scalar(Opcode::Unpick.to_usize().unwrap(), 0, 0, 0, 0))?;
                 Ok(())
             }
             _ => Err(xous::Error::UseBeforeInit),
@@ -145,8 +141,7 @@ impl PredictionApi for PredictionPlugin {
         match self.connection {
             Some(cid) => {
                 let buf = Buffer::into_buf(s).or(Err(xous::Error::InternalError))?;
-                buf.lend(cid, Opcode::Input.to_u32().unwrap())
-                    .expect("|API: set_input operation failure");
+                buf.lend(cid, Opcode::Input.to_u32().unwrap()).expect("|API: set_input operation failure");
                 Ok(())
             }
             _ => Err(xous::Error::UseBeforeInit),
@@ -169,12 +164,7 @@ impl PredictionApi for PredictionPlugin {
     fn get_prediction(&self, index: u32, api_token: [u32; 4]) -> Result<Option<String<4000>>, xous::Error> {
         match self.connection {
             Some(cid) => {
-                let prediction = Prediction {
-                    index,
-                    string: String::<1000>::new(),
-                    valid: false,
-                    api_token,
-                };
+                let prediction = Prediction { index, string: String::<1000>::new(), valid: false, api_token };
                 let mut buf = Buffer::into_buf(prediction).or(Err(xous::Error::InternalError))?;
                 buf.lend_mut(cid, Opcode::Prediction.to_u32().unwrap())
                     .or(Err(xous::Error::InternalError))?;
@@ -206,14 +196,9 @@ impl PredictionApi for PredictionPlugin {
     fn acquire(&self, api_token: Option<[u32; 4]>) -> Result<[u32; 4], xous::Error> {
         match self.connection {
             Some(cid) => {
-                let request = AcquirePredictor {
-                    token: api_token,
-                };
+                let request = AcquirePredictor { token: api_token };
                 let mut buf = Buffer::into_buf(request).unwrap();
-                buf.lend_mut(
-                    cid,
-                    Opcode::Acquire.to_u32().unwrap()
-                ).unwrap();
+                buf.lend_mut(cid, Opcode::Acquire.to_u32().unwrap()).unwrap();
                 let ret = buf.to_original::<AcquirePredictor, _>().unwrap();
                 match ret.token {
                     Some(token) => Ok(token),
@@ -229,12 +214,15 @@ impl PredictionApi for PredictionPlugin {
             Some(cid) => {
                 send_message(
                     cid,
-                    Message::new_scalar(Opcode::Release.to_usize().unwrap(),
-                    api_token[0] as usize,
-                    api_token[1] as usize,
-                    api_token[2] as usize,
-                    api_token[3] as usize,
-                )).ok();
+                    Message::new_scalar(
+                        Opcode::Release.to_usize().unwrap(),
+                        api_token[0] as usize,
+                        api_token[1] as usize,
+                        api_token[2] as usize,
+                        api_token[3] as usize,
+                    ),
+                )
+                .ok();
             }
             _ => log::warn!("release called on a predictor with no connection"),
         }
@@ -279,7 +267,7 @@ pub struct ImefDescriptor {
     pub prediction_canvas: Option<graphics_server::Gid>,
     pub predictor: Option<String<64>>,
     pub token: [u32; 4], // token used to lookup our connected app inside the GAM
-    pub predictor_token: Option<[u32;4]>,
+    pub predictor_token: Option<[u32; 4]>,
 }
 
 pub trait ImeFrontEndApi {
@@ -302,13 +290,8 @@ pub struct ImeFrontEnd {
 impl ImeFrontEnd {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
-        let conn = xns
-            .request_connection_blocking(SERVER_NAME_IME_FRONT)
-            .expect("Can't connect to IMEF");
-        Ok(ImeFrontEnd {
-            cid: conn,
-            callback_sid: None,
-        })
+        let conn = xns.request_connection_blocking(SERVER_NAME_IME_FRONT).expect("Can't connect to IMEF");
+        Ok(ImeFrontEnd { cid: conn, callback_sid: None })
     }
 }
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -340,12 +323,10 @@ impl Drop for ImeFrontEnd {
 }
 
 impl ImeFrontEndApi for ImeFrontEnd {
-    fn conn(&self) -> xous::CID {
-        self.cid
-    }
-    fn getop_process_keys(&self) -> u32 {
-        ImefOpcode::ProcessKeys.to_u32().unwrap()
-    }
+    fn conn(&self) -> xous::CID { self.cid }
+
+    fn getop_process_keys(&self) -> u32 { ImefOpcode::ProcessKeys.to_u32().unwrap() }
+
     fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error> {
         let buf = Buffer::into_buf(descriptor).or(Err(xous::Error::InternalError))?;
         buf.send(self.cid, ImefOpcode::ConnectBackend.to_u32().unwrap())
@@ -416,10 +397,7 @@ impl ImeFrontEndApi for ImeFrontEnd {
 
     fn redraw(&self, force_all: bool) -> Result<(), xous::Error> {
         let arg = if force_all { 1 } else { 0 };
-        send_message(
-            self.cid,
-            Message::new_scalar(ImefOpcode::Redraw.to_usize().unwrap(), arg, 0, 0, 0),
-        )?;
+        send_message(self.cid, Message::new_scalar(ImefOpcode::Redraw.to_usize().unwrap(), arg, 0, 0, 0))?;
         Ok(())
     }
 }
@@ -431,8 +409,7 @@ fn callback_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ImefCallback::GotInputLine) => {
-                let buffer =
-                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let inputline = buffer.to_original::<String<4000>, _>().unwrap();
                 unsafe {
                     if let Some(cb) = INPUT_CB {
