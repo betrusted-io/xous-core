@@ -19,7 +19,9 @@ pub mod efuse_ecc {
             code = (!code & 0x1F) | 0x20;
         }
 
-        let secded = ((((code >> 5) ^ (code >> 4) ^ (code >> 3) ^ (code >> 2) ^ (code >> 1) ^ code) & 0x1) << 5) | code;
+        let secded = ((((code >> 5) ^ (code >> 4) ^ (code >> 3) ^ (code >> 2) ^ (code >> 1) ^ code) & 0x1)
+            << 5)
+            | code;
 
         data | secded << 24
     }

@@ -6,10 +6,11 @@ mod efuse_api;
 mod efuse_ecc;
 
 use api::*;
+use efuse_api::*;
 use num_traits::*;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
-use efuse_api::*;
+
 use crate::implementation::JtagPhy;
 
 pub enum JtagState {
@@ -32,7 +33,7 @@ pub enum JtagChain {
 
 pub enum JtagEndian {
     Big,    // MSB-first shiftout
-    Little   // LSB-first shiftout
+    Little, // LSB-first shiftout
 }
 
 /// option 1: make a "leg" machine that contains the shift-in/shift-out records specific to each leg
@@ -41,7 +42,6 @@ pub enum JtagEndian {
 /// I think we want a machine that has a Vector which holds a set of instructions that encapsulate either
 /// data to send into the IR or DR. There should be a state bit that indicates if the data has been
 /// executed; after execution, there is a result vector that is now valid.
-///
 #[derive(Clone)]
 pub struct JtagLeg {
     /// which chain (DR or IR)
@@ -56,12 +56,7 @@ pub struct JtagLeg {
 
 impl JtagLeg {
     pub fn new(chain_type: JtagChain, mytag: &str) -> Self {
-        JtagLeg {
-            c: chain_type,
-            o: Vec::new(),
-            i: Vec::new(),
-            tag: String::from(mytag),
-        }
+        JtagLeg { c: chain_type, o: Vec::new(), i: Vec::new(), tag: String::from(mytag) }
     }
 
     /// `push` will take data in the form of an unsigned int (either u128 or u32)
@@ -81,11 +76,19 @@ impl JtagLeg {
         for i in 0..count {
             match endian {
                 JtagEndian::Big => {
-                    if (data & (1 << i)) == 0 { self.i.push(false) } else { self.i.push(true) }
-                },
+                    if (data & (1 << i)) == 0 {
+                        self.i.push(false)
+                    } else {
+                        self.i.push(true)
+                    }
+                }
                 JtagEndian::Little => {
-                    if (data & (1 << (count-1-i))) == 0 { self.i.push(false) } else { self.i.push(true) }
-                },
+                    if (data & (1 << (count - 1 - i))) == 0 {
+                        self.i.push(false)
+                    } else {
+                        self.i.push(true)
+                    }
+                }
             }
         }
     }
@@ -95,11 +98,19 @@ impl JtagLeg {
         for i in 0..count {
             match endian {
                 JtagEndian::Big => {
-                    if (data & (1 << i)) == 0 { self.i.push(false) } else { self.i.push(true) }
-                },
+                    if (data & (1 << i)) == 0 {
+                        self.i.push(false)
+                    } else {
+                        self.i.push(true)
+                    }
+                }
                 JtagEndian::Little => {
-                    if (data & (1 << (count-1-i))) == 0 { self.i.push(false) } else { self.i.push(true) }
-                },
+                    if (data & (1 << (count - 1 - i))) == 0 {
+                        self.i.push(false)
+                    } else {
+                        self.i.push(true)
+                    }
+                }
             }
         }
     }
@@ -109,11 +120,19 @@ impl JtagLeg {
         for i in 0..count {
             match endian {
                 JtagEndian::Big => {
-                    if (data & (1 << i)) == 0 { self.i.push(false) } else { self.i.push(true) }
-                },
+                    if (data & (1 << i)) == 0 {
+                        self.i.push(false)
+                    } else {
+                        self.i.push(true)
+                    }
+                }
                 JtagEndian::Little => {
-                    if (data & (1 << (count-1-i))) == 0 { self.i.push(false) } else { self.i.push(true) }
-                },
+                    if (data & (1 << (count - 1 - i))) == 0 {
+                        self.i.push(false)
+                    } else {
+                        self.i.push(true)
+                    }
+                }
             }
         }
     }
@@ -131,11 +150,15 @@ impl JtagLeg {
             match endian {
                 JtagEndian::Little => {
                     data <<= 1;
-                    if self.o.pop().unwrap() { data |= 0x1; }
+                    if self.o.pop().unwrap() {
+                        data |= 0x1;
+                    }
                 }
                 JtagEndian::Big => {
                     data >>= 1;
-                    if self.o.pop().unwrap() { data |= 0x8000_0000; }
+                    if self.o.pop().unwrap() {
+                        data |= 0x8000_0000;
+                    }
                 }
             }
         }
@@ -158,11 +181,15 @@ impl JtagLeg {
             match endian {
                 JtagEndian::Little => {
                     data <<= 1;
-                    if self.o.pop().unwrap() { data |= 0x1; }
-                },
+                    if self.o.pop().unwrap() {
+                        data |= 0x1;
+                    }
+                }
                 JtagEndian::Big => {
                     data >>= 1;
-                    if self.o.pop().unwrap() { data |= 0x8000_0000_0000_0000_0000_0000_0000_0000; }
+                    if self.o.pop().unwrap() {
+                        data |= 0x8000_0000_0000_0000_0000_0000_0000_0000;
+                    }
                 }
             }
         }
@@ -183,11 +210,15 @@ impl JtagLeg {
             match endian {
                 JtagEndian::Little => {
                     data <<= 1;
-                    if self.o.pop().unwrap() { data |= 0x1; }
+                    if self.o.pop().unwrap() {
+                        data |= 0x1;
+                    }
                 }
                 JtagEndian::Big => {
                     data >>= 1;
-                    if self.o.pop().unwrap() { data |= 0x80; }
+                    if self.o.pop().unwrap() {
+                        data |= 0x80;
+                    }
                 }
             }
         }
@@ -195,25 +226,22 @@ impl JtagLeg {
         Some(data)
     }
 
-    pub fn tag(&self) -> String {
-        self.tag.clone()
-    }
+    pub fn tag(&self) -> String { self.tag.clone() }
 
-    pub fn dbg_i_len(&self) -> usize {
-        self.i.len()
-    }
-    pub fn dbg_o_len(&self) -> usize {
-        self.o.len()
-    }
+    pub fn dbg_i_len(&self) -> usize { self.i.len() }
+
+    pub fn dbg_o_len(&self) -> usize { self.o.len() }
 }
 
 pub struct JtagMach {
-    /// current state (could be in one of two generics, or in DR/IR chain; check top of Vector for current chain)
+    /// current state (could be in one of two generics, or in DR/IR chain; check top of Vector for current
+    /// chain)
     s: JtagState,
     /// a vector of legs to traverse. An entry stays in pending until the traversal is complete. Aborted
     /// traversals leave the leg in place
     pending: Vec<JtagLeg>,
-    /// a vector of legs traversed. An entry is only put into the done vector once its traversal is completed.
+    /// a vector of legs traversed. An entry is only put into the done vector once its traversal is
+    /// completed.
     done: Vec<JtagLeg>,
     /// the current leg being processed
     current: Option<JtagLeg>,
@@ -236,9 +264,10 @@ impl JtagMach {
             ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
+
     /// pause for a given number of microseconds.
     pub fn pause(&mut self, us: u32) {
-        let mut delay: u32 = us/1000;
+        let mut delay: u32 = us / 1000;
         if delay == 0 {
             delay = 1;
         }
@@ -246,54 +275,33 @@ impl JtagMach {
     }
 
     /// add() -- add a leg to the pending queue
-    pub fn add(&mut self, leg: JtagLeg) {
-        self.pending.push(leg);
-    }
+    pub fn add(&mut self, leg: JtagLeg) { self.pending.push(leg); }
 
     /// get() -- get the oldest result in the done queue. Returns an option.
     pub fn get(&mut self) -> Option<JtagLeg> {
-        if self.done.len() > 0 {
-            Some(self.done.remove(0))
-        } else {
-            None
-        }
+        if self.done.len() > 0 { Some(self.done.remove(0)) } else { None }
     }
 
-    /// has_pending() -- tells if the jtag machine has a pending leg to traverse. Returns the tag of the pending item, or None.
-    pub fn has_pending(&self) -> bool {
-        if self.pending.len() > 0 {
-            true
-        } else {
-            false
-        }
-    }
+    /// has_pending() -- tells if the jtag machine has a pending leg to traverse. Returns the tag of the
+    /// pending item, or None.
+    pub fn has_pending(&self) -> bool { if self.pending.len() > 0 { true } else { false } }
 
-    /// has_done() -- tells if the jtag machine has any legs that are done to read out. Returns the tag of the done item, or None.
+    /// has_done() -- tells if the jtag machine has any legs that are done to read out. Returns the tag of the
+    /// done item, or None.
     #[allow(dead_code)]
-    pub fn has_done(&self) -> bool {
-        if self.done.len() > 0 {
-            true
-        } else {
-            false
-        }
-    }
+    pub fn has_done(&self) -> bool { if self.done.len() > 0 { true } else { false } }
 
     /// for debug
     #[allow(dead_code)]
-    pub fn pending_len(&self) -> usize {
-        self.pending.len()
-    }
+    pub fn pending_len(&self) -> usize { self.pending.len() }
+
     /// for debug
     #[allow(dead_code)]
-    pub fn done_len(&self) -> usize {
-        self.done.len()
-    }
-    pub fn dbg_reset(&mut self) {
-        self.debug = 0;
-    }
-    pub fn dbg_get(&self) -> u32 {
-        self.debug
-    }
+    pub fn done_len(&self) -> usize { self.done.len() }
+
+    pub fn dbg_reset(&mut self) { self.debug = 0; }
+
+    pub fn dbg_get(&self) -> u32 { self.debug }
 
     /// step() -- move state machine by one cycle
     /// if there is nothing in the pending queue, stay in idle
@@ -303,7 +311,7 @@ impl JtagMach {
             JtagState::TestReset => {
                 self.phy.sync(false, false);
                 JtagState::RunIdle
-            },
+            }
             JtagState::RunIdle => {
                 // we have a current item, traverse to the correct tree based on the type
                 if let Some(ref mut cur) = self.current {
@@ -311,7 +319,7 @@ impl JtagMach {
                         JtagChain::DR => {
                             self.debug = 2;
                             self.phy.sync(false, true);
-                        },
+                        }
                         JtagChain::IR => {
                             self.debug = 3;
                             // must be IR -- do two TMS high pulses to get to the IR leg
@@ -333,16 +341,16 @@ impl JtagMach {
                     }
                     JtagState::RunIdle
                 }
-            },
+            }
             JtagState::Select => {
                 self.phy.sync(false, false);
                 JtagState::Capture
-            },
+            }
             JtagState::Capture => {
                 // always move to shift, because leg structures always have data
                 self.phy.sync(false, false);
                 JtagState::Shift
-            },
+            }
             JtagState::Shift => {
                 // shift data until the input vector is exhausted
                 if let Some(ref mut cur) = self.current {
@@ -367,19 +375,19 @@ impl JtagMach {
                     // Shouldn't happen: No "Current", but move on gracefully
                     JtagState::Exit1
                 }
-            },
+            }
             JtagState::Exit1 => {
                 self.phy.sync(false, true);
                 JtagState::Update
-            },
+            }
             JtagState::Pause => {
                 self.phy.sync(false, true);
                 JtagState::Exit2
-            },
+            }
             JtagState::Exit2 => {
                 self.phy.sync(false, true);
                 JtagState::Update
-            },
+            }
             JtagState::Update => {
                 self.phy.sync(false, false);
 
@@ -401,7 +409,8 @@ impl JtagMach {
         self.s = JtagState::TestReset;
     }
 
-    /// next() -- advance until a RUN_IDLE state. If currently RUN_IDLE, traverse the next available leg, if one exists
+    /// next() -- advance until a RUN_IDLE state. If currently RUN_IDLE, traverse the next available leg, if
+    /// one exists
     pub fn next(&mut self) {
         match self.s {
             JtagState::RunIdle | JtagState::TestReset => {
@@ -423,21 +432,22 @@ impl JtagMach {
                 } else {
                     self.step(); // this should be a single step with no state change
                 }
-            },
+            }
             _ => {
-                // in the case that we're not already in idle or reset, run the machine until we get to idle or reset
+                // in the case that we're not already in idle or reset, run the machine until we get to idle
+                // or reset
                 loop {
                     match self.s {
                         JtagState::RunIdle | JtagState::TestReset => break,
                         _ => self.step(),
                     }
                 }
-            },
+            }
         }
     }
 }
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation {
     use utralib::generated::*;
 
@@ -456,22 +466,22 @@ mod implementation {
             )
             .expect("couldn't map JTAG CSR range");
 
-            let jtag = JtagPhy {
-                csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-            };
+            let jtag = JtagPhy { csr: CSR::new(csr.as_mut_ptr() as *mut u32) };
 
             jtag
         }
 
         /// given a tdi and tms value, pulse the clock, and then return the tdo that comes out
         pub fn sync(&mut self, tdi: bool, tms: bool) -> bool {
-            self.csr.wo(utra::jtag::NEXT,
-                self.csr.ms(utra::jtag::NEXT_TDI, if tdi {1} else {0}) |
-                self.csr.ms(utra::jtag::NEXT_TMS, if tms {1} else {0})
+            self.csr.wo(
+                utra::jtag::NEXT,
+                self.csr.ms(utra::jtag::NEXT_TDI, if tdi { 1 } else { 0 })
+                    | self.csr.ms(utra::jtag::NEXT_TMS, if tms { 1 } else { 0 }),
             );
 
-            while self.csr.rf(utra::jtag::TDO_READY) == 0 { }  // make sure we are in a ready/tdo valid state
-            if self.csr.rf(utra::jtag::TDO_TDO) == 0 { // this is the TDO value from /prior/ to the TCK rise
+            while self.csr.rf(utra::jtag::TDO_READY) == 0 {} // make sure we are in a ready/tdo valid state
+            if self.csr.rf(utra::jtag::TDO_TDO) == 0 {
+                // this is the TDO value from /prior/ to the TCK rise
                 false
             } else {
                 true
@@ -485,20 +495,14 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "xous"))]
 mod implementation {
-    pub struct JtagPhy {
-    }
+    pub struct JtagPhy {}
 
     impl JtagPhy {
-        pub fn new() -> JtagPhy {
-            JtagPhy {
-            }
-        }
-        pub fn sync(&mut self, _tdi: bool, _tms: bool) -> bool {
-            false
-        }
+        pub fn new() -> JtagPhy { JtagPhy {} }
+
+        pub fn sync(&mut self, _tdi: bool, _tms: bool) -> bool { false }
     }
 }
-
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
@@ -510,9 +514,9 @@ fn main() -> ! {
     //   - one connection from the key server
     //   - one connection from shellchat for command line
     //   - another connection from shellchat for oqc testing
-    #[cfg(all(any(feature="precursor", feature="renode"), not(feature="dvt")))]
+    #[cfg(all(any(feature = "precursor", feature = "renode"), not(feature = "dvt")))]
     let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(3)).expect("can't register server");
-    #[cfg(all(any(feature="precursor", feature="renode"), feature="dvt"))] // dvt build has less in it
+    #[cfg(all(any(feature = "precursor", feature = "renode"), feature = "dvt"))] // dvt build has less in it
     let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(2)).expect("can't register server");
     #[cfg(not(target_os = "xous"))]
     let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(2)).expect("can't register server");
@@ -536,7 +540,8 @@ fn main() -> ! {
                 jtag.add(id_leg);
                 jtag.next();
                 // NOW: - check the return data on .get() before using it
-                if jtag.get().is_none() { // discard ID code but check that there's something
+                if jtag.get().is_none() {
+                    // discard ID code but check that there's something
                     log::error!("ID instruction not in get queue!");
                     xous::return_scalar(msg.sender, 0xFFFF_FFFF).unwrap();
                     continue;
@@ -548,7 +553,8 @@ fn main() -> ! {
                 jtag.dbg_reset();
                 jtag.next();
                 let d: u32 = jtag.dbg_get();
-                if let Some(mut iddata) = jtag.get() { // this contains the actual idcode data
+                if let Some(mut iddata) = jtag.get() {
+                    // this contains the actual idcode data
                     let id = iddata.pop_u32(32, JtagEndian::Little).unwrap();
                     log::trace!("tag: {}, code: 0x{:08x}, d:{}", iddata.tag(), id, d);
                     xous::return_scalar(msg.sender, id as usize).unwrap();
@@ -562,7 +568,8 @@ fn main() -> ! {
                 ir_leg.push_u32(0b110010, 6, JtagEndian::Little);
                 jtag.add(ir_leg);
                 jtag.next();
-                if jtag.get().is_none() { // discard ID code but check that there's something
+                if jtag.get().is_none() {
+                    // discard ID code but check that there's something
                     log::error!("cmd instruction not in get queue!");
                     xous::return_scalar2(msg.sender, 0xFFFF_FFFF, 0xFFFF).unwrap();
                 }
@@ -582,7 +589,8 @@ fn main() -> ! {
             }),
             Some(Opcode::EfuseFetch) => {
                 efuse.fetch(&mut jtag);
-                let mut buffer = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut efuse_rec = buffer.to_original::<EfuseRecord, _>().unwrap();
 
                 efuse_rec.user = efuse.phy_user();
@@ -596,13 +604,15 @@ fn main() -> ! {
                 ir_leg.push_u32(ir as u32, 6, JtagEndian::Little); // ISC_ENABLE
                 jtag.add(ir_leg);
                 jtag.next();
-                if jtag.get().is_none() { // discard ID code but check that there's something
+                if jtag.get().is_none() {
+                    // discard ID code but check that there's something
                     log::error!("cmd instruction not in get queue!");
                 }
             }),
             Some(Opcode::EfuseKeyBurn) => {
                 susres.set_suspendable(false).unwrap();
-                let mut buffer = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let key = buffer.to_original::<[u8; 32], _>().unwrap();
                 // refresh the efuse cache
                 efuse.fetch(&mut jtag);
@@ -614,7 +624,9 @@ fn main() -> ! {
                 if efuse.is_valid() {
                     log::info!("efuse key is valid to burn, proceeding. There is no return...");
                     if cfg!(feature = "dry-run") {
-                        log::info!("Dry run selected, key NOT BURNED. Device will be in an inconsistent state.");
+                        log::info!(
+                            "Dry run selected, key NOT BURNED. Device will be in an inconsistent state."
+                        );
                     } else {
                         efuse.burn(&mut jtag);
                     }
@@ -632,7 +644,9 @@ fn main() -> ! {
                 if efuse.is_valid() {
                     log::info!("control is valid to burn, proceeding. There is no return...");
                     if cfg!(feature = "dry-run") {
-                        log::info!("Dry run selected, control fuses NOT BURNED. Device will be in an inconsistent state.");
+                        log::info!(
+                            "Dry run selected, control fuses NOT BURNED. Device will be in an inconsistent state."
+                        );
                     } else {
                         efuse.burn(&mut jtag);
                     }
@@ -650,7 +664,9 @@ fn main() -> ! {
                 if efuse.is_valid() {
                     log::info!("user fuses are valid to burn, proceeding. There is no return...");
                     if cfg!(feature = "dry-run") {
-                        log::info!("Dry run selected, user fuse NOT BURNED. Device will be in an inconsistent state.");
+                        log::info!(
+                            "Dry run selected, user fuse NOT BURNED. Device will be in an inconsistent state."
+                        );
                     } else {
                         efuse.burn(&mut jtag);
                     }
@@ -663,7 +679,7 @@ fn main() -> ! {
             }),
             None => {
                 log::error!("couldn't convert opcode");
-                break
+                break;
             }
         }
     }
