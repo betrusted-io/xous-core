@@ -41,29 +41,25 @@ fn main() -> Result<()> {
     let input_file_path = Path::new(&args[1]);
     let output_file_path = Path::new(&args[2]);
 
-    let test_data = std::fs::read_to_string(input_file_path).wrap_err(format!(
-        "Could not read test data from '{}'",
-        input_file_path.to_string_lossy()
-    ))?;
-    let test_data: TestData =
-        serde_json::from_str(&test_data).wrap_err("Error parsing test vectors")?;
+    let test_data = std::fs::read_to_string(input_file_path)
+        .wrap_err(format!("Could not read test data from '{}'", input_file_path.to_string_lossy()))?;
+    let test_data: TestData = serde_json::from_str(&test_data).wrap_err("Error parsing test vectors")?;
 
     let expected_results = vec!["valid".to_string(), "acceptable".to_string()];
-    let mut output_file = std::fs::File::create(output_file_path).wrap_err(format!(
-        "Error creating output file '{}'",
-        output_file_path.to_string_lossy()
-    ))?;
+    let mut output_file = std::fs::File::create(output_file_path)
+        .wrap_err(format!("Error creating output file '{}'", output_file_path.to_string_lossy()))?;
     let mut last_id = 0;
 
     for test_case in &test_data.test_groups[0].tests {
         if test_case.id != last_id + 1 {
-            bail!("Expect test cases to be continuously ascending. Expected next tcId to be {}, was {}", last_id + 1, test_case.id)
+            bail!(
+                "Expect test cases to be continuously ascending. Expected next tcId to be {}, was {}",
+                last_id + 1,
+                test_case.id
+            )
         }
         if !expected_results.contains(&test_case.result) {
-            bail!(
-                "Expect test case results to be one of {:?}",
-                expected_results
-            );
+            bail!("Expect test case results to be one of {:?}", expected_results);
         }
         last_id.add_assign(1);
 
