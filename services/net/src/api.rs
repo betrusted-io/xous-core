@@ -7,20 +7,19 @@ pub use ping::NetPingCallback;
 pub(crate) use tcp::*;
 
 pub mod rkyv_enum;
-pub use rkyv_enum::*;
-
-use com::SsidRecord;
-use rkyv::{Archive, Deserialize, Serialize};
-use smoltcp::wire::IpAddress;
 use std::fmt;
 use std::fmt::Debug;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use xous_semver::SemVer;
 
+use com::SsidRecord;
+use rkyv::{Archive, Deserialize, Serialize};
+pub use rkyv_enum::*;
 // republish this so we can decode the icmpv4 error codes
 #[allow(unused_imports)]
 pub use smoltcp::wire::Icmpv4DstUnreachable;
+use smoltcp::wire::IpAddress;
+use xous_semver::SemVer;
 
 // note: this name cannot be changed, because it is baked into `libstd`
 pub(crate) const SERVER_NAME_NET: &str = "_Middleware Network Server_";
@@ -29,10 +28,7 @@ pub const AP_DICT_NAME: &'static str = "wlan.networks";
 
 #[allow(dead_code)]
 /// minimum revision required for compatibility with Net crate
-pub const MIN_EC_REV: SemVer = SemVer {
-    maj: 0, min: 9, rev: 6, extra: 0,
-    commit: None,
-};
+pub const MIN_EC_REV: SemVer = SemVer { maj: 0, min: 9, rev: 6, extra: 0, commit: None };
 
 /// Dispatch opcodes to the Net crate main loop.
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, PartialEq, Eq)]
@@ -149,14 +145,13 @@ pub(crate) enum Opcode {
     /// =======|=========
     ///      0 | 0 if no error, 1 if error
     ///      1 | Number of bytes transferred, or code of the error
-    ///
     StdTcpTx = 31,
 
     /// Receives data from the specified TCP Connection. The TCP connection number is
     /// passed in the upper 16 bits of the opcode, and the number of received bytes
     /// is returned as part of the `Valid` parameter. This is not blocking.
-    ///   Unfortunately, it is *valid* to receive zero bytes, but the xous::Message parameter does not allow it.
-    ///   Thus the value of u32::MAX is mapped to "zero" bytes received.
+    ///   Unfortunately, it is *valid* to receive zero bytes, but the xous::Message parameter does not allow
+    /// it.   Thus the value of u32::MAX is mapped to "zero" bytes received.
     StdTcpPeek = 32,
 
     /// Receives data from the specified TCP Connection.
@@ -164,9 +159,9 @@ pub(crate) enum Opcode {
     /// - The TCP connection number is passed in the upper 16 bits of the opcode.
     /// - The return buffer is the `buf` parameter
     /// - The read timeout is passed as the `offset` parameter.
-    /// - The number of received bytes is returned as part of the `valid` parameter.
-    ///   Unfortunately, it is *valid* to receive zero bytes, but the xous::Message parameter does not allow it.
-    ///   Thus the value of u32::MAX is mapped to "zero" bytes received.
+    /// - The number of received bytes is returned as part of the `valid` parameter. Unfortunately, it is
+    ///   *valid* to receive zero bytes, but the xous::Message parameter does not allow it. Thus the value of
+    ///   u32::MAX is mapped to "zero" bytes received.
     StdTcpRx = 33,
 
     /// Close the TCP connection. The connection ID is specified in the upper 16 bits
@@ -224,7 +219,7 @@ pub(crate) enum Opcode {
 
     /// Close the UDP connection. The connection ID is specified in the upper 16 bits
     /// of the opcode. This may be any kind of message (scalar, blockingscalar, memory,
-     /// etc.)
+    /// etc.)
     StdUdpClose = 41,
 
     /// Receives data from the specified UDP Connection.
@@ -366,11 +361,10 @@ pub(crate) enum Opcode {
     StdTcpStreamShutdown = 46,
 
     LoopbackRx = 47,
-
     // do not use any numbers higher than 0x8000 as that is reserved for the nonblocking flag
 }
 #[allow(dead_code)]
-pub(crate) const NONBLOCKING_FLAG:usize = 0x8000; // when set, modulates a Peek or Read to be nonblocking
+pub(crate) const NONBLOCKING_FLAG: usize = 0x8000; // when set, modulates a Peek or Read to be nonblocking
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]
 pub enum ScanState {
@@ -383,9 +377,10 @@ pub enum ScanState {
 }
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]
 pub(crate) struct SsidList {
-    /// IPC memory structures have to pre-allocate all their memory, but are always allocated in 4096-byte chunks.
-    /// We could allocate up to maybe 100+ return values, but then we'd have to write a default initializer that
-    /// covers a 64-length array. So, we limit at 32. <s>Thanks, Rust!</s> 32 APs should be enough for anyone, right?...
+    /// IPC memory structures have to pre-allocate all their memory, but are always allocated in 4096-byte
+    /// chunks. We could allocate up to maybe 100+ return values, but then we'd have to write a default
+    /// initializer that covers a 64-length array. So, we limit at 32. <s>Thanks, Rust!</s> 32 APs should
+    /// be enough for anyone, right?...
     pub(crate) list: [Option<SsidRecord>; 32],
     pub(crate) state: ScanState,
 }
@@ -442,10 +437,7 @@ pub(crate) struct NetSocketAddr {
 }
 impl From<SocketAddr> for NetSocketAddr {
     fn from(other: SocketAddr) -> NetSocketAddr {
-        NetSocketAddr {
-            addr: NetIpAddr::from(other),
-            port: other.port(),
-        }
+        NetSocketAddr { addr: NetIpAddr::from(other), port: other.port() }
     }
 }
 
@@ -469,23 +461,14 @@ impl fmt::Display for NetIpAddr {
             NetIpAddr::Ipv4(octets) => {
                 // Fast Path: if there's no alignment stuff, write directly to the buffer
                 if fmt.precision().is_none() && fmt.width().is_none() {
-                    write!(
-                        fmt,
-                        "{}.{}.{}.{}",
-                        octets[0], octets[1], octets[2], octets[3]
-                    )
+                    write!(fmt, "{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3])
                 } else {
                     const IPV4_BUF_LEN: usize = 15; // Long enough for the longest possible IPv4 address
                     let mut buf = [0u8; IPV4_BUF_LEN];
                     let mut buf_slice = &mut buf[..];
 
                     // Note: The call to write should never fail, hence the unwrap
-                    write!(
-                        buf_slice,
-                        "{}.{}.{}.{}",
-                        octets[0], octets[1], octets[2], octets[3]
-                    )
-                    .unwrap();
+                    write!(buf_slice, "{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3]).unwrap();
                     let len = IPV4_BUF_LEN - buf_slice.len();
 
                     // This unsafe is OK because we know what is being written to the buffer
@@ -499,9 +482,7 @@ impl fmt::Display for NetIpAddr {
 }
 
 impl fmt::Debug for NetIpAddr {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self, fmt)
-    }
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result { fmt::Display::fmt(self, fmt) }
 }
 
 /// This defines a Xous Scalar message endpoint.
@@ -528,29 +509,26 @@ pub(crate) struct XousScalarEndpoint {
 }
 #[allow(dead_code)]
 impl XousScalarEndpoint {
-    pub(crate) fn new() -> Self {
-        XousScalarEndpoint {
-            cid: None,
-            op: None,
-            args: [None; 4],
-        }
-    }
+    pub(crate) fn new() -> Self { XousScalarEndpoint { cid: None, op: None, args: [None; 4] } }
+
     pub(crate) fn get(&self) -> (Option<xous::CID>, Option<usize>, [Option<usize>; 4]) {
         (self.cid, self.op, self.args)
     }
+
     pub(crate) fn set(&mut self, cid: xous::CID, op: usize, args: [Option<usize>; 4]) {
         self.cid = Some(cid);
         self.op = Some(op);
         self.args = args;
     }
+
     pub(crate) fn clear(&mut self) {
         self.cid = None;
         self.op = None;
         self.args = [None; 4];
     }
-    pub(crate) fn is_set(&self) -> bool {
-        self.cid.is_some() && self.op.is_some()
-    }
+
+    pub(crate) fn is_set(&self) -> bool { self.cid.is_some() && self.op.is_some() }
+
     pub(crate) fn notify(&mut self) {
         if let Some(cid) = self.cid {
             if let Some(op) = self.op {
@@ -573,6 +551,7 @@ impl XousScalarEndpoint {
             }
         }
     }
+
     /// We use u32 as the custom args instead of usize because we need
     /// the code to be portable to both 32 bit and 64 bit architectures. Code
     /// that assumes a 64-bit usize for the args on a 64-bit arch won't run on
@@ -590,11 +569,7 @@ impl XousScalarEndpoint {
                     if let Some(b) = custom[0] {
                         b as usize
                     } else {
-                        if let Some(a) = self.args[0] {
-                            a
-                        } else {
-                            0
-                        }
+                        if let Some(a) = self.args[0] { a } else { 0 }
                     }
                 );
                 match xous::send_message(
@@ -604,38 +579,22 @@ impl XousScalarEndpoint {
                         if let Some(b) = custom[0] {
                             b as usize
                         } else {
-                            if let Some(a) = self.args[0] {
-                                a
-                            } else {
-                                0
-                            }
+                            if let Some(a) = self.args[0] { a } else { 0 }
                         },
                         if let Some(b) = custom[1] {
                             b as usize
                         } else {
-                            if let Some(a) = self.args[1] {
-                                a
-                            } else {
-                                0
-                            }
+                            if let Some(a) = self.args[1] { a } else { 0 }
                         },
                         if let Some(b) = custom[2] {
                             b as usize
                         } else {
-                            if let Some(a) = self.args[2] {
-                                a
-                            } else {
-                                0
-                            }
+                            if let Some(a) = self.args[2] { a } else { 0 }
                         },
                         if let Some(b) = custom[3] {
                             b as usize
                         } else {
-                            if let Some(a) = self.args[3] {
-                                a
-                            } else {
-                                0
-                            }
+                            if let Some(a) = self.args[3] { a } else { 0 }
                         },
                     ),
                 ) {

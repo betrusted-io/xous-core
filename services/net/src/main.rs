@@ -10,39 +10,35 @@ use std_glue::*;
 mod std_udp;
 use std_udp::*;
 mod std_tcplistener;
-use std_tcplistener::*;
-
 use com::api::{ComIntSources, Ipv4Conf};
 use num_traits::*;
+use std_tcplistener::*;
 
 mod connection_manager;
 mod device;
 
 #[cfg(test)]
 mod tests;
-#[cfg(feature="btest")]
-mod btests;
-
-use std::collections::HashMap;
-use std::convert::TryInto;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, try_send_message, Message, CID, SID};
-use xous_ipc::Buffer;
-
-use byteorder::{ByteOrder, NetworkEndian};
-use smoltcp::iface::{Interface, Config, SocketSet};
-use smoltcp::phy::{Device, Tracer};
-use smoltcp::socket::{tcp, udp, icmp};
-use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, IpEndpoint, HardwareAddress};
-use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 
 use core::num::NonZeroU64;
-use core::sync::atomic::{AtomicU32, AtomicU16, Ordering};
-use smoltcp::iface::SocketHandle;
-use smoltcp::time::{Duration, Instant};
-use std::sync::Arc;
-use std::sync::mpsc::{channel, Sender};
-use std::thread;
+use core::sync::atomic::{AtomicU16, AtomicU32, Ordering};
 use std::cmp::Ordering as CmpOrdering;
+use std::collections::HashMap;
+use std::convert::TryInto;
+use std::sync::mpsc::{channel, Sender};
+use std::sync::Arc;
+use std::thread;
+
+use byteorder::{ByteOrder, NetworkEndian};
+use smoltcp::iface::SocketHandle;
+use smoltcp::iface::{Config, Interface, SocketSet};
+use smoltcp::phy::{Device, Tracer};
+use smoltcp::socket::{icmp, tcp, udp};
+use smoltcp::time::{Duration, Instant};
+use smoltcp::wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address};
+use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, try_send_message, Message, CID, SID};
+use xous_ipc::Buffer;
 
 // 0 indicates no address is currently assigned
 pub static IPV4_ADDRESS: AtomicU32 = AtomicU32::new(0);
@@ -109,23 +105,17 @@ pub struct Wakeup {
     pub time: u64,
 }
 impl Ord for Wakeup {
-    fn cmp(&self, other: &Self) -> CmpOrdering {
-        self.time.cmp(&other.time)
-    }
+    fn cmp(&self, other: &Self) -> CmpOrdering { self.time.cmp(&other.time) }
 }
 impl PartialOrd for Wakeup {
-    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
-        Some(self.cmp(other))
-    }
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> { Some(self.cmp(other)) }
 }
 impl PartialEq for Wakeup {
-    fn eq(&self, other: &Self) -> bool {
-        self.time == other.time
-    }
+    fn eq(&self, other: &Self) -> bool { self.time == other.time }
 }
 impl Eq for Wakeup {}
 pub struct WorkerState {
-    pub tx: Sender::<u64>,
+    pub tx: Sender<u64>,
     pub is_busy: bool,
     pub time_replica: u64, // this is just to help with debugging, nothing else
 }
@@ -149,9 +139,7 @@ fn main() -> ! {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let net_sid = xns
-        .register_name(api::SERVER_NAME_NET, None)
-        .expect("can't register server");
+    let net_sid = xns.register_name(api::SERVER_NAME_NET, None).expect("can't register server");
     let net_conn = xous::connect(net_sid).unwrap();
     log::trace!("registered with NS -- {:?}", net_sid);
 
@@ -165,8 +153,7 @@ fn main() -> ! {
 
     // hook the COM interrupt listener
     let net_cid = xous::connect(net_sid).unwrap();
-    llio.hook_com_event_callback(Opcode::ComInterrupt.to_u32().unwrap(), net_cid)
-        .unwrap();
+    llio.hook_com_event_callback(Opcode::ComInterrupt.to_u32().unwrap(), net_cid).unwrap();
     llio.com_event_enable(true).unwrap();
     // setup the interrupt masks
     let mut com_int_list: Vec<ComIntSources> = vec![];
@@ -184,7 +171,10 @@ fn main() -> ! {
     let hw_config = match com.wlan_get_config() {
         Ok(config) => config,
         Err(e) => {
-            log::error!("Something is wrong with the EC, got {:?} when requesting a MAC address. Trying our best to bodge through it.", e);
+            log::error!(
+                "Something is wrong with the EC, got {:?} when requesting a MAC address. Trying our best to bodge through it.",
+                e
+            );
             let mut fake_mac = [0u8; 6];
             trng.fill_bytes_via_next(&mut fake_mac);
             fake_mac[0] = 2; // locally administered
@@ -194,7 +184,7 @@ fn main() -> ! {
                 mac: fake_mac,
                 addr: [169, 254, 0, 2], // link local address
                 gtwy: [169, 254, 0, 1], // something bogus
-                mask: [255, 255, 0, 0,],
+                mask: [255, 255, 0, 0],
                 dns1: [1, 1, 1, 1],
                 dns2: [8, 8, 8, 8],
             }
@@ -213,7 +203,10 @@ fn main() -> ! {
         MAC_ADDRESS_LSB.store(u32::from_be_bytes(fake_mac[2..6].try_into().unwrap()), Ordering::SeqCst);
         MAC_ADDRESS_MSB.store(u16::from_be_bytes(fake_mac[0..2].try_into().unwrap()), Ordering::SeqCst);
         config_valid = false;
-        log::warn!("We had a bogus MAC address from the EC, filling in a temporary fake one to avoid panics: {:x?}", fake_mac);
+        log::warn!(
+            "We had a bogus MAC address from the EC, filling in a temporary fake one to avoid panics: {:x?}",
+            fake_mac
+        );
         Config::new(EthernetAddress(fake_mac).into())
     };
     config.random_seed = trng.get_u64().unwrap();
@@ -232,11 +225,10 @@ fn main() -> ! {
 
     let mut sockets = SocketSet::new(vec![]);
     let icmp_handle = sockets.add(icmp_socket);
-    { // put in a block to retire the icmp_socket variable in this scope
+    {
+        // put in a block to retire the icmp_socket variable in this scope
         let icmp_socket = sockets.get_mut::<icmp::Socket>(icmp_handle);
-        icmp_socket
-            .bind(icmp::Endpoint::Ident(PING_IDENT))
-            .expect("couldn't bind to icmp socket");
+        icmp_socket.bind(icmp::Endpoint::Ident(PING_IDENT)).expect("couldn't bind to icmp socket");
     }
 
     // ------------- libstd variant -----------
@@ -327,13 +319,7 @@ fn main() -> ! {
         move || {
             xous::try_send_message(
                 parent_conn,
-                Message::new_scalar(
-                    Opcode::SetupMpsc.to_usize().unwrap(),
-                    0,
-                    0,
-                    0,
-                    0,
-                ),
+                Message::new_scalar(Opcode::SetupMpsc.to_usize().unwrap(), 0, 0, 0, 0),
             )
             .ok();
             loop {
@@ -343,23 +329,37 @@ fn main() -> ! {
             }
         }
     });
-    let mut self_sender: Option::<usize> = None;
+    let mut self_sender: Option<usize> = None;
     loop {
-        if !config_valid { // try to fix our configuration from a bogus default to something valid...
+        if !config_valid {
+            // try to fix our configuration from a bogus default to something valid...
             match com.wlan_get_config() {
                 Ok(hw_config) => {
                     let mac_unchecked: HardwareAddress = EthernetAddress(hw_config.mac).into();
                     if mac_unchecked.is_unicast() {
-                        MAC_ADDRESS_LSB.store(u32::from_be_bytes(hw_config.mac[2..6].try_into().unwrap()), Ordering::SeqCst);
-                        MAC_ADDRESS_MSB.store(u16::from_be_bytes(hw_config.mac[0..2].try_into().unwrap()), Ordering::SeqCst);
+                        MAC_ADDRESS_LSB.store(
+                            u32::from_be_bytes(hw_config.mac[2..6].try_into().unwrap()),
+                            Ordering::SeqCst,
+                        );
+                        MAC_ADDRESS_MSB.store(
+                            u16::from_be_bytes(hw_config.mac[0..2].try_into().unwrap()),
+                            Ordering::SeqCst,
+                        );
                         config = Config::new(mac_unchecked);
                         config.random_seed = trng.get_u64().unwrap();
                         // rebuild the interface with the new config
-                        iface = Interface::new(config, &mut device, Instant::from_millis(timer.elapsed_ms() as i64));
+                        iface = Interface::new(
+                            config,
+                            &mut device,
+                            Instant::from_millis(timer.elapsed_ms() as i64),
+                        );
                         config_valid = true;
                     } else {
                         // else, config_valid stays false, and we try again next time around
-                        log::warn!("Non-unicast MAC address reported by the EC: {:x?}, config invalid!", hw_config.mac);
+                        log::warn!(
+                            "Non-unicast MAC address reported by the EC: {:x?}, config invalid!",
+                            hw_config.mac
+                        );
                         timer.sleep_ms(900).unwrap(); // throttle the net crate so that the COM may have a chance to restore the EC.
                     }
                 }
@@ -374,9 +374,7 @@ fn main() -> ! {
             Some(poll_at) if timestamp < poll_at => poll_at - timestamp,
             _ => Duration::from_millis(NET_DEFAULT_POLL_MS),
         };
-        let msg_or_timeout = core_rx.recv_timeout(
-            std::time::Duration::from_millis(deadline.millis())
-        );
+        let msg_or_timeout = core_rx.recv_timeout(std::time::Duration::from_millis(deadline.millis()));
         let mut msg = match msg_or_timeout {
             Ok(m) => m,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
@@ -386,16 +384,10 @@ fn main() -> ! {
                     // self_sender should be safe to unwrap because it is the first thing
                     // set by the loop, there would not be a timeout
                     sender: xous::MessageSender::from_usize(self_sender.unwrap()),
-                    body: Message::new_scalar(
-                        Opcode::NetPump.to_usize().unwrap(),
-                        0,
-                        0,
-                        0,
-                        0,
-                    ),
+                    body: Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
                 }
             }
-            _ => panic!("Unhandled MPSC error in core tx/rx of net thread")
+            _ => panic!("Unhandled MPSC error in core tx/rx of net thread"),
         };
         if let Some(dc_cid) = cid_to_disconnect.take() {
             // disconnect previous loop iter's connection after d/c OK response was sent
@@ -403,13 +395,12 @@ fn main() -> ! {
                 match xous::disconnect(dc_cid) {
                     Ok(_) => {}
                     Err(xous::Error::ServerNotFound) => {
-                        log::trace!("Disconnect returned the expected error code for a remote that has been destroyed.")
+                        log::trace!(
+                            "Disconnect returned the expected error code for a remote that has been destroyed."
+                        )
                     }
                     Err(e) => {
-                        log::error!(
-                            "Attempt to de-allocate CID to destroyed server met with error: {:?}",
-                            e
-                        );
+                        log::error!("Attempt to de-allocate CID to destroyed server met with error: {:?}", e);
                     }
                 }
             }
@@ -435,9 +426,8 @@ fn main() -> ! {
             }),
             Some(Opcode::Ping) => {
                 log::debug!("Ping");
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buf =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut pkt = buf.to_original::<NetPingPacket, _>().unwrap();
 
                 let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
@@ -452,33 +442,34 @@ fn main() -> ! {
                 if socket.can_send() {
                     log::debug!("sending ping to {:?}", pkt.endpoint);
                     let remote = IpAddress::from(pkt.endpoint);
-                    // we take advantage of the fact that the same CID is always returned for repeated connect requests to the same SID.
+                    // we take advantage of the fact that the same CID is always returned for repeated connect
+                    // requests to the same SID.
                     let cid = match pkt.server {
-                        XousServerId::PrivateSid(sid) => {
-                            match xous::connect(SID::from_array(sid)) {
-                                Ok(cid) => cid,
-                                Err(e) => {
-                                    log::error!("Ping request with single-use callback SID is invalid. Aborting request. {:?}",e);
-                                    continue;
-                                }
+                        XousServerId::PrivateSid(sid) => match xous::connect(SID::from_array(sid)) {
+                            Ok(cid) => cid,
+                            Err(e) => {
+                                log::error!(
+                                    "Ping request with single-use callback SID is invalid. Aborting request. {:?}",
+                                    e
+                                );
+                                continue;
                             }
-                        }
-                        XousServerId::ServerName(name) => {
-                            match xns.request_connection(name.to_str()) {
-                                Ok(cid) => cid,
-                                Err(e) => {
-                                    log::error!("Ping request received, but callback name '{}' is invalid. Aborting request. {:?}", name, e);
-                                    continue;
-                                }
+                        },
+                        XousServerId::ServerName(name) => match xns.request_connection(name.to_str()) {
+                            Ok(cid) => cid,
+                            Err(e) => {
+                                log::error!(
+                                    "Ping request received, but callback name '{}' is invalid. Aborting request. {:?}",
+                                    name,
+                                    e
+                                );
+                                continue;
                             }
-                        }
+                        },
                     };
-                    // this structure can be a HashMap key because it "should" be invariant across well-formed ping requests
-                    let conn = PingConnection {
-                        remote,
-                        cid,
-                        retop: pkt.return_opcode,
-                    };
+                    // this structure can be a HashMap key because it "should" be invariant across well-formed
+                    // ping requests
+                    let conn = PingConnection { remote, cid, retop: pkt.return_opcode };
                     log::trace!(
                         "ping conn info: remote {:?} / cid: {} / retp: {}",
                         remote,
@@ -510,7 +501,8 @@ fn main() -> ! {
                             icmp_repr.emit(&mut icmp_packet, &device_caps.checksum);
                         }
                         IpAddress::Ipv6(_) => {
-                            // not sure if this is a valid thing to do, to just assign the source some number like this??
+                            // not sure if this is a valid thing to do, to just assign the source some number
+                            // like this??
                             let src_ipv6 = IpAddress::v6(0xfdaa, 0, 0, 0, 0, 0, 0, 1);
                             let icmp_repr = Icmpv6Repr::EchoRequest {
                                 ident: PING_IDENT,
@@ -519,16 +511,12 @@ fn main() -> ! {
                             };
                             let icmp_payload = socket.send(icmp_repr.buffer_len(), remote).unwrap();
                             let mut icmp_packet = Icmpv6Packet::new_unchecked(icmp_payload);
-                            icmp_repr.emit(
-                                &src_ipv6,
-                                &remote,
-                                &mut icmp_packet,
-                                &device_caps.checksum,
-                            );
+                            icmp_repr.emit(&src_ipv6, &remote, &mut icmp_packet, &device_caps.checksum);
                         }
                     }
                     seq += 1;
-                    // fire off a Pump to get the stack to actually transmit the ping; this call merely queues it for sending
+                    // fire off a Pump to get the stack to actually transmit the ping; this call merely queues
+                    // it for sending
                     xous::try_send_message(
                         net_conn,
                         Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
@@ -538,8 +526,7 @@ fn main() -> ! {
                 } else {
                     pkt.sent_ok = Some(false);
                 }
-                buf.replace(pkt)
-                    .expect("Xous couldn't issue response to Ping request");
+                buf.replace(pkt).expect("Xous couldn't issue response to Ping request");
             }
             Some(Opcode::PingSetTtl) => msg_scalar_unpack!(msg, ttl, _, _, _, {
                 let checked_ttl = if ttl > 255 { 255 as u8 } else { ttl as u8 };
@@ -562,9 +549,8 @@ fn main() -> ! {
                 xous::return_scalar(msg.sender, ping_timeout_ms as usize).unwrap();
             }),
             Some(Opcode::DnsHookAddIpv4) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buf =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let hook = buf.to_original::<XousPrivateServerHook, _>().unwrap();
                 if dns_ipv4_hook.is_set() {
                     buf.replace(NetMemResponse::AlreadyUsed).unwrap();
@@ -578,9 +564,8 @@ fn main() -> ! {
                 }
             }
             Some(Opcode::DnsHookAddIpv6) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buf =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let hook = buf.to_original::<XousPrivateServerHook, _>().unwrap();
                 if dns_ipv6_hook.is_set() {
                     buf.replace(NetMemResponse::AlreadyUsed).unwrap();
@@ -594,9 +579,8 @@ fn main() -> ! {
                 }
             }
             Some(Opcode::DnsHookAllClear) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buf =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let hook = buf.to_original::<XousPrivateServerHook, _>().unwrap();
                 if dns_allclear_hook.is_set() {
                     buf.replace(NetMemResponse::AlreadyUsed).unwrap();
@@ -631,11 +615,9 @@ fn main() -> ! {
                 );
                 xous::try_send_message(
                     net_conn,
-                    Message::new_scalar(
-                        Opcode::NetPump.to_usize().unwrap(),
-                        0, 0, 0, 0
-                    ),
-                ).ok();
+                    Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
             }
 
             Some(Opcode::StdTcpTx) => {
@@ -651,11 +633,9 @@ fn main() -> ! {
                 );
                 xous::try_send_message(
                     net_conn,
-                    Message::new_scalar(
-                        Opcode::NetPump.to_usize().unwrap(),
-                        0, 0, 0, 0
-                    ),
-                ).ok();
+                    Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
             }
 
             Some(Opcode::StdTcpPeek) => {
@@ -672,11 +652,9 @@ fn main() -> ! {
                 );
                 xous::try_send_message(
                     net_conn,
-                    Message::new_scalar(
-                        Opcode::NetPump.to_usize().unwrap(),
-                        0, 0, 0, 0
-                    ),
-                ).ok();
+                    Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
             }
 
             Some(Opcode::StdTcpRx) => {
@@ -693,20 +671,16 @@ fn main() -> ! {
                 );
                 xous::try_send_message(
                     net_conn,
-                    Message::new_scalar(
-                        Opcode::NetPump.to_usize().unwrap(),
-                        0, 0, 0, 0
-                    ),
-                ).ok();
+                    Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
             }
 
             Some(Opcode::StdTcpClose) => {
                 let pid = msg.sender.pid();
                 let connection_idx = msg.body.id() >> 16;
-                let handle = if let Some(connection) = process_sockets
-                    .entry(pid)
-                    .or_default()
-                    .get_mut(connection_idx)
+                let handle = if let Some(connection) =
+                    process_sockets.entry(pid).or_default().get_mut(connection_idx)
                 {
                     if let Some(connection) = connection.take() {
                         connection
@@ -729,7 +703,8 @@ fn main() -> ! {
                         socket.close();
                         tcp_tx_wait_fin.push((handle, msg.sender, 0));
                         //log::info!("EARLY CLOSE");
-                        //xous::return_scalar(msg.sender, 0).ok(); // ack early so we don't block other processes waiting to close
+                        //xous::return_scalar(msg.sender, 0).ok(); // ack early so we don't block other
+                        // processes waiting to close
                     } else {
                         log::trace!("def2");
                         tcp_tx_closing.push((handle, msg.sender));
@@ -748,25 +723,18 @@ fn main() -> ! {
                 let pid = msg.sender.pid();
                 let connection_idx = msg.body.id() >> 16;
                 let shutdown_code = msg.body.scalar_message().unwrap().arg1;
-                if let Some(Some(connection)) = process_sockets
-                    .entry(pid)
-                    .or_default()
-                    .get(connection_idx)
-                {
-                    if (shutdown_code & 1) != 0 { // read shutdown
+                if let Some(Some(connection)) = process_sockets.entry(pid).or_default().get(connection_idx) {
+                    if (shutdown_code & 1) != 0 {
+                        // read shutdown
                         // search for the handle in the rxwaiting set
                         for rx_waiter in tcp_rx_waiting.iter_mut() {
-                            let WaitingSocket {
-                                env: mut msg,
-                                handle,
-                                expiry: _,
-                            } = match rx_waiter {
+                            let WaitingSocket { env: mut msg, handle, expiry: _ } = match rx_waiter {
                                 &mut None => continue,
                                 Some(s) => {
                                     if s.handle == *connection {
                                         rx_waiter.take().unwrap() // removes the message from the waiting queue
                                     } else {
-                                        continue
+                                        continue;
                                     }
                                 }
                             };
@@ -776,26 +744,23 @@ fn main() -> ! {
                                 Some(body) => {
                                     // u32::MAX indicates a zero-length receive
                                     body.valid = xous::MemorySize::new(u32::MAX as usize);
-                                },
+                                }
                                 None => {
                                     respond_with_error(msg, NetError::LibraryError);
                                 }
                             }
-                            // in theory, there should be no more matching handles as they should be all unique, so we can abort the search.
+                            // in theory, there should be no more matching handles as they should be all
+                            // unique, so we can abort the search.
                             break;
                         }
                         for rx_waiter in tcp_peek_waiting.iter_mut() {
-                            let WaitingSocket {
-                                env: mut msg,
-                                handle,
-                                expiry: _,
-                            } = match rx_waiter {
+                            let WaitingSocket { env: mut msg, handle, expiry: _ } = match rx_waiter {
                                 &mut None => continue,
                                 Some(s) => {
                                     if s.handle == *connection {
                                         rx_waiter.take().unwrap() // removes the message from the waiting queue
                                     } else {
-                                        continue
+                                        continue;
                                     }
                                 }
                             };
@@ -805,29 +770,27 @@ fn main() -> ! {
                                 Some(body) => {
                                     // u32::MAX indicates a zero-length receive
                                     body.valid = xous::MemorySize::new(u32::MAX as usize);
-                                },
+                                }
                                 None => {
                                     respond_with_error(msg, NetError::LibraryError);
                                 }
                             }
-                            // in theory, there should be no more matching handles as they should be all unique, so we can abort the search.
+                            // in theory, there should be no more matching handles as they should be all
+                            // unique, so we can abort the search.
                             break;
                         }
                     }
-                    if (shutdown_code & 2) != 0 { // write shutdown
+                    if (shutdown_code & 2) != 0 {
+                        // write shutdown
                         // search for the handle in the txwaiting set
                         for tx_waiter in tcp_tx_waiting.iter_mut() {
-                            let WaitingSocket {
-                                env: mut msg,
-                                handle,
-                                expiry: _,
-                            } = match tx_waiter {
+                            let WaitingSocket { env: mut msg, handle, expiry: _ } = match tx_waiter {
                                 &mut None => continue,
                                 Some(s) => {
                                     if s.handle == *connection {
                                         tx_waiter.take().unwrap() // removes the message from the waiting queue
                                     } else {
-                                        continue
+                                        continue;
                                     }
                                 }
                             };
@@ -840,12 +803,13 @@ fn main() -> ! {
                                     let response_data = unsafe { body.buf.as_slice_mut::<u32>() };
                                     response_data[0] = 0;
                                     response_data[1] = 0;
-                                },
+                                }
                                 None => {
                                     respond_with_error(msg, NetError::LibraryError);
                                 }
                             }
-                            // in theory, there should be no more matching handles as they should be all unique, so we can abort the search.
+                            // in theory, there should be no more matching handles as they should be all
+                            // unique, so we can abort the search.
                             break;
                         }
                     }
@@ -856,30 +820,20 @@ fn main() -> ! {
                 // pump the rx to process any shutdowns
                 xous::try_send_message(
                     net_conn,
-                    Message::new_scalar(
-                        Opcode::NetPump.to_usize().unwrap(),
-                        0, 0, 0, 0
-                    ),
-                ).ok();
+                    Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
             }
 
             Some(Opcode::StdTcpListen) => {
                 let pid = msg.sender.pid();
 
-                std_tcp_listen(
-                    msg,
-                    &mut iface,
-                    &mut sockets,
-                    process_sockets.entry(pid).or_default(),
-                    &trng,
-                );
+                std_tcp_listen(msg, &mut iface, &mut sockets, process_sockets.entry(pid).or_default(), &trng);
                 xous::try_send_message(
                     net_conn,
-                    Message::new_scalar(
-                        Opcode::NetPump.to_usize().unwrap(),
-                        0, 0, 0, 0
-                    ),
-                ).ok();
+                    Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
             }
 
             Some(Opcode::StdTcpAccept) => {
@@ -895,11 +849,9 @@ fn main() -> ! {
                 );
                 xous::try_send_message(
                     net_conn,
-                    Message::new_scalar(
-                        Opcode::NetPump.to_usize().unwrap(),
-                        0, 0, 0, 0
-                    ),
-                ).ok();
+                    Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
             }
 
             Some(Opcode::StdGetAddress) => {
@@ -913,21 +865,22 @@ fn main() -> ! {
                     }
                 };
 
-                if let Some(Some(connection)) = process_sockets
-                    .entry(pid)
-                    .or_default()
-                    .get_mut(connection_idx)
+                if let Some(Some(connection)) =
+                    process_sockets.entry(pid).or_default().get_mut(connection_idx)
                 {
                     let socket = sockets.get::<tcp::Socket>(*connection);
                     match socket.local_endpoint() {
                         Some(ep) => {
                             body.valid = xous::MemorySize::new(
-                                write_address(ep.addr,
-                                unsafe { body.buf.as_slice_mut() })
+                                write_address(ep.addr, unsafe { body.buf.as_slice_mut() })
                                     .unwrap_or_default(),
                             )
                         }
-                        None => respond_with_error(msg, NetError::Invalid).unwrap_or(()), // this always returns None, can't do anything other than this.
+                        None => respond_with_error(msg, NetError::Invalid).unwrap_or(()), /* this always
+                                                                                           * returns None,
+                                                                                           * can't do anything
+                                                                                           * other than
+                                                                                           * this. */
                     }
                 } else {
                     respond_with_error(msg, NetError::Invalid);
@@ -943,10 +896,8 @@ fn main() -> ! {
                     continue;
                 }
 
-                if let Some(Some(connection)) = process_sockets
-                    .entry(pid)
-                    .or_default()
-                    .get_mut(connection_idx)
+                if let Some(Some(connection)) =
+                    process_sockets.entry(pid).or_default().get_mut(connection_idx)
                 {
                     let args = msg.body.scalar_message().unwrap();
                     let limit = if args.arg4 == 1 {
@@ -956,11 +907,7 @@ fn main() -> ! {
                         let socket = sockets.get::<tcp::Socket>(*connection);
                         socket.hop_limit().unwrap_or(64) as usize
                     };
-                    xous::return_scalar(
-                        msg.sender,
-                        limit,
-                    )
-                    .ok();
+                    xous::return_scalar(msg.sender, limit).ok();
                 } else {
                     respond_with_error(msg, NetError::Invalid);
                     continue;
@@ -976,17 +923,12 @@ fn main() -> ! {
                     continue;
                 }
 
-                if let Some(Some(connection)) = process_sockets
-                    .entry(pid)
-                    .or_default()
-                    .get_mut(connection_idx)
+                if let Some(Some(connection)) =
+                    process_sockets.entry(pid).or_default().get_mut(connection_idx)
                 {
                     let args = msg.body.scalar_message().unwrap();
-                    let hop_limit = if (args.arg1 == 0) || (args.arg1 > 255) {
-                        None
-                    } else {
-                        Some(args.arg1 as u8)
-                    };
+                    let hop_limit =
+                        if (args.arg1 == 0) || (args.arg1 > 255) { None } else { Some(args.arg1 as u8) };
                     if args.arg4 == 1 {
                         let socket = sockets.get_mut::<udp::Socket>(*connection);
                         socket.set_hop_limit(hop_limit);
@@ -1010,23 +952,13 @@ fn main() -> ! {
                     continue;
                 }
 
-                if let Some(Some(connection)) = process_sockets
-                    .entry(pid)
-                    .or_default()
-                    .get_mut(connection_idx)
+                if let Some(Some(connection)) =
+                    process_sockets.entry(pid).or_default().get_mut(connection_idx)
                 {
                     let socket = sockets.get::<tcp::Socket>(*connection);
                     let nagle_enabled = socket.nagle_enabled();
                     let no_delay = !nagle_enabled;
-                    xous::return_scalar(
-                        msg.sender,
-                        if no_delay {
-                            1
-                        } else {
-                            0
-                        },
-                    )
-                    .ok();
+                    xous::return_scalar(msg.sender, if no_delay { 1 } else { 0 }).ok();
                 } else {
                     respond_with_error(msg, NetError::Invalid);
                 }
@@ -1041,10 +973,8 @@ fn main() -> ! {
                     continue;
                 }
 
-                if let Some(Some(connection)) = process_sockets
-                    .entry(pid)
-                    .or_default()
-                    .get_mut(connection_idx)
+                if let Some(Some(connection)) =
+                    process_sockets.entry(pid).or_default().get_mut(connection_idx)
                 {
                     let socket = sockets.get_mut::<tcp::Socket>(*connection);
                     let args = msg.body.scalar_message().unwrap();
@@ -1059,12 +989,7 @@ fn main() -> ! {
             Some(Opcode::StdUdpBind) => {
                 log::debug!("StdUdpBind");
                 let pid = msg.sender.pid();
-                std_udp_bind(
-                    msg,
-                    &mut iface,
-                    &mut sockets,
-                    process_sockets.entry(pid).or_default(),
-                );
+                std_udp_bind(msg, &mut iface, &mut sockets, process_sockets.entry(pid).or_default());
             }
 
             Some(Opcode::StdUdpRx) => {
@@ -1083,29 +1008,20 @@ fn main() -> ! {
             Some(Opcode::StdUdpTx) => {
                 log::debug!("StdUdpTx");
                 let pid = msg.sender.pid();
-                std_udp_tx(
-                    msg,
-                    &mut iface,
-                    &mut sockets,
-                    process_sockets.entry(pid).or_default(),
-                );
+                std_udp_tx(msg, &mut iface, &mut sockets, process_sockets.entry(pid).or_default());
                 xous::try_send_message(
                     net_conn,
-                    Message::new_scalar(
-                        Opcode::NetPump.to_usize().unwrap(),
-                        0, 0, 0, 0
-                    ),
-                ).ok();
+                    Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
             }
 
             Some(Opcode::StdUdpClose) => {
                 log::debug!("StdUdpClose");
                 let pid = msg.sender.pid();
                 let connection_idx = msg.body.id() >> 16;
-                let handle = if let Some(connection) = process_sockets
-                    .entry(pid)
-                    .or_default()
-                    .get_mut(connection_idx)
+                let handle = if let Some(connection) =
+                    process_sockets.entry(pid).or_default().get_mut(connection_idx)
                 {
                     if let Some(connection) = connection.take() {
                         connection
@@ -1135,9 +1051,7 @@ fn main() -> ! {
                         match xous::try_send_message(
                             cm_cid,
                             Message::new_scalar(
-                                connection_manager::ConnectionManagerOpcode::ComInt
-                                    .to_usize()
-                                    .unwrap(),
+                                connection_manager::ConnectionManagerOpcode::ComInt.to_usize().unwrap(),
                                 ints,
                                 raw_rxlen,
                                 0,
@@ -1149,7 +1063,10 @@ fn main() -> ! {
                                 log::warn!("Our net queue runneth over, interrupts were dropped.");
                             }
                             Err(e) => {
-                                log::error!("Unhandled error forwarding ComInt to the connection manager: {:?}", e);
+                                log::error!(
+                                    "Unhandled error forwarding ComInt to the connection manager: {:?}",
+                                    e
+                                );
                             }
                         };
                         for &pending in com_int_list.iter() {
@@ -1164,23 +1081,30 @@ fn main() -> ! {
                                     log::warn!("Battery is critical! TODO: go into SHIP mode");
                                 }
                                 ComIntSources::WlanIpConfigUpdate => {
-                                    // right now the WLAN implementation only does IPV4. So IPV6 compatibility ends here.
-                                    // if IPV6 gets added to the EC/COM bus, ideally this is one of a couple spots in Xous that needs a tweak.
-                                    let config = match com
-                                    .wlan_get_config() {
+                                    // right now the WLAN implementation only does IPV4. So IPV6 compatibility
+                                    // ends here. if IPV6 gets added to
+                                    // the EC/COM bus, ideally this is one of a couple spots in Xous that
+                                    // needs a tweak.
+                                    let config = match com.wlan_get_config() {
                                         Ok(config) => config,
                                         Err(e) => {
-                                            log::error!("WLAN config interrupt was bogus. EC is probably updating? Ignoring. Error: {:?}", e);
+                                            log::error!(
+                                                "WLAN config interrupt was bogus. EC is probably updating? Ignoring. Error: {:?}",
+                                                e
+                                            );
                                             continue;
                                         }
                                     };
                                     log::info!("Network config acquired: {:?}", config);
-                                    log::info!("{}NET.OK,{:?},{}",
+                                    log::info!(
+                                        "{}NET.OK,{:?},{}",
                                         xous::BOOKEND_START,
                                         std::net::IpAddr::from(config.addr),
-                                        xous::BOOKEND_END);
+                                        xous::BOOKEND_END
+                                    );
                                     net_config = Some(config);
-                                    // update a static variable that tracks this, useful for e.g. UDP bind address checking
+                                    // update a static variable that tracks this, useful for e.g. UDP bind
+                                    // address checking
                                     IPV4_ADDRESS.store(u32::from_be_bytes(config.addr), Ordering::SeqCst);
 
                                     if config.addr != [127, 0, 0, 1] {
@@ -1188,18 +1112,19 @@ fn main() -> ! {
                                         iface.update_ip_addrs(|ip_addrs| {
                                             ip_addrs.clear();
                                             ip_addrs
-                                                .push(IpCidr::new(IpAddress::v4(
-                                                    config.addr[0],
-                                                    config.addr[1],
-                                                    config.addr[2],
-                                                    config.addr[3],
-                                                ), 24))
+                                                .push(IpCidr::new(
+                                                    IpAddress::v4(
+                                                        config.addr[0],
+                                                        config.addr[1],
+                                                        config.addr[2],
+                                                        config.addr[3],
+                                                    ),
+                                                    24,
+                                                ))
                                                 .unwrap();
                                             // ...and the loopback interface
                                             ip_addrs
-                                                .push(IpCidr::new(IpAddress::v4(
-                                                    127, 0, 0, 1
-                                                ), 8))
+                                                .push(IpCidr::new(IpAddress::v4(127, 0, 0, 1), 8))
                                                 .unwrap();
                                         });
                                     } else {
@@ -1240,8 +1165,11 @@ fn main() -> ! {
                                     if let Some(_config) = net_config {
                                         if let Some(rxlen) = maybe_rxlen {
                                             match device.get_mut().push_rx_avail(rxlen) {
-                                                None => {} //log::info!("pushed {} bytes avail to iface", rxlen),
-                                                Some(_) => log::warn!("Got more packets, but smoltcp didn't drain them in time"),
+                                                None => {} /* log::info!("pushed {} bytes avail to iface", */
+                                                // rxlen),
+                                                Some(_) => log::warn!(
+                                                    "Got more packets, but smoltcp didn't drain them in time"
+                                                ),
                                             }
                                             match xous::try_send_message(
                                                 net_conn,
@@ -1255,14 +1183,21 @@ fn main() -> ! {
                                             ) {
                                                 Ok(_) => {}
                                                 Err(xous::Error::ServerQueueFull) => {
-                                                    log::warn!("Our net queue runneth over, packets will be dropped.");
+                                                    log::warn!(
+                                                        "Our net queue runneth over, packets will be dropped."
+                                                    );
                                                 }
                                                 Err(e) => {
-                                                    log::error!("Unhandled error sending NetPump to self: {:?}", e);
+                                                    log::error!(
+                                                        "Unhandled error sending NetPump to self: {:?}",
+                                                        e
+                                                    );
                                                 }
                                             }
                                         } else {
-                                            log::error!("Got RxReady interrupt but no packet length specified!");
+                                            log::error!(
+                                                "Got RxReady interrupt but no packet length specified!"
+                                            );
                                         }
                                     }
                                 }
@@ -1311,13 +1246,7 @@ fn main() -> ! {
                 } */
                 match xous::try_send_message(
                     net_conn,
-                    Message::new_scalar(
-                        Opcode::NetPump.to_usize().unwrap(),
-                        0,
-                        0,
-                        0,
-                        0,
-                    ),
+                    Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
                 ) {
                     Ok(_) => {}
                     Err(xous::Error::ServerQueueFull) => {
@@ -1335,7 +1264,7 @@ fn main() -> ! {
                 if !iface.poll(timestamp, &mut device, &mut sockets) {
                     // nothing to do, continue on.
                     log::debug!("No change to socket readiness");
-                    continue
+                    continue;
                 } else {
                     log::debug!("Socket readiness changed");
                 }
@@ -1375,11 +1304,7 @@ fn main() -> ! {
                 // log::trace!("pump: tcp rx");
                 for connection in tcp_rx_waiting.iter_mut() {
                     let socket;
-                    let WaitingSocket {
-                        mut env,
-                        handle: _,
-                        expiry: _,
-                    } = {
+                    let WaitingSocket { mut env, handle: _, expiry: _ } = {
                         match connection {
                             &mut None => continue,
                             Some(s) => {
@@ -1395,7 +1320,8 @@ fn main() -> ! {
                                         }
                                     } else if socket.state() == smoltcp::socket::tcp::State::CloseWait
                                     // this state added to handle the auto-close edge case on a remote hang-up
-                                    || socket.state() == smoltcp::socket::tcp::State::Closed {
+                                    || socket.state() == smoltcp::socket::tcp::State::Closed
+                                    {
                                         // stop waiting if we're in CloseWait, as we don't plan to transmit
                                     } else {
                                         continue;
@@ -1410,7 +1336,8 @@ fn main() -> ! {
                     if !socket.can_recv() {
                         if socket.state() == smoltcp::socket::tcp::State::CloseWait
                         // this state added to handle the auto-close edge case on a remote hang-up
-                        || socket.state() == smoltcp::socket::tcp::State::Closed {
+                        || socket.state() == smoltcp::socket::tcp::State::Closed
+                        {
                             log::debug!("rxrcv connection closed");
                             let body = env.body.memory_message_mut().unwrap();
                             log::debug!("rxrcv of {}", 0);
@@ -1425,11 +1352,7 @@ fn main() -> ! {
                     }
 
                     let body = env.body.memory_message_mut().unwrap();
-                    let buflen = if let Some(valid) = body.valid {
-                        valid.get()
-                    } else {
-                        0
-                    };
+                    let buflen = if let Some(valid) = body.valid { valid.get() } else { 0 };
                     match socket.recv_slice(unsafe { &mut body.buf.as_slice_mut()[..buflen] }) {
                         Ok(count) => {
                             log::debug!("rxrcv of {}", count);
@@ -1448,11 +1371,7 @@ fn main() -> ! {
                 // log::trace!("pump: tcp peek");
                 for connection in tcp_peek_waiting.iter_mut() {
                     let socket;
-                    let WaitingSocket {
-                        mut env,
-                        handle: _,
-                        expiry: _,
-                    } = {
+                    let WaitingSocket { mut env, handle: _, expiry: _ } = {
                         match connection {
                             &mut None => continue,
                             Some(s) => {
@@ -1468,7 +1387,8 @@ fn main() -> ! {
                                         }
                                     } else if socket.state() == smoltcp::socket::tcp::State::CloseWait
                                     // this state added to handle the auto-close edge case on a remote hang-up
-                                    || socket.state() == smoltcp::socket::tcp::State::Closed {
+                                    || socket.state() == smoltcp::socket::tcp::State::Closed
+                                    {
                                         // stop waiting if we're in CloseWait, as we don't plan to transmit
                                     } else {
                                         continue;
@@ -1483,7 +1403,8 @@ fn main() -> ! {
                     if !socket.can_recv() {
                         if socket.state() == smoltcp::socket::tcp::State::CloseWait
                         // this state added to handle the auto-close edge case on a remote hang-up
-                        || socket.state() == smoltcp::socket::tcp::State::Closed {
+                        || socket.state() == smoltcp::socket::tcp::State::Closed
+                        {
                             log::debug!("peekrcv connection closed");
                             let body = env.body.memory_message_mut().unwrap();
                             log::debug!("peekrcv of {}", 0);
@@ -1498,11 +1419,7 @@ fn main() -> ! {
                     }
 
                     let body = env.body.memory_message_mut().unwrap();
-                    let buflen = if let Some(valid) = body.valid {
-                        valid.get()
-                    } else {
-                        0
-                    };
+                    let buflen = if let Some(valid) = body.valid { valid.get() } else { 0 };
                     match socket.peek_slice(unsafe { &mut body.buf.as_slice_mut()[..buflen] }) {
                         Ok(count) => {
                             log::debug!("peekrcv of {}", count);
@@ -1521,11 +1438,7 @@ fn main() -> ! {
                 // log::trace!("pump: tcp tx");
                 for connection in tcp_tx_waiting.iter_mut() {
                     let socket;
-                    let WaitingSocket {
-                        mut env,
-                        handle: _,
-                        expiry: _,
-                    } = {
+                    let WaitingSocket { mut env, handle: _, expiry: _ } = {
                         match connection {
                             &mut None => continue,
                             Some(s) => {
@@ -1560,13 +1473,7 @@ fn main() -> ! {
                         let data = unsafe { body.buf.as_slice::<u8>() };
                         let length = body
                             .valid
-                            .map(|v| {
-                                if v.get() > data.len() {
-                                    data.len()
-                                } else {
-                                    v.get()
-                                }
-                            })
+                            .map(|v| if v.get() > data.len() { data.len() } else { v.get() })
                             .unwrap_or_else(|| data.len());
 
                         match socket.send_slice(&data[..length]) {
@@ -1589,11 +1496,7 @@ fn main() -> ! {
                 // log::trace!("pump: tcp listen");
                 for connection in tcp_accept_waiting.iter_mut() {
                     let ep: IpEndpoint;
-                    let AcceptingSocket {
-                        mut env,
-                        handle: _,
-                        fd,
-                    } = match connection {
+                    let AcceptingSocket { mut env, handle: _, fd } = match connection {
                         &mut None => continue,
                         Some(s) => {
                             let socket = sockets.get_mut::<tcp::Socket>(s.handle);
@@ -1616,11 +1519,7 @@ fn main() -> ! {
                 // log::trace!("pump: udp");
                 for connection in udp_rx_waiting.iter_mut() {
                     let socket;
-                    let UdpStdState {
-                        mut msg,
-                        handle: _,
-                        expiry: _,
-                    } = {
+                    let UdpStdState { mut msg, handle: _, expiry: _ } = {
                         match connection {
                             &mut None => continue,
                             Some(s) => {
@@ -1638,7 +1537,8 @@ fn main() -> ! {
                                 } // we don't process the Rx here because we need to `take()` the message first, so that its lifetime ends
                             }
                         }
-                        // remove the connection from the list, allowing subsequent code to operate on it and then .drop()
+                        // remove the connection from the list, allowing subsequent code to operate on it and
+                        // then .drop()
                         connection.take().unwrap()
                     };
 
@@ -1654,10 +1554,12 @@ fn main() -> ! {
                         match socket.peek() {
                             Ok((data, endpoint)) => {
                                 udp_rx_success(
-                                    // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
+                                    // unwrap is safe here because the message was type-checked prior to
+                                    // insertion into the waiting queue
                                     unsafe { msg.body.memory_message_mut().unwrap().buf.as_slice_mut() },
                                     data,
-                                    endpoint.endpoint // have to duplicate the code between peek and recv because of this type difference
+                                    endpoint.endpoint, /* have to duplicate the code between peek and recv
+                                                        * because of this type difference */
                                 );
                             }
                             Err(e) => {
@@ -1670,10 +1572,11 @@ fn main() -> ! {
                             Ok((data, endpoint)) => {
                                 log::debug!("netpump udp rx");
                                 udp_rx_success(
-                                    // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
+                                    // unwrap is safe here because the message was type-checked prior to
+                                    // insertion into the waiting queue
                                     unsafe { msg.body.memory_message_mut().unwrap().buf.as_slice_mut() },
                                     data,
-                                    endpoint.endpoint
+                                    endpoint.endpoint,
                                 );
                             }
                             Err(e) => {
@@ -1695,7 +1598,8 @@ fn main() -> ! {
                             socket.close();
                             tcp_tx_wait_fin.push((*handle, *sender, 0));
                             //log::info!("EARLY CLOSE");
-                            //xous::return_scalar(*sender, 0).ok(); // ack early so we don't block other processes waiting to close
+                            //xous::return_scalar(*sender, 0).ok(); // ack early so we don't block other
+                            // processes waiting to close
                             false
                         } else {
                             true
@@ -1711,9 +1615,10 @@ fn main() -> ! {
                     // most implementations are fully non-blocking, we need to block on Xous
                     // to allow smoltcp to process correctly. However, the socket will stick
                     // around forever if the final ack doesn't arrive, and this gums up the works.
-                    // FORCE_CLOSE_COUNT is an arbitrary threshold where we just decide to stop waiting for the other
-                    // side to send the final ack: it's long enough that it almost never times out
-                    // incorrectly, but short enough that we're not keeping around baggage forever.
+                    // FORCE_CLOSE_COUNT is an arbitrary threshold where we just decide to stop waiting for
+                    // the other side to send the final ack: it's long enough that it
+                    // almost never times out incorrectly, but short enough that we're not
+                    // keeping around baggage forever.
                     const FORCE_CLOSE_COUNT: u32 = 16;
                     if !socket.is_open() || *count > FORCE_CLOSE_COUNT {
                         if *count > FORCE_CLOSE_COUNT {
@@ -1721,39 +1626,44 @@ fn main() -> ! {
                         }
                         log::debug!("socket closed {:?}", socket.local_endpoint());
                         sockets.remove(*handle);
-                        tcp_server_remote_close_poll.retain(|x| {
-                            *x != *handle
-                        });
+                        tcp_server_remote_close_poll.retain(|x| *x != *handle);
                         // log::info!("would return_scalar now");
                         xous::return_scalar(*sender, 0).ok();
                         false
                     } else {
                         *count += 1;
-                        log::debug!("socket waiting to close({}): {:?} {:?}->{:?}", count, socket.state(), socket.local_endpoint(), socket.remote_endpoint());
+                        log::debug!(
+                            "socket waiting to close({}): {:?} {:?}->{:?}",
+                            count,
+                            socket.state(),
+                            socket.local_endpoint(),
+                            socket.remote_endpoint()
+                        );
                         true
                     }
                 });
 
                 tcp_server_remote_close_poll.retain(|handle| {
                     let socket = sockets.get_mut::<tcp::Socket>(*handle);
-                    log::debug!("remote close poll: state {:?} local {:?}", socket.state(), socket.local_endpoint());
+                    log::debug!(
+                        "remote close poll: state {:?} local {:?}",
+                        socket.state(),
+                        socket.local_endpoint()
+                    );
                     if socket.state() == smoltcp::socket::tcp::State::CloseWait {
-                        // initiate the closing ack, but allow the explicit drop to remove the socket once the handle is finished
-                        // this handles the special case that a stream was accepted, but then the client hangs up
-                        // and the server isn't actively polling the loop. By pushing the socket to the "close"
-                        // state, we allow the three-way close handshake to actually complete instead of hanging
-                        // in a FIN-WAIT-2 state.
+                        // initiate the closing ack, but allow the explicit drop to remove the socket once the
+                        // handle is finished this handles the special case that a
+                        // stream was accepted, but then the client hangs up
+                        // and the server isn't actively polling the loop. By pushing the socket to the
+                        // "close" state, we allow the three-way close handshake to
+                        // actually complete instead of hanging in a FIN-WAIT-2 state.
                         socket.close();
                     }
-                    if !socket.is_open() {
-                        false
-                    } else {
-                        true
-                    }
+                    if !socket.is_open() { false } else { true }
                 });
 
-                // this block contains the ICMP Rx handler. Tx is initiated by an incoming message to the Net crate.
-                // log::trace!("pump: icmp");
+                // this block contains the ICMP Rx handler. Tx is initiated by an incoming message to the Net
+                // crate. log::trace!("pump: icmp");
                 {
                     let socket = sockets.get_mut::<icmp::Socket>(icmp_handle);
                     if !socket.is_open() {
@@ -1761,9 +1671,8 @@ fn main() -> ! {
                     }
 
                     if socket.can_recv() {
-                        let (payload, _) = socket
-                            .recv()
-                            .expect("couldn't receive on socket despite asserting availability");
+                        let (payload, _) =
+                            socket.recv().expect("couldn't receive on socket despite asserting availability");
                         log::trace!("icmp payload: {:x?}", payload);
 
                         for (connection, waiting_queue) in ping_destinations.iter_mut() {
@@ -1772,18 +1681,14 @@ fn main() -> ! {
                                 IpAddress::Ipv4(_) => {
                                     let icmp_packet = Icmpv4Packet::new_checked(&payload).unwrap();
                                     let icmp_repr =
-                                        Icmpv4Repr::parse(&icmp_packet, &device_caps.checksum)
-                                            .unwrap();
+                                        Icmpv4Repr::parse(&icmp_packet, &device_caps.checksum).unwrap();
                                     if let Icmpv4Repr::EchoReply { seq_no, data, .. } = icmp_repr {
-                                        log::trace!(
-                                            "got icmp seq no {} / data: {:x?}",
-                                            seq_no,
-                                            data
-                                        );
+                                        log::trace!("got icmp seq no {} / data: {:x?}", seq_no, data);
                                         if let Some(_) = waiting_queue.get(&seq_no) {
                                             let packet_timestamp_ms = NetworkEndian::read_i64(data);
                                             waiting_queue.remove(&seq_no);
-                                            // use try_send_message because we don't want to block if the recipient's queue is full;
+                                            // use try_send_message because we don't want to block if the
+                                            // recipient's queue is full;
                                             // instead, the message is just dropped
                                             match xous::try_send_message(
                                                 connection.cid,
@@ -1800,27 +1705,20 @@ fn main() -> ! {
                                             ) {
                                                 Ok(_) => {}
                                                 Err(xous::Error::ServerQueueFull) => {
-                                                    log::warn!("Got seq {} response, but upstream server queue is full; dropping.", &seq_no);
+                                                    log::warn!(
+                                                        "Got seq {} response, but upstream server queue is full; dropping.",
+                                                        &seq_no
+                                                    );
                                                 }
                                                 Err(e) => {
-                                                    log::error!(
-                                                        "Unhandled error: {:?}; ignoring",
-                                                        e
-                                                    );
+                                                    log::error!("Unhandled error: {:?}; ignoring", e);
                                                 }
                                             }
                                         }
-                                    } else if let Icmpv4Repr::DstUnreachable {
-                                        reason,
-                                        header,
-                                        ..
-                                    } = icmp_repr
+                                    } else if let Icmpv4Repr::DstUnreachable { reason, header, .. } =
+                                        icmp_repr
                                     {
-                                        log::warn!(
-                                            "Got dst unreachable {:?}: {:?}",
-                                            header.dst_addr,
-                                            reason
-                                        );
+                                        log::warn!("Got dst unreachable {:?}: {:?}", header.dst_addr, reason);
                                         let reason_code: u8 = From::from(reason);
                                         match xous::try_send_message(
                                             connection.cid,
@@ -1828,9 +1726,7 @@ fn main() -> ! {
                                                 connection.retop,
                                                 NetPingCallback::Unreachable.to_usize().unwrap()
                                                     | (reason_code as usize) << 24,
-                                                u32::from_be_bytes(
-                                                    remote_addr.as_bytes().try_into().unwrap(),
-                                                )
+                                                u32::from_be_bytes(remote_addr.as_bytes().try_into().unwrap())
                                                     as usize,
                                                 0,
                                                 0,
@@ -1838,7 +1734,10 @@ fn main() -> ! {
                                         ) {
                                             Ok(_) => {}
                                             Err(xous::Error::ServerQueueFull) => {
-                                                log::warn!("Got dst {:?} unreachable, but upstream server queue is full; dropping.", remote_addr);
+                                                log::warn!(
+                                                    "Got dst {:?} unreachable, but upstream server queue is full; dropping.",
+                                                    remote_addr
+                                                );
                                             }
                                             Err(e) => {
                                                 log::error!("Unhandled error: {:?}; ignoring", e);
@@ -1850,7 +1749,8 @@ fn main() -> ! {
                                 }
 
                                 IpAddress::Ipv6(_) => {
-                                    // NOTE: actually not sure what src_ipv6 should be. This is just from an example.
+                                    // NOTE: actually not sure what src_ipv6 should be. This is just from an
+                                    // example.
                                     let src_ipv6 = IpAddress::v6(0xfdaa, 0, 0, 0, 0, 0, 0, 1);
                                     let icmp_packet = Icmpv6Packet::new_checked(&payload).unwrap();
                                     let icmp_repr = Icmpv6Repr::parse(
@@ -1870,54 +1770,45 @@ fn main() -> ! {
                                                 Message::new_scalar(
                                                     connection.retop,
                                                     NetPingCallback::NoErr.to_usize().unwrap(),
-                                                    u32::from_be_bytes(ra[..4].try_into().unwrap())
-                                                        as usize,
-                                                    u32::from_be_bytes(ra[12..].try_into().unwrap())
-                                                        as usize,
+                                                    u32::from_be_bytes(ra[..4].try_into().unwrap()) as usize,
+                                                    u32::from_be_bytes(ra[12..].try_into().unwrap()) as usize,
                                                     (now as i64 - packet_timestamp_ms) as usize,
                                                 ),
                                             ) {
                                                 Ok(_) => {}
                                                 Err(xous::Error::ServerQueueFull) => {
-                                                    log::warn!("Got seq {} response, but upstream server queue is full; dropping.", &seq_no);
+                                                    log::warn!(
+                                                        "Got seq {} response, but upstream server queue is full; dropping.",
+                                                        &seq_no
+                                                    );
                                                 }
                                                 Err(e) => {
-                                                    log::error!(
-                                                        "Unhandled error: {:?}; ignoring",
-                                                        e
-                                                    );
+                                                    log::error!("Unhandled error: {:?}; ignoring", e);
                                                 }
                                             }
                                         }
-                                    } else if let Icmpv6Repr::DstUnreachable {
-                                        reason,
-                                        header,
-                                        ..
-                                    } = icmp_repr
+                                    } else if let Icmpv6Repr::DstUnreachable { reason, header, .. } =
+                                        icmp_repr
                                     {
                                         let reason_code: u8 = From::from(reason);
-                                        log::warn!(
-                                            "Got dst unreachable {:?}: {:?}",
-                                            header.dst_addr,
-                                            reason
-                                        );
+                                        log::warn!("Got dst unreachable {:?}: {:?}", header.dst_addr, reason);
                                         match xous::try_send_message(
                                             connection.cid,
                                             Message::new_scalar(
                                                 connection.retop,
                                                 NetPingCallback::Unreachable.to_usize().unwrap()
                                                     | (reason_code as usize) << 24,
-                                                u32::from_be_bytes(ra[..4].try_into().unwrap())
-                                                    as usize,
-                                                u32::from_be_bytes(ra[8..12].try_into().unwrap())
-                                                    as usize,
-                                                u32::from_be_bytes(ra[12..].try_into().unwrap())
-                                                    as usize,
+                                                u32::from_be_bytes(ra[..4].try_into().unwrap()) as usize,
+                                                u32::from_be_bytes(ra[8..12].try_into().unwrap()) as usize,
+                                                u32::from_be_bytes(ra[12..].try_into().unwrap()) as usize,
                                             ),
                                         ) {
                                             Ok(_) => {}
                                             Err(xous::Error::ServerQueueFull) => {
-                                                log::warn!("Got dst {:?} unreachable, but upstream server queue is full; dropping.", remote_addr);
+                                                log::warn!(
+                                                    "Got dst {:?} unreachable, but upstream server queue is full; dropping.",
+                                                    remote_addr
+                                                );
                                             }
                                             Err(e) => {
                                                 log::error!("Unhandled error: {:?}; ignoring", e);
@@ -1935,8 +1826,8 @@ fn main() -> ! {
                 // log::trace!("pump: icmp retirement");
                 {
                     // notify the callback to drop its connection, because the queue is now empty
-                    // do this before we clear the queue, because we want the Drop message to come on the iteration
-                    // *after* the queue is empty.
+                    // do this before we clear the queue, because we want the Drop message to come on the
+                    // iteration *after* the queue is empty.
                     ping_destinations.retain(|conn, v|
                         if v.len() == 0 {
                             log::debug!("Dropping ping record for {:?}", conn.remote);
@@ -1985,45 +1876,30 @@ fn main() -> ! {
                 // log::set_max_level(log::LevelFilter::Info);
             }),
             Some(Opcode::GetIpv4Config) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let ser = if let Some(config) = net_config {
-                    Some(config.encode_u16())
-                } else {
-                    None
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let ser = if let Some(config) = net_config { Some(config.encode_u16()) } else { None };
                 buffer.replace(ser).expect("couldn't return config");
             }
             Some(Opcode::SubscribeWifiStats) => {
-                msg.forward(
-                    cm_cid,
-                    connection_manager::ConnectionManagerOpcode::SubscribeWifiStats as _)
-                .expect("couldn't forward subscription request");
+                msg.forward(cm_cid, connection_manager::ConnectionManagerOpcode::SubscribeWifiStats as _)
+                    .expect("couldn't forward subscription request");
             }
             Some(Opcode::UnsubWifiStats) => {
-                msg.forward(
-                    cm_cid,
-                    connection_manager::ConnectionManagerOpcode::UnsubWifiStats as _)
-                .expect("couldn't forward unsub request");
-            },
+                msg.forward(cm_cid, connection_manager::ConnectionManagerOpcode::UnsubWifiStats as _)
+                    .expect("couldn't forward unsub request");
+            }
             Some(Opcode::FetchSsidList) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let ret_storage = SsidList::default();
-                let mut buf =
-                    Buffer::into_buf(ret_storage).expect("couldn't convert to memory message");
+                let mut buf = Buffer::into_buf(ret_storage).expect("couldn't convert to memory message");
                 buf.lend_mut(
                     cm_cid,
-                    connection_manager::ConnectionManagerOpcode::FetchSsidList
-                        .to_u32()
-                        .unwrap(),
+                    connection_manager::ConnectionManagerOpcode::FetchSsidList.to_u32().unwrap(),
                 )
                 .expect("couldn't forward ssid list request");
-                let ret_list = buf
-                    .to_original::<SsidList, _>()
-                    .expect("couldn't restore original");
+                let ret_list = buf.to_original::<SsidList, _>().expect("couldn't restore original");
                 buffer.replace(ret_list).expect("couldn't return config");
             }
             Some(Opcode::ConnMgrStartStop) => msg_scalar_unpack!(msg, code, _, _, _, {
@@ -2033,17 +1909,18 @@ fn main() -> ! {
                     2 => connection_manager::ConnectionManagerOpcode::DisconnectAndStop.to_usize().unwrap(),
                     3 => connection_manager::ConnectionManagerOpcode::WifiOnAndRun.to_usize().unwrap(),
                     4 => connection_manager::ConnectionManagerOpcode::WifiOn.to_usize().unwrap(),
-                    _ => {log::warn!("Got incorrect start/stop code, ignoring: {}", code); continue},
+                    _ => {
+                        log::warn!("Got incorrect start/stop code, ignoring: {}", code);
+                        continue;
+                    }
                 };
-                match try_send_message(
-                    cm_cid,
-                    Message::new_scalar(
-                        cm_op, 0, 0, 0, 0
-                    ),
-                ) {
+                match try_send_message(cm_cid, Message::new_scalar(cm_op, 0, 0, 0, 0)) {
                     Err(xous::Error::ServerQueueFull) => {
-                        log::warn!("ConnMgrStartStop: connection manager queue full, dropping request for {:?}", cm_op);
-                    },
+                        log::warn!(
+                            "ConnMgrStartStop: connection manager queue full, dropping request for {:?}",
+                            cm_op
+                        );
+                    }
                     _ => (),
                 };
             }),
@@ -2065,10 +1942,10 @@ fn main() -> ! {
 
                 match try_send_message(
                     cm_cid,
-                    Message::new_scalar( // this has to be non-blocking to avoid deadlock: reset can be called from inside connection_manager
-                        connection_manager::ConnectionManagerOpcode::EcReset
-                            .to_usize()
-                            .unwrap(),
+                    Message::new_scalar(
+                        // this has to be non-blocking to avoid deadlock: reset can be called from inside
+                        // connection_manager
+                        connection_manager::ConnectionManagerOpcode::EcReset.to_usize().unwrap(),
                         0,
                         0,
                         0,
@@ -2077,7 +1954,7 @@ fn main() -> ! {
                 ) {
                     Err(xous::Error::ServerQueueFull) => {
                         log::warn!("Reset: connection manager queue full, dropping request for EcReset");
-                    },
+                    }
                     _ => (),
                 }
                 xous::return_scalar(msg.sender, 1).unwrap();
@@ -2086,9 +1963,7 @@ fn main() -> ! {
                 com_int_list.clear();
                 com.ints_enable(&com_int_list); // disable all the interrupts
 
-                susres
-                    .suspend_until_resume(token)
-                    .expect("couldn't execute suspend/resume");
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 // re-enable the interrupts
                 com_int_list.clear();
                 com_int_list.push(ComIntSources::WlanIpConfigUpdate);
@@ -2115,9 +1990,7 @@ fn main() -> ! {
     xous::send_message(
         cm_cid,
         Message::new_blocking_scalar(
-            connection_manager::ConnectionManagerOpcode::Quit
-                .to_usize()
-                .unwrap(),
+            connection_manager::ConnectionManagerOpcode::Quit.to_usize().unwrap(),
             0,
             0,
             0,

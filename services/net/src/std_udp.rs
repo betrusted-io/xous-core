@@ -1,6 +1,7 @@
-use crate::*;
-use smoltcp::wire::{IpEndpoint, IpAddress};
+use smoltcp::wire::{IpAddress, IpEndpoint};
 use ticktimer_server::Ticktimer;
+
+use crate::*;
 
 /// Overall architecture for libstd UDP implementation.
 ///
@@ -12,7 +13,7 @@ pub(crate) fn std_udp_bind(
     _iface: &mut Interface,
     sockets: &mut SocketSet,
     our_sockets: &mut Vec<Option<SocketHandle>>,
-    ) {
+) {
     // Ignore nonblocking and scalar messages
     let body = match msg.body.memory_message_mut() {
         Some(b) => b,
@@ -34,32 +35,26 @@ pub(crate) fn std_udp_bind(
         }
     };
 
-    let udp_rx_buffer = udp::PacketBuffer::new(
-        vec![udp::PacketMetadata::EMPTY, udp::PacketMetadata::EMPTY],
-        vec![0; 65535],
-    );
-    let udp_tx_buffer = udp::PacketBuffer::new(
-        vec![udp::PacketMetadata::EMPTY, udp::PacketMetadata::EMPTY],
-        vec![0; 65535],
-    );
+    let udp_rx_buffer =
+        udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY, udp::PacketMetadata::EMPTY], vec![0; 65535]);
+    let udp_tx_buffer =
+        udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY, udp::PacketMetadata::EMPTY], vec![0; 65535]);
     let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
     let handle = sockets.add(udp_socket);
     let udp_socket = sockets.get_mut::<udp::Socket>(handle);
 
     // Attempt to connect, returning the error if there is one
-    if let Err(e) = udp_socket
-        .bind(IpEndpoint{addr: address, port: local_port})
-        .map_err(|e| match e {
-            smoltcp::socket::udp::BindError::InvalidState => NetError::SocketInUse,
-            smoltcp::socket::udp::BindError::Unaddressable => NetError::Unaddressable,
-        })
-    {
+    if let Err(e) = udp_socket.bind(IpEndpoint { addr: address, port: local_port }).map_err(|e| match e {
+        smoltcp::socket::udp::BindError::InvalidState => NetError::SocketInUse,
+        smoltcp::socket::udp::BindError::Unaddressable => NetError::Unaddressable,
+    }) {
         log::trace!("couldn't connect: {:?}", e);
         std_failure(msg, e);
         return;
     }
 
-    // Add the socket into our process' list of sockets, and pass the index back as the `fd` parameter for future reference.
+    // Add the socket into our process' list of sockets, and pass the index back as the `fd` parameter for
+    // future reference.
     let idx = insert_or_append(our_sockets, handle) as u8;
 
     let body = msg.body.memory_message_mut().unwrap();
@@ -101,11 +96,7 @@ pub(crate) fn std_udp_rx(
     let nonblocking = args[0] == 0;
     let expiry = if !nonblocking {
         let to = u64::from_le_bytes(args[1..9].try_into().unwrap());
-        if to == 0 {
-            None
-        } else {
-            Some(to + timer.elapsed_ms())
-        }
+        if to == 0 { None } else { Some(to + timer.elapsed_ms()) }
     } else {
         None
     };
@@ -131,11 +122,12 @@ pub(crate) fn std_udp_rx(
         if socket.is_open() {
             socket.close();
         }
-        if let Err(e) = socket.bind(IpEndpoint{addr: IpAddress::Ipv4(local_addr), port})
-        .map_err(|e| match e {
-            smoltcp::socket::udp::BindError::Unaddressable => NetError::WouldBlock,
-            _ => NetError::LibraryError,
-        }) {
+        if let Err(e) =
+            socket.bind(IpEndpoint { addr: IpAddress::Ipv4(local_addr), port }).map_err(|e| match e {
+                smoltcp::socket::udp::BindError::Unaddressable => NetError::WouldBlock,
+                _ => NetError::LibraryError,
+            })
+        {
             std_failure(msg, e);
             return;
         }
@@ -180,7 +172,8 @@ pub(crate) fn std_udp_rx(
     insert_or_append(
         udp_rx_waiting,
         UdpStdState {
-            msg, // <-- msg is inserted into the udp_rx_waiting vector, thus preventing the lend_mut from returning.
+            msg, /* <-- msg is inserted into the udp_rx_waiting vector, thus preventing the lend_mut from
+                  * returning. */
             handle: *handle,
             expiry,
         },
@@ -223,7 +216,13 @@ pub(crate) fn std_udp_tx(
     };
     let len = u16::from_le_bytes([bytes[19], bytes[20]]);
     // attempt the tx
-    log::debug!("udp tx to fd {} -> {:?}:{} {:?}", connection_handle_index, address, remote_port, &bytes[21..21 + len as usize]);
+    log::debug!(
+        "udp tx to fd {} -> {:?}:{} {:?}",
+        connection_handle_index,
+        address,
+        remote_port,
+        &bytes[21..21 + len as usize]
+    );
     let local_addr = match iface.ipv4_addr() {
         Some(addr) => addr,
         None => {
@@ -241,11 +240,12 @@ pub(crate) fn std_udp_tx(
         if socket.is_open() {
             socket.close();
         }
-        if let Err(e) = socket.bind(IpEndpoint{addr: IpAddress::Ipv4(local_addr), port})
-        .map_err(|e| match e {
-            smoltcp::socket::udp::BindError::InvalidState => NetError::WouldBlock,
-            smoltcp::socket::udp::BindError::Unaddressable => NetError::Unaddressable,
-        }) {
+        if let Err(e) =
+            socket.bind(IpEndpoint { addr: IpAddress::Ipv4(local_addr), port }).map_err(|e| match e {
+                smoltcp::socket::udp::BindError::InvalidState => NetError::WouldBlock,
+                smoltcp::socket::udp::BindError::Unaddressable => NetError::Unaddressable,
+            })
+        {
             std_failure(msg, e);
             return;
         }
@@ -253,9 +253,10 @@ pub(crate) fn std_udp_tx(
     match socket.send_slice(&bytes[21..21 + len as usize], IpEndpoint::new(address, remote_port)) {
         Ok(_) => unsafe {
             body.buf.as_slice_mut()[0] = 0;
-        }
+        },
         Err(_e) => {
-            // the only type of error returned from smoltcp in this case is if the destination is not addressible.
+            // the only type of error returned from smoltcp in this case is if the destination is not
+            // addressible.
             std_failure(msg, NetError::Unaddressable);
             return;
         }

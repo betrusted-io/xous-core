@@ -1,14 +1,15 @@
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use xous::{Message, msg_scalar_unpack, send_message};
-use xous_ipc::Buffer;
-use crate::NetConn;
-use crate::api::*;
 use num_traits::*;
+use xous::{msg_scalar_unpack, send_message, Message};
+use xous_ipc::Buffer;
+
+use crate::api::*;
+use crate::NetConn;
 
 ///////// Ping implementation
 /// smoltcp's ICMP stack is a little weird. It's designed with an icmp packet
@@ -24,11 +25,10 @@ use num_traits::*;
 ///
 /// This ugly division of labor leads to an unweildy handler prone to locking
 /// and object lifetime issues. There's two options on how to work our way out of this.
-/// 1. One is to re-implement ICMP packet packing and unpacking inside Xous, so that
-///    smoltcp is just a raw ICMP packet pusher.
-/// 2. Make the Xous Net interface to ICMP specific to "ping", pushing sequence numbers
-///    and origin timestamps into the Net crate, and getting back sequence numbers with
-///    the corresponding timestamps.
+/// 1. One is to re-implement ICMP packet packing and unpacking inside Xous, so that smoltcp is just a raw
+///    ICMP packet pusher.
+/// 2. Make the Xous Net interface to ICMP specific to "ping", pushing sequence numbers and origin timestamps
+///    into the Net crate, and getting back sequence numbers with the corresponding timestamps.
 ///
 /// The downside of (1) is duplication of effort. ICMP is fairly straightforward for
 /// IPv4, but unfortunately for IPv6 it requires knowledge of the source address
@@ -67,12 +67,9 @@ impl Ping {
     pub fn non_blocking_handle(callback_server: XousServerId, dispatch_opcode: usize) -> Ping {
         let xns = xous_names::XousNames::new().unwrap();
         let net = NetConn::new(&xns).unwrap();
-        Ping {
-            net,
-            callback_server: Some(callback_server),
-            dispatch_opcode: Some(dispatch_opcode),
-         }
+        Ping { net, callback_server: Some(callback_server), dispatch_opcode: Some(dispatch_opcode) }
     }
+
     /// This is a handle just for manipulating settings on the ping socket. You would create
     /// one of these if you wanted to adjust the ping settings before issuing a `blocking` ping,
     /// which is incapable of manipulating the Net crate state.
@@ -93,12 +90,15 @@ impl Ping {
                     sent_ok: None,
                 };
                 let mut buf = Buffer::into_buf(ping).expect("couldn't allocate memory to send Ping");
-                buf.lend_mut(self.net.conn(), Opcode::Ping.to_u32().unwrap()).expect("couldn't send Ping command");
+                buf.lend_mut(self.net.conn(), Opcode::Ping.to_u32().unwrap())
+                    .expect("couldn't send Ping command");
                 let ret = buf.to_original::<NetPingPacket, _>().unwrap();
                 if let Some(sent_ok) = ret.sent_ok {
                     sent_ok
                 } else {
-                    panic!("Internal error: malformed data returned from Net while processing Ping operation");
+                    panic!(
+                        "Internal error: malformed data returned from Net while processing Ping operation"
+                    );
                 }
             } else {
                 log::warn!("Ping object was not initialized for async operation.");
@@ -112,7 +112,7 @@ impl Ping {
 
     /// Send multiple pings by spawning a helper thread. Results go to the asynchronous callback
     /// specified during the creation of the Ping object.
-    pub fn ping_spawn_thread(&self, remote: IpAddr, count: usize, delay_ms: usize) -> Option<JoinHandle::<()>> {
+    pub fn ping_spawn_thread(&self, remote: IpAddr, count: usize, delay_ms: usize) -> Option<JoinHandle<()>> {
         if let Some(cbs) = self.callback_server {
             if let Some(dispatch_op) = self.dispatch_opcode {
                 let handle = thread::spawn({
@@ -129,15 +129,21 @@ impl Ping {
                                 return_opcode: dispatch_op,
                                 sent_ok: None,
                             };
-                            let mut buf = Buffer::into_buf(ping).expect("couldn't allocate memory to send Ping");
-                            buf.lend_mut(net_conn, Opcode::Ping.to_u32().unwrap()).expect("couldn't send Ping command");
+                            let mut buf =
+                                Buffer::into_buf(ping).expect("couldn't allocate memory to send Ping");
+                            buf.lend_mut(net_conn, Opcode::Ping.to_u32().unwrap())
+                                .expect("couldn't send Ping command");
                             let ret = buf.to_original::<NetPingPacket, _>().unwrap();
                             if let Some(sent_ok) = ret.sent_ok {
                                 if !sent_ok {
-                                    log::warn!("Problem sending a Ping inside ping_spawn; ignoring error and moving on.");
+                                    log::warn!(
+                                        "Problem sending a Ping inside ping_spawn; ignoring error and moving on."
+                                    );
                                 }
                             } else {
-                                panic!("Internal error: malformed data returned from Net while processing Ping operation");
+                                panic!(
+                                    "Internal error: malformed data returned from Net while processing Ping operation"
+                                );
                             }
                             tt.sleep_ms(delay_ms).unwrap();
                             cur_count += 1;
@@ -181,33 +187,38 @@ impl Ping {
                     if sent_ok {
                         loop {
                             let msg = xous::receive_message(sid).unwrap();
-                            // only one message type is expected back, so we don't match on ID -- just unpack the message already!
+                            // only one message type is expected back, so we don't match on ID -- just unpack
+                            // the message already!
                             msg_scalar_unpack!(msg, op, _addr, seq_or_addr, timestamp, {
                                 match FromPrimitive::from_usize(op & 0xFF) {
                                     Some(NetPingCallback::Drop) => {
                                         break;
                                     }
-                                    Some(NetPingCallback::NoErr) => {
-                                        match remote {
-                                            IpAddr::V4(_) => {
-                                                reachable.store(true, Ordering::SeqCst);
-                                                ping_time.store(timestamp as u32, Ordering::SeqCst);
-                                                log::info!("Pong from {:?} seq {} received: {} ms", remote, seq_or_addr, timestamp);
-                                            },
-                                            IpAddr::V6(_) => {
-                                                reachable.store(true, Ordering::SeqCst);
-                                                ping_time.store(timestamp as u32, Ordering::SeqCst);
-                                                log::info!("Pong from {:?} received: {} ms", remote, timestamp);
-                                            },
+                                    Some(NetPingCallback::NoErr) => match remote {
+                                        IpAddr::V4(_) => {
+                                            reachable.store(true, Ordering::SeqCst);
+                                            ping_time.store(timestamp as u32, Ordering::SeqCst);
+                                            log::info!(
+                                                "Pong from {:?} seq {} received: {} ms",
+                                                remote,
+                                                seq_or_addr,
+                                                timestamp
+                                            );
                                         }
-                                    }
+                                        IpAddr::V6(_) => {
+                                            reachable.store(true, Ordering::SeqCst);
+                                            ping_time.store(timestamp as u32, Ordering::SeqCst);
+                                            log::info!("Pong from {:?} received: {} ms", remote, timestamp);
+                                        }
+                                    },
                                     Some(NetPingCallback::Timeout) => {
                                         reachable.store(false, Ordering::SeqCst);
                                         ping_time.store(timestamp as u32, Ordering::SeqCst);
                                         log::info!("Ping to {:?} timed out", remote);
                                     }
                                     Some(NetPingCallback::Unreachable) => {
-                                        let code = smoltcp::wire::Icmpv4DstUnreachable::from((op >> 24) as u8);
+                                        let code =
+                                            smoltcp::wire::Icmpv4DstUnreachable::from((op >> 24) as u8);
                                         reachable.store(false, Ordering::SeqCst);
                                         log::info!("Ping to {:?} unreachable: {:?}", remote, code);
                                     }
@@ -218,7 +229,10 @@ impl Ping {
                             });
                         }
                     } else {
-                        log::error!("Ping to {:?} was requested, but an internal error prevented it from being sent (maybe ICMP socket is busy?).", remote);
+                        log::error!(
+                            "Ping to {:?} was requested, but an internal error prevented it from being sent (maybe ICMP socket is busy?).",
+                            remote
+                        );
                     }
                 } else {
                     panic!("Internal error -- Ping was requested, but the returned memory was malformed");
@@ -233,35 +247,42 @@ impl Ping {
     pub fn set_timeout(&mut self, timeout_ms: u32) {
         send_message(
             self.net.conn(),
-            Message::new_scalar(Opcode::PingSetTimeout.to_usize().unwrap(), timeout_ms as usize, 0, 0, 0)
-        ).expect("couldn't send set timeout for ping");
+            Message::new_scalar(Opcode::PingSetTimeout.to_usize().unwrap(), timeout_ms as usize, 0, 0, 0),
+        )
+        .expect("couldn't send set timeout for ping");
     }
+
     pub fn get_timeout(&self) -> u32 {
         let response = send_message(
             self.net.conn(),
-            Message::new_blocking_scalar(Opcode::PingGetTimeout.to_usize().unwrap(), 0, 0, 0, 0)
-        ).expect("Couldn't get ping timeout");
+            Message::new_blocking_scalar(Opcode::PingGetTimeout.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .expect("Couldn't get ping timeout");
         if let xous::Result::Scalar1(result) = response {
             result as u32
         } else {
             panic!("Could execute get_timeout call");
         }
     }
+
     pub fn get_ttl(&self) -> u8 {
         let response = send_message(
             self.net.conn(),
-            Message::new_blocking_scalar(Opcode::PingGetTtl.to_usize().unwrap(), 0, 0, 0, 0)
-        ).expect("Couldn't get ping TTL");
+            Message::new_blocking_scalar(Opcode::PingGetTtl.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .expect("Couldn't get ping TTL");
         if let xous::Result::Scalar1(result) = response {
             result as u8
         } else {
             panic!("Could execute get_ttl call");
         }
     }
+
     pub fn set_ttl(&self, ttl: u8) {
         send_message(
             self.net.conn(),
-            Message::new_scalar(Opcode::PingSetTtl.to_usize().unwrap(), ttl as usize, 0, 0, 0)
-        ).expect("couldn't send set TTL message for ping");
+            Message::new_scalar(Opcode::PingSetTtl.to_usize().unwrap(), ttl as usize, 0, 0, 0),
+        )
+        .expect("couldn't send set TTL message for ping");
     }
 }
