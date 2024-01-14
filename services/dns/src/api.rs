@@ -19,7 +19,8 @@ pub(crate) enum Opcode {
     /// used internally to update the TTL field, and eventually expire the cache (unless cache is frozen)
     UpdateTtl = 2,
 
-    /// issuing this opcode causes all future attempts to change the DNS server configs to be ignored. This also freezes the cache.
+    /// issuing this opcode causes all future attempts to change the DNS server configs to be ignored. This
+    /// also freezes the cache.
     FreezeConfig = 3,
 
     /// this allows automatic updates to the DNS server configs based on DHCP. This is the default state.
@@ -52,14 +53,7 @@ pub(crate) enum Opcode {
 }
 
 #[derive(
-    Debug,
-    num_derive::FromPrimitive,
-    num_derive::ToPrimitive,
-    Archive,
-    Serialize,
-    Deserialize,
-    Copy,
-    Clone,
+    Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, Archive, Serialize, Deserialize, Copy, Clone,
 )]
 #[repr(u16)]
 pub enum DnsResponseCode {
