@@ -32,21 +32,13 @@ impl Ticktimer {
     pub fn elapsed_ms(&self) -> u64 {
         let response = send_message(
             self.conn,
-            xous::Message::new_blocking_scalar(
-                api::Opcode::ElapsedMs.to_usize().unwrap(),
-                0,
-                0,
-                0,
-                0,
-            ),
+            xous::Message::new_blocking_scalar(api::Opcode::ElapsedMs.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .expect("Ticktimer: failure to send message to Ticktimer");
         if let xous::Result::Scalar2(upper, lower) = response {
             upper as u64 | ((lower as u64) << 32)
         } else {
-            panic!(
-                "Ticktimer elapsed_ms(): unexpected return value."
-            );
+            panic!("Ticktimer elapsed_ms(): unexpected return value.");
         }
     }
 
@@ -58,13 +50,7 @@ impl Ticktimer {
     pub fn sleep_ms(&self, ms: usize) -> Result<(), Error> {
         send_message(
             self.conn,
-            xous::Message::new_blocking_scalar(
-                api::Opcode::SleepMs.to_usize().unwrap(),
-                ms,
-                0,
-                0,
-                0,
-            ),
+            xous::Message::new_blocking_scalar(api::Opcode::SleepMs.to_usize().unwrap(), ms, 0, 0, 0),
         )
         .map(|_| ())
     }
@@ -86,17 +72,13 @@ impl Ticktimer {
     ///
     ///     * A `String` containing the version information of the latest build
     pub fn get_version(&self) -> String {
-        let alloc = api::VersionString {
-            version: xous_ipc::String::new(),
-        };
+        let alloc = api::VersionString { version: xous_ipc::String::new() };
         let mut buf = xous_ipc::Buffer::into_buf(alloc).expect("couldn't convert version request");
-        buf.lend_mut(self.conn, api::Opcode::GetVersion.to_u32().unwrap())
-            .expect("couldn't get version");
-        let v = buf
-            .to_original::<api::VersionString, _>()
-            .expect("couldn't revert buffer");
+        buf.lend_mut(self.conn, api::Opcode::GetVersion.to_u32().unwrap()).expect("couldn't get version");
+        let v = buf.to_original::<api::VersionString, _>().expect("couldn't revert buffer");
         String::from(v.version.as_str().unwrap())
     }
+
     pub fn get_version_semver(&self) -> SemVer {
         SemVer::from_str(self.get_version().lines().next().unwrap()).unwrap()
     }
@@ -121,13 +103,7 @@ impl Ticktimer {
     pub fn lock_mutex(&self, mtx: usize) {
         send_message(
             self.conn,
-            xous::Message::new_blocking_scalar(
-                api::Opcode::LockMutex.to_usize().unwrap(),
-                mtx,
-                0,
-                0,
-                0,
-            ),
+            xous::Message::new_blocking_scalar(api::Opcode::LockMutex.to_usize().unwrap(), mtx, 0, 0, 0),
         )
         .expect("couldn't lock mutex");
     }
@@ -179,17 +155,10 @@ impl Ticktimer {
     ///
     ///     * condvar: A `usize` referring to the Condvar. This is probably a pointer, but can be any `usize`
     ///     * count: The number of Waiters to wake up
-    ///
     pub fn notify_condition(&self, condvar: usize, count: usize) {
         send_message(
             self.conn,
-            xous::Message::new_scalar(
-                api::Opcode::NotifyCondition.to_usize().unwrap(),
-                condvar,
-                count,
-                0,
-                0,
-            ),
+            xous::Message::new_scalar(api::Opcode::NotifyCondition.to_usize().unwrap(), condvar, count, 0, 0),
         )
         .map(|r| r == xous::Result::Scalar1(0))
         .expect("couldn't notify condition");
@@ -200,7 +169,8 @@ use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Ticktimer {
     fn drop(&mut self) {
-        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the
+        // connection.
         if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe {
                 xous::disconnect(self.conn).unwrap();
