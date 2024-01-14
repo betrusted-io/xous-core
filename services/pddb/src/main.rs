@@ -477,7 +477,10 @@ fn wrapped_main() -> ! {
     // other processes from crafting them.
     let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
     let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
-    let pw_handle = thread::spawn({ move || password_ux_manager(xous::connect(pddb_sid).unwrap(), pw_sid) });
+    let pw_handle = thread::spawn({
+        // this comment keeps rustfmt from flattening this block
+        move || password_ux_manager(xous::connect(pddb_sid).unwrap(), pw_sid)
+    });
 
     // OS-specific PDDB driver
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy), pw_cid);
@@ -1738,9 +1741,9 @@ fn wrapped_main() -> ! {
                             None
                         },
                     ) {
-                        Ok((list, _, _)) => list.into_iter().rev().collect(), /* reverse order so Vec can
-                                                                                * just pop and get "first"
-                                                                                * item */
+                        Ok((list, _, _)) => list.into_iter().rev().collect(), /* reverse order so Vec can */
+                        // just pop and get "first"
+                        // item
                         Err(e) => {
                             match e.kind() {
                                 std::io::ErrorKind::NotFound => buf[..4]
