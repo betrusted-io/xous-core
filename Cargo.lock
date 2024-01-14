@@ -2750,6 +2750,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "log-test-client"
+version = "0.1.0"
+dependencies = [
+ "xous 0.9.56 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "managed"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

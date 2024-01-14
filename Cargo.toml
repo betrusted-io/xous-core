@@ -29,7 +29,7 @@ default-members = [
   "services/modals",
   "services/usb-device-xous",
   "services/early_settings",
-  "libs/userprefs"
+  "libs/userprefs",
 ]
 members = [
   "xous-ipc",
@@ -70,6 +70,7 @@ members = [
   "services/pddb",
   "services/net",
   "services/dns",
+  "services/log-test-client",
   "services/modals",
   "services/early_settings",
   "apps/app-loader",
@@ -109,8 +110,8 @@ resolver = "2"
 # packages to be rebuilt every time they were touched.
 # Keep them out of the main workspace.
 exclude = [
-  "utralib",  # Exclude UTRA, since it is machine-generated.
-  "locales",  # exclude because it is machine-generated
+  "utralib", # Exclude UTRA, since it is machine-generated.
+  "locales", # exclude because it is machine-generated
   "xtask",
   # exclude the API crates, as they are domiciled here but referenced via crates.io
   "api/xous-api-log",
@@ -122,13 +123,13 @@ exclude = [
 ]
 
 [profile.release]
-codegen-units = 1 # 1 better optimizations
+codegen-units = 1  # 1 better optimizations
 debug = false
 strip = false
 lto = "fat"
 incremental = true
 #panic = "abort" # Remove panic output, which can reduce file size
-opt-level = "s"  # z,s: Optimize for size instead of performance; 1 for easier debugging; comment out for "best performance" (but in Rust 1.72 this causes regressions)
+opt-level = "s" # z,s: Optimize for size instead of performance; 1 for easier debugging; comment out for "best performance" (but in Rust 1.72 this causes regressions)
 
 # prefer hardware-accelerated versions of services
 [patch.crates-io.sha2]
@@ -138,17 +139,17 @@ path = "services/engine-sha512"
 path = "services/aes"
 
 [patch.crates-io.curve25519-dalek]
-git="https://github.com/betrusted-io/curve25519-dalek.git"
-branch="main"
+git = "https://github.com/betrusted-io/curve25519-dalek.git"
+branch = "main"
 #path = "../curve25519-dalek"  # when doing local dev work
 # feature overrides are specified at the crate level
 
 [patch."https://github.com/betrusted-io/xous-engine-25519.git"]
-engine-25519 = {path = "services/engine-25519"}
+engine-25519 = { path = "services/engine-25519" }
 
 [patch.crates-io.usb-device]
-git="https://github.com/betrusted-io/usb-device.git"
-branch="main"
+git = "https://github.com/betrusted-io/usb-device.git"
+branch = "main"
 # local dev shortcuts
 #path = "../usb-device"
 
@@ -157,8 +158,8 @@ path = "imports/getrandom"
 
 [patch.crates-io.ring]
 # path = "../ring-xous"  # for local dev only
-git="https://github.com/betrusted-io/ring-xous"
-rev="4296c2e7904898766cf7d8d589759a129794783b" # use the commitref because we're still updating the branch
+git = "https://github.com/betrusted-io/ring-xous"
+rev = "4296c2e7904898766cf7d8d589759a129794783b"  # use the commitref because we're still updating the branch
 #branch="0.16.20-cleanup"
 
 ######################################################
