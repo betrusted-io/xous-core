@@ -572,6 +572,7 @@ fn parse_vendor_extensions<T: BufRead>(
 
 fn print_header<U: Write>(out: &mut U) -> std::io::Result<()> {
     let s = r####"
+#![cfg_attr(rustfmt, rustfmt_skip)] // don't format generated files
 #![allow(dead_code)]
 use core::convert::TryInto;
 #[cfg(feature="std")]
