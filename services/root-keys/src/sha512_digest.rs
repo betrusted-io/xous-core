@@ -1,33 +1,23 @@
 use digest::{
-    consts::{U64, U128},
-    BlockInput,
-    FixedOutputDirty,
-    Reset,
-    Update,
+    consts::{U128, U64},
+    BlockInput, FixedOutputDirty, Reset, Update,
 };
 
 /// Wrap a pre-hash value in a Digest trait
 #[derive(Clone)]
 pub struct Sha512Prehash {
     /// track the length of the message processed so far
-    hash: Option<[u8; 64]>
+    hash: Option<[u8; 64]>,
 }
 impl Sha512Prehash {
     // use this function instead of default for more control over configuration of the hardware engine
-    pub fn new() -> Self {
-        Sha512Prehash {
-            hash: None
-        }
-    }
+    pub fn new() -> Self { Sha512Prehash { hash: None } }
+
     #[allow(dead_code)] // not used in hosted mode
-    pub fn set_prehash(&mut self, hash: [u8; 64]) {
-        self.hash = Some(hash);
-    }
+    pub fn set_prehash(&mut self, hash: [u8; 64]) { self.hash = Some(hash); }
 }
 impl Default for Sha512Prehash {
-    fn default() -> Self {
-        Sha512Prehash::new()
-    }
+    fn default() -> Self { Sha512Prehash::new() }
 }
 
 impl BlockInput for Sha512Prehash {
@@ -55,6 +45,5 @@ impl FixedOutputDirty for Sha512Prehash {
 }
 
 impl Reset for Sha512Prehash {
-    fn reset(&mut self) {
-    }
+    fn reset(&mut self) {}
 }

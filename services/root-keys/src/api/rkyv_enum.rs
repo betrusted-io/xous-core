@@ -13,6 +13,7 @@
 
 #![allow(dead_code)]
 use zeroize::Zeroize;
+
 use crate::PAR_BLOCKS;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]

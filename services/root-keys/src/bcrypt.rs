@@ -1,4 +1,3 @@
-
 // this code is based on https://github.com/Keats/rust-bcrypt
 // the original crate is not used directly because the base64 wrappers cause the crate
 // to be incompatible with a no-std environment. We are storing binary data directly
@@ -47,19 +46,19 @@ pub fn bcrypt(cost: u32, salt: &[u8], pw: &str, output: &mut [u8]) {
     let state = setup(cost, salt, &plaintext_copy[..pw_len]);
 
     // erase the plaintext copy as soon as we're done with it
-    // an unsafe method is used because the compiler will correctly reason that plaintext_copy goes out of scope
-    // and these writes are never read, and therefore they may be optimized out.
+    // an unsafe method is used because the compiler will correctly reason that plaintext_copy goes out of
+    // scope and these writes are never read, and therefore they may be optimized out.
     let pt_ptr = plaintext_copy.as_mut_ptr();
     for i in 0..plaintext_copy.len() {
-        unsafe{pt_ptr.add(i).write_volatile(core::mem::zeroed());}
+        unsafe {
+            pt_ptr.add(i).write_volatile(core::mem::zeroed());
+        }
     }
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
     // OrpheanBeholderScryDoubt
     #[allow(clippy::unreadable_literal)]
-    let mut ctext = [
-        0x4f727068, 0x65616e42, 0x65686f6c, 0x64657253, 0x63727944, 0x6f756274,
-    ];
+    let mut ctext = [0x4f727068, 0x65616e42, 0x65686f6c, 0x64657253, 0x63727944, 0x6f756274];
     for i in 0..3 {
         let i: usize = i * 2;
         for _ in 0..64 {

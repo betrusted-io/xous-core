@@ -6,35 +6,31 @@ use api::*;
 mod backups;
 mod sha512_digest;
 
-use xous::{msg_scalar_unpack, send_message, msg_blocking_scalar_unpack};
-#[cfg(feature = "policy-menu")]
-use xous_ipc::String;
-
-use xous_ipc::Buffer;
-
-use num_traits::*;
+use core::ops::Deref;
+use std::convert::TryInto;
+use std::format;
+use std::str;
 
 use gam::modal::*;
 #[cfg(feature = "policy-menu")]
 use gam::{MenuItem, MenuPayload};
-
+use locales::t;
+use num_traits::*;
 #[cfg(feature = "tts")]
 use tts_frontend::*;
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message};
+use xous_ipc::Buffer;
+#[cfg(feature = "policy-menu")]
+use xous_ipc::String;
 
-use locales::t;
-use core::ops::Deref;
-use std::format;
-use std::str;
-use std::convert::TryInto;
-
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 use implementation::*;
 /// used by the bbram helper/console protocol to indicate the start of a console message
 const CONSOLE_SENTINEL: &'static str = "CONS_SENTINEL|";
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod bcrypt;
 
 pub enum SignatureResult {
@@ -67,7 +63,7 @@ pub(crate) enum UpdateType {
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct MetadataInFlash {
-    pub magic: u32,  // 0x6174656d 'atem'
+    pub magic: u32, // 0x6174656d 'atem'
     pub version: u32,
     /// git data, but formatted as binary integers
     pub git_additional: u32, // commits beyond the tag
@@ -99,21 +95,23 @@ pub struct MetadataInFlash {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "xous"))]
 mod implementation {
+    use std::convert::TryInto;
+
+    use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
+    use aes::Aes256;
+    use ed25519_dalek::PublicKey;
+    use gam::modal::{Modal, Slider};
+    use gam::{ActionType, ProgressBar};
+    use locales::t;
+    use num_traits::*;
+    use xous_semver::SemVer;
+
+    use crate::api::*;
+    use crate::backups;
     use crate::PasswordRetentionPolicy;
     use crate::PasswordType;
-    use gam::modal::{Modal, Slider};
-    use locales::t;
-    use crate::api::*;
-    use gam::{ActionType, ProgressBar};
-    use num_traits::*;
-    use crate::{SignatureResult, GatewareRegion, MetadataInFlash};
-    use aes::Aes256;
-    use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
-    use std::convert::TryInto;
     use crate::UpdateType;
-    use xous_semver::SemVer;
-    use crate::backups;
-    use ed25519_dalek::PublicKey;
+    use crate::{GatewareRegion, MetadataInFlash, SignatureResult};
 
     #[derive(Debug, Copy, Clone)]
     #[allow(dead_code)]
@@ -144,34 +142,57 @@ mod implementation {
                 xns,
             }
         }
-        pub fn suspend(&self) {
-        }
-        pub fn resume(&self) {
-        }
+
+        pub fn suspend(&self) {}
+
+        pub fn resume(&self) {}
+
         pub fn pddb_recycle(&self) {}
 
         pub fn update_policy(&mut self, policy: Option<PasswordRetentionPolicy>) {
             log::info!("policy updated: {:?}", policy);
         }
+
         pub fn hash_and_save_password(&mut self, pw: &str, _verify: bool) -> bool {
             log::info!("got password plaintext: {}", pw);
             true
         }
+
         pub fn set_ux_password_type(&mut self, cur_type: Option<PasswordType>) {
             self.password_type = cur_type;
         }
-        pub fn is_initialized(&self) -> bool {true}
+
+        pub fn is_initialized(&self) -> bool { true }
+
         pub fn setup_key_init(&mut self) {}
-        fn fake_progress(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, msg: &str) -> Result<(), RootkeyResult> {
-            let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
-            0, 100, 10, Some("%"), 0, true, true
+
+        fn fake_progress(
+            &mut self,
+            rootkeys_modal: &mut Modal,
+            main_cid: xous::CID,
+            msg: &str,
+        ) -> Result<(), RootkeyResult> {
+            let mut progress_action = Slider::new(
+                main_cid,
+                Opcode::UxGutter.to_u32().unwrap(),
+                0,
+                100,
+                10,
+                Some("%"),
+                0,
+                true,
+                true,
             );
             progress_action.set_is_password(true);
             // now show the init wait note...
             rootkeys_modal.modify(
                 Some(ActionType::Slider(progress_action)),
-                Some(msg), false,
-                None, true, None);
+                Some(msg),
+                false,
+                None,
+                true,
+                None,
+            );
             rootkeys_modal.activate();
 
             xous::yield_slice(); // give some time to the GAM to render
@@ -186,57 +207,83 @@ mod implementation {
             }
             Ok(())
         }
-        pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+
+        pub fn do_key_init(
+            &mut self,
+            rootkeys_modal: &mut Modal,
+            main_cid: xous::CID,
+        ) -> Result<(), RootkeyResult> {
             self.xous_init_interlock();
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.setup_wait", locales::LANG))
         }
-        pub fn do_gateware_update(&mut self,
+
+        pub fn do_gateware_update(
+            &mut self,
             rootkeys_modal: &mut Modal,
             _modals: &modals::Modals,
             main_cid: xous::CID,
-            _updatetype: UpdateType
+            _updatetype: UpdateType,
         ) -> Result<(), RootkeyResult> {
             self.xous_init_interlock();
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.gwup_starting", locales::LANG))
         }
-        pub fn do_gateware_provision_uninitialized(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+
+        pub fn do_gateware_provision_uninitialized(
+            &mut self,
+            rootkeys_modal: &mut Modal,
+            main_cid: xous::CID,
+        ) -> Result<(), RootkeyResult> {
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.gwup_starting", locales::LANG))
         }
 
-        pub fn do_sign_xous(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+        pub fn do_sign_xous(
+            &mut self,
+            rootkeys_modal: &mut Modal,
+            main_cid: xous::CID,
+        ) -> Result<(), RootkeyResult> {
             self.xous_init_interlock();
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.init.signing_kernel", locales::LANG))
         }
+
         pub fn purge_password(&mut self, _ptype: PasswordType) {}
+
         pub fn purge_user_password(&mut self, _ptype: AesRootkeyType) {}
+
         pub fn purge_sensitive_data(&mut self) {}
 
-        pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.password_type}
+        pub fn get_ux_password_type(&self) -> Option<PasswordType> { self.password_type }
+
         pub fn finish_key_init(&mut self) {}
-        pub fn verify_gateware_self_signature(&mut self, _pk: Option::<&PublicKey>) -> bool {
-            true
-        }
-        pub fn test(&mut self, _rootkeys_modal: &mut Modal, _main_cid: xous::CID) -> Result<(), RootkeyResult> {
+
+        pub fn verify_gateware_self_signature(&mut self, _pk: Option<&PublicKey>) -> bool { true }
+
+        pub fn test(
+            &mut self,
+            _rootkeys_modal: &mut Modal,
+            _main_cid: xous::CID,
+        ) -> Result<(), RootkeyResult> {
             Ok(())
         }
-        pub fn is_jtag_working(&self) -> bool {true}
-        pub fn is_efuse_secured(&self) -> Option<bool> {None}
+
+        pub fn is_jtag_working(&self) -> bool { true }
+
+        pub fn is_efuse_secured(&self) -> Option<bool> { None }
+
         pub fn check_gateware_signature(&mut self, _region_enum: GatewareRegion) -> SignatureResult {
             log::info!("faking gateware check...");
             self.ticktimer.sleep_ms(4000).unwrap();
             log::info!("done");
             SignatureResult::DevKeyOk
         }
-        pub fn is_pcache_update_password_valid(&self) -> bool {
-            false
-        }
+
+        pub fn is_pcache_update_password_valid(&self) -> bool { false }
+
         pub fn is_pcache_boot_password_valid(&self) -> bool {
             // set this to `false` to test password boxes in hosted mode
             true
         }
-        pub fn fpga_key_source(&self) -> FpgaKeySource {
-            FpgaKeySource::Efuse
-        }
+
+        pub fn fpga_key_source(&self) -> FpgaKeySource { FpgaKeySource::Efuse }
 
         pub fn fetch_gw_metadata(&self, _region_enum: GatewareRegion) -> MetadataInFlash {
             MetadataInFlash {
@@ -250,31 +297,118 @@ mod implementation {
                 bin_checksum: [0; 16],
                 src_checksum: [0; 16],
                 date_len: 26,
-                date_str: [50, 48, 50, 49, 45, 48, 56, 45, 49, 50, 32, 50, 50, 58, 49, 53, 58, 53, 51, 46, 56, 49, 55, 51, 53, 54, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                date_str: [
+                    50, 48, 50, 49, 45, 48, 56, 45, 49, 50, 32, 50, 50, 58, 49, 53, 58, 53, 51, 46, 56, 49,
+                    55, 51, 53, 54, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                ],
                 host_len: 14,
-                host_str: [98, 117, 110, 110, 105, 101, 45, 100, 101, 115, 107, 116, 111, 112, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                host_str: [
+                    98, 117, 110, 110, 105, 101, 45, 100, 101, 115, 107, 116, 111, 112, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                ],
                 tag_len: 19,
-                tag_str: [118, 48, 46, 56, 46, 50, 45, 55, 49, 45, 103, 102, 102, 98, 97, 52, 55, 102, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                tag_str: [
+                    118, 48, 46, 56, 46, 50, 45, 55, 49, 45, 103, 102, 102, 98, 97, 52, 55, 102, 10, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                ],
                 log_len: 203,
-                log_str: [99, 111, 109, 109, 105, 116, 32, 102, 102, 98, 97, 52, 55, 102, 52, 98, 102, 55, 99, 52, 51, 50, 55, 54, 55, 50, 50, 56, 102, 101, 99, 52, 51, 53, 97, 56, 56, 48, 54, 54, 55, 53, 101, 52, 102, 49, 102, 10, 65, 117, 116, 104, 111, 114, 58, 32, 98, 117, 110, 110, 105, 101, 32, 60, 98, 117, 110, 110, 105, 101, 64, 107, 111, 115, 97, 103, 105, 46, 99, 111, 109, 62, 10, 68, 97, 116, 101, 58, 32, 32, 32, 84, 104, 117, 32, 65, 117, 103, 32, 49, 50, 32, 48, 52, 58, 52, 49, 58, 53, 49, 32, 50, 48, 50, 49, 32, 43, 48, 56, 48, 48, 10, 10, 32, 32, 32, 32, 109, 111, 100, 105, 102, 121, 32, 98, 111, 111, 116, 32, 116, 111, 32, 100, 111, 32, 102, 97, 108, 108, 98, 97, 99, 107, 32, 111, 110, 32, 115, 105, 103, 110, 97, 116, 117, 114, 101, 115, 10, 10, 77, 9, 98, 111, 111, 116, 47, 98, 101, 116, 114, 117, 115, 116, 101, 100, 45, 98, 111, 111, 116, 47, 115, 114, 99, 47, 109, 97, 105, 110, 46, 114, 115, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                log_str: [
+                    99, 111, 109, 109, 105, 116, 32, 102, 102, 98, 97, 52, 55, 102, 52, 98, 102, 55, 99, 52,
+                    51, 50, 55, 54, 55, 50, 50, 56, 102, 101, 99, 52, 51, 53, 97, 56, 56, 48, 54, 54, 55, 53,
+                    101, 52, 102, 49, 102, 10, 65, 117, 116, 104, 111, 114, 58, 32, 98, 117, 110, 110, 105,
+                    101, 32, 60, 98, 117, 110, 110, 105, 101, 64, 107, 111, 115, 97, 103, 105, 46, 99, 111,
+                    109, 62, 10, 68, 97, 116, 101, 58, 32, 32, 32, 84, 104, 117, 32, 65, 117, 103, 32, 49,
+                    50, 32, 48, 52, 58, 52, 49, 58, 53, 49, 32, 50, 48, 50, 49, 32, 43, 48, 56, 48, 48, 10,
+                    10, 32, 32, 32, 32, 109, 111, 100, 105, 102, 121, 32, 98, 111, 111, 116, 32, 116, 111,
+                    32, 100, 111, 32, 102, 97, 108, 108, 98, 97, 99, 107, 32, 111, 110, 32, 115, 105, 103,
+                    110, 97, 116, 117, 114, 101, 115, 10, 10, 77, 9, 98, 111, 111, 116, 47, 98, 101, 116,
+                    114, 117, 115, 116, 101, 100, 45, 98, 111, 111, 116, 47, 115, 114, 99, 47, 109, 97, 105,
+                    110, 46, 114, 115, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                ],
                 status_len: 512,
-                status_str: [79, 110, 32, 98, 114, 97, 110, 99, 104, 32, 109, 97, 105, 110, 10, 89, 111, 117, 114, 32, 98, 114, 97, 110, 99, 104, 32, 105, 115, 32, 117, 112, 32, 116, 111, 32, 100, 97, 116, 101, 32, 119, 105, 116, 104, 32, 39, 111, 114, 105, 103, 105, 110, 47, 109, 97, 105, 110, 39, 46, 10, 10, 67, 104, 97, 110, 103, 101, 115, 32, 110, 111, 116, 32, 115, 116, 97, 103, 101, 100, 32, 102, 111, 114, 32, 99, 111, 109, 109, 105, 116, 58, 10, 32, 32, 40, 117, 115, 101, 32, 34, 103, 105, 116, 32, 97, 100, 100, 32, 60, 102, 105, 108, 101, 62, 46, 46, 46, 34, 32, 116, 111, 32, 117, 112, 100, 97, 116, 101, 32, 119, 104, 97, 116, 32, 119, 105, 108, 108, 32, 98, 101, 32, 99, 111, 109, 109, 105, 116, 116, 101, 100, 41, 10, 32, 32, 40, 117, 115, 101, 32, 34, 103, 105, 116, 32, 114, 101, 115, 116, 111, 114, 101, 32, 60, 102, 105, 108, 101, 62, 46, 46, 46, 34, 32, 116, 111, 32, 100, 105, 115, 99, 97, 114, 100, 32, 99, 104, 97, 110, 103, 101, 115, 32, 105, 110, 32, 119, 111, 114, 107, 105, 110, 103, 32, 100, 105, 114, 101, 99, 116, 111, 114, 121, 41, 10, 32, 32, 40, 99, 111, 109, 109, 105, 116, 32, 111, 114, 32, 100, 105, 115, 99, 97, 114, 100, 32, 116, 104, 101, 32, 117, 110, 116, 114, 97, 99, 107, 101, 100, 32, 111, 114, 32, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 32, 105, 110, 32, 115, 117, 98, 109, 111, 100, 117, 108, 101, 115, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 97, 112, 112, 101, 110, 100, 95, 99, 115, 114, 46, 112, 121, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 101, 116, 114, 117, 115, 116, 101, 100, 95, 115, 111, 99, 46, 112, 121, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 111, 111, 116, 47, 98, 101, 116, 114, 117, 115, 116, 101, 100, 45, 98, 111, 111, 116, 47, 97, 115, 115, 101, 109, 98, 108, 101, 46, 115, 104, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 111, 111, 116, 95, 116, 101, 115, 116, 46, 112, 121, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 117, 105, 108, 100, 45, 100, 111, 99, 115, 46, 115, 104, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 99, 104, 101, 99, 107, 45, 116, 105, 109, 105, 110, 103, 46, 115, 104, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 99, 111, 109, 112, 105, 108, 101, 114, 95, 114, 116, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 101, 110, 99, 114, 121, 112, 116, 45, 98, 105, 116, 115, 116, 114, 101, 97, 109, 45, 112, 121, 116, 104, 111, 110, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 103, 97, 116, 101, 119, 97, 114, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 108, 105, 116, 101, 100, 114, 97, 109, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 108, 105, 116, 101, 115, 99, 111, 112, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 108, 105, 116, 101, 120, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 109, 105, 103, 101, 110, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 111, 112, 101, 110, 116, 105, 116, 97, 110, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 112, 121, 115, 101, 114, 105, 97, 108, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 112, 121, 116, 104, 111, 110, 100, 97, 116, 97, 45, 99, 112, 117, 45, 118, 101, 120, 114, 105, 115, 99, 118, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 114, 111, 109, 45, 108, 111, 99, 97, 116, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102],
-           }
+                status_str: [
+                    79, 110, 32, 98, 114, 97, 110, 99, 104, 32, 109, 97, 105, 110, 10, 89, 111, 117, 114, 32,
+                    98, 114, 97, 110, 99, 104, 32, 105, 115, 32, 117, 112, 32, 116, 111, 32, 100, 97, 116,
+                    101, 32, 119, 105, 116, 104, 32, 39, 111, 114, 105, 103, 105, 110, 47, 109, 97, 105, 110,
+                    39, 46, 10, 10, 67, 104, 97, 110, 103, 101, 115, 32, 110, 111, 116, 32, 115, 116, 97,
+                    103, 101, 100, 32, 102, 111, 114, 32, 99, 111, 109, 109, 105, 116, 58, 10, 32, 32, 40,
+                    117, 115, 101, 32, 34, 103, 105, 116, 32, 97, 100, 100, 32, 60, 102, 105, 108, 101, 62,
+                    46, 46, 46, 34, 32, 116, 111, 32, 117, 112, 100, 97, 116, 101, 32, 119, 104, 97, 116, 32,
+                    119, 105, 108, 108, 32, 98, 101, 32, 99, 111, 109, 109, 105, 116, 116, 101, 100, 41, 10,
+                    32, 32, 40, 117, 115, 101, 32, 34, 103, 105, 116, 32, 114, 101, 115, 116, 111, 114, 101,
+                    32, 60, 102, 105, 108, 101, 62, 46, 46, 46, 34, 32, 116, 111, 32, 100, 105, 115, 99, 97,
+                    114, 100, 32, 99, 104, 97, 110, 103, 101, 115, 32, 105, 110, 32, 119, 111, 114, 107, 105,
+                    110, 103, 32, 100, 105, 114, 101, 99, 116, 111, 114, 121, 41, 10, 32, 32, 40, 99, 111,
+                    109, 109, 105, 116, 32, 111, 114, 32, 100, 105, 115, 99, 97, 114, 100, 32, 116, 104, 101,
+                    32, 117, 110, 116, 114, 97, 99, 107, 101, 100, 32, 111, 114, 32, 109, 111, 100, 105, 102,
+                    105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 32, 105, 110, 32, 115, 117, 98, 109,
+                    111, 100, 117, 108, 101, 115, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32,
+                    32, 32, 97, 112, 112, 101, 110, 100, 95, 99, 115, 114, 46, 112, 121, 10, 9, 109, 111,
+                    100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 101, 116, 114, 117, 115, 116, 101, 100,
+                    95, 115, 111, 99, 46, 112, 121, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32,
+                    32, 32, 98, 111, 111, 116, 47, 98, 101, 116, 114, 117, 115, 116, 101, 100, 45, 98, 111,
+                    111, 116, 47, 97, 115, 115, 101, 109, 98, 108, 101, 46, 115, 104, 10, 9, 109, 111, 100,
+                    105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 111, 111, 116, 95, 116, 101, 115, 116, 46,
+                    112, 121, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 117, 105,
+                    108, 100, 45, 100, 111, 99, 115, 46, 115, 104, 10, 9, 109, 111, 100, 105, 102, 105, 101,
+                    100, 58, 32, 32, 32, 99, 104, 101, 99, 107, 45, 116, 105, 109, 105, 110, 103, 46, 115,
+                    104, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115,
+                    47, 99, 111, 109, 112, 105, 108, 101, 114, 95, 114, 116, 32, 40, 109, 111, 100, 105, 102,
+                    105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102,
+                    105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 101, 110, 99, 114, 121, 112, 116,
+                    45, 98, 105, 116, 115, 116, 114, 101, 97, 109, 45, 112, 121, 116, 104, 111, 110, 32, 40,
+                    109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9,
+                    109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 103, 97,
+                    116, 101, 119, 97, 114, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111,
+                    110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32,
+                    32, 100, 101, 112, 115, 47, 108, 105, 116, 101, 100, 114, 97, 109, 32, 40, 109, 111, 100,
+                    105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100,
+                    105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 108, 105, 116, 101, 115,
+                    99, 111, 112, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116,
+                    101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100,
+                    101, 112, 115, 47, 108, 105, 116, 101, 120, 32, 40, 109, 111, 100, 105, 102, 105, 101,
+                    100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101,
+                    100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 109, 105, 103, 101, 110, 32, 40, 109, 111,
+                    100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111,
+                    100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 111, 112, 101, 110,
+                    116, 105, 116, 97, 110, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110,
+                    116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32,
+                    100, 101, 112, 115, 47, 112, 121, 115, 101, 114, 105, 97, 108, 32, 40, 109, 111, 100,
+                    105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100,
+                    105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 112, 121, 116, 104, 111,
+                    110, 100, 97, 116, 97, 45, 99, 112, 117, 45, 118, 101, 120, 114, 105, 115, 99, 118, 32,
+                    40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10,
+                    9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 114,
+                    111, 109, 45, 108, 111, 99, 97, 116, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100,
+                    32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102,
+                ],
+            }
         }
+
         pub fn aes_op(&mut self, key_index: u8, op_type: AesOpType, block: &mut [u8; 16]) {
             // fake a "well known" key by just expanding the index into a trivial key
             let mut key = [0 as u8; 32];
             key[0] = key_index;
             let cipher = Aes256::new(GenericArray::from_slice(&key));
             match op_type {
-                AesOpType::Decrypt => {
-                    cipher.decrypt_block(block.try_into().unwrap())
-                },
-                AesOpType::Encrypt => {
-                    cipher.encrypt_block(block.try_into().unwrap())
-                }
+                AesOpType::Decrypt => cipher.decrypt_block(block.try_into().unwrap()),
+                AesOpType::Encrypt => cipher.encrypt_block(block.try_into().unwrap()),
             }
         }
+
         pub fn aes_par_op(&mut self, key_index: u8, op_type: AesOpType, blocks: &mut [[u8; 16]; PAR_BLOCKS]) {
             // fake a "well known" key by just expanding the index into a trivial key
             let mut key = [0 as u8; 32];
@@ -285,7 +419,7 @@ mod implementation {
                     for block in blocks.iter_mut() {
                         cipher.decrypt_block(block.try_into().unwrap());
                     }
-                },
+                }
                 AesOpType::Encrypt => {
                     for block in blocks.iter_mut() {
                         cipher.encrypt_block(block.try_into().unwrap());
@@ -293,6 +427,7 @@ mod implementation {
                 }
             }
         }
+
         pub fn kwp_op(&mut self, kwp: &mut KeyWrapper) {
             use aes_kw::Kek;
             use aes_kw::KekAes256;
@@ -316,11 +451,11 @@ mod implementation {
                                 aes_kw::Error::InvalidKekSize { size } => {
                                     log::info!("invalid size {}", size); // weird. can't name this _size
                                     KeywrapError::InvalidKekSize
-                                },
+                                }
                                 aes_kw::Error::InvalidOutputSize { expected } => {
                                     log::info!("invalid output size {}", expected);
                                     KeywrapError::InvalidOutputSize
-                                },
+                                }
                             });
                         }
                     }
@@ -343,23 +478,26 @@ mod implementation {
                                 aes_kw::Error::InvalidKekSize { size } => {
                                     log::info!("invalid size {}", size); // weird. can't name this _size
                                     KeywrapError::InvalidKekSize
-                                },
+                                }
                                 aes_kw::Error::InvalidOutputSize { expected } => {
                                     log::info!("invalid output size {}", expected);
                                     KeywrapError::InvalidOutputSize
-                                },
+                                }
                             });
                         }
                     }
                 }
             }
         }
+
         fn xous_init_interlock(&self) {
             loop {
                 if self.xns.trusted_init_done().expect("couldn't query init done status on xous-names") {
                     break;
                 } else {
-                    log::warn!("trusted init of xous-names not finished, rootkeys is holding off on sensitive operations");
+                    log::warn!(
+                        "trusted init of xous-names not finished, rootkeys is holding off on sensitive operations"
+                    );
                     self.ticktimer.sleep_ms(650).expect("couldn't sleep");
                 }
             }
@@ -367,52 +505,70 @@ mod implementation {
                 if self.gam.trusted_init_done().expect("couldn't query init done status on GAM") {
                     break;
                 } else {
-                    log::warn!("trusted init of GAM not finished, rootkeys is holding off on sensitive operations");
+                    log::warn!(
+                        "trusted init of GAM not finished, rootkeys is holding off on sensitive operations"
+                    );
                     self.ticktimer.sleep_ms(650).expect("couldn't sleep");
                 }
             }
         }
-        pub fn staged_semver(&self) -> SemVer {
-            SemVer{maj: 0, min: 0, rev: 0, extra: 0, commit: None}
-        }
+
+        pub fn staged_semver(&self) -> SemVer { SemVer { maj: 0, min: 0, rev: 0, extra: 0, commit: None } }
+
         pub fn try_nokey_soc_update(&mut self, _rootkeys_modal: &mut Modal, _main_cid: xous::CID) -> bool {
             false
         }
-        pub fn should_prompt_for_update(&self) -> bool {true}
+
+        pub fn should_prompt_for_update(&self) -> bool { true }
+
         pub fn set_prompt_for_update(&self, _state: bool) {}
-        pub fn write_backup(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt, checksums: Option::<Checksums>) -> Result<(), xous::Error> {
+
+        pub fn write_backup(
+            &mut self,
+            mut header: BackupHeader,
+            backup_ct: backups::BackupDataCt,
+            checksums: Option<Checksums>,
+        ) -> Result<(), xous::Error> {
             header.op = BackupOp::Backup;
             log::info!("backup header: {:?}", header);
             log::info!("backup ciphertext: {:x?}", backup_ct.as_ref());
             log::info!("backup checksums: {:x?}", checksums);
             Ok(())
         }
-        pub fn write_restore_dna(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
+
+        pub fn write_restore_dna(
+            &mut self,
+            mut header: BackupHeader,
+            backup_ct: backups::BackupDataCt,
+        ) -> Result<(), xous::Error> {
             header.op = BackupOp::RestoreDna;
             log::info!("write restore_dna called");
             log::info!("backup header: {:?}", header);
             log::info!("backup ciphertext: {:x?}", backup_ct.as_ref());
             Ok(())
         }
+
         pub fn read_backup(&mut self) -> Result<(BackupHeader, backups::BackupDataCt), xous::Error> {
             Err(xous::Error::InternalError)
         }
+
         pub fn erase_backup(&mut self) {}
-        pub fn read_backup_header(&mut self) -> Option<BackupHeader> {
-            None
-        }
-        pub fn get_backup_key(&mut self) -> Option<(backups::BackupKey, backups::KeyRomExport)> {
-            None
-        }
+
+        pub fn read_backup_header(&mut self) -> Option<BackupHeader> { None }
+
+        pub fn get_backup_key(&mut self) -> Option<(backups::BackupKey, backups::KeyRomExport)> { None }
+
         pub fn is_zero_key(&self) -> Option<bool> { Some(true) }
-        pub fn setup_restore_init(&mut self, _key: backups::BackupKey, _rom: backups::KeyRomExport) {
-        }
-        pub fn is_dont_ask_init_set(&self) -> bool {false}
+
+        pub fn setup_restore_init(&mut self, _key: backups::BackupKey, _rom: backups::KeyRomExport) {}
+
+        pub fn is_dont_ask_init_set(&self) -> bool { false }
+
         pub fn set_dont_ask_init(&self) {}
+
         pub fn reset_dont_ask_init(&mut self) {}
     }
 }
-
 
 fn main() -> ! {
     #[cfg(not(target_os = "xous"))]
@@ -445,9 +601,10 @@ fn main() -> ! {
 
     // register a suspend/resume listener
     let main_cid = xous::connect(keys_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, main_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, main_cid)
+        .expect("couldn't create suspend/resume object");
 
-    #[cfg(feature="tts")]
+    #[cfg(feature = "tts")]
     let tts = TtsFrontend::new(&xns).unwrap();
 
     // create a policy menu object
@@ -458,35 +615,51 @@ fn main() -> ! {
             name: String::from_str(t!("rootkeys.policy_keep", locales::LANG)),
             action_conn: Some(main_cid),
             action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
-            action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysKeep.to_u32().unwrap(), 0, 0, 0,]),
+            action_payload: MenuPayload::Scalar([
+                PasswordRetentionPolicy::AlwaysKeep.to_u32().unwrap(),
+                0,
+                0,
+                0,
+            ]),
             close_on_select: true,
         });
         menu_items.push(MenuItem {
             name: String::from_str(t!("rootkeys.policy_suspend", locales::LANG)),
             action_conn: Some(main_cid),
             action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
-            action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::EraseOnSuspend.to_u32().unwrap(), 0, 0, 0,]),
+            action_payload: MenuPayload::Scalar([
+                PasswordRetentionPolicy::EraseOnSuspend.to_u32().unwrap(),
+                0,
+                0,
+                0,
+            ]),
             close_on_select: true,
         });
         menu_items.push(MenuItem {
             name: String::from_str(t!("rootkeys.policy_clear", locales::LANG)),
             action_conn: Some(main_cid),
             action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
-            action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysPurge.to_u32().unwrap(), 0, 0, 0,]),
+            action_payload: MenuPayload::Scalar([
+                PasswordRetentionPolicy::AlwaysPurge.to_u32().unwrap(),
+                0,
+                0,
+                0,
+            ]),
             close_on_select: true,
         });
         gam::menu_matic(menu_items, crate::ROOTKEY_MENU_NAME, None);
         let mut policy_followup_action: Option<usize> = None;
     }
 
-    // create our very own password modal -- so that critical passwords aren't being shuffled between servers left and right
+    // create our very own password modal -- so that critical passwords aren't being shuffled between servers
+    // left and right
     let mut password_action = TextEntry::new(
-            true,
-            TextEntryVisibility::LastChars,
-            main_cid,
-            Opcode::UxInitUpdateFirstPasswordReturn.to_u32().unwrap(),
-            vec![TextEntryPayload::new()],
-            None,
+        true,
+        TextEntryVisibility::LastChars,
+        main_cid,
+        Opcode::UxInitUpdateFirstPasswordReturn.to_u32().unwrap(),
+        vec![TextEntryPayload::new()],
+        None,
     );
     password_action.reset_action_payloads(1, None);
     let mut dismiss_modal_action = Notification::new(main_cid, Opcode::UxGutter.to_u32().unwrap());
@@ -498,9 +671,11 @@ fn main() -> ! {
         Some(t!("rootkeys.updatefirstpass", locales::LANG)),
         None,
         gam::SYSTEM_STYLE,
-        8
+        8,
     );
-    rootkeys_modal.spawn_helper(keys_sid, rootkeys_modal.sid,
+    rootkeys_modal.spawn_helper(
+        keys_sid,
+        rootkeys_modal.sid,
         Opcode::ModalRedraw.to_u32().unwrap(),
         Opcode::ModalKeys.to_u32().unwrap(),
         Opcode::ModalDrop.to_u32().unwrap(),
@@ -551,11 +726,14 @@ fn main() -> ! {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
-            Some(Opcode::ClearPasswordCacheEntry) => msg_blocking_scalar_unpack!(msg, pass_type_code, _, _, _, {
-                let pass_type: AesRootkeyType = FromPrimitive::from_usize(pass_type_code).unwrap_or(AesRootkeyType::NoneSpecified);
-                keys.purge_user_password(pass_type);
-                xous::return_scalar(msg.sender, 1).unwrap();
-            }),
+            Some(Opcode::ClearPasswordCacheEntry) => {
+                msg_blocking_scalar_unpack!(msg, pass_type_code, _, _, _, {
+                    let pass_type: AesRootkeyType =
+                        FromPrimitive::from_usize(pass_type_code).unwrap_or(AesRootkeyType::NoneSpecified);
+                    keys.purge_user_password(pass_type);
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                })
+            }
 
             // UX flow opcodes
             Some(Opcode::UxTryInitKeys) => {
@@ -565,14 +743,17 @@ fn main() -> ! {
                     }
                     _ => (),
                 }
-                if false { // short-circuit for testing subroutines
+                if false {
+                    // short-circuit for testing subroutines
                     let _success = keys.test(&mut rootkeys_modal, main_cid);
 
                     keys.finish_key_init();
                     log::info!("going to into reboot arc");
-                    send_message(main_cid,
-                        xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).expect("couldn't initiate dialog box");
+                    send_message(
+                        main_cid,
+                        xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .expect("couldn't initiate dialog box");
                     if let Some(dr) = deferred_response.take() {
                         xous::return_scalar(dr, 0).unwrap();
                     }
@@ -594,8 +775,10 @@ fn main() -> ! {
                     // - pepper
 
                     if keys.is_initialized() {
-                        modals.show_notification(t!("rootkeys.already_init", locales::LANG), None).expect("modals error");
-                        #[cfg(feature="tts")]
+                        modals
+                            .show_notification(t!("rootkeys.already_init", locales::LANG), None)
+                            .expect("modals error");
+                        #[cfg(feature = "tts")]
                         tts.tts_blocking(t!("rootkeys.already_init", locales::LANG)).unwrap();
                         keys.set_ux_password_type(None);
                         if let Some(dr) = deferred_response.take() {
@@ -603,10 +786,14 @@ fn main() -> ! {
                         }
                         continue;
                     } else {
-                        modals.add_list_item(t!("rootkeys.confirm.yes", locales::LANG)).expect("modals error");
+                        modals
+                            .add_list_item(t!("rootkeys.confirm.yes", locales::LANG))
+                            .expect("modals error");
                         modals.add_list_item(t!("rootkeys.confirm.no", locales::LANG)).expect("modals error");
                         if deferred_response.is_some() {
-                            modals.add_list_item(t!("rootkeys.confirm.dont_ask", locales::LANG)).expect("modals error");
+                            modals
+                                .add_list_item(t!("rootkeys.confirm.dont_ask", locales::LANG))
+                                .expect("modals error");
                             log::info!("{}ROOTKEY.INITQ3,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         } else {
                             log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
@@ -637,23 +824,28 @@ fn main() -> ! {
                             _ => log::error!("get_radiobutton failed"),
                         }
                     }
-                    // setup_key_init() prepares the salt and other items necessary to receive a password safely
+                    // setup_key_init() prepares the salt and other items necessary to receive a password
+                    // safely
                     keys.setup_key_init();
                     // request the update password first
                     keys.set_ux_password_type(Some(PasswordType::Update));
                     // pop up our private password dialog box
-                    password_action.set_action_opcode(Opcode::UxInitUpdateFirstPasswordReturn.to_u32().unwrap());
+                    password_action
+                        .set_action_opcode(Opcode::UxInitUpdateFirstPasswordReturn.to_u32().unwrap());
                     rootkeys_modal.modify(
                         Some(ActionType::TextEntry(password_action.clone())),
-                        Some(t!("rootkeys.updatefirstpass", locales::LANG)), false,
-                        None, true, None
+                        Some(t!("rootkeys.updatefirstpass", locales::LANG)),
+                        false,
+                        None,
+                        true,
+                        None,
                     );
-                    #[cfg(feature="tts")]
+                    #[cfg(feature = "tts")]
                     tts.tts_blocking(t!("rootkeys.updatefirstpass", locales::LANG)).unwrap();
                     log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                 }
-            },
+            }
             Some(Opcode::UxInitUpdateFirstPasswordReturn) => {
                 // assume:
                 //   - setup_key_init has also been called (exactly once, before anything happens)
@@ -670,14 +862,17 @@ fn main() -> ! {
                 password_action.set_action_opcode(Opcode::UxInitUpdatePasswordReturn.to_u32().unwrap());
                 rootkeys_modal.modify(
                     Some(ActionType::TextEntry(password_action.clone())),
-                    Some(t!("rootkeys.updatepass", locales::LANG)), false,
-                    None, true, None
+                    Some(t!("rootkeys.updatepass", locales::LANG)),
+                    false,
+                    None,
+                    true,
+                    None,
                 );
-                #[cfg(feature="tts")]
+                #[cfg(feature = "tts")]
                 tts.tts_blocking(t!("rootkeys.updatepass", locales::LANG)).unwrap();
                 log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 rootkeys_modal.activate();
-            },
+            }
             Some(Opcode::UxInitUpdatePasswordReturn) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
@@ -693,13 +888,18 @@ fn main() -> ! {
                                 // request the update password first
                                 keys.set_ux_password_type(Some(PasswordType::Update));
                                 // pop up our private password dialog box
-                                password_action.set_action_opcode(Opcode::UxInitUpdateFirstPasswordReturn.to_u32().unwrap());
+                                password_action.set_action_opcode(
+                                    Opcode::UxInitUpdateFirstPasswordReturn.to_u32().unwrap(),
+                                );
                                 rootkeys_modal.modify(
                                     Some(ActionType::TextEntry(password_action.clone())),
-                                    Some(t!("rootkeys.updatefirstpass", locales::LANG)), false,
-                                    None, true, None
+                                    Some(t!("rootkeys.updatefirstpass", locales::LANG)),
+                                    false,
+                                    None,
+                                    true,
+                                    None,
                                 );
-                                #[cfg(feature="tts")]
+                                #[cfg(feature = "tts")]
                                 tts.tts_blocking(t!("rootkeys.updatefirstpass", locales::LANG)).unwrap();
                                 log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                                 rootkeys_modal.activate();
@@ -728,7 +928,7 @@ fn main() -> ! {
                                 xous::return_scalar(dr, 0).unwrap();
                             }
                             continue;
-                        },
+                        }
                     }
                 }
 
@@ -739,7 +939,8 @@ fn main() -> ! {
 
                 // this routine will update the rootkeys_modal with the current Ux state
                 let result = keys.do_key_init(&mut rootkeys_modal, main_cid);
-                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close
+                // and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
                 log::info!("set_ux_password result: {:?}", result);
@@ -751,30 +952,42 @@ fn main() -> ! {
                     Ok(_) => {
                         log::info!("going to into reboot arc");
                         keys.pddb_recycle(); // we have brand new root keys from e.g. a factory reset -- recycle the PDDB, as it is no longer mountable.
-                        send_message(main_cid,
-                            xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).expect("couldn't initiate dialog box");
+                        send_message(
+                            main_cid,
+                            xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .expect("couldn't initiate dialog box");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_key", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_key", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::StateError) => {
-                        modals.show_notification(t!("rootkeys.wrong_state", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.wrong_state", locales::LANG), None)
+                            .expect("modals error");
                     }
                 }
                 if let Some(dr) = deferred_response.take() {
                     xous::return_scalar(dr, 0).unwrap();
                 }
-            },
+            }
             Some(Opcode::UxTryReboot) => {
                 log::info!("{}ROOTKEY.INITDONE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 log::info!("entering reboot handler");
@@ -785,21 +998,30 @@ fn main() -> ! {
 
                 let vbus = (llio.adc_vbus().unwrap() as u32) * 503;
                 log::info!("Vbus is: {}mV", vbus / 100);
-                if vbus > 150_000 { // 1.5V
+                if vbus > 150_000 {
+                    // 1.5V
                     // if power is plugged in, request that it be removed
-                    modals.show_notification(t!("rootkeys.init.unplug_power", locales::LANG), None).expect("modals error");
+                    modals
+                        .show_notification(t!("rootkeys.init.unplug_power", locales::LANG), None)
+                        .expect("modals error");
                     log::info!("vbus is high, holding off on reboot");
-                    send_message(main_cid,
-                        xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).expect("couldn't initiate dialog box");
+                    send_message(
+                        main_cid,
+                        xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .expect("couldn't initiate dialog box");
                 } else {
                     log::info!("initiating reboot");
-                    modals.dynamic_notification(Some(t!("rootkeys.init.finished", locales::LANG)), None).expect("modals error");
+                    modals
+                        .dynamic_notification(Some(t!("rootkeys.init.finished", locales::LANG)), None)
+                        .expect("modals error");
                     xous::yield_slice(); // these are necessary to get the messages in place to do a full redraw before the reboot happens
                     log::info!("going to reboot state");
-                    send_message(main_cid,
-                        xous::Message::new_scalar(Opcode::UxDoReboot.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).expect("couldn't initiate dialog box");
+                    send_message(
+                        main_cid,
+                        xous::Message::new_scalar(Opcode::UxDoReboot.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .expect("couldn't initiate dialog box");
                 }
             }
             Some(Opcode::UxDoReboot) => {
@@ -821,9 +1043,11 @@ fn main() -> ! {
                 }
 
                 // refresh the message if it goes away
-                send_message(main_cid,
-                    xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
-                ).expect("couldn't initiate dialog box");
+                send_message(
+                    main_cid,
+                    xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't initiate dialog box");
             }
             Some(Opcode::UxBlindCopy) => {
                 modals.add_list_item(t!("rootkeys.gwup.yes", locales::LANG)).expect("modals error");
@@ -832,7 +1056,8 @@ fn main() -> ! {
                     Ok(response) => {
                         if response == t!("rootkeys.gwup.no", locales::LANG) {
                             continue;
-                        } if response != t!("rootkeys.gwup.yes", locales::LANG) {
+                        }
+                        if response != t!("rootkeys.gwup.yes", locales::LANG) {
                             log::error!("got unexpected response from radio box: {:?}", response);
                             continue;
                         } else {
@@ -846,29 +1071,42 @@ fn main() -> ! {
                 }
 
                 let result = keys.do_gateware_provision_uninitialized(&mut rootkeys_modal, main_cid);
-                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close
+                // and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
                 match result {
                     Ok(_) => {
-                        modals.show_notification(t!("rootkeys.gwup.finished", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.gwup.finished", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
                         // probably a bad password, purge it, so the user can try again
                         keys.purge_password(PasswordType::Update);
-                        modals.show_notification(t!("rootkeys.init.fail_key", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_key", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::StateError) => {
-                        modals.show_notification(t!("rootkeys.wrong_state", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.wrong_state", locales::LANG), None)
+                            .expect("modals error");
                     }
                 }
             }
@@ -882,11 +1120,14 @@ fn main() -> ! {
                 // steps:
                 //  - check update signature "Inspecting gateware update, this will take a moment..."
                 //  - if no signature found: "No valid update found! (ok -> exit out)"
-                //  - inform user of signature status "Gatware signed with foo, do you want to see the metadata? (quick/all/no)"
+                //  - inform user of signature status "Gatware signed with foo, do you want to see the
+                //    metadata? (quick/all/no)"
                 //  - option to show metadata (multiple pages)
                 //  - proceed with update question "Proceed with update? (yes/no)"
                 //  - do the update
-                modals.dynamic_notification(Some(t!("rootkeys.gwup.inspecting", locales::LANG)), None).expect("modals error");
+                modals
+                    .dynamic_notification(Some(t!("rootkeys.gwup.inspecting", locales::LANG)), None)
+                    .expect("modals error");
 
                 let prompt = match keys.check_gateware_signature(GatewareRegion::Staging) {
                     SignatureResult::SelfSignOk => t!("rootkeys.gwup.viewinfo_ss", locales::LANG),
@@ -894,10 +1135,11 @@ fn main() -> ! {
                     SignatureResult::DevKeyOk => t!("rootkeys.gwup.viewinfo_dk", locales::LANG),
                     SignatureResult::MalformedSignature
                     | SignatureResult::InvalidPubKey
-                    | SignatureResult::InvalidSignatureType
-                        => {
+                    | SignatureResult::InvalidSignatureType => {
                         modals.dynamic_notification_close().expect("modals error");
-                        modals.show_notification(t!("rootkeys.gwup.sig_problem", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.gwup.sig_problem", locales::LANG), None)
+                            .expect("modals error");
                         if let Some(dr) = deferred_response.take() {
                             xous::return_scalar(dr, 0).unwrap();
                         }
@@ -905,7 +1147,9 @@ fn main() -> ! {
                     }
                     _ => {
                         modals.dynamic_notification_close().expect("modals error");
-                        modals.show_notification(t!("rootkeys.gwup.no_update_found", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.gwup.no_update_found", locales::LANG), None)
+                            .expect("modals error");
                         if let Some(dr) = deferred_response.take() {
                             xous::return_scalar(dr, 0).unwrap();
                         }
@@ -920,14 +1164,22 @@ fn main() -> ! {
 
                 let gw_info = keys.fetch_gw_metadata(GatewareRegion::Staging);
                 let info = if gw_info.git_commit == 0 && gw_info.git_additional == 0 {
-                    format!("v{}.{}.{}+{}\nClean tag\n@{}\n{}",
-                        gw_info.git_maj, gw_info.git_min, gw_info.git_rev, gw_info.git_additional,
+                    format!(
+                        "v{}.{}.{}+{}\nClean tag\n@{}\n{}",
+                        gw_info.git_maj,
+                        gw_info.git_min,
+                        gw_info.git_rev,
+                        gw_info.git_additional,
                         str::from_utf8(&gw_info.host_str[..gw_info.host_len as usize]).unwrap(),
                         str::from_utf8(&gw_info.date_str[..gw_info.date_len as usize]).unwrap()
                     )
                 } else {
-                    format!("v{}.{}.{}+{}\ncommit: g{:x}\n@{}\n{}",
-                        gw_info.git_maj, gw_info.git_min, gw_info.git_rev, gw_info.git_additional,
+                    format!(
+                        "v{}.{}.{}+{}\ncommit: g{:x}\n@{}\n{}",
+                        gw_info.git_maj,
+                        gw_info.git_min,
+                        gw_info.git_rev,
+                        gw_info.git_additional,
                         gw_info.git_commit,
                         str::from_utf8(&gw_info.host_str[..gw_info.host_len as usize]).unwrap(),
                         str::from_utf8(&gw_info.date_str[..gw_info.date_len as usize]).unwrap()
@@ -944,12 +1196,16 @@ fn main() -> ! {
                             modals.show_notification(info.as_str(), None).expect("modals error");
                             let gw_info = keys.fetch_gw_metadata(GatewareRegion::Staging);
                             // truncate the message to better fit in the rendering box
-                            let info_len = if gw_info.log_len > 256 { 256 } else {gw_info.log_len};
-                            let info = format!("{}", str::from_utf8(&gw_info.log_str[..info_len as usize]).unwrap());
+                            let info_len = if gw_info.log_len > 256 { 256 } else { gw_info.log_len };
+                            let info =
+                                format!("{}", str::from_utf8(&gw_info.log_str[..info_len as usize]).unwrap());
                             modals.show_notification(info.as_str(), None).expect("modals error");
                             // truncate the message to better fit in the rendering box
-                            let status_len = if gw_info.status_len > 256 { 256 } else {gw_info.status_len};
-                            let info = format!("{}", str::from_utf8(&gw_info.status_str[..status_len as usize]).unwrap());
+                            let status_len = if gw_info.status_len > 256 { 256 } else { gw_info.status_len };
+                            let info = format!(
+                                "{}",
+                                str::from_utf8(&gw_info.status_str[..status_len as usize]).unwrap()
+                            );
                             modals.show_notification(info.as_str(), None).expect("modals error");
                         } else {
                             skip_confirmation = true;
@@ -973,7 +1229,8 @@ fn main() -> ! {
                                     xous::return_scalar(dr, 0).unwrap();
                                 }
                                 continue;
-                            } if response != t!("rootkeys.gwup.yes", locales::LANG) {
+                            }
+                            if response != t!("rootkeys.gwup.yes", locales::LANG) {
                                 log::error!("got unexpected response from radio box: {:?}", response);
                                 if let Some(dr) = deferred_response.take() {
                                     xous::return_scalar(dr, 0).unwrap();
@@ -993,25 +1250,29 @@ fn main() -> ! {
                     }
                 }
 
-                // here, we always set the password policy to "keep until suspend". Maybe we want to change this, maybe we
-                // want to refer to the PDDB to do something different, but in retrospect asking this question to users is dumb
-                // and annoying.
+                // here, we always set the password policy to "keep until suspend". Maybe we want to change
+                // this, maybe we want to refer to the PDDB to do something different, but in
+                // retrospect asking this question to users is dumb and annoying.
 
                 if keys.is_pcache_update_password_valid() {
                     // indicate that there should be no change to the policy
                     let payload = gam::RadioButtonPayload::new(t!("rootkeys.policy_suspend", locales::LANG));
                     let buf = Buffer::into_buf(payload).expect("couldn't convert message to payload");
                     buf.send(main_cid, Opcode::UxUpdateGwRun.to_u32().unwrap())
-                    .map(|_| ()).expect("couldn't send action message");
+                        .map(|_| ())
+                        .expect("couldn't send action message");
                 } else {
                     keys.set_ux_password_type(Some(PasswordType::Update));
                     password_action.set_action_opcode(Opcode::UxUpdateGwPasswordReturn.to_u32().unwrap());
                     rootkeys_modal.modify(
                         Some(ActionType::TextEntry(password_action.clone())),
-                        Some(t!("rootkeys.get_update_password", locales::LANG)), false,
-                        None, true, None
+                        Some(t!("rootkeys.get_update_password", locales::LANG)),
+                        false,
+                        None,
+                        true,
+                        None,
                     );
-                    #[cfg(feature="tts")]
+                    #[cfg(feature = "tts")]
                     tts.tts_blocking(t!("rootkeys.get_update_password", locales::LANG)).unwrap();
                     log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
@@ -1028,12 +1289,14 @@ fn main() -> ! {
                 let payload = gam::RadioButtonPayload::new(t!("rootkeys.policy_suspend", locales::LANG));
                 let buf = Buffer::into_buf(payload).expect("couldn't convert message to payload");
                 buf.send(main_cid, Opcode::UxUpdateGwRun.to_u32().unwrap())
-                .map(|_| ()).expect("couldn't send action message");
+                    .map(|_| ())
+                    .expect("couldn't send action message");
             }
             Some(Opcode::UxUpdateGwRun) => {
-                // this is a bit of legacy code to handle a return from a menu that would set our password policy.
-                // for now, this is short-circuited because every branch that leads into here selects "policy_suspend",
-                // which is a 99% correct but 100% more user-friendly policy
+                // this is a bit of legacy code to handle a return from a menu that would set our password
+                // policy. for now, this is short-circuited because every branch that leads
+                // into here selects "policy_suspend", which is a 99% correct but 100% more
+                // user-friendly policy
                 #[cfg(feature = "policy-menu")]
                 {
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -1050,34 +1313,49 @@ fn main() -> ! {
                 }
                 keys.set_ux_password_type(None);
 
-                let result = keys.do_gateware_update(&mut rootkeys_modal, &modals, main_cid, UpdateType::Regular);
-                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                let result =
+                    keys.do_gateware_update(&mut rootkeys_modal, &modals, main_cid, UpdateType::Regular);
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close
+                // and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
                 match result {
                     Ok(_) => {
-                        send_message(main_cid,
-                            xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).expect("couldn't initiate dialog box");
+                        send_message(
+                            main_cid,
+                            xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .expect("couldn't initiate dialog box");
                         // just do the reboot now.
-                        // modals.show_notification(t!("rootkeys.gwup.finished", locales::LANG), None).expect("modals error");
+                        // modals.show_notification(t!("rootkeys.gwup.finished", locales::LANG),
+                        // None).expect("modals error");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
                         // probably a bad password, purge it, so the user can try again
                         keys.purge_password(PasswordType::Update);
-                        modals.show_notification(t!("rootkeys.init.fail_key", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_key", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::StateError) => {
-                        modals.show_notification(t!("rootkeys.wrong_state", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.wrong_state", locales::LANG), None)
+                            .expect("modals error");
                     }
                 }
                 if let Some(dr) = deferred_response.take() {
@@ -1090,21 +1368,25 @@ fn main() -> ! {
                     let payload = gam::RadioButtonPayload::new(t!("rootkeys.policy_suspend", locales::LANG));
                     let buf = Buffer::into_buf(payload).expect("couldn't convert message to payload");
                     buf.send(main_cid, Opcode::UxSignXousRun.to_u32().unwrap())
-                    .map(|_| ()).expect("couldn't send action message");
+                        .map(|_| ())
+                        .expect("couldn't send action message");
                 } else {
                     keys.set_ux_password_type(Some(PasswordType::Update));
                     password_action.set_action_opcode(Opcode::UxSignXousPasswordReturn.to_u32().unwrap());
                     rootkeys_modal.modify(
                         Some(ActionType::TextEntry(password_action.clone())),
-                        Some(t!("rootkeys.get_signing_password", locales::LANG)), false,
-                        None, true, None
+                        Some(t!("rootkeys.get_signing_password", locales::LANG)),
+                        false,
+                        None,
+                        true,
+                        None,
                     );
-                    #[cfg(feature="tts")]
+                    #[cfg(feature = "tts")]
                     tts.tts_blocking(t!("rootkeys.get_signing_password", locales::LANG)).unwrap();
                     log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                 }
-            },
+            }
             Some(Opcode::UxSignXousPasswordReturn) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
@@ -1116,11 +1398,13 @@ fn main() -> ! {
                 let payload = gam::RadioButtonPayload::new(t!("rootkeys.policy_suspend", locales::LANG));
                 let buf = Buffer::into_buf(payload).expect("couldn't convert message to payload");
                 buf.send(main_cid, Opcode::UxSignXousRun.to_u32().unwrap())
-                .map(|_| ()).expect("couldn't send action message");
-            },
+                    .map(|_| ())
+                    .expect("couldn't send action message");
+            }
             Some(Opcode::UxSignXousRun) => {
                 #[cfg(feature = "policy-menu")]
-                {// legacy code to set policy, if it were to be inserted in the flow
+                {
+                    // legacy code to set policy, if it were to be inserted in the flow
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
                     if payload.as_str() == t!("rootkeys.policy_keep", locales::LANG) {
@@ -1136,29 +1420,42 @@ fn main() -> ! {
                 keys.set_ux_password_type(None);
 
                 let result = keys.do_sign_xous(&mut rootkeys_modal, main_cid);
-                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close
+                // and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
                 match result {
                     Ok(_) => {
-                        modals.show_notification(t!("rootkeys.signxous.finished", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.signxous.finished", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
                         // probably a bad password, purge it, so the user can try again
                         keys.purge_password(PasswordType::Update);
-                        modals.show_notification(t!("rootkeys.init.fail_key", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_key", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::StateError) => {
-                        modals.show_notification(t!("rootkeys.wrong_state", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.wrong_state", locales::LANG), None)
+                            .expect("modals error");
                     }
                 }
             }
@@ -1176,32 +1473,42 @@ fn main() -> ! {
                         aes_sender = Some(msg.sender);
                     }
                     keys.set_ux_password_type(Some(PasswordType::Boot));
-                    //password_action.set_action_opcode(Opcode::UxAesPasswordPolicy.to_u32().unwrap()); // skip policy question. it's annoying.
+                    //password_action.set_action_opcode(Opcode::UxAesPasswordPolicy.to_u32().unwrap()); //
+                    // skip policy question. it's annoying.
                     password_action.set_action_opcode(Opcode::UxAesEnsureReturn.to_u32().unwrap());
                     rootkeys_modal.modify(
                         Some(ActionType::TextEntry(password_action.clone())),
-                        Some(t!("rootkeys.get_login_password", locales::LANG)), false,
-                        None, true, None
+                        Some(t!("rootkeys.get_login_password", locales::LANG)),
+                        false,
+                        None,
+                        true,
+                        None,
                     );
-                    #[cfg(feature="tts")]
+                    #[cfg(feature = "tts")]
                     tts.tts_blocking(t!("rootkeys.get_login_password", locales::LANG)).unwrap();
                     log::info!("{}ROOTKEY.BOOTPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
-                    // note that the scalar is *not* yet returned, it will be returned by the opcode called by the password assurance
+                    // note that the scalar is *not* yet returned, it will be returned by the opcode called by
+                    // the password assurance
                 } else {
                     // insert other indices, as we come to have them in else-ifs
                     // note that there needs to be a way to keep the ensured password in sync with the
-                    // actual key index (if multiple passwords are used/required). For now, because there is only
-                    // one password, we can use is_pcache_boot_password_valid() to sync that up; but as we add
-                    // more keys with more passwords, this policy may need to become markedly more complicated!
+                    // actual key index (if multiple passwords are used/required). For now, because there is
+                    // only one password, we can use is_pcache_boot_password_valid() to
+                    // sync that up; but as we add more keys with more passwords, this
+                    // policy may need to become markedly more complicated!
 
                     // otherwise, an invalid password request
-                    modals.show_notification(t!("rootkeys.bad_password_request", locales::LANG), None).expect("modals error");
+                    modals
+                        .show_notification(t!("rootkeys.bad_password_request", locales::LANG), None)
+                        .expect("modals error");
 
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
-            Some(Opcode::UxAesPasswordPolicy) => { // this is bypassed, it's not useful. You basically always only want to retain the password until sleep.
+            Some(Opcode::UxAesPasswordPolicy) => {
+                // this is bypassed, it's not useful. You basically always only want to retain the password
+                // until sleep.
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
@@ -1209,28 +1516,33 @@ fn main() -> ! {
                 plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
 
-                let mut confirm_radiobox = gam::modal::RadioButtons::new(
-                    main_cid,
-                    Opcode::UxAesEnsureReturn.to_u32().unwrap()
-                );
+                let mut confirm_radiobox =
+                    gam::modal::RadioButtons::new(main_cid, Opcode::UxAesEnsureReturn.to_u32().unwrap());
                 confirm_radiobox.is_password = true;
                 confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_suspend", locales::LANG)));
-                // confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_clear", locales::LANG))); // this policy makes no sense in the use case of the key
+                // confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_clear", locales::LANG))); //
+                // this policy makes no sense in the use case of the key
                 confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_keep", locales::LANG)));
                 rootkeys_modal.modify(
                     Some(ActionType::RadioButtons(confirm_radiobox)),
-                    Some(t!("rootkeys.policy_request", locales::LANG)), false,
-                    None, true, None);
-                #[cfg(feature="tts")]
+                    Some(t!("rootkeys.policy_request", locales::LANG)),
+                    false,
+                    None,
+                    true,
+                    None,
+                );
+                #[cfg(feature = "tts")]
                 tts.tts_blocking(t!("rootkeys.policy_request", locales::LANG)).unwrap();
                 rootkeys_modal.activate();
-            },
+            }
             Some(Opcode::UxAesEnsureReturn) => {
                 if let Some(sender) = aes_sender.take() {
                     xous::return_scalar(sender, 1).unwrap();
                     #[cfg(feature = "policy-menu")]
-                    { // in case we want to bring back the policy check
-                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    {
+                        // in case we want to bring back the policy check
+                        let buffer =
+                            unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
                         if payload.as_str() == t!("rootkeys.policy_keep", locales::LANG) {
                             keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
@@ -1243,13 +1555,15 @@ fn main() -> ! {
                         }
                     }
                     {
-                        let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let mut buf =
+                            unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
                         keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
                         plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                         buf.volatile_clear();
 
-                        // this is a reasonable default policy -- don't bother the user to answer this question all the time.
+                        // this is a reasonable default policy -- don't bother the user to answer this
+                        // question all the time.
                         keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
                     }
 
@@ -1260,10 +1574,13 @@ fn main() -> ! {
                 }
             }
             Some(Opcode::AesOracle) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 // as_flat saves a copy step, but we have to deserialize some enums manually
                 let mut aes_op = buffer.to_original::<AesOp, _>().unwrap();
-                let op = match aes_op.aes_op { // seems stupid, but we have to do this because we want to have zeroize on the AesOp record, and it means we can't have Copy on this.
+                let op = match aes_op.aes_op {
+                    // seems stupid, but we have to do this because we want to have zeroize on the AesOp
+                    // record, and it means we can't have Copy on this.
                     AesOpType::Decrypt => AesOpType::Decrypt,
                     AesOpType::Encrypt => AesOpType::Encrypt,
                 };
@@ -1279,25 +1596,30 @@ fn main() -> ! {
                     }
                 };
                 buffer.replace(aes_op).unwrap();
-            },
+            }
             Some(Opcode::AesKwp) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut kwp = buffer.to_original::<KeyWrapper, _>().unwrap();
                 keys.kwp_op(&mut kwp);
                 buffer.replace(kwp).unwrap();
             }
 
             Some(Opcode::BbramProvision) => {
-                modals.show_notification(t!("rootkeys.bbram.confirm", locales::LANG), None).expect("modals error");
-                let console_input = gam::modal::ConsoleInput::new(
-                    main_cid,
-                    Opcode::UxBbramCheckReturn.to_u32().unwrap()
-                );
+                modals
+                    .show_notification(t!("rootkeys.bbram.confirm", locales::LANG), None)
+                    .expect("modals error");
+                let console_input =
+                    gam::modal::ConsoleInput::new(main_cid, Opcode::UxBbramCheckReturn.to_u32().unwrap());
                 rootkeys_modal.modify(
                     Some(ActionType::ConsoleInput(console_input)),
-                    Some(t!("rootkeys.console_input", locales::LANG)), false,
-                    None, true, None);
-                #[cfg(feature="tts")]
+                    Some(t!("rootkeys.console_input", locales::LANG)),
+                    false,
+                    None,
+                    true,
+                    None,
+                );
+                #[cfg(feature = "tts")]
                 tts.tts_blocking(t!("rootkeys.console_input", locales::LANG)).unwrap();
                 rootkeys_modal.activate();
                 log::info!("{}check_conn", CONSOLE_SENTINEL);
@@ -1310,23 +1632,30 @@ fn main() -> ! {
                     log::info!("got '{}', moving on", console_text.first().as_str());
                     // proceed
                     if keys.is_pcache_update_password_valid() || !keys.is_initialized() {
-                        send_message(main_cid,
-                            xous::Message::new_scalar(Opcode::UxBbramRun.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).unwrap();
+                        send_message(
+                            main_cid,
+                            xous::Message::new_scalar(Opcode::UxBbramRun.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .unwrap();
                     } else {
                         keys.set_ux_password_type(Some(PasswordType::Update));
                         password_action.set_action_opcode(Opcode::UxBbramPasswordReturn.to_u32().unwrap());
                         rootkeys_modal.modify(
                             Some(ActionType::TextEntry(password_action.clone())),
-                            Some(t!("rootkeys.get_signing_password", locales::LANG)), false,
-                            None, true, None
+                            Some(t!("rootkeys.get_signing_password", locales::LANG)),
+                            false,
+                            None,
+                            true,
+                            None,
                         );
-                        #[cfg(feature="tts")]
+                        #[cfg(feature = "tts")]
                         tts.tts_blocking(t!("rootkeys.get_signing_password", locales::LANG)).unwrap();
                         rootkeys_modal.activate();
                     }
                 } else {
-                    modals.show_notification(t!("rootkeys.bbram.no_helper", locales::LANG), None).expect("modals error");
+                    modals
+                        .show_notification(t!("rootkeys.bbram.no_helper", locales::LANG), None)
+                        .expect("modals error");
                     continue;
                 }
             }
@@ -1337,36 +1666,56 @@ fn main() -> ! {
                 keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
                 plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
-                send_message(main_cid,
-                    xous::Message::new_scalar(Opcode::UxBbramRun.to_usize().unwrap(), 0, 0, 0, 0)
-                ).unwrap();
+                send_message(
+                    main_cid,
+                    xous::Message::new_scalar(Opcode::UxBbramRun.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .unwrap();
             }
             Some(Opcode::UxBbramRun) => {
                 keys.set_ux_password_type(None);
-                let result = keys.do_gateware_update(&mut rootkeys_modal, &modals, main_cid, UpdateType::BbramProvision);
-                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                let result = keys.do_gateware_update(
+                    &mut rootkeys_modal,
+                    &modals,
+                    main_cid,
+                    UpdateType::BbramProvision,
+                );
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close
+                // and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
                 match result {
                     Ok(_) => {
-                        modals.show_notification(t!("rootkeys.bbram.finished", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.bbram.finished", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
                         // probably a bad password, purge it, so the user can try again
                         keys.purge_password(PasswordType::Update);
-                        modals.show_notification(t!("rootkeys.init.fail_key", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_key", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::StateError) => {
-                        modals.show_notification(t!("rootkeys.wrong_state", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.wrong_state", locales::LANG), None)
+                            .expect("modals error");
                     }
                 }
             }
@@ -1384,16 +1733,20 @@ fn main() -> ! {
             }),
             Some(Opcode::StagedSemver) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let staged_semver: [u8; 16] = keys.staged_semver().into();
-                xous::return_scalar2(msg.sender,
+                xous::return_scalar2(
+                    msg.sender,
                     u32::from_le_bytes(staged_semver[0..4].try_into().unwrap()) as usize,
                     u32::from_le_bytes(staged_semver[4..8].try_into().unwrap()) as usize,
-                ).expect("couldn't send return value");
+                )
+                .expect("couldn't send return value");
             }),
             Some(Opcode::TryNoKeySocUpdate) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if keys.try_nokey_soc_update(&mut rootkeys_modal, main_cid) {
-                    send_message(main_cid,
-                        xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).expect("couldn't initiate dialog box");
+                    send_message(
+                        main_cid,
+                        xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .expect("couldn't initiate dialog box");
                     // the status flow remains blocked "forever", but that's ok -- we should be rebooting.
                     // xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
@@ -1408,10 +1761,11 @@ fn main() -> ! {
                 }
             }),
             Some(Opcode::SetPromptForUpdate) => msg_scalar_unpack!(msg, state, _, _, _, {
-                keys.set_prompt_for_update(if state == 1 {true} else {false});
+                keys.set_prompt_for_update(if state == 1 { true } else { false });
             }),
             Some(Opcode::ShouldRestore) => {
-                let mut buf = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buf =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let maybe_header = keys.read_backup_header();
                 let mut ret = BackupHeaderIpc::default();
                 if let Some(header) = maybe_header {
@@ -1438,10 +1792,13 @@ fn main() -> ! {
                 password_action.set_action_opcode(Opcode::UxCreateBackupPwReturn.to_u32().unwrap());
                 rootkeys_modal.modify(
                     Some(ActionType::TextEntry(password_action.clone())),
-                    Some(t!("rootkeys.get_update_password_backup", locales::LANG)), false,
-                    None, true, None
+                    Some(t!("rootkeys.get_update_password_backup", locales::LANG)),
+                    false,
+                    None,
+                    true,
+                    None,
                 );
-                #[cfg(feature="tts")]
+                #[cfg(feature = "tts")]
                 tts.tts_blocking(t!("rootkeys.get_update_password_backup", locales::LANG)).unwrap();
                 log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 rootkeys_modal.activate();
@@ -1457,8 +1814,11 @@ fn main() -> ! {
 
                 // check if the entered password is valid.
                 if let Some((fpga_key, keyrom)) = keys.get_backup_key() {
-                    // this gets shown in an "insecure" modal but -- we're expatriating this data anyways, so meh?
-                    modals.show_bip39(Some(t!("rootkeys.backup_key", locales::LANG)), &fpga_key.0.to_vec()).ok();
+                    // this gets shown in an "insecure" modal but -- we're expatriating this data anyways, so
+                    // meh?
+                    modals
+                        .show_bip39(Some(t!("rootkeys.backup_key", locales::LANG)), &fpga_key.0.to_vec())
+                        .ok();
                     // let the user confirm the key, or skip it. YOLO!
                     loop {
                         modals.add_list_item(t!("rootkeys.gwup.yes", locales::LANG)).expect("modals error");
@@ -1467,21 +1827,41 @@ fn main() -> ! {
                         match modals.get_radiobutton(t!("rootkeys.backup_verify", locales::LANG)) {
                             Ok(response) => {
                                 if response == t!("rootkeys.gwup.yes", locales::LANG) {
-                                    match modals.input_bip39(Some(t!("rootkeys.backup_key_enter", locales::LANG))) {
+                                    match modals
+                                        .input_bip39(Some(t!("rootkeys.backup_key_enter", locales::LANG)))
+                                    {
                                         Ok(verify) => {
                                             log::debug!("got bip39 verification: {:x?}", verify);
                                             if &verify == &fpga_key.0 {
                                                 log::debug!("verify succeeded");
-                                                modals.show_notification(t!("rootkeys.backup_key_match", locales::LANG), None).ok();
+                                                modals
+                                                    .show_notification(
+                                                        t!("rootkeys.backup_key_match", locales::LANG),
+                                                        None,
+                                                    )
+                                                    .ok();
                                                 break;
                                             } else {
                                                 log::debug!("verify failed");
-                                                modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", locales::LANG)), &fpga_key.0.to_vec()).ok();
+                                                modals
+                                                    .show_bip39(
+                                                        Some(t!(
+                                                            "rootkeys.backup_key_mismatch",
+                                                            locales::LANG
+                                                        )),
+                                                        &fpga_key.0.to_vec(),
+                                                    )
+                                                    .ok();
                                             }
                                         }
                                         _ => {
                                             log::debug!("bip39 verification aborted");
-                                            modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", locales::LANG)), &fpga_key.0.to_vec()).ok();
+                                            modals
+                                                .show_bip39(
+                                                    Some(t!("rootkeys.backup_key_mismatch", locales::LANG)),
+                                                    &fpga_key.0.to_vec(),
+                                                )
+                                                .ok();
                                         }
                                     }
                                 } else {
@@ -1497,34 +1877,52 @@ fn main() -> ! {
                     match keys.write_backup(backup_header.take().unwrap(), backup_ct, checksums.take()) {
                         Ok(_) => {
                             // this switchover takes a couple seconds, give some user feedback
-                            modals.dynamic_notification(Some(t!("rootkeys.backup_prepwait", locales::LANG)), None).ok();
+                            modals
+                                .dynamic_notification(
+                                    Some(t!("rootkeys.backup_prepwait", locales::LANG)),
+                                    None,
+                                )
+                                .ok();
                             let usbd = usb_device_xous::UsbHid::new();
                             usbd.switch_to_core(usb_device_xous::UsbDeviceType::Debug).unwrap();
                             usbd.debug_usb(Some(false)).unwrap();
                             modals.dynamic_notification_close().ok();
-                            // there will be a bit of a pause while the QR text renders, but we'll have to fix that with other optimizations...
+                            // there will be a bit of a pause while the QR text renders, but we'll have to fix
+                            // that with other optimizations...
                             log::info!("{}BACKUP.STAGED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                            modals.show_notification(t!("rootkeys.backup_staged", locales::LANG), Some("https://github.com/betrusted-io/betrusted-wiki/wiki/Backups")).ok();
-                            // this informs users who dismiss the QR code that they must reboot to resume normal operation
+                            modals
+                                .show_notification(
+                                    t!("rootkeys.backup_staged", locales::LANG),
+                                    Some("https://github.com/betrusted-io/betrusted-wiki/wiki/Backups"),
+                                )
+                                .ok();
+                            // this informs users who dismiss the QR code that they must reboot to resume
+                            // normal operation
                             modals.show_notification(t!("rootkeys.backup_waiting", locales::LANG), None).ok();
                         }
                         Err(_) => {
-                            modals.show_notification(t!("rootkeys.backup_staging_error", locales::LANG), None).ok();
+                            modals
+                                .show_notification(t!("rootkeys.backup_staging_error", locales::LANG), None)
+                                .ok();
                         }
                     }
                 } else {
                     modals.show_notification(t!("rootkeys.backup_badpass", locales::LANG), None).ok();
-                    // Prompt the user again for the password. It will do this until a correct password is entered.
-                    // maybe it would be thoughtful to add a yes/no box for rebooting in case someone decides they
-                    // don't want to run the backup right now. But I think this is an edge case that few will run into.
+                    // Prompt the user again for the password. It will do this until a correct password is
+                    // entered. maybe it would be thoughtful to add a yes/no box for
+                    // rebooting in case someone decides they don't want to run the backup
+                    // right now. But I think this is an edge case that few will run into.
                     keys.set_ux_password_type(Some(PasswordType::Update));
                     password_action.set_action_opcode(Opcode::UxCreateBackupPwReturn.to_u32().unwrap());
                     rootkeys_modal.modify(
                         Some(ActionType::TextEntry(password_action.clone())),
-                        Some(t!("rootkeys.get_update_password_backup", locales::LANG)), false,
-                        None, true, None
+                        Some(t!("rootkeys.get_update_password_backup", locales::LANG)),
+                        false,
+                        None,
+                        true,
+                        None,
                     );
-                    #[cfg(feature="tts")]
+                    #[cfg(feature = "tts")]
                     tts.tts_blocking(t!("rootkeys.get_update_password_backup", locales::LANG)).unwrap();
                     log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
@@ -1540,7 +1938,9 @@ fn main() -> ! {
                     match modals.get_radiobutton(t!("rootkeys.restore_already_init", locales::LANG)) {
                         Ok(response) => {
                             if response == t!("rootkeys.confirm.no", locales::LANG) {
-                                modals.show_notification(t!("rootkeys.restore_abort", locales::LANG), None).ok();
+                                modals
+                                    .show_notification(t!("rootkeys.restore_abort", locales::LANG), None)
+                                    .ok();
                                 if let Some(sender) = deferred_response {
                                     xous::return_scalar(sender, 1).ok();
                                 }
@@ -1571,7 +1971,9 @@ fn main() -> ! {
                             }
                             _ => {
                                 // key entry failed, aborting.
-                                modals.show_notification(t!("rootkeys.restore_badpass", locales::LANG), None).ok();
+                                modals
+                                    .show_notification(t!("rootkeys.restore_badpass", locales::LANG), None)
+                                    .ok();
                             }
                         }
                     } else {
@@ -1588,7 +1990,9 @@ fn main() -> ! {
                             log::warn!("Corruption detected:");
                             log::info!("plaintext header: {:?}", pt.header);
                             log::info!("encrypted header: {:?}", header);
-                            modals.show_notification(t!("rootkeys.restore_corrupt", locales::LANG), None).ok();
+                            modals
+                                .show_notification(t!("rootkeys.restore_corrupt", locales::LANG), None)
+                                .ok();
                             if let Some(sender) = deferred_response {
                                 xous::return_scalar(sender, 1).ok();
                             }
@@ -1597,17 +2001,19 @@ fn main() -> ! {
                         let mut restore_rom = backups::KeyRomExport::default();
                         restore_rom.0.copy_from_slice(&pt.keyrom);
 
-                        // We have a bit of a conundrum in terms of restoring the key, because it can mismatch what's in
-                        // the target restore hardware. Here is how it gets resolved:
+                        // We have a bit of a conundrum in terms of restoring the key, because it can mismatch
+                        // what's in the target restore hardware. Here is how it gets
+                        // resolved:
                         //  - (dev state) If we booted with zero key, we leave it zero key
-                        //  - (restore to blank device) If we booted with zero key, and the image is non-zero key,
-                        //    We re-encrypt to the zero key that corresponds to the current device,
-                        //    and show a warning that the FPGA key / backup key needs to be set
-                        //    as a separate step.
-                        //  - (restore to keyed device) If we booted with a non-zero key, this means someone had primed a
-                        //    SoC image with an encrypted key to start with, or we are restoring to a bootable device that
-                        //    has been keyed. This probably means e-fuses or BBRAM was burned. We check that the booted
-                        //    image matches the provided backup key, and then encrypt to that key.
+                        //  - (restore to blank device) If we booted with zero key, and the image is non-zero
+                        //    key, We re-encrypt to the zero key that corresponds to the current device, and
+                        //    show a warning that the FPGA key / backup key needs to be set as a separate
+                        //    step.
+                        //  - (restore to keyed device) If we booted with a non-zero key, this means someone
+                        //    had primed a SoC image with an encrypted key to start with, or we are restoring
+                        //    to a bootable device that has been keyed. This probably means e-fuses or BBRAM
+                        //    was burned. We check that the booted image matches the provided backup key, and
+                        //    then encrypt to that key.
                         //
                         // Either way, the flow at this point is similar to doing a gateware update, in that
                         // the source image to apply is a zero-key image in the staging area.
@@ -1615,13 +2021,19 @@ fn main() -> ! {
                             // zeroize the restore key to match the device state
                             // (we don't need it anymore, now that the backup has been decrypted!)
                             restore_key.0.copy_from_slice(&[0u8; 32]);
-                            // also zeroize the copy in the key rom. It *could* be set from the previous FPGA config,
-                            // but, since this FPGA we're going to will have the 0-key, we wipe so the state is consistent.
+                            // also zeroize the copy in the key rom. It *could* be set from the previous FPGA
+                            // config, but, since this FPGA we're going to will
+                            // have the 0-key, we wipe so the state is consistent.
                             restore_rom.0[0..8].copy_from_slice(&[0u32; 8]);
                         }
                         if restore_key.0 == [0u8; 32] {
                             if !showed_zero_key_notice {
-                                modals.show_notification(t!("rootkeys.restore_needs_keyburn", locales::LANG), None).ok();
+                                modals
+                                    .show_notification(
+                                        t!("rootkeys.restore_needs_keyburn", locales::LANG),
+                                        None,
+                                    )
+                                    .ok();
                             }
                         }
                         // this will setup the pepper so we can request a password
@@ -1632,10 +2044,13 @@ fn main() -> ! {
                         password_action.set_action_opcode(Opcode::UxDoRestorePwReturn.to_u32().unwrap());
                         rootkeys_modal.modify(
                             Some(ActionType::TextEntry(password_action.clone())),
-                            Some(t!("rootkeys.get_update_password_restore", locales::LANG)), false,
-                            None, true, None
+                            Some(t!("rootkeys.get_update_password_restore", locales::LANG)),
+                            false,
+                            None,
+                            true,
+                            None,
                         );
-                        #[cfg(feature="tts")]
+                        #[cfg(feature = "tts")]
                         tts.tts_blocking(t!("rootkeys.get_update_password_restore", locales::LANG)).unwrap();
                         log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         rootkeys_modal.activate();
@@ -1656,10 +2071,10 @@ fn main() -> ! {
                 buf.volatile_clear();
                 keys.set_ux_password_type(None);
 
-                let result = keys.do_gateware_update(&mut rootkeys_modal, &modals, main_cid,
-                    UpdateType::Restore
-                );
-                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                let result =
+                    keys.do_gateware_update(&mut rootkeys_modal, &modals, main_cid, UpdateType::Restore);
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close
+                // and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
                 log::info!("set_ux_password result: {:?}", result);
@@ -1677,28 +2092,36 @@ fn main() -> ! {
                         } else {
                             log::info!("DNA is not the same; setting flag to trigger RestoreDna flow");
                             // one more step...have to re-encrypt the PDDB's basis to the new device's DNA.
-                            // we'll handle this *after* the reboot, because we may need a newer SoC version, etc.
+                            // we'll handle this *after* the reboot, because we may need a newer SoC version,
+                            // etc.
                             header.op = BackupOp::RestoreDna; // it gets set inside the call too; could lose this line but testing is painful on this flow.
-                            keys.write_restore_dna(header, ct)
-                            .expect("Couldn't set flag for restore with new DNA: some data loss will occur.");
+                            keys.write_restore_dna(header, ct).expect(
+                                "Couldn't set flag for restore with new DNA: some data loss will occur.",
+                            );
                         }
                         log::info!("going to into reboot arc");
-                        send_message(main_cid,
-                            xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).expect("couldn't initiate dialog box");
+                        send_message(
+                            main_cid,
+                            xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .expect("couldn't initiate dialog box");
                         // don't unblock the caller if we go to the reboot arc
                     }
                     Err(RootkeyResult::AlignmentError) => {
                         // clear all the state, re-enable suspend/resume
                         keys.finish_key_init();
 
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None)
+                            .expect("modals error");
                         if let Some(sender) = deferred_response {
                             xous::return_scalar(sender, 1).ok();
                         }
                     }
                     Err(RootkeyResult::KeyError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_key", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_key", locales::LANG), None)
+                            .expect("modals error");
                         modals.add_list_item(t!("rootkeys.gwup.yes", locales::LANG)).expect("modals error");
                         modals.add_list_item(t!("rootkeys.gwup.no", locales::LANG)).expect("modals error");
                         match modals.get_radiobutton(t!("rootkeys.try_again", locales::LANG)) {
@@ -1714,14 +2137,22 @@ fn main() -> ! {
                                 } else if response == t!("rootkeys.gwup.yes", locales::LANG) {
                                     // get the update password, so we can encrypt the FPGA key to it.
                                     keys.set_ux_password_type(Some(PasswordType::Update));
-                                    password_action.set_action_opcode(Opcode::UxDoRestorePwReturn.to_u32().unwrap());
+                                    password_action
+                                        .set_action_opcode(Opcode::UxDoRestorePwReturn.to_u32().unwrap());
                                     rootkeys_modal.modify(
                                         Some(ActionType::TextEntry(password_action.clone())),
-                                        Some(t!("rootkeys.get_update_password_restore", locales::LANG)), false,
-                                        None, true, None
+                                        Some(t!("rootkeys.get_update_password_restore", locales::LANG)),
+                                        false,
+                                        None,
+                                        true,
+                                        None,
                                     );
-                                    #[cfg(feature="tts")]
-                                    tts.tts_blocking(t!("rootkeys.get_update_password_restore", locales::LANG)).unwrap();
+                                    #[cfg(feature = "tts")]
+                                    tts.tts_blocking(t!(
+                                        "rootkeys.get_update_password_restore",
+                                        locales::LANG
+                                    ))
+                                    .unwrap();
                                     log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                                     rootkeys_modal.activate();
                                 } else {
@@ -1738,7 +2169,9 @@ fn main() -> ! {
                         // clear all the state, re-enable suspend/resume
                         keys.finish_key_init();
 
-                        modals.show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None)
+                            .expect("modals error");
                         if let Some(sender) = deferred_response {
                             xous::return_scalar(sender, 1).ok();
                         }
@@ -1747,7 +2180,9 @@ fn main() -> ! {
                         // clear all the state, re-enable suspend/resume
                         keys.finish_key_init();
 
-                        modals.show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None)
+                            .expect("modals error");
                         if let Some(sender) = deferred_response {
                             xous::return_scalar(sender, 1).ok();
                         }
@@ -1756,7 +2191,9 @@ fn main() -> ! {
                         // clear all the state, re-enable suspend/resume
                         keys.finish_key_init();
 
-                        modals.show_notification(t!("rootkeys.wrong_state", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.wrong_state", locales::LANG), None)
+                            .expect("modals error");
                         if let Some(sender) = deferred_response {
                             xous::return_scalar(sender, 1).ok();
                         }
@@ -1799,33 +2236,40 @@ fn main() -> ! {
                 //   2. create a backup of the gateware
                 //   3. inject new key into gateware, while re-encrypting to the new key
                 //   4. burn the key using jtag.efuse_key_burn()
-                //   5. seal the device using seal_device_forever()
-                //      [first device don't call this so we can debug the flow; on second device, call this and confirm we can't re-burn or readout]
+                //   5. seal the device using seal_device_forever() [first device don't call this so we can
+                //      debug the flow; on second device, call this and confirm we can't re-burn or readout]
                 //   6. force a reboot
                 log::info!("{}EFUSE.START,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 // confirm that we can read out our JTAG ID.
                 if !keys.is_jtag_working() {
-                    modals.show_notification(t!("rootkeys.efuse_jtag_fail", locales::LANG), None).expect("modals error");
+                    modals
+                        .show_notification(t!("rootkeys.efuse_jtag_fail", locales::LANG), None)
+                        .expect("modals error");
                     continue;
                 }
                 // get password, or skip getting it if it's already in cache
                 if keys.is_pcache_update_password_valid() || !keys.is_initialized() {
-                    send_message(main_cid,
-                        xous::Message::new_scalar(Opcode::EfuseRun.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).unwrap();
+                    send_message(
+                        main_cid,
+                        xous::Message::new_scalar(Opcode::EfuseRun.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .unwrap();
                 } else {
                     keys.set_ux_password_type(Some(PasswordType::Update));
                     password_action.set_action_opcode(Opcode::EfusePasswordReturn.to_u32().unwrap());
                     rootkeys_modal.modify(
                         Some(ActionType::TextEntry(password_action.clone())),
-                        Some(t!("rootkeys.get_signing_password", locales::LANG)), false,
-                        None, true, None
+                        Some(t!("rootkeys.get_signing_password", locales::LANG)),
+                        false,
+                        None,
+                        true,
+                        None,
                     );
-                    #[cfg(feature="tts")]
+                    #[cfg(feature = "tts")]
                     tts.tts_blocking(t!("rootkeys.get_signing_password", locales::LANG)).unwrap();
                     rootkeys_modal.activate();
                 }
-            },
+            }
             #[cfg(feature = "efuse")]
             Some(Opcode::EfusePasswordReturn) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -1834,41 +2278,63 @@ fn main() -> ! {
                 keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
                 plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
-                send_message(main_cid,
-                    xous::Message::new_scalar(Opcode::EfuseRun.to_usize().unwrap(), 0, 0, 0, 0)
-                ).unwrap();
+                send_message(
+                    main_cid,
+                    xous::Message::new_scalar(Opcode::EfuseRun.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .unwrap();
             }
             #[cfg(feature = "efuse")]
             Some(Opcode::EfuseRun) => {
                 keys.set_ux_password_type(None);
-                let result = keys.do_gateware_update(&mut rootkeys_modal, &modals, main_cid, UpdateType::EfuseProvision);
-                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                let result = keys.do_gateware_update(
+                    &mut rootkeys_modal,
+                    &modals,
+                    main_cid,
+                    UpdateType::EfuseProvision,
+                );
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close
+                // and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
                 match result {
                     Ok(_) => {
                         log::info!("{}EFUSE.OK,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                        modals.show_notification(t!("rootkeys.efuse_finished", locales::LANG), None).expect("modals error");
-                        send_message(main_cid,
-                            xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).expect("couldn't initiate dialog box");
+                        modals
+                            .show_notification(t!("rootkeys.efuse_finished", locales::LANG), None)
+                            .expect("modals error");
+                        send_message(
+                            main_cid,
+                            xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .expect("couldn't initiate dialog box");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_alignment", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
                         // probably a bad password, purge it, so the user can try again
                         keys.purge_password(PasswordType::Update);
-                        modals.show_notification(t!("rootkeys.init.fail_key", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_key", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_verify", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.init.fail_burn", locales::LANG), None)
+                            .expect("modals error");
                     }
                     Err(RootkeyResult::StateError) => {
-                        modals.show_notification(t!("rootkeys.wrong_state", locales::LANG), None).expect("modals error");
+                        modals
+                            .show_notification(t!("rootkeys.wrong_state", locales::LANG), None)
+                            .expect("modals error");
                     }
                 }
             }
@@ -1884,22 +2350,18 @@ fn main() -> ! {
             Some(Opcode::UxPolicyReturn) => msg_scalar_unpack!(msg, policy_code, _, _, _, {
                 keys.update_policy(FromPrimitive::from_usize(policy_code));
                 if let Some(action) = policy_followup_action {
-                    send_message(main_cid,
-                        xous::Message::new_scalar(action, 0, 0, 0, 0)
-                    ).unwrap();
+                    send_message(main_cid, xous::Message::new_scalar(action, 0, 0, 0, 0)).unwrap();
                 }
                 policy_followup_action = None;
             }),
             Some(Opcode::UxGutter) => {
                 // an intentional NOP for UX actions that require a destintation but need no action
-            },
-
-
+            }
 
             // boilerplate Ux handlers
             Some(Opcode::ModalRedraw) => {
                 rootkeys_modal.redraw();
-            },
+            }
             Some(Opcode::ModalKeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
                 let keys = [
                     core::char::from_u32(k1 as u32).unwrap_or('\u{0000}'),
@@ -1914,7 +2376,7 @@ fn main() -> ! {
             }
             Some(Opcode::Quit) => {
                 log::warn!("password thread received quit, exiting.");
-                break
+                break;
             }
             None => {
                 log::error!("couldn't convert opcode");

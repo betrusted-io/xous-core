@@ -1,10 +1,10 @@
 mod rkyv_enum;
+use core::mem::size_of;
+use core::ops::{Deref, DerefMut};
+
 pub use rkyv_enum::*;
 
-use core::ops::{Deref, DerefMut};
-use core::mem::size_of;
-
-pub(crate) const SERVER_NAME_KEYS: &str     = "_Root key server and update manager_";
+pub(crate) const SERVER_NAME_KEYS: &str = "_Root key server and update manager_";
 #[allow(dead_code)]
 pub(crate) const SIG_LOADER_VERSION: u32 = 1; // standard ed25519 signature
 #[allow(dead_code)]
@@ -25,7 +25,8 @@ pub(crate) enum Opcode {
     AesOracle = 4,
     /// initiate key wrapper operation
     AesKwp = 5,
-    /// create new FPGA keys; provisioning requires a slave device to be connected that can run the JTAG sequence
+    /// create new FPGA keys; provisioning requires a slave device to be connected that can run the JTAG
+    /// sequence
     BbramProvision = 6,
     /// clear a cached password
     ClearPasswordCacheEntry = 7,
@@ -134,7 +135,7 @@ pub enum PasswordType {
     Boot = 1,
     Update = 2,
 }
-#[cfg_attr(not(any(feature="precursor", feature="renode")), allow(dead_code))]
+#[cfg_attr(not(any(feature = "precursor", feature = "renode")), allow(dead_code))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum RootkeyResult {
     AlignmentError = 0,
@@ -217,7 +218,9 @@ impl fmt::Display for KeywrapError {
             KeywrapError::InvalidKekSize => f.write_str("Invalid key size"),
             KeywrapError::InvalidOutputSize => f.write_str("Invalid output size"),
             KeywrapError::IntegrityCheckFailed => f.write_str("Authentication failed"),
-            KeywrapError::UpgradeToNew((_k, _wk)) => f.write_str("Legacy migration detected! New wrapped key transmitted to caller"),
+            KeywrapError::UpgradeToNew((_k, _wk)) => {
+                f.write_str("Legacy migration detected! New wrapped key transmitted to caller")
+            }
         }
     }
 }
@@ -228,7 +231,7 @@ pub(crate) const MAX_WRAP_DATA: usize = 2048;
 /// can deal with. So, unfortunately, the result of this does *not* get zeroized on drop :(
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 // #[zeroize(drop)]
-pub (crate) struct KeyWrapper {
+pub(crate) struct KeyWrapper {
     pub data: [u8; MAX_WRAP_DATA + 8],
     // used to specify the length of the data used in the fixed-length array above
     pub len: u32,
@@ -243,22 +246,18 @@ pub (crate) struct KeyWrapper {
 // a bit inefficient but convenient, because we need an Option<> of the
 // BackupHeader and not the header itself.
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub (crate) struct BackupHeaderIpc {
+pub(crate) struct BackupHeaderIpc {
     pub data: Option<[u8; core::mem::size_of::<BackupHeader>()]>,
     pub checksums: Option<Checksums>,
-
 }
 impl Default for BackupHeaderIpc {
     fn default() -> Self {
-        BackupHeaderIpc {
-            data: None::<[u8; core::mem::size_of::<BackupHeader>()]>,
-            checksums: None,
-        }
+        BackupHeaderIpc { data: None::<[u8; core::mem::size_of::<BackupHeader>()]>, checksums: None }
     }
 }
 
 pub const BACKUP_VERSION: u32 = 0x00_01_00_01;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub const BACKUP_VERSION_MASK: u32 = 0xFF_FF_00_00; // mask off bits that are cross-compatible
 
 #[repr(u32)]
@@ -293,10 +292,8 @@ impl Default for BackupLanguage {
         }
     }
 }
-impl From::<BackupLanguage> for [u8; 4] {
-    fn from(l: BackupLanguage) -> [u8; 4] {
-        (l as u32).to_le_bytes()
-    }
+impl From<BackupLanguage> for [u8; 4] {
+    fn from(l: BackupLanguage) -> [u8; 4] { (l as u32).to_le_bytes() }
 }
 #[repr(u32)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -313,7 +310,7 @@ pub enum BackupKeyboardLayout {
     Hangul = 5,
     // codes above 16384 are reserved for user layouts
 }
-impl From::<KeyMap> for BackupKeyboardLayout {
+impl From<KeyMap> for BackupKeyboardLayout {
     fn from(map: KeyMap) -> BackupKeyboardLayout {
         match map {
             KeyMap::Qwerty => BackupKeyboardLayout::Qwerty,
@@ -338,16 +335,12 @@ impl From<BackupKeyboardLayout> for KeyMap {
     }
 }
 impl Default for BackupKeyboardLayout {
-    fn default() -> Self {
-        BackupKeyboardLayout::Qwerty
-    }
+    fn default() -> Self { BackupKeyboardLayout::Qwerty }
 }
-impl From::<BackupKeyboardLayout> for [u8; 4] {
-    fn from(l: BackupKeyboardLayout) -> [u8; 4] {
-        (l as u32).to_le_bytes()
-    }
+impl From<BackupKeyboardLayout> for [u8; 4] {
+    fn from(l: BackupKeyboardLayout) -> [u8; 4] { (l as u32).to_le_bytes() }
 }
-impl From::<[u8; 4]> for BackupKeyboardLayout {
+impl From<[u8; 4]> for BackupKeyboardLayout {
     fn from(b: [u8; 4]) -> BackupKeyboardLayout {
         let code = u32::from_le_bytes(b);
         match code {
@@ -409,7 +402,10 @@ pub struct BackupHeader {
 }
 impl Default for BackupHeader {
     fn default() -> Self {
-        assert!(xous::PDDB_LEN & ((CHECKSUM_BLOCKLEN_PAGE * 0x1000) - 1) == 0, "PDDB_LEN is not an integer multiple of CHECKSUM_LEN_PAGE");
+        assert!(
+            xous::PDDB_LEN & ((CHECKSUM_BLOCKLEN_PAGE * 0x1000) - 1) == 0,
+            "PDDB_LEN is not an integer multiple of CHECKSUM_LEN_PAGE"
+        );
         BackupHeader {
             version: BACKUP_VERSION,
             xous_ver: [0u8; 16],
@@ -430,6 +426,7 @@ impl Default for BackupHeader {
 }
 impl Deref for BackupHeader {
     type Target = [u8];
+
     fn deref(&self) -> &[u8] {
         unsafe {
             core::slice::from_raw_parts(self as *const BackupHeader as *const u8, size_of::<BackupHeader>())
@@ -468,14 +465,11 @@ pub struct Checksums {
     pub checksums: [[u8; 16]; crate::api::TOTAL_CHECKSUMS as usize],
 }
 impl Default for Checksums {
-    fn default() -> Self {
-        Checksums {
-            checksums: [[0u8; 16]; crate::api::TOTAL_CHECKSUMS as usize],
-        }
-    }
+    fn default() -> Self { Checksums { checksums: [[0u8; 16]; crate::api::TOTAL_CHECKSUMS as usize] } }
 }
 impl Deref for Checksums {
     type Target = [u8];
+
     fn deref(&self) -> &[u8] {
         unsafe {
             core::slice::from_raw_parts(self as *const Checksums as *const u8, size_of::<Checksums>())
