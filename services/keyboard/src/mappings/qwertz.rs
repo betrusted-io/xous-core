@@ -1,6 +1,7 @@
 use crate::{RowCol, ScanCode};
 
 /// Compute the qwertz key mapping of row/col to key tuples
+#[rustfmt::skip]
 pub(crate) fn map_qwertz(code: RowCol) -> ScanCode {
     let rc = (code.r, code.c);
 
