@@ -19,7 +19,7 @@ pub struct Shrink<I> {
     in_y: usize,
     /// the current x coord of the outbound image
     out_x: usize,
-    /// the current y coord of the outbound image    
+    /// the current y coord of the outbound image
     out_y: usize,
     /// a buffer the width of the outbound image to stove horizontal averages
     buf: Vec<u16>,
