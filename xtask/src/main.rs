@@ -1,5 +1,6 @@
 mod app_manifest;
 mod versioning;
+use app_manifest::generate_app_menus;
 use versioning::*;
 mod utils;
 use utils::*;
@@ -424,6 +425,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // ---- other single-purpose commands ----
         Some("generate-locales") => generate_locales()?,
         Some("wycheproof-import") => whycheproof_import()?,
+        Some("dummy-template") => generate_app_menus(&Vec::new()),
         _ => print_help(),
     }
     builder.build()?;
@@ -535,6 +537,7 @@ Other commands:
  wycheproof-import       generate binary test vectors for engine-25519 from whycheproof-import/x25519.json
  install-toolkit         installs Xous toolkit with no prompt, useful in CI. Specify `--force` to remove existing toolchains
  compile-apps            Just compiles the apps specified in [cratespecs], for example in order to use app server
+ dummy-template          Generate dummy templates for formatting and checking purposes
 
 Note: By default, the `ticktimer` will get rebuilt every time. You can skip this by appending `--no-timestamp` to the command.
 "
