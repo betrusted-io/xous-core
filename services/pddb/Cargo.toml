@@ -52,7 +52,7 @@ modals = { path = "../modals" }
 utralib = { version = "0.1.24", optional = true, default-features = false }
 
 # performance profiling
-perflib = { path = "../../tools/perflib", optional = true }
+perflib = { path = "../../libs/perflib", optional = true }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 rand = "0.8.5"

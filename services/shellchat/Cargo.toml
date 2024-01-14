@@ -90,7 +90,7 @@ ring = { version = "0.16.20", optional = true }
 tungstenite = { version = "0.20.0", optional = true }
 
 # for performance testing
-perflib = { path = "../../tools/perflib", optional = true }
+perflib = { path = "../../libs/perflib", optional = true }
 random-pick = { version = "1.2.15", optional = true }
 
 # for the curve25519 tests
