@@ -197,7 +197,7 @@ mod tests {
     }
     /// This test exists because nothing in the bitfield spec explicitly requires that a true maps to a 1.
     /// In fact a lot of code would work just fine if you mapped true to 0 and false to 1: if you're just
-    /// using the generated getter and setter, it woudln't matter.
+    /// using the generated getter and setter, it wouldn't matter.
     /// However, in our application, we fully expect a true to be a 1. This test exists to ensure this
     /// seemingly obvious but not explicitly stated fact always remains true.
     #[test]

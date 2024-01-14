@@ -72,7 +72,7 @@ When returning, a memory buffer may be required. The contents of this buffer wil
 
 ## Syscall Types
 
-Syscalls use specialised types, many of which are backed by `usize`. For example, a `MemoryAddress` is a `NoneZeroUsize`, which is the same size as `usize`. In this manner, programs can ensure that memory addresses cannot be `NULL`.
+Syscalls use specialized types, many of which are backed by `usize`. For example, a `MemoryAddress` is a `NoneZeroUsize`, which is the same size as `usize`. In this manner, programs can ensure that memory addresses cannot be `NULL`.
 
 ## Syscall Support Types
 

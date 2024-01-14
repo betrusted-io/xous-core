@@ -13,7 +13,7 @@ PAC generated using [svd2rust](https://crates.io/crates/svd2rust):
 ```
     // this seems clear -- as long as all the bit fields are specified
     // (they actually aren't, so some non-obvious things are happening)
-    p.POWER.power.write(|w| 
+    p.POWER.power.write(|w|
        w.discharge().bit(true)
         .soc_on().bit(false)
         .kbddrive().bit(true)
@@ -23,10 +23,10 @@ PAC generated using [svd2rust](https://crates.io/crates/svd2rust):
     // what should this do?
     // 1. just set the discharge bit to true and everything else to zero?
     // 2. read the register first, change only the discharge bit to true, leaving the rest unchanged?
-    p.POWER.power.write(|w| 
+    p.POWER.power.write(|w|
        w.discharge().bit(true)
       );
-      
+
     // answer: it does (1). You need to use the `modify()` function to have (2) happen.
 
 ```
@@ -43,15 +43,15 @@ the rest of the contents are zero? These types of ambiguity make it
 hard to audit code, especially for experts in systems programming
 who are not also experts in Rust.
 
-The primary trade-off for achieving unambiguity and thinness is less
+The primary trade-off for achieving unambiguousness and thinness is less
 type checking and type hardening, because we are not fully taking
-advantage of the advanced syntax features of Rust. 
+advantage of the advanced syntax features of Rust.
 
 That being said, a certain degree of deliberate malleability in the
 register abstraction is desired to assist with security-oriented
 audits: for a security audit, it is often just as important to ask
 what the undefined bits do, as it is to check the settings of the
-defined bits. Malleabilty allows an auditor to quickly create targeted
+defined bits. Malleability allows an auditor to quickly create targeted
 tests that exercise undefined bits. Existing Rust-based access crates
 create strict types that eliminate the class of errors where constants
 defined for one register are used in an incorrect type of register,

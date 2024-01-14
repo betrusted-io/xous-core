@@ -1,6 +1,6 @@
 # PDDB
 
-Please refer to the Xous Book for the [authoratative documentation on the PDDB](https://betrusted.io/xous-book/ch09-00-pddb-overview.html).
+Please refer to the Xous Book for the [authoritative documentation on the PDDB](https://betrusted.io/xous-book/ch09-00-pddb-overview.html).
 
 Alternatively, documentation for the PDDB can be found in the headers of the source files:
 

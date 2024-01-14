@@ -21,9 +21,9 @@ Each entry for an app needs a record in `manifest.json` with this format:
         "context_name": "freeform name",
         "menu_name": {
             "appmenu.app_name": {
-                "en": "app name in english",
-                "ja": "app name in japanese",
-                "zh": "app name in chinese",
+                "en": "app name in English",
+                "ja": "app name in Japanese",
+                "zh": "app name in Chinese",
                 "en-tts": "app name for the blind"
             }
         }

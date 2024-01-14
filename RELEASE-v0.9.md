@@ -13,7 +13,7 @@ in the APIs. Thus, we refer you to the [0.8 release notes](https://github.com/be
 for examples of idiomatic ways to write code for Xous.
 
 ## Major new features of 0.9
-- Xous now targets `riscv32-imac-uknown-xous-elf` instead of `riscv32-imac-unknown-none-elf`.
+- Xous now targets `riscv32-imac-unknown-xous-elf` instead of `riscv32-imac-unknown-none-elf`.
   - `cargo xtask`, when run interactively, will offer to install the `xous` target.
   - Kernel debug primitives are accessible via the kernel console
   - GDB improvements
@@ -69,7 +69,7 @@ for examples of idiomatic ways to write code for Xous.
     - No COM-based inter-chip communication yet
 
 ## New in 0.9.5
-- `modals` server for a simple "Pure Rust" API for creating dialog boxes and getting user input. See the `tests.rs` file for some examples how to use the applcation calls.
+- `modals` server for a simple "Pure Rust" API for creating dialog boxes and getting user input. See the `tests.rs` file for some examples how to use the application calls.
 
 ## New in 0.9.6
 - Networking: DNS, UDP, Ping and TCP
@@ -134,13 +134,14 @@ for examples of idiomatic ways to write code for Xous.
 - `pddb` revision bumped to v2.1:
   - A first problem was identified where a key was being re-used between the ECB page table cipher and the AES-GCM-SIV data cipher
   - HKDF is now used to derive two separate keys for each
-  - A second problem was identified where the virtual page number was being stored as a fully expanded address in the paget able, and not as a page number. Due to the compressed encoding of the page table entry, this means that the virtual address space would be shrunk by ~4000x. This is now fixed, so we have the full as-designed virtual memory space once again.
+  - A second problem was identified where the virtual page number was being stored as a fully expanded address in the page
+  table, and not as a page number. Due to the compressed encoding of the page table entry, this means that the virtual address space would be shrunk by ~4000x. This is now fixed, so we have the full as-designed virtual memory space once again.
   - A migration routine was created to go from v1 -> v2 databases. It automatically detects the older version and attempts to guide the user through a migration. Although we don't have many users and databases today, this is a "best practice" for breaking revisions and this serves as a basis for forward-looking changes that are migrateable.
 - Various fixes and improvements to the USB update scripts to improve reliability.
 - Graphical panic outputs: when there is a panic, you get a "Guru Meditation" error box plus the panic message.
   - Currently all panics are hard crashes
   - Most of the time the system will reboot itself within a few seconds of displaying the panic
-  - There will be occassions where you will need to insert a paperclip into the reset port on the lower right hand corner to recover from the panic.
+  - There will be occasions where you will need to insert a paperclip into the reset port on the lower right hand corner to recover from the panic.
   - If you get a panic, please snap a photo of it and drop it in a new issue in the `xous-core` repo, along with a description of what you were doing at the time.
 
 ## New in 0.9.9
@@ -161,7 +162,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Issue #162 and #159: fix bugs with condvar support. condvar IDs are now serial, so re-allocations are not a problem, and the routine to remove old ones from the notification table now looks at the correct sender ID.
 - Add `ceil`, `floor`, and `trunc` (f32 and f64) variants to the built-ins list (this is a `std` lib update, in 1.61.0.2)
 - Add CI test automation facilities - CI infra now drives actual hardware through `expect` scripts, instead of just doing simulation checks
-- Vendor in `getrandom` so we can support a Xous API for the crate, allowing us access some of the more modern rustcrypto APIs. This is necssary for `randcore` 0.6 compatibility. `randcore` 0.5 APIs are retained by integrating them directly into the TRNG object.
+- Vendor in `getrandom` so we can support a Xous API for the crate, allowing us access some of the more modern rustcrypto APIs. This is necessary for `randcore` 0.6 compatibility. `randcore` 0.5 APIs are retained by integrating them directly into the TRNG object.
 - Update AES API level to 0.8, and cipher dependency to 0.4 (on rootkeys). This was necessary to get CBC support for AES, which is needed for FIDO2. This *should* have no user-facing impact.
 - `vault` app: a user authentication management app is now ready for Alpha testing. It aims to provide FIDO2, TOTP, and stored password DB functions.
   - U2F/FIDO2 are a vendor-in of Google OpenSK's FIDO2 implementation. The code basically passes the CTAP2 test suite (https://github.com/google/CTAP2-test-tool) ("basically passes" in that the timeouts tests fail because they aren't automated to not "press the button" when timeouts are being tested).
@@ -229,7 +230,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Net fixes (`std` testbench compliance):
   - added loopback interface by "faking it" over the COM as smoltcp does not yet have the feature (loops back packets and ARP packets)
   - `net test` command added when the nettest feature is turned on
-  - get error codes into compliance with library expcectations
+  - get error codes into compliance with library expectations
   - add nonblocking feature
   - fix Peek
   - fix short reads -- no more discarding of excess data when the read buffer is shorter than the data in the buffer

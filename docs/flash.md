@@ -26,7 +26,7 @@ image stays resident. This means no space is allocated in FLASH for hibernation 
 
 Finally, everything in the memory layout up until the PDDB is considered to be largely
 static data, only written during firmware and software updates. Therefore, no provision
-exists for sector-sparing or weare levelling; we instead rely on the 100k-cycle write
+exists for sector-sparing or wear levelling; we instead rely on the 100k-cycle write
 endurance of the underlying hardware. The PDDB itself will have to implement some form
 of wear leveling, however.
 
@@ -143,7 +143,7 @@ The csr.csv block is further structured as follows:
 
 Prior to the creation of the PDDB, some hard-coded audio data is loaded for development purposes.
 
-This documents their location in FLASH. The samples are shorter than the allocated regions, but the WAV headers encode their actual lenth.
+This documents their location in FLASH. The samples are shorter than the allocated regions, but the WAV headers encode their actual length.
 
 ```
 +-----------+----------------------------------------+

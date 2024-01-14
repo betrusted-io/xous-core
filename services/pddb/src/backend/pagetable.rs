@@ -32,7 +32,7 @@ impl Default for PtFlags {
 ///
 /// Contains the address map of the corresponding entry,
 /// plus a nonce, and a checksum. Due to the Page Table being deliberately
-/// srtuctured to have invalid entries that don't decrypt correctly, you
+/// structured to have invalid entries that don't decrypt correctly, you
 /// can't use a chaining approach. Thus these entries are encrypted closer to
 /// an ECB-style, thus an embedded nonce is necessary to keep identical entries
 /// from appearing the same in the ciphertext domain.
