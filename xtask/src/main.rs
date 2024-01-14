@@ -112,16 +112,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // for fast testing of compilation targets of the PDDB to real hardware
     let pddb_dev_pkgs = [&base_pkgs[..], &["pddb", "sha2"]].concat();
     // for fast checking of AES hardware accelerator
-    let aestest_pkgs = ["xous-ticktimer", "xous-log", "aes-test"].to_vec();
+    let aes_test_pkgs = ["xous-ticktimer", "xous-log", "aes-test"].to_vec();
 
     // ---- extract position independent args ----
-    let lkey = get_flag("--lkey")?;
-    if lkey.len() != 0 {
-        builder.loader_key_file(lkey[0].to_string());
+    let loader_key = get_flag("--lkey")?;
+    if loader_key.len() != 0 {
+        builder.loader_key_file(loader_key[0].to_string());
     }
-    let kkey = get_flag("--kkey")?;
-    if kkey.len() != 0 {
-        builder.kernel_key_file(kkey[0].to_string());
+    let kernel_key = get_flag("--kkey")?;
+    if kernel_key.len() != 0 {
+        builder.kernel_key_file(kernel_key[0].to_string());
     }
 
     let extra_apps = get_flag("--app")?;
@@ -205,7 +205,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("renode-aes-test") => {
             builder
                 .target_renode()
-                .add_services(&aestest_pkgs.into_iter().map(String::from).collect())
+                .add_services(&aes_test_pkgs.into_iter().map(String::from).collect())
                 .add_services(&get_cratespecs());
         }
         Some("ffi-test") => {
