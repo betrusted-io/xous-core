@@ -1,17 +1,16 @@
 #![cfg_attr(not(target_os = "none"), allow(dead_code))]
-
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
 mod murmur3;
 
-use xous_api_susres::*;
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use num_traits::{ToPrimitive, FromPrimitive};
-use xous_ipc::Buffer;
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack, send_message, Message};
-use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
+use num_traits::{FromPrimitive, ToPrimitive};
 use xous::messages::sender::Sender;
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message, CID};
+use xous_api_susres::*;
+use xous_ipc::Buffer;
 
 #[cfg(feature = "debugprint")]
 #[macro_use]
@@ -19,24 +18,21 @@ mod debug;
 
 // effectively ignore any println! macros when debugprint is not selected
 #[cfg(not(feature = "debugprint"))]
-macro_rules! println
-{
-	() => ({
-	});
-	($fmt:expr) => ({
-	});
-	($fmt:expr, $($args:tt)+) => ({
-	});
+macro_rules! println {
+    () => {{}};
+    ($fmt:expr) => {{}};
+    ($fmt:expr, $($args:tt)+) => {{}};
 }
 
-
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation {
+    use core::sync::atomic::Ordering;
+
+    use num_traits::ToPrimitive;
     use utralib::generated::*;
+
     use crate::murmur3::murmur3_32;
     use crate::SHOULD_RESUME;
-    use core::sync::atomic::Ordering;
-    use num_traits::ToPrimitive;
 
     const SYSTEM_CLOCK_FREQUENCY: u32 = 12_000_000; // timer0 is now in the always-on domain
     const SYSTEM_TICK_INTERVAL_MS: u32 = xous::BASE_QUANTA_MS;
@@ -62,11 +58,12 @@ mod implementation {
     // run on Xous resume, with a bit in the RESUME register set.
     fn susres_handler(_irq_no: usize, arg: *mut usize) {
         //println!("susres handler");
-        let sr = unsafe{ &mut *(arg as *mut SusResHw) };
+        let sr = unsafe { &mut *(arg as *mut SusResHw) };
         // clear the pending interrupt
         sr.csr.wfo(utra::susres::EV_PENDING_SOFT_INT, 1);
 
-        // set this to true to do a touch-and-go suspend/resume (no actual power off, but the whole prep cycle in play)
+        // set this to true to do a touch-and-go suspend/resume (no actual power off, but the whole prep cycle
+        // in play)
         let touch_and_go = false;
         if touch_and_go {
             sr.csr.wfo(utra::susres::STATE_RESUME, 1);
@@ -75,7 +72,8 @@ mod implementation {
         if sr.csr.rf(utra::susres::STATE_RESUME) == 0 {
             //println!("going into suspend");
             #[cfg(feature = "sus_reboot")]
-            { // this is just for testing, doing a quick full-soc boot instead of a power down
+            {
+                // this is just for testing, doing a quick full-soc boot instead of a power down
                 let mut reboot_csr = CSR::new(REBOOT_CSR.load(Ordering::Relaxed) as *mut u32);
                 reboot_csr.wfo(utra::reboot::SOC_RESET_SOC_RESET, 0xAC);
             }
@@ -84,7 +82,9 @@ mod implementation {
             if let Some(cf) = sr.cacheflush {
                 let cf_ptr = cf.as_ptr() as *mut u32;
                 for i in 0..(cf.len() / 4) {
-                    unsafe {cf_ptr.add(i).write_volatile(0xacdc_acdc); }
+                    unsafe {
+                        cf_ptr.add(i).write_volatile(0xacdc_acdc);
+                    }
                 }
             }
 
@@ -120,7 +120,7 @@ mod implementation {
     impl SusResHw {
         pub fn new() -> Self {
             // os timer initializations
-            let ostimer_csr  = xous::syscall::map_memory(
+            let ostimer_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::timer0::HW_TIMER0_BASE),
                 None,
                 4096,
@@ -131,7 +131,8 @@ mod implementation {
                 utra::timer0::TIMER0_IRQ,
                 timer_tick,
                 ostimer_csr.as_mut_ptr() as *mut usize,
-            ).expect("couldn't claim IRQ");
+            )
+            .expect("couldn't claim IRQ");
 
             // everything else
             let csr = xous::syscall::map_memory(
@@ -144,11 +145,14 @@ mod implementation {
 
             // note that mapping a page zeroes it out. Plus, this should have been zero'd by the bootloader.
             let marker = xous::syscall::map_memory(
-                xous::MemoryAddress::new(0x4100_0000 - 0x3000), // this is a special, hard-coded location; 0x2000 is the size of the bootloader's stack area
+                xous::MemoryAddress::new(0x4100_0000 - 0x3000), /* this is a special, hard-coded location;
+                                                                 * 0x2000 is the size of the bootloader's
+                                                                 * stack area */
                 None,
                 4096,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
-            ).expect("couldn't map clean suspend page");
+            )
+            .expect("couldn't map clean suspend page");
 
             let seed_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::seed::HW_SEED_BASE),
@@ -190,19 +194,19 @@ mod implementation {
 
             sr
         }
+
         pub fn init(&mut self) {
             xous::claim_interrupt(
                 utra::susres::SUSRES_IRQ,
                 susres_handler,
                 self as *mut SusResHw as *mut usize,
-            ).expect("couldn't claim IRQ");
+            )
+            .expect("couldn't claim IRQ");
         }
-        pub fn ignore_wfi(&mut self) {
-            self.csr.wfo(utra::susres::WFI_OVERRIDE, 1);
-        }
-        pub fn restore_wfi(&mut self) {
-            self.csr.wfo(utra::susres::WFI_OVERRIDE, 0);
-        }
+
+        pub fn ignore_wfi(&mut self) { self.csr.wfo(utra::susres::WFI_OVERRIDE, 1); }
+
+        pub fn restore_wfi(&mut self) { self.csr.wfo(utra::susres::WFI_OVERRIDE, 0); }
 
         pub fn reboot(&mut self, reboot_soc: bool) {
             if reboot_soc {
@@ -211,24 +215,32 @@ mod implementation {
                 self.reboot_csr.wfo(utra::reboot::CPU_RESET_CPU_RESET, 1);
             }
         }
+
         pub fn set_reboot_vector(&mut self, vector: u32) {
             self.reboot_csr.wfo(utra::reboot::ADDR_ADDR, vector);
         }
+
         pub fn force_power_off(&mut self) {
             loop {
                 self.csr.wfo(utra::susres::POWERDOWN_POWERDOWN, 1);
                 xous::yield_slice();
             } // block forever here
         }
+
         /// Safety: this should only be called once by the main suspend/resume loop
         /// to create a copy of the timeout engine inside the timeout handler.
-        pub (crate) unsafe fn setup_timeout_csr(&mut self, cid: xous::CID) -> Result<(), xous::Error> {
-            xous::send_message(cid,
+        pub(crate) unsafe fn setup_timeout_csr(&mut self, cid: xous::CID) -> Result<(), xous::Error> {
+            xous::send_message(
+                cid,
                 xous::Message::new_scalar(
-                crate::TimeoutOpcode::SetCsr.to_usize().unwrap(),
-                self.csr.base() as usize,
-                0, 0, 0)
-            ).map(|_| ())
+                    crate::TimeoutOpcode::SetCsr.to_usize().unwrap(),
+                    self.csr.base() as usize,
+                    0,
+                    0,
+                    0,
+                ),
+            )
+            .map(|_| ())
         }
 
         pub fn do_suspend(&mut self, forced: bool) {
@@ -252,16 +264,14 @@ mod implementation {
                 // busy-wait until we confirm the ticktimer has paused
             }
             self.stored_time = Some(
-               (self.csr.r(utra::susres::TIME0) as u64 |
-               (self.csr.r(utra::susres::TIME1) as u64) << 32)
-               + 1 // a placeholder in case we need to advance time on save
+                (self.csr.r(utra::susres::TIME0) as u64 | (self.csr.r(utra::susres::TIME1) as u64) << 32) + 1, /* a placeholder in case we need to advance time on save */
             );
             #[cfg(feature = "debugprint")]
             println!("Stored time: {}", self.stored_time.unwrap());
 
             // setup the clean suspend marker, note if things were forced
             const WORDS_PER_PAGE: usize = 1024;
-            let marker: *mut[u32; WORDS_PER_PAGE] = self.marker.as_mut_ptr() as *mut[u32; 1024];
+            let marker: *mut [u32; WORDS_PER_PAGE] = self.marker.as_mut_ptr() as *mut [u32; 1024];
 
             // get some entropy from the kernel using a special syscall crafted for this purpose
             let (r0, r1, r2, r3) = xous::create_server_id().unwrap().to_u32();
@@ -313,31 +323,33 @@ mod implementation {
                         3 => 0xCC55_55CC,
                         _ => 0x3141_5923, // this should really never happen, but Rust wants it
                     };
-                    unsafe{(*marker)[index + i] = word};
+                    unsafe { (*marker)[index + i] = word };
                 }
                 if index == 0 {
                     if !forced {
-                        unsafe{(*marker)[index + 0] = 0};
+                        unsafe { (*marker)[index + 0] = 0 };
                     } else {
-                        unsafe{(*marker)[index + 0] = 1};
+                        unsafe { (*marker)[index + 0] = 1 };
                     }
-                    unsafe{(*marker)[index + 1] = seed0};
-                    unsafe{(*marker)[index + 2] = seed1};
-                    unsafe{(*marker)[index + 3] = pid};
+                    unsafe { (*marker)[index + 1] = seed0 };
+                    unsafe { (*marker)[index + 2] = seed1 };
+                    unsafe { (*marker)[index + 3] = pid };
                 }
                 let mut hashbuf: [u32; WORDS_PER_PAGE / RANGES - 1] = [0; WORDS_PER_PAGE / RANGES - 1];
                 for i in 0..hashbuf.len() {
-                    hashbuf[i] = unsafe{(*marker)[index + i]};
+                    hashbuf[i] = unsafe { (*marker)[index + i] };
                 }
-                let hash = murmur3_32( &hashbuf, 0);
-                unsafe{(*marker)[index + range - 1] = hash;}
+                let hash = murmur3_32(&hashbuf, 0);
+                unsafe {
+                    (*marker)[index + range - 1] = hash;
+                }
                 println!("Clean suspend hash: {:03} <- 0x{:08x}", index + range - 1, hash);
                 index += range;
             }
 
             // allocate memory for the cache flush
             if self.cacheflush.is_none() {
-                self.cacheflush = Some (
+                self.cacheflush = Some(
                     xous::syscall::map_memory(
                         None,
                         None,
@@ -350,14 +362,17 @@ mod implementation {
                         // a validation cycle that I don't want to go through right now.
                         512 * 1024,
                         xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
-                    ).expect("couldn't allocate RAM for cache flushing")
+                    )
+                    .expect("couldn't allocate RAM for cache flushing"),
                 );
                 // the RESERVE flag should pre-allocate the pages, but for good measure
                 // we write all the pages to make sure they are at a defined value
                 if let Some(cf) = self.cacheflush {
                     let cf_ptr = cf.as_ptr() as *mut u32;
                     for i in 0..(cf.len() / 4) {
-                        unsafe {cf_ptr.add(i).write_volatile(0x0bad_0bad); }
+                        unsafe {
+                            cf_ptr.add(i).write_volatile(0x0bad_0bad);
+                        }
                     }
                 }
             }
@@ -374,15 +389,19 @@ mod implementation {
                 xous::yield_slice();
             }
         }
-        pub fn do_resume(&mut self) -> bool { // returns true if the previous suspend was forced
+
+        pub fn do_resume(&mut self) -> bool {
+            // returns true if the previous suspend was forced
             // resume the ticktimer where it left off
             #[cfg(feature = "debugprint")]
             println!("Trying to resume");
-            if let Some(time)= self.stored_time.take() {
+            if let Some(time) = self.stored_time.take() {
                 // zero out the clean-suspend marker
-                let marker: *mut [u32; 1024] = self.marker.as_mut_ptr() as *mut[u32; 1024];
+                let marker: *mut [u32; 1024] = self.marker.as_mut_ptr() as *mut [u32; 1024];
                 for words in 0..1024 {
-                    unsafe{(*marker)[words] = 0x0;}
+                    unsafe {
+                        (*marker)[words] = 0x0;
+                    }
                 }
 
                 // restore the ticktimer
@@ -405,15 +424,16 @@ mod implementation {
                 self.os_timer.wfo(utra::timer0::EN_EN, 0b1);
 
                 // start the ticktimer running
-                self.csr.wo(utra::susres::CONTROL,
-                    self.csr.ms(utra::susres::CONTROL_LOAD, 1)
+                self.csr.wo(utra::susres::CONTROL, self.csr.ms(utra::susres::CONTROL_LOAD, 1));
+                log::trace!(
+                    "Resume {} / control {}",
+                    self.csr.r(utra::susres::RESUME_TIME0),
+                    self.csr.r(utra::susres::CONTROL)
                 );
-                log::trace!("Resume {} / control {}", self.csr.r(utra::susres::RESUME_TIME0), self.csr.r(utra::susres::CONTROL));
                 log::trace!("Ticktimer loaded with {} / {}", time, self.csr.r(utra::susres::TIME0));
                 self.csr.wo(utra::susres::CONTROL, 0);
                 #[cfg(feature = "debugprint")]
                 println!("Ticktimer and OS timer now running");
-
             } else {
                 panic!("Can't resume because the ticktimer value was not saved properly before suspend!")
             };
@@ -423,15 +443,13 @@ mod implementation {
                 xous::syscall::unmap_memory(cf).expect("couldn't de-allocate cache flush region");
             }
 
-            if self.csr.rf(utra::susres::STATE_WAS_FORCED) == 0 {
-                false
-            } else {
-                true
-            }
+            if self.csr.rf(utra::susres::STATE_WAS_FORCED) == 0 { false } else { true }
         }
+
         fn get_hw_time(&self) -> u64 {
             self.csr.r(utra::susres::TIME0) as u64 | ((self.csr.r(utra::susres::TIME1) as u64) << 32)
         }
+
         pub fn debug_delay(&self, duration: u32) {
             let start = self.get_hw_time();
             while ((self.get_hw_time() - start) as u32) < duration {
@@ -439,7 +457,6 @@ mod implementation {
             }
         }
     }
-
 }
 
 #[cfg(any(not(target_os = "xous"),
@@ -448,28 +465,34 @@ mod implementation {
 mod implementation {
     use num_traits::ToPrimitive;
 
-    pub struct SusResHw {
-    }
+    pub struct SusResHw {}
     impl SusResHw {
-        pub fn new() -> Self {
-            SusResHw {}
-        }
+        pub fn new() -> Self { SusResHw {} }
+
         pub fn init(&mut self) {}
+
         pub fn reboot(&self, _reboot_soc: bool) {}
+
         pub fn set_reboot_vector(&self, _vector: u32) {}
+
         pub fn force_power_off(&mut self) {}
-        pub fn do_suspend(&mut self, _forced: bool) {
+
+        pub fn do_suspend(&mut self, _forced: bool) {}
+
+        pub fn do_resume(&mut self) -> bool { false }
+
+        pub(crate) unsafe fn setup_timeout_csr(&mut self, cid: xous::CID) -> Result<(), xous::Error> {
+            xous::send_message(
+                cid,
+                xous::Message::new_scalar(crate::TimeoutOpcode::SetCsr.to_usize().unwrap(), 0, 0, 0, 0),
+            )
+            .map(|_| ())
         }
-        pub fn do_resume(&mut self) -> bool {
-            false
-        }
-        pub (crate) unsafe fn setup_timeout_csr(&mut self, cid: xous::CID) -> Result<(), xous::Error> {
-            xous::send_message(cid,
-                xous::Message::new_scalar(crate::TimeoutOpcode::SetCsr.to_usize().unwrap(), 0, 0, 0, 0)
-            ).map(|_| ())
-        }
+
         pub fn ignore_wfi(&mut self) {}
+
         pub fn restore_wfi(&mut self) {}
+
         pub fn debug_delay(&self, _duration: u32) {}
     }
 }
@@ -496,14 +519,14 @@ static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(5000); // this is gated by the p
 static TIMEOUT_CONN: AtomicU32 = AtomicU32::new(0);
 pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     use utralib::generated::*;
-    #[cfg(any(feature="precursor", feature="renode"))]
-    let mut csr: Option<CSR::<u32>> = None;
+    #[cfg(any(feature = "precursor", feature = "renode"))]
+    let mut csr: Option<CSR<u32>> = None;
     loop {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            #[cfg(any(feature="precursor", feature="renode"))]
+            #[cfg(any(feature = "precursor", feature = "renode"))]
             Some(TimeoutOpcode::SetCsr) => msg_scalar_unpack!(msg, base, _, _, _, {
                 csr = Some(CSR::new(base as *mut u32));
             }),
@@ -514,11 +537,12 @@ pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 // ignore the opcode in hosted mode
             }),
             Some(TimeoutOpcode::Run) => {
-                #[cfg(any(feature="precursor", feature="renode"))]
+                #[cfg(any(feature = "precursor", feature = "renode"))]
                 {
-                    // we have to re-implement the ticktimer time reading here because as we wait for the timeout,
-                    // the ticktimer goes away! so we use the susres local copy with direct hardware ops to keep track of time in this phase
-                    fn get_hw_time(hw: CSR::<u32>) -> u64 {
+                    // we have to re-implement the ticktimer time reading here because as we wait for the
+                    // timeout, the ticktimer goes away! so we use the susres local copy
+                    // with direct hardware ops to keep track of time in this phase
+                    fn get_hw_time(hw: CSR<u32>) -> u64 {
                         hw.r(utra::susres::TIME0) as u64 | ((hw.r(utra::susres::TIME1) as u64) << 32)
                     }
                     if let Some(hw) = csr {
@@ -533,23 +557,22 @@ pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     }
                 }
                 log::trace!("HW timeout reached");
-                match send_message(TIMEOUT_CONN.load(Ordering::Relaxed),
-                    Message::new_scalar(Opcode::SuspendTimeout.to_usize().unwrap(), 0, 0, 0, 0)
+                match send_message(
+                    TIMEOUT_CONN.load(Ordering::Relaxed),
+                    Message::new_scalar(Opcode::SuspendTimeout.to_usize().unwrap(), 0, 0, 0, 0),
                 ) {
                     Err(xous::Error::ServerNotFound) => break,
-                    Ok(xous::Result::Ok) => {},
-                    _ => panic!("unhandled error in status pump thread")
+                    Ok(xous::Result::Ok) => {}
+                    _ => panic!("unhandled error in status pump thread"),
                 }
             }
-            Some(TimeoutOpcode::Drop) => {
-                break
-            }
+            Some(TimeoutOpcode::Drop) => break,
             None => {
                 log::error!("received unknown opcode in timeout_thread!");
             }
         }
     }
-    unsafe{xous::disconnect(TIMEOUT_CONN.load(Ordering::Relaxed)).unwrap()};
+    unsafe { xous::disconnect(TIMEOUT_CONN.load(Ordering::Relaxed)).unwrap() };
     TIMEOUT_CONN.store(0, Ordering::Relaxed);
     xous::destroy_server(sid).unwrap();
 }
@@ -585,13 +608,16 @@ fn main() -> ! {
     // allocate a private server ID for the timeout thread, it's not registered with the name server
     let timeout_sid = xous::create_server().unwrap();
     let (sid0, sid1, sid2, sid3) = timeout_sid.to_u32();
-    xous::create_thread_4(timeout_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't create timeout thread");
+    xous::create_thread_4(timeout_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize)
+        .expect("couldn't create timeout thread");
     let timeout_outgoing_conn = xous::connect(timeout_sid).expect("couldn't connect to our timeout thread");
     // safety: we are cloning a CSR and handing to another thread that is coded to only
     // operate on the registers disjoint from those used by the rest of the code (therefore
     // no stomping on values).
-    unsafe{
-        susres_hw.setup_timeout_csr(timeout_outgoing_conn).expect("couldn't set hardware CSR for timeout thread");
+    unsafe {
+        susres_hw
+            .setup_timeout_csr(timeout_outgoing_conn)
+            .expect("couldn't set hardware CSR for timeout thread");
     }
 
     let mut suspend_requested: Option<Sender> = None;
@@ -619,35 +645,44 @@ fn main() -> ! {
             match FromPrimitive::from_usize(msg.body.id()) {
                 Some(Opcode::RebootRequest) => {
                     reboot_requested = true;
-                },
+                }
                 Some(Opcode::RebootCpuConfirm) => {
                     log::error!("RebootCpuConfirm, but no prior Request. Ignoring.");
-                },
+                }
                 Some(Opcode::RebootSocConfirm) => {
                     log::error!("RebootSocConfirm, but no prior Request. Ignoring.");
-                },
-                Some(Opcode::RebootVector) =>  msg_scalar_unpack!(msg, vector, _, _, _, {
+                }
+                Some(Opcode::RebootVector) => msg_scalar_unpack!(msg, vector, _, _, _, {
                     susres_hw.set_reboot_vector(vector as u32);
                 }),
                 Some(Opcode::SuspendEventSubscribe) => {
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
                     do_hook(hookdata, &mut suspend_subscribers);
-                },
+                }
                 Some(Opcode::SuspendingNow) => {
                     if suspend_requested.is_none() {
-                        // this is harmless, it means a process' execution gate came a bit later than expected, so just ignore and tell it to resume
-                        // the execution gate is only requested until *after* a process has checked in and said it is ready to suspend, anyways.
-                        log::warn!("exec gate message received late from pid {:?}, ignoring", msg.sender.pid());
-                        xous::return_scalar(msg.sender, 0).expect("couldn't return dummy message to unblock execution");
+                        // this is harmless, it means a process' execution gate came a bit later than
+                        // expected, so just ignore and tell it to resume
+                        // the execution gate is only requested until *after* a process has checked in and
+                        // said it is ready to suspend, anyways.
+                        log::warn!(
+                            "exec gate message received late from pid {:?}, ignoring",
+                            msg.sender.pid()
+                        );
+                        xous::return_scalar(msg.sender, 0)
+                            .expect("couldn't return dummy message to unblock execution");
                     } else {
                         gated_pids.push(msg.sender);
                     }
-                },
+                }
                 Some(Opcode::SuspendReady) => msg_scalar_unpack!(msg, token, _, _, _, {
                     log::debug!("SuspendReady with token {}", token);
                     if suspend_requested.is_none() {
-                        log::error!("received a SuspendReady message when a suspend wasn't pending from token {}", token);
+                        log::error!(
+                            "received a SuspendReady message when a suspend wasn't pending from token {}",
+                            token
+                        );
                         continue;
                     }
                     if token >= suspend_subscribers.len() {
@@ -686,20 +721,25 @@ fn main() -> ! {
                         susres_hw.do_suspend(false);
 
                         // ---- power turns off ----
-                        // ---- time passes while we are off. The FPGA is powered off; all registers are lost, but RAM is retained. ----
-                        // ---- omg power came back! ---
+                        // ---- time passes while we are off. The FPGA is powered off; all registers are lost,
+                        // but RAM is retained. ---- ---- omg power came back! ---
 
                         // when do_suspend() returns, it means we've resumed
-                        let sender = suspend_requested.take().expect("suspend was requested, but no requestor is on record!");
+                        let sender = suspend_requested
+                            .take()
+                            .expect("suspend was requested, but no requestor is on record!");
 
                         log_server::resume(); // log server is a special case, in order to avoid circular dependencies
                         if susres_hw.do_resume() {
-                            log::error!("We did a clean shut-down, but bootloader is saying previous suspend was forced. Some peripherals may be in an unclean state!");
+                            log::error!(
+                                "We did a clean shut-down, but bootloader is saying previous suspend was forced. Some peripherals may be in an unclean state!"
+                            );
                         }
                         // this now allows all other threads to commence
                         log::trace!("low-level resume done, restoring execution");
                         for pid in gated_pids.drain(..) {
-                            xous::return_scalar(pid, 0).expect("couldn't return dummy message to unblock execution");
+                            xous::return_scalar(pid, 0)
+                                .expect("couldn't return dummy message to unblock execution");
                         }
                         susres_hw.restore_wfi();
 
@@ -711,7 +751,8 @@ fn main() -> ! {
                         current_op_order = current_op_order.next();
                         let mut at_least_one_event_sent = false;
                         while !at_least_one_event_sent {
-                            let (send_success, next_op_order) = send_event(&suspend_subscribers, current_op_order);
+                            let (send_success, next_op_order) =
+                                send_event(&suspend_subscribers, current_op_order);
                             if !send_success {
                                 current_op_order = next_op_order;
                             }
@@ -730,8 +771,8 @@ fn main() -> ! {
                     for sub in suspend_subscribers.iter() {
                         log::info!("{:?}", sub);
                     }*/
-                    // if the 2-second timeout is still pending from a previous suspend, deny the suspend request.
-                    // ...just don't suspend that quickly after resuming???
+                    // if the 2-second timeout is still pending from a previous suspend, deny the suspend
+                    // request. ...just don't suspend that quickly after resuming???
                     if allow_suspend && !timeout_pending {
                         susres_hw.ignore_wfi();
                         suspend_requested = Some(msg.sender);
@@ -744,14 +785,17 @@ fn main() -> ! {
                         }
                         // do we want to start the timeout before or after sending the notifications? hmm. 🤔
                         timeout_pending = true;
-                        send_message(timeout_outgoing_conn,
-                            Message::new_scalar(TimeoutOpcode::Run.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).expect("couldn't initiate timeout before suspend!");
+                        send_message(
+                            timeout_outgoing_conn,
+                            Message::new_scalar(TimeoutOpcode::Run.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .expect("couldn't initiate timeout before suspend!");
 
                         current_op_order = crate::api::SuspendOrder::Early;
                         let mut at_least_one_event_sent = false;
                         while !at_least_one_event_sent {
-                            let (send_success, next_op_order) = send_event(&suspend_subscribers, current_op_order);
+                            let (send_success, next_op_order) =
+                                send_event(&suspend_subscribers, current_op_order);
                             if !send_success {
                                 current_op_order = next_op_order;
                             }
@@ -760,10 +804,12 @@ fn main() -> ! {
                         // let the events fire
                         xous::yield_slice();
                     } else {
-                        log::warn!("suspend requested, but the system was not allowed to suspend. Ignoring request.");
+                        log::warn!(
+                            "suspend requested, but the system was not allowed to suspend. Ignoring request."
+                        );
                         xous::return_scalar(msg.sender, 0).ok();
                     }
-                },
+                }
                 Some(Opcode::SuspendTimeout) => {
                     if timeout_pending {
                         // record which tokens had not reported in
@@ -771,20 +817,26 @@ fn main() -> ! {
                             sub.failed_to_suspend = !sub.ready_to_suspend;
                         }
                         timeout_pending = false;
-                        log::warn!("Suspend timed out, forcing an unclean suspend at stage {:?}", current_op_order);
+                        log::warn!(
+                            "Suspend timed out, forcing an unclean suspend at stage {:?}",
+                            current_op_order
+                        );
                         for sub in suspend_subscribers.iter() {
                             if sub.order == current_op_order {
                                 if !sub.ready_to_suspend {
-                                    // note to debugger: you will get a token number, which is in itself not useful.
-                                    // There should be, at least once in the debug log, printed on the very first suspend cycle,
-                                    // a list of PID->tokens. Tokens are assigned in the order that the registration happens
-                                    // to the susres server. Empirically, this list is generally stable for every build,
+                                    // note to debugger: you will get a token number, which is in itself not
+                                    // useful. There should be, at least
+                                    // once in the debug log, printed on the very first suspend cycle,
+                                    // a list of PID->tokens. Tokens are assigned in the order that the
+                                    // registration happens to the susres
+                                    // server. Empirically, this list is generally stable for every build,
                                     // and is guaranteed to be stable across a single cold boot.
                                     log::warn!("  -> NOT READY TOKEN: {}", sub.token);
                                 }
                             }
                         }
-                        // In case of timeout, skip the suspend cycle and return a failure, instead of forcing the suspend.
+                        // In case of timeout, skip the suspend cycle and return a failure, instead of forcing
+                        // the suspend.
                         /*
                         susres_hw.debug_delay(500); // let the messages print
                         // force a suspend
@@ -801,9 +853,12 @@ fn main() -> ! {
                             log::error!("We forced a suspend, but the bootloader is claiming we did a clean suspend. Internal state may be inconsistent.");
                         }
                         */
-                        let sender = suspend_requested.take().expect("suspend was requested, but no requestor is on record!");
+                        let sender = suspend_requested
+                            .take()
+                            .expect("suspend was requested, but no requestor is on record!");
                         for pid in gated_pids.drain(..) {
-                            xous::return_scalar(pid, 0).expect("couldn't return dummy message to unblock execution");
+                            xous::return_scalar(pid, 0)
+                                .expect("couldn't return dummy message to unblock execution");
                         }
                         susres_hw.restore_wfi();
 
@@ -811,8 +866,8 @@ fn main() -> ! {
                         xous::return_scalar(sender, 0).ok();
                     } else {
                         log::trace!("clean suspend timeout received, ignoring");
-                        // this means we did a clean suspend, we've resumed, and the timeout came back after the resume
-                        // just ignore the message.
+                        // this means we did a clean suspend, we've resumed, and the timeout came back after
+                        // the resume just ignore the message.
                     }
                 }
                 Some(Opcode::WasSuspendClean) => msg_blocking_scalar_unpack!(msg, token, _, _, _, {
@@ -830,16 +885,14 @@ fn main() -> ! {
                 }),
                 Some(Opcode::SuspendAllow) => {
                     allow_suspend = true;
-                },
+                }
                 Some(Opcode::SuspendDeny) => {
                     allow_suspend = false;
-                },
+                }
                 Some(Opcode::PowerOff) => {
                     susres_hw.force_power_off();
                 }
-                Some(Opcode::Quit) => {
-                    break
-                }
+                Some(Opcode::Quit) => break,
                 None => {
                     log::error!("couldn't convert opcode");
                 }
@@ -855,7 +908,7 @@ fn main() -> ! {
     xous::terminate_process(0)
 }
 
-fn do_hook(hookdata: ScalarHook, cb_conns: &mut Vec::<ScalarCallback>) {
+fn do_hook(hookdata: ScalarHook, cb_conns: &mut Vec<ScalarCallback>) {
     let (s0, s1, s2, s3) = hookdata.sid;
     let sid = xous::SID::from_u32(s0, s1, s2, s3);
     let server_to_cb_cid = xous::connect(sid).unwrap();
@@ -871,16 +924,23 @@ fn do_hook(hookdata: ScalarHook, cb_conns: &mut Vec::<ScalarCallback>) {
     log::trace!("hooking {:?}", cb_dat);
     cb_conns.push(cb_dat);
 }
-fn unhook(cb_conns: &mut Vec::<ScalarCallback>) {
+fn unhook(cb_conns: &mut Vec<ScalarCallback>) {
     for scb in cb_conns.iter() {
-        xous::send_message(scb.server_to_cb_cid,
-            xous::Message::new_blocking_scalar(SuspendEventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)
-        ).unwrap();
-        unsafe{xous::disconnect(scb.server_to_cb_cid).unwrap();}
+        xous::send_message(
+            scb.server_to_cb_cid,
+            xous::Message::new_blocking_scalar(SuspendEventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .unwrap();
+        unsafe {
+            xous::disconnect(scb.server_to_cb_cid).unwrap();
+        }
     }
     cb_conns.clear();
 }
-fn send_event(cb_conns: &Vec::<ScalarCallback>, order: crate::api::SuspendOrder) -> (bool, crate::api::SuspendOrder) {
+fn send_event(
+    cb_conns: &Vec<ScalarCallback>,
+    order: crate::api::SuspendOrder,
+) -> (bool, crate::api::SuspendOrder) {
     let mut at_least_one_event_sent = false;
     log::info!("Sending suspend to {:?} stage", order);
     /*
@@ -906,10 +966,17 @@ fn send_event(cb_conns: &Vec::<ScalarCallback>, order: crate::api::SuspendOrder)
     for scb in cb_conns.iter() {
         if scb.order == order {
             at_least_one_event_sent = true;
-            xous::send_message(scb.server_to_cb_cid,
-                xous::Message::new_scalar(SuspendEventCallback::Event.to_usize().unwrap(),
-                scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, scb.token as usize, 0)
-            ).unwrap();
+            xous::send_message(
+                scb.server_to_cb_cid,
+                xous::Message::new_scalar(
+                    SuspendEventCallback::Event.to_usize().unwrap(),
+                    scb.cb_to_client_cid as usize,
+                    scb.cb_to_client_id as usize,
+                    scb.token as usize,
+                    0,
+                ),
+            )
+            .unwrap();
         }
     }
     (at_least_one_event_sent, order.next())
