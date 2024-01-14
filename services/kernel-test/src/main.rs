@@ -52,12 +52,7 @@ fn sleep_loop_4(main_conn: usize, sleep_ms: usize, ticktimer_conn: usize, pid: u
 }
 
 fn sleep_loop_3(main_conn: usize, sleep_ms: usize, ticktimer_conn: usize) {
-    sleep_loop_4(
-        main_conn,
-        sleep_ms,
-        ticktimer_conn,
-        xous::current_pid().unwrap().get() as _,
-    );
+    sleep_loop_4(main_conn, sleep_ms, ticktimer_conn, xous::current_pid().unwrap().get() as _);
 }
 
 fn sleep_loop_2(main_conn: usize, sleep_ms: usize) {
@@ -66,15 +61,12 @@ fn sleep_loop_2(main_conn: usize, sleep_ms: usize) {
 }
 
 fn sleep_loop_1(main_conn: usize) {
-    let sleep_ms =
-        (xous::current_pid().unwrap().get() as usize) * (xous::current_tid().unwrap() as usize);
+    let sleep_ms = (xous::current_pid().unwrap().get() as usize) * (xous::current_tid().unwrap() as usize);
     sleep_loop_2(main_conn, sleep_ms);
 }
 
 static mut MAIN_CONN: xous::CID = 0;
-fn sleep_loop_0() {
-    sleep_loop_1(unsafe { MAIN_CONN } as _);
-}
+fn sleep_loop_0() { sleep_loop_1(unsafe { MAIN_CONN } as _); }
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
