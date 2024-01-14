@@ -115,9 +115,9 @@ impl<'a> Read for PddbKey<'a> {
                     PddbRetcode::AccessDenied => {
                         Err(Error::new(ErrorKind::PermissionDenied, "Access denied"))
                     }
-                    PddbRetcode::UnexpectedEof => Ok(0), /* I believe this is the "expected" behavior for
-                                                           * reads that want to read beyond the current end
-                                                           * of file */
+                    PddbRetcode::UnexpectedEof => Ok(0), /* I believe this is the "expected" behavior for */
+                    // reads that want to read beyond the current end
+                    // of file
                     _ => {
                         log::error!("Unhandled error code: {:?}", pbuf.retcode);
                         Err(Error::new(ErrorKind::Other, "Unhandled error code in PddbKey Read"))
