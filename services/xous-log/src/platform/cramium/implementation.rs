@@ -1,13 +1,14 @@
 use core::fmt::{Error, Write};
+
 use utralib::generated::*;
 
 pub struct Output {}
 
-#[cfg(feature="cramium-soc")]
+#[cfg(feature = "cramium-soc")]
 pub static mut UART_DMA_BUF: *mut u8 = 0x0000_0000 as *mut u8;
 
 pub fn init() -> Output {
-    #[cfg(feature="cramium-fpga")]
+    #[cfg(feature = "cramium-fpga")]
     let uart = xous::syscall::map_memory(
         xous::MemoryAddress::new(utra::duart::HW_DUART_BASE),
         None,
@@ -15,8 +16,9 @@ pub fn init() -> Output {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map serial port");
-    // TODO: migrate this to a "proper" UART that is available on SoC hardware, but for now all we have access to is the DUART.
-    #[cfg(feature="cramium-soc")]
+    // TODO: migrate this to a "proper" UART that is available on SoC hardware, but for now all we have access
+    // to is the DUART.
+    #[cfg(feature = "cramium-soc")]
     let uart = xous::syscall::map_memory(
         xous::MemoryAddress::new(utra::udma_uart_0::HW_UDMA_UART_0_BASE),
         None,
@@ -28,7 +30,7 @@ pub fn init() -> Output {
     println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
     println!("Process: map success!");
 
-    #[cfg(feature="cramium-soc")]
+    #[cfg(feature = "cramium-soc")]
     {
         // TODO: need to write an allocator for the UDMA memory region as well
         let tx_buf_region = xous::syscall::map_memory(
@@ -98,7 +100,7 @@ pub fn init() -> Output {
         */
     }
 
-    #[cfg(feature="inject")]
+    #[cfg(feature = "inject")]
     {
         let inject_mem = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::keyinject::HW_KEYINJECT_BASE),
@@ -106,7 +108,7 @@ pub fn init() -> Output {
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
-            .expect("couldn't map keyinjection CSR range");
+        .expect("couldn't map keyinjection CSR range");
         println!("Note: character injection via console UART is enabled.");
 
         println!("Allocating IRQ...");
@@ -115,7 +117,7 @@ pub fn init() -> Output {
             handle_console_irq,
             inject_mem.as_mut_ptr() as *mut usize,
         )
-            .expect("couldn't claim interrupt");
+        .expect("couldn't claim interrupt");
         println!("Claimed IRQ {}", utra::console::CONSOLE_IRQ);
         uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
     }
@@ -123,9 +125,7 @@ pub fn init() -> Output {
 }
 
 impl Output {
-    pub fn get_writer(&self) -> OutputWriter {
-        OutputWriter {}
-    }
+    pub fn get_writer(&self) -> OutputWriter { OutputWriter {} }
 
     pub fn run(&mut self) {
         loop {
@@ -134,7 +134,7 @@ impl Output {
     }
 }
 
-#[cfg(feature="inject")]
+#[cfg(feature = "inject")]
 fn handle_console_irq(_irq_no: usize, arg: *mut usize) {
     if cfg!(feature = "logging") {
         let mut inject_csr = CSR::new(arg as *mut u32);
@@ -142,10 +142,7 @@ fn handle_console_irq(_irq_no: usize, arg: *mut usize) {
         // println!("rxe {}", uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY));
         while uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY) == 0 {
             // I really rather think this is more readable, than the "Rusty" version below.
-            inject_csr.wfo(
-                utra::keyinject::UART_CHAR_CHAR,
-                uart_csr.rf(utra::uart::RXTX_RXTX),
-            );
+            inject_csr.wfo(utra::keyinject::UART_CHAR_CHAR, uart_csr.rf(utra::uart::RXTX_RXTX));
             uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
 
             // I guess this is how you would do it if you were "really doing Rust"
@@ -175,19 +172,19 @@ pub struct OutputWriter {}
 
 impl OutputWriter {
     pub fn putc(&self, c: u8) {
-        #[cfg(feature="cramium-fpga")]
+        #[cfg(feature = "cramium-fpga")]
         {
             let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
 
             while uart_csr.r(utra::duart::SFR_SR) != 0 {}
             uart_csr.wo(utra::duart::SFR_TXD, c as u32);
 
-            // there's a race condition in the handler, if a new character comes in while handling the interrupt,
-            // the pending bit never clears. If the console seems to freeze, uncomment this line.
-            // This kind of works around that, at the expense of maybe losing some Rx characters.
-            // uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
+            // there's a race condition in the handler, if a new character comes in while handling the
+            // interrupt, the pending bit never clears. If the console seems to freeze, uncomment
+            // this line. This kind of works around that, at the expense of maybe losing some Rx
+            // characters. uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
         }
-        #[cfg(feature="cramium-soc")]
+        #[cfg(feature = "cramium-soc")]
         {
             let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
             // enqueue our character to send via DMA
@@ -202,8 +199,8 @@ impl OutputWriter {
             // send it
             uart_csr.wo(utra::udma_uart_0::REG_TX_CFG, 0x10); // EN
             // wait for it all to be done
-            while uart_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {   }
-            while (uart_csr.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {  }
+            while uart_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {}
+            while (uart_csr.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {}
         }
     }
 
@@ -211,7 +208,7 @@ impl OutputWriter {
     /// bytes written. This is mostly compatible with `std::io::Write`,
     /// except it is infallible.
     pub fn write(&mut self, buf: &[u8]) -> usize {
-        #[cfg(feature="cramium-soc")]
+        #[cfg(feature = "cramium-soc")]
         {
             // write the whole buffer via DMA, and then idle with yield_slice() for better
             // concurrency (as opposed to character-by-character polling).
@@ -247,7 +244,7 @@ impl OutputWriter {
 
             writelen
         }
-        #[cfg(feature="cramium-fpga")]
+        #[cfg(feature = "cramium-fpga")]
         {
             for c in buf {
                 self.putc(*c)
@@ -256,9 +253,7 @@ impl OutputWriter {
         }
     }
 
-    pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> {
-        Ok(self.write(buf))
-    }
+    pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> { Ok(self.write(buf)) }
 }
 
 impl Write for OutputWriter {

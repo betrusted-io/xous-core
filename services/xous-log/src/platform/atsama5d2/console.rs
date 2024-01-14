@@ -1,16 +1,13 @@
 // SPDX-FileCopyrightText: 2023 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use atsama5d27::{
-    uart::{Uart as UartHw, Uart1, UART_BASE_ADDRESS},
-};
+use core::fmt::{Error, Write};
 
+use atsama5d27::uart::{Uart as UartHw, Uart1, UART_BASE_ADDRESS};
 #[cfg(feature = "lcd-console")]
-use atsama5d27::{lcdc::Lcdc, console::DisplayAndUartConsole, display::FramebufDisplay};
+use atsama5d27::{console::DisplayAndUartConsole, display::FramebufDisplay, lcdc::Lcdc};
 #[cfg(feature = "lcd-console")]
 use utralib::HW_LCDC_BASE;
-
-use core::fmt::{Error, Write};
 
 const UART_NUMBER: usize = 1;
 pub type UartType = UartHw<Uart1>; // Make sure this matches the UART_NUMBER above
@@ -52,21 +49,16 @@ impl Console<UartType> {
         // Allocate a page for DMA descriptor
         #[cfg(feature = "lcd-console")]
         let inner = {
-            let dma_desc_addr = xous::syscall::map_memory(
-                None,
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-                .expect("couldn't map LCDC DMA descriptor");
+            let dma_desc_addr =
+                xous::syscall::map_memory(None, None, 4096, xous::MemoryFlags::R | xous::MemoryFlags::W)
+                    .expect("couldn't map LCDC DMA descriptor");
 
             // Access the address of the page to get it physically allocated
             unsafe {
                 dma_desc_addr.as_mut_ptr().write_volatile(0);
             }
             let dma_desc_addr = dma_desc_addr.as_ptr() as _;
-            let dma_desc_addr_phys =
-                xous::syscall::virt_to_phys(dma_desc_addr).expect("can't convert v2p");
+            let dma_desc_addr_phys = xous::syscall::virt_to_phys(dma_desc_addr).expect("can't convert v2p");
 
             // Allocate framebuffer pages
             let fb_addr = xous::syscall::map_memory(
@@ -75,11 +67,13 @@ impl Console<UartType> {
                 FB_SIZE_BYTES,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
-                .expect("couldn't map lcd framebuffer");
+            .expect("couldn't map lcd framebuffer");
 
             // Access the addresses of the framebuffer pages to give them
             // a continuous physical backing
-            unsafe { fb_addr.as_mut_ptr().write_volatile(0x00); }
+            unsafe {
+                fb_addr.as_mut_ptr().write_volatile(0x00);
+            }
             let fb_addr = fb_addr.as_ptr() as _;
             for page in (0..FB_SIZE_BYTES).into_iter().step_by(4096) {
                 unsafe {
@@ -98,7 +92,7 @@ impl Console<UartType> {
                 4096 * 4, // In ATSAMA5D2 peripherals occupy 16K
                 xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::DEV,
             )
-                .expect("couldn't map LCDC peripheral");
+            .expect("couldn't map LCDC peripheral");
             let lcdc_addr = addr.as_mut_ptr() as _;
             let mut lcdc = Lcdc::new_vma(
                 lcdc_addr,

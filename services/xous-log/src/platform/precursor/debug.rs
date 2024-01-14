@@ -60,13 +60,13 @@ impl Uart {
         while uart_csr.r(utra::uart::TXFULL) != 0 {}
         uart_csr.wo(utra::uart::RXTX, c as u32);
     }
+
     /// This is an abstraction violation, but this call is actually relied upon by the
     /// non-debug path to re-enable UART RX during a resume. This should be cleaned up.
     pub fn enable_rx(&self) {
         let mut uart_csr = CSR::new(unsafe { DEFAULT_UART_ADDR as *mut u32 });
         uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
     }
-
 }
 
 impl Write for Uart {

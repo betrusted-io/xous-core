@@ -29,7 +29,7 @@ pub struct Uart {}
 // this is a hack to bypass an explicit initialization/allocation step for the debug structure
 pub static mut DEFAULT_UART_ADDR: *mut usize = 0x0000_0000 as *mut usize;
 
-#[cfg(feature="cramium-fpga")]
+#[cfg(feature = "cramium-fpga")]
 impl Uart {
     pub fn putc(&self, c: u8) {
         assert!(unsafe { DEFAULT_UART_ADDR } as usize != 0);
@@ -40,7 +40,7 @@ impl Uart {
     }
 }
 
-#[cfg(feature="cramium-soc")]
+#[cfg(feature = "cramium-soc")]
 impl Uart {
     pub fn putc(&self, c: u8) {
         let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
@@ -56,8 +56,8 @@ impl Uart {
         // send it
         uart_csr.wo(utra::udma_uart_0::REG_TX_CFG, 0x10); // EN
         // wait for it all to be done
-        while uart_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {   }
-        while (uart_csr.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {  }
+        while uart_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {}
+        while (uart_csr.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {}
     }
 }
 

@@ -16,11 +16,7 @@ pub struct Output {
 pub fn init() -> Output {
     let (tx, rx) = channel();
 
-    Output {
-        tx,
-        rx,
-        stdout: std::io::stdout(),
-    }
+    Output { tx, rx, stdout: std::io::stdout() }
 }
 
 impl Output {
@@ -42,17 +38,11 @@ impl Output {
         }
     }
 
-    pub fn get_writer(&self) -> OutputWriter {
-        OutputWriter {
-            tx: self.tx.clone(),
-        }
-    }
+    pub fn get_writer(&self) -> OutputWriter { OutputWriter { tx: self.tx.clone() } }
 }
 
 impl Drop for Output {
-    fn drop(&mut self) {
-        self.tx.send(ControlMessage::Exit).unwrap();
-    }
+    fn drop(&mut self) { self.tx.send(ControlMessage::Exit).unwrap(); }
 }
 
 impl Write for Output {
@@ -68,9 +58,7 @@ pub struct OutputWriter {
 }
 
 impl OutputWriter {
-    pub fn putc(&self, c: u8) {
-        self.tx.send(ControlMessage::Byte(c)).unwrap();
-    }
+    pub fn putc(&self, c: u8) { self.tx.send(ControlMessage::Byte(c)).unwrap(); }
 }
 
 impl Write for OutputWriter {
