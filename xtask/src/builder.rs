@@ -203,7 +203,7 @@ impl Builder {
     /// trim migration code out of the PDDB: when we have a breaking change to the PDDB,
     /// the PDDB contains code to detect the version change and migrate to the latest
     /// version. Eventually (on the order of many months or years), this code gets retired,
-    /// otherwise we accumulate rarely-used code ad nauseum.
+    /// otherwise we accumulate rarely-used code ad nauseam.
     #[allow(dead_code)]
     pub fn set_min_xous_ver<'a>(&'a mut self, min_ver_string: &str) -> &'a mut Builder {
         self.min_ver = min_ver_string.to_string();
@@ -641,7 +641,7 @@ impl Builder {
             }
         } else if self.target.is_none() {
             // hosted mode doesn't specify a cross-compilation target!
-            // throw a warning if prebuilts are specified for hosted mode
+            // throw a warning if prebuilt files are specified for hosted mode
             for item in [&self.services[..], &self.apps[..]].concat() {
                 match item {
                     CrateSpec::Prebuilt(name, _, _xip) => {

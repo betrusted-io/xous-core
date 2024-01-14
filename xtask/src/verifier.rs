@@ -130,7 +130,7 @@ fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
                    This is awful. The Cargo.toml file is parsed and reformatted by the packaging tool to normalize its contents.
                    Thus, the Cargo.toml file of the downloaded version never matches the Cargo.toml file that's actually used.
                    Unfortunately, there doesn't seem to be an easy way to check the equivalence of two Cargo.toml files,
-                   except for recursively and deeply parsing through and comparing all the possibile keys and values of
+                   except for recursively and deeply parsing through and comparing all the possible keys and values of
                    the abstract key/value tree.
 
                    As a hack, we compare to the Cargo.toml.orig file. Which is...kind of OK, but really, this opens us
