@@ -1,4 +1,4 @@
-pub(crate) const SERVER_NAME_ENGINE25519: &str     = "_Curve-25519 Accelerator Engine_";
+pub(crate) const SERVER_NAME_ENGINE25519: &str = "_Curve-25519 Accelerator Engine_";
 
 // I don't understand why clippy says these are unused. But clippy is wrong. Shut up, clippy.
 #[allow(dead_code)]
@@ -22,9 +22,9 @@ pub(crate) const NUM_REGS: usize = 32;
 pub(crate) const BITWIDTH: usize = 256;
 #[allow(dead_code)] // not used in hosted
 pub(crate) const NUM_WINDOWS: usize = 16;
-pub const RF_SIZE_IN_U32: usize = NUM_REGS*(BITWIDTH/32); // 32 registers, 256 bits/register/32 bits per u32
+pub const RF_SIZE_IN_U32: usize = NUM_REGS * (BITWIDTH / 32); // 32 registers, 256 bits/register/32 bits per u32
 #[allow(dead_code)] // not used in hosted
-pub const TOTAL_RF_SIZE_IN_U32: usize = NUM_REGS*(BITWIDTH/32)*NUM_WINDOWS; // 32 registers, 256 bits/register/32 bits per u32, times 16 windows
+pub const TOTAL_RF_SIZE_IN_U32: usize = NUM_REGS * (BITWIDTH / 32) * NUM_WINDOWS; // 32 registers, 256 bits/register/32 bits per u32, times 16 windows
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Copy)]
 pub struct Job {
@@ -72,10 +72,8 @@ pub(crate) enum Opcode {
     IllegalOpcode,
 
     // note: suspend/resume handled by a separate thread and server
-
     /// exit the server
     Quit,
-
     // note that suspend/resume is handled by a secondary thread that can concurrently
     // interrupt the main thread and store the state
 }
