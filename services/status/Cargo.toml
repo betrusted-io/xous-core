@@ -7,45 +7,47 @@ version = "0.1.0"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-com = {path = "../com"}
-content-plugin-api = {path = "../content-plugin-api"}
+com = { path = "../com" }
+content-plugin-api = { path = "../content-plugin-api" }
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.52"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.52"}
-trng = {path = "../trng"}
-llio = {path = "../llio"}
-xous = "0.9.56"
-xous-ipc = "0.9.56"
-xous-names = {package = "xous-api-names", version = "0.9.54"}
-graphics-server = {path = "../graphics-server"}
-gam = {path = "../gam"}
-locales = {path = "../../locales"}
-susres = {package = "xous-api-susres", version = "0.9.52"}
-root-keys = {path = "../root-keys"}
-modals = {path = "../modals"}
-pddb = {path = "../pddb"}
-net = {path = "../net"}
-keyboard = {path = "../keyboard"}
-usb-device-xous = {path="../usb-device-xous"}
-codec = {path="../codec"}
-userprefs = {path = "../../libs/userprefs"}
-dns = {path="../dns"}
-early_settings ={ path = "../early_settings"}
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+trng = { path = "../trng" }
+llio = { path = "../llio" }
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+xous-names = { package = "xous-api-names", version = "0.9.55" }
+graphics-server = { path = "../graphics-server" }
+gam = { path = "../gam" }
+locales = { path = "../../locales" }
+susres = { package = "xous-api-susres", version = "0.9.53" }
+root-keys = { path = "../root-keys" }
+modals = { path = "../modals" }
+pddb = { path = "../pddb" }
+net = { path = "../net" }
+keyboard = { path = "../keyboard" }
+usb-device-xous = { path = "../usb-device-xous" }
+codec = { path = "../codec" }
+userprefs = { path = "../../libs/userprefs" }
+dns = { path = "../dns" }
+early_settings = { path = "../early_settings" }
 
 
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+] }
 
-chrono = {version = "0.4.19", default-features = false, features = ["std"]}
+chrono = { version = "0.4.19", default-features = false, features = ["std"] }
 crossbeam = "0.8.2"
 
-sha2 = {path="../engine-sha512"}
+sha2 = { path = "../engine-sha512" }
 digest = "0.9.0"
 xous-semver = "0.1.2"
 com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
-utralib = {version = "0.1.23", optional = true, default-features = false }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 
 # short circuit the datetime call on hosted mode
 [target.'cfg(any(windows,unix))'.dependencies]
@@ -56,7 +58,7 @@ precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 debugprint = []
-braille = [] # used for braille mode, so console isn't overwhelmed with status
+braille = []                      # used for braille mode, so console isn't overwhelmed with status
 tts = []
 # default = ["debugprint"] # "debugprint"
 dbg-ecupdate = []

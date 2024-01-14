@@ -11,29 +11,29 @@ resolver = "2"
 [dependencies]
 bitflags = "1.2.1"
 stats_alloc = { version = "0.1.8", optional = true }
-xous-kernel = { package = "xous", version = "0.9.56", features = [
+xous-kernel = { package = "xous", version = "0.9.57", features = [
     "forget-memory-messages",
 ] }
-utralib = { version = "0.1.23", optional = true, default_features = false }
+utralib = { version = "0.1.24", optional = true, default_features = false }
 rand_chacha = { version = "0.3.1", optional = true, default_features = false }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
-xous-kernel = { package = "xous", version = "0.9.56", features = [
+xous-kernel = { package = "xous", version = "0.9.57", features = [
     "forget-memory-messages",
     "processes-as-threads",
 ] }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-riscv = { version = "0.5.6", package = "xous-riscv" } # source is in "../imports/riscv-0.5.6"
+riscv = { version = "0.5.6", package = "xous-riscv" }                           # source is in "../imports/riscv-0.5.6"
 gdbstub = { version = "0.6.5", optional = true, default-features = false }
 gdbstub_arch = { version = "0.2.4", optional = true, default-features = false }
 
 [target.'cfg(target_arch = "arm")'.dependencies]
-armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", features = ["critical-section"] }
-atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
-xous-kernel = { package = "xous", version = "0.9.56", features = [
-    "v2p",
+armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", features = [
+    "critical-section",
 ] }
+atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
+xous-kernel = { package = "xous", version = "0.9.57", features = ["v2p"] }
 critical-section = "1.1.1"
 
 [features]
@@ -49,12 +49,14 @@ gdb-stub = ["gdbstub", "gdbstub_arch"]
 print-panics = []
 report-memory = ["stats_alloc"]
 wrap-print = []
-big-heap = [] # Cause heaps to start at 12 MM instead of 512 kB
+big-heap = []                          # Cause heaps to start at 12 MM instead of 512 kB
 v2p = ["xous-kernel/v2p"]
 
 # patches for simulation targets ONLY. Applying these flags will result in totally broken security.
 hwsim = []
-fake-rng = ["rand_chacha"] # works around lack of a real TRNG in the full-chip sim for now. This should go away for production.
+fake-rng = [
+    "rand_chacha",
+] # works around lack of a real TRNG in the full-chip sim for now. This should go away for production.
 
 # default = ["print-panics", "debug-print", "wrap-print"]
 default = ["print-panics"]

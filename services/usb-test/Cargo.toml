@@ -7,26 +7,26 @@ description = "USB test & development stub"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.56"
-log-server = { package = "xous-api-log", version = "0.1.52" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.52" }
-xous-names = { package = "xous-api-names", version = "0.9.54" }
+xous = "0.9.57"
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+xous-names = { package = "xous-api-names", version = "0.9.55" }
 log = "0.4.14"
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-susres = {package = "xous-api-susres", version = "0.9.52"}
-keyboard = {path = "../keyboard"}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+susres = { package = "xous-api-susres", version = "0.9.53" }
+keyboard = { path = "../keyboard" }
 bitfield = "0.13.2"
 vcell = "0.1.3"
-utralib = { version = "0.1.23", optional = true, default-features = false }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 
-xous-usb-hid = {git = "https://github.com/betrusted-io/xous-usb-hid.git"}
-embedded-time = "0.12.1" # required by the keyboard interface
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git" }
+embedded-time = "0.12.1"                                                    # required by the keyboard interface
 
 [dependencies.usb-device]
 # see top level Cargo.toml for patch.crates-io directive to help with dev work
 version = "0.2.8"
-features=["log"]
+features = ["log"]
 
 [dev-dependencies]
 rand = "0.8.5"

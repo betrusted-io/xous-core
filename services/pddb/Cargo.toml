@@ -7,32 +7,35 @@ description = "Plausibly Deniable Database"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-bitflags = {version = "1"}
-xous = "0.9.56"
-xous-ipc = "0.9.56"
-log-server = { package = "xous-api-log", version = "0.1.52" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.52" }
-xous-names = { package = "xous-api-names", version = "0.9.54" }
-susres = {package = "xous-api-susres", version = "0.9.52"}
+bitflags = { version = "1" }
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+xous-names = { package = "xous-api-names", version = "0.9.55" }
+susres = { package = "xous-api-susres", version = "0.9.53" }
 log = "0.4.14"
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-rkyv = {version = "0.4.3", features = ["const_generics"]}
-trng = {path = "../trng"}
-spinor = {path = "../spinor"}
-aes = {path="../aes"}
-root-keys = {path="../root-keys"}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.4.3", features = ["const_generics"] }
+trng = { path = "../trng" }
+spinor = { path = "../spinor" }
+aes = { path = "../aes" }
+root-keys = { path = "../root-keys" }
 cipher = "0.4.2"
 bitfield = "0.13.2"
-aes-gcm-siv = {version = "0.11.1", default-features = false, features = ["alloc", "aes"]}
+aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
+    "alloc",
+    "aes",
+] }
 # aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
-llio = {path="../llio"}
-subtle = {version = "2.4.1", default-features = false}
-tts-frontend = {path="../tts"}
+llio = { path = "../llio" }
+subtle = { version = "2.4.1", default-features = false }
+tts-frontend = { path = "../tts" }
 rand_core = "0.5.1"
 
 # passwords
-sha2 = {path = "../engine-sha512"}
+sha2 = { path = "../engine-sha512" }
 digest = "0.9.0"
 hkdf = "0.11.0"
 zeroize = "1.3.0"
@@ -42,20 +45,22 @@ zeroize_derive = "1.1.0"
 blowfish = { version = "0.9.1", features = ["bcrypt"] }
 
 # UX (for password entry and notifications)
-gam = {path="../gam"}
-locales = {path = "../../locales"}
-modals = {path="../modals"}
+gam = { path = "../gam" }
+locales = { path = "../../locales" }
+modals = { path = "../modals" }
 
-utralib = { version = "0.1.23", optional = true, default-features = false }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 
 # performance profiling
-perflib = {path="../../tools/perflib", optional = true}
+perflib = { path = "../../tools/perflib", optional = true }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 
-hex = { version = "0.4.3", default-features = false, features = ["alloc"], optional = true }
+hex = { version = "0.4.3", default-features = false, features = [
+    "alloc",
+], optional = true }
 
 [features]
 precursor = ["utralib/precursor"]

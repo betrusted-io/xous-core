@@ -5,43 +5,45 @@ edition = "2018"
 
 [dependencies]
 log = "0.4.14"
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-xous = "0.9.56"
-xous-ipc = "0.9.56"
-rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
-log-server = { package = "xous-api-log", version = "0.1.52" }
-xous-names = { package = "xous-api-names", version = "0.9.54" }
-gam = {path = "../../services/gam" }
-graphics-server = {path = "../../services/graphics-server" }
-locales = {path = "../../locales"}
-tts-frontend = {path="../../services/tts"}
-usb-device-xous = {path="../../services/usb-device-xous"}
-xous-usb-hid = {git = "https://github.com/betrusted-io/xous-usb-hid.git"}
-pddb = {path = "../../services/pddb" }
-modals = {path = "../../services/modals" }
-trng = {path="../../services/trng"}
-susres = {package = "xous-api-susres", version = "0.9.52"}
-ime-plugin-api = {path = "../../services/ime-plugin-api"}
-content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
-backup = {path = "libraries/backup"}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+rkyv = { version = "0.4.3", features = [
+    "const_generics",
+], default-features = false }
+log-server = { package = "xous-api-log", version = "0.1.53" }
+xous-names = { package = "xous-api-names", version = "0.9.55" }
+gam = { path = "../../services/gam" }
+graphics-server = { path = "../../services/graphics-server" }
+locales = { path = "../../locales" }
+tts-frontend = { path = "../../services/tts" }
+usb-device-xous = { path = "../../services/usb-device-xous" }
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git" }
+pddb = { path = "../../services/pddb" }
+modals = { path = "../../services/modals" }
+trng = { path = "../../services/trng" }
+susres = { package = "xous-api-susres", version = "0.9.53" }
+ime-plugin-api = { path = "../../services/ime-plugin-api" }
+content-plugin-api = { path = "../../services/content-plugin-api" } # all content canvas providers must provide this API
+backup = { path = "libraries/backup" }
 byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.5.0", features = ["core_hint_black_box"] }
 rand_core = "0.6.3"
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.52"}
-userprefs = {path = "../../libs/userprefs"}
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+userprefs = { path = "../../libs/userprefs" }
 
 # opensk
-ctap-crypto = {path = "libraries/crypto"}
-cbor = {path = "libraries/cbor"}
+ctap-crypto = { path = "libraries/crypto" }
+cbor = { path = "libraries/cbor" }
 persistent_store = { path = "libraries/persistent_store" }
 ed25519-compact = { version = "1", default-features = false, optional = true }
 rand = { version = "0.8.4", optional = true }
 
 # ux formatting
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
-chrono = {version = "0.4.19", default-features = false, features = ["std"]}
+chrono = { version = "0.4.19", default-features = false, features = ["std"] }
 
 # password generation
 passwords = "3.1.9"
@@ -51,17 +53,17 @@ sha-1 = "0.9.8"
 hmac = "0.11.0"
 digest = "0.9.0"
 base32 = "0.4.0"
-sha2 = {path="../../services/engine-sha512"}
-sntpc = {version = "0.3.1"}
-net = {path="../../services/net"}
+sha2 = { path = "../../services/engine-sha512" }
+sntpc = { version = "0.3.1" }
+net = { path = "../../services/net" }
 com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
 # performance profiling
-perflib = {path="../../tools/perflib", optional = true}
-utralib = {version = "0.1.23", optional = true, default-features = false }
+perflib = { path = "../../tools/perflib", optional = true }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 
 # testing
-random-pick = {version = "1.2.15", optional = true}
+random-pick = { version = "1.2.15", optional = true }
 [dev-dependencies]
 enum-iterator = "0.6.0"
 
@@ -73,11 +75,18 @@ tts = []
 with_ctap1 = ["ctap-crypto/with_ctap1"]
 autotest = []
 multireset = [] # allows credential reset more than once per boot
-vaultperf = ["perflib", "xous/v2p", "utralib", "utralib/precursor"] # vault is the performance logging manager. Do not use concurrently with "shellperf", as there can only be one manager.
+vaultperf = [
+    "perflib",
+    "xous/v2p",
+    "utralib",
+    "utralib/precursor",
+] # vault is the performance logging manager. Do not use concurrently with "shellperf", as there can only be one manager.
 vault-testing = ["random-pick"]
 # introduce a slight delay after UX boxes swap, in case of race conditions. Shouldn't be necessary anymore, but kept around in case there's a new edge case we missed.
 ux-swap-delay = []
-osk-upgrade = [] # placeholder to select out OpenSK's "vendor upgrade" over HID, which we don't use because we have our own upgrade path.
-xous = [] # marks xous-specific code segments deep inside the CTAP crate. Mostly to help evaluate if a patch is even feasible in the future.
+osk-upgrade = [
+] # placeholder to select out OpenSK's "vendor upgrade" over HID, which we don't use because we have our own upgrade path.
+xous = [
+] # marks xous-specific code segments deep inside the CTAP crate. Mostly to help evaluate if a patch is even feasible in the future.
 ed25519 = ["ed25519-compact"]
 default = ["with_ctap1", "ed25519", "xous"] # testing removed for release tag

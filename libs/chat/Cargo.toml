@@ -8,29 +8,31 @@ description = "Chat UI over pddb records"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 log = "0.4.14"
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-xous = "0.9.56"
-xous-ipc = "0.9.56"
-log-server = { package = "xous-api-log", version = "0.1.52" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.52" }
-xous-names = { package = "xous-api-names", version = "0.9.54" }
-gam = {path = "../../services/gam" }
-graphics-server = {path = "../../services/graphics-server" }
-trng = {path = "../../services/trng"}
-locales = {path = "../../locales"}
-ime-plugin-api = {path = "../../services/ime-plugin-api"}
-ime-plugin-shell = {path = "../../services/ime-plugin-shell"}
-content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
-com = {path = "../../services/com"}
-llio = {path = "../../services/llio"}
-modals = {path = "../../services/modals"}
-codec = {path = "../../services/codec"}
-cos_table = {path = "../../libs/cos_table"}
-pddb = {path = "../../services/pddb"}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+xous-names = { package = "xous-api-names", version = "0.9.55" }
+gam = { path = "../../services/gam" }
+graphics-server = { path = "../../services/graphics-server" }
+trng = { path = "../../services/trng" }
+locales = { path = "../../locales" }
+ime-plugin-api = { path = "../../services/ime-plugin-api" }
+ime-plugin-shell = { path = "../../services/ime-plugin-shell" }
+content-plugin-api = { path = "../../services/content-plugin-api" }       # all content canvas providers must provide this API
+com = { path = "../../services/com" }
+llio = { path = "../../services/llio" }
+modals = { path = "../../services/modals" }
+codec = { path = "../../services/codec" }
+cos_table = { path = "../../libs/cos_table" }
+pddb = { path = "../../services/pddb" }
 
 enumset = "1.1.2"
-rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+] }
 
 [features]
 default = []

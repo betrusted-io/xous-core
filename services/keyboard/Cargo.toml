@@ -7,22 +7,27 @@ version = "0.1.0"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-log = {version = "0.4", features = ["max_level_trace", "release_max_level_trace"]}
-log-server = {package = "xous-api-log", version = "0.1.52"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.52"}
-xous = "0.9.56"
-xous-ipc = "0.9.56"
-xous-names = {package = "xous-api-names", version = "0.9.54"}
-llio = {path = "../llio"}
-susres = {package = "xous-api-susres", version = "0.9.52"}
-spinor = {path = "../spinor"}
+log = { version = "0.4", features = [
+    "max_level_trace",
+    "release_max_level_trace",
+] }
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+xous-names = { package = "xous-api-names", version = "0.9.55" }
+llio = { path = "../llio" }
+susres = { package = "xous-api-susres", version = "0.9.53" }
+spinor = { path = "../spinor" }
 
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+] }
 
-utralib = {version = "0.1.23", optional = true, default-features = false }
-early_settings ={ path = "../early_settings"}
+utralib = { version = "0.1.24", optional = true, default-features = false }
+early_settings = { path = "../early_settings" }
 
 [features]
 precursor = ["utralib/precursor"]
@@ -30,7 +35,8 @@ hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 dvt = []
 debugprint = []
-debuginject = [] # used only if you want direct key injection via serial or USB. Could be a security risk!
+debuginject = [
+] # used only if you want direct key injection via serial or USB. Could be a security risk!
 rawserial = []
 braille = []
 inject-api = [] # used by the serial feature in usb

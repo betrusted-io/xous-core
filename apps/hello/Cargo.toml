@@ -5,16 +5,16 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.14"
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-xous = "0.9.56"
-xous-ipc = "0.9.56"
-log-server = { package = "xous-api-log", version = "0.1.52" }
-xous-names = { package = "xous-api-names", version = "0.9.54" }
-gam = {path = "../../services/gam" }
-graphics-server = {path = "../../services/graphics-server" }
-locales = {path = "../../locales"}
-tts-frontend = {path="../../services/tts"}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+log-server = { package = "xous-api-log", version = "0.1.53" }
+xous-names = { package = "xous-api-names", version = "0.9.55" }
+gam = { path = "../../services/gam" }
+graphics-server = { path = "../../services/graphics-server" }
+locales = { path = "../../locales" }
+tts-frontend = { path = "../../services/tts" }
 
 [features]
 tts = []

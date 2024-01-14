@@ -7,53 +7,55 @@ version = "0.1.0"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-com = {path = "../com"}
-content-plugin-api = {path = "../content-plugin-api"}# all content canvas providers must provide this API
-gam = {path = "../gam"}
-graphics-server = {path = "../graphics-server"}
-ime-plugin-api = {path = "../ime-plugin-api"}
-ime-plugin-shell = {path = "../ime-plugin-shell"}
-ime-plugin-tts = {path = "../ime-plugin-tts"}
-llio = {path = "../llio"}
+com = { path = "../com" }
+content-plugin-api = { path = "../content-plugin-api" }                   # all content canvas providers must provide this API
+gam = { path = "../gam" }
+graphics-server = { path = "../graphics-server" }
+ime-plugin-api = { path = "../ime-plugin-api" }
+ime-plugin-shell = { path = "../ime-plugin-shell" }
+ime-plugin-tts = { path = "../ime-plugin-tts" }
+llio = { path = "../llio" }
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.52"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.52"}
-xous = "0.9.56"
-xous-ipc = "0.9.56"
-xous-names = {package = "xous-api-names", version = "0.9.54"}
-keyboard = {path = "../keyboard"}
-susres = {package = "xous-api-susres", version = "0.9.52"}
-codec = {path = "../codec"}
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+xous-names = { package = "xous-api-names", version = "0.9.55" }
+keyboard = { path = "../keyboard" }
+susres = { package = "xous-api-susres", version = "0.9.53" }
+codec = { path = "../codec" }
 #engine-sha512 = {path="../engine-sha512"}
-sha2 = {path="../engine-sha512"}
+sha2 = { path = "../engine-sha512" }
 digest = "0.9.0"
-aes={path="../aes"}
+aes = { path = "../aes" }
 cipher = "0.3.0"
-engine-25519 = {path="../engine-25519"}
-spinor = {path="../spinor"}
-root-keys = {path="../root-keys"}
-jtag = {path="../jtag"}
-net = {path="../net"}
-dns = {path="../dns"}
-pddb = {path="../pddb"}
-modals = {path="../modals"}
-usb-device-xous = {path="../usb-device-xous"}
-utralib = {version = "0.1.23", optional = true, default-features = false }
+engine-25519 = { path = "../engine-25519" }
+spinor = { path = "../spinor" }
+root-keys = { path = "../root-keys" }
+jtag = { path = "../jtag" }
+net = { path = "../net" }
+dns = { path = "../dns" }
+pddb = { path = "../pddb" }
+modals = { path = "../modals" }
+usb-device-xous = { path = "../usb-device-xous" }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 
-tts-frontend = {path="../tts"}
-locales = {path = "../../locales"}
+tts-frontend = { path = "../tts" }
+locales = { path = "../../locales" }
 
-trng = {path = "../trng"}
+trng = { path = "../trng" }
 
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+] }
 
-chrono = {version = "0.4.19", default-features = false, features = ["std"]}
+chrono = { version = "0.4.19", default-features = false, features = ["std"] }
 
 # for audio self-test analysis
 base64 = "0.20.0"
-cos_table = {path="../../libs/cos_table"}
+cos_table = { path = "../../libs/cos_table" }
 # used to parse net connectivity results
 com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 
@@ -63,40 +65,40 @@ threadpool = "1.8.1"
 # testing rand compatibility - this is chasing the devil, but unfortunately
 # a *lot* of useful packages are chasing this devil.
 # also used in pddb testing
-rand = {version = "0.8.5", features = ["getrandom"]}
+rand = { version = "0.8.5", features = ["getrandom"] }
 
 # pddb testing
-rand_chacha = {version = "0.3.1", optional = true}
+rand_chacha = { version = "0.3.1", optional = true }
 
 # for lock tests
 rand_xorshift = "0.3.0"
 
 # for ditherpunk testing
-png = {version = "0.17.5", optional = true}
-tracking-allocator = {version = "0.3.0", optional = true}
-tracing = {version = "0.1.35", optional = true}
-tracing-subscriber = {version = "0.3.11", optional = true}
+png = { version = "0.17.5", optional = true }
+tracking-allocator = { version = "0.3.0", optional = true }
+tracing = { version = "0.1.35", optional = true }
+tracing-subscriber = { version = "0.3.11", optional = true }
 
 # for rustls testing
-tls = {path = "../../libs/tls", optional = true}
-url = {version = "2.2.2", optional = true}
+tls = { path = "../../libs/tls", optional = true }
+url = { version = "2.2.2", optional = true }
 # for testing ring math functions
 # note requirement for patch to xous-ring in workspace Cargo.toml
-ring = {version = "0.16.20", optional = true}
+ring = { version = "0.16.20", optional = true }
 
 # for websocket testing
-tungstenite = {version = "0.20.0", optional = true}
+tungstenite = { version = "0.20.0", optional = true }
 
 # for performance testing
-perflib = {path="../../tools/perflib", optional = true}
-random-pick = {version = "1.2.15", optional = true}
+perflib = { path = "../../tools/perflib", optional = true }
+random-pick = { version = "1.2.15", optional = true }
 
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
-hex = {version = "0.4.3", default-features = false, features = []}
+hex = { version = "0.4.3", default-features = false, features = [] }
 #sha2 = {version = "0.9.5", default-features = false, features = []}
 [dependencies.curve25519-dalek]
-version = "3.1.0" # note this is patched to our fork in ./Cargo.toml
+version = "3.1.0"                       # note this is patched to our fork in ./Cargo.toml
 default-features = false
 features = ["u32_backend", "betrusted"]
 
@@ -116,8 +118,10 @@ precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted", "random-pick"]
 renode = ["utralib/renode"]
 debugprint = []
-spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
-benchmarks = [] # adds the benchmark routines. Left off normally to free up code and memory space.
+spinortest = [
+] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
+benchmarks = [
+] # adds the benchmark routines. Left off normally to free up code and memory space.
 aestests = [] # adds AES tests
 tts = [] # adds text to speech plugin
 pddbtest = ["rand_chacha"]
@@ -125,15 +129,22 @@ autobasis = ["rand_chacha"]
 autobasis-ci = []
 ditherpunk = ["png"]
 tracking-alloc = ["tracking-allocator", "tracing", "tracing-subscriber"]
-dbg-ecupdate = [] # for issuing manual commands to initiate an EC update (vs UX). Also need to enable this feature in the status crate. Intended for debug only.
+dbg-ecupdate = [
+] # for issuing manual commands to initiate an EC update (vs UX). Also need to enable this feature in the status crate. Intended for debug only.
 test-rekey = []
 no-codec = []
 nettest = [] # batch network tests
 tls = ["dep:tls", "ring"]
 rootCA = ["tls/rootCA"]
 websocket = ["tls", "tungstenite", "url"]
-shellperf = ["ring", "perflib", "xous/v2p", "random-pick"] # this also needs the project-wide "perfcounter" feature to be selected. shellchat is the exclusive manager of the performance counter, do not use with e.g. "vaultperf" feature
+shellperf = [
+    "ring",
+    "perflib",
+    "xous/v2p",
+    "random-pick",
+] # this also needs the project-wide "perfcounter" feature to be selected. shellchat is the exclusive manager of the performance counter, do not use with e.g. "vaultperf" feature
 extra-tests = []
 mass-storage = []
-locktests = [] # for debugging some specific `std` tests cherry-picked out of the test suite
+locktests = [
+] # for debugging some specific `std` tests cherry-picked out of the test suite
 default = [] # "debugprint"

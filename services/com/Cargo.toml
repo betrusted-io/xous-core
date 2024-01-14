@@ -9,23 +9,25 @@ version = "0.1.0"
 [dependencies]
 com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.52"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.52"}
-susres = {package = "xous-api-susres", version = "0.9.52"}
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+susres = { package = "xous-api-susres", version = "0.9.53" }
 typenum = "1.12"
-xous = "0.9.56"
-xous-ipc = "0.9.56"
-xous-names = {package = "xous-api-names", version = "0.9.54"}
-trng = {path = "../trng"}
-llio = {path = "../llio"}
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+xous-names = { package = "xous-api-names", version = "0.9.55" }
+trng = { path = "../trng" }
+llio = { path = "../llio" }
 
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+] }
 
 xous-semver = "0.1.2"
 
-utralib = {version = "0.1.23", optional = true, default-features = false }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 
@@ -34,6 +36,6 @@ precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 debugprint = []
-default = [] # "debugprint"
+default = []                      # "debugprint"
 fccagent = []
 #default = ["debugprint"] # , "fccagent"

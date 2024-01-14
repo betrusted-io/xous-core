@@ -10,5 +10,5 @@ description = "AES library for Xous"
 cipher = "0.4.2"
 
 [features]
-hazmat = [] # Expose cryptographically hazardous APIs
+hazmat = []  # Expose cryptographically hazardous APIs
 default = []

@@ -7,30 +7,32 @@ version = "0.1.0"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-com = {path = "../com"} # used by the backlight setting on the main menu thread
-content-plugin-api = {path = "../content-plugin-api"}
-graphics-server = {path = "../graphics-server"}
-ime-plugin-api = {path = "../ime-plugin-api"}
-ime-plugin-shell = {path = "../ime-plugin-shell"}
-keyboard = {path = "../keyboard"}
+com = { path = "../com" }                                                 # used by the backlight setting on the main menu thread
+content-plugin-api = { path = "../content-plugin-api" }
+graphics-server = { path = "../graphics-server" }
+ime-plugin-api = { path = "../ime-plugin-api" }
+ime-plugin-shell = { path = "../ime-plugin-shell" }
+keyboard = { path = "../keyboard" }
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.52"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.52"}
-trng = {path = "../trng"}
-xous = "0.9.56"
-xous-ipc = "0.9.56"
-xous-names = {package = "xous-api-names", version = "0.9.54"}
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+trng = { path = "../trng" }
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+xous-names = { package = "xous-api-names", version = "0.9.55" }
 
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+] }
 
-susres = {package = "xous-api-susres", version = "0.9.52"} # used for the sleep now menu item
+susres = { package = "xous-api-susres", version = "0.9.53" } # used for the sleep now menu item
 
-enum_dispatch = "0.3.7" # used for trait-based dispatch off of multiple layout objects.
-locales = {path = "../../locales"}
+enum_dispatch = "0.3.7"              # used for trait-based dispatch off of multiple layout objects.
+locales = { path = "../../locales" }
 
-tts-frontend = {path="../tts"}
+tts-frontend = { path = "../tts" }
 
 qrcode = { version = "0.12", default-features = false }
 miniz_oxide = "0.4.4"
@@ -38,10 +40,10 @@ miniz_oxide = "0.4.4"
 
 # used in bip39 dialogue
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
-sha2 = {path="../engine-sha512"}
+sha2 = { path = "../engine-sha512" }
 digest = "0.9.0"
 
-utralib = {version = "0.1.23", optional = true, default-features = false }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 
 [features]
 precursor = ["utralib/precursor"]
@@ -52,4 +54,5 @@ tts = []
 # default = ["debugprint"] # "debugprint"
 default = []
 ditherpunk = []
-unsafe-app-loading = []  # allow new contexts to be registered dynamically - this is unsafe and should not be set for release builds.
+unsafe-app-loading = [
+] # allow new contexts to be registered dynamically - this is unsafe and should not be set for release builds.
