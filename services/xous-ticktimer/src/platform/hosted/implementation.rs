@@ -1,13 +1,14 @@
-use crate::RequestKind;
-use crate::TimeoutExpiry;
-use crate::TimerRequest;
-
-use num_traits::ToPrimitive;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
+
+use num_traits::ToPrimitive;
 use xous::definitions::MessageSender;
+
+use crate::RequestKind;
+use crate::TimeoutExpiry;
+use crate::TimerRequest;
 
 /// The Message ID of the last message we responded to
 static LAST_RESPONDER: AtomicUsize = AtomicUsize::new(0);
@@ -15,11 +16,7 @@ static LAST_RESPONDER: AtomicUsize = AtomicUsize::new(0);
 #[derive(Debug)]
 enum SleepComms {
     InterruptSleep,
-    StartSleep(
-        xous::MessageSender,
-        i64, /* ms */
-        u64, /* elapsed */
-    ),
+    StartSleep(xous::MessageSender, i64 /* ms */, u64 /* elapsed */),
 }
 pub struct XousTickTimer {
     start: std::time::Instant,
@@ -36,11 +33,12 @@ impl XousTickTimer {
             let mut timeout = None;
             let mut current_response: Option<TimerRequest> = None;
             loop {
-                log::trace!("waiting for{} for an event", timeout.map(|d: Duration| format!(" {} ms", d.as_millis())).unwrap_or("ever".to_string()));
+                log::trace!(
+                    "waiting for{} for an event",
+                    timeout.map(|d: Duration| format!(" {} ms", d.as_millis())).unwrap_or("ever".to_string())
+                );
                 let result = match timeout {
-                    None => sleep_receiver
-                        .recv()
-                        .map_err(|_| RecvTimeoutError::Disconnected),
+                    None => sleep_receiver.recv().map_err(|_| RecvTimeoutError::Disconnected),
                     Some(s) => sleep_receiver.recv_timeout(s),
                 };
                 match result {
@@ -77,11 +75,7 @@ impl XousTickTimer {
                         let mut duration = expiry - (elapsed as i64);
                         if duration > 0 {
                             #[cfg(feature = "debug-print")]
-                            log::info!(
-                                "Starting sleep for {} ms, returning to {}",
-                                duration,
-                                new_sender
-                            );
+                            log::info!("Starting sleep for {} ms, returning to {}", duration, new_sender);
                         } else {
                             #[cfg(feature = "debug-print")]
                             log::info!(
@@ -91,9 +85,7 @@ impl XousTickTimer {
                             );
                             duration = 0;
                         }
-                        timeout = Some(Duration::from_millis(
-                            duration.try_into().unwrap(),
-                        ));
+                        timeout = Some(Duration::from_millis(duration.try_into().unwrap()));
                         current_response = Some(TimerRequest {
                             sender: new_sender,
                             msec: expiry.into(),
@@ -106,11 +98,7 @@ impl XousTickTimer {
         })
         .unwrap();
 
-        XousTickTimer {
-            start: Instant::now(),
-            time_remaining_receiver,
-            sleep_comms: sleep_sender,
-        }
+        XousTickTimer { start: Instant::now(), time_remaining_receiver, sleep_comms: sleep_sender }
     }
 
     /// Used for sanity-checking to make sure we're not double-responding
@@ -118,13 +106,9 @@ impl XousTickTimer {
         MessageSender::from_usize(LAST_RESPONDER.load(Ordering::Relaxed))
     }
 
-    pub fn reset(&mut self) {
-        self.start = std::time::Instant::now();
-    }
+    pub fn reset(&mut self) { self.start = std::time::Instant::now(); }
 
-    pub fn elapsed_ms(&self) -> u64 {
-        self.start.elapsed().as_millis().try_into().unwrap()
-    }
+    pub fn elapsed_ms(&self) -> u64 { self.start.elapsed().as_millis().try_into().unwrap() }
 
     pub fn stop_interrupt(&mut self) -> Option<TimerRequest> {
         self.sleep_comms.send(SleepComms::InterruptSleep).unwrap();
@@ -140,11 +124,7 @@ impl XousTickTimer {
             request.sender
         );
         self.sleep_comms
-            .send(SleepComms::StartSleep(
-                request.sender,
-                request.msec.to_i64(),
-                self.elapsed_ms(),
-            ))
+            .send(SleepComms::StartSleep(request.sender, request.msec.to_i64(), self.elapsed_ms()))
             .unwrap();
     }
 
@@ -152,15 +132,15 @@ impl XousTickTimer {
     pub fn reset_wdt(&self) {
         // dummy function, does nothing
     }
-    pub fn register_suspend_listener(
-        &self,
-        _opcode: u32,
-        _cid: xous::CID,
-    ) -> Result<(), xous::Error> {
+
+    pub fn register_suspend_listener(&self, _opcode: u32, _cid: xous::CID) -> Result<(), xous::Error> {
         Ok(())
     }
+
     pub fn init(&mut self) {}
+
     pub fn suspend(&self) {}
+
     pub fn resume(&self) {}
 
     /// Disable the sleep interrupt and remove the currently-pending sleep item.
@@ -174,7 +154,10 @@ impl XousTickTimer {
         if let Some(current) = self.stop_interrupt() {
             #[cfg(feature = "debug-print")]
             log::info!("Existing request was {:?}", current);
-            assert!(sleep_heap.insert(current.msec, current).is_none(), "Existing sleep_heap entry would be overwritten");
+            assert!(
+                sleep_heap.insert(current.msec, current).is_none(),
+                "Existing sleep_heap entry would be overwritten"
+            );
         } else {
             #[cfg(feature = "debug-print")]
             log::info!("There was no existing sleep() request");
@@ -198,10 +181,7 @@ impl XousTickTimer {
             self.schedule_response(next_response);
         } else {
             #[cfg(feature = "debug-print")]
-            log::info!(
-                "not scheduling a response since the sleep heap is empty ({:?})",
-                sleep_heap
-            );
+            log::info!("not scheduling a response since the sleep heap is empty ({:?})", sleep_heap);
         }
     }
 
@@ -231,7 +211,10 @@ impl XousTickTimer {
 
             #[cfg(feature = "debug-print")]
             log::info!("Modified, the request was: {:?}", request);
-            assert!(sleep_heap.insert(request.msec, request).is_none(), "Existing sleep_heap entry would be overwritten");
+            assert!(
+                sleep_heap.insert(request.msec, request).is_none(),
+                "Existing sleep_heap entry would be overwritten"
+            );
         } else {
             #[cfg(feature = "debug-print")]
             log::info!("No new sleep request");

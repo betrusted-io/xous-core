@@ -3,14 +3,13 @@ const TICKS_PER_MS: u64 = 1;
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::collections::BTreeMap;
 
-use crate::TimeoutExpiry;
-use crate::TimerRequest;
-
-#[cfg(feature="susres")]
+#[cfg(feature = "susres")]
 use susres::{RegManager, RegOrField, SuspendResume};
 use utralib::generated::*;
-
 use xous::definitions::MessageSender;
+
+use crate::TimeoutExpiry;
+use crate::TimerRequest;
 
 /// Latency slack may be necessary for hardware implementations that can't handle
 /// events that happened in the past. However, for Precursor hardware, alarms will
@@ -24,11 +23,11 @@ const LATENCY_SLACK_MS: i64 = 0;
 pub struct XousTickTimer {
     csr: utralib::CSR<u32>,
     current_response: Option<TimerRequest>,
-    #[cfg(feature="susres")]
+    #[cfg(feature = "susres")]
     ticktimer_sr_manager: RegManager<{ utra::ticktimer::TICKTIMER_NUMREGS }>,
-    #[cfg(feature="watchdog")]
+    #[cfg(feature = "watchdog")]
     wdt_sr_manager: RegManager<{ utra::wdt::WDT_NUMREGS }>,
-    #[cfg(feature="watchdog")]
+    #[cfg(feature = "watchdog")]
     wdt: utralib::CSR<u32>,
 }
 
@@ -91,7 +90,7 @@ impl XousTickTimer {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map Tick Timer CSR range");
-        #[cfg(feature="watchdog")]
+        #[cfg(feature = "watchdog")]
         let wdt = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::wdt::HW_WDT_BASE),
             None,
@@ -99,20 +98,20 @@ impl XousTickTimer {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map Watchdog timer CSR range");
-        #[cfg(feature="susres")]
+        #[cfg(feature = "susres")]
         let ticktimer_sr_manager = RegManager::new(csr.as_mut_ptr() as *mut u32);
-        #[cfg(feature="watchdog")]
+        #[cfg(feature = "watchdog")]
         let wdt_sr_manager = RegManager::new(wdt.as_mut_ptr() as *mut u32);
 
         #[allow(unused_mut)] // sometimes mut, sometimes not based on feature flags.
         let mut xtt = XousTickTimer {
             csr: CSR::new(csr.as_mut_ptr() as *mut u32),
             current_response: None,
-            #[cfg(feature="susres")]
+            #[cfg(feature = "susres")]
             ticktimer_sr_manager,
-            #[cfg(feature="watchdog")]
+            #[cfg(feature = "watchdog")]
             wdt_sr_manager,
-            #[cfg(feature="watchdog")]
+            #[cfg(feature = "watchdog")]
             wdt: CSR::new(wdt.as_mut_ptr() as *mut u32),
         };
 
@@ -140,9 +139,7 @@ impl XousTickTimer {
     ///
     /// This function is safe to call only if interrupts are disabled. Otherwise,
     /// the value may change during processing.
-    pub unsafe fn sequence_number() -> usize {
-        TICKTIMER_SEQUENCE_NUMBER.load(Ordering::Relaxed)
-    }
+    pub unsafe fn sequence_number() -> usize { TICKTIMER_SEQUENCE_NUMBER.load(Ordering::Relaxed) }
 
     pub fn init(&mut self) {
         xous::claim_interrupt(
@@ -152,16 +149,13 @@ impl XousTickTimer {
         )
         .expect("couldn't claim irq");
 
-        #[cfg(feature="susres")]
+        #[cfg(feature = "susres")]
         {
-            self.ticktimer_sr_manager
-                .push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET0), None);
-            self.ticktimer_sr_manager
-                .push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET1), None);
+            self.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET0), None);
+            self.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET1), None);
             self.ticktimer_sr_manager
                 .push_fixed_value(RegOrField::Reg(utra::ticktimer::EV_PENDING), 0xFFFF_FFFF);
-            self.ticktimer_sr_manager
-                .push(RegOrField::Reg(utra::ticktimer::EV_ENABLE), None);
+            self.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::EV_ENABLE), None);
         }
     }
 
@@ -177,9 +171,7 @@ impl XousTickTimer {
         time
     }
 
-    pub fn elapsed_ms(&self) -> u64 {
-        self.raw_ticktime() / TICKS_PER_MS
-    }
+    pub fn elapsed_ms(&self) -> u64 { self.raw_ticktime() / TICKS_PER_MS }
 
     pub fn stop_interrupt(&mut self) -> Option<TimerRequest> {
         // Disable the timer
@@ -205,11 +197,7 @@ impl XousTickTimer {
 
     pub fn schedule_response(&mut self, request: TimerRequest) {
         let irq_target = request.msec.to_i64().wrapping_add(LATENCY_SLACK_MS);
-        log::trace!(
-            "setting a response at {} ms (current time: {} ms)",
-            irq_target,
-            self.elapsed_ms()
-        );
+        log::trace!("setting a response at {} ms (current time: {} ms)", irq_target, self.elapsed_ms());
 
         // Disable the timer interrupt
         assert!(self.csr.rf(utra::ticktimer::EV_ENABLE_ALARM) == 0);
@@ -219,10 +207,8 @@ impl XousTickTimer {
         self.current_response = Some(request);
 
         // Set the new target time
-        self.csr
-            .wo(utra::ticktimer::MSLEEP_TARGET1, (irq_target >> 32) as _);
-        self.csr
-            .wo(utra::ticktimer::MSLEEP_TARGET0, irq_target as _);
+        self.csr.wo(utra::ticktimer::MSLEEP_TARGET1, (irq_target >> 32) as _);
+        self.csr.wo(utra::ticktimer::MSLEEP_TARGET0, irq_target as _);
 
         // Clear previous interrupt (if any)
         self.csr.wfo(utra::ticktimer::EV_PENDING_ALARM, 1);
@@ -232,21 +218,15 @@ impl XousTickTimer {
     }
 
     #[allow(dead_code)]
-    #[cfg(feature="watchdog")]
-    pub fn reset_wdt(&mut self) {
-        self.wdt.wfo(utra::wdt::WATCHDOG_RESET_WDT, 1);
-    }
+    #[cfg(feature = "watchdog")]
+    pub fn reset_wdt(&mut self) { self.wdt.wfo(utra::wdt::WATCHDOG_RESET_WDT, 1); }
 
     #[allow(dead_code)]
-    #[cfg(feature="watchdog")]
+    #[cfg(feature = "watchdog")]
     pub fn check_wdt(&mut self) {
         let state = self.wdt.r(utra::wdt::STATE);
         if state & self.wdt.ms(utra::wdt::STATE_DISARMED, 1) == 0 {
-            log::info!(
-                "{} WDT is not disarmed, state: 0x{:x}",
-                self.elapsed_ms(),
-                state
-            );
+            log::info!("{} WDT is not disarmed, state: 0x{:x}", self.elapsed_ms(), state);
         }
     }
 
@@ -254,9 +234,9 @@ impl XousTickTimer {
     // example of a generic suspend/resume template
     pub fn suspend(&mut self) {
         log::trace!("suspending");
-        #[cfg(feature="susres")]
+        #[cfg(feature = "susres")]
         self.ticktimer_sr_manager.suspend();
-        #[cfg(feature="watchdog")]
+        #[cfg(feature = "watchdog")]
         self.wdt_sr_manager.suspend();
 
         // by writing this after suspend(), resume will get the prior value
@@ -271,18 +251,16 @@ impl XousTickTimer {
             self.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
         }
 
-        // manually clear any pending ticktimer events. This is mainly releveant for a "touch-and-go" simulated suspend.
+        // manually clear any pending ticktimer events. This is mainly releveant for a "touch-and-go"
+        // simulated suspend.
         self.csr.wfo(utra::ticktimer::EV_PENDING_ALARM, 1);
 
-         #[cfg(feature="watchdog")]
+        #[cfg(feature = "watchdog")]
         self.wdt_sr_manager.resume();
-        #[cfg(feature="susres")]
+        #[cfg(feature = "susres")]
         self.ticktimer_sr_manager.resume();
 
-        log::trace!(
-            "ticktimer enable: {}",
-            self.csr.r(utra::ticktimer::EV_ENABLE)
-        );
+        log::trace!("ticktimer enable: {}", self.csr.r(utra::ticktimer::EV_ENABLE));
         log::trace!(
             "ticktimer time/target: {}/{}",
             self.csr.r(utra::ticktimer::TIME0),
@@ -306,7 +284,10 @@ impl XousTickTimer {
         if let Some(current) = self.stop_interrupt() {
             #[cfg(feature = "debug-print")]
             log::info!("Existing request was {:?}", current);
-            assert!(sleep_heap.insert(current.msec, current).is_none(), "Existing sleep_heap entry would be overwritten");
+            assert!(
+                sleep_heap.insert(current.msec, current).is_none(),
+                "Existing sleep_heap entry would be overwritten"
+            );
         } else {
             #[cfg(feature = "debug-print")]
             log::info!("There was no existing sleep() request");
@@ -331,10 +312,7 @@ impl XousTickTimer {
             self.schedule_response(next_response);
         } else {
             #[cfg(feature = "debug-print")]
-            log::info!(
-                "not scheduling a response since the sleep heap is empty ({:?})",
-                sleep_heap
-            );
+            log::info!("not scheduling a response since the sleep heap is empty ({:?})", sleep_heap);
         }
     }
 
@@ -363,7 +341,10 @@ impl XousTickTimer {
 
             #[cfg(feature = "debug-print")]
             log::info!("Modified, the request was: {:?}", request);
-            assert!(sleep_heap.insert(request.msec, request).is_none(), "Existing sleep_heap entry would be overwritten");
+            assert!(
+                sleep_heap.insert(request.msec, request).is_none(),
+                "Existing sleep_heap entry would be overwritten"
+            );
         } else {
             #[cfg(feature = "debug-print")]
             log::info!("No new sleep request");
