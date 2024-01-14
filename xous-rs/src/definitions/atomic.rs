@@ -10,7 +10,7 @@ pub enum AtomicOperation {
     /// thread.
     MutexUnlock(usize /* Address */, bool /* Should Switch Immediately */),
 
-    
+
     CondvarWait(usize /* Address */),
     CondvarWaitTimeout(usize /* Address */, usize /* Timeout (ms) */),
     CondvarNotifyOne(usize /* Address */),
