@@ -2,12 +2,13 @@
 # - run this on Linux to fix Windows changing .rs files to +x:
 #      `find . -name "*.rs" -exec chmod -x {} \;`
 
-# Don't format these vendored-in files
+# Don't format libraries that have been vendored in
 ignore = [
     "libs/mass-storage/**",
     "loader/curve25519-dalek-loader/**",
     "loader/ed25519-dalek-loader/**",
     "loader/sha2-loader/**",
+    "imports/getrandom/**",
 ]
 
 # I can't rely on contributors using .editorconfig
