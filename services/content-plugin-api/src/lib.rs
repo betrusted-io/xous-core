@@ -10,6 +10,7 @@ pub enum Opcode {
 
 impl core::convert::TryFrom<&Message> for Opcode {
     type Error = &'static str;
+
     fn try_from(message: &Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => match m.id {
@@ -24,13 +25,7 @@ impl core::convert::TryFrom<&Message> for Opcode {
 impl From<Opcode> for Message {
     fn from(opcode: Opcode) -> Message {
         match opcode {
-            Opcode::Redraw => Message::Scalar(ScalarMessage {
-                id: 0,
-                arg1: 0,
-                arg2: 0,
-                arg3: 0,
-                arg4: 0,
-            }),
+            Opcode::Redraw => Message::Scalar(ScalarMessage { id: 0, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
             // _ => panic!("SHCH api: Opcode type not handled by From<Opcode>, refer to helper method"),
         }
     }
