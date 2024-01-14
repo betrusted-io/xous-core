@@ -13,9 +13,9 @@ pub fn test_ui(chat: &Chat) {
     chat.post_add("alice", 1_700_000_000, "hello world!", None).ok();
     chat.post_add("bob", 1_700_000_002, "hi alice!", None).ok();
     for i in 0..5 {
-        chat.post_add("alice", 1_700_000_005 + i*4, &format!("alice sez {}", i), None).ok();
-        chat.post_add("bob", 1_700_000_006 + i*4, &format!("bob sez {}", i), None).ok();
-        chat.post_add("trent", 1_700_000_007 + i*4, &format!("trent sez {}", i), None).ok();
+        chat.post_add("alice", 1_700_000_005 + i * 4, &format!("alice sez {}", i), None).ok();
+        chat.post_add("bob", 1_700_000_006 + i * 4, &format!("bob sez {}", i), None).ok();
+        chat.post_add("trent", 1_700_000_007 + i * 4, &format!("trent sez {}", i), None).ok();
     }
     chat.post_add("alice", 1_700_001_000, "eom", None).ok();
 
