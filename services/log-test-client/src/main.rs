@@ -1,13 +1,14 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-use xous::StringBuffer;
 use core::fmt::Write;
+
+use xous::StringBuffer;
 
 fn main() -> ! {
     let connection = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
 
-    let mut log_string= StringBuffer::new();
+    let mut log_string = StringBuffer::new();
     for i in 0.. {
         log_string.clear();
         writeln!(log_string, "Hello, world! Loop {}", i).unwrap();
