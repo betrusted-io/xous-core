@@ -19,15 +19,14 @@ pub fn get_path<'a>(s: &'a str, prefix: &'a str) -> Option<&'a str> {
     let without_prefix = s.strip_prefix(prefix)?.strip_prefix(':')?;
     let mut path_split = without_prefix.split(':');
     let parent = path_split.next();
-    if path_split.next().is_some() {
-        None
-    } else {
-        parent
-    }
+    if path_split.next().is_some() { None } else { parent }
 }
 
 /// Split a path into its constituant Basis and Dict, if the path is legal.
-pub fn split_basis_and_dict<F: FnMut() -> Option<String>>(src: &str, mut default: F) -> io::Result<(Option<String>, Option<String>)> {
+pub fn split_basis_and_dict<F: FnMut() -> Option<String>>(
+    src: &str,
+    mut default: F,
+) -> io::Result<(Option<String>, Option<String>)> {
     let mut basis = None;
     let dict;
     if let Some(src) = src.strip_prefix(MAIN_SEP) {
@@ -70,9 +69,7 @@ pub fn split_basis_and_dict<F: FnMut() -> Option<String>>(src: &str, mut default
 }
 
 #[cfg(test)]
-fn default_path() -> Option<String> {
-    Some("{DEFAULT}".to_owned())
-}
+fn default_path() -> Option<String> { Some("{DEFAULT}".to_owned()) }
 
 #[test]
 fn empty_string() {
@@ -91,26 +88,23 @@ fn dict_with_colon() {
 
 #[test]
 fn dict_with_two_colons() {
-    assert_eq!(split_basis_and_dict("one:two:three", default_path).unwrap(), (None, Some("one:two:three".to_owned())));
+    assert_eq!(
+        split_basis_and_dict("one:two:three", default_path).unwrap(),
+        (None, Some("one:two:three".to_owned()))
+    );
 }
 
 #[test]
 #[should_panic]
-fn dict_with_trailing_colon() {
-    split_basis_and_dict("one:", default_path).unwrap();
-}
+fn dict_with_trailing_colon() { split_basis_and_dict("one:", default_path).unwrap(); }
 
 #[test]
 #[should_panic]
-fn two_dicts_with_trailing_colon() {
-    split_basis_and_dict("one:two:", default_path).unwrap();
-}
+fn two_dicts_with_trailing_colon() { split_basis_and_dict("one:two:", default_path).unwrap(); }
 
 #[test]
 #[should_panic]
-fn basis_with_dict_with_trailing_colon() {
-    split_basis_and_dict(":one:two:", default_path).unwrap();
-}
+fn basis_with_dict_with_trailing_colon() { split_basis_and_dict(":one:two:", default_path).unwrap(); }
 
 #[test]
 #[should_panic]
@@ -125,12 +119,18 @@ fn basis_missing_colon() {
 
 #[test]
 fn basis_with_one_dict() {
-    assert_eq!(split_basis_and_dict(":one:two", default_path).unwrap(), (Some("one".to_owned()), Some("two".to_owned())));
+    assert_eq!(
+        split_basis_and_dict(":one:two", default_path).unwrap(),
+        (Some("one".to_owned()), Some("two".to_owned()))
+    );
 }
 
 #[test]
 fn basis_with_two_dicts() {
-    assert_eq!(split_basis_and_dict(":one:two:three", default_path).unwrap(), (Some("one".to_owned()), Some("two:three".to_owned())));
+    assert_eq!(
+        split_basis_and_dict(":one:two:three", default_path).unwrap(),
+        (Some("one".to_owned()), Some("two:three".to_owned()))
+    );
 }
 #[test]
 fn double_colon() {
@@ -146,29 +146,29 @@ fn single_colon() {
 #[test]
 fn double_colon_two_keys() {
     let default = default_path();
-    assert_eq!(split_basis_and_dict("::foo:bar", default_path).unwrap(), (default, Some("foo:bar".to_owned())));
+    assert_eq!(
+        split_basis_and_dict("::foo:bar", default_path).unwrap(),
+        (default, Some("foo:bar".to_owned()))
+    );
 }
 
 #[test]
 fn double_colon_three_keys() {
     let default = default_path();
-    assert_eq!(split_basis_and_dict("::foo:bar:baz", default_path).unwrap(), (default, Some("foo:bar:baz".to_owned())));
+    assert_eq!(
+        split_basis_and_dict("::foo:bar:baz", default_path).unwrap(),
+        (default, Some("foo:bar:baz".to_owned()))
+    );
 }
 
 #[test]
 #[should_panic]
-fn double_colon_three_keys_trailing_colon() {
-    split_basis_and_dict("::foo:bar:baz:", default_path).unwrap();
-}
+fn double_colon_three_keys_trailing_colon() { split_basis_and_dict("::foo:bar:baz:", default_path).unwrap(); }
 
 #[test]
 #[should_panic]
-fn dict_with_two_keys_two_trailing_colons() {
-    split_basis_and_dict("foo:bar::", default_path).unwrap();
-}
+fn dict_with_two_keys_two_trailing_colons() { split_basis_and_dict("foo:bar::", default_path).unwrap(); }
 
 #[test]
 #[should_panic]
-fn dict_with_two_keys_three_trailing_colons() {
-    split_basis_and_dict("foo:bar:::", default_path).unwrap();
-}
+fn dict_with_two_keys_three_trailing_colons() { split_basis_and_dict("foo:bar:::", default_path).unwrap(); }

@@ -1,45 +1,43 @@
-use std::convert::TryInto;
-
-use crate::*;
-use backend::bcrypt::*;
-use aes_gcm_siv::{Nonce, Tag, Aes256GcmSiv};
-use aes_gcm_siv::aead::{Aead, Payload};
-use aes::{Aes256, Block, BLOCK_SIZE};
-use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
-use modals::Modals;
-use root_keys::api::KeywrapError;
-use root_keys::api::AesRootkeyType;
-use spinor::SPINOR_BULK_ERASE_SIZE;
-use subtle::ConstantTimeEq;
-use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
-
-use std::collections::HashMap;
-#[cfg(any(all(feature="pddbtest", feature="autobasis"), not(feature="deterministic")))]
-use std::collections::HashSet;
-#[cfg(feature="deterministic")]
+use core::ops::{Deref, DerefMut};
+use std::cmp::Reverse;
+#[cfg(feature = "deterministic")]
 use std::collections::BTreeSet;
 use std::collections::BinaryHeap;
-use std::cmp::Reverse;
-use std::io::{Result, Error, ErrorKind};
+use std::collections::HashMap;
+#[cfg(any(all(feature = "pddbtest", feature = "autobasis"), not(feature = "deterministic")))]
+use std::collections::HashSet;
+use std::convert::TryInto;
+use std::io::{Error, ErrorKind, Result};
 
-#[cfg(not(feature="deterministic"))]
-type FspaceSet = HashSet::<PhysPage>;
-#[cfg(feature="deterministic")]
-type FspaceSet = BTreeSet::<PhysPage>;
+use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
+use aes::{Aes256, Block, BLOCK_SIZE};
+use aes_gcm_siv::aead::{Aead, Payload};
+use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
+use backend::bcrypt::*;
+use modals::Modals;
+use root_keys::api::AesRootkeyType;
+use root_keys::api::KeywrapError;
+use spinor::SPINOR_BULK_ERASE_SIZE;
+use subtle::ConstantTimeEq;
 
+use crate::*;
+
+#[cfg(not(feature = "deterministic"))]
+type FspaceSet = HashSet<PhysPage>;
+#[cfg(feature = "deterministic")]
+type FspaceSet = BTreeSet<PhysPage>;
+
+use digest::Digest;
+#[cfg(feature = "perfcounter")]
+use perflib::*;
+use sha2::{FallbackStrategy, Sha512Trunc256};
+#[cfg(feature = "perfcounter")]
+use utralib::AtomicCsr;
 use zeroize::Zeroize;
 
-use sha2::{FallbackStrategy, Sha512Trunc256};
-use digest::Digest;
-
-#[cfg(feature="migration1")]
+#[cfg(feature = "migration1")]
 use crate::backend::migration1to2::*;
-
-#[cfg(feature="perfcounter")]
-use perflib::*;
-#[cfg(feature="perfcounter")]
-use utralib::AtomicCsr;
 
 /// Implementation-specific PDDB structures: for Precursor/Xous OS pair
 pub(crate) const MBBB_PAGES: usize = 10;
@@ -58,7 +56,7 @@ pub const KCOM_CT_LEN: usize = 4004;
 pub(crate) const WRAPPED_AES_KEYSIZE: usize = AES_KEYSIZE + 8;
 const SCD_VERSION: u32 = 2;
 
-#[cfg(all(feature="pddbtest", feature="autobasis"))]
+#[cfg(all(feature = "pddbtest", feature = "autobasis"))]
 pub const BASIS_TEST_ROOTNAME: &'static str = "test";
 
 #[derive(Zeroize)]
@@ -67,7 +65,8 @@ pub const BASIS_TEST_ROOTNAME: &'static str = "test";
 pub(crate) struct StaticCryptoData {
     /// a version number for the block
     pub(crate) version: u32,
-    /// aes-256 key of the system basis page table, encrypted with the User0 root key, and wrapped using NIST SP800-38F
+    /// aes-256 key of the system basis page table, encrypted with the User0 root key, and wrapped using NIST
+    /// SP800-38F
     pub(crate) system_key_pt: [u8; WRAPPED_AES_KEYSIZE],
     /// aes-256 key of the system basis, encrypted with the User0 root key, and wrapped using NIST SP800-38F
     pub(crate) system_key: [u8; WRAPPED_AES_KEYSIZE],
@@ -86,18 +85,23 @@ impl StaticCryptoData {
 }
 impl Deref for StaticCryptoData {
     type Target = [u8];
+
     fn deref(&self) -> &[u8] {
         unsafe {
-            core::slice::from_raw_parts(self as *const StaticCryptoData as *const u8, size_of::<StaticCryptoData>())
-                as &[u8]
+            core::slice::from_raw_parts(
+                self as *const StaticCryptoData as *const u8,
+                size_of::<StaticCryptoData>(),
+            ) as &[u8]
         }
     }
 }
 impl DerefMut for StaticCryptoData {
     fn deref_mut(&mut self) -> &mut [u8] {
         unsafe {
-            core::slice::from_raw_parts_mut(self as *mut StaticCryptoData as *mut u8, size_of::<StaticCryptoData>())
-                as &mut [u8]
+            core::slice::from_raw_parts_mut(
+                self as *mut StaticCryptoData as *mut u8,
+                size_of::<StaticCryptoData>(),
+            ) as &mut [u8]
         }
     }
 }
@@ -111,15 +115,15 @@ enum DnaMode {
 #[zeroize(drop)]
 pub(crate) struct BasisKeys {
     pub(crate) pt: [u8; AES_KEYSIZE],
-    pub(crate) data: [u8; AES_KEYSIZE]
+    pub(crate) data: [u8; AES_KEYSIZE],
 }
 
 struct MigrationCiphers {
     pt_ecb: Aes256,
     data_gcm_siv: Aes256GcmSiv,
     data_key: [u8; 32],
-    aad_incoming: Vec::<u8>,
-    aad_local: Vec::<u8>,
+    aad_incoming: Vec<u8>,
+    aad_local: Vec<u8>,
 }
 
 // emulated
@@ -129,9 +133,9 @@ type EmuMemoryRange = EmuStorage;
 type EmuSpinor = HostedSpinor;
 
 // native hardware
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 type EmuMemoryRange = xous::MemoryRange;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 type EmuSpinor = spinor::Spinor;
 
 pub(crate) struct PddbOs {
@@ -142,24 +146,28 @@ pub(crate) struct PddbOs {
     /// page table base -- location in FLASH, offset from physical bottom of pddb_mr
     pt_phys_base: PageAlignedPa,
     /// local key store -- one page, to store exactly one key, used for the system basis.
-    /// the rest of the keys are generated on the fly entirely from the user password + a salt also stored in this page
+    /// the rest of the keys are generated on the fly entirely from the user password + a salt also stored in
+    /// this page
     key_phys_base: PageAlignedPa,
     /// make before break buffer base -- location in FLASH, offset from physical bottom of pddb_mr
     mbbb_phys_base: PageAlignedPa,
     /// free space circular buffer base -- location in FLASH, offset from physical bottom of pddb_mr
     fscb_phys_base: PageAlignedPa,
     data_phys_base: PageAlignedPa,
-    /// We keep a copy of the raw key around because we have to combine this with the AAD of a block to derive the AES-GCM-SIV cipher.
+    /// We keep a copy of the raw key around because we have to combine this with the AAD of a block to
+    /// derive the AES-GCM-SIV cipher.
     system_basis_key: Option<BasisKeys>,
-    /// derived cipher for handling fastspace -- cache it, so we can save the time cost of constructing the cipher key schedule
+    /// derived cipher for handling fastspace -- cache it, so we can save the time cost of constructing the
+    /// cipher key schedule
     cipher_ecb: Option<Aes256>,
     /// fast space cache
     fspace_cache: FspaceSet,
     /// memoize the location of the fscb log pages
-    fspace_log_addrs: Vec::<PageAlignedPa>,
+    fspace_log_addrs: Vec<PageAlignedPa>,
     /// memoize the current target offset for the next log entry
     fspace_log_next_addr: Option<PhysAddr>,
-    /// track roughly how big the log has gotten, so we can pre-emptively garbage collect it before we get too full.
+    /// track roughly how big the log has gotten, so we can pre-emptively garbage collect it before we get
+    /// too full.
     fspace_log_len: usize,
     /// a cached copy of the FPGA's DNA ID, used in the AAA records.
     dna: u64,
@@ -173,14 +181,14 @@ pub(crate) struct PddbOs {
     pw_cid: xous::CID,
     /// Number of consecutive failed login attempts
     failed_logins: u64,
-    #[cfg(all(feature="pddbtest", feature="autobasis"))]
-    testnames: HashSet::<String>,
+    #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
+    testnames: HashSet<String>,
     /// Performance counter elements
-    #[cfg(feature="perfcounter")]
+    #[cfg(feature = "perfcounter")]
     perfclient: PerfClient,
-    #[cfg(feature="perfcounter")]
+    #[cfg(feature = "perfcounter")]
     pc_id: u32,
-    #[cfg(feature="perfcounter")]
+    #[cfg(feature = "perfcounter")]
     /// used to toggle performance profiling on or off
     use_perf: bool,
 }
@@ -188,7 +196,7 @@ pub(crate) struct PddbOs {
 impl PddbOs {
     pub fn new(trngpool: Rc<RefCell<TrngPool>>, pw_cid: xous::CID) -> PddbOs {
         let xns = xous_names::XousNames::new().unwrap();
-        #[cfg(any(feature="precursor", feature="renode"))]
+        #[cfg(any(feature = "precursor", feature = "renode"))]
         let pddb = xous::syscall::map_memory(
             xous::MemoryAddress::new(xous::PDDB_LOC as usize + xous::FLASH_PHYS_BASE as usize),
             None,
@@ -196,23 +204,29 @@ impl PddbOs {
             xous::MemoryFlags::R | xous::MemoryFlags::RESERVE,
         )
         .expect("Couldn't map the PDDB memory range");
-        #[cfg(any(feature="precursor", feature="renode"))]
+        #[cfg(any(feature = "precursor", feature = "renode"))]
         // Safety: all u8 values are valid
-        log::info!("pddb slice len: {}, PDDB_A_LEN: {}, raw len: {}", unsafe { pddb.as_slice::<u8>().len() }, PDDB_A_LEN, pddb.len()); // sanity check the PDDB size on init
+        log::info!(
+            "pddb slice len: {}, PDDB_A_LEN: {}, raw len: {}",
+            unsafe { pddb.as_slice::<u8>().len() },
+            PDDB_A_LEN,
+            pddb.len()
+        ); // sanity check the PDDB size on init
 
         // the mbbb is located one page off from the Page Table
         let key_phys_base = PageAlignedPa::from(size_of::<PageTableInFlash>());
         log::debug!("key_phys_base: {:x?}", key_phys_base);
         let mbbb_phys_base = key_phys_base + PageAlignedPa::from(PAGE_SIZE);
         log::debug!("mbbb_phys_base: {:x?}", mbbb_phys_base);
-        let fscb_phys_base = PageAlignedPa::from(mbbb_phys_base.as_u32() + MBBB_PAGES as u32 * PAGE_SIZE as u32);
+        let fscb_phys_base =
+            PageAlignedPa::from(mbbb_phys_base.as_u32() + MBBB_PAGES as u32 * PAGE_SIZE as u32);
         log::debug!("fscb_phys_base: {:x?}", fscb_phys_base);
 
         let llio = llio::Llio::new(&xns);
         let dna = llio.soc_dna().unwrap();
 
         // performance counter infrastructure, if selected
-        #[cfg(feature="perfcounter")]
+        #[cfg(feature = "perfcounter")]
         let event2_csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utralib::generated::utra::event_source2::HW_EVENT_SOURCE2_BASE),
             None,
@@ -220,23 +234,26 @@ impl PddbOs {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map event2 CSR range");
-        #[cfg(feature="perfcounter")]
+        #[cfg(feature = "perfcounter")]
         let perfclient = PerfClient::new(AtomicCsr::new(event2_csr.as_mut_ptr() as *mut u32));
-        #[cfg(feature="perfcounter")]
+        #[cfg(feature = "perfcounter")]
         let pc_id = xous::process::id() as u32;
 
         // native hardware
-        #[cfg(any(feature="precursor", feature="renode"))]
+        #[cfg(any(feature = "precursor", feature = "renode"))]
         let ret = PddbOs {
             spinor: spinor::Spinor::new(&xns).unwrap(),
-            rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
+            rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0))
+                .expect("FATAL: couldn't access RootKeys!"),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             pddb_mr: pddb,
             pt_phys_base: PageAlignedPa::from(0 as u32),
             key_phys_base,
             mbbb_phys_base,
             fscb_phys_base,
-            data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
+            data_phys_base: PageAlignedPa::from(
+                fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32,
+            ),
             system_basis_key: None,
             cipher_ecb: None,
             fspace_cache: FspaceSet::new(),
@@ -250,13 +267,13 @@ impl PddbOs {
             entropy: trngpool,
             pw_cid,
             failed_logins: 0,
-            #[cfg(all(feature="pddbtest", feature="autobasis"))]
+            #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
             testnames: HashSet::new(),
-            #[cfg(feature="perfcounter")]
+            #[cfg(feature = "perfcounter")]
             perfclient,
-            #[cfg(feature="perfcounter")]
+            #[cfg(feature = "perfcounter")]
             pc_id,
-            #[cfg(feature="perfcounter")]
+            #[cfg(feature = "perfcounter")]
             use_perf: true,
         };
         // emulated
@@ -264,14 +281,17 @@ impl PddbOs {
         let ret = {
             PddbOs {
                 spinor: HostedSpinor::new(),
-                rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
+                rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0))
+                    .expect("FATAL: couldn't access RootKeys!"),
                 tt: ticktimer_server::Ticktimer::new().unwrap(),
                 pddb_mr: EmuStorage::new(),
                 pt_phys_base: PageAlignedPa::from(0 as u32),
                 key_phys_base,
                 mbbb_phys_base,
                 fscb_phys_base,
-                data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
+                data_phys_base: PageAlignedPa::from(
+                    fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32,
+                ),
                 system_basis_key: None,
                 cipher_ecb: None,
                 fspace_cache: FspaceSet::new(),
@@ -285,7 +305,7 @@ impl PddbOs {
                 entropy: trngpool,
                 pw_cid,
                 failed_logins: 0,
-                #[cfg(all(feature="pddbtest", feature="autobasis"))]
+                #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
                 testnames: HashSet::new(),
             }
         };
@@ -293,7 +313,7 @@ impl PddbOs {
     }
 
     #[cfg(not(target_os = "xous"))]
-    pub fn dbg_dump(&self, name: Option<String>, extra_keys: Option<&Vec::<KeyExport>>) {
+    pub fn dbg_dump(&self, name: Option<String>, extra_keys: Option<&Vec<KeyExport>>) {
         self.pddb_mr.dump_fs(&name);
         let mut export = Vec::<KeyExport>::new();
         if let Some(key) = &self.system_basis_key {
@@ -302,13 +322,7 @@ impl PddbOs {
             for (&src, dst) in PDDB_DEFAULT_SYSTEM_BASIS.as_bytes().iter().zip(name.iter_mut()) {
                 *dst = src;
             }
-            export.push(
-                KeyExport {
-                    basis_name: name,
-                    key: key.data,
-                    pt_key: key.pt,
-                }
-            );
+            export.push(KeyExport { basis_name: name, key: key.data, pt_key: key.pt });
         }
         if let Some(extra) = extra_keys {
             for key in extra {
@@ -317,24 +331,26 @@ impl PddbOs {
         }
         self.pddb_mr.dump_keys(&export, &name);
     }
+
     #[allow(dead_code)]
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     pub fn dbg_dump(&self, _name: Option<String>) {
         // placeholder
     }
+
     #[allow(dead_code)]
-    #[cfg(feature="perfcounter")]
-    pub fn set_use_perf(&mut self, use_perf: bool) {
-        self.use_perf = use_perf;
-    }
+    #[cfg(feature = "perfcounter")]
+    pub fn set_use_perf(&mut self, use_perf: bool) { self.use_perf = use_perf; }
+
     #[allow(dead_code)]
-    #[cfg(feature="perfcounter")]
+    #[cfg(feature = "perfcounter")]
     pub fn perf_entry(&mut self, file_id: u32, meta: u32, index: u32, line: u32) {
         if self.use_perf {
             let entry = perf_entry!(self.pc_id, file_id, meta, index, line);
             self.perfclient.log_event_unchecked(entry);
         }
     }
+
     #[allow(dead_code)]
     #[cfg(not(target_os = "xous"))]
     /// used to reset the hardware structure for repeated runs of testing within a single invocation
@@ -346,6 +362,7 @@ impl PddbOs {
         self.fspace_log_next_addr = None;
         self.pddb_mr.reset();
     }
+
     pub(crate) fn is_efuse_secured(&self) -> bool {
         self.rootkeys.is_efuse_secured().expect("couldn't query efuse security state") == Some(true)
     }
@@ -354,68 +371,88 @@ impl PddbOs {
         let nonce_array = self.entropy.borrow_mut().get_nonce();
         *Nonce::from_slice(&nonce_array)
     }
+
     #[allow(dead_code)]
-    pub(crate) fn dna(&self) -> u64 {self.dna}
-    pub(crate) fn trng_slice(&self, slice: &mut [u8]) {
-        self.entropy.borrow_mut().get_slice(slice);
-    }
-    pub(crate) fn trng_u32(&self) -> u32 {
-        self.entropy.borrow_mut().get_u32()
-    }
-    pub(crate) fn trng_u8(&self) -> u8 {
-        self.entropy.borrow_mut().get_u8()
-    }
-    pub(crate) fn timestamp_now(&self) -> u64 {self.tt.elapsed_ms()}
+    pub(crate) fn dna(&self) -> u64 { self.dna }
+
+    pub(crate) fn trng_slice(&self, slice: &mut [u8]) { self.entropy.borrow_mut().get_slice(slice); }
+
+    pub(crate) fn trng_u32(&self) -> u32 { self.entropy.borrow_mut().get_u32() }
+
+    pub(crate) fn trng_u8(&self) -> u8 { self.entropy.borrow_mut().get_u8() }
+
+    pub(crate) fn timestamp_now(&self) -> u64 { self.tt.elapsed_ms() }
+
     /// checks if the root keys are initialized, which is a prerequisite to formatting and mounting
     pub(crate) fn rootkeys_initialized(&self) -> bool {
         self.rootkeys.is_initialized().expect("couldn't query initialization state of the rootkeys server")
     }
+
     /// patches data at an offset starting from the data physical base address, which corresponds
     /// exactly to the first entry in the page table
     pub(crate) fn patch_data(&self, data: &[u8], offset: u32) {
         log::trace!("patch offset: {:x} len: {:x}", offset, data.len());
-        // log::trace!("patch bef: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize + self.data_phys_base.as_usize()..offset as usize + self.data_phys_base.as_usize() + 48]);
-        assert!(data.len() + offset as usize <= PDDB_A_LEN - self.data_phys_base.as_usize(), "attempt to store past disk boundary");
-        self.spinor.patch(
-            unsafe { self.pddb_mr.as_slice() },
-            xous::PDDB_LOC,
-            &data,
-            offset + self.data_phys_base.as_u32(),
-        ).expect("couldn't write to data region in the PDDB");
-        //log::trace!("patch aft: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize + self.data_phys_base.as_usize()..offset as usize + self.data_phys_base.as_usize() + 48]);
-        //log::trace!("patch end: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize + self.data_phys_base.as_usize() + 4048..offset as usize + self.data_phys_base.as_usize() + 4096])
+        // log::trace!("patch bef: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize +
+        // self.data_phys_base.as_usize()..offset as usize + self.data_phys_base.as_usize() + 48]);
+        assert!(
+            data.len() + offset as usize <= PDDB_A_LEN - self.data_phys_base.as_usize(),
+            "attempt to store past disk boundary"
+        );
+        self.spinor
+            .patch(
+                unsafe { self.pddb_mr.as_slice() },
+                xous::PDDB_LOC,
+                &data,
+                offset + self.data_phys_base.as_u32(),
+            )
+            .expect("couldn't write to data region in the PDDB");
+        //log::trace!("patch aft: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize +
+        // self.data_phys_base.as_usize()..offset as usize + self.data_phys_base.as_usize() + 48]);
+        // log::trace!("patch end: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize +
+        // self.data_phys_base.as_usize() + 4048..offset as usize + self.data_phys_base.as_usize() + 4096])
     }
+
     fn patch_pagetable(&self, data: &[u8], offset: u32) {
         if cfg!(feature = "mbbb") {
-            assert!(data.len() + offset as usize <= size_of::<PageTableInFlash>(), "attempt to patch past page table end");
-            // 1. Check if there is an MBBB structure existing. If so, copy it into the empty slot in the page table, then erase the mbbb.
+            assert!(
+                data.len() + offset as usize <= size_of::<PageTableInFlash>(),
+                "attempt to patch past page table end"
+            );
+            // 1. Check if there is an MBBB structure existing. If so, copy it into the empty slot in the page
+            //    table, then erase the mbbb.
             if let Some(mbbb) = self.mbbb_retrieve() {
                 if let Some(erased_offset) = self.pt_find_erased_slot() {
-                    self.spinor.patch(
-                        unsafe { self.pddb_mr.as_slice() },
-                        xous::PDDB_LOC,
-                        &mbbb,
-                        self.pt_phys_base.as_u32() + erased_offset,
-                    ).expect("couldn't write to page table");
+                    self.spinor
+                        .patch(
+                            unsafe { self.pddb_mr.as_slice() },
+                            xous::PDDB_LOC,
+                            &mbbb,
+                            self.pt_phys_base.as_u32() + erased_offset,
+                        )
+                        .expect("couldn't write to page table");
                 }
-                // if there *isn't* an erased slot, we still want to get rid of the MBBB structure. A lack of an
-                // erased slot would indicate we lost power after we copied the previous MBBB structure but before we could erase
-                // it from storage, so this picks up where we left off.
+                // if there *isn't* an erased slot, we still want to get rid of the MBBB structure. A lack of
+                // an erased slot would indicate we lost power after we copied the previous
+                // MBBB structure but before we could erase it from storage, so this picks up
+                // where we left off.
                 self.mbbb_erase();
             }
             // 2. find the page we're patching
             let base_page = offset as usize & !(PAGE_SIZE - 1);
             // 3. copy the data to a local buffer
             let mut mbbb_page = [0u8; PAGE_SIZE];
-            for (&src, dst) in
-            unsafe { self.pddb_mr.as_slice()[self.pt_phys_base.as_usize() + base_page..self.pt_phys_base.as_usize() + base_page + PAGE_SIZE].iter() }
-            .zip(mbbb_page.iter_mut()) {
+            for (&src, dst) in unsafe {
+                self.pddb_mr.as_slice()[self.pt_phys_base.as_usize() + base_page
+                    ..self.pt_phys_base.as_usize() + base_page + PAGE_SIZE]
+                    .iter()
+            }
+            .zip(mbbb_page.iter_mut())
+            {
                 *dst = src;
             }
             // 4. patch the local buffer copy
             let base_offset = offset as usize & (PAGE_SIZE - 1);
-            for (&src, dst) in data.iter()
-            .zip(mbbb_page[base_offset..base_offset + data.len()].iter_mut()) {
+            for (&src, dst) in data.iter().zip(mbbb_page[base_offset..base_offset + data.len()].iter_mut()) {
                 *dst = src;
             }
             // 5. pick a random offset in the MBBB for the target patch, and write the data into the target
@@ -423,55 +460,75 @@ impl PddbOs {
             self.patch_mbbb(&mbbb_page, offset);
             // 6. erase the original page area, thus making the MBBB the authorative location
             let blank = [0xffu8; PAGE_SIZE];
-            self.spinor.patch(
-                unsafe { self.pddb_mr.as_slice() },
-                xous::PDDB_LOC,
-                &blank,
-                self.pt_phys_base.as_u32() + base_page as u32,
-            ).expect("couldn't write to page table");
+            self.spinor
+                .patch(
+                    unsafe { self.pddb_mr.as_slice() },
+                    xous::PDDB_LOC,
+                    &blank,
+                    self.pt_phys_base.as_u32() + base_page as u32,
+                )
+                .expect("couldn't write to page table");
         } else {
             self.patch_pagetable_raw(data, offset);
         }
     }
+
     /// Direct write to the page table, without MBBB buffering.
     fn patch_pagetable_raw(&self, data: &[u8], offset: u32) {
-        assert!(data.len() + offset as usize <= size_of::<PageTableInFlash>(), "attempt to patch past page table end");
-        self.spinor.patch(
-            unsafe { self.pddb_mr.as_slice() },
-            xous::PDDB_LOC,
-            &data,
-            self.pt_phys_base.as_u32() + offset,
-        ).expect("couldn't write to page table");
+        assert!(
+            data.len() + offset as usize <= size_of::<PageTableInFlash>(),
+            "attempt to patch past page table end"
+        );
+        self.spinor
+            .patch(
+                unsafe { self.pddb_mr.as_slice() },
+                xous::PDDB_LOC,
+                &data,
+                self.pt_phys_base.as_u32() + offset,
+            )
+            .expect("couldn't write to page table");
     }
+
     fn patch_keys(&self, data: &[u8], offset: u32) {
-        assert!(data.len() + offset as usize <= PAGE_SIZE, "attempt to burn key data that is outside the key region");
+        assert!(
+            data.len() + offset as usize <= PAGE_SIZE,
+            "attempt to burn key data that is outside the key region"
+        );
         log::info!("patching keys area with {} bytes", data.len());
-        self.spinor.patch(
-            unsafe { self.pddb_mr.as_slice() },
-            xous::PDDB_LOC,
-            data,
-            self.key_phys_base.as_u32() + offset
-        ).expect("couldn't burn keys");
+        self.spinor
+            .patch(
+                unsafe { self.pddb_mr.as_slice() },
+                xous::PDDB_LOC,
+                data,
+                self.key_phys_base.as_u32() + offset,
+            )
+            .expect("couldn't burn keys");
     }
+
     fn patch_mbbb(&self, data: &[u8], offset: u32) {
         assert!(data.len() + offset as usize <= PAGE_SIZE * MBBB_PAGES, "mbbb patch would go out of bounds");
-        self.spinor.patch(
-            unsafe { self.pddb_mr.as_slice() },
-            xous::PDDB_LOC,
-            data,
-            self.mbbb_phys_base.as_u32() + offset
-        ).expect("couldn't burn mbbb");
+        self.spinor
+            .patch(
+                unsafe { self.pddb_mr.as_slice() },
+                xous::PDDB_LOC,
+                data,
+                self.mbbb_phys_base.as_u32() + offset,
+            )
+            .expect("couldn't burn mbbb");
     }
-    /// raw patch is provided for 128-bit incremental updates to the FLASH. For FastSpace master record writes,
-    /// see fast_space_write()
+
+    /// raw patch is provided for 128-bit incremental updates to the FLASH. For FastSpace master record
+    /// writes, see fast_space_write()
     fn patch_fscb(&self, data: &[u8], offset: u32) {
         assert!(data.len() + offset as usize <= PAGE_SIZE * FSCB_PAGES, "fscb patch would go out of bounds");
-        self.spinor.patch(
-            unsafe { self.pddb_mr.as_slice() },
-            xous::PDDB_LOC,
-            data,
-            self.fscb_phys_base.as_u32() + offset
-        ).expect("couldn't burn fscb");
+        self.spinor
+            .patch(
+                unsafe { self.pddb_mr.as_slice() },
+                xous::PDDB_LOC,
+                data,
+                self.fscb_phys_base.as_u32() + offset,
+            )
+            .expect("couldn't burn fscb");
     }
 
     /// Public function that "does the right thing" for patching in a page table entry based on a virtual to
@@ -493,51 +550,70 @@ impl PddbOs {
         self.trng_slice(&mut eraseblock);
         self.patch_pagetable(&eraseblock, phys_page_num * aes::BLOCK_SIZE as u32);
     }
+
     /// Searches the page table for an MBBB slot. This is currently an O(N) search but
     /// in practice for Precursor there are only 8 pages, so it's quite fast on average.
     /// This would want to be optimized or cached for a much larger filesystem.
     /// Returns the physical address of the erased slot as an offset from the pt_phys_base()
     fn pt_find_erased_slot(&self) -> Option<PhysAddr> {
-        let pt: &[u8] = unsafe { &self.pddb_mr.as_slice()[self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()] };
+        let pt: &[u8] = unsafe {
+            &self.pddb_mr.as_slice()
+                [self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()]
+        };
         let blank = [0xffu8; aes::BLOCK_SIZE];
         for (index, page) in pt.chunks(PAGE_SIZE).enumerate() {
             if page[..aes::BLOCK_SIZE] == blank {
-                return Some( (index * PAGE_SIZE) as PhysAddr )
+                return Some((index * PAGE_SIZE) as PhysAddr);
             }
         }
         None
     }
+
     fn pt_as_slice(&self) -> &[u8] {
-        unsafe { &self.pddb_mr.as_slice()[self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()] }
+        unsafe {
+            &self.pddb_mr.as_slice()
+                [self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()]
+        }
     }
 
     /// scans the page tables and returns all entries for a given basis
     /// basis_name is needed to decrypt pages in case of a journal conflict
     ///
     /// Here, we may encounter page table entries that are bogus for two reasons:
-    ///    1. PT entries that pass the checksum, but don't map to valid data due to random collisions from the short 32-bit checksum space
+    ///    1. PT entries that pass the checksum, but don't map to valid data due to random collisions from the
+    ///       short 32-bit checksum space
     ///    2. Conflicting entries due to an unclean power-down
     ///
     /// This routine does a "lazy" check of improper data:
-    /// If the bad data happens to land on the same page mapping as valid data, a conflict resolution happens where
-    /// the block is decrypted and validated.
-    ///   - If there is only one valid block, the valid block is picked to populate the page table (handles half of case 1)
-    ///   - If two valid blocks are found, the one with the older journal entry is used (handles the easy version of case 2)
-    ///   - If two valid blocks with identical journal versions happen (hard version of case 2), this is an internal consistency error.
-    ///     It shouldn't happen; but, if it happens, it retains the first version encountered and prints an error to the log.
+    /// If the bad data happens to land on the same page mapping as valid data, a conflict resolution happens
+    /// where the block is decrypted and validated.
+    ///   - If there is only one valid block, the valid block is picked to populate the page table (handles
+    ///     half of case 1)
+    ///   - If two valid blocks are found, the one with the older journal entry is used (handles the easy
+    ///     version of case 2)
+    ///   - If two valid blocks with identical journal versions happen (hard version of case 2), this is an
+    ///     internal consistency error. It shouldn't happen; but, if it happens, it retains the first version
+    ///     encountered and prints an error to the log.
     ///
-    /// This leaves the "hard version" of case 1 - there was a checksum collision, and it wasn't detected because no other valid
-    /// block happened to map to it. In this case, the "imposter" entry is left to stand, under the theory that typically this represents
-    /// this represents a "leak" of free space where this orphaned bock may never be allocated or used. However, because these are
-    /// rare (perhaps around 1 in a billion chance?) this leakage is fine. Note that if the FSCB is generated before this page gets
-    /// allocated, the imposter page is avoided in the scan, so this leaked memory is "forever". An orphaned node search could
-    /// try to chase this out, if it becomes a problem.
+    /// This leaves the "hard version" of case 1 - there was a checksum collision, and it wasn't detected
+    /// because no other valid block happened to map to it. In this case, the "imposter" entry is left to
+    /// stand, under the theory that typically this represents this represents a "leak" of free space
+    /// where this orphaned bock may never be allocated or used. However, because these are rare (perhaps
+    /// around 1 in a billion chance?) this leakage is fine. Note that if the FSCB is generated before this
+    /// page gets allocated, the imposter page is avoided in the scan, so this leaked memory is "forever".
+    /// An orphaned node search could try to chase this out, if it becomes a problem.
     ///
-    /// If the "imposter" entry also happens to be "allocated" down the road (that is, the FSCB happens to have an entry
-    /// that also maps to the imposter), the imposter is effectively de-allocated because the FSCB report is inserted directly
-    /// into the page table, overwriting the impostor entry in the paget able. On the next mount, this turns into the "trivial conflict"
-    /// case, where one page will validate and the other will not.
-    pub(crate) fn pt_scan_key(&self, pt_key: &[u8; AES_KEYSIZE], data_key: &[u8; AES_KEYSIZE], basis_name: &str) -> Option<HashMap::<VirtAddr, PhysPage>> {
+    /// If the "imposter" entry also happens to be "allocated" down the road (that is, the FSCB happens to
+    /// have an entry that also maps to the imposter), the imposter is effectively de-allocated because
+    /// the FSCB report is inserted directly into the page table, overwriting the impostor entry in the
+    /// paget able. On the next mount, this turns into the "trivial conflict" case, where one page will
+    /// validate and the other will not.
+    pub(crate) fn pt_scan_key(
+        &self,
+        pt_key: &[u8; AES_KEYSIZE],
+        data_key: &[u8; AES_KEYSIZE],
+        basis_name: &str,
+    ) -> Option<HashMap<VirtAddr, PhysPage>> {
         let cipher = Aes256::new(&GenericArray::from_slice(pt_key));
         let pt = self.pt_as_slice();
         let mut map = HashMap::<VirtAddr, PhysPage>::new();
@@ -547,14 +623,17 @@ impl PddbOs {
                 if let Some(page) = self.mbbb_retrieve() {
                     page
                 } else {
-                    log::debug!("Blank page in PT found, but no MBBB entry exists. PT is either corrupted or not initialized!");
+                    log::debug!(
+                        "Blank page in PT found, but no MBBB entry exists. PT is either corrupted or not initialized!"
+                    );
                     pt_page
                 }
             } else {
                 pt_page
             };
             for (index, candidate) in clean_page.chunks(aes::BLOCK_SIZE).enumerate() {
-                // encryption is in-place, but the candidates are read-only, so we have to copy them to a new location
+                // encryption is in-place, but the candidates are read-only, so we have to copy them to a new
+                // location
                 let mut block = Block::clone_from_slice(candidate);
                 cipher.decrypt_block(&mut block);
                 if let Some(pte) = Pte::try_from_slice(block.as_slice()) {
@@ -574,12 +653,18 @@ impl PddbOs {
                             let new_data = self.data_decrypt_page(&cipher, &aad, &pp);
                             if let Some(new_d) = new_data {
                                 if let Some(prev_d) = prev_data {
-                                    let prev_j = JournalType::from_le_bytes(prev_d[..size_of::<JournalType>()].try_into().unwrap());
-                                    let new_j = JournalType::from_le_bytes(new_d[..size_of::<JournalType>()].try_into().unwrap());
+                                    let prev_j = JournalType::from_le_bytes(
+                                        prev_d[..size_of::<JournalType>()].try_into().unwrap(),
+                                    );
+                                    let new_j = JournalType::from_le_bytes(
+                                        new_d[..size_of::<JournalType>()].try_into().unwrap(),
+                                    );
                                     if new_j > prev_j {
                                         map.insert(pte.vaddr(), pp);
                                     } else if new_j == prev_j {
-                                        log::error!("Found duplicate blocks with same journal age, picking arbitrary block and moving on...");
+                                        log::error!(
+                                            "Found duplicate blocks with same journal age, picking arbitrary block and moving on..."
+                                        );
                                     }
                                 } else {
                                     self.resolve_pp_journal(&mut pp);
@@ -588,7 +673,11 @@ impl PddbOs {
                                 }
                             } else {
                                 // new data is bogus, ignore it
-                                log::warn!("conflicting PTE found, but data is bogus: v{:x?}:p{:x?}", pte.vaddr(), prev_page);
+                                log::warn!(
+                                    "conflicting PTE found, but data is bogus: v{:x?}:p{:x?}",
+                                    pte.vaddr(),
+                                    prev_page
+                                );
                             }
                         } else {
                             // handle case that there is a conflict in root structure
@@ -596,12 +685,18 @@ impl PddbOs {
                             let new_data = self.data_decrypt_page_with_commit(data_key, &aad, &pp);
                             if let Some(new_d) = new_data {
                                 if let Some(prev_d) = prev_data {
-                                    let prev_j = JournalType::from_le_bytes(prev_d[..size_of::<JournalType>()].try_into().unwrap());
-                                    let new_j = JournalType::from_le_bytes(new_d[..size_of::<JournalType>()].try_into().unwrap());
+                                    let prev_j = JournalType::from_le_bytes(
+                                        prev_d[..size_of::<JournalType>()].try_into().unwrap(),
+                                    );
+                                    let new_j = JournalType::from_le_bytes(
+                                        new_d[..size_of::<JournalType>()].try_into().unwrap(),
+                                    );
                                     if new_j > prev_j {
                                         map.insert(pte.vaddr(), pp);
                                     } else if new_j == prev_j {
-                                        log::error!("Found duplicate blocks with same journal age, picking arbitrary block and moving on...");
+                                        log::error!(
+                                            "Found duplicate blocks with same journal age, picking arbitrary block and moving on..."
+                                        );
                                     }
                                 } else {
                                     self.resolve_pp_journal(&mut pp);
@@ -611,7 +706,11 @@ impl PddbOs {
                             } else {
                                 // new data is bogus, ignore it
                                 // new data is bogus, ignore it
-                                log::warn!("conflicting basis root found, but data is bogus: v{:x?}:p{:x?}", pte.vaddr(), prev_page);
+                                log::warn!(
+                                    "conflicting basis root found, but data is bogus: v{:x?}:p{:x?}",
+                                    pte.vaddr(),
+                                    prev_page
+                                );
                             }
                         }
                     } else {
@@ -621,14 +720,12 @@ impl PddbOs {
                 }
             }
         }
-        if map.len() > 0 {
-            Some(map)
-        } else {
-            None
-        }
+        if map.len() > 0 { Some(map) } else { None }
     }
+
     /// Pages drawn from disk might already have come from the FSCB. We need to make the journal number
-    /// of these consistent with those in the FSCB so later on when they are retired we don't have journal conflicts.
+    /// of these consistent with those in the FSCB so later on when they are retired we don't have journal
+    /// conflicts.
     fn resolve_pp_journal(&self, pp: &mut PhysPage) {
         if let Some(fs_pp) = self.fspace_cache.get(pp) {
             if pp.journal() < fs_pp.journal() {
@@ -640,22 +737,31 @@ impl PddbOs {
 
     /// maps a StaticCryptoData structure into the key area of the PDDB.
     fn static_crypto_data_get(&self) -> &StaticCryptoData {
-        let scd_ptr = unsafe { self.pddb_mr.as_slice::<u8>()[self.key_phys_base.as_usize()..self.key_phys_base.as_usize() + PAGE_SIZE].as_ptr() as *const StaticCryptoData };
-        let scd: &StaticCryptoData = unsafe{scd_ptr.as_ref().unwrap()};
+        let scd_ptr = unsafe {
+            self.pddb_mr.as_slice::<u8>()
+                [self.key_phys_base.as_usize()..self.key_phys_base.as_usize() + PAGE_SIZE]
+                .as_ptr() as *const StaticCryptoData
+        };
+        let scd: &StaticCryptoData = unsafe { scd_ptr.as_ref().unwrap() };
         scd
     }
-    #[cfg(feature="migration1")]
-    /// needs to reside in this object because it accesses the key_phys_base registers, which have good reason to be private
-    /// this needs to return a full copy of the data, because the copy on disk is going away.
+
+    #[cfg(feature = "migration1")]
+    /// needs to reside in this object because it accesses the key_phys_base registers, which have good reason
+    /// to be private this needs to return a full copy of the data, because the copy on disk is going
+    /// away.
     fn static_crypto_data_get_v1(&self) -> StaticCryptoDataV1 {
         let mut scd = StaticCryptoDataV1::default();
-        let scd_ptr = self.pddb_mr.as_slice::<u8>()[self.key_phys_base.as_usize()..self.key_phys_base.as_usize() + PAGE_SIZE].as_ptr() as *const StaticCryptoDataV1;
-        let scd_flash: &StaticCryptoDataV1 = unsafe{scd_ptr.as_ref().unwrap()};
+        let scd_ptr = self.pddb_mr.as_slice::<u8>()
+            [self.key_phys_base.as_usize()..self.key_phys_base.as_usize() + PAGE_SIZE]
+            .as_ptr() as *const StaticCryptoDataV1;
+        let scd_flash: &StaticCryptoDataV1 = unsafe { scd_ptr.as_ref().unwrap() };
         scd.version = scd_flash.version;
         scd.system_key = scd_flash.system_key;
         scd.salt_base = scd_flash.salt_base;
         scd
     }
+
     /// takes the key and writes it with zero, using hard pointer math and a compiler fence to ensure
     /// the wipe isn't optimized out.
     #[allow(dead_code)]
@@ -664,14 +770,15 @@ impl PddbOs {
         self.system_basis_key = None;
         self.cipher_ecb = None;
     }
-    pub(crate) fn clear_password(&self) {
-        self.rootkeys.clear_password(AesRootkeyType::User0);
-    }
-    pub (crate) fn try_login(&mut self) -> PasswordState {
+
+    pub(crate) fn clear_password(&self) { self.rootkeys.clear_password(AesRootkeyType::User0); }
+
+    pub(crate) fn try_login(&mut self) -> PasswordState {
         if self.system_basis_key.is_none() || self.cipher_ecb.is_none() {
             let scd = self.static_crypto_data_get();
-            if scd.version == 0xFFFF_FFFF { // system is in the blank state
-                return PasswordState::Uninit
+            if scd.version == 0xFFFF_FFFF {
+                // system is in the blank state
+                return PasswordState::Uninit;
             }
             if scd.version != SCD_VERSION {
                 log::error!("Version mismatch for keystore, declaring database as uninitialized");
@@ -718,7 +825,7 @@ impl PddbOs {
                         self.failed_logins = self.failed_logins.saturating_add(1);
                         return PasswordState::Incorrect(self.failed_logins);
                     }
-                }
+                },
             }
             match self.rootkeys.unwrap_key(&scd.system_key, AES_KEYSIZE) {
                 Ok(sk) => syskey.copy_from_slice(&sk),
@@ -734,7 +841,7 @@ impl PddbOs {
                         self.failed_logins = self.failed_logins.saturating_add(1);
                         return PasswordState::Incorrect(self.failed_logins);
                     }
-                }
+                },
             }
             if keys_updated {
                 log::warn!("Migration event from incorrectly wrapped key");
@@ -750,20 +857,15 @@ impl PddbOs {
             let mut system_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
             system_key.copy_from_slice(&syskey);
 
-            self.system_basis_key = Some(
-                BasisKeys {
-                    data: system_key,
-                    pt: system_key_pt,
-                }
-            );
+            self.system_basis_key = Some(BasisKeys { data: system_key, pt: system_key_pt });
             // erase the plaintext keys
             let nuke = syskey.as_mut_ptr();
             for i in 0..syskey.len() {
-                unsafe{nuke.add(i).write_volatile(0)};
+                unsafe { nuke.add(i).write_volatile(0) };
             }
             let nuke = syskey_pt.as_mut_ptr();
             for i in 0..syskey_pt.len() {
-                unsafe{nuke.add(i).write_volatile(0)};
+                unsafe { nuke.add(i).write_volatile(0) };
             }
             self.failed_logins = 0;
             PasswordState::Correct
@@ -772,18 +874,25 @@ impl PddbOs {
             PasswordState::Correct
         }
     }
+
     fn syskey_ensure(&mut self) {
         while self.try_login() != PasswordState::Correct {
             self.clear_password(); // clear the bad password entry
             let xns = xous_names::XousNames::new().unwrap();
             let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
-            modals.show_notification(t!("pddb.badpass_infallible", locales::LANG), None).expect("notification failed");
+            modals
+                .show_notification(t!("pddb.badpass_infallible", locales::LANG), None)
+                .expect("notification failed");
         }
     }
 
     fn mbbb_as_slice(&self) -> &[u8] {
-        unsafe { &self.pddb_mr.as_slice()[self.mbbb_phys_base.as_usize()..self.mbbb_phys_base.as_usize() + MBBB_PAGES * PAGE_SIZE] }
+        unsafe {
+            &self.pddb_mr.as_slice()
+                [self.mbbb_phys_base.as_usize()..self.mbbb_phys_base.as_usize() + MBBB_PAGES * PAGE_SIZE]
+        }
     }
+
     fn mbbb_retrieve(&self) -> Option<&[u8]> {
         // Invariant: MBBB pages should be blank, unless a page is stashed there. So, just check the first
         // AES key size region for "blankness"
@@ -792,11 +901,12 @@ impl PddbOs {
             if page[..aes::BLOCK_SIZE] == blank {
                 continue;
             } else {
-                return Some(page)
+                return Some(page);
             }
         }
         None
     }
+
     fn mbbb_erase(&self) {
         let blank = [0xffu8; aes::BLOCK_SIZE];
         for (index, page) in self.mbbb_as_slice().chunks(PAGE_SIZE).enumerate() {
@@ -819,7 +929,7 @@ impl PddbOs {
     /// the desired target DNA to effectively bypass the check (you need to, of course,
     /// know what that DNA is in the first place, so hopefully you were able to extract
     /// it before you destroyed the FPGA).
-    fn fast_space_aad(&self, aad: &mut Vec::<u8>) {
+    fn fast_space_aad(&self, aad: &mut Vec<u8>) {
         aad.extend_from_slice(PDDB_FAST_SPACE_SYSTEM_BASIS.as_bytes());
         aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
         match self.dna_mode {
@@ -827,6 +937,7 @@ impl PddbOs {
             DnaMode::Migration => aad.extend_from_slice(&self.migration_dna.to_le_bytes()),
         }
     }
+
     /// Assumes you are writing a "most recent" version of FastSpace. Thus
     /// Anytime the fscb is updated, all the partial records are nuked, as well as any existing record.
     /// Then, a _random_ location is picked to place the structure to help with wear levelling.
@@ -837,15 +948,14 @@ impl PddbOs {
             let nonce_array = self.entropy.borrow_mut().get_nonce();
             let nonce = Nonce::from_slice(&nonce_array);
             let fs_ser: &[u8] = fs.deref();
-            assert!( ((fs_ser.len() + size_of::<Nonce>() + size_of::<Tag>()) & (PAGE_SIZE - 1)) == 0,
-                "FastSpace record is not page-aligned in size!");
+            assert!(
+                ((fs_ser.len() + size_of::<Nonce>() + size_of::<Tag>()) & (PAGE_SIZE - 1)) == 0,
+                "FastSpace record is not page-aligned in size!"
+            );
             // AAD + data => Payload
             let mut aad = Vec::<u8>::new();
             self.fast_space_aad(&mut aad);
-            let payload = Payload {
-                msg: fs_ser,
-                aad: &aad,
-            };
+            let payload = Payload { msg: fs_ser, aad: &aad };
             // these are useful for debug, but do a hard-comment on them because they leak secret info
             //log::info!("key: {:x?}", key);
             //log::info!("nonce: {:x?}", nonce);
@@ -856,47 +966,76 @@ impl PddbOs {
             //log::info!("mac: {:x?}", &ciphertext[ciphertext.len()-16..]);
             let ct_to_flash = ciphertext.deref();
             // determine which page we're going to write the ciphertext into
-            let page_search_limit = FSCB_PAGES - ((PageAlignedPa::from(ciphertext.len()).as_usize() / PAGE_SIZE) - 1);
+            let page_search_limit =
+                FSCB_PAGES - ((PageAlignedPa::from(ciphertext.len()).as_usize() / PAGE_SIZE) - 1);
             let dest_page_start = self.entropy.borrow_mut().get_u32() % page_search_limit as u32;
             // atomicity of the FreeSpace structure is a bit of a tough topic. It's a fairly hefty structure,
             // that runs a risk of corruption as it's being written, if power is lost or the system crashes.
-            // However, the guiding principle of this ordering is that it's better to have no FastSpace structure
-            // (and force a re-computation of it by scanning all the open Basis), than it is to have a broken
-            // FastSpace structure + stale SpaceUpdates. In particular a stale SpaceUpdate would lead the system
-            // to conclude that some pages are free when they aren't. Thus, we prefer to completely erase the
-            // FSCB region before committing the updated version.
+            // However, the guiding principle of this ordering is that it's better to have no FastSpace
+            // structure (and force a re-computation of it by scanning all the open Basis), than
+            // it is to have a broken FastSpace structure + stale SpaceUpdates. In particular a
+            // stale SpaceUpdate would lead the system to conclude that some pages are free when
+            // they aren't. Thus, we prefer to completely erase the FSCB region before committing
+            // the updated version.
             let patch_data = [&nonce_array, ct_to_flash].concat();
             assert!(patch_data.len() % PAGE_SIZE == 0); // should be guaranteed by design, if not, throw an error during early testing.
             let dest_page_end = dest_page_start + (patch_data.len() / PAGE_SIZE) as u32;
-            log::info!("picking random pages [{}-{}) out of {} pages for fscb", dest_page_start, dest_page_end, FSCB_PAGES);
-            { // this is where we begin the "it would be bad if we lost power about now" code region
+            log::info!(
+                "picking random pages [{}-{}) out of {} pages for fscb",
+                dest_page_start,
+                dest_page_end,
+                FSCB_PAGES
+            );
+            {
+                // this is where we begin the "it would be bad if we lost power about now" code region
                 let blank_sector: [u8; PAGE_SIZE] = [0xff; PAGE_SIZE]; // prep a "blank" page for the loop
                 for offset in 0..FSCB_PAGES as u32 {
                     if offset >= dest_page_start && offset < dest_page_end {
-                        // patch the FSCB data in when we find it, and skip on later iterations that are within the page range of the FSCB
+                        // patch the FSCB data in when we find it, and skip on later iterations that are
+                        // within the page range of the FSCB
                         if offset == dest_page_start {
                             self.patch_fscb(&patch_data, dest_page_start * PAGE_SIZE as u32);
 
-                            // Catch cache coherence issues. For now, we do a "hard panic" so that we know there is a cache coherence problem.
-                            // We could "paper over" this by re-reading the data, but really, this problem should be solved by the d-cache
-                            // flush in the SPINOR primitive.
+                            // Catch cache coherence issues. For now, we do a "hard panic" so that we know
+                            // there is a cache coherence problem.
+                            // We could "paper over" this by re-reading the data, but really, this problem
+                            // should be solved by the d-cache flush in the SPINOR
+                            // primitive.
                             let page_start = dest_page_start as usize * PAGE_SIZE;
-                            let fscb_slice = &unsafe { self.pddb_mr.as_slice() }[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE];
+                            let fscb_slice =
+                                &unsafe { self.pddb_mr.as_slice() }[self.fscb_phys_base.as_usize()
+                                    ..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE];
                             let mut fscb_buf = [0; FASTSPACE_PAGES * PAGE_SIZE - size_of::<Nonce>()];
                             // copy the encrypted data to the decryption buffer
-                            fscb_buf.copy_from_slice(&fscb_slice[page_start + size_of::<Nonce>() .. page_start + FASTSPACE_PAGES * PAGE_SIZE]);
+                            fscb_buf.copy_from_slice(
+                                &fscb_slice[page_start + size_of::<Nonce>()
+                                    ..page_start + FASTSPACE_PAGES * PAGE_SIZE],
+                            );
                             let mut errcount = 0;
-                            for (index, (&buf, &flash)) in fscb_buf.iter().zip(&patch_data[size_of::<Nonce>()..]).enumerate() {
+                            for (index, (&buf, &flash)) in
+                                fscb_buf.iter().zip(&patch_data[size_of::<Nonce>()..]).enumerate()
+                            {
                                 if buf != flash {
                                     if errcount < 128 {
-                                        log::warn!("Cache coherence issue at 0x{:x}: buf 0x{:x} -> rbk 0x{:x}", index, buf, flash);
+                                        log::warn!(
+                                            "Cache coherence issue at 0x{:x}: buf 0x{:x} -> rbk 0x{:x}",
+                                            index,
+                                            buf,
+                                            flash
+                                        );
                                     }
                                     errcount += 1;
                                 }
                             }
                             if errcount != 0 {
-                                log::warn!("Cache coherence issue detected: total buf<->rbk errors: {}", errcount);
-                                panic!("FSCB write to pages [{}-{}) failed: cache coherence failure, with {} errors", dest_page_start, dest_page_end, errcount);
+                                log::warn!(
+                                    "Cache coherence issue detected: total buf<->rbk errors: {}",
+                                    errcount
+                                );
+                                panic!(
+                                    "FSCB write to pages [{}-{}) failed: cache coherence failure, with {} errors",
+                                    dest_page_start, dest_page_end, errcount
+                                );
                             }
                             /*
                             let mut daad = Vec::<u8>::new();
@@ -967,29 +1106,19 @@ impl PddbOs {
                 log::info!("patch data len: {}", patch_data.len());
             } // end "it would be bad if we lost power now" region
 
-            // note: this function should be followed up by a fast_space_read() to regenerate the temporary
-            // bookkeeping variables that are not reset by this function.
+        // note: this function should be followed up by a fast_space_read() to regenerate the temporary
+        // bookkeeping variables that are not reset by this function.
         } else {
             panic!("invalid state!");
         }
     }
 
-    #[cfg(feature="hwtest")]
+    #[cfg(feature = "hwtest")]
     pub fn stresstest_read(&mut self, pagecount: u32, iters: u32) -> u32 {
-        let pagecount = if pagecount == 0 {
-            2
-        } else {
-            pagecount
-        };
-        let iters = if iters == 0 {
-            16
-        } else {
-            iters
-        };
-        let test_slice = &self.pddb_mr.as_slice()[
-            self.data_phys_base.as_usize()..
-            self.data_phys_base.as_usize() + pagecount as usize * PAGE_SIZE
-        ];
+        let pagecount = if pagecount == 0 { 2 } else { pagecount };
+        let iters = if iters == 0 { 16 } else { iters };
+        let test_slice = &self.pddb_mr.as_slice()
+            [self.data_phys_base.as_usize()..self.data_phys_base.as_usize() + pagecount as usize * PAGE_SIZE];
         let mut total_errs = 0;
         for attempt in 0..iters {
             log::info!("Attempt {} of {}", attempt + 1, iters);
@@ -1000,7 +1129,13 @@ impl PddbOs {
                 if flash != mem {
                     errcount += 1;
                     if errcount < 128 {
-                        log::warn!("Attempt {}: Mismatch at 0x:{:x}: flash:{:x} <-> mem {:x}", attempt, index, flash, mem);
+                        log::warn!(
+                            "Attempt {}: Mismatch at 0x:{:x}: flash:{:x} <-> mem {:x}",
+                            attempt,
+                            index,
+                            flash,
+                            mem
+                        );
                     }
                 }
             }
@@ -1009,6 +1144,7 @@ impl PddbOs {
         }
         total_errs
     }
+
     /// Sweeps through the entire set of known data (as indicated in `page_heap`) and
     /// returns a subset of the total free space in a PhysPage vector that is a list of physical pages,
     /// in random order, that can be used by PDDB operations in the future without worry about
@@ -1018,7 +1154,7 @@ impl PddbOs {
     /// needs to run in a fairly memory-constrained environment, keeping in mind that if the PDDB
     /// structures were to be extended to run on say, an external USB drive with gigabytes of space,
     /// we cannot afford to naively allocate vectors that count every single page.
-    fn fast_space_generate(&mut self, mut page_heap: BinaryHeap<Reverse<u32>>) -> Vec::<PhysPage> {
+    fn fast_space_generate(&mut self, mut page_heap: BinaryHeap<Reverse<u32>>) -> Vec<PhysPage> {
         let mut free_pool = Vec::<usize>::new();
         let max_entries = FASTSPACE_PAGES * PAGE_SIZE / size_of::<PhysPage>();
         free_pool.reserve_exact(max_entries);
@@ -1066,12 +1202,13 @@ impl PddbOs {
         // https://github.com/rust-random/rand/blob/0f4fc6b4c303696bd5f8765a375162ac7142b1df/src/seq/mod.rs#L586-L592
         for i in (1..free_pool.len()).rev() {
             // invariant: elements with index > i have been locked in place.
-            free_pool.swap(i, self.entropy.borrow_mut().get_u32() as usize % (i+1));
+            free_pool.swap(i, self.entropy.borrow_mut().get_u32() as usize % (i + 1));
         }
         log::info!("free_pool initial count: {}", free_pool.len());
 
         // 4. ensure that the free pool stays within the defined deniability ratio + noise
-        let mut noise = (self.entropy.borrow_mut().get_u32() as f32 / u32::MAX as f32) * FSCB_FILL_UNCERTAINTY;
+        let mut noise =
+            (self.entropy.borrow_mut().get_u32() as f32 / u32::MAX as f32) * FSCB_FILL_UNCERTAINTY;
         if self.entropy.borrow_mut().get_u8() > 127 {
             noise = -noise;
         }
@@ -1079,8 +1216,12 @@ impl PddbOs {
         // we're guaranteed to have at least one free page, because we errored out if the pages was 0 above.
         let deniable_free_pages = if deniable_free_pages == 0 { 1 } else { deniable_free_pages };
         free_pool.truncate(deniable_free_pages);
-        log::warn!("total_free: {}; free_pool after PD trim: {}; max pages allowed: {}",
-            total_free_pages, free_pool.len(), deniable_free_pages);
+        log::warn!(
+            "total_free: {}; free_pool after PD trim: {}; max pages allowed: {}",
+            total_free_pages,
+            free_pool.len(),
+            deniable_free_pages
+        );
 
         // 5. Take the free_pool and annotate it for writing to disk
         let mut page_pool = Vec::<PhysPage>::new();
@@ -1096,15 +1237,20 @@ impl PddbOs {
     }
 
     fn fscb_deref(&self) -> &[u8] {
-        unsafe { &self.pddb_mr.as_slice()[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE] }
+        unsafe {
+            &self.pddb_mr.as_slice()
+                [self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE]
+        }
     }
+
     /// Reads the data structures in the FSCB, if any, and stores the results in the fspace_cache HashSet.
-    /// Note the following convention on the fscb: if the first 128 bits of a page are all 1's, then that sector
-    /// cannot contain the master FastSpace record. Also, if a sector is to contain *any* data, the first piece
-    /// of data must start at exactly 16 bytes into the page (at the 129th bit). Examples:
+    /// Note the following convention on the fscb: if the first 128 bits of a page are all 1's, then that
+    /// sector cannot contain the master FastSpace record. Also, if a sector is to contain *any* data, the
+    /// first piece of data must start at exactly 16 bytes into the page (at the 129th bit). Examples:
     ///
     /// FF = must be all 1's
-    /// xx/yy/zz = AES encrypted data. Techincally AES includes the all 1's ciphertext in its set, but it's extremely unlikely.
+    /// xx/yy/zz = AES encrypted data. Techincally AES includes the all 1's ciphertext in its set, but it's
+    /// extremely unlikely.
     ///
     /// Byte #
     /// | 0  | 1  | 2  | 3  | 4  | 5  | 6  | 7  | 8  | 9  |  A |  B | C  | D  | E  | F  | 10 | 11 | 12 | 13 | 14 | ...  # byte offset
@@ -1112,7 +1258,6 @@ impl PddbOs {
     /// | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | ...  # page must be blank
     /// | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | yy | yy | yy | yy | yy | ...  # page must contain FastSpace record
     /// | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | zz | zz | zz | zz | zz | ...  # page contains an arbitrary number of SpaceUpdate records
-    ///
     fn fast_space_read(&mut self) {
         self.syskey_ensure();
         if let Some(system_key) = &self.system_basis_key {
@@ -1122,10 +1267,15 @@ impl PddbOs {
             self.fspace_log_next_addr = None;
             self.fspace_log_len = 0;
 
-            // let fscb_slice = self.fscb_deref(); // can't use this line because it causse self to be immutably borrowed, so we write out the equivalent below.
-            let fscb_slice = unsafe { &self.pddb_mr.as_slice()[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE] };
+            // let fscb_slice = self.fscb_deref(); // can't use this line because it causse self to be
+            // immutably borrowed, so we write out the equivalent below.
+            let fscb_slice = unsafe {
+                &self.pddb_mr.as_slice()
+                    [self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE]
+            };
 
-            // 1. scan through the entire space, and look for the FastSpace record. It can be identified by the
+            // 1. scan through the entire space, and look for the FastSpace record. It can be identified by
+            //    the
             // first 16 (aes::BLOCK_SIZE) bytes not being all 1's.
             let blank: [u8; aes::BLOCK_SIZE] = [0xff; aes::BLOCK_SIZE];
             let mut fscb_pages = 0;
@@ -1190,9 +1340,11 @@ impl PddbOs {
             let mut block = Block::default();
             log::info!("space_log_addrs len: {}", self.fspace_log_addrs.len());
             for page in &self.fspace_log_addrs {
-                for (index, ct_block) in
-                fscb_slice[page.as_usize() + aes::BLOCK_SIZE .. page.as_usize() + PAGE_SIZE]
-                .chunks_exact(aes::BLOCK_SIZE).enumerate() {
+                for (index, ct_block) in fscb_slice
+                    [page.as_usize() + aes::BLOCK_SIZE..page.as_usize() + PAGE_SIZE]
+                    .chunks_exact(aes::BLOCK_SIZE)
+                    .enumerate()
+                {
                     let mut is_blank = true;
                     for &ct in ct_block {
                         if ct != 0xFF {
@@ -1201,7 +1353,8 @@ impl PddbOs {
                     }
                     if is_blank {
                         // end the scan at the first blank block. Note the location.
-                        self.fspace_log_next_addr = Some((page.as_usize() + ((1 + index) * aes::BLOCK_SIZE)) as PhysAddr);
+                        self.fspace_log_next_addr =
+                            Some((page.as_usize() + ((1 + index) * aes::BLOCK_SIZE)) as PhysAddr);
                         break;
                     }
                     // now try to decrypt the ciphertext block
@@ -1211,19 +1364,30 @@ impl PddbOs {
                     cipher.decrypt_block(&mut block);
                     if let Some(pp) = SpaceUpdate::try_into_phys_page(block.as_slice()) {
                         log::debug!("maybe replacing fspace block: {:x?}", pp);
-                        // note: pp.valid() isn't the cryptographic check, the cryptographic check of record validity is in try_into_phys_page()
-                        if pp.valid() { // PS: it should always be valid!
+                        // note: pp.valid() isn't the cryptographic check, the cryptographic check of record
+                        // validity is in try_into_phys_page()
+                        if pp.valid() {
+                            // PS: it should always be valid!
                             if let Some(prev_pp) = self.fspace_cache.get(&pp) {
                                 if pp.journal() > prev_pp.journal() {
                                     self.fspace_cache.replace(pp);
                                 } else if pp.journal() == prev_pp.journal() {
-                                    log::error!("got two identical journal revisions -- this shouldn't happen\n{:x?} (prev)\n{:x?}(candidate)", prev_pp, pp);
-                                    log::error!("replacing the previous version with the candidate! wish us luck.");
+                                    log::error!(
+                                        "got two identical journal revisions -- this shouldn't happen\n{:x?} (prev)\n{:x?}(candidate)",
+                                        prev_pp,
+                                        pp
+                                    );
+                                    log::error!(
+                                        "replacing the previous version with the candidate! wish us luck."
+                                    );
                                     self.fspace_cache.replace(pp);
                                 }
                             } else {
                                 // this happens when the FSCB is flushed, and then a page is deleted.
-                                log::debug!("Journal entry for a free space page that isn't already in our cache {:?}", pp);
+                                log::debug!(
+                                    "Journal entry for a free space page that isn't already in our cache {:?}",
+                                    pp
+                                );
                                 self.fspace_cache.insert(pp);
                             }
                         }
@@ -1241,19 +1405,22 @@ impl PddbOs {
                     // pick a random page out of the blank pool (random for wear levelling)
                     let random_index = self.entropy.borrow_mut().get_u32() as usize % blank_pages.len();
                     // set the next log address at an offset of one AES block in from the top.
-                    self.fspace_log_next_addr = Some((blank_pages[random_index] + aes::BLOCK_SIZE) as PhysAddr);
+                    self.fspace_log_next_addr =
+                        Some((blank_pages[random_index] + aes::BLOCK_SIZE) as PhysAddr);
                 } else {
-                    log::warn!("FSCB has no blank space for new update records. This will cause fast_space_alloc() to fail, which can be remedied with a call to fast_space_generate().");
+                    log::warn!(
+                        "FSCB has no blank space for new update records. This will cause fast_space_alloc() to fail, which can be remedied with a call to fast_space_generate()."
+                    );
                 }
             }
         } else {
             panic!("invalid state!");
         }
     }
+
     /// returns a count of the number of pages in the fspace cache
-    pub fn fast_space_len(&self) -> usize {
-        self.fspace_cache.len()
-    }
+    pub fn fast_space_len(&self) -> usize { self.fspace_cache.len() }
+
     /// Normally, the fspace_log_next_addr is just incremented, but when it hits the end of the
     /// page, it's set to None. This function will do a modestly expensive scan of the FSCB area
     /// to try and either find another partially filled page, or a completely empty page.
@@ -1266,33 +1433,40 @@ impl PddbOs {
             let mut blank_pages = Vec::new();
             for page_start in (0..fscb_slice.len()).step_by(PAGE_SIZE) {
                 if (fscb_slice[page_start..page_start + aes::BLOCK_SIZE] == blank)
-                && (fscb_slice[page_start + aes::BLOCK_SIZE..page_start + aes::BLOCK_SIZE * 2] == blank) {
+                    && (fscb_slice[page_start + aes::BLOCK_SIZE..page_start + aes::BLOCK_SIZE * 2] == blank)
+                {
                     // page has met the criteria for being blank, skip to the next page
                     blank_pages.push(page_start);
-                    continue
+                    continue;
                 } else if fscb_slice[page_start..page_start + aes::BLOCK_SIZE] == blank {
                     // this page contains update records; scan it for an empty slot
-                    for (index, block) in
-                    fscb_slice[page_start + aes::BLOCK_SIZE..page_start + PAGE_SIZE]
-                    .chunks_exact(aes::BLOCK_SIZE).enumerate() {
-                        // start with a size check; a failure mode of just iterating is the iterator will terminate early if the block sizes aren't the same.
+                    for (index, block) in fscb_slice[page_start + aes::BLOCK_SIZE..page_start + PAGE_SIZE]
+                        .chunks_exact(aes::BLOCK_SIZE)
+                        .enumerate()
+                    {
+                        // start with a size check; a failure mode of just iterating is the iterator will
+                        // terminate early if the block sizes aren't the same.
                         let mut is_blank = block.len() == blank.len();
                         // now confirm that every item is the same
                         for (&a, &b) in block.iter().zip(blank.iter()) {
-                            if a != b {is_blank = false;}
+                            if a != b {
+                                is_blank = false;
+                            }
                         }
                         if is_blank {
-                            self.fspace_log_next_addr = Some( (page_start + (1 + index) * aes::BLOCK_SIZE) as PhysAddr );
+                            self.fspace_log_next_addr =
+                                Some((page_start + (1 + index) * aes::BLOCK_SIZE) as PhysAddr);
                             log::info!("Next FSCB entry: {:x?}", self.fspace_log_next_addr);
-                            return true
+                            return true;
                         }
                     }
                 } else {
                     // this is probably an encrypted FastSpace page, just skip it
-                    continue
+                    continue;
                 }
             }
-            // if we got to this point, we couldn't find a partially full page. Pull a random page from the blank page pool.
+            // if we got to this point, we couldn't find a partially full page. Pull a random page from the
+            // blank page pool.
             if blank_pages.len() != 0 {
                 // pick a random page out of the blank pool (random for wear levelling)
                 let random_index = self.entropy.borrow_mut().get_u32() as usize % blank_pages.len();
@@ -1305,28 +1479,33 @@ impl PddbOs {
             }
         }
     }
+
     pub fn fast_space_has_pages(&self, count: usize) -> bool {
         let mut free_count = 0;
         for pp in self.fspace_cache.iter() {
-            if (pp.space_state() == SpaceState::Free || pp.space_state() == SpaceState::Dirty) && (pp.journal() < PHYS_PAGE_JOURNAL_MAX) {
+            if (pp.space_state() == SpaceState::Free || pp.space_state() == SpaceState::Dirty)
+                && (pp.journal() < PHYS_PAGE_JOURNAL_MAX)
+            {
                 free_count += 1;
             } else {
                 log::trace!("fastpace other entry: {:?}", pp.space_state());
             }
             if free_count >= count {
-                return true
+                return true;
             }
         }
         false
     }
-    /// Attempts to allocate a page out of the fspace cache (in RAM). This is the "normal" route for allocating pages.
-    /// This call should be prefixed by a call to ensure_fast_space_alloc() to make sure it doesn't fail.
-    /// We do a two-stage "look before you leap" because trying to dynamically redo the fast space allocation tables
-    /// in the middle of trying to allocate pages causes a borrow checker problem -- because you're already using the
-    /// page maps to figure out you ran out of space, but then you're trying to mutate them to allocate more space.
-    /// This can lead to concurrency issues, so we do a "look before you leap" method instead, where we just check that
-    /// the correct amount of free space is available before doing an allocation, and if not, we mutate the map to populate
-    /// new free space; and if so, we mutate the map to remove the allocated page.
+
+    /// Attempts to allocate a page out of the fspace cache (in RAM). This is the "normal" route for
+    /// allocating pages. This call should be prefixed by a call to ensure_fast_space_alloc() to make sure
+    /// it doesn't fail. We do a two-stage "look before you leap" because trying to dynamically redo the
+    /// fast space allocation tables in the middle of trying to allocate pages causes a borrow checker
+    /// problem -- because you're already using the page maps to figure out you ran out of space, but then
+    /// you're trying to mutate them to allocate more space. This can lead to concurrency issues, so we do
+    /// a "look before you leap" method instead, where we just check that the correct amount of free space
+    /// is available before doing an allocation, and if not, we mutate the map to populate new free space;
+    /// and if so, we mutate the map to remove the allocated page.
     pub fn try_fast_space_alloc(&mut self) -> Option<PhysPage> {
         // 1. Confirm that the fspace_log_next_addr is valid. If not, regenerate it, or fail.
         if !self.fast_space_ensure_next_log() {
@@ -1334,15 +1513,18 @@ impl PddbOs {
             None
         } else {
             // 2. find the first page that is Free or Dirty.
-            // We made a mistake early on and assumed that the HashSet underlying type would have enough randomness,
-            // but unfortunately, it tends to be an MRU list of pages: so, recently de-allocated pages are returned
-            // preferentially. This is the opposite of what we want. Thus, we are now paying a bit of a price in
-            // computational efficiency to map the HashSet into a Vec and then pick a random entry to get the
-            // propreties that we were originally hoping for :-/
+            // We made a mistake early on and assumed that the HashSet underlying type would have enough
+            // randomness, but unfortunately, it tends to be an MRU list of pages: so, recently
+            // de-allocated pages are returned preferentially. This is the opposite of what we
+            // want. Thus, we are now paying a bit of a price in computational efficiency to map
+            // the HashSet into a Vec and then pick a random entry to get the propreties that we
+            // were originally hoping for :-/
             let mut maybe_alloc = None;
             let mut candidates = Vec::<PhysPage>::new();
             for pp in self.fspace_cache.iter() {
-                if (pp.space_state() == SpaceState::Free || pp.space_state() == SpaceState::Dirty) && (pp.journal() < PHYS_PAGE_JOURNAL_MAX) {
+                if (pp.space_state() == SpaceState::Free || pp.space_state() == SpaceState::Dirty)
+                    && (pp.journal() < PHYS_PAGE_JOURNAL_MAX)
+                {
                     candidates.push(pp.clone());
                 }
             }
@@ -1350,9 +1532,10 @@ impl PddbOs {
             if candidates.len() > 0 {
                 let mut ppc = candidates[self.entropy.borrow_mut().get_u32() as usize % candidates.len()];
                 // take the state directly to Used, skipping MaybeUsed. If the system crashes between now and
-                // when the page is actually used, the consequence is a "lost" entry in the FastSpace cache. However,
-                // the entry will be reclaimed on the next full-space scan. This is a less-bad outcome than filling up
-                // the log with 2x the number of operations to record MaybeUsed and then Used.
+                // when the page is actually used, the consequence is a "lost" entry in the FastSpace cache.
+                // However, the entry will be reclaimed on the next full-space scan. This is a
+                // less-bad outcome than filling up the log with 2x the number of operations
+                // to record MaybeUsed and then Used.
                 ppc.set_space_state(SpaceState::Used);
                 ppc.set_clean(false); // the allocated page is not clean, because it hasn't been written to disk
                 ppc.set_valid(true); // the allocated page is now valid, so it should be flushed to disk
@@ -1360,7 +1543,8 @@ impl PddbOs {
 
                 // commit the usage to the journal
                 self.syskey_ensure();
-                let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
+                let cipher =
+                    self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
                 let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), ppc);
                 let mut block = Block::from_mut_slice(update.deref_mut());
                 log::trace!("block: {:x?}", block);
@@ -1373,8 +1557,8 @@ impl PddbOs {
                 if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
                     self.fspace_log_next_addr = Some(next_addr as PhysAddr);
                 } else {
-                    // fspace_log_next_addr is already None because we used "take()". We'll find a free spot for the
-                    // next journal entry the next time around.
+                    // fspace_log_next_addr is already None because we used "take()". We'll find a free spot
+                    // for the next journal entry the next time around.
                 }
                 maybe_alloc = Some(ppc);
             }
@@ -1385,11 +1569,15 @@ impl PddbOs {
                 //}
             }
             if let Some(alloc) = maybe_alloc {
-                assert!(self.fspace_cache.remove(&alloc), "inconsistent state: we found a free page, but later when we tried to update it, it wasn't there!");
+                assert!(
+                    self.fspace_cache.remove(&alloc),
+                    "inconsistent state: we found a free page, but later when we tried to update it, it wasn't there!"
+                );
             }
             maybe_alloc
         }
     }
+
     pub fn fast_space_free(&mut self, pp: &mut PhysPage) {
         self.fast_space_ensure_next_log();
         if !self.fspace_cache.remove(&pp) {
@@ -1424,16 +1612,24 @@ impl PddbOs {
         // mark the page as invalid, so that it will be deleted on the next PT sync
         pp.set_valid(false);
     }
+
     /// This is a "look before you leap" function that will potentially pause all system operations
     /// and do a deep scan for space if the required amount is not available.
-    pub fn ensure_fast_space_alloc(&mut self, pages: usize, cache: &Vec::<BasisCacheEntry>) -> bool {
+    pub fn ensure_fast_space_alloc(&mut self, pages: usize, cache: &Vec<BasisCacheEntry>) -> bool {
         const BUFFER: usize = 1; // a bit of slop in the trigger point
         let has_pages = self.fast_space_has_pages(pages + BUFFER);
-        log::trace!("alloc fast_space_len: {}, log_len {}, has {} pages: {}", self.fast_space_len(), self.fspace_log_len, pages + BUFFER, has_pages);
+        log::trace!(
+            "alloc fast_space_len: {}, log_len {}, has {} pages: {}",
+            self.fast_space_len(),
+            self.fspace_log_len,
+            pages + BUFFER,
+            has_pages
+        );
         // make sure we have fast space pages...
         if has_pages
         // ..and make sure we have space for fast space log entries
-        && (self.fspace_log_len < (FSCB_PAGES - FASTSPACE_PAGES - 1) * PAGE_SIZE / aes::BLOCK_SIZE) {
+        && (self.fspace_log_len < (FSCB_PAGES - FASTSPACE_PAGES - 1) * PAGE_SIZE / aes::BLOCK_SIZE)
+        {
             true
         } else {
             if !has_pages {
@@ -1445,9 +1641,7 @@ impl PddbOs {
                         // we're out of free space
                         false
                     } else {
-                        let mut fast_space = FastSpace {
-                            free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
-                        };
+                        let mut fast_space = FastSpace { free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN] };
                         for pp in fast_space.free_pool.iter_mut() {
                             pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE)
                         }
@@ -1461,11 +1655,7 @@ impl PddbOs {
                         self.fast_space_read();
 
                         // check that we have enough space now -- if not, we're just out of disk space!
-                        if self.fast_space_len() > pages {
-                            true
-                        } else {
-                            false
-                        }
+                        if self.fast_space_len() > pages { true } else { false }
                     }
                 } else {
                     false
@@ -1479,11 +1669,10 @@ impl PddbOs {
             }
         }
     }
+
     /// This is a "fast" flush that expires all the PDDB SpaceUpdate journal
     pub(crate) fn fast_space_flush(&mut self) {
-        let mut fast_space = FastSpace {
-            free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
-        };
+        let mut fast_space = FastSpace { free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN] };
         for pp in fast_space.free_pool.iter_mut() {
             pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE)
         }
@@ -1496,14 +1685,15 @@ impl PddbOs {
         // write just commits a new record to disk, but doesn't update our internal data cache
         // this also clears the fast space log.
         self.fast_space_write(&fast_space);
-        // this will re-read back in the data, shuffle the alloc order a bit, and ensure the data cache is fully in sync
+        // this will re-read back in the data, shuffle the alloc order a bit, and ensure the data cache is
+        // fully in sync
         self.fast_space_read();
         // this will locate the next fast space log point.
         self.fast_space_ensure_next_log();
         log::info!("Flush took {}ms", self.timestamp_now() - start);
     }
 
-    pub(crate) fn data_aad(&self, name: &str) -> Vec::<u8> {
+    pub(crate) fn data_aad(&self, name: &str) -> Vec<u8> {
         let mut aad = Vec::<u8>::new();
         aad.extend_from_slice(&name.as_bytes());
         aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
@@ -1515,25 +1705,28 @@ impl PddbOs {
     }
 
     /// returns a decrypted page that still includes the journal number at the very beginning
-    /// We don't clip it off because it would require re-allocating a vector, and it's cheaper (although less elegant) to later
-    /// just index past it.
-    pub(crate) fn data_decrypt_page(&self, cipher: &Aes256GcmSiv, aad: &[u8], page: &PhysPage) -> Option<Vec::<u8>> {
-        let ct_slice = unsafe { &self.pddb_mr.as_slice()[
-            self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE ..
-            self.data_phys_base.as_usize() + (page.page_number() as usize + 1) * PAGE_SIZE] };
+    /// We don't clip it off because it would require re-allocating a vector, and it's cheaper (although less
+    /// elegant) to later just index past it.
+    pub(crate) fn data_decrypt_page(
+        &self,
+        cipher: &Aes256GcmSiv,
+        aad: &[u8],
+        page: &PhysPage,
+    ) -> Option<Vec<u8>> {
+        let ct_slice = unsafe {
+            &self.pddb_mr.as_slice()[self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE
+                ..self.data_phys_base.as_usize() + (page.page_number() as usize + 1) * PAGE_SIZE]
+        };
         let nonce = &ct_slice[..size_of::<Nonce>()];
         let ct = &ct_slice[size_of::<Nonce>()..];
-        match cipher.decrypt(
-            Nonce::from_slice(nonce),
-            Payload {
-                aad,
-                msg: ct,
-            }
-        ) {
+        match cipher.decrypt(Nonce::from_slice(nonce), Payload { aad, msg: ct }) {
             Ok(data) => {
-                assert!(data.len() == VPAGE_SIZE + size_of::<JournalType>(), "authentication successful, but wrong amount of data was recovered");
+                assert!(
+                    data.len() == VPAGE_SIZE + size_of::<JournalType>(),
+                    "authentication successful, but wrong amount of data was recovered"
+                );
                 Some(data)
-            },
+            }
             Err(e) => {
                 log::trace!("Error decrypting page: {:?}", e); // sometimes this is totally "normal", like when we're testing for valid data.
                 None
@@ -1551,17 +1744,26 @@ impl PddbOs {
     ///   - kcomm_nonce - 32 bytes
     ///   - kcomm - 32 bytes
     /// - MAC - 16 bytes
-    /// We stripe the MAC at the end just in case the MAC has some arithmetic property that can betray the existence
-    /// of a basis root record with key commitment. The committed key and the nonce both should be indistinguishable
-    /// from ciphertext.
-    pub(crate) fn data_decrypt_page_with_commit(&self, key: &[u8], aad: &[u8], page: &PhysPage) -> Option<Vec::<u8>> {
+    /// We stripe the MAC at the end just in case the MAC has some arithmetic property that can betray the
+    /// existence of a basis root record with key commitment. The committed key and the nonce both should
+    /// be indistinguishable from ciphertext.
+    pub(crate) fn data_decrypt_page_with_commit(
+        &self,
+        key: &[u8],
+        aad: &[u8],
+        page: &PhysPage,
+    ) -> Option<Vec<u8>> {
         const KCOM_NONCE_LEN: usize = 32;
         const KCOM_LEN: usize = 32;
         const MAC_LEN: usize = 16;
-        let ct_slice = unsafe { &self.pddb_mr.as_slice()[
-            self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE ..
-            self.data_phys_base.as_usize() + (page.page_number() as usize + 1) * PAGE_SIZE] };
-        log::debug!("commit data at 0x{:x}", self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE);
+        let ct_slice = unsafe {
+            &self.pddb_mr.as_slice()[self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE
+                ..self.data_phys_base.as_usize() + (page.page_number() as usize + 1) * PAGE_SIZE]
+        };
+        log::debug!(
+            "commit data at 0x{:x}",
+            self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE
+        );
         let nonce = &ct_slice[..size_of::<Nonce>()];
         let ct_total = &ct_slice[size_of::<Nonce>()..];
 
@@ -1587,7 +1789,10 @@ impl PddbOs {
             *dst = src;
             ct_pos += 1;
         }
-        assert!(ct_pos == PAGE_SIZE - size_of::<Nonce>(), "struct sizing error in unpacking page with key commit");
+        assert!(
+            ct_pos == PAGE_SIZE - size_of::<Nonce>(),
+            "struct sizing error in unpacking page with key commit"
+        );
         log::debug!("found nonce of {:x?}", nonce);
         log::debug!("found kcom_nonce of {:x?}", nonce_comm);
 
@@ -1595,47 +1800,52 @@ impl PddbOs {
         let cipher = Aes256GcmSiv::new(&kenc.into());
 
         // Attempt decryption. This is None on failure
-        let plaintext = cipher.decrypt(
-            Nonce::from_slice(nonce),
-            Payload {
-                aad,
-                msg: &ct_plus_mac,
-            }
-        ).ok();
+        let plaintext = cipher.decrypt(Nonce::from_slice(nonce), Payload { aad, msg: &ct_plus_mac }).ok();
 
         // Only return the plaintext if the stored key commitment agrees with the computed one
-        if kcom.ct_eq(&key_comm_stored).into() {
-            plaintext
-        } else {
-            None
-        }
+        if kcom.ct_eq(&key_comm_stored).into() { plaintext } else { None }
     }
 
-    /// `data` includes the journal entry on top. The data passed in must be exactly one vpage plus the journal entry
-    pub(crate) fn data_encrypt_and_patch_page(&self, cipher: &Aes256GcmSiv, aad: &[u8], data: &mut [u8], pp: &PhysPage) {
-        assert!(data.len() == VPAGE_SIZE + size_of::<JournalType>(), "did not get a page-sized region to patch");
-        let j = JournalType::from_le_bytes(data[..size_of::<JournalType>()].try_into().unwrap()).saturating_add(1);
-        for (&src, dst) in j.to_le_bytes().iter().zip(data[..size_of::<JournalType>()].iter_mut()) { *dst = src; }
+    /// `data` includes the journal entry on top. The data passed in must be exactly one vpage plus the
+    /// journal entry
+    pub(crate) fn data_encrypt_and_patch_page(
+        &self,
+        cipher: &Aes256GcmSiv,
+        aad: &[u8],
+        data: &mut [u8],
+        pp: &PhysPage,
+    ) {
+        assert!(
+            data.len() == VPAGE_SIZE + size_of::<JournalType>(),
+            "did not get a page-sized region to patch"
+        );
+        let j = JournalType::from_le_bytes(data[..size_of::<JournalType>()].try_into().unwrap())
+            .saturating_add(1);
+        for (&src, dst) in j.to_le_bytes().iter().zip(data[..size_of::<JournalType>()].iter_mut()) {
+            *dst = src;
+        }
         let nonce = self.nonce_gen();
-        let ciphertext = cipher.encrypt(
-            &nonce,
-            Payload {
-                aad,
-                msg: &data,
-            }
-        ).expect("couldn't encrypt data");
-        // log::trace!("calling patch. nonce {:x?}, ct {:x?}, data {:x?}", nonce.as_slice(), &ciphertext[..32], &data[..32]);
+        let ciphertext = cipher.encrypt(&nonce, Payload { aad, msg: &data }).expect("couldn't encrypt data");
+        // log::trace!("calling patch. nonce {:x?}, ct {:x?}, data {:x?}", nonce.as_slice(),
+        // &ciphertext[..32], &data[..32]);
         self.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
     }
 
     /// `data` includes the journal entry on top.
-    /// The data passed in must be exactly one vpage plus the journal entry minus the length of the commit structure (64 bytes),
-    /// which is 4004 bytes total
+    /// The data passed in must be exactly one vpage plus the journal entry minus the length of the commit
+    /// structure (64 bytes), which is 4004 bytes total
     /// This function increments the journal and re-nonces the structure.
-    pub(crate) fn data_encrypt_and_patch_page_with_commit(&self, key: &[u8], aad: &[u8], data: &mut [u8], pp: &PhysPage) {
+    pub(crate) fn data_encrypt_and_patch_page_with_commit(
+        &self,
+        key: &[u8],
+        aad: &[u8],
+        data: &mut [u8],
+        pp: &PhysPage,
+    ) {
         assert!(data.len() == KCOM_CT_LEN, "did not get a key-commit sized region to patch");
         // updates the journal type
-        let j = JournalType::from_le_bytes(data[..size_of::<JournalType>()].try_into().unwrap()).saturating_add(1);
+        let j = JournalType::from_le_bytes(data[..size_of::<JournalType>()].try_into().unwrap())
+            .saturating_add(1);
         data[..size_of::<JournalType>()].copy_from_slice(&j.to_le_bytes());
         // gets the AES-GCM-SIV nonce
         let nonce = self.nonce_gen();
@@ -1645,29 +1855,25 @@ impl PddbOs {
         // generates the encryption and commit keys
         let (kenc, kcom) = self.kcom_func(key.try_into().unwrap(), &kcom_nonce);
         let cipher = Aes256GcmSiv::new(&kenc.into());
-        let ciphertext = cipher.encrypt(
-            &nonce,
-            Payload {
-                aad,
-                msg: &data,
-            }
-        ).expect("couldn't encrypt data");
+        let ciphertext = cipher.encrypt(&nonce, Payload { aad, msg: &data }).expect("couldn't encrypt data");
         let mut dest_page = [0u8; PAGE_SIZE];
 
         let mut written = 0; // used as a sanity check on the insane iterator chain constructed below
-        for (&src, dst) in
-        nonce.as_slice().iter()
-        .chain(ciphertext[..KCOM_CT_LEN].iter())
-        .chain(kcom_nonce.iter())
-        .chain(kcom.iter())
-        .chain(ciphertext[KCOM_CT_LEN..].iter())
-        .zip(dest_page.iter_mut()) {
+        for (&src, dst) in nonce
+            .as_slice()
+            .iter()
+            .chain(ciphertext[..KCOM_CT_LEN].iter())
+            .chain(kcom_nonce.iter())
+            .chain(kcom.iter())
+            .chain(ciphertext[KCOM_CT_LEN..].iter())
+            .zip(dest_page.iter_mut())
+        {
             *dst = src;
             written += 1;
         }
         assert!(written == 4096, "data sizing error in encryption with key commit");
         log::trace!("nonce: {:x?}", &nonce);
-        log::debug!("dest_page[kcom_nonce]: {:x?}", &dest_page[12+4004..12+4004+32]);
+        log::debug!("dest_page[kcom_nonce]: {:x?}", &dest_page[12 + 4004..12 + 4004 + 32]);
         self.patch_data(&dest_page, pp.page_number() * PAGE_SIZE as u32);
     }
 
@@ -1675,10 +1881,7 @@ impl PddbOs {
     /// a `nonce` which is the 96-bit nonce used in the AES-GCM-SIV for a given block;
     /// and `nonce_com` which is the commitment nonce, set at 256 bits.
     /// The result is two tuples, (kenc, kcom).
-    fn kcom_func(&self,
-        key: &[u8; 32],
-        nonce_com: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
-
+    fn kcom_func(&self, key: &[u8; 32], nonce_com: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
         let mut h_enc = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
         h_enc.update(key);
         // per https://eprint.iacr.org/2020/1456.pdf Table 4 on page 13 Type I Lenc
@@ -1701,18 +1904,28 @@ impl PddbOs {
         self.fast_space_read();
         self.syskey_ensure();
         if let Some(syskey) = self.system_basis_key.take() {
-            if let Some(sysbasis_map) = self.pt_scan_key(&syskey.pt, &syskey.data, PDDB_DEFAULT_SYSTEM_BASIS) {
+            if let Some(sysbasis_map) = self.pt_scan_key(&syskey.pt, &syskey.data, PDDB_DEFAULT_SYSTEM_BASIS)
+            {
                 let aad = self.data_aad(PDDB_DEFAULT_SYSTEM_BASIS);
                 // get the first page, where the basis root is guaranteed to be
                 if let Some(root_page) = sysbasis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
                     let vpage = match self.data_decrypt_page_with_commit(&syskey.data, &aad, root_page) {
                         Some(data) => data,
-                        None => {log::error!("System basis decryption did not authenticate. Unrecoverable error."); return None;},
+                        None => {
+                            log::error!("System basis decryption did not authenticate. Unrecoverable error.");
+                            return None;
+                        }
                     };
-                    // if the below assertion fails, you will need to re-code this to decrypt more than one VPAGE and stripe into a basis root struct
-                    assert!(size_of::<BasisRoot>() <= VPAGE_SIZE, "BasisRoot has grown past a single VPAGE, this routine needs to be re-coded to accommodate the extra bulk");
+                    // if the below assertion fails, you will need to re-code this to decrypt more than one
+                    // VPAGE and stripe into a basis root struct
+                    assert!(
+                        size_of::<BasisRoot>() <= VPAGE_SIZE,
+                        "BasisRoot has grown past a single VPAGE, this routine needs to be re-coded to accommodate the extra bulk"
+                    );
                     let mut basis_root = BasisRoot::default();
-                    for (&src, dst) in vpage[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut()) {
+                    for (&src, dst) in
+                        vpage[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut())
+                    {
                         *dst = src;
                     }
                     if basis_root.magic != PDDB_MAGIC {
@@ -1723,13 +1936,24 @@ impl PddbOs {
                         log::error!("PDDB version mismatch in system basis root. Unrecoverable error.");
                         return None;
                     }
-                    let basis_name = std::str::from_utf8(&basis_root.name.data[..basis_root.name.len as usize]).expect("basis is not valid utf-8");
+                    let basis_name =
+                        std::str::from_utf8(&basis_root.name.data[..basis_root.name.len as usize])
+                            .expect("basis is not valid utf-8");
                     if basis_name != PDDB_DEFAULT_SYSTEM_BASIS {
-                        log::error!("PDDB system basis name is incorrect: {}; aborting mount operation.", basis_name);
+                        log::error!(
+                            "PDDB system basis name is incorrect: {}; aborting mount operation.",
+                            basis_name
+                        );
                         return None;
                     }
                     log::info!("System BasisRoot record found, generating cache entry");
-                    let bce = BasisCacheEntry::mount(self, &basis_name, &syskey, false, BasisRetentionPolicy::Persist);
+                    let bce = BasisCacheEntry::mount(
+                        self,
+                        &basis_name,
+                        &syskey,
+                        false,
+                        BasisRetentionPolicy::Persist,
+                    );
                     self.system_basis_key = Some(syskey);
                     bce
                 } else {
@@ -1758,7 +1982,7 @@ impl PddbOs {
             self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_a));
 
             log::info!("{}PDDB.CHECKPASS,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-            #[cfg(any(feature="precursor", feature="renode"))] // skip this dialog in hosted mode
+            #[cfg(any(feature = "precursor", feature = "renode"))] // skip this dialog in hosted mode
             modals.show_notification(t!("pddb.checkpass", locales::LANG), None).expect("notification failed");
 
             self.clear_password();
@@ -1769,15 +1993,13 @@ impl PddbOs {
                 success = true;
             } else {
                 log::info!("{}PDDB.PWFAIL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                modals.show_notification(t!("pddb.checkpass_fail", locales::LANG), None).expect("notification failed");
+                modals
+                    .show_notification(t!("pddb.checkpass_fail", locales::LANG), None)
+                    .expect("notification failed");
                 self.clear_password();
             }
         }
-        if success {
-            Ok(())
-        } else {
-            Err(Error::new(ErrorKind::PermissionDenied, "Password entry failed"))
-        }
+        if success { Ok(()) } else { Err(Error::new(ErrorKind::PermissionDenied, "Password entry failed")) }
     }
 
     /// this function attempts to change the PIN. returns Ok() if changed, error if not.
@@ -1785,13 +2007,18 @@ impl PddbOs {
         if let Some(system_keys) = &self.system_basis_key {
             // get the new password
             self.clear_password();
-            modals.show_notification(t!("pddb.changepin.enter_new_pin", locales::LANG), None)
+            modals
+                .show_notification(t!("pddb.changepin.enter_new_pin", locales::LANG), None)
                 .map_err(|_| Error::new(ErrorKind::Other, "Internal error"))?;
             self.pw_check(modals)?;
 
             // wrap keys in the new password, and store them to disk
-            let wrapped_key = self.rootkeys.wrap_key(&system_keys.data).expect("Internal error wrapping our encryption key");
-            let wrapped_key_pt = self.rootkeys.wrap_key(&system_keys.pt).expect("Internal error wrapping our encryption key");
+            let wrapped_key = self
+                .rootkeys
+                .wrap_key(&system_keys.data)
+                .expect("Internal error wrapping our encryption key");
+            let wrapped_key_pt =
+                self.rootkeys.wrap_key(&system_keys.pt).expect("Internal error wrapping our encryption key");
             let mut crypto_keys = StaticCryptoData::default();
             crypto_keys.deref_mut().copy_from_slice(&self.static_crypto_data_get().deref());
             assert!(wrapped_key_pt.len() == 40);
@@ -1804,13 +2031,17 @@ impl PddbOs {
             Err(Error::new(ErrorKind::PermissionDenied, "System basis keys not unlocked"))
         }
     }
+
     /// this function is dangerous in that calling it will completely erase all of the previous data
     /// in the PDDB an replace it with a brand-spanking new, blank PDDB.
-    /// The number of servers that can connect to the Spinor crate is strictly tracked, so we borrow a reference
-    /// to the Spinor object allocated to the PDDB implementation for this operation.
+    /// The number of servers that can connect to the Spinor crate is strictly tracked, so we borrow a
+    /// reference to the Spinor object allocated to the PDDB implementation for this operation.
     pub(crate) fn pddb_format(&mut self, fast: bool, progress: Option<&modals::Modals>) -> Result<()> {
         if !self.rootkeys.is_initialized().unwrap() {
-            return Err(Error::new(ErrorKind::Unsupported, "Root keys are not initialized; cannot format a PDDB without root keys!"));
+            return Err(Error::new(
+                ErrorKind::Unsupported,
+                "Root keys are not initialized; cannot format a PDDB without root keys!",
+            ));
         }
         // step 0. If we have a modal, confirm that the password entered was correct with a double-entry.
         if let Some(modals) = progress {
@@ -1821,15 +2052,21 @@ impl PddbOs {
         if !fast {
             log::info!("Erasing the PDDB region");
             if let Some(modals) = progress {
-                modals.start_progress(
-                    t!("pddb.erase", locales::LANG),
-                    xous::PDDB_LOC, xous::PDDB_LOC + PDDB_A_LEN as u32, xous::PDDB_LOC)
+                modals
+                    .start_progress(
+                        t!("pddb.erase", locales::LANG),
+                        xous::PDDB_LOC,
+                        xous::PDDB_LOC + PDDB_A_LEN as u32,
+                        xous::PDDB_LOC,
+                    )
                     .expect("couldn't raise progress bar");
                 // retain this delay, because the next section is so compute-intensive, it may take a
                 // while for the GAM to catch up.
                 self.tt.sleep_ms(100).unwrap();
             }
-            for offset in (xous::PDDB_LOC..(xous::PDDB_LOC + PDDB_A_LEN as u32)).step_by(SPINOR_BULK_ERASE_SIZE as usize) {
+            for offset in (xous::PDDB_LOC..(xous::PDDB_LOC + PDDB_A_LEN as u32))
+                .step_by(SPINOR_BULK_ERASE_SIZE as usize)
+            {
                 if (offset / SPINOR_BULK_ERASE_SIZE) % 4 == 0 {
                     log::info!("Initial erase: {}/{}", offset - xous::PDDB_LOC, PDDB_A_LEN as u32);
                     if let Some(modals) = progress {
@@ -1839,7 +2076,11 @@ impl PddbOs {
                 // do a blank check first to see if the sector really needs erasing
                 let mut blank = true;
                 let slice_start = (offset - xous::PDDB_LOC) as usize / size_of::<u32>();
-                for word in unsafe { self.pddb_mr.as_slice::<u32>()[slice_start..slice_start + SPINOR_BULK_ERASE_SIZE as usize / size_of::<u32>()].iter() } {
+                for word in unsafe {
+                    self.pddb_mr.as_slice::<u32>()
+                        [slice_start..slice_start + SPINOR_BULK_ERASE_SIZE as usize / size_of::<u32>()]
+                        .iter()
+                } {
                     if *word != 0xFFFF_FFFF {
                         blank = false;
                         break;
@@ -1850,16 +2091,20 @@ impl PddbOs {
                 }
             }
             if let Some(modals) = progress {
-                modals.update_progress(xous::PDDB_LOC + PDDB_A_LEN as u32).expect("couldn't update progress bar");
+                modals
+                    .update_progress(xous::PDDB_LOC + PDDB_A_LEN as u32)
+                    .expect("couldn't update progress bar");
                 modals.finish_progress().expect("couldn't dismiss progress bar");
-                #[cfg(feature="ux-swap-delay")]
+                #[cfg(feature = "ux-swap-delay")]
                 self.tt.sleep_ms(100).unwrap();
             }
         }
 
         // step 2. fill in the page table with junk, which marks it as cryptographically empty
         if let Some(modals) = progress {
-            modals.start_progress(t!("pddb.initpt", locales::LANG), 0, size_of::<PageTableInFlash>() as u32, 0).expect("couldn't raise progress bar");
+            modals
+                .start_progress(t!("pddb.initpt", locales::LANG), 0, size_of::<PageTableInFlash>() as u32, 0)
+                .expect("couldn't raise progress bar");
         }
         let mut temp: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
         for page in (0..(size_of::<PageTableInFlash>() & !(PAGE_SIZE - 1))).step_by(PAGE_SIZE) {
@@ -1872,11 +2117,16 @@ impl PddbOs {
             }
         }
         if let Some(modals) = progress {
-            modals.update_progress(size_of::<PageTableInFlash>() as u32).expect("couldn't update progress bar");
+            modals
+                .update_progress(size_of::<PageTableInFlash>() as u32)
+                .expect("couldn't update progress bar");
         }
         if size_of::<PageTableInFlash>() & (PAGE_SIZE - 1) != 0 {
             let remainder_start = size_of::<PageTableInFlash>() & !(PAGE_SIZE - 1);
-            log::info!("Page table does not end on a page boundary. Handling trailing page case of {} bytes", size_of::<PageTableInFlash>() - remainder_start);
+            log::info!(
+                "Page table does not end on a page boundary. Handling trailing page case of {} bytes",
+                size_of::<PageTableInFlash>() - remainder_start
+            );
             let mut temp = Vec::<u8>::new();
             for _ in remainder_start..size_of::<PageTableInFlash>() {
                 temp.push(self.entropy.borrow_mut().get_u8());
@@ -1885,7 +2135,7 @@ impl PddbOs {
         }
         if let Some(modals) = progress {
             modals.finish_progress().expect("couldn't dismiss progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
 
@@ -1895,11 +2145,16 @@ impl PddbOs {
         //    return Err(Error::new(ErrorKind::PermissionDenied, "unlock password was incorrect"));
         //}
         if let Some(modals) = progress {
-            modals.start_progress(t!("pddb.key", locales::LANG), 0, 100, 0).expect("couldn't raise progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            modals
+                .start_progress(t!("pddb.key", locales::LANG), 0, 100, 0)
+                .expect("couldn't raise progress bar");
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
-        assert!(size_of::<StaticCryptoData>() == PAGE_SIZE, "StaticCryptoData structure is not correctly sized");
+        assert!(
+            size_of::<StaticCryptoData>() == PAGE_SIZE,
+            "StaticCryptoData structure is not correctly sized"
+        );
         let mut system_basis_key_pt: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
         let mut system_basis_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
         self.entropy.borrow_mut().get_slice(&mut system_basis_key_pt);
@@ -1908,19 +2163,16 @@ impl PddbOs {
         self.cipher_ecb = Some(Aes256::new(GenericArray::from_slice(&system_basis_key_pt)));
         let cipher_ecb = Aes256::new(GenericArray::from_slice(&system_basis_key_pt)); // a second copy for patching the page table later in this routine interior mutability blah blah work around oops
         // now wrap the key for storage
-        let wrapped_key = self.rootkeys.wrap_key(&system_basis_key).expect("Internal error wrapping our encryption key");
-        let wrapped_key_pt = self.rootkeys.wrap_key(&system_basis_key_pt).expect("Internal error wrapping our encryption key");
-        self.system_basis_key = Some(
-            BasisKeys {
-                pt: system_basis_key_pt,
-                data: system_basis_key,
-            }
-        ); // this causes system_basis_key to be owned by self and go out of scope
+        let wrapped_key =
+            self.rootkeys.wrap_key(&system_basis_key).expect("Internal error wrapping our encryption key");
+        let wrapped_key_pt =
+            self.rootkeys.wrap_key(&system_basis_key_pt).expect("Internal error wrapping our encryption key");
+        self.system_basis_key = Some(BasisKeys { pt: system_basis_key_pt, data: system_basis_key }); // this causes system_basis_key to be owned by self and go out of scope
         let mut crypto_keys = StaticCryptoData::default();
         crypto_keys.version = SCD_VERSION; // should already be set by `default()` but let's be sure.
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         // copy the encrypted key into the data structure for commit to Flash
@@ -1939,69 +2191,79 @@ impl PddbOs {
         self.patch_keys(crypto_keys.deref(), 0);
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
-        // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
+        // now we have a copy of the AES key necessary to encrypt the default System basis that we created in
+        // step 2.
 
         #[cfg(not(target_os = "xous"))]
         self.tt.sleep_ms(500).unwrap(); // delay for UX to catch up in emulation
 
         // step 4. mbbb handling
-        // mbbb should just be blank at this point, and the flash was erased in step 1, so there's nothing to do.
+        // mbbb should just be blank at this point, and the flash was erased in step 1, so there's nothing to
+        // do.
 
         // step 5. fscb handling
         // pick a set of random pages from the free pool and assign it to the fscb
         // pass the generator an empty cache - this causes it to treat the entire disk as free space
         if let Some(modals) = progress {
-            modals.start_progress(t!("pddb.fastspace", locales::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            modals
+                .start_progress(t!("pddb.fastspace", locales::LANG), 0, 100, 0)
+                .expect("couldn't raise progress bar");
             self.tt.sleep_ms(100).unwrap();
         }
         let free_pool = self.fast_space_generate(BinaryHeap::<Reverse<u32>>::new());
-        let mut fast_space = FastSpace {
-            free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
-        };
+        let mut fast_space = FastSpace { free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN] };
         for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
             *dst = src;
         }
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         self.fast_space_write(&fast_space);
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
 
         #[cfg(not(target_os = "xous"))]
         self.tt.sleep_ms(500).unwrap();
 
-        // step 5. salt the free space with random numbers. this can take a while, we might need a "progress report" of some kind...
-        // this is coded using "direct disk" offsets...under the assumption that we only ever really want to do this here, and
-        // not re-use this routine elsewhere.
+        // step 5. salt the free space with random numbers. this can take a while, we might need a "progress
+        // report" of some kind... this is coded using "direct disk" offsets...under the assumption
+        // that we only ever really want to do this here, and not re-use this routine elsewhere.
         if let Some(modals) = progress {
-            modals.start_progress(t!("pddb.randomize", locales::LANG),
-            self.data_phys_base.as_u32(), PDDB_A_LEN as u32, self.data_phys_base.as_u32()).expect("couldn't raise progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            modals
+                .start_progress(
+                    t!("pddb.randomize", locales::LANG),
+                    self.data_phys_base.as_u32(),
+                    PDDB_A_LEN as u32,
+                    self.data_phys_base.as_u32(),
+                )
+                .expect("couldn't raise progress bar");
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         let blank = [0xffu8; aes::BLOCK_SIZE];
         for offset in (self.data_phys_base.as_usize()..PDDB_A_LEN).step_by(PAGE_SIZE) {
             if fast {
-                // we could "skip" pages already encrypted to an old key as a short cut -- because we nuked our
-                // session key, previous data should be undecipherable. You shouldn't do this for a production erase
-                // but this is good for speeding up testing.
+                // we could "skip" pages already encrypted to an old key as a short cut -- because we nuked
+                // our session key, previous data should be undecipherable. You shouldn't do
+                // this for a production erase but this is good for speeding up testing.
                 let mut is_blank = true;
-                let block: &[u8] = unsafe { &self.pddb_mr.as_slice()[offset + aes::BLOCK_SIZE * 3..offset + aes::BLOCK_SIZE * 4] };
+                let block: &[u8] = unsafe {
+                    &self.pddb_mr.as_slice()[offset + aes::BLOCK_SIZE * 3..offset + aes::BLOCK_SIZE * 4]
+                };
                 for (&a, &b) in block.iter().zip(blank.iter()) {
                     if a != b {
                         is_blank = false;
@@ -2010,38 +2272,41 @@ impl PddbOs {
                 }
                 if !is_blank {
                     if (offset / PAGE_SIZE) % 16 == 0 {
-                        log::info!("Page at {} is likely to already have cryptographic data, skipping...", offset);
+                        log::info!(
+                            "Page at {} is likely to already have cryptographic data, skipping...",
+                            offset
+                        );
                     }
                     continue;
                 }
             }
             self.entropy.borrow_mut().get_slice(&mut temp);
-            if (offset / PAGE_SIZE) % 256 == 0 { // ~one update per megabyte
+            if (offset / PAGE_SIZE) % 256 == 0 {
+                // ~one update per megabyte
                 log::info!("Cryptographic 'erase': {}/{}", offset, PDDB_A_LEN);
                 if let Some(modals) = progress {
                     modals.update_progress(offset as u32).expect("couldn't update progress bar");
                 }
             }
-            self.spinor.patch(
-                unsafe { self.pddb_mr.as_slice() },
-                xous::PDDB_LOC,
-                &temp,
-                offset as u32
-            ).expect("couldn't fill in disk with random datax");
+            self.spinor
+                .patch(unsafe { self.pddb_mr.as_slice() }, xous::PDDB_LOC, &temp, offset as u32)
+                .expect("couldn't fill in disk with random datax");
         }
         if let Some(modals) = progress {
             modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
 
         // step 6. create the system basis root structure
         if let Some(modals) = progress {
-            modals.start_progress(t!("pddb.structure", locales::LANG), 0, 100, 0).expect("couldn't raise progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            modals
+                .start_progress(t!("pddb.structure", locales::LANG), 0, 100, 0)
+                .expect("couldn't raise progress bar");
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         let basis_root = BasisRoot {
@@ -2056,7 +2321,7 @@ impl PddbOs {
         self.fast_space_read(); // we reconstitute our fspace map even though it was just generated, partially as a sanity check that everything is ok
         if let Some(modals) = progress {
             modals.update_progress(33).expect("couldn't update progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
 
@@ -2076,12 +2341,12 @@ impl PddbOs {
         // from the basis_sync() method on a BasisCache entry, but because we haven't created a cache entry,
         // we're copypasta'ing the code here
         let aad = basis_root.aad(self.dna);
-        let pp = basis_v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
+        let pp = basis_v2p_map
+            .get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
             .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
         assert!(pp.valid(), "v2p returned an invalid page");
         let journal_bytes = (self.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes();
-        let slice_iter =
-            journal_bytes.iter() // journal rev
+        let slice_iter = journal_bytes.iter() // journal rev
             .chain(basis_root.as_ref().iter());
         let mut block = [0 as u8; KCOM_CT_LEN];
         for (&src, dst) in slice_iter.zip(block.iter_mut()) {
@@ -2092,7 +2357,7 @@ impl PddbOs {
         self.system_basis_key = Some(syskey); // put the key back
         if let Some(modals) = progress {
             modals.update_progress(66).expect("couldn't update progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
 
@@ -2104,10 +2369,10 @@ impl PddbOs {
         }
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         Ok(())
@@ -2117,7 +2382,10 @@ impl PddbOs {
     /// Basis have been unlocked, the function returns `true`. The other option is the user
     /// can decline to unlock all the Basis right now, cancelling out of the process, which will
     /// cause the requesting free space sweep to fail.
-    pub(crate) fn pddb_generate_used_map(&self, cache: &Vec::<BasisCacheEntry>) -> Option<BinaryHeap<Reverse<u32>>> {
+    pub(crate) fn pddb_generate_used_map(
+        &self,
+        cache: &Vec<BasisCacheEntry>,
+    ) -> Option<BinaryHeap<Reverse<u32>>> {
         if let Some(all_keys) = self.pddb_get_all_keys(&cache) {
             let mut page_heap = BinaryHeap::new();
             let mut page_check = std::collections::HashSet::new(); // this is just for sanity checking because you can't query a heap
@@ -2135,7 +2403,6 @@ impl PddbOs {
                 }
             }
 
-
             // need to incorporate all of the FSCB knowledge into the scan as well, because there could be
             // cached pages inside "live" Basis that have not been committed to disk. However, it *should* be
             // the case that any cached allocations came out of the previous FSCB pool, therefore, by merging
@@ -2144,10 +2411,16 @@ impl PddbOs {
             for pp in self.fspace_cache.iter() {
                 if pp.space_state() == SpaceState::Used || pp.space_state() == SpaceState::MaybeUsed {
                     if !page_check.insert(pp.page_number()) {
-                        log::debug!("FSCB and page table both record this used page: {} (this is normal)", pp.page_number());
+                        log::debug!(
+                            "FSCB and page table both record this used page: {} (this is normal)",
+                            pp.page_number()
+                        );
                     } else {
                         page_heap.push(Reverse(pp.page_number()));
-                        log::info!("FSCB contained {}, but not yet committed to disk; added to page_heap", pp.page_number());
+                        log::info!(
+                            "FSCB contained {}, but not yet committed to disk; added to page_heap",
+                            pp.page_number()
+                        );
                     }
                 }
             }
@@ -2162,10 +2435,9 @@ impl PddbOs {
     ///
     /// If there are items allocated in the FSCB that have not had their corresponding physical
     /// page table entries on disk written, the operation will fail.
-    pub(crate) fn pddb_rekey(&mut self, op: PddbRekeyOp, cache: &Vec::<BasisCacheEntry>) -> PddbRekeyOp {
+    pub(crate) fn pddb_rekey(&mut self, op: PddbRekeyOp, cache: &Vec<BasisCacheEntry>) -> PddbRekeyOp {
         match op {
-            PddbRekeyOp::FromDnaFast(dna) |
-            PddbRekeyOp::FromDnaSafe(dna) => {
+            PddbRekeyOp::FromDnaFast(dna) | PddbRekeyOp::FromDnaSafe(dna) => {
                 if cache.len() != 0 {
                     log::error!("We can't have any previously mounted Bases if the PDDB has the wrong key.");
                     return PddbRekeyOp::InternalError;
@@ -2176,7 +2448,7 @@ impl PddbOs {
                 self.syskey_ensure(); // this routine will continue to bang the user for a password. There is no way out otherwise.
                 log::info!("migrating from dna 0x{:x} -> 0x{:x}", self.migration_dna, self.dna);
                 self.fast_space_read(); // we hawe to re-read the FSCB, because it would have failed previously with lots of warnings
-            },
+            }
             PddbRekeyOp::Churn => self.dna_mode = DnaMode::Churn,
             _ => (),
         };
@@ -2184,12 +2456,14 @@ impl PddbOs {
         // clean up any MBBB, as it will mess up our algorithm
         if let Some(mbbb) = self.mbbb_retrieve() {
             if let Some(erased_offset) = self.pt_find_erased_slot() {
-                self.spinor.patch(
-                    unsafe { self.pddb_mr.as_slice() },
-                    xous::PDDB_LOC,
-                    &mbbb,
-                    self.pt_phys_base.as_u32() + erased_offset,
-                ).expect("couldn't write to page table");
+                self.spinor
+                    .patch(
+                        unsafe { self.pddb_mr.as_slice() },
+                        xous::PDDB_LOC,
+                        &mbbb,
+                        self.pt_phys_base.as_u32() + erased_offset,
+                    )
+                    .expect("couldn't write to page table");
             }
             self.mbbb_erase();
         }
@@ -2222,7 +2496,16 @@ impl PddbOs {
                 let aad_local = self.data_aad(&name);
                 self.dna_mode = DnaMode::Migration;
                 let aad_incoming = self.data_aad(&name);
-                keymap.insert(&name, MigrationCiphers { pt_ecb, data_gcm_siv, aad_incoming, aad_local, data_key: basis_keys.data.into() });
+                keymap.insert(
+                    &name,
+                    MigrationCiphers {
+                        pt_ecb,
+                        data_gcm_siv,
+                        aad_incoming,
+                        aad_local,
+                        data_key: basis_keys.data.into(),
+                    },
+                );
                 modals.update_progress(index as u32 + 1).ok();
             }
 
@@ -2243,7 +2526,9 @@ impl PddbOs {
             }
             modals.finish_progress().ok();
             if !clean {
-                log::warn!("Unmapped FSCB records were found, but this is likely due to FSCB flushes called. Continuing.");
+                log::warn!(
+                    "Unmapped FSCB records were found, but this is likely due to FSCB flushes called. Continuing."
+                );
                 // return PddbRekeyOp::VerifyFail
             }
 
@@ -2259,30 +2544,45 @@ impl PddbOs {
             let pagetable: &[u8] = unsafe { &self.pddb_mr.as_slice()[..pddb_data_pages * size_of::<Pte>()] };
             log::info!("Derived page table of len 0x{:x}", pagetable.len());
             let entries_per_page = PAGE_SIZE / size_of::<Pte>();
-            modals.start_progress(t!("pddb.rekey.running", locales::LANG), 0, (pddb_data_pages * size_of::<Pte>()) as u32, 0).ok();
+            modals
+                .start_progress(
+                    t!("pddb.rekey.running", locales::LANG),
+                    0,
+                    (pddb_data_pages * size_of::<Pte>()) as u32,
+                    0,
+                )
+                .ok();
             for (chunk_enum, page) in pagetable.chunks(PAGE_SIZE).enumerate() {
                 // this is the actual offset into pagetable[] that the page[] slice comes from
                 let chunk_start_address = chunk_enum * PAGE_SIZE;
                 let chunk_start_ppn = chunk_enum * entries_per_page;
                 let mut chunk_len = 0; // we have to track this because the .chunks() will return a less-than-page sized chunk on the last iteration
-                log::info!("processing chunk at 0x{:x} (page number {}", chunk_start_address, chunk_start_ppn);
+                log::info!(
+                    "processing chunk at 0x{:x} (page number {}",
+                    chunk_start_address,
+                    chunk_start_ppn
+                );
 
                 let mut new_pt_page = [0u8; PAGE_SIZE];
                 assert!(page.len() % size_of::<Pte>() == 0);
-                for (index, (enc_pte, new_pte)) in
-                page.chunks_exact(size_of::<Pte>())
-                .zip(new_pt_page.chunks_exact_mut(size_of::<Pte>()))
-                .enumerate() {
+                for (index, (enc_pte, new_pte)) in page
+                    .chunks_exact(size_of::<Pte>())
+                    .zip(new_pt_page.chunks_exact_mut(size_of::<Pte>()))
+                    .enumerate()
+                {
                     let ppn = (chunk_start_ppn + index) as u32;
                     chunk_len += size_of::<Pte>();
                     if let Some(&keyname) = pagemap.get(&ppn) {
                         log::debug!("re-encrypt page {} of {}", ppn, keyname);
-                        let ciphers = keymap.get(keyname).expect("How do we have a mapping to a key that we don't have?");
-                        // ok, we know the physical page table number, and thus the page location, and the keys. we can
-                        // now do the following:
-                        // 1. re-encrypt the page table. It is relatively "free" to do a thorough re-encryption
-                        // so we will always either redo the nonce on every entry and/or fill the unused entries
-                        // with fresh noise.
+                        let ciphers = keymap
+                            .get(keyname)
+                            .expect("How do we have a mapping to a key that we don't have?");
+                        // ok, we know the physical page table number, and thus the page location, and the
+                        // keys. we can now do the following:
+                        // 1. re-encrypt the page table. It is relatively "free" to do a thorough
+                        //    re-encryption
+                        // so we will always either redo the nonce on every entry and/or fill the unused
+                        // entries with fresh noise.
                         let mut block = Block::clone_from_slice(enc_pte);
                         ciphers.pt_ecb.decrypt_block(&mut block);
                         if let Some(mut pte) = Pte::try_from_slice(block.as_slice()) {
@@ -2292,48 +2592,53 @@ impl PddbOs {
                             new_pte.copy_from_slice(enc_entry.as_slice());
                         }
 
-                        // 2. re-encrypt the disclosed basis data from the previous DNA to the current DNA. Redo all the nonces
+                        // 2. re-encrypt the disclosed basis data from the previous DNA to the current DNA.
+                        //    Redo all the nonces
                         // while we are at it.
                         if let Some(mut data) = self.data_decrypt_page(
-                        &ciphers.data_gcm_siv,
-                        &ciphers.aad_incoming,
-                        &PhysPage(ppn)) {
+                            &ciphers.data_gcm_siv,
+                            &ciphers.aad_incoming,
+                            &PhysPage(ppn),
+                        ) {
                             // this routine also redoes the nonce correctly.
                             self.data_encrypt_and_patch_page(
                                 &ciphers.data_gcm_siv,
                                 &ciphers.aad_local,
                                 &mut data,
-                                &PhysPage(ppn)
+                                &PhysPage(ppn),
                             );
                         } else {
-                            // see if it's a root page, which is encrypted differently due to AES-GCM-SIV salamanders and key commits.
+                            // see if it's a root page, which is encrypted differently due to AES-GCM-SIV
+                            // salamanders and key commits.
                             if let Some(mut data) = self.data_decrypt_page_with_commit(
-                            &ciphers.data_key,
-                            &ciphers.aad_incoming,
-                            &PhysPage(ppn)) {
+                                &ciphers.data_key,
+                                &ciphers.aad_incoming,
+                                &PhysPage(ppn),
+                            ) {
                                 log::debug!("...as basis root page...");
                                 self.data_encrypt_and_patch_page_with_commit(
                                     &ciphers.data_key,
                                     &ciphers.aad_local,
                                     &mut data,
-                                    &PhysPage(ppn)
+                                    &PhysPage(ppn),
                                 );
                             } else {
                                 log::warn!("Page number {} failed to decrypt. This data is now lost.", ppn);
                             }
                         }
                     } else {
-                        // it's an unused page. fill in the PTE with garbage, and *maybe* fill in the mapped page
-                        // with new garbage, too.
+                        // it's an unused page. fill in the PTE with garbage, and *maybe* fill in the mapped
+                        // page with new garbage, too.
                         self.trng_slice(new_pte);
 
                         // the chance is expressed as a number from 0-255. It is compared against an 8-bit
-                        // random number, and if the random number is less than the fraction, a rekey op will happen
+                        // random number, and if the random number is less than the fraction, a rekey op will
+                        // happen
                         let blank_rekey_chance = match op {
                             PddbRekeyOp::FromDnaFast(_) => FAST_REKEY_CHANCE,
                             PddbRekeyOp::FromDnaSafe(_) => 256, // 100% chance of rekey
-                            PddbRekeyOp::Churn => 256, // 100% chance of rekey
-                            _ => continue, // don't rekey blanks for all other ops
+                            PddbRekeyOp::Churn => 256,          // 100% chance of rekey
+                            _ => continue,                      // don't rekey blanks for all other ops
                         };
                         if (self.trng_u8() as u32) < blank_rekey_chance {
                             log::debug!("re-noising unused page {}", ppn);
@@ -2346,7 +2651,8 @@ impl PddbOs {
                     }
                 }
                 self.patch_pagetable_raw(&new_pt_page[..chunk_len], chunk_start_address as u32);
-                // this only updates once per page of PTEs, so, every 256 pages that get re-encrypted in the worst case.
+                // this only updates once per page of PTEs, so, every 256 pages that get re-encrypted in the
+                // worst case.
                 modals.update_progress(chunk_start_address as u32).ok();
             }
             modals.finish_progress().ok();
@@ -2356,8 +2662,7 @@ impl PddbOs {
             // 3. if we are not just changing the password on one Basis, regenerate the FSCB, since we
             // have all the Bases open
             let do_fscb = match op {
-                PddbRekeyOp::FromDnaFast(_dna) |
-                PddbRekeyOp::FromDnaSafe(_dna) => true,
+                PddbRekeyOp::FromDnaFast(_dna) | PddbRekeyOp::FromDnaSafe(_dna) => true,
                 PddbRekeyOp::Churn => true,
                 _ => false,
             };
@@ -2374,9 +2679,7 @@ impl PddbOs {
                 }
                 // generate and nuke old free space records
                 let free_pool = self.fast_space_generate(page_heap);
-                let mut fast_space = FastSpace {
-                    free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
-                };
+                let mut fast_space = FastSpace { free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN] };
                 for pp in fast_space.free_pool.iter_mut() {
                     pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE)
                 }
@@ -2403,9 +2706,9 @@ impl PddbOs {
     /// valid (it'll scan up and stop as soon as one Pte checks out). Note that it then only returns
     /// a Vec of keys & names, not a BasisCacheEntry -- so it means that the Basis still are "closed"
     /// at the conclusion of the sweep, but their page use can be accounted for.
-    #[cfg(not(all(feature="pddbtest", feature="autobasis")))]
-    pub(crate) fn pddb_get_all_keys(&self, cache: &Vec::<BasisCacheEntry>) -> Option<Vec<(BasisKeys, String)>> {
-        #[cfg(feature="ux-swap-delay")]
+    #[cfg(not(all(feature = "pddbtest", feature = "autobasis")))]
+    pub(crate) fn pddb_get_all_keys(&self, cache: &Vec<BasisCacheEntry>) -> Option<Vec<(BasisKeys, String)>> {
+        #[cfg(feature = "ux-swap-delay")]
         const SWAP_DELAY_MS: usize = 300;
         // populate the "known" entries
         let mut ret = Vec::<(BasisKeys, String)>::new();
@@ -2416,16 +2719,16 @@ impl PddbOs {
         for entry in cache {
             log::info!(" - {}", entry.name);
         }
-        // In the case of a migration, the basis cache would be empty, but the system basis key is already set up
+        // In the case of a migration, the basis cache would be empty, but the system basis key is already set
+        // up
         if self.dna_mode == DnaMode::Migration {
-            let syskeys = self.system_basis_key.as_ref()
+            let syskeys = self
+                .system_basis_key
+                .as_ref()
                 .expect("Internal error: syskey_ensure() must be called prior to get_all_keys()");
             ret.push((
-                BasisKeys {
-                    pt: syskeys.pt.into(),
-                    data: syskeys.data.into(),
-                },
-                PDDB_DEFAULT_SYSTEM_BASIS.to_string()
+                BasisKeys { pt: syskeys.pt.into(), data: syskeys.data.into() },
+                PDDB_DEFAULT_SYSTEM_BASIS.to_string(),
             ));
             // note: because self.dna_mode is in 'Migration', the AAD checks in this section will be
             // using the original DNA, so they should pass.
@@ -2435,14 +2738,17 @@ impl PddbOs {
         //    alloc operation to fail
         let xns = xous_names::XousNames::new().unwrap();
         let modals = modals::Modals::new(&xns).unwrap();
-        modals.show_notification(
-            match self.dna_mode {
-                DnaMode::Normal => t!("pddb.freespace.request", locales::LANG),
-                DnaMode::Migration => t!("pddb.rekey.request", locales::LANG),
-                DnaMode::Churn => t!("pddb.churn.request", locales::LANG),
-            },
-            None).ok();
-        #[cfg(feature="ux-swap-delay")]
+        modals
+            .show_notification(
+                match self.dna_mode {
+                    DnaMode::Normal => t!("pddb.freespace.request", locales::LANG),
+                    DnaMode::Migration => t!("pddb.rekey.request", locales::LANG),
+                    DnaMode::Churn => t!("pddb.churn.request", locales::LANG),
+                },
+                None,
+            )
+            .ok();
+        #[cfg(feature = "ux-swap-delay")]
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
         // 0.5 display the Bases that we know
@@ -2452,19 +2758,15 @@ impl PddbOs {
             blist.push_str(name);
         }
         modals.show_notification(&blist, None).ok();
-        #[cfg(feature="ux-swap-delay")]
+        #[cfg(feature = "ux-swap-delay")]
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
         // 1. prompt user to enter any name/password combos for other basis we want to keep
         while self.yes_no_approval(&modals, t!("pddb.freespace.enumerate_another", locales::LANG)) {
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
-            match modals
-                .alert_builder(t!("pddb.freespace.name", locales::LANG))
-                .field(None, None)
-                .build()
-            {
+            match modals.alert_builder(t!("pddb.freespace.name", locales::LANG)).field(None, None).build() {
                 Ok(bname) => {
                     let name = bname.first().as_str().to_string();
                     let request = BasisRequestPassword {
@@ -2475,21 +2777,21 @@ impl PddbOs {
                     buf.lend_mut(self.pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
                     let retpass = buf.to_original::<BasisRequestPassword, _>().unwrap();
                     // 2. validate the name/password combo
-                    let basis_key = self.basis_derive_key(
-                        &name,
-                        retpass.plaintext_pw.unwrap().as_str().unwrap()
-                    );
+                    let basis_key =
+                        self.basis_derive_key(&name, retpass.plaintext_pw.unwrap().as_str().unwrap());
                     // validate the password by finding the root block of the basis. We rely entirely
                     // upon the AEAD with key commit to ensure the password is correct.
                     let maybe_entry = if let Some(basis_map) =
-                    self.pt_scan_key(&basis_key.pt, &basis_key.data, &name) {
+                        self.pt_scan_key(&basis_key.pt, &basis_key.data, &name)
+                    {
                         let aad = self.data_aad(&name);
                         if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
                             match self.data_decrypt_page_with_commit(&basis_key.data, &aad, root_page) {
                                 Some(_data) => {
-                                    // if the root page decrypts, we accept the password; no further checking is done.
+                                    // if the root page decrypts, we accept the password; no further checking
+                                    // is done.
                                     Some((basis_key, name.to_string()))
-                                },
+                                }
                                 None => None,
                             }
                         } else {
@@ -2503,13 +2805,13 @@ impl PddbOs {
                         ret.push((basis_key, name));
                     } else {
                         modals.show_notification(t!("pddb.freespace.badpass", locales::LANG), None).ok();
-                        #[cfg(feature="ux-swap-delay")]
+                        #[cfg(feature = "ux-swap-delay")]
                         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                     }
-                },
+                }
                 _ => return None,
             };
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
             // 4. repeat summary print-out
             let mut blist = String::from(t!("pddb.freespace.currentlist", locales::LANG));
@@ -2518,7 +2820,7 @@ impl PddbOs {
                 blist.push_str(name);
             }
             modals.show_notification(&blist, None).ok();
-            #[cfg(feature="ux-swap-delay")]
+            #[cfg(feature = "ux-swap-delay")]
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
         }
         // done!
@@ -2528,7 +2830,8 @@ impl PddbOs {
                 DnaMode::Normal => t!("pddb.freespace.finished", locales::LANG),
                 DnaMode::Migration => t!("pddb.rekey.finished", locales::LANG),
                 DnaMode::Churn => t!("pddb.churn.finished", locales::LANG),
-        }) {
+            },
+        ) {
             Some(ret)
         } else {
             None
@@ -2536,9 +2839,9 @@ impl PddbOs {
     }
 
     fn yes_no_approval(&self, modals: &modals::Modals, request: &str) -> bool {
-        modals.add_list(
-            vec![t!("pddb.yes", locales::LANG), t!("pddb.no", locales::LANG)]
-        ).expect("couldn't build confirmation dialog");
+        modals
+            .add_list(vec![t!("pddb.yes", locales::LANG), t!("pddb.no", locales::LANG)])
+            .expect("couldn't build confirmation dialog");
         match modals.get_radiobutton(request) {
             Ok(response) => {
                 if &response == t!("pddb.yes", locales::LANG) {
@@ -2550,7 +2853,7 @@ impl PddbOs {
             _ => {
                 log::error!("get approval failed");
                 false
-            },
+            }
         }
     }
 
@@ -2559,7 +2862,8 @@ impl PddbOs {
     pub(crate) fn basis_derive_key(&self, basis_name: &str, password: &str) -> BasisKeys {
         // 1. derive the salt from the "key" region. First step is to create the salt lookup
         // table, which is done by hashing the name and password together with SHA-512
-        // manage the allocation of the data for the basis & password explicitly so that we may wipe them later
+        // manage the allocation of the data for the basis & password explicitly so that we may wipe them
+        // later
         let mut bname_copy = [0u8; BASIS_NAME_LEN];
         for (src, dst) in basis_name.bytes().zip(bname_copy.iter_mut()) {
             *dst = src;
@@ -2584,7 +2888,7 @@ impl PddbOs {
         for (&src, dst) in result.iter().zip(salt.iter_mut()) {
             *dst = src;
         }
-        #[cfg(feature="hazardous-debug")]
+        #[cfg(feature = "hazardous-debug")]
         log::info!("derived salt: {:x?}", salt);
 
         // 3. use the salt + password and run bcrypt on it to derive a key.
@@ -2608,43 +2912,43 @@ impl PddbOs {
         // shouldn't be optimized out or re-ordered
         let bn_ptr = bname_copy.as_mut_ptr();
         for i in 0..bname_copy.len() {
-            unsafe{bn_ptr.add(i).write_volatile(core::mem::zeroed());}
+            unsafe {
+                bn_ptr.add(i).write_volatile(core::mem::zeroed());
+            }
         }
         let pt_ptr = plaintext_pw.as_mut_ptr();
         for i in 0..plaintext_pw.len() {
-            unsafe{pt_ptr.add(i).write_volatile(core::mem::zeroed());}
+            unsafe {
+                pt_ptr.add(i).write_volatile(core::mem::zeroed());
+            }
         }
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
-        #[cfg(feature="hazardous-debug")]
+        #[cfg(feature = "hazardous-debug")]
         log::info!("okm_pt: {:x?}", okm_pt);
-        #[cfg(feature="hazardous-debug")]
+        #[cfg(feature = "hazardous-debug")]
         log::info!("okm_data: {:x?}", okm_data);
 
-        //6. return the keys
-        BasisKeys {
-            pt: okm_pt,
-            data: okm_data,
-        }
+        // 6. return the keys
+        BasisKeys { pt: okm_pt, data: okm_data }
     }
 
-    pub(crate) fn reset_dont_ask_init(&self) {
-        self.rootkeys.do_reset_dont_ask_init();
-    }
+    pub(crate) fn reset_dont_ask_init(&self) { self.rootkeys.do_reset_dont_ask_init(); }
 
-    pub(crate) fn checksums(&self, modals: Option::<&Modals>) -> root_keys::api::Checksums {
+    pub(crate) fn checksums(&self, modals: Option<&Modals>) -> root_keys::api::Checksums {
         let mut checksums = root_keys::api::Checksums::default();
         let pddb = unsafe { self.pddb_mr.as_slice() };
         if let Some(m) = modals {
-            m.start_progress(
-                t!("pddb.checksums", locales::LANG),
-                0,
-                checksums.checksums.len() as u32,
-                0
-            ).ok();
+            m.start_progress(t!("pddb.checksums", locales::LANG), 0, checksums.checksums.len() as u32, 0)
+                .ok();
         }
-        for (index, region) in pddb.chunks(root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE).enumerate() {
-            assert!(region.len() == root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE, "CHECKSUM_BLOCKLEN_PAGE is not an even divisor of the PDDB size");
+        for (index, region) in
+            pddb.chunks(root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE).enumerate()
+        {
+            assert!(
+                region.len() == root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE,
+                "CHECKSUM_BLOCKLEN_PAGE is not an even divisor of the PDDB size"
+            );
             let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware);
             hasher.update(region); // reserve the first 32 bytes of salt for the HKDF
             let digest = hasher.finalize();
@@ -2659,6 +2963,7 @@ impl PddbOs {
         }
         checksums
     }
+
     //-------------------------------- TESTING -----------------------------------------
     // always gated behind a feature flag. Includes routines that are nonsensicle in normal operation at best,
     // and very dangerous from a security perspective at worst.
@@ -2678,21 +2983,22 @@ impl PddbOs {
     /// The tooling and argument spec on this is deliberately sparse because this routine is meant to
     /// be only used "if you know what you're doing" and we want to make the arg passing as minimal/easy
     /// as possible (just a scalar) to cut down on testing overhead.
-    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
     pub(crate) fn basis_testing(&mut self, cache: &mut BasisCache, config: &[Option<bool>; 32]) {
         for (index, &maybe_op) in config.iter().enumerate() {
             let name = format!("{}{}", BASIS_TEST_ROOTNAME, index);
             if let Some(op) = maybe_op {
-                if op { // try to mount the basis, or create it if it does not exist.
+                if op {
+                    // try to mount the basis, or create it if it does not exist.
                     self.testnames.insert(name.to_string());
-                    let maybe_basis = cache.basis_unlock(
-                        self, &name, &name, BasisRetentionPolicy::Persist);
+                    let maybe_basis = cache.basis_unlock(self, &name, &name, BasisRetentionPolicy::Persist);
 
                     if maybe_basis.is_some() {
                         cache.basis_add(maybe_basis.unwrap());
                     } else {
                         cache.basis_create(self, &name, &name).expect("couldn't create basis");
-                        let basis = cache.basis_unlock(self, &name, &name, BasisRetentionPolicy::Persist)
+                        let basis = cache
+                            .basis_unlock(self, &name, &name, BasisRetentionPolicy::Persist)
                             .expect("couldn't open just created basis");
                         cache.basis_add(basis);
                     }
@@ -2700,19 +3006,28 @@ impl PddbOs {
                     let blist = cache.basis_list();
                     if blist.contains(&name) {
                         match cache.basis_unmount(self, &name) {
-                            Ok(_) => {},
+                            Ok(_) => {}
                             Err(e) => log::error!("error unmounting basis {}: {:?}", name, e),
                         }
                     } else {
-                        log::info!("attempted to unmount {} but it does not exist or is already locked", name);
+                        log::info!(
+                            "attempted to unmount {} but it does not exist or is already locked",
+                            name
+                        );
                     }
                 }
             }
         }
     }
-    /// In testing, we want a way to automatically unlock all known test Bases. This stand-in feature automates that.
-    #[cfg(all(feature="pddbtest", feature="autobasis"))]
-    pub(crate) fn pddb_get_all_keys<'a>(&'a self, cache: &'a Vec::<BasisCacheEntry>, _op: GetKeyOp) -> Option<Vec<(BasisKeys, String)>> {
+
+    /// In testing, we want a way to automatically unlock all known test Bases. This stand-in feature
+    /// automates that.
+    #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
+    pub(crate) fn pddb_get_all_keys<'a>(
+        &'a self,
+        cache: &'a Vec<BasisCacheEntry>,
+        _op: GetKeyOp,
+    ) -> Option<Vec<(BasisKeys, String)>> {
         // populate the "known" entries
         let mut ret = Vec::<(BasisKeys, String)>::new();
         for entry in cache {
@@ -2731,10 +3046,7 @@ impl PddbOs {
                 }
             }
             if !exists {
-                let basis_key = self.basis_derive_key(
-                    name,
-                    name
-                );
+                let basis_key = self.basis_derive_key(name, name);
                 ret.push((basis_key, name.to_string()));
             }
         }
@@ -2744,23 +3056,17 @@ impl PddbOs {
         }
         Some(ret)
     }
-    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+
+    #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
     pub(crate) fn dbg_extra(&self) -> Vec<KeyExport> {
         let mut ret = Vec::<KeyExport>::new();
         for name in self.testnames.iter() {
-            let basis_key = self.basis_derive_key(
-                name,
-                name
-            );
+            let basis_key = self.basis_derive_key(name, name);
             let mut basis_name = [0 as u8; 64];
             for (&src, dst) in name.as_bytes().iter().zip(basis_name.iter_mut()) {
                 *dst = src;
             }
-            ret.push(KeyExport {
-                basis_name,
-                key: basis_key.data,
-                pt_key: basis_key.pt,
-            });
+            ret.push(KeyExport { basis_name, key: basis_key.data, pt_key: basis_key.pt });
         }
         ret
     }
@@ -2772,11 +3078,17 @@ impl PddbOs {
     /// Must be within this structure because it accesses the rootkeys, and we don't want to make that public.
     /// Need to pass this the old version of the StaticCryptoData, because it's already erased and replaced
     /// by updated keys by the time this routine is called.
-    #[cfg(feature="migration1")]
-    pub(crate) fn basis_derive_key_v00_00_01_01(&self, basis_name: &str, password: &str, scd: &StaticCryptoDataV1) -> [u8; AES_KEYSIZE] {
+    #[cfg(feature = "migration1")]
+    pub(crate) fn basis_derive_key_v00_00_01_01(
+        &self,
+        basis_name: &str,
+        password: &str,
+        scd: &StaticCryptoDataV1,
+    ) -> [u8; AES_KEYSIZE] {
         // 1. derive the salt from the "key" region. First step is to create the salt lookup
         // table, which is done by hashing the name and password together with SHA-512
-        // manage the allocation of the data for the basis & password explicitly so that we may wipe them later
+        // manage the allocation of the data for the basis & password explicitly so that we may wipe them
+        // later
         let mut bname_copy = [0u8; BASIS_NAME_LEN];
         for (src, dst) in basis_name.bytes().zip(bname_copy.iter_mut()) {
             *dst = src;
@@ -2800,7 +3112,7 @@ impl PddbOs {
         for (&src, dst) in result.iter().zip(salt.iter_mut()) {
             *dst = src;
         }
-        #[cfg(feature="hazardous-debug")]
+        #[cfg(feature = "hazardous-debug")]
         log::info!("derived salt: {:x?}", salt);
 
         // 3. use the salt + password and run bcrypt on it to derive a key.
@@ -2823,30 +3135,34 @@ impl PddbOs {
         // shouldn't be optimized out or re-ordered
         let bn_ptr = bname_copy.as_mut_ptr();
         for i in 0..bname_copy.len() {
-            unsafe{bn_ptr.add(i).write_volatile(core::mem::zeroed());}
+            unsafe {
+                bn_ptr.add(i).write_volatile(core::mem::zeroed());
+            }
         }
         let pt_ptr = plaintext_pw.as_mut_ptr();
         for i in 0..plaintext_pw.len() {
-            unsafe{pt_ptr.add(i).write_volatile(core::mem::zeroed());}
+            unsafe {
+                pt_ptr.add(i).write_volatile(core::mem::zeroed());
+            }
         }
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
-        //6. return the key
+        // 6. return the key
         key
     }
 
-    #[cfg(feature="migration1")]
+    #[cfg(feature = "migration1")]
     fn migration_v1_to_v2_inner(
         &mut self,
-        aad_v1: &Vec::<u8>,
-        aad_v2: &Vec::<u8>,
+        aad_v1: &Vec<u8>,
+        aad_v2: &Vec<u8>,
         key_v1: &[u8; AES_KEYSIZE], // needed to decrypt page with commit
         cipher_pt_v1: &Aes256,
         cipher_data_v1: &Aes256GcmSiv,
         key_data_v2: &[u8; AES_KEYSIZE], // this is needed because we have to do a key commitment
         cipher_pt_v2: &Aes256,
         cipher_data_v2: &Aes256GcmSiv,
-        used_pages: &mut BinaryHeap::<Reverse<u32>>,
+        used_pages: &mut BinaryHeap<Reverse<u32>>,
     ) -> bool {
         let blank = [0xffu8; aes::BLOCK_SIZE];
         let pt = self.pt_as_slice();
@@ -2856,16 +3172,23 @@ impl PddbOs {
         for (page_index, pt_page) in pt.chunks(PAGE_SIZE).enumerate() {
             if pt_page[..aes::BLOCK_SIZE] == blank {
                 if let Some(page) = self.mbbb_retrieve() {
-                    log::info!("Found MBBB, restoring 0x100 pages @ ppn {:x} & erasing MBBB", (page_index * PAGE_SIZE / aes::BLOCK_SIZE));
-                    self.spinor.patch(
-                        self.pddb_mr.as_slice(),
-                        xous::PDDB_LOC,
-                        &page,
-                        self.pt_phys_base.as_u32() + (page_index * PAGE_SIZE) as u32,
-                    ).expect("couldn't write to page table");
+                    log::info!(
+                        "Found MBBB, restoring 0x100 pages @ ppn {:x} & erasing MBBB",
+                        (page_index * PAGE_SIZE / aes::BLOCK_SIZE)
+                    );
+                    self.spinor
+                        .patch(
+                            self.pddb_mr.as_slice(),
+                            xous::PDDB_LOC,
+                            &page,
+                            self.pt_phys_base.as_u32() + (page_index * PAGE_SIZE) as u32,
+                        )
+                        .expect("couldn't write to page table");
                     self.mbbb_erase();
                 } else {
-                    log::info!("Blank page in PT found, but no MBBB entry exists. PT is either corrupted or not initialized!");
+                    log::info!(
+                        "Blank page in PT found, but no MBBB entry exists. PT is either corrupted or not initialized!"
+                    );
                 }
             }
         }
@@ -2891,35 +3214,53 @@ impl PddbOs {
                     let mut pp = PhysPage(0);
                     pp.set_page_number(((page_index * PAGE_SIZE / aes::BLOCK_SIZE) + index) as PhysAddr);
 
-                    // root records require key commitment (to avoid AES-GCM-SIV salamanders), so detect & handle that
-                    if pte.vaddr_v1().get() == VPAGE_SIZE as u64 { // v1 addresses were full vaddrs, not page numbers
-                        log::info!("migration: potential root block at (pp){:x}/(vp){:x}", pp.page_number(), pte.vaddr_v1().get());
+                    // root records require key commitment (to avoid AES-GCM-SIV salamanders), so detect &
+                    // handle that
+                    if pte.vaddr_v1().get() == VPAGE_SIZE as u64 {
+                        // v1 addresses were full vaddrs, not page numbers
+                        log::info!(
+                            "migration: potential root block at (pp){:x}/(vp){:x}",
+                            pp.page_number(),
+                            pte.vaddr_v1().get()
+                        );
                         // retrieve the data at `pp`
                         let migrating_data = self.data_decrypt_page_with_commit(key_v1, aad_v1, &pp);
                         if let Some(vpage) = migrating_data {
                             log::info!("migration: found root block!");
                             found_basis = true;
                             let mut basis_root = BasisRoot::default();
-                            for (&src, dst) in (&vpage)[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut()) {
+                            for (&src, dst) in (&vpage)[size_of::<JournalType>()..]
+                                .iter()
+                                .zip(basis_root.deref_mut().iter_mut())
+                            {
                                 *dst = src;
                             }
                             let (previous, _) = PDDB_MIGRATE_1;
                             if basis_root.version != previous {
-                                log::warn!("Root basis record did not match expected version during migration. Ignoring and attempting to move on...");
+                                log::warn!(
+                                    "Root basis record did not match expected version during migration. Ignoring and attempting to move on..."
+                                );
                             }
                             basis_root.version = PDDB_VERSION; // update the version to our current one
                             log::info!("Basis root: {:?}", basis_root);
-                            let slice_iter =
-                                (&vpage[..size_of::<JournalType>()]).iter() // just copy the journal rev
+                            let slice_iter = (&vpage[..size_of::<JournalType>()]).iter() // just copy the journal rev
                                 .chain(basis_root.as_ref().iter());
                             let mut block = [0 as u8; KCOM_CT_LEN];
                             for (&src, dst) in slice_iter.zip(block.iter_mut()) {
                                 *dst = src;
                             }
-                            self.data_encrypt_and_patch_page_with_commit(key_data_v2, aad_v2, &mut block, &pp);
+                            self.data_encrypt_and_patch_page_with_commit(
+                                key_data_v2,
+                                aad_v2,
+                                &mut block,
+                                &pp,
+                            );
                         } else {
-                            // could be a checksum collision that triggers this, so it's not a hard error. A later "real" version will succeed and all would be fine.
-                            log::warn!("Root basis record did not decrypt correctly, ignoring and hoping for the best, but your chances are slim.");
+                            // could be a checksum collision that triggers this, so it's not a hard error. A
+                            // later "real" version will succeed and all would be fine.
+                            log::warn!(
+                                "Root basis record did not decrypt correctly, ignoring and hoping for the best, but your chances are slim."
+                            );
                         }
                     } else {
                         log::info!("migrating (pp){:x}/(vp){:x}", pp.page_number(), pte.vaddr_v1().get());
@@ -2929,12 +3270,16 @@ impl PddbOs {
                         if let Some(mut vpage) = migrating_data {
                             self.data_encrypt_and_patch_page(&cipher_data_v2, aad_v2, &mut vpage, &pp);
                         } else {
-                            log::warn!("Potential checksum collision found at pp {}; ignoring", pp.page_number());
+                            log::warn!(
+                                "Potential checksum collision found at pp {}; ignoring",
+                                pp.page_number()
+                            );
                         }
                     }
 
-                    // *** 3. re-encrypt the PTE and the target page to the v2 keys and corrected addressing scheme
-                    // a deconstructed pt_patch_mapping() call -- because the normal call would insert a MBBB block, which is not what we want in this case.
+                    // *** 3. re-encrypt the PTE and the target page to the v2 keys and corrected addressing
+                    // scheme a deconstructed pt_patch_mapping() call -- because the
+                    // normal call would insert a MBBB block, which is not what we want in this case.
                     let mut pte = Pte::new(pte.vaddr_v1(), PtFlags::CLEAN, Rc::clone(&self.entropy));
                     let mut pt_block = Block::from_mut_slice(pte.deref_mut());
                     cipher_pt_v2.encrypt_block(&mut pt_block);
@@ -2954,11 +3299,12 @@ impl PddbOs {
     /// note that v1 also had an error where page tables were encoded in full addresess, when
     /// we meant to encode them using page numbers. This code also handles that migration.
     /// Must be within this structure because it accesses the rootkeys, and we don't want to make that public.
-    #[cfg(feature="migration1")]
+    #[cfg(feature = "migration1")]
     pub(crate) fn migration_v1_to_v2(&mut self, pw_cid: xous::CID) -> PasswordState {
         let scd = self.static_crypto_data_get_v1();
-        if scd.version == 0xFFFF_FFFF { // system is in the blank state
-            return PasswordState::Uninit
+        if scd.version == 0xFFFF_FFFF {
+            // system is in the blank state
+            return PasswordState::Uninit;
         }
         if scd.version != SCD_VERSION_MIGRATION1 {
             return PasswordState::Uninit;
@@ -2976,7 +3322,8 @@ impl PddbOs {
                 // build a modals for migration messages
                 let xns = xous_names::XousNames::new().unwrap();
                 let modals = modals::Modals::new(&xns).unwrap();
-                // v1->v2 messages willl only be in English, because we don't have any non-English users yet (afaik)
+                // v1->v2 messages willl only be in English, because we don't have any non-English users yet
+                // (afaik)
 
                 let cipher_v1 = Aes256::new(GenericArray::from_slice(&syskey));
                 let mut system_key_v1: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
@@ -2986,14 +3333,17 @@ impl PddbOs {
                 // erase the old vector completely, now that the key is in system_key_v1
                 let nuke = syskey.as_mut_ptr();
                 for i in 0..syskey.len() {
-                    unsafe{nuke.add(i).write_volatile(0)};
+                    unsafe { nuke.add(i).write_volatile(0) };
                 }
-                modals.dynamic_notification(Some("PDDB v1->v2 migration"), Some("Migrating System keys to v2")).unwrap();
+                modals
+                    .dynamic_notification(Some("PDDB v1->v2 migration"), Some("Migrating System keys to v2"))
+                    .unwrap();
 
                 // ------ I. migrate the system basis -------
-                // *** 0. generate v2 keys. This will immediately overwrite the SCD -- if we have an error or power outage
-                // after this point, we lose the entire PDDB. The other option is to commit the v2 keys at the end, but,
-                // similarly, we end up with a partial migration either way.
+                // *** 0. generate v2 keys. This will immediately overwrite the SCD -- if we have an error or
+                // power outage after this point, we lose the entire PDDB. The other option is
+                // to commit the v2 keys at the end, but, similarly, we end up with a partial
+                // migration either way.
                 let mut system_basis_key_pt: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
                 let mut system_basis_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
                 let mut syskey_data_copy: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE]; // we will need a copy of this later on for re-encrypting with key commit
@@ -3008,14 +3358,15 @@ impl PddbOs {
                 let data_cipher_v2 = Aes256GcmSiv::new(Key::from_slice(&system_basis_key));
                 let aad_v2 = self.data_aad(PDDB_DEFAULT_SYSTEM_BASIS);
                 // now wrap the key for storage
-                let wrapped_key = self.rootkeys.wrap_key(&system_basis_key).expect("Internal error wrapping our encryption key");
-                let wrapped_key_pt = self.rootkeys.wrap_key(&system_basis_key_pt).expect("Internal error wrapping our encryption key");
-                self.system_basis_key = Some(
-                    BasisKeys {
-                        pt: system_basis_key_pt,
-                        data: system_basis_key,
-                    }
-                ); // this causes system_basis_key to be owned by self and go out of scope
+                let wrapped_key = self
+                    .rootkeys
+                    .wrap_key(&system_basis_key)
+                    .expect("Internal error wrapping our encryption key");
+                let wrapped_key_pt = self
+                    .rootkeys
+                    .wrap_key(&system_basis_key_pt)
+                    .expect("Internal error wrapping our encryption key");
+                self.system_basis_key = Some(BasisKeys { pt: system_basis_key_pt, data: system_basis_key }); // this causes system_basis_key to be owned by self and go out of scope
                 let mut crypto_keys = StaticCryptoData::default();
                 crypto_keys.version = SCD_VERSION; // should already be set by `default()` but let's be sure.
 
@@ -3044,9 +3395,11 @@ impl PddbOs {
                 // *** 1. scan the page table
                 modals.dynamic_notification_update(None, Some("Migrating System Basis")).unwrap();
                 // *** 2. if an entry matches, also decrypt the target page and store it here
-                // *** 3. re-encrypt the PTE and the target page to the v2 keys and corrected addressing scheme
+                // *** 3. re-encrypt the PTE and the target page to the v2 keys and corrected addressing
+                // scheme
                 if !self.migration_v1_to_v2_inner(
-                    &aad_v1, &aad_v2,
+                    &aad_v1,
+                    &aad_v2,
                     &system_key_v1,
                     &cipher_v1,
                     &data_cipher_v1,
@@ -3060,45 +3413,66 @@ impl PddbOs {
                     log::info!("System basis migration successful");
                 }
 
-                // *** 4. The MBBB is natively migrated as part of this process, so nothing explictly needs to be done here.
+                // *** 4. The MBBB is natively migrated as part of this process, so nothing explictly needs to
+                // be done here.
 
                 // ------ II. migrate any hidden basis ------
                 modals.dynamic_notification_close().unwrap();
-                let mut prompt = String::from("Any secret Bases must be migrated now, or else their data will be lost.\n\nUnlock a Basis for migration?");
+                let mut prompt = String::from(
+                    "Any secret Bases must be migrated now, or else their data will be lost.\n\nUnlock a Basis for migration?",
+                );
                 loop {
-                    modals.add_list_item(t!("pddb.yes", locales::LANG)).expect("couldn't build radio item list");
-                    modals.add_list_item(t!("pddb.no", locales::LANG)).expect("couldn't build radio item list");
+                    modals
+                        .add_list_item(t!("pddb.yes", locales::LANG))
+                        .expect("couldn't build radio item list");
+                    modals
+                        .add_list_item(t!("pddb.no", locales::LANG))
+                        .expect("couldn't build radio item list");
                     match modals.get_radiobutton(&prompt) {
                         Ok(response) => {
                             if response.as_str() == t!("pddb.yes", locales::LANG) {
-                                match modals.alert_builder("Enter the Basis name")
-                                .field(Some("My Secret Basis".to_string()), None)
-                                .build() {
+                                match modals
+                                    .alert_builder("Enter the Basis name")
+                                    .field(Some("My Secret Basis".to_string()), None)
+                                    .build()
+                                {
                                     Ok(bname) => {
                                         let request = BasisRequestPassword {
                                             db_name: xous_ipc::String::from_str(bname.first().as_str()),
                                             plaintext_pw: None,
                                         };
                                         let mut buf = Buffer::into_buf(request).unwrap();
-                                        buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
+                                        buf.lend_mut(
+                                            pw_cid,
+                                            PwManagerOpcode::RequestPassword.to_u32().unwrap(),
+                                        )
+                                        .unwrap();
                                         let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
                                         if let Some(pw) = ret.plaintext_pw {
                                             // derive old and new keys
                                             let basis_key_v1 = self.basis_derive_key_v00_00_01_01(
                                                 bname.first().as_str(),
                                                 pw.as_str().unwrap_or("UTF8-error"),
-                                                &scd
+                                                &scd,
                                             );
                                             let basis_aad_v1 = data_aad_v1(&self, bname.first().as_str());
                                             let basis_aad_v2 = self.data_aad(bname.first().as_str());
-                                            let basis_pt_cipher_v1 = Aes256::new(GenericArray::from_slice(&basis_key_v1));
-                                            let basis_data_cipher_v1 = Aes256GcmSiv::new(Key::from_slice(&basis_key_v1));
-                                            let basis_keys = self.basis_derive_key(bname.first().as_str(), pw.as_str().unwrap_or("UTF8 error"));
-                                            let basis_pt_cipher_2 = Aes256::new(GenericArray::from_slice(&basis_keys.pt));
-                                            let basis_data_cipher_2 = Aes256GcmSiv::new(Key::from_slice(&basis_keys.data));
+                                            let basis_pt_cipher_v1 =
+                                                Aes256::new(GenericArray::from_slice(&basis_key_v1));
+                                            let basis_data_cipher_v1 =
+                                                Aes256GcmSiv::new(Key::from_slice(&basis_key_v1));
+                                            let basis_keys = self.basis_derive_key(
+                                                bname.first().as_str(),
+                                                pw.as_str().unwrap_or("UTF8 error"),
+                                            );
+                                            let basis_pt_cipher_2 =
+                                                Aes256::new(GenericArray::from_slice(&basis_keys.pt));
+                                            let basis_data_cipher_2 =
+                                                Aes256GcmSiv::new(Key::from_slice(&basis_keys.data));
                                             // perform the migration
                                             if self.migration_v1_to_v2_inner(
-                                                &basis_aad_v1, &basis_aad_v2,
+                                                &basis_aad_v1,
+                                                &basis_aad_v2,
                                                 &basis_key_v1,
                                                 &basis_pt_cipher_v1,
                                                 &basis_data_cipher_v1,
@@ -3110,25 +3484,33 @@ impl PddbOs {
                                                 #[cfg(not(target_os = "xous"))]
                                                 {
                                                     let mut name = [0 as u8; 64];
-                                                    for (&src, dst) in bname.first().as_str().as_bytes().iter().zip(name.iter_mut()) {
+                                                    for (&src, dst) in bname
+                                                        .first()
+                                                        .as_str()
+                                                        .as_bytes()
+                                                        .iter()
+                                                        .zip(name.iter_mut())
+                                                    {
                                                         *dst = src;
                                                     }
-                                                    export.push(
-                                                        KeyExport {
-                                                            basis_name: name,
-                                                            key: basis_keys.data,
-                                                            pt_key: basis_keys.pt,
-                                                        }
-                                                    );
+                                                    export.push(KeyExport {
+                                                        basis_name: name,
+                                                        key: basis_keys.data,
+                                                        pt_key: basis_keys.pt,
+                                                    });
                                                 }
                                                 prompt.clear();
-                                                prompt.push_str("Migration success, migrate another secret Basis?");
+                                                prompt.push_str(
+                                                    "Migration success, migrate another secret Basis?",
+                                                );
                                             } else {
                                                 prompt.clear();
                                                 prompt.push_str("Migration failure, retry and/or migrate another secret Basis?");
                                             }
                                         } else {
-                                            log::warn!("Couldn't retrieve password for the basis, ignoring and moving on");
+                                            log::warn!(
+                                                "Couldn't retrieve password for the basis, ignoring and moving on"
+                                            );
                                             prompt.clear();
                                             prompt.push_str("Error unlocking Basis, retry?");
                                         }
@@ -3145,16 +3527,19 @@ impl PddbOs {
                                 log::warn!("Got unexpected return from radiobutton: {}", response);
                             }
                         }
-                        _ => log::warn!("get_radiobutton failed")
+                        _ => log::warn!("get_radiobutton failed"),
                     }
                 }
 
                 // ------ III. nuke and regnerate fast space -----
-                modals.dynamic_notification(Some("Finalizing PDDB v1->v2 migration"), Some("Regenerate FastSpace")).unwrap();
+                modals
+                    .dynamic_notification(
+                        Some("Finalizing PDDB v1->v2 migration"),
+                        Some("Regenerate FastSpace"),
+                    )
+                    .unwrap();
                 let free_pool = self.fast_space_generate(used_pages);
-                let mut fast_space = FastSpace {
-                    free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
-                };
+                let mut fast_space = FastSpace { free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN] };
                 for pp in fast_space.free_pool.iter_mut() {
                     pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE)
                 }
@@ -3172,12 +3557,16 @@ impl PddbOs {
                 // clear out the v1 key
                 let sk_ptr = system_key_v1.as_mut_ptr();
                 for i in 0..system_key_v1.len() {
-                    unsafe{sk_ptr.add(i).write_volatile(core::mem::zeroed());}
+                    unsafe {
+                        sk_ptr.add(i).write_volatile(core::mem::zeroed());
+                    }
                 }
                 // clear out the copy of the v2 system data key, required for key commits of the basis
                 let sk_ptr = syskey_data_copy.as_mut_ptr();
                 for i in 0..syskey_data_copy.len() {
-                    unsafe{sk_ptr.add(i).write_volatile(core::mem::zeroed());}
+                    unsafe {
+                        sk_ptr.add(i).write_volatile(core::mem::zeroed());
+                    }
                 }
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 

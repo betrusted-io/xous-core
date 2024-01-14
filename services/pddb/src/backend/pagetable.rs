@@ -1,12 +1,13 @@
-use super::{PAGE_SIZE, TrngPool, VirtAddr, murmur3_32, VPAGE_SIZE};
-use core::mem::size_of;
-use aes_gcm_siv::{Nonce, Tag};
-use std::rc::Rc;
 use core::cell::RefCell;
-use core::ops::{Deref, DerefMut};
 use core::convert::TryInto;
+use core::mem::size_of;
+use core::ops::{Deref, DerefMut};
+use std::rc::Rc;
 
+use aes_gcm_siv::{Nonce, Tag};
 use bitflags::bitflags;
+
+use super::{murmur3_32, TrngPool, VirtAddr, PAGE_SIZE, VPAGE_SIZE};
 
 bitflags! {
     /// flags used by the page table
@@ -23,7 +24,7 @@ bitflags! {
     }
 }
 impl Default for PtFlags {
-    fn default() -> PtFlags {PtFlags::INVALID}
+    fn default() -> PtFlags { PtFlags::INVALID }
 }
 
 /// A Page Table Entry. Must be equal in length to one AES block size (128 bits).
@@ -51,8 +52,8 @@ pub(crate) struct Pte {
     flags: PtFlags,
     /// 32-bit strength of a nonce, but can be varied
     nonce: [u8; 4],
-    /// 32-bit "weak" checksum, used only for quick scans of the PTE to determine a coarse "in" or "out" classifier
-    /// checksum is computed on all of the bits prior, so checksum(pddb_addr, flags, nonce)
+    /// 32-bit "weak" checksum, used only for quick scans of the PTE to determine a coarse "in" or "out"
+    /// classifier checksum is computed on all of the bits prior, so checksum(pddb_addr, flags, nonce)
     checksum: [u8; 4],
 }
 impl Pte {
@@ -70,22 +71,26 @@ impl Pte {
 
         pte
     }
+
     pub fn vaddr(&self) -> VirtAddr {
         let mut full_addr = [0u8; 8];
-        // LSB encoded, so this loop deposits the partial pddb_addr in the LSBs, and the MSBs are correctly 0 from above initializer
+        // LSB encoded, so this loop deposits the partial pddb_addr in the LSBs, and the MSBs are correctly 0
+        // from above initializer
         for (&src, dst) in self.pddb_addr.iter().zip(full_addr.iter_mut()) {
             *dst = src;
         }
         VirtAddr::new(u64::from_le_bytes(full_addr) * VPAGE_SIZE as u64).unwrap()
     }
+
     /// V1 databases stored the virtual address as a full address, instead of as a page number, which means
     /// the overall size of our database was about 4000x smaller than we had thought. This was fixed in v2,
     /// but this getter is required to migrate from v1.
     /// This allows us to retrieve the old address format for the first phase of migration.
-    #[cfg(feature="migration1")]
+    #[cfg(feature = "migration1")]
     pub fn vaddr_v1(&self) -> VirtAddr {
         let mut full_addr = [0u8; 8];
-        // LSB encoded, so this loop deposits the partial pddb_addr in the LSBs, and the MSBs are correctly 0 from above initializer
+        // LSB encoded, so this loop deposits the partial pddb_addr in the LSBs, and the MSBs are correctly 0
+        // from above initializer
         for (&src, dst) in self.pddb_addr.iter().zip(full_addr.iter_mut()) {
             *dst = src;
         }
@@ -93,9 +98,8 @@ impl Pte {
     }
 
     #[allow(dead_code)]
-    pub fn flags(&self) -> PtFlags {
-        self.flags
-    }
+    pub fn flags(&self) -> PtFlags { self.flags }
+
     pub fn try_from_slice(slice: &[u8]) -> Option<Self> {
         if slice.len() == size_of::<Pte>() {
             let mut maybe_pt = Pte::default();
@@ -112,6 +116,7 @@ impl Pte {
             None
         }
     }
+
     /// Normally you should be using pt_patch_mapping(), which generates a new nonce every
     /// time the entry is patched. However, this function is provided for "bulk" operations
     /// such as migrations where we violate the abstractions to improve performance.
@@ -125,6 +130,7 @@ impl Pte {
 }
 impl Deref for Pte {
     type Target = [u8];
+
     fn deref(&self) -> &[u8] {
         unsafe {
             core::slice::from_raw_parts(self as *const Pte as *const u8, core::mem::size_of::<Pte>())
@@ -165,6 +171,7 @@ pub(crate) struct EncryptedPage {
     journal_rev: [u8; 4],
     /// data is encrypted and holds the good stuff
     data: [u8; PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<u32>()],
-    /// tag is the authentication tag. If the page decrypts & authenticates, we know it's a valid data block for us.
+    /// tag is the authentication tag. If the page decrypts & authenticates, we know it's a valid data block
+    /// for us.
     p_tag: [u8; size_of::<Tag>()],
 }

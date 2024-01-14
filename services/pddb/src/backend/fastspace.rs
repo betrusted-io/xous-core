@@ -1,10 +1,11 @@
-use core::ops::{Deref, DerefMut};
 use core::convert::TryInto;
+use core::mem::size_of;
+use core::ops::{Deref, DerefMut};
+
+use aes_gcm_siv::{Nonce, Tag};
 
 use super::PAGE_SIZE;
 use crate::*;
-use core::mem::size_of;
-use aes_gcm_siv::{Nonce, Tag};
 
 /// Each free_pool entry takes about 4 bytes, so give-or-take we have about 1000 free_pool
 /// entries per page of storage for the free_pool, or 4k * 1000 ~ 4MiB per page, when PhysAddr is a u32
@@ -34,14 +35,12 @@ impl From<u8> for SpaceState {
     }
 }
 impl From<SpaceState> for u8 {
-    fn from(arg: SpaceState) -> Self {
-        arg as u8
-    }
+    fn from(arg: SpaceState) -> Self { arg as u8 }
 }
 
-pub(crate) const FASTSPACE_FREE_POOL_LEN: usize =
-   ((PAGE_SIZE * FASTSPACE_PAGES) - (size_of::<Nonce>() + size_of::<Tag>()))
-   / core::mem::size_of::<PhysPage>();
+pub(crate) const FASTSPACE_FREE_POOL_LEN: usize = ((PAGE_SIZE * FASTSPACE_PAGES)
+    - (size_of::<Nonce>() + size_of::<Tag>()))
+    / core::mem::size_of::<PhysPage>();
 /// FastSpace tracks a limited set of physical pages
 /// An optimal implementation of this would fill whole pages with the free_pool array.
 /// This record is meant to be updated rarely, and atomically, in a make-before-break fashion:
@@ -60,17 +59,20 @@ pub(crate) const FASTSPACE_FREE_POOL_LEN: usize =
 ///   The "rare" property is important especially as the disk size scales up; if we wanted to keep
 ///   100MiB of "fast space" on hand, this structure would span 25 pages.
 #[repr(C)]
-pub (crate) struct FastSpace {
+pub(crate) struct FastSpace {
     /// Not sure if there is a "better" way to compute things, but we want the number of entries in the
     /// free_pool array to "round out" the FastSpace record to be equal to exactly one page
     pub(crate) free_pool: [PhysPage; FASTSPACE_FREE_POOL_LEN],
 }
 impl Deref for FastSpace {
     type Target = [u8];
+
     fn deref(&self) -> &[u8] {
         unsafe {
-            core::slice::from_raw_parts(self as *const FastSpace as *const u8, core::mem::size_of::<FastSpace>())
-                as &[u8]
+            core::slice::from_raw_parts(
+                self as *const FastSpace as *const u8,
+                core::mem::size_of::<FastSpace>(),
+            ) as &[u8]
         }
     }
 }
@@ -84,10 +86,11 @@ pub(crate) struct FastSpaceInFlash {
     p_tag: [u8; size_of::<Tag>()],
 }
 
-/// a 128-bit record that stores an encrypted update to the FastSpace pool, facilitating the "rarely" update property of the structure.
+/// a 128-bit record that stores an encrypted update to the FastSpace pool, facilitating the "rarely" update
+/// property of the structure.
 #[repr(C, packed)]
 #[cfg(not(feature = "u64_pa"))]
-pub (crate) struct SpaceUpdate {
+pub(crate) struct SpaceUpdate {
     nonce: u64,
     page_number: PhysPage,
     // this checksum is "weak" but we are protecting against two scenarios:
@@ -112,6 +115,7 @@ impl SpaceUpdate {
             None
         }
     }
+
     pub fn new(nonce: u64, page_number: PhysPage) -> Self {
         let mut hashbuf: [u8; 12] = [0; 12];
         for (&src, dst) in nonce.to_le_bytes().iter().zip(hashbuf[..8].iter_mut()) {
@@ -121,16 +125,12 @@ impl SpaceUpdate {
             *dst = src;
         }
         let computed_sum = murmur3_32(&hashbuf[..12], u32::from_be_bytes(hashbuf[4..8].try_into().unwrap()));
-        SpaceUpdate {
-            nonce,
-            page_number,
-            checksum: computed_sum.to_le_bytes(),
-        }
+        SpaceUpdate { nonce, page_number, checksum: computed_sum.to_le_bytes() }
     }
 }
 
 #[cfg(feature = "u64_pa")]
-pub (crate) struct SpaceUpdate {
+pub(crate) struct SpaceUpdate {
     nonce: u64,
     page_number: PhysPage,
     // consider: using the top 12 bits of the PhysAddr as a checksum
@@ -138,18 +138,23 @@ pub (crate) struct SpaceUpdate {
 
 impl Deref for SpaceUpdate {
     type Target = [u8];
+
     fn deref(&self) -> &[u8] {
         unsafe {
-            core::slice::from_raw_parts(self as *const SpaceUpdate as *const u8, core::mem::size_of::<SpaceUpdate>())
-                as &[u8]
+            core::slice::from_raw_parts(
+                self as *const SpaceUpdate as *const u8,
+                core::mem::size_of::<SpaceUpdate>(),
+            ) as &[u8]
         }
     }
 }
 impl DerefMut for SpaceUpdate {
     fn deref_mut(&mut self) -> &mut [u8] {
         unsafe {
-            core::slice::from_raw_parts_mut(self as *mut SpaceUpdate as *mut u8, core::mem::size_of::<SpaceUpdate>())
-                as &mut [u8]
+            core::slice::from_raw_parts_mut(
+                self as *mut SpaceUpdate as *mut u8,
+                core::mem::size_of::<SpaceUpdate>(),
+            ) as &mut [u8]
         }
     }
 }
@@ -159,6 +164,9 @@ mod tests {
     use super::*;
     #[test]
     fn test_fast_space_size() {
-        assert!(core::mem::size_of::<FastSpaceInFlash>() & (PAGE_SIZE - 1) == 0, "FastSpaceInFlash is not exactly a multiple of one page in size");
+        assert!(
+            core::mem::size_of::<FastSpaceInFlash>() & (PAGE_SIZE - 1) == 0,
+            "FastSpaceInFlash is not exactly a multiple of one page in size"
+        );
     }
 }

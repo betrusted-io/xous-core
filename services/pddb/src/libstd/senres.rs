@@ -69,26 +69,18 @@ impl<'a> Message<'a> {
             data: unsafe { core::slice::from_raw_parts_mut(data as *mut u8, len) },
         })
     }
+
     // Need to figure out how to make the non-mutable version work, since `data`
     // must be a mutable vec.
     pub fn from_slice(data: &'a [u8]) -> Result<Self, ()> {
-        Ok(Message {
-            message_id: 0,
-            auto_return: false,
-            data,
-        })
+        Ok(Message { message_id: 0, auto_return: false, data })
     }
+
     pub fn from_mut_slice(data: &'a mut [u8]) -> Result<MutableMessage<'a>, ()> {
-        Ok(MutableMessage {
-            message_id: 0,
-            mutable: true,
-            auto_return: false,
-            data,
-        })
+        Ok(MutableMessage { message_id: 0, mutable: true, auto_return: false, data })
     }
-    pub fn auto_return(&mut self, enable: bool) {
-        self.auto_return = enable;
-    }
+
+    pub fn auto_return(&mut self, enable: bool) { self.auto_return = enable; }
 }
 
 #[cfg(target_os = "xous")]
@@ -123,52 +115,35 @@ impl<'a> Drop for Message<'a> {
     fn drop(&mut self) {
         if self.auto_return {
             #[cfg(target_os = "xous")]
-            return_memory_message(
-                self.message_id,
-                self.data.as_ptr() as usize,
-                self.data.len(),
-            );
+            return_memory_message(self.message_id, self.data.as_ptr() as usize, self.data.len());
         }
     }
 }
 
 impl<'a> SenresMut for MutableMessage<'a> {
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.data
-    }
-    fn as_mut_ptr(&mut self) -> *mut u8 {
-        self as *mut _ as *mut u8
-    }
+    fn as_mut_slice(&mut self) -> &mut [u8] { self.data }
+
+    fn as_mut_ptr(&mut self) -> *mut u8 { self as *mut _ as *mut u8 }
 }
 
 impl<'a> Senres for MutableMessage<'a> {
-    fn as_slice(&self) -> &[u8] {
-        self.data
-    }
-    fn len(&self) -> usize {
-        self.data.len()
-    }
-    fn as_ptr(&self) -> *const u8 {
-        self as *const _ as *const u8
-    }
-    fn can_create_writer(&self) -> bool {
-        self.mutable
-    }
+    fn as_slice(&self) -> &[u8] { self.data }
+
+    fn len(&self) -> usize { self.data.len() }
+
+    fn as_ptr(&self) -> *const u8 { self as *const _ as *const u8 }
+
+    fn can_create_writer(&self) -> bool { self.mutable }
 }
 
 impl<'a> Senres for Message<'a> {
-    fn as_slice(&self) -> &[u8] {
-        self.data
-    }
-    fn len(&self) -> usize {
-        self.data.len()
-    }
-    fn as_ptr(&self) -> *const u8 {
-        self as *const _ as *const u8
-    }
-    fn can_create_writer(&self) -> bool {
-        false
-    }
+    fn as_slice(&self) -> &[u8] { self.data }
+
+    fn len(&self) -> usize { self.data.len() }
+
+    fn as_ptr(&self) -> *const u8 { self as *const _ as *const u8 }
+
+    fn can_create_writer(&self) -> bool { false }
 }
 
 pub trait Senres {
@@ -176,18 +151,13 @@ pub trait Senres {
     fn as_ptr(&self) -> *const u8;
     fn len(&self) -> usize;
 
-    fn can_create_writer(&self) -> bool {
-        true
-    }
+    fn can_create_writer(&self) -> bool { true }
 
     fn reader(&self, fourcc: [u8; 4]) -> Option<Reader<Self>>
     where
         Self: core::marker::Sized,
     {
-        let reader = Reader {
-            backing: self,
-            offset: core::cell::Cell::new(0),
-        };
+        let reader = Reader { backing: self, offset: core::cell::Cell::new(0) };
         if SENRES_V1_MAGIC != reader.try_get_from().ok()? {
             return None;
         }
@@ -199,9 +169,7 @@ pub trait Senres {
     }
 
     #[cfg(not(target_os = "xous"))]
-    fn lend(&self, _connection: u32, _opcode: usize) -> Result<(), ()> {
-        Ok(())
-    }
+    fn lend(&self, _connection: u32, _opcode: usize) -> Result<(), ()> { Ok(()) }
 
     #[cfg(target_os = "xous")]
     fn lend(&self, connection: u32, opcode: usize) -> Result<(), ()> {
@@ -246,18 +214,13 @@ pub trait SenresMut: Senres {
         if !self.can_create_writer() {
             return None;
         }
-        let mut writer = Writer {
-            backing: self,
-            offset: 0,
-        };
+        let mut writer = Writer { backing: self, offset: 0 };
         writer.append(SENRES_V1_MAGIC);
         writer.append(fourcc);
         Some(writer)
     }
     #[cfg(not(target_os = "xous"))]
-    fn lend_mut(&mut self, _connection: u32, _opcode: usize) -> Result<(), ()> {
-        Ok(())
-    }
+    fn lend_mut(&mut self, _connection: u32, _opcode: usize) -> Result<(), ()> { Ok(()) }
     #[cfg(target_os = "xous")]
     fn lend_mut(&mut self, connection: u32, opcode: usize) -> Result<(), ()> {
         let mut a0 = Syscall::SendMessage as usize;
@@ -293,7 +256,6 @@ pub trait SenresMut: Senres {
         }
     }
 }
-
 
 pub struct Writer<'a, Backing: SenresMut> {
     backing: &'a mut Backing,
@@ -341,30 +303,21 @@ impl<const N: usize> Stack<N> {
 }
 
 impl<const N: usize> SenresMut for Stack<N> {
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.data.as_mut_slice()
-    }
-    fn as_mut_ptr(&mut self) -> *mut u8 {
-        &mut self.data as *mut _ as *mut u8
-    }
+    fn as_mut_slice(&mut self) -> &mut [u8] { self.data.as_mut_slice() }
+
+    fn as_mut_ptr(&mut self) -> *mut u8 { &mut self.data as *mut _ as *mut u8 }
 }
 
 impl<const N: usize> Senres for Stack<N> {
-    fn as_slice(&self) -> &[u8] {
-        self.data.as_slice()
-    }
-    fn len(&self) -> usize {
-        N
-    }
-    fn as_ptr(&self) -> *const u8 {
-        &self.data as *const _ as *const u8
-    }
+    fn as_slice(&self) -> &[u8] { self.data.as_slice() }
+
+    fn len(&self) -> usize { N }
+
+    fn as_ptr(&self) -> *const u8 { &self.data as *const _ as *const u8 }
 }
 
 impl<'a, Backing: SenresMut> Writer<'a, Backing> {
-    pub fn append<T: SenSer<Backing>>(&mut self, other: T) {
-        other.append_to(self);
-    }
+    pub fn append<T: SenSer<Backing>>(&mut self, other: T) { other.append_to(self); }
 
     pub fn delayed_append<T: SenSer<Backing>>(&mut self) -> DelayedWriter<Backing, T> {
         let delayed_writer = DelayedWriter {
@@ -398,9 +351,7 @@ impl<'a, Backing: SenresMut> Writer<'a, Backing> {
 }
 
 impl<'a, Backing: Senres> Reader<'a, Backing> {
-    pub fn try_get_from<T: RecDes<Backing>>(&self) -> Result<T, ()> {
-        T::try_get_from(self)
-    }
+    pub fn try_get_from<T: RecDes<Backing>>(&self) -> Result<T, ()> { T::try_get_from(self) }
 
     pub fn try_get_ref_from<T: RecDesRef<'a, Backing> + ?Sized>(&'a self) -> Result<&T, ()> {
         T::try_get_ref_from(self)
@@ -418,10 +369,8 @@ macro_rules! primitive_impl {
         impl<Backing: SenresMut> SenSer<Backing> for $SelfT {
             fn append_to(&self, senres: &mut Writer<Backing>) {
                 senres.align_to(core::mem::align_of::<Self>());
-                for (src, dest) in self
-                    .to_le_bytes()
-                    .iter()
-                    .zip(senres.backing.as_mut_slice()[senres.offset..].iter_mut())
+                for (src, dest) in
+                    self.to_le_bytes().iter().zip(senres.backing.as_mut_slice()[senres.offset..].iter_mut())
                 {
                     *dest = *src;
                     senres.offset += 1;
@@ -438,9 +387,7 @@ macro_rules! primitive_impl {
                     return Err(());
                 }
                 let val = Self::from_le_bytes(
-                    senres.backing.as_slice()[offset..offset + my_size]
-                        .try_into()
-                        .unwrap(),
+                    senres.backing.as_slice()[offset..offset + my_size].try_into().unwrap(),
                 );
                 senres.offset.set(offset + my_size);
                 Ok(val)
@@ -562,10 +509,8 @@ impl<T: RecDes<Backing>, Backing: Senres, const N: usize> RecDes<Backing> for [T
 impl<Backing: SenresMut> SenSer<Backing> for str {
     fn append_to(&self, senres: &mut Writer<Backing>) {
         senres.append(self.len() as u32);
-        for (src, dest) in self
-            .as_bytes()
-            .iter()
-            .zip(senres.backing.as_mut_slice()[senres.offset..].iter_mut())
+        for (src, dest) in
+            self.as_bytes().iter().zip(senres.backing.as_mut_slice()[senres.offset..].iter_mut())
         {
             *dest = *src;
             senres.offset += 1;
@@ -576,10 +521,8 @@ impl<Backing: SenresMut> SenSer<Backing> for str {
 impl<Backing: SenresMut> SenSer<Backing> for &str {
     fn append_to(&self, senres: &mut Writer<Backing>) {
         senres.append(self.len() as u32);
-        for (src, dest) in self
-            .as_bytes()
-            .iter()
-            .zip(senres.backing.as_mut_slice()[senres.offset..].iter_mut())
+        for (src, dest) in
+            self.as_bytes().iter().zip(senres.backing.as_mut_slice()[senres.offset..].iter_mut())
         {
             *dest = *src;
             senres.offset += 1;
@@ -594,12 +537,10 @@ impl<Backing: Senres> RecDes<Backing> for String {
         if offset + len > senres.backing.as_slice().len() {
             return Err(());
         }
-        core::str::from_utf8(&senres.backing.as_slice()[offset..offset + len])
-            .or(Err(()))
-            .map(|e| {
-                senres.offset.set(offset + len);
-                e.to_owned()
-            })
+        core::str::from_utf8(&senres.backing.as_slice()[offset..offset + len]).or(Err(())).map(|e| {
+            senres.offset.set(offset + len);
+            e.to_owned()
+        })
     }
 }
 
@@ -610,12 +551,10 @@ impl<'a, Backing: Senres> RecDesRef<'a, Backing> for str {
         if offset + len > senres.backing.as_slice().len() {
             return Err(());
         }
-        core::str::from_utf8(&senres.backing.as_slice()[offset..offset + len])
-            .or(Err(()))
-            .map(|e| {
-                senres.offset.set(offset + len);
-                e
-            })
+        core::str::from_utf8(&senres.backing.as_slice()[offset..offset + len]).or(Err(())).map(|e| {
+            senres.offset.set(offset + len);
+            e
+        })
     }
 }
 
@@ -627,10 +566,7 @@ impl<'a, Backing: Senres, T: RecDes<Backing>> RecDesRef<'a, Backing> for [T] {
             return Err(());
         }
         let ret = unsafe {
-            core::slice::from_raw_parts(
-                senres.backing.as_slice().as_ptr().add(offset) as *const T,
-                len,
-            )
+            core::slice::from_raw_parts(senres.backing.as_slice().as_ptr().add(offset) as *const T, len)
         };
         senres.offset.set(offset + len * core::mem::size_of::<T>());
         Ok(ret)
@@ -638,9 +574,7 @@ impl<'a, Backing: Senres, T: RecDes<Backing>> RecDesRef<'a, Backing> for [T] {
 }
 
 impl<const N: usize> Default for Stack<N> {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 fn do_stuff(_r: &Stack) {
@@ -683,9 +617,7 @@ fn smoke_test() {
         println!("u32 val: {}", val);
         let val: u64 = reader.try_get_from().expect("couldn't get the u64 value");
         println!("u64 val: {:x}", val);
-        let val: &str = reader
-            .try_get_ref_from()
-            .expect("couldn't get string value");
+        let val: &str = reader.try_get_ref_from().expect("couldn't get string value");
         println!("String val: {}", val);
         let val: String = reader.try_get_from().expect("couldn't get string2 value");
         println!("String2 val: {}", val);
@@ -694,9 +626,7 @@ fn smoke_test() {
         let val: Option<u32> = reader.try_get_from().expect("couldn't get Option<u32>");
         println!("Option<u32> val: {:?}", val);
 
-        let val: u8 = reader
-            .try_get_from()
-            .expect("couldn't get u8 weird padding");
+        let val: u8 = reader.try_get_from().expect("couldn't get u8 weird padding");
         println!("u8 val: {}", val);
 
         let val: &[i32] = reader.try_get_ref_from().expect("couldn't get &[i32]");

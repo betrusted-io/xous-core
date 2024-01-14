@@ -1,6 +1,6 @@
-use std::thread;
 #[allow(unused_imports)]
-use std::io::{Error, ErrorKind, Write, Read};
+use std::io::{Error, ErrorKind, Read, Write};
+use std::thread;
 
 const PROFILING_DICT: &'static str = "pdict";
 const NUMKEYS: usize = 200;
@@ -21,9 +21,7 @@ pub fn do_query_work() {
 
         let key_count = match pddb.list_keys(PROFILING_DICT, None) {
             Ok(kl) => kl.len(),
-            Err(_e) => {
-                0
-            }
+            Err(_e) => 0,
         };
 
         // populate the dictionary if we're short the number of keys we want to have
@@ -31,15 +29,7 @@ pub fn do_query_work() {
         if key_count < NUMKEYS {
             for _ in 0..NUMKEYS - key_count {
                 let guid = gen_guid(&mut trng);
-                match pddb.get(
-                    PROFILING_DICT,
-                    &guid,
-                    None,
-                    true,
-                    true,
-                    Some(256),
-                    None::<fn()>
-                ) {
+                match pddb.get(PROFILING_DICT, &guid, None, true, true, Some(256), None::<fn()>) {
                     Ok(mut key) => {
                         let mut rdata = [0u8; 192];
                         trng.fill_bytes(&mut rdata);

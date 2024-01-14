@@ -1,9 +1,9 @@
 mod rkyv_enum;
-pub use rkyv_enum::*;
+use core::ops::{Deref, DerefMut};
+use std::num::NonZeroU32;
 
 use bitfield::bitfield;
-use std::num::NonZeroU32;
-use core::ops::{Deref, DerefMut};
+pub use rkyv_enum::*;
 
 // on the "[allow(dead_code)]" directives: these constants are used to define the PDDB, and are
 // sometimes used by both `bin` (main.rs) and `lib` (lib.rs) views, but also, sometimes used
@@ -15,8 +15,8 @@ use core::ops::{Deref, DerefMut};
 // here, because sometimes, clippy just can't see the big picture.
 
 // note this name cannot be changed because it is baked into `libstd`
-pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
-pub(crate) const SERVER_NAME_PDDB_POLLER: &str     = "_PDDB Mount Poller_";
+pub(crate) const SERVER_NAME_PDDB: &str = "_Plausibly Deniable Database_";
+pub(crate) const SERVER_NAME_PDDB_POLLER: &str = "_PDDB Mount Poller_";
 /// This is the registered name for a dedicated private API channel to the PDDB for doing the time reset
 /// Even though nobody but the PDDB should connect to this, we have to share it publicly so the PDDB can
 /// depend upon this constant.
@@ -43,10 +43,10 @@ pub(crate) const PDDB_VERSION: u32 = 0x00_00_02_01;
 #[allow(dead_code)]
 // PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
 #[allow(dead_code)]
-#[cfg(not(any(feature="pddbtest",feature="autobasis",feature="ci",feature="smalldb")))]
+#[cfg(not(any(feature = "pddbtest", feature = "autobasis", feature = "ci", feature = "smalldb")))]
 pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
 #[allow(dead_code)]
-#[cfg(any(feature="pddbtest",feature="autobasis",feature="ci",feature="smalldb"))]
+#[cfg(any(feature = "pddbtest", feature = "autobasis", feature = "ci", feature = "smalldb"))]
 pub const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 
 /// range for the starting point of a journal number, picked from a random seed
@@ -108,7 +108,7 @@ pub(crate) const PDDB_FAST_SPACE_SYSTEM_BASIS: &'static str = ".FastSpace";
 
 #[allow(dead_code)]
 // TODO: add hardware acceleration for BCRYPT so we can hit the OWASP target without excessive UX delay
-pub(crate) const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWASP; takes 5696 ms to verify @ 10 rounds; 804 ms to verify 7 rounds
+pub(crate) const BCRYPT_COST: u32 = 7; // 10 is the minimum recommended by OWASP; takes 5696 ms to verify @ 10 rounds; 804 ms to verify 7 rounds
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
@@ -160,7 +160,7 @@ pub(crate) enum Opcode {
     /// Write debug dump (only available in hosted mode)
     #[cfg(not(target_os = "xous"))]
     DangerousDebug = 25,
-    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
     BasisTesting = 26,
 
     ListBasisStd = 26,
@@ -262,9 +262,11 @@ pub type ApiToken = [u32; 3];
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[repr(C)]
 pub struct PddbBasisList {
-    /// the first 63 that fit in the list -- generally we anticipate not more than a few being open at a time, so this should be enough.
-    pub list: [xous_ipc::String::<BASIS_NAME_LEN>; 63],
-    /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where this structure wasn't big enough.
+    /// the first 63 that fit in the list -- generally we anticipate not more than a few being open at a
+    /// time, so this should be enough.
+    pub list: [xous_ipc::String<BASIS_NAME_LEN>; 63],
+    /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where
+    /// this structure wasn't big enough.
     pub num: u32,
 }
 
@@ -296,16 +298,16 @@ impl BasisRetentionPolicy {
 }
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbBasisRequest {
-    pub name: xous_ipc::String::<BASIS_NAME_LEN>,
+    pub name: xous_ipc::String<BASIS_NAME_LEN>,
     pub code: PddbRequestCode,
     pub policy: Option<BasisRetentionPolicy>,
 }
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbDictRequest {
     pub basis_specified: bool,
-    pub basis: xous_ipc::String::<BASIS_NAME_LEN>,
-    pub dict: xous_ipc::String::<DICT_NAME_LEN>,
-    pub key: xous_ipc::String::<KEY_NAME_LEN>,
+    pub basis: xous_ipc::String<BASIS_NAME_LEN>,
+    pub dict: xous_ipc::String<DICT_NAME_LEN>,
+    pub key: xous_ipc::String<KEY_NAME_LEN>,
     pub index: u32,
     pub token: [u32; 4],
     pub code: PddbRequestCode,
@@ -321,13 +323,14 @@ pub struct PddbDictRequest {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbKeyRequest {
     pub basis_specified: bool,
-    pub basis: xous_ipc::String::<BASIS_NAME_LEN>,
-    pub dict: xous_ipc::String::<DICT_NAME_LEN>,
-    pub key: xous_ipc::String::<KEY_NAME_LEN>,
+    pub basis: xous_ipc::String<BASIS_NAME_LEN>,
+    pub dict: xous_ipc::String<DICT_NAME_LEN>,
+    pub key: xous_ipc::String<KEY_NAME_LEN>,
     pub token: Option<ApiToken>,
     pub create_dict: bool,
     pub create_key: bool,
-    pub alloc_hint: Option<u64>, // this is a usize but for IPC we must have defined memory sizes, so we pick the big option.
+    pub alloc_hint: Option<u64>, /* this is a usize but for IPC we must have defined memory sizes, so we
+                                  * pick the big option. */
     pub cb_sid: Option<[u32; 4]>,
     pub result: PddbRequestCode,
 }
@@ -335,7 +338,7 @@ pub struct PddbKeyRequest {
 pub(crate) const MAX_PDDBKLISTLEN: usize = 4064;
 /// A structure for requesting a token to access a particular key/value pair
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub (crate) struct PddbKeyList {
+pub(crate) struct PddbKeyList {
     pub token: [u32; 4],
     pub data: [u8; MAX_PDDBKLISTLEN],
     pub retcode: PddbRetcode,
@@ -345,17 +348,26 @@ pub (crate) struct PddbKeyList {
 /// A structure for bulk deletion of keys
 pub(crate) const MAX_PDDB_DELETE_LEN: usize = 3800; // approximate limit, might be a little higher if we cared to calculate it out
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub (crate) struct PddbDeleteList {
+pub(crate) struct PddbDeleteList {
     pub basis_specified: bool,
-    pub basis: xous_ipc::String::<BASIS_NAME_LEN>,
-    pub dict: xous_ipc::String::<DICT_NAME_LEN>,
+    pub basis: xous_ipc::String<BASIS_NAME_LEN>,
+    pub dict: xous_ipc::String<DICT_NAME_LEN>,
     pub data: [u8; MAX_PDDB_DELETE_LEN],
     pub retcode: PddbRetcode,
 }
 
 /// Return codes for Read/Write API calls to the main server
 #[repr(u8)]
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
+#[derive(
+    num_derive::FromPrimitive,
+    num_derive::ToPrimitive,
+    Debug,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+    Eq,
+    PartialEq,
+)]
 pub(crate) enum PddbRetcode {
     Uninit = 0,
     Ok = 1,
@@ -380,7 +392,8 @@ pub(crate) struct PddbBuf {
     reserved: u8,
     /// length of the data field
     pub(crate) len: u16,
-    /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
+    /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a
+    /// 32-bit target.
     pub(crate) position: u64,
     pub(crate) data: [u8; PDDB_BUF_DATA_LEN],
 }
@@ -401,12 +414,19 @@ pub struct PddbKeyRecord {
     /// and the record must be explicitly re-read with a non-bulk call to fetch its data,
     /// or the key has zero length. Check the `len` field to differentiate the two.
     /// (Turns out that `rkyv` crashes when deserializing a zero-length Vec)
-    pub data: Option<Vec::<u8>>,
+    pub data: Option<Vec<u8>>,
 }
 
 /// Return codes for Read/Write API calls to the main server
 #[repr(u32)]
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    num_derive::FromPrimitive,
+    num_derive::ToPrimitive,
+    Debug,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum PddbBulkReadCode {
     /// Uninitialized value
     Uninit = 0,
@@ -433,18 +453,23 @@ pub struct BulkReadHeader {
 }
 impl Deref for BulkReadHeader {
     type Target = [u8];
+
     fn deref(&self) -> &[u8] {
         unsafe {
-            core::slice::from_raw_parts(self as *const BulkReadHeader as *const u8, core::mem::size_of::<BulkReadHeader>())
-                as &[u8]
+            core::slice::from_raw_parts(
+                self as *const BulkReadHeader as *const u8,
+                core::mem::size_of::<BulkReadHeader>(),
+            ) as &[u8]
         }
     }
 }
 impl DerefMut for BulkReadHeader {
     fn deref_mut(&mut self) -> &mut [u8] {
         unsafe {
-            core::slice::from_raw_parts_mut(self as *mut BulkReadHeader as *mut u8, core::mem::size_of::<BulkReadHeader>())
-                as &mut [u8]
+            core::slice::from_raw_parts_mut(
+                self as *mut BulkReadHeader as *mut u8,
+                core::mem::size_of::<BulkReadHeader>(),
+            ) as &mut [u8]
         }
     }
 }
@@ -452,13 +477,15 @@ impl DerefMut for BulkReadHeader {
 #[allow(dead_code)]
 /// Ensure that the `PddbBuf` struct is exactly one page big
 const fn _assert_pddbbuf_is_4096_bytes() {
-    unsafe { core::mem::transmute::<_, PddbBuf>([0u8; 4096]); }
+    unsafe {
+        core::mem::transmute::<_, PddbBuf>([0u8; 4096]);
+    }
 }
 
 impl PddbBuf {
     pub(crate) fn from_slice_mut(slice: &mut [u8]) -> &mut PddbBuf {
         // this transforms the slice [u8] into a PddbBuf ref.
-        unsafe {core::mem::transmute::<*mut u8, &mut PddbBuf>(slice.as_mut_ptr()) }
+        unsafe { core::mem::transmute::<*mut u8, &mut PddbBuf>(slice.as_mut_ptr()) }
     }
 }
 
@@ -497,8 +524,8 @@ pub struct PddbKeyAttrIpc {
     pub len: u64,
     pub reserved: u64,
     pub age: u64,
-    pub dict: xous_ipc::String::<DICT_NAME_LEN>,
-    pub basis: xous_ipc::String::<BASIS_NAME_LEN>,
+    pub dict: xous_ipc::String<DICT_NAME_LEN>,
+    pub basis: xous_ipc::String<BASIS_NAME_LEN>,
     pub flags: u32,
     pub index: u32,
     pub token: ApiToken,
@@ -518,6 +545,7 @@ impl PddbKeyAttrIpc {
             code: PddbRequestCode::Uninit,
         }
     }
+
     #[allow(dead_code)]
     pub fn to_attributes(&self) -> KeyAttributes {
         KeyAttributes {
@@ -530,6 +558,7 @@ impl PddbKeyAttrIpc {
             index: NonZeroU32::new(self.index).unwrap(),
         }
     }
+
     pub fn from_attributes(attr: KeyAttributes, token: ApiToken) -> PddbKeyAttrIpc {
         PddbKeyAttrIpc {
             len: attr.len as u64,
@@ -550,7 +579,7 @@ impl PddbKeyAttrIpc {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbDangerousDebug {
     pub request: DebugRequest,
-    pub dump_name: xous_ipc::String::<128>,
+    pub dump_name: xous_ipc::String<128>,
 }
 #[cfg(not(target_os = "xous"))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -570,6 +599,9 @@ mod tests {
     }
     #[test]
     fn test_pddb_len() {
-        assert!(PDDB_A_LEN <= xous::PDDB_LEN as usize, "PDDB_A_LEN is larger than the maximum extents available in the hardware");
+        assert!(
+            PDDB_A_LEN <= xous::PDDB_LEN as usize,
+            "PDDB_A_LEN is larger than the maximum extents available in the hardware"
+        );
     }
 }

@@ -27,5 +27,5 @@ mod hosted;
 #[cfg(not(target_os = "xous"))]
 pub(crate) use hosted::*;
 
-#[cfg(feature="migration1")]
+#[cfg(feature = "migration1")]
 mod migration1to2;
