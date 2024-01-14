@@ -1,16 +1,12 @@
-use cbor::reader::DecoderError;
 use core::convert::TryFrom;
+
+use cbor::reader::DecoderError;
 use locales::t;
+use vault::ctap::hid::{send::HidPacketIterator, ChannelID, CtapHidCommand, Message};
+use vault::vault_api::{COMMAND_BACKUP_TOTP_CODES, COMMAND_RESET_SESSION, COMMAND_RESTORE_TOTP_CODES};
 
-use vault::{
-    ctap::hid::{send::HidPacketIterator, ChannelID, Message, CtapHidCommand}
-};
-use crate::totp::TotpAlgorithm;
 use crate::storage::{Error, PasswordRecord, TotpRecord};
-
-use vault::vault_api::{
-    COMMAND_BACKUP_TOTP_CODES, COMMAND_RESTORE_TOTP_CODES, COMMAND_RESET_SESSION
-};
+use crate::totp::TotpAlgorithm;
 // TODO(gsora): add something that checks whether or not a command works.
 
 pub enum SessionError {
@@ -39,9 +35,7 @@ pub struct VendorSession {
 }
 
 impl VendorSession {
-    fn reset(&mut self) {
-        *self = VendorSession::default()
-    }
+    fn reset(&mut self) { *self = VendorSession::default() }
 
     fn read_from_wire(&mut self, w: backup::Wire, command: u8) -> Result<(), SessionError> {
         self.data.append(&mut w.data.clone());
@@ -76,17 +70,11 @@ impl VendorSession {
         b.pop()
     }
 
-    pub fn is_backup(&self) -> bool {
-        self.is_backup
-    }
+    pub fn is_backup(&self) -> bool { self.is_backup }
 
-    pub fn has_backup_data(&self) -> bool {
-        self.backup_chunks.is_some()
-    }
+    pub fn has_backup_data(&self) -> bool { self.backup_chunks.is_some() }
 
-    fn finished(&self) -> bool {
-        self.finished
-    }
+    fn finished(&self) -> bool { self.finished }
 }
 
 pub fn handle_vendor_data(
@@ -129,8 +117,7 @@ pub fn handle_vendor_data(
         Err(error) => {
             log::error!("error while handling vendor data, {:?}", error);
             return Ok(Some(
-                HidPacketIterator::new(error_message(channel_id, backup::ERROR_VENDOR_HANDLING))
-                    .unwrap(),
+                HidPacketIterator::new(error_message(channel_id, backup::ERROR_VENDOR_HANDLING)).unwrap(),
             ));
         }
     };
@@ -141,8 +128,7 @@ pub fn handle_vendor_data(
         Err(error) => {
             log::error!("error while handling vendor data, {:?}", error);
             return Ok(Some(
-                HidPacketIterator::new(error_message(channel_id, backup::ERROR_VENDOR_HANDLING))
-                    .unwrap(),
+                HidPacketIterator::new(error_message(channel_id, backup::ERROR_VENDOR_HANDLING)).unwrap(),
             ));
         }
     };
@@ -174,11 +160,7 @@ pub fn handle_vendor_command(session: &mut VendorSession, allow_host: bool) -> H
     let payload = if allow_host {
         match session.command {
             COMMAND_RESTORE_TOTP_CODES => match handle_restore(payload, &xns) {
-                Ok(payload) => Message {
-                    cid: channel_id,
-                    cmd: cmd.into(),
-                    payload,
-                },
+                Ok(payload) => Message { cid: channel_id, cmd: cmd.into(), payload },
                 Err(error) => {
                     log::error!("error while restoring codes: {:?}", error);
                     error_message(channel_id, 41)
@@ -187,11 +169,7 @@ pub fn handle_vendor_command(session: &mut VendorSession, allow_host: bool) -> H
             COMMAND_BACKUP_TOTP_CODES => match handle_backup(&xns, session) {
                 Ok(payload) => {
                     log::debug!("sending over chunk: {:?}", payload);
-                    Message {
-                        cid: channel_id,
-                        cmd: cmd.into(),
-                        payload,
-                    }
+                    Message { cid: channel_id, cmd: cmd.into(), payload }
                 }
                 Err(error) => {
                     match error {
@@ -225,9 +203,7 @@ enum BackupError {
 }
 
 impl From<DecoderError> for BackupError {
-    fn from(de: DecoderError) -> Self {
-        BackupError::CborError(de)
-    }
+    fn from(de: DecoderError) -> Self { BackupError::CborError(de) }
 }
 
 impl From<crate::storage::Error> for BackupError {
@@ -240,9 +216,7 @@ impl From<crate::storage::Error> for BackupError {
 }
 
 impl From<backup::CborConversionError> for BackupError {
-    fn from(cbe: backup::CborConversionError) -> Self {
-        BackupError::CborConversionError(cbe)
-    }
+    fn from(cbe: backup::CborConversionError) -> Self { BackupError::CborConversionError(cbe) }
 }
 
 fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>, BackupError> {
@@ -311,10 +285,7 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
     }
 }
 
-fn handle_backup(
-    xns: &xous_names::XousNames,
-    session: &mut VendorSession,
-) -> Result<Vec<u8>, BackupError> {
+fn handle_backup(xns: &xous_names::XousNames, session: &mut VendorSession) -> Result<Vec<u8>, BackupError> {
     log::debug!(
         "entering backup handler, is_backup: {} has_backup_data: {}",
         session.is_backup(),
@@ -331,11 +302,7 @@ fn handle_backup(
 
         let new_chunk = new_chunk.as_ref().unwrap();
 
-        log::debug!(
-            "new chunk data: idx: {}, more_data: {}",
-            new_chunk.index,
-            new_chunk.more_data
-        );
+        log::debug!("new chunk data: idx: {}, more_data: {}", new_chunk.index, new_chunk.more_data);
         return Ok(new_chunk.into());
     }
 
@@ -389,10 +356,7 @@ fn handle_backup(
     log::debug!("loading newly created backup data in session");
     session.load_backup_data(data);
 
-    log::debug!(
-        "amount of chunks: {}",
-        session.backup_chunks.as_ref().unwrap().len()
-    );
+    log::debug!("amount of chunks: {}", session.backup_chunks.as_ref().unwrap().len());
 
     let new_chunk = session.drain_backup();
 
@@ -403,11 +367,7 @@ fn handle_backup(
 
     let new_chunk = new_chunk.as_ref().unwrap();
 
-    log::debug!(
-        "new chunk data: idx: {}, more_data: {}",
-        new_chunk.index,
-        new_chunk.more_data
-    );
+    log::debug!("new chunk data: idx: {}, more_data: {}", new_chunk.index, new_chunk.more_data);
 
     return Ok(new_chunk.into());
 }

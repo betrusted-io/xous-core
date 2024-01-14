@@ -1,17 +1,11 @@
 use ime_plugin_api::*;
-
-use xous_ipc::Buffer;
 use num_traits::*;
 use xous::msg_scalar_unpack;
+use xous_ipc::Buffer;
 
 pub(crate) const SERVER_NAME_ICONTRAY: &'static str = "_vault icon tray plugin_";
 
-const ICONS: [&'static str; 4] = [
-    "\t FIDO",
-    "\t⏳1234",
-    "\t🔐****",
-    "\t🧾🛠",
-];
+const ICONS: [&'static str; 4] = ["\t FIDO", "\t⏳1234", "\t🔐****", "\t🧾🛠"];
 
 pub(crate) fn icontray_server(conn_to_main: xous::CID) {
     let xns = xous_names::XousNames::new().unwrap();
@@ -21,11 +15,7 @@ pub(crate) fn icontray_server(conn_to_main: xous::CID) {
 
     let ime_sh_sid = xns.register_name(SERVER_NAME_ICONTRAY, None).expect("can't register server");
 
-    let mytriggers = PredictionTriggers {
-        newline: false,
-        punctuation: false,
-        whitespace: false,
-    };
+    let mytriggers = PredictionTriggers { newline: false, punctuation: false, whitespace: false };
 
     let mut api_token: Option<[u32; 4]> = None;
     loop {
@@ -33,9 +23,8 @@ pub(crate) fn icontray_server(conn_to_main: xous::CID) {
         log::trace!("received message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::Acquire) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut ret = buffer.to_original::<AcquirePredictor, _>().unwrap();
                 if api_token.is_none() {
                     if let Some(token) = ret.token {
@@ -64,17 +53,16 @@ pub(crate) fn icontray_server(conn_to_main: xous::CID) {
                 }
             }),
             Some(Opcode::Input) => {
-                msg.forward(
-                    conn_to_main,
-                    crate::VaultOp::IncrementalLine.to_usize().unwrap()
-                ).expect("couldn't forward input");
+                msg.forward(conn_to_main, crate::VaultOp::IncrementalLine.to_usize().unwrap())
+                    .expect("couldn't forward input");
             }
             Some(Opcode::Picked) => {
                 // this is ignored
             }
             Some(Opcode::Prediction) => {
                 // we don't check the API token here, because our "predictions" are just the four menu slots
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut prediction: Prediction = buffer.to_original::<Prediction, _>().unwrap();
                 // every key press, the four slots get queried
                 prediction.string.clear();
@@ -91,14 +79,18 @@ pub(crate) fn icontray_server(conn_to_main: xous::CID) {
                 // ignore
             }
             Some(Opcode::GetPredictionTriggers) => {
-                xous::return_scalar(msg.sender, mytriggers.into()).expect("couldn't return GetPredictionTriggers");
+                xous::return_scalar(msg.sender, mytriggers.into())
+                    .expect("couldn't return GetPredictionTriggers");
             }
             Some(Opcode::Quit) => {
                 if api_token.is_some() {
-                    log::error!("received quit, goodbye!"); break;
+                    log::error!("received quit, goodbye!");
+                    break;
                 }
             }
-            None => {log::error!("unknown Opcode");}
+            None => {
+                log::error!("unknown Opcode");
+            }
         }
     }
     log::trace!("main loop exit, destroying servers");

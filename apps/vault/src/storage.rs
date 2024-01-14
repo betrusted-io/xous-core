@@ -1,13 +1,14 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
 use std::convert::TryFrom;
 use std::{
     io::Read,
     io::Write,
     time::{SystemTime, UNIX_EPOCH},
 };
-use crate::totp::TotpAlgorithm;
 
+use chrono::{DateTime, NaiveDateTime, Utc};
 use ctap_crypto::Hash256;
+
+use crate::totp::TotpAlgorithm;
 
 const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
 const VAULT_TOTP_DICT: &'static str = "vault.totp";
@@ -32,21 +33,15 @@ pub enum Error {
 }
 
 impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Self::IoError(e)
-    }
+    fn from(e: std::io::Error) -> Self { Self::IoError(e) }
 }
 
 impl From<TOTPSerializationError> for Error {
-    fn from(e: TOTPSerializationError) -> Self {
-        Self::TotpSerError(e)
-    }
+    fn from(e: TOTPSerializationError) -> Self { Self::TotpSerError(e) }
 }
 
 impl From<PasswordSerializationError> for Error {
-    fn from(e: PasswordSerializationError) -> Self {
-        Self::PasswordSerError(e)
-    }
+    fn from(e: PasswordSerializationError) -> Self { Self::PasswordSerError(e) }
 }
 
 pub struct Manager {
@@ -85,22 +80,11 @@ impl ContentKind {
 }
 
 impl Manager {
-    pub fn new(_xns: &xous_names::XousNames) -> Manager {
-        Manager {
-            pddb: pddb::Pddb::new(),
-        }
-    }
+    pub fn new(_xns: &xous_names::XousNames) -> Manager { Manager { pddb: pddb::Pddb::new() } }
 
     fn pddb_exists(&self, dict: &str, key_name: &str, basis: Option<String>) -> bool {
-        match self.pddb.get(
-            dict,
-            &key_name,
-            basis.as_deref(),
-            false,
-            false,
-            None,
-            Some(vault::basis_change),
-        ) {
+        match self.pddb.get(dict, &key_name, basis.as_deref(), false, false, None, Some(vault::basis_change))
+        {
             Ok(_) => return true,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
             Err(e) => {
@@ -146,15 +130,7 @@ impl Manager {
     }
 
     fn pddb_get(&self, dict: &str, key_name: &str) -> Result<Vec<u8>, Error> {
-        match self.pddb.get(
-            dict,
-            key_name,
-            None,
-            false,
-            false,
-            None,
-            Some(vault::basis_change),
-        ) {
+        match self.pddb.get(dict, key_name, None, false, false, None, Some(vault::basis_change)) {
             Ok(mut record) => {
                 let mut data = Vec::<u8>::new();
                 record.read_to_end(&mut data)?;
@@ -165,19 +141,8 @@ impl Manager {
     }
 
     fn basis_for_key(&self, dict: &str, key_name: &str) -> Result<String, Error> {
-        match self.pddb.get(
-            dict,
-            key_name,
-            None,
-            false,
-            false,
-            None,
-            Some(vault::basis_change),
-        ) {
-            Ok(record) => Ok(record
-                .attributes()
-                .expect("couldn't get key attributes")
-                .basis),
+        match self.pddb.get(dict, key_name, None, false, false, None, Some(vault::basis_change)) {
+            Ok(record) => Ok(record.attributes().expect("couldn't get key attributes").basis),
             Err(e) => return Err(Error::IoError(e)),
         }
     }
@@ -256,10 +221,7 @@ impl Manager {
         Ok(())
     }
 
-    pub fn all<T: StorageContent + std::default::Default>(
-        &self,
-        kind: ContentKind,
-    ) -> Result<Vec<T>, Error> {
+    pub fn all<T: StorageContent + std::default::Default>(&self, kind: ContentKind) -> Result<Vec<T>, Error> {
         let settings = kind.settings();
 
         let keylist = self.pddb.list_keys(&settings.dict, None)?;
@@ -296,8 +258,7 @@ impl Manager {
         let settings = kind.settings();
 
         let basis = self.basis_for_key(&settings.dict, key_name)?;
-        self.pddb
-            .delete_key(&settings.dict, key_name, Some(&basis))?;
+        self.pddb.delete_key(&settings.dict, key_name, Some(&basis))?;
 
         self.new_record(&mut *record, Some(basis), true)
     }
@@ -306,9 +267,7 @@ impl Manager {
         let settings = kind.settings();
 
         let basis = self.basis_for_key(&settings.dict, key_name)?;
-        self.pddb
-            .delete_key(&settings.dict, key_name, Some(&basis))
-            .map_err(|error| Error::IoError(error))
+        self.pddb.delete_key(&settings.dict, key_name, Some(&basis)).map_err(|error| Error::IoError(error))
     }
 }
 
@@ -339,15 +298,10 @@ pub enum TOTPSerializationError {
 
 impl StorageContent for TotpRecord {
     fn settings(&self) -> ContentPDDBSettings {
-        ContentPDDBSettings {
-            dict: VAULT_TOTP_DICT.to_string(),
-            alloc_hint: Some(VAULT_TOTP_ALLOC_HINT),
-        }
+        ContentPDDBSettings { dict: VAULT_TOTP_DICT.to_string(), alloc_hint: Some(VAULT_TOTP_ALLOC_HINT) }
     }
 
-    fn set_ctime(&mut self, value: u64) {
-        self.ctime = value;
-    }
+    fn set_ctime(&mut self, value: u64) { self.ctime = value; }
 
     fn from_vec(&mut self, data: Vec<u8>) -> Result<(), Error> {
         let desc_str = std::str::from_utf8(&data).or(Err(TOTPSerializationError::MalformedInput))?;
@@ -412,10 +366,7 @@ impl StorageContent for TotpRecord {
                         }
                     }
                     _ => {
-                        log::warn!(
-                            "unexpected tag {} encountered parsing TOTP info, ignoring",
-                            tag
-                        );
+                        log::warn!("unexpected tag {} encountered parsing TOTP info, ignoring", tag);
                     }
                 }
             } else {
@@ -427,6 +378,7 @@ impl StorageContent for TotpRecord {
 
         Ok(())
     }
+
     fn to_vec(&self) -> Vec<u8> {
         format!(
             "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
@@ -445,7 +397,7 @@ impl StorageContent for TotpRecord {
             "timestep",
             self.timestep,
             "hotp",
-            if self.is_hotp {1} else {0},
+            if self.is_hotp { 1 } else { 0 },
             "ctime",
             self.ctime,
         )
@@ -534,10 +486,7 @@ impl TryFrom<Vec<u8>> for TotpRecord {
                         }
                     }
                     _ => {
-                        log::warn!(
-                            "unexpected tag {} encountered parsing TOTP info, ignoring",
-                            tag
-                        );
+                        log::warn!("unexpected tag {} encountered parsing TOTP info, ignoring", tag);
                     }
                 }
             } else {
@@ -568,7 +517,7 @@ impl From<TotpRecord> for Vec<u8> {
             "timestep",
             tr.timestep,
             "hotp",
-            if tr.is_hotp {1} else {0},
+            if tr.is_hotp { 1 } else { 0 },
             "ctime",
             tr.ctime,
         )
@@ -612,6 +561,7 @@ impl PasswordRecord {
             count: 0,
         }
     }
+
     pub fn clear(&mut self) {
         self.description.clear();
         self.username.clear();
@@ -626,21 +576,15 @@ impl PasswordRecord {
 
 impl StorageContent for PasswordRecord {
     fn settings(&self) -> ContentPDDBSettings {
-        ContentPDDBSettings {
-            dict: VAULT_PASSWORD_DICT.to_string(),
-            alloc_hint: Some(VAULT_TOTP_ALLOC_HINT),
-        }
+        ContentPDDBSettings { dict: VAULT_PASSWORD_DICT.to_string(), alloc_hint: Some(VAULT_TOTP_ALLOC_HINT) }
     }
 
-    fn set_ctime(&mut self, value: u64) {
-        self.ctime = value;
-    }
+    fn set_ctime(&mut self, value: u64) { self.ctime = value; }
 
     fn from_vec(&mut self, data: Vec<u8>) -> Result<(), Error> {
         self.clear();
         // use `std::str` so we're allocating this temporary on the stack
-        let desc_str =
-            std::str::from_utf8(&data).or(Err(PasswordSerializationError::MalformedInput))?;
+        let desc_str = std::str::from_utf8(&data).or(Err(PasswordSerializationError::MalformedInput))?;
 
         let lines = desc_str.split('\n');
         for line in lines {
@@ -683,10 +627,7 @@ impl StorageContent for PasswordRecord {
                         }
                     }
                     _ => {
-                        log::warn!(
-                            "unexpected tag {} encountered parsing password info, ignoring",
-                            tag
-                        );
+                        log::warn!("unexpected tag {} encountered parsing password info, ignoring", tag);
                     }
                 }
             } else {
@@ -695,6 +636,7 @@ impl StorageContent for PasswordRecord {
         }
         Ok(())
     }
+
     fn to_vec(&self) -> Vec<u8> {
         format!(
             "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
@@ -730,8 +672,7 @@ impl TryFrom<Vec<u8>> for PasswordRecord {
     type Error = PasswordSerializationError;
 
     fn try_from(data: Vec<u8>) -> Result<Self, Self::Error> {
-        let desc_str =
-            String::from_utf8(data).or(Err(PasswordSerializationError::MalformedInput))?;
+        let desc_str = String::from_utf8(data).or(Err(PasswordSerializationError::MalformedInput))?;
 
         let mut pr = PasswordRecord {
             version: VAULT_PASSWORD_REC_VERSION,
@@ -785,10 +726,7 @@ impl TryFrom<Vec<u8>> for PasswordRecord {
                         }
                     }
                     _ => {
-                        log::warn!(
-                            "unexpected tag {} encountered parsing password info, ignoring",
-                            tag
-                        );
+                        log::warn!("unexpected tag {} encountered parsing password info, ignoring", tag);
                     }
                 }
             } else {
@@ -824,11 +762,10 @@ impl From<PasswordRecord> for Vec<u8> {
     }
 }
 
-/// because we don't get Utc::now, as the crate checks your architecture and xous is not recognized as a valid target
+/// because we don't get Utc::now, as the crate checks your architecture and xous is not recognized as a valid
+/// target
 fn utc_now() -> DateTime<Utc> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time before Unix epoch");
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("system time before Unix epoch");
     let naive = NaiveDateTime::from_timestamp(now.as_secs() as i64, now.subsec_nanos() as u32);
     DateTime::from_utc(naive, Utc)
 }

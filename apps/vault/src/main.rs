@@ -1,41 +1,36 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod ux;
-mod submenu;
 mod actions;
-mod totp;
-mod prereqs;
-mod vendor_commands;
-mod storage;
-mod migration_v1;
 mod itemcache;
+mod migration_v1;
+mod prereqs;
+mod storage;
+mod submenu;
+mod totp;
+mod ux;
+mod vendor_commands;
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Instant;
+
+use actions::ActionOp;
 use itemcache::*;
-
 use locales::t;
-
+use num_traits::*;
+use ux::framework::{name_to_style, VaultUx, DEFAULT_FONT, FONT_LIST};
 use vault::ctap::main_hid::HidIterType;
 use vault::env::xous::XousEnv;
 use vault::env::Env;
-use vault::{
-    SELF_CONN, Transport, VaultOp
-};
-
-use actions::ActionOp;
-use crate::ux::framework::NavDir;
-use crate::prereqs::ntp_updater;
-use crate::vendor_commands::VendorSession;
-
-use ux::framework::{VaultUx, DEFAULT_FONT, FONT_LIST, name_to_style};
+use vault::{Transport, VaultOp, SELF_CONN};
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
 use xous_ipc::Buffer;
-use xous::{send_message, Message, msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_usb_hid::device::fido::*;
-use num_traits::*;
 
-use std::thread;
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use crate::prereqs::ntp_updater;
+use crate::ux::framework::NavDir;
+use crate::vendor_commands::VendorSession;
 
 // CTAP2 testing notes:
 //
@@ -104,8 +99,8 @@ pub enum VaultMode {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct SelectedEntry {
-    pub key_guid: xous_ipc::String::<256>,
-    pub description: xous_ipc::String::<256>,
+    pub key_guid: xous_ipc::String<256>,
+    pub description: xous_ipc::String<256>,
     pub mode: VaultMode,
 }
 
@@ -128,7 +123,8 @@ fn main() -> ! {
     let action_active = Arc::new(AtomicBool::new(false));
     let allow_host = Arc::new(AtomicBool::new(false));
     let allow_totp_rendering = Arc::new(AtomicBool::new(true));
-    // Protects access to the openSK PDDB entries from simultaneous readout on the UX while OpenSK is updating it
+    // Protects access to the openSK PDDB entries from simultaneous readout on the UX while OpenSK is updating
+    // it
     let opensk_mutex = Arc::new(Mutex::new(0));
     // storage for lefty mode
     let lefty_mode = Arc::new(AtomicBool::new(false));
@@ -146,7 +142,8 @@ fn main() -> ! {
         let action_active = action_active.clone();
         let opensk_mutex = opensk_mutex.clone();
         move || {
-            let mut manager = crate::actions::ActionManager::new(main_conn, mode, item_lists, action_active, opensk_mutex);
+            let mut manager =
+                crate::actions::ActionManager::new(main_conn, mode, item_lists, action_active, opensk_mutex);
             loop {
                 let msg = xous::receive_message(sid).unwrap();
                 let opcode: Option<ActionOp> = FromPrimitive::from_usize(msg.body.id());
@@ -156,29 +153,31 @@ fn main() -> ! {
                         manager.activate();
                         manager.menu_addnew(); // this is responsible for updating the item cache
                         manager.deactivate();
-                    },
+                    }
                     Some(ActionOp::MenuDeleteStage2) => {
-                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let buffer =
+                            unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
                         manager.activate();
                         manager.menu_delete(entry);
                         manager.retrieve_db();
                         manager.deactivate();
-                    },
+                    }
                     Some(ActionOp::MenuEditStage2) => {
-                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let buffer =
+                            unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
                         manager.activate();
                         manager.menu_edit(entry); // this is responsible for updating the item cache
                         manager.deactivate();
-                    },
+                    }
                     Some(ActionOp::MenuUnlockBasis) => {
                         manager.activate();
                         manager.unlock_basis();
                         manager.item_lists.lock().unwrap().clear(VaultMode::Password); // clear the cached item list for passwords (totp/fido are not cached and don't need clearing)
                         manager.retrieve_db();
                         manager.deactivate();
-                    },
+                    }
                     Some(ActionOp::MenuManageBasis) => {
                         manager.activate();
                         manager.manage_basis();
@@ -187,25 +186,27 @@ fn main() -> ! {
                         manager.deactivate();
                     }
                     Some(ActionOp::MenuClose) => {
-                        // dummy activate/de-activate cycle because we have to trigger a redraw of the underlying UX
+                        // dummy activate/de-activate cycle because we have to trigger a redraw of the
+                        // underlying UX
                         manager.activate();
                         manager.deactivate();
-                    },
+                    }
                     Some(ActionOp::UpdateOneItem) => {
-                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let buffer =
+                            unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
                         manager.activate();
                         manager.update_db_entry(entry);
                         manager.deactivate();
                     }
-                    Some(ActionOp::UpdateMode) => msg_blocking_scalar_unpack!(msg, _, _, _, _,{
+                    Some(ActionOp::UpdateMode) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                         // the password DBs are now not shared between modes, so no need to re-retrieve it.
                         if manager.is_db_empty() {
                             manager.retrieve_db();
                         }
                         xous::return_scalar(msg.sender, 1).unwrap();
                     }),
-                    Some(ActionOp::ReloadDb) => msg_blocking_scalar_unpack!(msg, _, _, _, _,{
+                    Some(ActionOp::ReloadDb) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                         manager.retrieve_db();
                         xous::return_scalar(msg.sender, 1).unwrap();
                     }),
@@ -215,7 +216,7 @@ fn main() -> ! {
                     None => {
                         log::error!("msg could not be decoded {:?}", msg);
                     }
-                    #[cfg(feature="vault-testing")]
+                    #[cfg(feature = "vault-testing")]
                     Some(ActionOp::GenerateTests) => {
                         manager.populate_tests();
                         manager.retrieve_db();
@@ -229,10 +230,12 @@ fn main() -> ! {
     let actions_conn = xous::connect(actions_sid).unwrap();
 
     // spawn the FIDO USB->UX update kicker thread. It is responsible for issuing a UX refresh command
-    // a few moments after FIDO traffic ceases. The purpose is to get the UX to reflect credential manipulaitons that happen via USB.
+    // a few moments after FIDO traffic ceases. The purpose is to get the UX to reflect credential
+    // manipulaitons that happen via USB.
     let kicker_sid = xous::create_server().unwrap();
     let kicker_cid = xous::connect(kicker_sid).unwrap();
-    // 64-bit elapsed time has to be split into two atomic U32s, because there is no atomic U64 on a 32-bit system :-/
+    // 64-bit elapsed time has to be split into two atomic U32s, because there is no atomic U64 on a 32-bit
+    // system :-/
     let kick_target_msb = Arc::new(AtomicU32::new(0));
     let kick_target_lsb = Arc::new(AtomicU32::new(0));
     let kicker_running = Arc::new(AtomicBool::new(false));
@@ -249,8 +252,7 @@ fn main() -> ! {
             let mut _return_type = 0;
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             loop {
-                xous::reply_and_receive_next_legacy(kicker_sid, &mut _msg_opt, &mut _return_type)
-                .unwrap();
+                xous::reply_and_receive_next_legacy(kicker_sid, &mut _msg_opt, &mut _return_type).unwrap();
                 let now = tt.elapsed_ms();
                 let target = ((kick_target_msb.load(Ordering::SeqCst) as u64) << 32)
                     | (kick_target_lsb.load(Ordering::SeqCst)) as u64;
@@ -258,16 +260,27 @@ fn main() -> ! {
                     kicker_running.store(false, Ordering::SeqCst);
                     if *mode.lock().unwrap() == VaultMode::Fido {
                         log::debug!("kick!");
-                        xous::send_message(main_conn,
-                            xous::Message::new_scalar(VaultOp::ReloadDbAndFullRedraw.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).ok();
+                        xous::send_message(
+                            main_conn,
+                            xous::Message::new_scalar(
+                                VaultOp::ReloadDbAndFullRedraw.to_usize().unwrap(),
+                                0,
+                                0,
+                                0,
+                                0,
+                            ),
+                        )
+                        .ok();
                     }
                 } else {
                     // keep the poll alive until we exhaust our target time
                     tt.sleep_ms(KICKER_DELAY_MS as usize / 2).ok();
-                    xous::send_message(self_conn,
-                        xous::Message::new_scalar(0, 0, 0, 0, 0) // only one message type, any message will wake us up
-                    ).ok();
+                    xous::send_message(
+                        self_conn,
+                        xous::Message::new_scalar(0, 0, 0, 0, 0), /* only one message type, any message
+                                                                   * will wake us up */
+                    )
+                    .ok();
                 }
             }
         }
@@ -288,13 +301,16 @@ fn main() -> ! {
             pddb.is_mounted_blocking();
             // Attempt a migration, if necessary. If none is necessary this call is fairly lightweight.
             match crate::migration_v1::migrate(&pddb) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     log::warn!("Migration encountered errors! {:?}", e);
                     let modals = modals::Modals::new(&xns).unwrap();
-                    modals.show_notification(
-                        &format!("{}\n{:?}", t!("vault.migration_error", locales::LANG), e), None
-                    ).ok();
+                    modals
+                        .show_notification(
+                            &format!("{}\n{:?}", t!("vault.migration_error", locales::LANG), e),
+                            None,
+                        )
+                        .ok();
                 }
             };
 
@@ -308,7 +324,8 @@ fn main() -> ! {
                             ctap.update_timeouts(Instant::now());
                             let mutex = opensk_mutex.lock().unwrap();
                             log::trace!("Received U2F packet");
-                            let typed_reply = ctap.process_hid_packet(&msg.packet, Transport::MainHid, Instant::now());
+                            let typed_reply =
+                                ctap.process_hid_packet(&msg.packet, Transport::MainHid, Instant::now());
                             match typed_reply {
                                 HidIterType::Ctap(reply) => {
                                     for pkt_reply in reply {
@@ -326,12 +343,11 @@ fn main() -> ! {
                                     }
                                 }
                                 HidIterType::Vendor(msg) => {
-                                    let reply =
-                                    match vendor_commands::handle_vendor_data(
+                                    let reply = match vendor_commands::handle_vendor_data(
                                         msg.cmd as u8,
                                         msg.cid,
                                         msg.payload,
-                                        &mut vendor_session
+                                        &mut vendor_session,
                                     ) {
                                         Ok(return_payload) => {
                                             // if None, this means we've finished parsing all that
@@ -343,7 +359,7 @@ fn main() -> ! {
                                                     log::debug!("starting processing of vendor data...");
                                                     let resp = vendor_commands::handle_vendor_command(
                                                         &mut vendor_session,
-                                                        allow_host.load(Ordering::SeqCst)
+                                                        allow_host.load(Ordering::SeqCst),
                                                     );
                                                     log::debug!("finished processing of vendor data!");
 
@@ -355,7 +371,7 @@ fn main() -> ! {
                                                                 vendor_session = VendorSession::default();
                                                                 resp
                                                             }
-                                                        },
+                                                        }
                                                         false => {
                                                             vendor_session = VendorSession::default();
                                                             resp
@@ -388,31 +404,36 @@ fn main() -> ! {
                             }
                             drop(mutex);
                         }
-                        Err(e) => {
-                            match e {
-                                _ => {
-                                    log::warn!("FIDO listener got an error: {:?}", e);
-                                }
+                        Err(e) => match e {
+                            _ => {
+                                log::warn!("FIDO listener got an error: {:?}", e);
                             }
-                        }
+                        },
                     }
-                    // note the traffic to a UX kicker. After KICKER_DELAY_MS of no USB activity, a redraw will be issued.
+                    // note the traffic to a UX kicker. After KICKER_DELAY_MS of no USB activity, a redraw
+                    // will be issued.
                     let target = tt.elapsed_ms() + KICKER_DELAY_MS;
                     if !kicker_running.swap(true, Ordering::SeqCst) {
-                        // update the MSB first, so in case of rollover the only negative effect is we wait an extra KICKER_DELAY_MS
+                        // update the MSB first, so in case of rollover the only negative effect is we wait an
+                        // extra KICKER_DELAY_MS
                         kick_target_msb.store((target >> 32) as u32, Ordering::SeqCst);
                         kick_target_lsb.store(target as u32, Ordering::SeqCst);
                         // kick the kicker!
-                        xous::send_message(kicker_cid,
-                            xous::Message::new_scalar(0, 0, 0, 0, 0) // only one message type, any message will do
-                        ).ok();
+                        xous::send_message(
+                            kicker_cid,
+                            xous::Message::new_scalar(0, 0, 0, 0, 0), /* only one message type, any
+                                                                       * message will do */
+                        )
+                        .ok();
                     } else {
                         kick_target_msb.store((target >> 32) as u32, Ordering::SeqCst);
                         kick_target_lsb.store(target as u32, Ordering::SeqCst);
                     }
                 }
             } else {
-                log::warn!("SoC rev is incompatible with USB HID operations, the U2F/FIDO2 server is not started");
+                log::warn!(
+                    "SoC rev is incompatible with USB HID operations, the U2F/FIDO2 server is not started"
+                );
             }
         }
     });
@@ -441,7 +462,7 @@ fn main() -> ! {
         actions_conn,
         mode.clone(),
         item_lists.clone(),
-        action_active.clone()
+        action_active.clone(),
     );
     vaultux.update_mode();
     vaultux.get_glyph_style();
@@ -466,25 +487,21 @@ fn main() -> ! {
             Some(VaultOp::IncrementalLine) => {
                 if action_active.load(Ordering::SeqCst) {
                     log::trace!("action active, skipping incremental input");
-                    send_message(conn,
-                        Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).ok();
+                    send_message(conn, Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0))
+                        .ok();
                     continue;
                 }
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
                 log::debug!("Incremental input: {}", s.as_str());
                 vaultux.input(s.as_str()).expect("Vault couldn't accept input string");
-                send_message(conn,
-                    Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
-                ).ok();
+                send_message(conn, Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)).ok();
             }
             Some(VaultOp::Line) => {
                 if action_active.load(Ordering::SeqCst) {
                     log::trace!("action active, skipping line input");
-                    send_message(conn,
-                        Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).ok();
+                    send_message(conn, Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0))
+                        .ok();
                     continue;
                 }
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -493,27 +510,53 @@ fn main() -> ! {
                 match s.as_str() {
                     "\u{0011}" => {
                         *mode.lock().unwrap() = VaultMode::Fido;
-                        send_message(actions_conn,
-                            Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).ok();
+                        send_message(
+                            actions_conn,
+                            Message::new_blocking_scalar(
+                                ActionOp::UpdateMode.to_usize().unwrap(),
+                                0,
+                                0,
+                                0,
+                                0,
+                            ),
+                        )
+                        .ok();
                         vaultux.update_mode();
                     }
                     "\u{0012}" => {
                         *mode.lock().unwrap() = VaultMode::Totp;
-                        send_message(actions_conn,
-                            Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).ok();
+                        send_message(
+                            actions_conn,
+                            Message::new_blocking_scalar(
+                                ActionOp::UpdateMode.to_usize().unwrap(),
+                                0,
+                                0,
+                                0,
+                                0,
+                            ),
+                        )
+                        .ok();
                         vaultux.update_mode();
                         // this will start a periodic pump to keep the UX updating
-                        send_message(pump_conn,
-                            Message::new_scalar(totp::PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).ok();
+                        send_message(
+                            pump_conn,
+                            Message::new_scalar(totp::PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .ok();
                     }
                     "\u{0013}" => {
                         *mode.lock().unwrap() = VaultMode::Password;
-                        send_message(actions_conn,
-                            Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).ok();
+                        send_message(
+                            actions_conn,
+                            Message::new_blocking_scalar(
+                                ActionOp::UpdateMode.to_usize().unwrap(),
+                                0,
+                                0,
+                                0,
+                                0,
+                            ),
+                        )
+                        .ok();
                         vaultux.update_mode();
                     }
                     "\u{0014}" => {
@@ -532,13 +575,12 @@ fn main() -> ! {
                         vaultux.nav(NavDir::PageDown);
                     }
                     _ => {
-                        // someone hit enter. The string is the whole search query, but what we care is that someone hit enter.
+                        // someone hit enter. The string is the whole search query, but what we care is that
+                        // someone hit enter.
                         vaultux.raise_menu();
                     }
                 }
-                send_message(conn,
-                    Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
-                ).ok();
+                send_message(conn, Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)).ok();
             }
             Some(VaultOp::Redraw) => {
                 if allow_redraw {
@@ -552,9 +594,11 @@ fn main() -> ! {
                 }
             }
             Some(VaultOp::ReloadDbAndFullRedraw) => {
-                send_message(actions_conn,
-                    Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0)
-                ).ok();
+                send_message(
+                    actions_conn,
+                    Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
                 vaultux.update_mode();
                 if allow_redraw {
                     vaultux.redraw().expect("Vault couldn't redraw");
@@ -564,14 +608,14 @@ fn main() -> ! {
                 vaultux.basis_change();
                 // this set of calls will effectively force a reload of any UX data
                 *mode.lock().unwrap() = VaultMode::Fido;
-                send_message(actions_conn,
-                    Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0)
-                ).ok();
+                send_message(
+                    actions_conn,
+                    Message::new_blocking_scalar(ActionOp::ReloadDb.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
                 vaultux.update_mode();
                 vaultux.input("").unwrap();
-                send_message(conn,
-                    Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
-                ).ok();
+                send_message(conn, Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)).ok();
             }
             Some(VaultOp::ChangeFocus) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
                 let new_state = gam::FocusState::convert_focus_change(new_state_code);
@@ -587,9 +631,17 @@ fn main() -> ! {
                         allow_redraw = true;
                         if first_time {
                             // Populate the initial fields, just the first time
-                            send_message(actions_conn,
-                                Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
-                            ).ok();
+                            send_message(
+                                actions_conn,
+                                Message::new_blocking_scalar(
+                                    ActionOp::UpdateMode.to_usize().unwrap(),
+                                    0,
+                                    0,
+                                    0,
+                                    0,
+                                ),
+                            )
+                            .ok();
                             vaultux.update_mode();
                             first_time = false;
                         }
@@ -598,15 +650,13 @@ fn main() -> ! {
             }),
             Some(VaultOp::MenuChangeFont) => {
                 for item in FONT_LIST {
-                    modals
-                        .add_list_item(item)
-                        .expect("couldn't build radio item list");
+                    modals.add_list_item(item).expect("couldn't build radio item list");
                 }
                 allow_totp_rendering.store(false, Ordering::SeqCst);
                 match modals.get_radiobutton(t!("vault.select_font", locales::LANG)) {
                     Ok(style) => {
                         vaultux.set_glyph_style(name_to_style(&style).unwrap_or(DEFAULT_FONT));
-                    },
+                    }
                     _ => log::error!("get_radiobutton failed"),
                 }
                 allow_totp_rendering.store(true, Ordering::SeqCst);
@@ -616,31 +666,69 @@ fn main() -> ! {
                 allow_totp_rendering.store(false, Ordering::SeqCst);
                 modals.dynamic_notification(Some(t!("vault.autotyping", locales::LANG)), None).ok();
                 match vaultux.autotype(select_username == 1) {
-                    Err(xous::Error::UseBeforeInit) => { // USB not plugged in
-                        modals.dynamic_notification_update(Some(t!("vault.error.usb_error", locales::LANG)), None).ok();
-                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
-                    },
-                    Err(xous::Error::InvalidString) => { // deserialzation error
-                        modals.dynamic_notification_update(Some(t!("vault.error.record_error", locales::LANG)), None).ok();
-                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
-                    },
-                    Err(xous::Error::ProcessNotFound) => { // key or dictionary not found
-                        modals.dynamic_notification_update(Some(t!("vault.error.not_found", locales::LANG)), None).ok();
-                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
-                    },
-                    Err(xous::Error::InvalidPID) => { // nothing was selected
-                        modals.dynamic_notification_update(Some(t!("vault.error.nothing_selected", locales::LANG)), None).ok();
-                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
-                    },
-                    Err(xous::Error::OutOfMemory) => { // trouble updating the key
-                        modals.dynamic_notification_update(Some(t!("vault.error.update_error", locales::LANG)), None).ok();
+                    Err(xous::Error::UseBeforeInit) => {
+                        // USB not plugged in
+                        modals
+                            .dynamic_notification_update(
+                                Some(t!("vault.error.usb_error", locales::LANG)),
+                                None,
+                            )
+                            .ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     }
-                    Ok(_) => {},
-                    Err(e) => { // unknown error
-                        modals.dynamic_notification(Some(
-                            &format!("{}\n{:?}", t!("vault.error.internal_error", locales::LANG), e),
-                        ), None).ok();
+                    Err(xous::Error::InvalidString) => {
+                        // deserialzation error
+                        modals
+                            .dynamic_notification_update(
+                                Some(t!("vault.error.record_error", locales::LANG)),
+                                None,
+                            )
+                            .ok();
+                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
+                    }
+                    Err(xous::Error::ProcessNotFound) => {
+                        // key or dictionary not found
+                        modals
+                            .dynamic_notification_update(
+                                Some(t!("vault.error.not_found", locales::LANG)),
+                                None,
+                            )
+                            .ok();
+                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
+                    }
+                    Err(xous::Error::InvalidPID) => {
+                        // nothing was selected
+                        modals
+                            .dynamic_notification_update(
+                                Some(t!("vault.error.nothing_selected", locales::LANG)),
+                                None,
+                            )
+                            .ok();
+                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
+                    }
+                    Err(xous::Error::OutOfMemory) => {
+                        // trouble updating the key
+                        modals
+                            .dynamic_notification_update(
+                                Some(t!("vault.error.update_error", locales::LANG)),
+                                None,
+                            )
+                            .ok();
+                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        // unknown error
+                        modals
+                            .dynamic_notification(
+                                Some(&format!(
+                                    "{}\n{:?}",
+                                    t!("vault.error.internal_error", locales::LANG),
+                                    e
+                                )),
+                                None,
+                            )
+                            .ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     }
                 }
@@ -649,14 +737,17 @@ fn main() -> ! {
                 // force the one entry to update its UX cache so that the autotype time increments up
                 if let Some(entry) = vaultux.selected_entry() {
                     let buf = Buffer::into_buf(entry).expect("IPC error");
-                    buf.send(actions_conn, ActionOp::UpdateOneItem.to_u32().unwrap()).expect("messaging error");
+                    buf.send(actions_conn, ActionOp::UpdateOneItem.to_u32().unwrap())
+                        .expect("messaging error");
                 }
             }),
             Some(VaultOp::MenuDeleteStage1) => {
-                // stage 1 happens here because the filtered list and selection entry are in the responsive UX section.
+                // stage 1 happens here because the filtered list and selection entry are in the responsive UX
+                // section.
                 if let Some(entry) = vaultux.selected_entry() {
                     let buf = Buffer::into_buf(entry).expect("IPC error");
-                    buf.send(actions_conn, ActionOp::MenuDeleteStage2.to_u32().unwrap()).expect("messaging error");
+                    buf.send(actions_conn, ActionOp::MenuDeleteStage2.to_u32().unwrap())
+                        .expect("messaging error");
                 } else {
                     allow_totp_rendering.store(false, Ordering::SeqCst);
                     // this will block redraws
@@ -665,11 +756,13 @@ fn main() -> ! {
                 }
             }
             Some(VaultOp::MenuEditStage1) => {
-                // stage 1 happens here because the filtered list and selection entry are in the responsive UX section.
+                // stage 1 happens here because the filtered list and selection entry are in the responsive UX
+                // section.
                 log::debug!("selecting entry for edit");
                 if let Some(entry) = vaultux.selected_entry() {
                     let buf = Buffer::into_buf(entry).expect("IPC error");
-                    buf.send(actions_conn, ActionOp::MenuEditStage2.to_u32().unwrap()).expect("messaging error");
+                    buf.send(actions_conn, ActionOp::MenuEditStage2.to_u32().unwrap())
+                        .expect("messaging error");
                 } else {
                     // this will block redraws
                     allow_totp_rendering.store(false, Ordering::SeqCst);
@@ -692,9 +785,11 @@ fn main() -> ! {
                 vaultux.readout_mode(false);
                 modals.dynamic_notification_close().ok();
 
-                xous::send_message(conn,
-                    xous::Message::new_scalar(VaultOp::ReloadDbAndFullRedraw.to_usize().unwrap(), 0, 0, 0, 0)
-                ).ok();
+                xous::send_message(
+                    conn,
+                    xous::Message::new_scalar(VaultOp::ReloadDbAndFullRedraw.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
             }
             Some(VaultOp::MenuAutotypeRate) => {
                 let cv = {
@@ -710,9 +805,9 @@ fn main() -> ! {
                         Some(cv.to_string()),
                         Some(|tf| match tf.as_str().parse::<usize>() {
                             Ok(_) => None,
-                            Err(_) => Some(xous_ipc::String::from_str(
-                                t!("prefs.autobacklight_err", locales::LANG),
-                            )),
+                            Err(_) => {
+                                Some(xous_ipc::String::from_str(t!("prefs.autobacklight_err", locales::LANG)))
+                            }
                         }),
                     )
                     .build()
@@ -728,8 +823,11 @@ fn main() -> ! {
                 allow_totp_rendering.store(false, Ordering::SeqCst);
                 let mode = yes_no_to_bool(
                     modals
-                        .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
-                            bool_to_yes_no(cv)))
+                        .get_radiobutton(&format!(
+                            "{} {}",
+                            t!("prefs.current_setting", locales::LANG),
+                            bool_to_yes_no(cv)
+                        ))
                         .unwrap()
                         .as_str(),
                 );
@@ -741,7 +839,7 @@ fn main() -> ! {
                 log::error!("got Quit");
                 break;
             }
-            Some(VaultOp::Nop) => {},
+            Some(VaultOp::Nop) => {}
             _ => {
                 log::trace!("got unknown message {:?}", msg);
             }

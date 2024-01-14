@@ -1,17 +1,15 @@
 use std::io::{Read, Write};
-use vault::ctap::storage::key;
 use std::num::ParseIntError;
+
 use pddb::Pddb;
+use vault::ctap::storage::key;
 
 const FIDO_DICT: &'static str = "fido.cfg";
 const FIDO_CRED_DICT: &'static str = "fido.cred";
 const FIDO_PERSISTENT_DICT: &'static str = "fido.persistent";
 
 fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
-    (0..s.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
-        .collect()
+    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16)).collect()
 }
 /// The point of the attestation key is to delegate the question of the authenticity of your U2F
 /// key effectively to a transaction that happens between the factory and the server. If the
@@ -48,8 +46,14 @@ pub fn migrate(pddb: &Pddb) -> Result<(), xous::Error> {
             persistent_store::store::OPENSK2_DICT,
             &vault::api::attestation_store::STORAGE_KEYS[0].to_string(),
             None,
-            true, true, Some(32), None::<fn()>
-        ).unwrap().write_all(&pk).map_err(|_| xous::Error::AccessDenied)?;
+            true,
+            true,
+            Some(32),
+            None::<fn()>,
+        )
+        .unwrap()
+        .write_all(&pk)
+        .map_err(|_| xous::Error::AccessDenied)?;
         let der = decode_hex(
             "308201423081e9021449a3e2a4e1078eae2f1a18567f0a734b09db2478300a06\
             082a8648ce3d040302301f311d301b06035504030c14507265637572736f7220\
@@ -61,13 +65,21 @@ pub fn migrate(pddb: &Pddb) -> Result<(), xous::Error> {
             55e731531755284bfcbe85ada1f39f44300a06082a8648ce3d04030203480030\
             45022100d27e39187da5efaa376254329499bb705f7188dd8c78e0725c7ed28d\
             e5d218e1022070853e1a43707298e07ebe9b9eb7cd5839b794db4c3d22209554\
-            1f0bdf82d1f4").unwrap();
+            1f0bdf82d1f4",
+        )
+        .unwrap();
         pddb.get(
             persistent_store::store::OPENSK2_DICT,
             &vault::api::attestation_store::STORAGE_KEYS[1].to_string(),
             None,
-            true, true, None, None::<fn()>
-        ).unwrap().write_all(&der).map_err(|_| xous::Error::AccessDenied)?;
+            true,
+            true,
+            None,
+            None::<fn()>,
+        )
+        .unwrap()
+        .write_all(&der)
+        .map_err(|_| xous::Error::AccessDenied)?;
 
         // port the master secret
         migrate_one(pddb, FIDO_DICT, "CRED_RANDOM_SECRET", key::CRED_RANDOM_SECRET)?;
@@ -81,9 +93,9 @@ pub fn migrate(pddb: &Pddb) -> Result<(), xous::Error> {
         // Turns out that porting over the PIN is a mistake. Just clear it.
         migrate_one(pddb, FIDO_DICT, "MIN_PIN_LENGTH", key::MIN_PIN_LENGTH)?;
         migrate_one(pddb, FIDO_DICT, "PIN_RETRIES", key::PIN_RETRIES)?;
-        // PIN_HASH requires appending a length to the end. This is an `advisory` field, so we...just make up a value of 8.
-        // This may not actually be the length used, but it's likely to be long enough to avoid forcing a re-PIN event because
-        // the PIN hash is too short.
+        // PIN_HASH requires appending a length to the end. This is an `advisory` field, so we...just make up
+        // a value of 8. This may not actually be the length used, but it's likely to be long enough
+        // to avoid forcing a re-PIN event because the PIN hash is too short.
         migrate_pin(pddb)?;
 
         // migrate credentials
@@ -91,29 +103,34 @@ pub fn migrate(pddb: &Pddb) -> Result<(), xous::Error> {
             Ok(list) => list,
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => Vec::new(),
-                _ => return Err(xous::Error::InternalError)
-            }
+                _ => return Err(xous::Error::InternalError),
+            },
         };
         let expected_creds = creds.len();
         let mut successful_migrations = 0;
         let cred_start = key::CREDENTIALS.start;
         for cred in creds {
-            let mut key = pddb.get(
-                FIDO_CRED_DICT,
-                &cred,
-                None, false, false, None, None::<fn()>
-            ).map_err(|_| xous::Error::AccessDenied)?;
+            let mut key = pddb
+                .get(FIDO_CRED_DICT, &cred, None, false, false, None, None::<fn()>)
+                .map_err(|_| xous::Error::AccessDenied)?;
             let mut data = Vec::<u8>::new();
             key.read_to_end(&mut data).unwrap();
             match vault::ctap::storage::deserialize_credential(&data) {
                 Some(pk) => {
                     log::debug!("Valid pk: {:?}", pk);
-                    let migrated_data = vault::ctap::storage::serialize_credential(pk).map_err(|_| xous::Error::InternalError)?;
-                    let mut new_key = pddb.get(
-                        persistent_store::store::OPENSK2_DICT,
-                        &(cred_start + successful_migrations).to_string(),
-                        None, true, true, Some(migrated_data.len()), None::<fn()>
-                    ).map_err(|_| xous::Error::AccessDenied)?;
+                    let migrated_data = vault::ctap::storage::serialize_credential(pk)
+                        .map_err(|_| xous::Error::InternalError)?;
+                    let mut new_key = pddb
+                        .get(
+                            persistent_store::store::OPENSK2_DICT,
+                            &(cred_start + successful_migrations).to_string(),
+                            None,
+                            true,
+                            true,
+                            Some(migrated_data.len()),
+                            None::<fn()>,
+                        )
+                        .map_err(|_| xous::Error::AccessDenied)?;
                     new_key.write_all(&migrated_data).map_err(|_| xous::Error::OutOfMemory)?;
                     successful_migrations += 1;
                     log::info!("Migrated credential {}:{}", FIDO_CRED_DICT, cred);
@@ -127,11 +144,7 @@ pub fn migrate(pddb: &Pddb) -> Result<(), xous::Error> {
         // sync & cleanup
         pddb.sync().ok();
         modals.dynamic_notification_close().ok();
-        if successful_migrations == expected_creds {
-            Ok(())
-        } else {
-            Err(xous::Error::InvalidString)
-        }
+        if successful_migrations == expected_creds { Ok(()) } else { Err(xous::Error::InvalidString) }
     } else {
         // OpenSK dict already exists; don't migrate anything.
         Ok(())
@@ -139,45 +152,38 @@ pub fn migrate(pddb: &Pddb) -> Result<(), xous::Error> {
 }
 
 /// Only migrates the data if it exists. Does not return an error if the record does not exist
-fn migrate_one (
-    pddb: &Pddb,
-    legacy_dict: &str,
-    legacy_key: &str,
-    new_key: usize,
-) -> Result<(), xous::Error> {
-    match pddb.get(
-        legacy_dict,
-        legacy_key,
-        None, false, false, None, None::<fn()>
-    ) {
+fn migrate_one(pddb: &Pddb, legacy_dict: &str, legacy_key: &str, new_key: usize) -> Result<(), xous::Error> {
+    match pddb.get(legacy_dict, legacy_key, None, false, false, None, None::<fn()>) {
         Ok(mut key) => {
             let mut data = Vec::<u8>::new();
             let len = key.read_to_end(&mut data).map_err(|_| xous::Error::AccessDenied)?;
-            let mut new_key = pddb.get(
-                persistent_store::store::OPENSK2_DICT,
-                &new_key.to_string(),
-                None, true, true, Some(len), None::<fn()>
-            ).map_err(|_| xous::Error::AccessDenied)?;
+            let mut new_key = pddb
+                .get(
+                    persistent_store::store::OPENSK2_DICT,
+                    &new_key.to_string(),
+                    None,
+                    true,
+                    true,
+                    Some(len),
+                    None::<fn()>,
+                )
+                .map_err(|_| xous::Error::AccessDenied)?;
             new_key.write_all(&data).map_err(|_| xous::Error::OutOfMemory)?;
             log::info!("successfully migrated {}:{}", legacy_dict, legacy_key);
             Ok(())
-        },
-        Err(e) => {
-            match e.kind() {
-                std::io::ErrorKind::NotFound => {
-                    log::info!("migration skipping {}:{}, as it does not exist", legacy_dict, legacy_key);
-                    Ok(())
-                },
-                _ => Err(xous::Error::InternalError)
-            }
         }
+        Err(e) => match e.kind() {
+            std::io::ErrorKind::NotFound => {
+                log::info!("migration skipping {}:{}, as it does not exist", legacy_dict, legacy_key);
+                Ok(())
+            }
+            _ => Err(xous::Error::InternalError),
+        },
     }
 }
 
 /// Handle the special case of the PIN_HASH
-fn migrate_pin (
-    pddb: &Pddb,
-) -> Result<(), xous::Error> {
+fn migrate_pin(pddb: &Pddb) -> Result<(), xous::Error> {
     // create the key for a forced PIN change
     // pddb.get(
     //     persistent_store::store::OPENSK2_DICT,
@@ -187,32 +193,32 @@ fn migrate_pin (
     let legacy_dict = FIDO_DICT;
     let legacy_key = "PIN_HASH";
     let new_key = key::PIN_PROPERTIES;
-    match pddb.get(
-        legacy_dict,
-        legacy_key,
-        None, false, false, None, None::<fn()>
-    ) {
+    match pddb.get(legacy_dict, legacy_key, None, false, false, None, None::<fn()>) {
         Ok(mut key) => {
             let mut data = Vec::<u8>::new();
-            data.push(8);  // add a bogus "length" advisory field of 8
+            data.push(8); // add a bogus "length" advisory field of 8
             let len = key.read_to_end(&mut data).map_err(|_| xous::Error::AccessDenied)? + 1;
-            let mut new_key = pddb.get(
-                persistent_store::store::OPENSK2_DICT,
-                &new_key.to_string(),
-                None, true, true, Some(len), None::<fn()>
-            ).map_err(|_| xous::Error::AccessDenied)?;
+            let mut new_key = pddb
+                .get(
+                    persistent_store::store::OPENSK2_DICT,
+                    &new_key.to_string(),
+                    None,
+                    true,
+                    true,
+                    Some(len),
+                    None::<fn()>,
+                )
+                .map_err(|_| xous::Error::AccessDenied)?;
             new_key.write_all(&data).map_err(|_| xous::Error::OutOfMemory)?;
             log::info!("successfully migrated {}:{}", legacy_dict, legacy_key);
             Ok(())
-        },
-        Err(e) => {
-            match e.kind() {
-                std::io::ErrorKind::NotFound => {
-                    log::info!("migration skipping {}:{}, as it does not exist", legacy_dict, legacy_key);
-                    Ok(())
-                },
-                _ => Err(xous::Error::InternalError)
-            }
         }
+        Err(e) => match e.kind() {
+            std::io::ErrorKind::NotFound => {
+                log::info!("migration skipping {}:{}, as it does not exist", legacy_dict, legacy_key);
+                Ok(())
+            }
+            _ => Err(xous::Error::InternalError),
+        },
     }
 }

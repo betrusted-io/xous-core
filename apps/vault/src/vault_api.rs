@@ -1,9 +1,8 @@
-use num_traits::*;
-use std::{
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use chrono::{DateTime, NaiveDateTime, Utc};
 use locales::t;
-use chrono::{Utc, DateTime, NaiveDateTime};
+use num_traits::*;
 
 // This file contains items that are used simultaneously within OpenSK and the `vault` app itself.
 // These items need to be pulled in via both `lib` and `main` scopes.
@@ -51,23 +50,20 @@ pub enum VaultOp {
     Quit,
 }
 
-
 pub fn atime_to_str(req_atime: u64) -> String {
     let mut request_str = String::with_capacity(
-        // avoid allocations to speed up this routine, it is in the inner loop of rendering lists of passwords
-        t!("vault.u2f.appinfo.last_authtime", locales::LANG).len() +
-        t!("vault.u2f.appinfo.seconds_ago", locales::LANG).len() +
-        16 // space for the actual duration + some slop for translation
+        // avoid allocations to speed up this routine, it is in the inner loop of rendering lists of
+        // passwords
+        t!("vault.u2f.appinfo.last_authtime", locales::LANG).len()
+            + t!("vault.u2f.appinfo.seconds_ago", locales::LANG).len()
+            + 16, // space for the actual duration + some slop for translation
     );
     if req_atime == 0 {
         request_str.push_str(t!("vault.u2f.appinfo.last_authtime", locales::LANG));
         request_str.push_str(t!("vault.u2f.appinfo.never", locales::LANG));
     } else {
         let now = utc_now();
-        let atime = DateTime::<Utc>::from_utc(
-            NaiveDateTime::from_timestamp(req_atime as i64, 0),
-            Utc
-        );
+        let atime = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(req_atime as i64, 0), Utc);
         // avoid format! macro, it is too slow.
         if now.signed_duration_since(atime).num_days() > 1 {
             request_str.push_str(t!("vault.u2f.appinfo.last_authtime", locales::LANG));
@@ -90,10 +86,10 @@ pub fn atime_to_str(req_atime: u64) -> String {
     request_str
 }
 
-/// because we don't get Utc::now, as the crate checks your architecture and xous is not recognized as a valid target
-pub fn utc_now() -> DateTime::<Utc> {
-    let now =
-    SystemTime::now().duration_since(UNIX_EPOCH).expect("system time before Unix epoch");
+/// because we don't get Utc::now, as the crate checks your architecture and xous is not recognized as a valid
+/// target
+pub fn utc_now() -> DateTime<Utc> {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("system time before Unix epoch");
     let naive = NaiveDateTime::from_timestamp(now.as_secs() as i64, now.subsec_nanos() as u32);
     DateTime::from_utc(naive, Utc)
 }
@@ -113,7 +109,7 @@ pub struct AppInfo {
     pub count: u64,
 }
 
-pub fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
+pub fn deserialize_app_info(descriptor: Vec<u8>) -> Option<AppInfo> {
     if let Ok(desc_str) = String::from_utf8(descriptor) {
         let mut appinfo = AppInfo {
             name: String::new(),
@@ -167,17 +163,16 @@ pub fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
                 log::trace!("invalid line skipped: {:?}", line);
             }
         }
-        #[cfg(any(feature="precursor", feature="renode"))]
-        if appinfo.name.len() > 0
-        && appinfo.id != [0u8; 32]
-        && appinfo.ctime != 0 { // atime can be 0 - indicates never used
+        #[cfg(any(feature = "precursor", feature = "renode"))]
+        if appinfo.name.len() > 0 && appinfo.id != [0u8; 32] && appinfo.ctime != 0 {
+            // atime can be 0 - indicates never used
             Some(appinfo)
         } else {
             None
         }
         #[cfg(not(target_os = "xous"))]
-        if appinfo.name.len() > 0
-        && appinfo.id != [0u8; 32] { // atime can be 0 - indicates never used. In hosted mode, ctime is 0.
+        if appinfo.name.len() > 0 && appinfo.id != [0u8; 32] {
+            // atime can be 0 - indicates never used. In hosted mode, ctime is 0.
             Some(appinfo)
         } else {
             None
@@ -187,20 +182,29 @@ pub fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
     }
 }
 
-pub fn serialize_app_info<'a>(appinfo: &AppInfo) -> Vec::<u8> {
-    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
-        "name", appinfo.name,
-        "id", hex::encode(appinfo.id),
-        "ctime", appinfo.ctime,
-        "atime", appinfo.atime,
-        "count", appinfo.count,
-    ).into_bytes()
+pub fn serialize_app_info<'a>(appinfo: &AppInfo) -> Vec<u8> {
+    format!(
+        "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
+        "name",
+        appinfo.name,
+        "id",
+        hex::encode(appinfo.id),
+        "ctime",
+        appinfo.ctime,
+        "atime",
+        appinfo.atime,
+        "count",
+        appinfo.count,
+    )
+    .into_bytes()
 }
 
 pub fn basis_change() {
     log::info!("got basis change");
-    xous::send_message(SELF_CONN.load(core::sync::atomic::Ordering::SeqCst),
-        xous::Message::new_scalar(VaultOp::BasisChange.to_usize().unwrap(), 0, 0, 0, 0)
-    ).unwrap();
+    xous::send_message(
+        SELF_CONN.load(core::sync::atomic::Ordering::SeqCst),
+        xous::Message::new_scalar(VaultOp::BasisChange.to_usize().unwrap(), 0, 0, 0, 0),
+    )
+    .unwrap();
 }
 pub static SELF_CONN: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);

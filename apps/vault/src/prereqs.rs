@@ -1,17 +1,18 @@
-use crate::VaultOp;
-use graphics_server::{Point, Rectangle, DrawStyle, PixelColor, TextView};
-use gam::{UxRegistration, GlyphStyle};
-use xous::{send_message, Message};
-use locales::t;
-use num_traits::*;
 use std::fmt::Write;
-use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
-
-use sntpc::{Error, NtpContext, NtpUdpSocket, Result, NtpTimestampGenerator};
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
+use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
 use std::thread;
 use std::time::SystemTime;
-use chrono::{Utc, TimeZone};
+
+use chrono::{TimeZone, Utc};
+use gam::{GlyphStyle, UxRegistration};
+use graphics_server::{DrawStyle, PixelColor, Point, Rectangle, TextView};
+use locales::t;
+use num_traits::*;
+use sntpc::{Error, NtpContext, NtpTimestampGenerator, NtpUdpSocket, Result};
+use xous::{send_message, Message};
+
+use crate::VaultOp;
 
 pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) {
     let xns = xous_names::XousNames::new().unwrap();
@@ -19,17 +20,21 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
     let gam = gam::Gam::new(&xns).expect("can't connect to GAM");
 
     let app_name_ref = gam::APP_NAME_VAULT;
-    let token = gam.register_ux(UxRegistration {
-        app_name: xous_ipc::String::<128>::from_str(app_name_ref),
-        ux_type: gam::UxType::Chat,
-        predictor: Some(xous_ipc::String::<64>::from_str(crate::ux::icontray::SERVER_NAME_ICONTRAY)),
-        listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!
-        redraw_id: VaultOp::Redraw.to_u32().unwrap(),
-        gotinput_id: Some(VaultOp::Line.to_u32().unwrap()),
-        audioframe_id: None,
-        rawkeys_id: None,
-        focuschange_id: Some(VaultOp::ChangeFocus.to_u32().unwrap()),
-    }).expect("couldn't register Ux context for repl").unwrap();
+    let token = gam
+        .register_ux(UxRegistration {
+            app_name: xous_ipc::String::<128>::from_str(app_name_ref),
+            ux_type: gam::UxType::Chat,
+            predictor: Some(xous_ipc::String::<64>::from_str(crate::ux::icontray::SERVER_NAME_ICONTRAY)),
+            listener: sid.to_array(), /* note disclosure of our SID to the GAM -- the secret is now shared
+                                       * with the GAM! */
+            redraw_id: VaultOp::Redraw.to_u32().unwrap(),
+            gotinput_id: Some(VaultOp::Line.to_u32().unwrap()),
+            audioframe_id: None,
+            rawkeys_id: None,
+            focuschange_id: Some(VaultOp::ChangeFocus.to_u32().unwrap()),
+        })
+        .expect("couldn't register Ux context for repl")
+        .unwrap();
 
     let content = gam.request_content_canvas(token).expect("couldn't get content canvas");
     let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
@@ -43,9 +48,8 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             while run_pump.load(Ordering::SeqCst) {
                 tt.sleep_ms(1120).unwrap();
-                send_message(self_conn,
-                    Message::new_scalar(VaultOp::Nop.to_usize().unwrap(), 0, 0, 0, 0)
-                ).ok();
+                send_message(self_conn, Message::new_scalar(VaultOp::Nop.to_usize().unwrap(), 0, 0, 0, 0))
+                    .ok();
             }
         }
     });
@@ -56,9 +60,9 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
         let opcode: Option<VaultOp> = FromPrimitive::from_usize(msg.body.id());
         log::trace!("{:?}", opcode);
         let is_mounted = pddb.is_mounted_nonblocking();
-        let time_init = match send_message(time_conn,
-            Message::new_blocking_scalar(6, /* WallClockTimeInit */
-                0, 0, 0, 0)
+        let time_init = match send_message(
+            time_conn,
+            Message::new_blocking_scalar(6 /* WallClockTimeInit */, 0, 0, 0, 0),
         ) {
             Ok(xous::Result::Scalar1(init)) => {
                 if init == 1 {
@@ -66,37 +70,38 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
                 } else {
                     false
                 }
-            },
+            }
             _ => false,
         };
         if is_mounted && time_init {
             // this will send a message to the future receiver of the server message
-            send_message(self_conn,
-                Message::new_scalar(VaultOp::FullRedraw.to_usize().unwrap(), 0, 0, 0, 0)
-            ).ok();
+            send_message(self_conn, Message::new_scalar(VaultOp::FullRedraw.to_usize().unwrap(), 0, 0, 0, 0))
+                .ok();
             break;
         }
         match opcode {
             Some(VaultOp::Redraw) | Some(VaultOp::FullRedraw) => {
                 if allow_redraw {
-                    gam.draw_rectangle(content,
+                    gam.draw_rectangle(
+                        content,
                         Rectangle::new_with_style(
                             Point::new(0, 0),
                             screensize,
-                        DrawStyle {
-                            fill_color: Some(PixelColor::Light),
-                            stroke_color: None,
-                            stroke_width: 0
-                        }
-                    )).expect("can't clear content area");
+                            DrawStyle {
+                                fill_color: Some(PixelColor::Light),
+                                stroke_color: None,
+                                stroke_width: 0,
+                            },
+                        ),
+                    )
+                    .expect("can't clear content area");
 
-                    let mut title_text = TextView::new(content,
-                        graphics_server::TextBounds::CenteredBot(
-                            Rectangle::new(
-                                Point::new(0, 0),
-                                Point::new(screensize.x, 150)
-                            )
-                        )
+                    let mut title_text = TextView::new(
+                        content,
+                        graphics_server::TextBounds::CenteredBot(Rectangle::new(
+                            Point::new(0, 0),
+                            Point::new(screensize.x, 150),
+                        )),
                     );
                     title_text.draw_border = false;
                     title_text.clear_area = true;
@@ -121,7 +126,7 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
                     }
                 }
             }),
-            _ => {}, // ignore unrecognized opcodes
+            _ => {} // ignore unrecognized opcodes
         }
     }
     run_pump.store(false, Ordering::SeqCst);
@@ -132,11 +137,7 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
 struct UdpSocketWrapper(UdpSocket);
 
 impl NtpUdpSocket for UdpSocketWrapper {
-    fn send_to<T: ToSocketAddrs>(
-        &self,
-        buf: &[u8],
-        addr: T,
-    ) -> Result<usize> {
+    fn send_to<T: ToSocketAddrs>(&self, buf: &[u8], addr: T) -> Result<usize> {
         match self.0.send_to(buf, addr) {
             Ok(usize) => Ok(usize),
             Err(_) => Err(Error::Network),
@@ -157,18 +158,13 @@ struct StdTimestampGen {
 }
 impl NtpTimestampGenerator for StdTimestampGen {
     fn init(&mut self) {
-        self.duration = std::time::SystemTime::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .unwrap();
+        self.duration =
+            std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap();
     }
 
-    fn timestamp_sec(&self) -> u64 {
-        self.duration.as_secs()
-    }
+    fn timestamp_sec(&self) -> u64 { self.duration.as_secs() }
 
-    fn timestamp_subsec_micros(&self) -> u32 {
-        self.duration.subsec_micros()
-    }
+    fn timestamp_subsec_micros(&self) -> u32 { self.duration.subsec_micros() }
 }
 
 pub(crate) fn ntp_updater(time_conn: xous::CID) {
@@ -182,7 +178,8 @@ pub(crate) fn ntp_updater(time_conn: xous::CID) {
             let mut force_update = true;
             tt.sleep_ms(1000 * 60 * 2).ok(); // initial delay of 2 minutes before polling. This gives plenty of time for network to come up.
             loop {
-                if force_update || now.elapsed().unwrap().as_secs() > 3600 * 24 { // once a day in real time
+                if force_update || now.elapsed().unwrap().as_secs() > 3600 * 24 {
+                    // once a day in real time
                     // check if we have a network connection. if not, repeat the loop, after a short delay
                     match netmgr.get_ipv4_config() {
                         Some(conf) => {
@@ -196,11 +193,14 @@ pub(crate) fn ntp_updater(time_conn: xous::CID) {
                             log::debug!("no network connection");
                             tt.sleep_ms(1000 * 43).unwrap();
                             continue;
-                        },
+                        }
                     }
                     // get time from NTP
                     let local_port = (trng.get_u32().unwrap() % 16384 + 49152) as u16;
-                    let socket_addr = SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), local_port);
+                    let socket_addr = SocketAddr::new(
+                        std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+                        local_port,
+                    );
                     let socket = UdpSocket::bind(socket_addr).expect("Unable to create UDP socket");
                     socket
                         .set_read_timeout(Some(std::time::Duration::from_secs(2)))
@@ -211,16 +211,20 @@ pub(crate) fn ntp_updater(time_conn: xous::CID) {
                     match result {
                         Ok(time) => {
                             log::debug!("Got NTP time: {}.{}", time.sec(), time.sec_fraction());
-                            let current_time = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0) + chrono::Duration::seconds(time.sec() as i64);
+                            let current_time = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0)
+                                + chrono::Duration::seconds(time.sec() as i64);
                             log::debug!("Setting UTC time: {:?}", current_time.to_string());
-                            xous::send_message(time_conn,
+                            xous::send_message(
+                                time_conn,
                                 Message::new_scalar(
                                     2, /* SetUtcTimeMs */
                                     ((current_time.timestamp_millis() as u64) >> 32) as usize,
                                     (current_time.timestamp_millis() as u64 & 0xFFFF_FFFF) as usize,
-                                    0, 0,
-                                )
-                            ).expect("couldn't set time");
+                                    0,
+                                    0,
+                                ),
+                            )
+                            .expect("couldn't set time");
                             now = SystemTime::now();
                             force_update = false;
                         }
@@ -228,7 +232,7 @@ pub(crate) fn ntp_updater(time_conn: xous::CID) {
                             // if NTP server is down, wait a bit longer and try again
                             log::warn!("NTP failed, err: {:?}", err);
                             tt.sleep_ms(1000 * 127).unwrap();
-                        },
+                        }
                     }
                 } else {
                     tt.sleep_ms(1000 * 60 * 3).unwrap(); // once every 3 minutes of screen-on time, poll the loop.

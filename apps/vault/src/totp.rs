@@ -1,13 +1,15 @@
-use sha1::Sha1;
-use hmac::{Hmac, Mac, NewMac};
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::{
     convert::TryFrom,
     time::{SystemTime, SystemTimeError},
 };
-use std::sync::{Arc, Mutex};
-use xous::{Message, send_message};
-use std::thread;
+
+use hmac::{Hmac, Mac, NewMac};
 use num_traits::*;
+use sha1::Sha1;
+use xous::{send_message, Message};
+
 use crate::VaultMode;
 
 // Derived from https://github.com/blakesmith/xous-core/blob/xtotp-time/apps/xtotp/src/main.rs
@@ -20,9 +22,7 @@ pub enum TotpAlgorithm {
 }
 
 impl Default for TotpAlgorithm {
-    fn default() -> Self {
-        Self::None
-    }
+    fn default() -> Self { Self::None }
 }
 
 impl std::fmt::Debug for TotpAlgorithm {
@@ -38,12 +38,13 @@ impl std::fmt::Debug for TotpAlgorithm {
 
 impl TryFrom<&str> for TotpAlgorithm {
     type Error = xous::Error;
+
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
             "SHA1" => Ok(TotpAlgorithm::HmacSha1),
             "SHA256" => Ok(TotpAlgorithm::HmacSha256),
             "SHA512" => Ok(TotpAlgorithm::HmacSha512),
-            _ => Err(xous::Error::InvalidString)
+            _ => Err(xous::Error::InvalidString),
         }
     }
 }
@@ -67,9 +68,7 @@ pub struct TotpEntry {
 }
 
 pub fn get_current_unix_time() -> Result<u64, SystemTimeError> {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
+    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|duration| duration.as_secs())
 }
 
 fn unpack_u64(v: u64) -> [u8; 8] {
@@ -82,7 +81,9 @@ fn unpack_u64(v: u64) -> [u8; 8] {
 fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Vec<u8>, xous::Error> {
     let mut computed_hmac = Vec::new();
     let checked_step = if totp_entry.step_seconds == 0 {
-        log::warn!("totp step_seconds was 0, this would cause a div-by-zero; forcing to 1. Check that this is not an HOTP record?");
+        log::warn!(
+            "totp step_seconds was 0, this would cause a div-by-zero; forcing to 1. Check that this is not an HOTP record?"
+        );
         1
     } else {
         totp_entry.step_seconds
@@ -91,20 +92,24 @@ fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Ve
         // The OpenTitan HMAC core does not support hmac-sha1. Fall back to
         // a software implementation.
         TotpAlgorithm::HmacSha1 => {
-            let mut mac: Hmac<Sha1> = Hmac::new_from_slice(&totp_entry.shared_secret).map_err(|_| xous::Error::InternalError)?;
+            let mut mac: Hmac<Sha1> =
+                Hmac::new_from_slice(&totp_entry.shared_secret).map_err(|_| xous::Error::InternalError)?;
             mac.update(&unpack_u64(unix_timestamp / checked_step));
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
         }
-        // note: sha256/sha512 implementations not yet tested, as we have yet to find a site that uses this to test against.
+        // note: sha256/sha512 implementations not yet tested, as we have yet to find a site that uses this to
+        // test against.
         TotpAlgorithm::HmacSha256 => {
-            let mut mac: Hmac<sha2::Sha256> = Hmac::new_from_slice(&totp_entry.shared_secret).map_err(|_| xous::Error::InternalError)?;
+            let mut mac: Hmac<sha2::Sha256> =
+                Hmac::new_from_slice(&totp_entry.shared_secret).map_err(|_| xous::Error::InternalError)?;
             mac.update(&unpack_u64(unix_timestamp / checked_step));
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
         }
         TotpAlgorithm::HmacSha512 => {
-            let mut mac: Hmac<sha2::Sha512> = Hmac::new_from_slice(&totp_entry.shared_secret).map_err(|_| xous::Error::InternalError)?;
+            let mut mac: Hmac<sha2::Sha512> =
+                Hmac::new_from_slice(&totp_entry.shared_secret).map_err(|_| xous::Error::InternalError)?;
             mac.update(&unpack_u64(unix_timestamp / checked_step));
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
@@ -144,7 +149,7 @@ pub(crate) fn pumper(
     mode: Arc<Mutex<VaultMode>>,
     sid: xous::SID,
     main_conn: xous::CID,
-    allow_totp_rendering: Arc<core::sync::atomic::AtomicBool>
+    allow_totp_rendering: Arc<core::sync::atomic::AtomicBool>,
 ) {
     let _ = thread::spawn({
         move || {
@@ -156,25 +161,32 @@ pub(crate) fn pumper(
                 log::trace!("{:?}", opcode);
                 match opcode {
                     Some(PumpOp::Pump) => {
-                        if allow_totp_rendering.load(core::sync::atomic::Ordering::SeqCst) { // don't redraw if we're in host access mode
-                            xous::try_send_message(main_conn,
-                                Message::new_scalar(crate::VaultOp::Redraw.to_usize().unwrap(),
-                                0, 0, 0, 0)
-                            ).ok(); // don't panic if the queue overflows
+                        if allow_totp_rendering.load(core::sync::atomic::Ordering::SeqCst) {
+                            // don't redraw if we're in host access mode
+                            xous::try_send_message(
+                                main_conn,
+                                Message::new_scalar(crate::VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0),
+                            )
+                            .ok(); // don't panic if the queue overflows
                         }
-                        let mode_cache = {(*mode.lock().unwrap()).clone()};
-                        { // we really want mode.lock() to be in a different scope so...
+                        let mode_cache = { (*mode.lock().unwrap()).clone() };
+                        {
+                            // we really want mode.lock() to be in a different scope so...
                             if mode_cache == VaultMode::Totp {
                                 tt.sleep_ms(2000).unwrap();
-                                send_message(self_conn,
-                                    Message::new_scalar(PumpOp::Pump.to_usize().unwrap(),
-                                    0, 0, 0, 0)
-                                ).expect("couldn't restart pump");
+                                send_message(
+                                    self_conn,
+                                    Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0),
+                                )
+                                .expect("couldn't restart pump");
                             }
                         }
-                        // if not in Totp mode, the restart message doesn't go through, and the redraws automatically stop.
-                    },
-                    Some(PumpOp::Quit) => {break;}
+                        // if not in Totp mode, the restart message doesn't go through, and the redraws
+                        // automatically stop.
+                    }
+                    Some(PumpOp::Quit) => {
+                        break;
+                    }
                     _ => log::warn!("couldn't parse message: {:?}", msg),
                 }
             }
