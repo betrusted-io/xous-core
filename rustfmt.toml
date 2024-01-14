@@ -1,5 +1,4 @@
 # Notes:
-# - @generated in the first five lines of a file suppresses formatting for generated files!
 # - run this on Linux to fix Windows changing .rs files to +x:
 #      `find . -name "*.rs" -exec chmod -x {} \;`
 
