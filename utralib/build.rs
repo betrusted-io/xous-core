@@ -1,13 +1,11 @@
 use std::env;
 use std::fs::OpenOptions;
-use std::io::Write;
 #[cfg(not(feature = "hosted"))]
 use std::io::Read;
+use std::io::Write;
 use std::path::PathBuf;
 
-fn out_dir() -> PathBuf {
-    PathBuf::from(env::var_os("OUT_DIR").unwrap())
-}
+fn out_dir() -> PathBuf { PathBuf::from(env::var_os("OUT_DIR").unwrap()) }
 
 /// Helper macro that returns a constant number of features enabled among specified list.
 macro_rules! count_enabled_features {
@@ -85,14 +83,17 @@ fn main() {
     // This script retains the use of an explicit "hosted" flag because we want to catch
     // unintentional build system misconfigurations that meant to build for a target other
     // than "hosted", rather than just falling back silently to defaults.
-    allow_single_target_feature!("precursor", "hosted", "renode", "atsama5d27", "cramium-soc", "cramium-fpga");
+    allow_single_target_feature!(
+        "precursor",
+        "hosted",
+        "renode",
+        "atsama5d27",
+        "cramium-soc",
+        "cramium-fpga"
+    );
 
     #[cfg(feature = "precursor")]
-    allow_single_gitrev_feature!(
-        "precursor-perflib",
-        "precursor-dvt",
-        "precursor-pvt"
-    );
+    allow_single_gitrev_feature!("precursor-perflib", "precursor-dvt", "precursor-pvt");
 
     // ----- select an SVD file based on a specific revision -----
     #[cfg(feature = "precursor-perflib")]
@@ -141,10 +142,7 @@ fn main() {
         let mut svd_files = Vec::new();
         for svd in svd_filenames.iter() {
             let svd_file_path = std::path::Path::new(&svd);
-            println!(
-                "cargo:rerun-if-changed={}",
-                svd_file_path.canonicalize().unwrap().display()
-            );
+            println!("cargo:rerun-if-changed={}", svd_file_path.canonicalize().unwrap().display());
             svd_files.push(std::fs::File::open(svd_file_path).unwrap());
         }
         // Regenerate the utra file in RAM.
@@ -156,17 +154,16 @@ fn main() {
         // If the file doesn't exist, or if it's different, write out a new utra file.
         let should_write = if let Ok(mut existing_file) = std::fs::File::open(generated_filename) {
             let mut existing_file_contents = vec![];
-            existing_file.read_to_end(&mut existing_file_contents).expect("couldn't read existing utra generated file");
+            existing_file
+                .read_to_end(&mut existing_file_contents)
+                .expect("couldn't read existing utra generated file");
             existing_file_contents != dest_vec
         } else {
             true
         };
         if should_write {
-            let mut dest_file =
-                std::fs::File::create(generated_filename).expect("couldn't open dest file");
-            dest_file
-                .write_all(&dest_vec)
-                .expect("couldn't write contents to utra file");
+            let mut dest_file = std::fs::File::create(generated_filename).expect("couldn't open dest file");
+            dest_file.write_all(&dest_vec).expect("couldn't write contents to utra file");
         }
 
         // ----- feedback SVD path to build framework -----
@@ -178,12 +175,7 @@ fn main() {
         // decode their addresses (this would be in anticipation of potential hardware bugs; ideally
         // this isn't ever a problem).
         let svd_path = out_dir().join("../../SVD_PATH");
-        let mut svd_file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(svd_path)
-            .unwrap();
+        let mut svd_file = OpenOptions::new().create(true).write(true).truncate(true).open(svd_path).unwrap();
         for svd in svd_filenames.iter() {
             writeln!(svd_file, "utralib/{}", svd).unwrap();
         }
@@ -191,12 +183,7 @@ fn main() {
     #[cfg(feature = "hosted")]
     {
         let svd_path = out_dir().join("../../SVD_PATH");
-        let mut svd_file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(svd_path)
-            .unwrap();
+        let mut svd_file = OpenOptions::new().create(true).write(true).truncate(true).open(svd_path).unwrap();
         write!(svd_file, "").unwrap(); // there is no SVD file for hosted mode
     }
 }
