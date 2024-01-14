@@ -1,10 +1,11 @@
 // A mirror of rustls::OwnedTrustAnchor
 
-use der::{Encode, Header, Reader, Tag};
-use rkyv::{Archive, Deserialize, Serialize};
 use std::cmp::min;
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind};
+
+use der::{Encode, Header, Reader, Tag};
+use rkyv::{Archive, Deserialize, Serialize};
 use x509_parser::prelude::{FromDer, X509Certificate};
 
 pub const MAX_ROTA_BYTES: usize = 1028;
@@ -143,16 +144,10 @@ fn add_der_header(tag: Tag, naked: &Vec<u8>) -> Result<Vec<u8>, Error> {
             let mut buff: [u8; 32] = [0u8; 32];
             match header.encode_to_slice(&mut buff) {
                 Ok(der) => Ok([der, naked].concat()),
-                Err(_) => Err(Error::new(
-                    ErrorKind::InvalidData,
-                    "der parse failed: encode",
-                )),
+                Err(_) => Err(Error::new(ErrorKind::InvalidData, "der parse failed: encode")),
             }
         }
-        Err(_) => Err(Error::new(
-            ErrorKind::InvalidData,
-            "der parse failed: header",
-        )),
+        Err(_) => Err(Error::new(ErrorKind::InvalidData, "der parse failed: header")),
     }
 }
 
@@ -163,25 +158,13 @@ fn rm_der_header(der: &[u8]) -> Result<Vec<u8>, Error> {
             Ok(header) => match header.encoded_len() {
                 Ok(len) => match TryInto::<usize>::try_into(len) {
                     Ok(len) => Ok(der[len..].to_vec()),
-                    Err(_) => Err(Error::new(
-                        ErrorKind::InvalidData,
-                        "der decode failed: into",
-                    )),
+                    Err(_) => Err(Error::new(ErrorKind::InvalidData, "der decode failed: into")),
                 },
-                Err(_) => Err(Error::new(
-                    ErrorKind::InvalidData,
-                    "der decode failed: length",
-                )),
+                Err(_) => Err(Error::new(ErrorKind::InvalidData, "der decode failed: length")),
             },
-            Err(_) => Err(Error::new(
-                ErrorKind::InvalidData,
-                "der decode failed: header",
-            )),
+            Err(_) => Err(Error::new(ErrorKind::InvalidData, "der decode failed: header")),
         },
-        Err(_) => Err(Error::new(
-            ErrorKind::InvalidData,
-            "der decode failed: reader",
-        )),
+        Err(_) => Err(Error::new(ErrorKind::InvalidData, "der decode failed: reader")),
     }
 }
 

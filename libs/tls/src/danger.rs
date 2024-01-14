@@ -38,22 +38,15 @@ impl rustls::client::ServerCertVerifier for StifledCertificateVerification {
                     CertificateError::UnknownIssuer => Ok(ServerCertVerified::assertion()),
                     CertificateError::NotValidYet => {
                         modals
-                            .show_notification(
-                                t!("tls.probe_help_not_valid_yet", locales::LANG),
-                                None,
-                            )
+                            .show_notification(t!("tls.probe_help_not_valid_yet", locales::LANG), None)
                             .expect("modal failed");
                         Err(Error::InvalidCertificate(e))
                     }
                     _ => {
                         modals
                             .show_notification(
-                                format!(
-                                    "{}\n{:?}",
-                                    t!("tls.probe_invalid_certificate", locales::LANG),
-                                    e
-                                )
-                                .as_str(),
+                                format!("{}\n{:?}", t!("tls.probe_invalid_certificate", locales::LANG), e)
+                                    .as_str(),
                                 None,
                             )
                             .expect("modal failed");
