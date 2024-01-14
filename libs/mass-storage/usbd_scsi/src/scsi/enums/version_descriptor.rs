@@ -215,7 +215,7 @@ pub enum VersionDescriptor {
     BCCNoVersionClaimed = 0x0380,
     /// MMC-4 (no version claimed)
     MMC4NoVersionClaimed = 0x03A0,
-    /// MMC-4 T10/1545-D revision 5"},  
+    /// MMC-4 T10/1545-D revision 5"},
     MMC4T101545DRevision5   = 0x03B0,
     /// MMC-4 T10/1545-D revision 5a
     MMC4T101545DRevision5a = 0x03B1,

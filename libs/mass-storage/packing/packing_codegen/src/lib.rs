@@ -104,7 +104,7 @@ const PKD_ATTR: &str = "pkd";
 ///
 /// However, this derive also supports inferring field alignments from the width of the field type, where the
 /// last field ended, etc. This is provided so projects can use it for the complex explicit case mentioned above
-/// but also use it for the more trivial alignments you'd expect from repr(C) or repr(Packed). `width` and 
+/// but also use it for the more trivial alignments you'd expect from repr(C) or repr(Packed). `width` and
 /// `space` were added to allow the case where most of the struct is as you'd expect but a handful of fields
 /// are slightly different. This was working at the time of implementation but has no tests around it currently
 /// so may get broken. //TODO: add tests for all supported cases.
@@ -339,7 +339,7 @@ usize_field!(StartBit, "StartBit", "StartBit");
 usize_field!(EndBit, "EndBit", "EndBit");
 
 
-fn get_attr<'a, I, Ta: 'a, Tb, F>(iter: I, _span: Span, scope: Scope, default: Tb, filter_map: F) -> Result<Tb, Error> 
+fn get_attr<'a, I, Ta: 'a, Tb, F>(iter: I, _span: Span, scope: Scope, default: Tb, filter_map: F) -> Result<Tb, Error>
 where
     I: Iterator<Item = &'a Ta>,
     Tb: Clone + Name + Debug,
@@ -709,7 +709,7 @@ fn derive_struct(
             if end_set {
                 if w != end - bit {
                     error_or_diagnostic(f.name.span(),
-                        format!("Field specifies width of {} but calculated width is {}. Check width, start/end byte/bit attributes", 
+                        format!("Field specifies width of {} but calculated width is {}. Check width, start/end byte/bit attributes",
                             w, end - bit))?;
                 }
             } else {

@@ -11,7 +11,7 @@ use crate::{
 
 /// Trait signifying a single bit in a byte. 7 = most significant bit, 0 = least significant bit
 pub trait Bit: IsLess<U8> + Unsigned {
-    /// The mask used to discard bits before this bit (i.e. if this bit is 5, ANDing this mask with 
+    /// The mask used to discard bits before this bit (i.e. if this bit is 5, ANDing this mask with
     /// a u8 will ensure bits 7 and 6 are 0.
     const HEAD_MASK: u8 = ((1_u16 << (Self::USIZE + 1)) - 1) as u8;
     /// The mask used to extract the single bit from a byte

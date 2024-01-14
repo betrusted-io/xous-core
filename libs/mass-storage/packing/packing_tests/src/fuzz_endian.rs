@@ -76,31 +76,31 @@ mod tests {
                 match p.little_endian {
                     true => <u8 as PackedBytes<[u8; 1]>>::to_bytes::<LittleEndian>(&(p.n as u8)),
                     false => <u8 as PackedBytes<[u8; 1]>>::to_bytes::<BigEndian>(&(p.n as u8)),
-                }.unwrap().to_vec()              
+                }.unwrap().to_vec()
             },
             2 => {
                 match p.little_endian {
                     true => <u16 as PackedBytes<[u8; 2]>>::to_bytes::<LittleEndian>(&(p.n as u16)),
                     false => <u16 as PackedBytes<[u8; 2]>>::to_bytes::<BigEndian>(&(p.n as u16)),
-                }.unwrap().to_vec()              
+                }.unwrap().to_vec()
             },
             3..=4 => {
                 match p.little_endian {
                     true => <u32 as PackedBytes<[u8; 4]>>::to_bytes::<LittleEndian>(&(p.n as u32)),
                     false => <u32 as PackedBytes<[u8; 4]>>::to_bytes::<BigEndian>(&(p.n as u32)),
-                }.unwrap().to_vec()              
+                }.unwrap().to_vec()
             },
             5..=8 => {
                 match p.little_endian {
                     true => <u64 as PackedBytes<[u8; 8]>>::to_bytes::<LittleEndian>(&(p.n as u64)),
                     false => <u64 as PackedBytes<[u8; 8]>>::to_bytes::<BigEndian>(&(p.n as u64)),
-                }.unwrap().to_vec()              
+                }.unwrap().to_vec()
             },
             _ => {
                 match p.little_endian {
                     true => <u128 as PackedBytes<[u8; 16]>>::to_bytes::<LittleEndian>(&p.n),
                     false => <u128 as PackedBytes<[u8; 16]>>::to_bytes::<BigEndian>(&p.n),
-                }.unwrap().to_vec()              
+                }.unwrap().to_vec()
             },
         };
 
@@ -254,7 +254,7 @@ mod tests {
 
         let mut aligned_field_bytes = Vec::new();
         aligned_field_bytes.resize(p.total_bytes, 0);
-        
+
         match (p.start, p.end, p.little_endian) {
             (7, 7, true) => LittleEndian::align_field_bits::<U7, U7>(&restored_field_bytes, &mut aligned_field_bytes),
             (7, 7, false) => BigEndian::align_field_bits::<U7, U7>(&restored_field_bytes, &mut aligned_field_bytes),
@@ -538,10 +538,10 @@ mod tests {
         }
 
         if let Err(e) = pretty_error(
-            &aligned_field_bytes, 
+            &aligned_field_bytes,
             &restored_field_bytes2,
             &restored_field_bytes,
-            p.start as usize, 
+            p.start as usize,
             p.end as usize,
         ) {
             panic!("restored->aligned->restored round trip failed: {}", e);

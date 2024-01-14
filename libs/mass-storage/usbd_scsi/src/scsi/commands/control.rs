@@ -12,7 +12,7 @@ use packing::Packed;
 pub struct Control {
     #[pkd(7, 6, 0, 0)]
     pub vendor_specific: u8,
-    
+
     #[pkd(2, 2, 0, 0)]
     pub normal_aca: bool,
 }

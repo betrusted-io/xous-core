@@ -5,7 +5,7 @@
 // SPDX-LIcense-Identifier: Apache 2.0
 
 // There are many more variants (see asc-num.txt) but these are the ones the scsi code
-// currently uses 
+// currently uses
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdditionalSenseCode {
     /// ASC 0x20, ASCQ: 0x0 - INVALID COMMAND OPERATION CODE
@@ -74,13 +74,13 @@ impl packing::PackedBytes<[u8; 2]> for AdditionalSenseCode {
     fn to_bytes<En: packing::Endian>(&self) -> Result<[u8; 2], Self::Error> {
         Ok([self.asc(), self.ascq()])
     }
-    
+
     fn from_bytes<En: packing::Endian>(bytes: [u8; 2]) -> Result<Self, Self::Error> {
         let [asc, ascq] = bytes;
         Self::from(asc, ascq).ok_or(packing::Error::InvalidEnumDiscriminant)
     }
 }
-       
+
 
 impl Default for AdditionalSenseCode {
     fn default() -> Self {

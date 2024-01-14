@@ -13,8 +13,8 @@ pub enum BlockDeviceError {
     WriteError,
 
     /// Error during erase; most likely value read back after erase was wrong
-    /// 
-    /// STM32 flash programming app note implies this is possible but doesn't say under what 
+    ///
+    /// STM32 flash programming app note implies this is possible but doesn't say under what
     /// circumstances. Is the flash knackered if this happens?
     EraseError,
 
@@ -32,7 +32,7 @@ pub trait BlockDevice {
 
     /// Write the `block` buffer to the block indicated by `lba`
     fn write_block(&mut self, lba: u32, block: &[u8]) -> Result<(), BlockDeviceError>;
-    
+
     /// Get the maxium valid lba (logical block address)
     fn max_lba(&self) -> u32;
 }

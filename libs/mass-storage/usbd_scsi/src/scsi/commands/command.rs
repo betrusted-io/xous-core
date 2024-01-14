@@ -43,7 +43,7 @@ impl Command {
             OpCode::Read6 => Ok(Command::Read(checked_extract::<Read6Command>(cbw)?.into())),
             OpCode::Read10 => Ok(Command::Read(checked_extract::<Read10Command>(cbw)?.into())),
             OpCode::Read12 => Ok(Command::Read(checked_extract::<Read12Command>(cbw)?.into())),
-            OpCode::ReadCapacity10 => Ok(Command::ReadCapacity(checked_extract(cbw)?)), 
+            OpCode::ReadCapacity10 => Ok(Command::ReadCapacity(checked_extract(cbw)?)),
             OpCode::ReadFormatCapacities => Ok(Command::ReadFormatCapacities(checked_extract(cbw)?)),
             OpCode::Inquiry => Ok(Command::Inquiry(checked_extract(cbw)?)),
             OpCode::TestUnitReady => Ok(Command::TestUnitReady(checked_extract(cbw)?)),
@@ -68,8 +68,8 @@ impl Command {
 }
 
 
-fn checked_extract<T>(cbw: &CommandBlockWrapper_NEW) -> Result<T, Error> 
-where 
+fn checked_extract<T>(cbw: &CommandBlockWrapper_NEW) -> Result<T, Error>
+where
     T: ParsePackedStruct,
     Error: From<<T as Packed>::Error>,
 {
