@@ -3,7 +3,12 @@
 #      `find . -name "*.rs" -exec chmod -x {} \;`
 
 # Don't format these vendored-in files
-ignore = ["libs/mass-storage/**"]
+ignore = [
+    "libs/mass-storage/**",
+    "loader/curve25519-dalek-loader/**",
+    "loader/ed25519-dalek-loader/**",
+    "loader/sha2-loader/**",
+]
 
 # I can't rely on contributors using .editorconfig
 newline_style = "Unix"
