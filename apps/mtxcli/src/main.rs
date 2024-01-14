@@ -23,14 +23,9 @@ pub(crate) enum MtxcliOp {
 // This name should be (1) unique (2) under 64 characters long and (3) ideally descriptive.
 pub(crate) const SERVER_NAME_MTXCLI: &str = "_Matrix cli_";
 
-fn main () -> ! {
+fn main() -> ! {
     let stack_size = 1024 * 1024;
-    std::thread::Builder::new()
-        .stack_size(stack_size)
-        .spawn(wrapped_main)
-        .unwrap()
-        .join()
-        .unwrap()
+    std::thread::Builder::new().stack_size(stack_size).spawn(wrapped_main).unwrap().join().unwrap()
 }
 
 fn wrapped_main() -> ! {
@@ -40,11 +35,8 @@ fn wrapped_main() -> ! {
 
     const HEAP_LARGER_LIMIT: usize = 2048 * 1024;
     let new_limit = HEAP_LARGER_LIMIT;
-    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
-        xous::Limits::HeapMaximum as usize,
-        0,
-        new_limit,
-    ));
+    let result =
+        xous::rsyscall(xous::SysCall::AdjustProcessLimit(xous::Limits::HeapMaximum as usize, 0, new_limit));
 
     if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
         xous::rsyscall(xous::SysCall::AdjustProcessLimit(

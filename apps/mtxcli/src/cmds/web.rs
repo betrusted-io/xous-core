@@ -1,6 +1,6 @@
-use serde::{Serialize,Deserialize};
-use ureq::serde_json::{Value, Map};
+use serde::{Deserialize, Serialize};
 use ureq;
+use ureq::serde_json::{Map, Value};
 
 use crate::cmds::url;
 
@@ -14,21 +14,19 @@ const MTX_ID_USER: &str = "m.id.user";
 
 pub fn get_username(user: &str) -> String {
     let i = match user.find('@') {
-        Some(index) => { index + 1 },
-        None => { 0 },
+        Some(index) => index + 1,
+        None => 0,
     };
     let j = match user.find(':') {
-        Some(index) => { index },
-        None => { user.len() },
+        Some(index) => index,
+        None => user.len(),
     };
     (&user[i..j]).to_string()
 }
 
 fn serialize<T: ?Sized + Serialize>(object: &T) -> Option<String> {
     match ureq::serde_json::to_string(&object) {
-        Ok(value) => {
-            Some(value)
-        },
+        Ok(value) => Some(value),
         Err(e) => {
             log::info!("ERROR in serialize: {:?}", e);
             None
@@ -36,7 +34,7 @@ fn serialize<T: ?Sized + Serialize>(object: &T) -> Option<String> {
     }
 }
 
-pub fn handle_response(maybe_response: Result<ureq::Response,ureq::Error>) -> Option<Value> {
+pub fn handle_response(maybe_response: Result<ureq::Response, ureq::Error>) -> Option<Value> {
     match maybe_response {
         Ok(response) => {
             if let Ok(body) = response.into_json() {
@@ -45,7 +43,7 @@ pub fn handle_response(maybe_response: Result<ureq::Response,ureq::Error>) -> Op
                 log::info!("Error: could not convert response into JSON");
                 None
             }
-        },
+        }
         Err(ureq::Error::Status(code, response)) => {
             /* the server returned an unexpected status
             code (such as 400, 500 etc) */
@@ -61,42 +59,29 @@ pub fn handle_response(maybe_response: Result<ureq::Response,ureq::Error>) -> Op
 }
 
 pub fn get_json(url: &str) -> Result<ureq::Response, ureq::Error> {
-    ureq::get(&url)
-        .set(ACCEPT, ACCEPT_JSON)
-        .call()
+    ureq::get(&url).set(ACCEPT, ACCEPT_JSON).call()
 }
 
-pub fn get_json_auth(url: &str, token:&str) -> Result<ureq::Response, ureq::Error> {
+pub fn get_json_auth(url: &str, token: &str) -> Result<ureq::Response, ureq::Error> {
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
-    ureq::get(&url)
-        .set(ACCEPT, ACCEPT_JSON)
-        .set(AUTHORIZATION, &authorization)
-        .call()
+    ureq::get(&url).set(ACCEPT, ACCEPT_JSON).set(AUTHORIZATION, &authorization).call()
 }
 
 pub fn post_string(url: &str, request_body: &str) -> Result<ureq::Response, ureq::Error> {
-    ureq::post(&url)
-        .set(ACCEPT, ACCEPT_JSON)
-        .send_string(request_body)
+    ureq::post(&url).set(ACCEPT, ACCEPT_JSON).send_string(request_body)
 }
 
 pub fn post_string_auth(url: &str, request_body: &str, token: &str) -> Result<ureq::Response, ureq::Error> {
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
-    ureq::post(&url)
-        .set(ACCEPT, ACCEPT_JSON)
-        .set(AUTHORIZATION, &authorization)
-        .send_string(request_body)
+    ureq::post(&url).set(ACCEPT, ACCEPT_JSON).set(AUTHORIZATION, &authorization).send_string(request_body)
 }
 
 pub fn put_string_auth(url: &str, request_body: &str, token: &str) -> Result<ureq::Response, ureq::Error> {
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
-    ureq::put(&url)
-        .set(ACCEPT, ACCEPT_JSON)
-        .set(AUTHORIZATION, &authorization)
-        .send_string(request_body)
+    ureq::put(&url).set(ACCEPT, ACCEPT_JSON).set(AUTHORIZATION, &authorization).send_string(request_body)
 }
 
 // --------------------------------
@@ -157,15 +142,8 @@ struct AuthRequest {
 
 impl AuthRequest {
     pub fn new(user: &str, password: &str) -> Self {
-        let identifier = AuthIdentifier {
-            type_: MTX_ID_USER.to_string(),
-            user: user.to_string()
-        };
-        AuthRequest {
-            type_: MTX_LOGIN_PASSWORD.to_string(),
-            identifier: identifier,
-            password: password.to_string()
-        }
+        let identifier = AuthIdentifier { type_: MTX_ID_USER.to_string(), user: user.to_string() };
+        AuthRequest { type_: MTX_LOGIN_PASSWORD.to_string(), identifier, password: password.to_string() }
     }
 }
 
@@ -221,10 +199,7 @@ impl EventFilter {
     pub fn new(limit: i32) -> Self {
         let mut not_types: Vec<String> = Vec::new();
         not_types.push("*".to_string());
-        EventFilter {
-            limit,
-            not_types,
-        }
+        EventFilter { limit, not_types }
     }
 }
 
@@ -241,17 +216,13 @@ impl RoomEventFilter {
         types.push(type_0.to_string());
         let mut rooms: Vec<String> = Vec::new();
         rooms.push(room_id.to_string());
-        RoomEventFilter {
-            limit,
-            types,
-            rooms,
-        }
+        RoomEventFilter { limit, types, rooms }
     }
 }
 
 #[derive(Serialize, Deserialize)]
 struct RoomFilter {
-    account_data: EventFilter,  // Should be RoomEventFilter
+    account_data: EventFilter, // Should be RoomEventFilter
     ephemeral: EventFilter,
     rooms: Vec<String>,
     state: EventFilter, // Should be StateFilter
@@ -266,13 +237,7 @@ impl RoomFilter {
         rooms.push(room_id.to_string());
         let state = EventFilter::new(0);
         let timeline = RoomEventFilter::new(10, room_id, "m.room.message");
-        RoomFilter {
-            account_data,
-            ephemeral,
-            rooms,
-            state,
-            timeline,
-        }
+        RoomFilter { account_data, ephemeral, rooms, state, timeline }
     }
 }
 
@@ -293,17 +258,11 @@ impl FilterRequest {
         event_fields.push("content.body".to_string());
         let presence = EventFilter::new(0);
         let room = RoomFilter::new(room_id);
-        FilterRequest {
-            account_data,
-            event_fields,
-            presence,
-            room,
-        }
+        FilterRequest { account_data, event_fields, presence, room }
     }
 }
 
-pub fn get_filter(user: &str, server: &str, room_id: &str, token: &str)
-                  -> Option<String> {
+pub fn get_filter(user: &str, server: &str, room_id: &str, token: &str) -> Option<String> {
     let user_encoded = url::encode(user);
     let mut url = String::from(server);
     url.push_str("/_matrix/client/v3/user/");
@@ -358,7 +317,6 @@ fn get_messages(body: Map<String, Value>, room_id: &str) -> String {
                                     if let Some(Value::Object(content)) = event.get("content") {
                                         if let Some(Value::String(body)) = content.get("body") {
                                             messages.push_str(body);
-
                                         } else {
                                             messages.push_str("....");
                                         }
@@ -376,8 +334,14 @@ fn get_messages(body: Map<String, Value>, room_id: &str) -> String {
     messages
 }
 
-pub fn client_sync(server: &str, filter: &str, since: &str, timeout: i32,
-                   room_id: &str, token: &str) -> Option<(String, String)> {
+pub fn client_sync(
+    server: &str,
+    filter: &str,
+    since: &str,
+    timeout: i32,
+    room_id: &str,
+    token: &str,
+) -> Option<(String, String)> {
     log::info!("heap usage: {}", crate::cmds::heap_usage());
     let mut url = String::from(server);
     url.push_str("/_matrix/client/r0/sync?filter=");
@@ -416,10 +380,7 @@ impl MessageRequest {
     pub fn new(text: &str) -> Self {
         let msgtype = "m.text".to_string();
         let body = text.to_string();
-        MessageRequest {
-            msgtype,
-            body,
-        }
+        MessageRequest { msgtype, body }
     }
 }
 

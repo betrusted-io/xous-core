@@ -1,17 +1,13 @@
 use std::io::Error;
 
-use crate::cmds::{CommonEnv,FILTER_KEY};
 use crate::cmds::migrations::MigrationApi;
+use crate::cmds::{CommonEnv, FILTER_KEY};
 use crate::migration_api;
 
 #[derive(Debug)]
-pub struct V0_9_11_0120 {
-}
+pub struct V0_9_11_0120 {}
 impl V0_9_11_0120 {
-    pub fn new() -> Self {
-        V0_9_11_0120 {
-        }
-    }
+    pub fn new() -> Self { V0_9_11_0120 {} }
 }
 
 impl<'a> MigrationApi<'a> for V0_9_11_0120 {
