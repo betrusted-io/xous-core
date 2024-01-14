@@ -109,13 +109,7 @@ pub enum Event {
 }
 
 #[derive(
-    Archive,
-    Serialize,
-    Deserialize,
-    Debug,
-    num_derive::FromPrimitive,
-    num_derive::ToPrimitive,
-    EnumSetType,
+    Archive, Serialize, Deserialize, Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, EnumSetType,
 )]
 pub enum PostFlag {
     Deleted,
@@ -124,13 +118,7 @@ pub enum PostFlag {
 }
 
 #[derive(
-    Archive,
-    Serialize,
-    Deserialize,
-    Debug,
-    num_derive::FromPrimitive,
-    num_derive::ToPrimitive,
-    EnumSetType,
+    Archive, Serialize, Deserialize, Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, EnumSetType,
 )]
 pub enum AuthorFlag {
     Bold,

@@ -2,17 +2,17 @@ pub mod attach;
 pub mod author;
 pub mod post;
 
-use crate::ui::VisualProperties;
-use crate::{now, default_textview};
+use core::slice::{Iter, IterMut};
+use std::collections::HashMap;
+use std::io::{Error, ErrorKind};
 
 use author::Author;
 use gam::Gam;
-use core::slice::{Iter, IterMut};
 use post::Post;
 use rkyv::{Archive, Deserialize, Serialize};
-use std::collections::HashMap;
 
-use std::io::{Error, ErrorKind};
+use crate::ui::VisualProperties;
+use crate::{default_textview, now};
 
 // TODO do better than just allocate lots!
 pub const MAX_BYTES: usize = 65536;
@@ -46,7 +46,7 @@ impl Dialogue {
         Self {
             title: title.to_string(),
             posts: Vec::<Post>::new(),
-            authors: authors,
+            authors,
             author_lookup: HashMap::<String, u16>::new(),
             last_timestamp: now(),
             last_author_id: first_author_id + 1,
@@ -68,7 +68,6 @@ impl Dialogue {
     /// * `text` - the text content of the Post
     /// * `attach_url` - a url of an attachment (image for example)
     /// * `vp` - the visual properties of the system - so that we can pre-compute the size extents of the post
-    ///
     pub fn post_add(
         &mut self,
         author: &str,
@@ -139,7 +138,6 @@ impl Dialogue {
     ///
     /// * `timestamp` - the Post timestamp criteria
     /// * `author` - the Post Author criteria
-    ///
     pub fn post_find(&self, author: &str, timestamp: u64) -> Option<usize> {
         if let Some(author_id) = self.author_lookup.get(author) {
             let i = self.posts.partition_point(|p| p.timestamp() < timestamp);
@@ -164,58 +162,36 @@ impl Dialogue {
     /// # Arguments
     ///
     /// * `index` - the index of the required Post
-    ///
-    pub fn post_get(&self, index: usize) -> Option<&Post> {
-        self.posts.get(index)
-    }
+    pub fn post_get(&self, index: usize) -> Option<&Post> { self.posts.get(index) }
 
     /// Return the index of the most recent Post in the Dialogue
-    ///
     pub fn post_last(&self) -> Option<usize> {
-        if self.posts.len() == 0 {
-            None
-        } else {
-            Some(self.posts.len() - 1)
-        }
+        if self.posts.len() == 0 { None } else { Some(self.posts.len() - 1) }
     }
 
     /// Return a slice of posts
-    pub fn posts_as_slice(&self) -> &[Post] {
-        &self.posts
-    }
+    pub fn posts_as_slice(&self) -> &[Post] { &self.posts }
 
-    pub fn posts_as_slice_mut(&mut self) -> &mut [Post] {
-        &mut self.posts
-    }
+    pub fn posts_as_slice_mut(&mut self) -> &mut [Post] { &mut self.posts }
 
     /// Return an iterator over the Dialogue Posts (oldest first)
-    ///
-    pub fn posts(&self) -> Iter<Post> {
-        return self.posts.iter();
-    }
+    pub fn posts(&self) -> Iter<Post> { return self.posts.iter(); }
 
     /// Return a mut iterator over the Dialogue Posts (oldest first)
-    ///
-    pub fn posts_mut(&mut self) -> IterMut<Post> {
-        return self.posts.iter_mut();
-    }
+    pub fn posts_mut(&mut self) -> IterMut<Post> { return self.posts.iter_mut(); }
 
     /// Return Some<Author> by id, or None.
     ///
     /// # Arguments
     ///
     /// * `id` - the index of the required Author
-    ///
-    pub fn author(&self, id: u16) -> Option<&Author> {
-        self.authors.get(&id)
-    }
+    pub fn author(&self, id: u16) -> Option<&Author> { self.authors.get(&id) }
 
     /// Return Some<author_id> by Author name, or None.
     ///
     /// # Arguments
     ///
     /// * `author` - the (external) name of the Author
-    ///
     pub fn author_id(&mut self, author: &str) -> Option<u16> {
         match self.author_lookup.get(author) {
             Some(id) => Some(*id),
@@ -232,7 +208,6 @@ impl Dialogue {
     }
 
     /// Assign and Return Some<author_id>, or None
-    ///
     fn author_id_next(&mut self) -> Option<u16> {
         if self.last_author_id < u16::max_value() {
             self.last_author_id += 1;
