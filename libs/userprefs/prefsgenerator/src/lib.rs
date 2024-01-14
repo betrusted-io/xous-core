@@ -70,13 +70,13 @@ pub fn getter_setter(input: TokenStream) -> TokenStream {
                     rw_methods.extend(read);
                 }
 
-                let ident_map: Vec<Ident> = named.iter().map(|field| {
-                    field.ident.as_ref().unwrap().clone()
-                }).collect();
+                let ident_map: Vec<Ident> =
+                    named.iter().map(|field| field.ident.as_ref().unwrap().clone()).collect();
 
-                let ident_fn_calls: Vec<Ident> = named.iter().map(|field| {
-                    format_ident!("{}_or_default", field.ident.as_ref().unwrap().clone())
-                }).collect();
+                let ident_fn_calls: Vec<Ident> = named
+                    .iter()
+                    .map(|field| format_ident!("{}_or_default", field.ident.as_ref().unwrap().clone()))
+                    .collect();
 
                 // create the "all" method
                 let all = quote! {
