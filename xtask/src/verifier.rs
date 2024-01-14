@@ -1,10 +1,10 @@
-use crate::builder::CrateSpec;
 use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
 
+use crate::builder::CrateSpec;
 use crate::DynError;
 
 pub fn check_project_consistency() -> Result<(), DynError> {
@@ -48,7 +48,8 @@ pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
             // this should *really* exist if the build system is stable, so just unwrap all the things
             let regdir = path.file_name().unwrap().to_str().unwrap().to_string();
             if regdir.contains("crates.io") {
-                // crates.io sticks sources in something with git yadda yadda...docs don't really say what/why/how...
+                // crates.io sticks sources in something with git yadda yadda...docs don't really say
+                // what/why/how...
                 cache_leaf.push_str(&regdir);
             }
         }
@@ -68,11 +69,7 @@ pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
         }
 
         // form the local source path
-        let subdir = if name.contains("-api-") {
-            "api"
-        } else {
-            "services"
-        };
+        let subdir = if name.contains("-api-") { "api" } else { "services" };
         let subdir = format!("./{}/{}/", subdir, name);
         // handle special cases of xous kernel and ipc crates
         let src_path = if name != "xous"
@@ -94,9 +91,7 @@ pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
             } else if name == "svd2utra" {
                 Path::new("./svd2utra")
             } else {
-                panic!(
-                    "Consistency error: special case handling did not find either xous or xous-ipc"
-                );
+                panic!("Consistency error: special case handling did not find either xous or xous-ipc");
             }
         };
 
@@ -112,7 +107,9 @@ pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
                 if hard_failure {
                     Err("Crates.io downloaded data does not match local source".into())
                 } else {
-                    println!("**WARNING**: Local package does not match the published source. Third parties downloading from crates.io will be inconsistent with this build.");
+                    println!(
+                        "**WARNING**: Local package does not match the published source. Third parties downloading from crates.io will be inconsistent with this build."
+                    );
                     Ok(())
                 }
             }
@@ -146,7 +143,8 @@ fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
                 other_file.push("Cargo.toml.orig");
                 let mut src_file = src.to_path_buf();
                 src_file.push(&fname);
-                // println!("comparing {} <-> {}", src_file.as_os_str().to_str().unwrap(), other_file.as_os_str().to_str().unwrap());
+                // println!("comparing {} <-> {}", src_file.as_os_str().to_str().unwrap(),
+                // other_file.as_os_str().to_str().unwrap());
                 match compare_files(&src_file, &other_file) {
                     Ok(true) => {}
                     Ok(false) => {
@@ -221,18 +219,16 @@ fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
                 other_file.push(&fname);
                 let mut src_file = src.to_path_buf();
                 src_file.push(&fname);
-                // println!("comparing {} <-> {}", src_file.as_os_str().to_str().unwrap(), other_file.as_os_str().to_str().unwrap());
+                // println!("comparing {} <-> {}", src_file.as_os_str().to_str().unwrap(),
+                // other_file.as_os_str().to_str().unwrap());
                 if (src_file.as_os_str().to_str().unwrap().contains("ticktimer")
                     && fname.as_os_str().to_str().unwrap() == "version.rs")
-                    || src_file
-                        .as_os_str()
-                        .to_str()
-                        .unwrap()
-                        .contains("Cargo.lock")
+                    || src_file.as_os_str().to_str().unwrap().contains("Cargo.lock")
                 {
                     // don't compare the version.rs, as it's supposed to be different due to the timestamp
                     // don't compare Cargo.lock files that happen to be checked into packages
-                    // println!("skipping ticktimer version.rs or Cargo.lock file"); // this line is helpful to ensure our skip exception isn't too broad.
+                    // println!("skipping ticktimer version.rs or Cargo.lock file"); // this line is helpful
+                    // to ensure our skip exception isn't too broad.
                 } else {
                     match compare_files(&src_file, &other_file) {
                         Ok(true) => {}
@@ -244,9 +240,7 @@ fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
                             );
                             return Ok(false);
                         }
-                        Err(_) => {
-                            return Err("Access error comparing remote and local crates".into())
-                        }
+                        Err(_) => return Err("Access error comparing remote and local crates".into()),
                     }
                 }
             }
@@ -260,7 +254,8 @@ fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
             other_dir.push(&dname);
             let mut src_dir = src.to_path_buf();
             src_dir.push(&dname);
-            // println!("comparing {}/ <-> {}/", src_dir.as_os_str().to_str().unwrap(), &other_dir.as_os_str().to_str().unwrap());
+            // println!("comparing {}/ <-> {}/", src_dir.as_os_str().to_str().unwrap(),
+            // &other_dir.as_os_str().to_str().unwrap());
             match compare_dirs(&src_dir, &other_dir) {
                 Ok(true) => {}
                 Ok(false) => {
@@ -295,11 +290,7 @@ fn compare_files(a: &Path, b: &Path) -> Result<bool, DynError> {
         // text do CRLF substitutions
         let f1 = s1?.replace("\r\n", "\n");
         let f2 = s2?.replace("\r\n", "\n");
-        if f1 == f2 {
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        if f1 == f2 { Ok(true) } else { Ok(false) }
     } else {
         // do a binary compare
         let f1 = BufReader::new(f1);

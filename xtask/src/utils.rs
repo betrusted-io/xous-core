@@ -1,4 +1,3 @@
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::{
     fs::{File, OpenOptions},
@@ -7,32 +6,25 @@ use std::{
     process::Command,
 };
 
+use lazy_static::lazy_static;
+
 use crate::{cargo, project_root};
 use crate::{TARGET_TRIPLE_ARM, TARGET_TRIPLE_RISCV32};
 
-const TOOLCHAIN_RELEASE_URL_RISCV32: &str =
-    "https://api.github.com/repos/betrusted-io/rust/releases";
-const TOOLCHAIN_RELEASE_URL_ARM: &str =
-    "https://api.github.com/repos/Foundation-Devices/rust/releases";
+const TOOLCHAIN_RELEASE_URL_RISCV32: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
+const TOOLCHAIN_RELEASE_URL_ARM: &str = "https://api.github.com/repos/Foundation-Devices/rust/releases";
 
 lazy_static! {
     static ref TOOLCHAIN_RELEASE_URLS: HashMap<String, String> = HashMap::from([
-        (
-            TARGET_TRIPLE_RISCV32.to_owned(),
-            TOOLCHAIN_RELEASE_URL_RISCV32.to_owned()
-        ),
-        (
-            TARGET_TRIPLE_ARM.to_owned(),
-            TOOLCHAIN_RELEASE_URL_ARM.to_owned()
-        ),
+        (TARGET_TRIPLE_RISCV32.to_owned(), TOOLCHAIN_RELEASE_URL_RISCV32.to_owned()),
+        (TARGET_TRIPLE_ARM.to_owned(), TOOLCHAIN_RELEASE_URL_ARM.to_owned()),
     ]);
 }
 
 /// Since we use the same TARGET for all calls to `build()`,
 /// cache it inside an atomic boolean. If this is `true` then
 /// it means we can assume the check passed already.
-static DONE_COMPILER_CHECK: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+static DONE_COMPILER_CHECK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Ensure we have a compatible compiler toolchain. We use a new Target,
 /// and we want to give the user a friendly way of installing the latest
@@ -85,8 +77,13 @@ pub(crate) fn ensure_compiler(
 
                 let rustc_version_str = format!("{}", rustc_version::version().unwrap());
                 if version_str.trim() != rustc_version_str.trim() {
-                    println!("Version upgrade. Compiler is version {}, the installed toolchain is for {}", rustc_version_str.trim(), version_str.trim(), );
-                    // return Err(format!("Version upgrade. Compiler is version {}, the installed toolchain is for {}", version_str, rustc_version_str));
+                    println!(
+                        "Version upgrade. Compiler is version {}, the installed toolchain is for {}",
+                        rustc_version_str.trim(),
+                        version_str.trim(),
+                    );
+                    // return Err(format!("Version upgrade. Compiler is version {}, the installed toolchain is
+                    // for {}", version_str, rustc_version_str));
                     return Ok(None);
                 }
             } else {
@@ -96,11 +93,7 @@ pub(crate) fn ensure_compiler(
             }
         }
 
-        if have_toolchain {
-            Ok(Some(toolchain_path))
-        } else {
-            Ok(None)
-        }
+        if have_toolchain { Ok(Some(toolchain_path)) } else { Ok(None) }
     }
 
     // If the sysroot exists, then we're good.
@@ -132,8 +125,7 @@ pub(crate) fn ensure_compiler(
     }
 
     // Since no sysroot exists, we must download a new one.
-    let toolchain_path =
-        get_sysroot(None)?.ok_or_else(|| "default toolchain not installed".to_owned())?;
+    let toolchain_path = get_sysroot(None)?.ok_or_else(|| "default toolchain not installed".to_owned())?;
     // If the terminal is a tty, or if toolchain installation is forced,
     // download the latest toolchain.
     if !atty::is(atty::Stream::Stdin) && !force_install {
@@ -153,10 +145,7 @@ pub(crate) fn ensure_compiler(
     if force_install {
         println!("Downloading toolchain");
     } else {
-        println!(
-            "Error: Toolchain for {} was not found on this system!",
-            target
-        );
+        println!("Error: Toolchain for {} was not found on this system!", target);
     }
     loop {
         if force_install {
@@ -180,12 +169,7 @@ pub(crate) fn ensure_compiler(
         println!();
     }
 
-    fn get_toolchain_url(
-        target: &str,
-        major: u64,
-        minor: u64,
-        patch: u64,
-    ) -> Result<String, String> {
+    fn get_toolchain_url(target: &str, major: u64, minor: u64, patch: u64) -> Result<String, String> {
         let url = TOOLCHAIN_RELEASE_URLS
             .get(target)
             .ok_or_else(|| format!("Can't find toolchain URL for target {}", target))?;
@@ -251,10 +235,7 @@ pub(crate) fn ensure_compiler(
     }
     let toolchain_url = get_toolchain_url(target, ver.major, ver.minor, ver.patch)?;
 
-    println!(
-        "Attempting to install toolchain for {} into {}",
-        target, toolchain_path
-    );
+    println!("Attempting to install toolchain for {} into {}", target, toolchain_path);
     println!("Downloading toolchain from {}...", toolchain_url);
 
     print!("Download in progress...");
@@ -265,14 +246,8 @@ pub(crate) fn ensure_compiler(
             // .middleware(CounterMiddleware(shared_state.clone()))
             .build();
 
-        let mut freader = agent
-            .get(&toolchain_url)
-            .call()
-            .map_err(|e| format!("{}", e))?
-            .into_reader();
-        freader
-            .read_to_end(&mut zip_data)
-            .map_err(|e| format!("{}", e))?;
+        let mut freader = agent.get(&toolchain_url).call().map_err(|e| format!("{}", e))?.into_reader();
+        freader.read_to_end(&mut zip_data).map_err(|e| format!("{}", e))?;
         // |total_bytes, bytes_so_far, _total_uploaded, _uploaded_so_far| {
         //     // If either number is infinite, don't print anything and just continue.
         //     if total_bytes.is_infinite() || bytes_so_far.is_infinite() {
@@ -291,10 +266,7 @@ pub(crate) fn ensure_compiler(
         // },
         println!();
     }
-    println!(
-        "Download successful. Total data size is {} bytes",
-        zip_data.len()
-    );
+    println!("Download successful. Total data size is {} bytes", zip_data.len());
 
     /// Extract the zipfile to the target directory, ensuring that all files
     /// contained within are created.
@@ -302,12 +274,11 @@ pub(crate) fn ensure_compiler(
         archive_data: P,
         extract_to: P2,
     ) -> Result<(), String> {
-        let mut archive = zip::ZipArchive::new(archive_data)
-            .map_err(|e| format!("unable to extract zip: {}", e))?;
+        let mut archive =
+            zip::ZipArchive::new(archive_data).map_err(|e| format!("unable to extract zip: {}", e))?;
         for i in 0..archive.len() {
-            let mut entry_in_archive = archive
-                .by_index(i)
-                .map_err(|e| format!("unable to locate file index {}: {}", i, e))?;
+            let mut entry_in_archive =
+                archive.by_index(i).map_err(|e| format!("unable to locate file index {}: {}", i, e))?;
             // println!(
             //     "Trying to extract file {}",
             //     entry_in_archive.mangled_name().display()
@@ -315,35 +286,21 @@ pub(crate) fn ensure_compiler(
 
             let output_path = extract_to.as_ref().join(entry_in_archive.mangled_name());
             if entry_in_archive.is_dir() {
-                std::fs::create_dir_all(&output_path).map_err(|e| {
-                    format!(
-                        "unable to create directory {}: {}",
-                        output_path.display(),
-                        e
-                    )
-                })?;
+                std::fs::create_dir_all(&output_path)
+                    .map_err(|e| format!("unable to create directory {}: {}", output_path.display(), e))?;
             } else {
                 // Create the parent directory if necessary
                 if let Some(parent) = output_path.parent() {
                     if !parent.exists() {
                         std::fs::create_dir_all(&parent).map_err(|e| {
-                            format!(
-                                "unable to create directory {}: {}",
-                                output_path.display(),
-                                e
-                            )
+                            format!("unable to create directory {}: {}", output_path.display(), e)
                         })?;
                     }
                 }
-                let mut outfile = std::fs::File::create(&output_path).map_err(|e| {
-                    format!("unable to create file {}: {}", output_path.display(), e)
-                })?;
+                let mut outfile = std::fs::File::create(&output_path)
+                    .map_err(|e| format!("unable to create file {}: {}", output_path.display(), e))?;
                 std::io::copy(&mut entry_in_archive, &mut outfile).map_err(|e| {
-                    format!(
-                        "unable to write extracted file {}: {}",
-                        output_path.display(),
-                        e
-                    )
+                    format!("unable to write extracted file {}: {}", output_path.display(), e)
                 })?;
             }
         }
@@ -364,15 +321,9 @@ pub(crate) fn generate_locales() -> Result<(), std::io::Error> {
     filetime::set_file_mtime("locales/src/lib.rs", ts)?;
     let mut path = project_root();
     path.push("locales");
-    let status = Command::new(cargo())
-        .current_dir(path)
-        .args(&["build", "--package", "locales"])
-        .status()?;
+    let status = Command::new(cargo()).current_dir(path).args(&["build", "--package", "locales"]).status()?;
     if !status.success() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Couldn't generate the locales",
-        ));
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Couldn't generate the locales"));
     }
     return Ok(());
 }
@@ -383,14 +334,7 @@ pub(crate) fn whycheproof_import() -> Result<(), crate::DynError> {
     let output_file = "services/shellchat/src/cmds/x25519_test.bin";
     let status = Command::new(cargo())
         .current_dir(project_root())
-        .args(&[
-            "run",
-            "--package",
-            "wycheproof-import",
-            "--",
-            input_file,
-            output_file,
-        ])
+        .args(&["run", "--package", "wycheproof-import", "--", input_file, output_file])
         .status()?;
     if !status.success() {
         return Err("wycheproof-import failed. If any, the output will not be usable.".into());
@@ -409,22 +353,13 @@ pub(crate) fn track_language_changes(last_lang: &str) -> Result<(), crate::DynEr
     let changed = match OpenOptions::new().read(true).open(&last_config) {
         Ok(mut file) => {
             file.read_to_string(&mut contents).unwrap();
-            if contents != last_lang {
-                true
-            } else {
-                false
-            }
+            if contents != last_lang { true } else { false }
         }
         _ => true,
     };
     if changed {
         println!("Locale language changed to {}", last_lang);
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&last_config)
-            .unwrap();
+        let mut file = OpenOptions::new().create(true).write(true).truncate(true).open(&last_config).unwrap();
         write!(file, "{}", last_lang).unwrap();
         generate_locales()?
     } else {

@@ -2,10 +2,11 @@
 // This generates the SEMVER data that is displayed when quering `xous ver`
 // It also generates timestamps, if demanded.
 
-use chrono::Local;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::process::Command;
+
+use chrono::Local;
 
 pub(crate) fn generate_version(add_timestamp: bool) {
     let output = if cfg!(target_os = "windows") {
@@ -42,19 +43,13 @@ pub(crate) fn generate_version(add_timestamp: bool) {
         )
         .expect("couldn't add our timestamp");
     } else {
-        write!(
-            new_data,
-            "#[allow(dead_code)]\npub const TIMESTAMP: &'static str = \"unavailable\";\n"
-        )
-        .expect("couldn't add our timestamp");
+        write!(new_data, "#[allow(dead_code)]\npub const TIMESTAMP: &'static str = \"unavailable\";\n")
+            .expect("couldn't add our timestamp");
     }
     write!(
         new_data,
         "pub const SEMVER: &'static str = \"{}\";\n",
-        semver
-            .strip_suffix("\r\n")
-            .or(semver.strip_suffix("\n"))
-            .unwrap_or(&semver)
+        semver.strip_suffix("\r\n").or(semver.strip_suffix("\n")).unwrap_or(&semver)
     )
     .expect("couldn't add our semver");
 
@@ -66,9 +61,7 @@ pub(crate) fn generate_version(add_timestamp: bool) {
             .truncate(true)
             .open(version_file)
             .expect("Can't open our version file for writing");
-        vfile
-            .write_all(&mut new_data)
-            .expect("couldn't write new timestamp to version.rs");
+        vfile.write_all(&mut new_data).expect("couldn't write new timestamp to version.rs");
     }
 }
 
@@ -87,6 +80,5 @@ pub(crate) fn get_version() -> crate::api::VersionString {
     v
 }
 "####;
-    out.write_all(s.as_bytes())
-        .expect("couldn't write our version template header");
+    out.write_all(s.as_bytes()).expect("couldn't write our version template header");
 }
