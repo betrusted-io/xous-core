@@ -1,6 +1,6 @@
-pub(crate) const SERVER_NAME_SPINOR: &str     = "_SPINOR Hardware Interface Server_";
+pub(crate) const SERVER_NAME_SPINOR: &str = "_SPINOR Hardware Interface Server_";
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub const SPINOR_SIZE_BYTES: u32 = 128 * 1024 * 1024; // physical size of the device, used for hardware sanity checks on requests
 #[cfg_attr(not(target_os = "xous"), allow(dead_code))]
 pub const SPINOR_ERASE_SIZE: u32 = 0x1000; // this is the smallest sector size.
@@ -20,7 +20,8 @@ pub(crate) enum Opcode {
     ClearStagingWriteProtect = 4,
     /// program a region. Erase is accomplished by calling WriteRegion with all 0xFF's as data.
     WriteRegion = 5,
-    /// bulk erase a region. Has fewer safety checks, used for accelerating the bulk clear of the PDDB for init.
+    /// bulk erase a region. Has fewer safety checks, used for accelerating the bulk clear of the PDDB for
+    /// init.
     BulkErase = 6,
 
     /// allow the susres manager to prevent new ops from happening during a suspend
@@ -67,7 +68,8 @@ pub(crate) struct WriteRegion {
 pub(crate) struct BulkErase {
     /// the exclusive access ID
     pub id: [u32; 4],
-    /// start address for the erase; address 0 is start of FLASH. WARNING: This will get rounded down to the nearest 64kiB boundary.
+    /// start address for the erase; address 0 is start of FLASH. WARNING: This will get rounded down to the
+    /// nearest 64kiB boundary.
     pub start: u32,
     /// length of data to erase. WARNING: This will always get rounded up to the nearest 64kiB.
     pub len: u32,
@@ -75,7 +77,16 @@ pub(crate) struct BulkErase {
     pub result: Option<SpinorError>,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Copy, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+#[derive(
+    Debug,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+    Clone,
+    Copy,
+    num_derive::FromPrimitive,
+    num_derive::ToPrimitive,
+)]
 pub enum SpinorError {
     NoError,
     AbortNotErased,
