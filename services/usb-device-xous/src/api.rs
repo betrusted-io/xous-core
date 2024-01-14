@@ -1,5 +1,6 @@
 // Note: the log server relies on this name not changing in order to hook the serial port for logging output.
-// changing this name shouldn't lead to a crash, but it will lead to the USB driver being undiscoverable by the log crate.
+// changing this name shouldn't lead to a crash, but it will lead to the USB driver being undiscoverable by
+// the log crate.
 pub(crate) const SERVER_NAME_USB_DEVICE: &'static str = "_Xous USB device driver_";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -52,11 +53,11 @@ pub(crate) enum Opcode {
     /// TRNG send poll
     SerialTrngPoll = 518,
 
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     SetBlockDevice = 1024,
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     SetBlockDeviceSID = 1025,
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     ResetBlockDevice = 1026,
 
     /// Handle the USB interrupt
@@ -73,7 +74,7 @@ pub(crate) enum Opcode {
 // The log crate depends on this API not changing.
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct UsbString {
-    pub s: xous_ipc::String::<4000>,
+    pub s: xous_ipc::String<4000>,
     pub sent: Option<u32>,
 }
 
@@ -104,7 +105,7 @@ pub enum UsbDeviceType {
     Debug = 0,
     FidoKbd = 1,
     Fido = 2,
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     MassStorage = 3,
     Serial = 4,
 }
@@ -117,7 +118,7 @@ impl TryFrom<usize> for UsbDeviceType {
             0 => Ok(UsbDeviceType::Debug),
             1 => Ok(UsbDeviceType::FidoKbd),
             2 => Ok(UsbDeviceType::Fido),
-            #[cfg(feature="mass-storage")]
+            #[cfg(feature = "mass-storage")]
             3 => Ok(UsbDeviceType::MassStorage),
             4 => Ok(UsbDeviceType::Serial),
             _ => Err("Invalid UsbDeviceType specifier"),
@@ -129,7 +130,7 @@ pub const SERIAL_ASCII_BUFLEN: usize = 512;
 pub const SERIAL_BINARY_BUFLEN: usize = 128;
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct UsbSerialAscii {
-    pub s: xous_ipc::String::<SERIAL_ASCII_BUFLEN>,
+    pub s: xous_ipc::String<SERIAL_ASCII_BUFLEN>,
     pub delimiter: Option<char>,
 }
 

@@ -1,47 +1,48 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-#[cfg(any(feature="precursor", feature="renode"))]
-mod main_hw;
 #[cfg(not(target_os = "xous"))]
 mod main_hosted;
+#[cfg(any(feature = "precursor", feature = "renode"))]
+mod main_hw;
 
 mod api;
+#[rustfmt::skip] // don't format lookup tables
 mod mappings;
 
 use api::*;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod hw;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 use hw::*;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod spinal_udc;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 use packed_struct::PackedStructSlice;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 use spinal_udc::*;
-#[cfg(all(any(feature="precursor", feature="renode"),feature="mass-storage"))]
+#[cfg(all(any(feature = "precursor", feature = "renode"), feature = "mass-storage"))]
 mod apps_block_device;
 
 #[cfg(not(target_os = "xous"))]
 mod hosted;
+use std::collections::BTreeMap;
+
 #[cfg(not(target_os = "xous"))]
 use hosted::*;
-
-use std::collections::BTreeMap;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 use num_traits::*;
 
 fn main() -> ! {
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     main_hw::main_hw();
     #[cfg(not(target_os = "xous"))]
     main_hosted::main_hosted();
 }
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub(crate) const START_OFFSET: u32 = 0x0048 + 8 + 16; // align spinal free space to 16-byte boundary + 16 bytes for EP0 read
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub(crate) const END_OFFSET: u32 = 0x1000; // derived from RAMSIZE parameter: this could be a dynamically read out constant, but, in practice, it's part of the hardware
 /// USB endpoint allocator. The SpinalHDL USB controller appears as a block of
 /// unstructured memory to the host. You can specify pointers into the memory with
@@ -53,7 +54,7 @@ pub(crate) const END_OFFSET: u32 = 0x1000; // derived from RAMSIZE parameter: th
 ///
 /// Returns a full memory address as the pointer. Must be shifted left by 4 to get the
 /// aligned representation used by the SpinalHDL block.
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub(crate) fn alloc_inner(allocs: &mut BTreeMap<u32, u32>, requested: u32) -> Option<u32> {
     if requested == 0 {
         return None;
@@ -91,9 +92,9 @@ mod tests {
     use super::*;
     #[test]
     fn test_alloc() {
-        use rand_chacha::ChaCha8Rng;
-        use rand_chacha::rand_core::SeedableRng;
         use rand_chacha::rand_core::RngCore;
+        use rand_chacha::rand_core::SeedableRng;
+        use rand_chacha::ChaCha8Rng;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut allocs = BTreeMap::<u32, u32>::new();
@@ -111,7 +112,7 @@ mod tests {
         // consistency check and print out
         for (&offset, &len) in allocs.iter() {
             assert!(offset >= last_alloc, "new offset is inside last allocation!");
-            println!("{}-{}", offset, offset+len);
+            println!("{}-{}", offset, offset + len);
             last_alloc = offset + len;
         }
 
@@ -133,7 +134,7 @@ mod tests {
         // consistency check and print out
         for (&offset, &len) in allocs.iter() {
             assert!(offset >= last_alloc, "new offset is inside last allocation!");
-            println!("{}-{}({})", offset, offset+len, len);
+            println!("{}-{}({})", offset, offset + len, len);
             last_alloc = offset + len;
         }
 
@@ -163,7 +164,7 @@ mod tests {
         for (&offset, &len) in allocs.iter() {
             assert!(offset >= last_alloc, "new offset is inside last allocation!");
             assert!(offset & 0xF == 0, "misaligned allocation detected");
-            println!("{}-{}({})", offset, offset+len, len);
+            println!("{}-{}({})", offset, offset + len, len);
             last_alloc = offset + len;
         }
     }

@@ -2,6 +2,7 @@
 pub use xous_usb_hid::page::Keyboard as UsbKeyCode;
 
 #[cfg(any(feature="precursor", feature="renode"))]
+#[rustfmt::skip]
 pub fn char_to_hid_code_us101(key: char) -> Vec<UsbKeyCode> {
     let mut code = vec![];
     match key {
@@ -120,6 +121,7 @@ pub fn char_to_hid_code_us101(key: char) -> Vec<UsbKeyCode> {
 
 /// auto-generated using tools/kbd_layout.py + `usb kbdtest` on device for dvorak layout on US101
 #[cfg(any(feature="precursor", feature="renode"))]
+#[rustfmt::skip]
 pub fn char_to_hid_code_dvorak(key: char) -> Vec<UsbKeyCode> {
     let mut code = vec![];
     match key {
