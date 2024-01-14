@@ -18,15 +18,11 @@ jobs:
           sudo apt update
           sudo apt install -y libxkbcommon-dev
 
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: "1.75.0"
-          default: true
+      - name: Update to latest toolchain
+        run: rustup update
 
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Fetch tags
         run: git fetch --prune --unshallow --tags
 
@@ -38,5 +34,5 @@ jobs:
       - name: Clean out old target directory (in case of libstd change)
         run: rm -rf target/*
 
-      - name: Build hosted-ci
+      - name: Build CI targets
         run: cargo xtask ${{ matrix.task }} --no-verify

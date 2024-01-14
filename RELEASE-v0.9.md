@@ -462,6 +462,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - `sigchat` can now link up to an existing account - thanks to huge PR by @nhoj
 - `xtask` can accept out-of-tree apps using a syntax like `cargo xtask app-image sigchat:path-to-elf-file` thanks to PR by @kotval. This allows apps like `sigchat` to have AGPL licensing without contaminating `xous-core`
 - `sigchat` moved to its own repo with AGPL licensing: https://github.com/betrusted-io/sigchat
+- Formatting and contribution standards have been modified. Formatting with `rustfmt` and trailing white space removal is now mandatory for all Xous contributions, see [#477](https://github.com/betrusted-io/xous-core/pull/477) for a discussion of how we got there and why.
+- The repo has gone through a "flag day" where all the crates have been formatted, which means commits before the flag day may be more difficult to undo. The changes are committed on a crate-by-crate basis, so if something is really broken we can undo the formatting for the crate and add an exception to the rustfmt rules.
 
 
 ## Roadmap
