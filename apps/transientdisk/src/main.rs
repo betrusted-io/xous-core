@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 use core::fmt::Write;
+
 use graphics_server::api::GlyphStyle;
 use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
 use num_traits::*;
@@ -53,18 +54,9 @@ impl UI {
             .expect("Could not register GAM UX")
             .unwrap();
 
-        let content = gam
-            .request_content_canvas(gam_token)
-            .expect("Could not get content canvas");
-        let screensize = gam
-            .get_canvas_bounds(content)
-            .expect("Could not get canvas dimensions");
-        Self {
-            gam,
-            _gam_token: gam_token,
-            content,
-            screensize,
-        }
+        let content = gam.request_content_canvas(gam_token).expect("Could not get content canvas");
+        let screensize = gam.get_canvas_bounds(content).expect("Could not get canvas dimensions");
+        Self { gam, _gam_token: gam_token, content, screensize }
     }
 
     /// Clear the entire screen.
@@ -75,11 +67,7 @@ impl UI {
                 Rectangle::new_with_style(
                     Point::new(0, 0),
                     self.screensize,
-                    DrawStyle {
-                        fill_color: Some(PixelColor::Light),
-                        stroke_color: None,
-                        stroke_width: 0,
-                    },
+                    DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 },
                 ),
             )
             .expect("can't clear content area");
@@ -92,10 +80,7 @@ impl UI {
         let mut text_view = TextView::new(
             self.content,
             TextBounds::GrowableFromBr(
-                Point::new(
-                    self.screensize.x - 45,
-                    self.screensize.y - (self.screensize.y / 2),
-                ),
+                Point::new(self.screensize.x - 45, self.screensize.y - (self.screensize.y / 2)),
                 (self.screensize.x / 5 * 4) as u16,
             ),
         );
@@ -105,12 +90,9 @@ impl UI {
         text_view.clear_area = true;
         text_view.rounded_border = Some(3);
         text_view.style = GlyphStyle::ExtraLarge;
-        write!(text_view.text, "1.44mb flash drive now available.")
-            .expect("Could not write to text view");
+        write!(text_view.text, "1.44mb flash drive now available.").expect("Could not write to text view");
 
-        self.gam
-            .post_textview(&mut text_view)
-            .expect("Could not render text view");
+        self.gam.post_textview(&mut text_view).expect("Could not render text view");
         self.gam.redraw().expect("Could not redraw screen");
     }
 }
@@ -123,17 +105,16 @@ fn main() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
 
     // Register the server with xous
-    let sid = xns
-        .register_name(SERVER_NAME_TRANSIENTDISK, None)
-        .expect("can't register server");
+    let sid = xns.register_name(SERVER_NAME_TRANSIENTDISK, None).expect("can't register server");
 
     #[cfg(not(feature = "mass-storage"))]
-    log::warn!("transientdisk has been compiled without the mass-storage feature, needed to make the USB subsystem behave like a mass-storage device.");
+    log::warn!(
+        "transientdisk has been compiled without the mass-storage feature, needed to make the USB subsystem behave like a mass-storage device."
+    );
 
     let mut ui = UI::new(&xns, sid);
 
-    let mut fd =
-        flash_drive::FlashDrive::new(1445888, 512).expect("cannot create flash drive instance");
+    let mut fd = flash_drive::FlashDrive::new(1445888, 512).expect("cannot create flash drive instance");
 
     #[cfg(feature = "mass-storage")]
     let usb = usb_device_xous::UsbHid::new();
@@ -181,8 +162,7 @@ fn main() -> ! {
 
                             usb.set_block_device_sid(sid.clone());
 
-                            usb.switch_to_core(usb_device_xous::UsbDeviceType::MassStorage)
-                                .unwrap();
+                            usb.switch_to_core(usb_device_xous::UsbDeviceType::MassStorage).unwrap();
                         }
                         usb_setup = true;
                     }

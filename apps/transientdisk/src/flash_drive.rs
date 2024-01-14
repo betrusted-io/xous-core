@@ -17,13 +17,9 @@ impl FlashDrive {
             return Err(FlashDriveError::CapacityNotPageAligned);
         }
 
-        let mut backing = xous::syscall::map_memory(
-            None,
-            None,
-            capacity,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .unwrap();
+        let mut backing =
+            xous::syscall::map_memory(None, None, capacity, xous::MemoryFlags::R | xous::MemoryFlags::W)
+                .unwrap();
 
         // initialize backing slice with bogus data. Safety: all `[u32]`
         // values are valid
@@ -32,30 +28,20 @@ impl FlashDrive {
             *d = index as u32;
         }
 
-        Ok(Self {
-            capacity,
-            block_size,
-            memory: backing,
-        })
+        Ok(Self { capacity, block_size, memory: backing })
     }
 
     pub fn read(&mut self, msg: &mut MessageEnvelope) {
-        let body = msg
-            .body
-            .memory_message_mut()
-            .expect("incorrect message type received");
+        let body = msg.body.memory_message_mut().expect("incorrect message type received");
         let lba = body.offset.map(|v| v.get()).unwrap_or_default();
         // Safety: all values of `[u32]` are valid
-        let data = unsafe { body.buf.as_slice_mut::<u8>() }; 
+        let data = unsafe { body.buf.as_slice_mut::<u8>() };
 
         self.read_inner(lba, data);
     }
 
     pub fn write(&mut self, msg: &mut MessageEnvelope) {
-        let body = msg
-            .body
-            .memory_message_mut()
-            .expect("incorrect message type received");
+        let body = msg.body.memory_message_mut().expect("incorrect message type received");
         let lba = body.offset.map(|v| v.get()).unwrap_or_default();
         // Safety: all values of `[u32]` are valid
         let data = unsafe { body.buf.as_slice_mut::<u8>() };
@@ -85,7 +71,5 @@ impl FlashDrive {
             .copy_from_slice(&data[..self.block_size]);
     }
 
-    fn max_lba_inner(&self) -> u32 {
-        (self.capacity as u32 / 512) - 1
-    }
+    fn max_lba_inner(&self) -> u32 { (self.capacity as u32 / 512) - 1 }
 }
