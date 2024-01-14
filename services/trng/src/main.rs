@@ -3,15 +3,13 @@
 
 mod api;
 use api::*;
-
+use log::info;
 use num_traits::*;
 use xous::CID;
 use xous_ipc::Buffer;
 
-use log::info;
-
-// when we are testing, allocate a fairly large chunk of data, because the overhead of switching and conditioning
-// the TRNG into the test mode is fairly high
+// when we are testing, allocate a fairly large chunk of data, because the overhead of switching and
+// conditioning the TRNG into the test mode is fairly high
 const TEST_CACHE_LEN: usize = 128 * 1024;
 #[derive(Copy, Clone, Debug)]
 struct ScalarCallback {
@@ -20,17 +18,22 @@ struct ScalarCallback {
     cb_to_client_id: u32,
 }
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation {
-    use crate::api::{ExcursionTest, HealthTests, MiniRunsTest, NistTests, TrngBuf, TrngErrors, TrngTestMode, TRNG_TEST_BUF_LEN, TrngTestBuf};
-    use crate::TEST_CACHE_LEN;
     use num_traits::*;
     use susres::{RegManager, RegOrField, SuspendResume};
     use utralib::generated::*;
 
+    use crate::api::{
+        ExcursionTest, HealthTests, MiniRunsTest, NistTests, TrngBuf, TrngErrors, TrngTestBuf, TrngTestMode,
+        TRNG_TEST_BUF_LEN,
+    };
+    use crate::TEST_CACHE_LEN;
+
     pub struct Trng {
         csr: utralib::CSR<u32>,
-        susres_manager: RegManager<{ utra::trng_server::TRNG_SERVER_NUMREGS }>, // probably can be reduced to save space?
+        susres_manager: RegManager<{ utra::trng_server::TRNG_SERVER_NUMREGS }>, /* probably can be reduced
+                                                                                 * to save space? */
         conn: xous::CID,
         errors: TrngErrors,
         err_stat: HealthTests,
@@ -49,16 +52,14 @@ mod implementation {
                 min: trng.csr.rf(utra::trng_server::AV_EXCURSION0_LAST_ERR_MIN) as u16,
                 max: trng.csr.rf(utra::trng_server::AV_EXCURSION0_LAST_ERR_MAX) as u16,
             });
-            trng.csr
-                .rmwf(utra::trng_server::AV_EXCURSION0_CTRL_RESET, 1);
+            trng.csr.rmwf(utra::trng_server::AV_EXCURSION0_CTRL_RESET, 1);
         }
         if (pending & trng.csr.ms(utra::trng_server::EV_PENDING_EXCURSION1, 1)) != 0 {
             trng.errors.excursion_errs[1] = Some(ExcursionTest {
                 min: trng.csr.rf(utra::trng_server::AV_EXCURSION1_LAST_ERR_MIN) as u16,
                 max: trng.csr.rf(utra::trng_server::AV_EXCURSION1_LAST_ERR_MAX) as u16,
             });
-            trng.csr
-                .rmwf(utra::trng_server::AV_EXCURSION1_CTRL_RESET, 1);
+            trng.csr.rmwf(utra::trng_server::AV_EXCURSION1_CTRL_RESET, 1);
         }
         if (pending & trng.csr.ms(utra::trng_server::EV_PENDING_HEALTH, 1)) != 0 {
             let av_repcount = trng.csr.rf(utra::trng_server::NIST_ERRORS_AV_REPCOUNT);
@@ -80,24 +81,17 @@ mod implementation {
         }
         // record error summaries and errors from non-health sources
         trng.errors.nist_errs = trng.csr.r(utra::trng_server::NIST_ERRORS);
-        trng.errors.server_underruns =
-            trng.csr.rf(utra::trng_server::UNDERRUNS_SERVER_UNDERRUN) as u16;
-        trng.errors.kernel_underruns =
-            trng.csr.rf(utra::trng_server::UNDERRUNS_KERNEL_UNDERRUN) as u16;
+        trng.errors.server_underruns = trng.csr.rf(utra::trng_server::UNDERRUNS_SERVER_UNDERRUN) as u16;
+        trng.errors.kernel_underruns = trng.csr.rf(utra::trng_server::UNDERRUNS_KERNEL_UNDERRUN) as u16;
 
-        // reset any error flags. try to do this a bit away from the pending clear, so it has time to take effect
+        // reset any error flags. try to do this a bit away from the pending clear, so it has time to take
+        // effect
         trng.csr.rmwf(utra::trng_server::CONTROL_CLR_ERR, 1);
 
         // notify the main loop of the error condition
         xous::try_send_message(
             trng.conn,
-            xous::Message::new_scalar(
-                crate::api::Opcode::ErrorNotification.to_usize().unwrap(),
-                0,
-                0,
-                0,
-                0,
-            ),
+            xous::Message::new_scalar(crate::api::Opcode::ErrorNotification.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .map(|_| ())
         .unwrap();
@@ -118,9 +112,7 @@ mod implementation {
 
             let mut trng = Trng {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                conn: xns
-                    .request_connection_blocking(crate::api::SERVER_NAME_TRNG)
-                    .unwrap(),
+                conn: xns.request_connection_blocking(crate::api::SERVER_NAME_TRNG).unwrap(),
                 susres_manager: RegManager::new(csr.as_mut_ptr() as *mut u32),
                 errors: TrngErrors {
                     excursion_errs: [None; 2],
@@ -147,8 +139,7 @@ mod implementation {
                 trng.csr.r(utra::trng_server::CONTROL)
             );
 
-            trng.susres_manager
-                .push(RegOrField::Reg(utra::trng_server::CONTROL), None);
+            trng.susres_manager.push(RegOrField::Reg(utra::trng_server::CONTROL), None);
 
             /*** TRNG tuning parameters: these were configured and tested in a long run against Dieharder
                 There is a rate of TRNG generation vs. quality trade-off. The tuning below is toward quality of
@@ -161,8 +152,7 @@ mod implementation {
                 trng.csr.ms(utra::trng_server::AV_CONFIG_POWERDELAY, 50_000)
                     | trng.csr.ms(utra::trng_server::AV_CONFIG_SAMPLES, 32),
             );
-            trng.susres_manager
-                .push(RegOrField::Reg(utra::trng_server::AV_CONFIG), None);
+            trng.susres_manager.push(RegOrField::Reg(utra::trng_server::AV_CONFIG), None);
 
             ///// configure ring oscillator
             trng.csr.wo(
@@ -173,20 +163,16 @@ mod implementation {
                     | trng.csr.ms(utra::trng_server::RO_CONFIG_FUZZ, 1)
                     | trng.csr.ms(utra::trng_server::RO_CONFIG_OVERSAMPLING, 3),
             );
-            trng.susres_manager
-                .push(RegOrField::Reg(utra::trng_server::RO_CONFIG), None);
+            trng.susres_manager.push(RegOrField::Reg(utra::trng_server::RO_CONFIG), None);
 
             // slightly reduce the frequency of these to reduce power
             trng.csr.wo(
                 utra::trng_server::CHACHA,
                 trng.csr.ms(utra::trng_server::CHACHA_RESEED_INTERVAL, 2)
-                    | trng
-                        .csr
-                        .ms(utra::trng_server::CHACHA_SELFMIX_INTERVAL, 1000)
+                    | trng.csr.ms(utra::trng_server::CHACHA_SELFMIX_INTERVAL, 1000)
                     | trng.csr.ms(utra::trng_server::CHACHA_SELFMIX_ENA, 1),
             );
-            trng.susres_manager
-                .push(RegOrField::Reg(utra::trng_server::CHACHA), None);
+            trng.susres_manager.push(RegOrField::Reg(utra::trng_server::CHACHA), None);
 
             log::debug!("hardware initialized");
 
@@ -208,6 +194,7 @@ mod implementation {
 
             trng
         }
+
         pub fn init(&mut self) {
             // handle error interrupts
             xous::claim_interrupt(
@@ -230,18 +217,13 @@ mod implementation {
                     | self.csr.ms(utra::trng_server::EV_ENABLE_EXCURSION0, 1)
                     | self.csr.ms(utra::trng_server::EV_ENABLE_EXCURSION1, 1),
             );
-            self.susres_manager
-                .push_fixed_value(RegOrField::Reg(utra::trng_server::EV_PENDING), 0xFFFF_FFFF);
-            self.susres_manager
-                .push(RegOrField::Reg(utra::trng_server::EV_ENABLE), None);
+            self.susres_manager.push_fixed_value(RegOrField::Reg(utra::trng_server::EV_PENDING), 0xFFFF_FFFF);
+            self.susres_manager.push(RegOrField::Reg(utra::trng_server::EV_ENABLE), None);
         }
 
-        pub fn get_errors(&self) -> TrngErrors {
-            self.errors
-        }
-        pub fn get_err_stats(&self) -> HealthTests {
-            self.err_stat
-        }
+        pub fn get_errors(&self) -> TrngErrors { self.errors }
+
+        pub fn get_err_stats(&self) -> HealthTests { self.err_stat }
 
         #[rustfmt::skip]
         pub fn get_tests(&self) -> HealthTests {
@@ -389,10 +371,7 @@ mod implementation {
         }
 
         pub fn get_buf(&mut self, len: u16) -> TrngBuf {
-            let mut tb = TrngBuf {
-                data: [0; 1024],
-                len,
-            };
+            let mut tb = TrngBuf { data: [0; 1024], len };
             for i in 0..len as usize {
                 tb.data[i] = self.get_data_eager();
             }
@@ -413,9 +392,8 @@ mod implementation {
             ret
         }
 
-        pub fn suspend(&mut self) {
-            self.susres_manager.suspend();
-        }
+        pub fn suspend(&mut self) { self.susres_manager.suspend(); }
+
         pub fn resume(&mut self) {
             self.susres_manager.resume();
             // pump the engine to discard the initial 0's in the execution pipeline
@@ -423,7 +401,8 @@ mod implementation {
         }
 
         fn flush_trng_fifo(&mut self) {
-            // The hardware FIFO Is 1024 entries deep x 32 bits wide. This is a hard-coded parameter derived from the trng_managed.py source code (line 1014)
+            // The hardware FIFO Is 1024 entries deep x 32 bits wide. This is a hard-coded parameter derived
+            // from the trng_managed.py source code (line 1014)
             for _ in 0..1024 {
                 while self.csr.rf(utra::trng_server::STATUS_AVAIL) == 0 {
                     xous::yield_slice();
@@ -431,12 +410,11 @@ mod implementation {
                 let _ = self.csr.rf(utra::trng_server::DATA_DATA);
             }
         }
-        /// This routine will "always" return a full buffer; if it is not full, that should be considered an error condition.
-        pub fn get_trng_testmode(&mut self, test_data: &mut Vec::<u8>, test_mode: TrngTestMode) -> TrngTestBuf {
-            let mut retbuf = TrngTestBuf {
-                data: [0u8; TRNG_TEST_BUF_LEN],
-                len: 0
-            };
+
+        /// This routine will "always" return a full buffer; if it is not full, that should be considered an
+        /// error condition.
+        pub fn get_trng_testmode(&mut self, test_data: &mut Vec<u8>, test_mode: TrngTestMode) -> TrngTestBuf {
+            let mut retbuf = TrngTestBuf { data: [0u8; TRNG_TEST_BUF_LEN], len: 0 };
             // bail if the test mode isn't set
             if test_mode == TrngTestMode::None {
                 return retbuf;
@@ -457,8 +435,10 @@ mod implementation {
                         self.csr.wo(
                             utra::trng_server::CONTROL,
                             self.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
-                            | self.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1)
-                            | self.csr.ms(utra::trng_server::CONTROL_RO_DIS, 1), // disable the RO to characterize only the AV
+                                | self.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1)
+                                | self.csr.ms(utra::trng_server::CONTROL_RO_DIS, 1), /* disable the RO to
+                                                                                      * characterize only
+                                                                                      * the AV */
                         );
                         self.flush_trng_fifo();
                     }
@@ -468,13 +448,22 @@ mod implementation {
                             utra::trng_server::CONTROL,
                             self.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
                                 | self.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1)
-                                | self.csr.ms(utra::trng_server::CONTROL_AV_DIS, 1), // disable the AV generator to characterize the RO
+                                | self.csr.ms(utra::trng_server::CONTROL_AV_DIS, 1), /* disable the AV
+                                                                                      * generator to
+                                                                                      * characterize the
+                                                                                      * RO */
                         );
                         self.flush_trng_fifo();
                     }
                     TrngTestMode::Both | TrngTestMode::Cprng => {
-                        assert!(self.csr.rf(utra::trng_server::CONTROL_RO_DIS) == 0, "TRNG test mode inconsistency (RO reads as disabled; expected it to be enabled)");
-                        assert!(self.csr.rf(utra::trng_server::CONTROL_AV_DIS) == 0, "TRNG test mode inconsistency (AV reads as disabled; expected it to be enabled)");
+                        assert!(
+                            self.csr.rf(utra::trng_server::CONTROL_RO_DIS) == 0,
+                            "TRNG test mode inconsistency (RO reads as disabled; expected it to be enabled)"
+                        );
+                        assert!(
+                            self.csr.rf(utra::trng_server::CONTROL_AV_DIS) == 0,
+                            "TRNG test mode inconsistency (AV reads as disabled; expected it to be enabled)"
+                        );
                     }
                     TrngTestMode::None => {
                         panic!("TRNG test buffer request with no test mode set.");
@@ -516,7 +505,7 @@ mod implementation {
                         self.flush_trng_fifo();
                     }
                     // the raw TRNG data already matches the expected system mode; nothing to do
-                    _ => {},
+                    _ => {}
                 }
 
                 // copy the test data into a return structure
@@ -531,10 +520,11 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "xous"))]
 mod implementation {
-    use rand_chacha::ChaCha8Rng;
-    use rand_chacha::rand_core::SeedableRng;
     use rand_chacha::rand_core::RngCore;
-    use crate::api::{HealthTests, TrngBuf, TrngErrors, TRNG_TEST_BUF_LEN, TrngTestBuf, TrngTestMode};
+    use rand_chacha::rand_core::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
+
+    use crate::api::{HealthTests, TrngBuf, TrngErrors, TrngTestBuf, TrngTestMode, TRNG_TEST_BUF_LEN};
 
     pub struct Trng {
         rng: ChaCha8Rng,
@@ -545,11 +535,14 @@ mod implementation {
     impl Trng {
         pub fn new(_xns: &xous_names::XousNames) -> Trng {
             Trng {
-                rng: ChaCha8Rng::seed_from_u64(xous::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst)),
+                rng: ChaCha8Rng::seed_from_u64(
+                    xous::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst),
+                ),
                 seed: 0x1afe_cafe,
                 msgcount: 0,
             }
         }
+
         pub fn init(&mut self) {}
 
         fn move_lfsr(&self, mut lfsr: u32) -> u32 {
@@ -571,10 +564,7 @@ mod implementation {
             for d in data.iter_mut() {
                 *d = self.rng.next_u32();
             }
-            TrngBuf {
-                data,
-                len,
-            }
+            TrngBuf { data, len }
         }
 
         pub fn get_trng(&mut self, _count: usize) -> [u32; 2] {
@@ -590,11 +580,13 @@ mod implementation {
 
             ret
         }
+
         pub fn suspend(&self) {}
+
         pub fn resume(&self) {}
-        pub fn get_tests(&self) -> HealthTests {
-            HealthTests::default()
-        }
+
+        pub fn get_tests(&self) -> HealthTests { HealthTests::default() }
+
         pub fn get_errors(&self) -> TrngErrors {
             TrngErrors {
                 excursion_errs: [None; 2],
@@ -608,14 +600,15 @@ mod implementation {
                 pending_mask: 0,
             }
         }
-        pub fn get_err_stats(&self) -> HealthTests {
-            HealthTests::default()
-        }
-        pub fn get_trng_testmode(&mut self, _test_data: &mut Vec::<u8>, _test_mode: TrngTestMode) -> TrngTestBuf {
-            TrngTestBuf {
-                data: [0u8; TRNG_TEST_BUF_LEN],
-                len: 0
-            }
+
+        pub fn get_err_stats(&self) -> HealthTests { HealthTests::default() }
+
+        pub fn get_trng_testmode(
+            &mut self,
+            _test_data: &mut Vec<u8>,
+            _test_mode: TrngTestMode,
+        ) -> TrngTestBuf {
+            TrngTestBuf { data: [0u8; TRNG_TEST_BUF_LEN], len: 0 }
         }
     }
 }
@@ -629,9 +622,7 @@ fn main() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     // unlimited connections allowed, anyone including less-trusted processes can get a random number
-    let trng_sid = xns
-        .register_name(api::SERVER_NAME_TRNG, None)
-        .expect("can't register server");
+    let trng_sid = xns.register_name(api::SERVER_NAME_TRNG, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", trng_sid);
 
     let mut trng = Box::new(Trng::new(&xns));
@@ -646,26 +637,28 @@ fn main() -> ! {
     #[cfg(feature = "urandomtest")]
     log::info!("TRNG built with urandom test enabled");
 
-    #[cfg(any(
-        feature = "avalanchetest",
-        feature = "ringosctest",
-        feature = "urandomtest"
-    ))]
-    xous::create_thread_1(tester_thread, trng.get_trng_csr() as usize)
-        .expect("couldn't create test thread");
+    #[cfg(any(feature = "avalanchetest", feature = "ringosctest", feature = "urandomtest"))]
+    xous::create_thread_1(tester_thread, trng.get_trng_csr() as usize).expect("couldn't create test thread");
 
-    // pump the TRNG hardware to clear the first number out, sometimes it is 0 due to clock-sync issues on the fifo
+    // pump the TRNG hardware to clear the first number out, sometimes it is 0 due to clock-sync issues on the
+    // fifo
     trng.get_trng(2);
     log::trace!("ready to accept requests");
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(trng_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, api::Opcode::SuspendResume as u32, sr_cid)
-        .expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(
+        Some(susres::SuspendOrder::Later),
+        &xns,
+        api::Opcode::SuspendResume as u32,
+        sr_cid,
+    )
+    .expect("couldn't create suspend/resume object");
 
     let mut error_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
 
-    // storage for testing data. We heap-allocate it, so that it's not a burden when we aren't testing the TRNG
+    // storage for testing data. We heap-allocate it, so that it's not a burden when we aren't testing the
+    // TRNG
     let mut test_data = Vec::<u8>::new();
     let mut test_mode = TrngTestMode::None;
 
@@ -681,41 +674,32 @@ fn main() -> ! {
             }),
             Some(api::Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 trng.suspend();
-                susres
-                    .suspend_until_resume(token)
-                    .expect("couldn't execute suspend/resume");
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 trng.resume();
             }),
             Some(api::Opcode::ErrorSubscribe) => {
-                let buffer =
-                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let hookdata = buffer.to_original::<api::ScalarHook, _>().unwrap();
                 do_hook(hookdata, &mut error_cb_conns);
             }
             Some(api::Opcode::ErrorNotification) => {
-                log::error!(
-                    "Got a notification interrupt from the TRNG. Syndrome: {:?}",
-                    trng.get_errors()
-                );
+                log::error!("Got a notification interrupt from the TRNG. Syndrome: {:?}", trng.get_errors());
                 log::error!("Stats: {:?}", trng.get_err_stats());
                 send_event(&error_cb_conns);
             }
             Some(api::Opcode::HealthStats) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 buffer.replace(trng.get_tests()).unwrap();
             }
             Some(api::Opcode::ErrorStats) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 buffer.replace(trng.get_errors()).unwrap();
             }
             Some(api::Opcode::FillTrng) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let len = buffer.as_flat::<TrngBuf, _>().unwrap().len;
                 buffer.replace(trng.get_buf(len)).unwrap();
             }
@@ -744,9 +728,8 @@ fn main() -> ! {
                 xous::return_scalar(msg.sender, 1).ok();
             }),
             Some(api::Opcode::TestGetData) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 buffer.replace(trng.get_trng_testmode(&mut test_data, test_mode)).unwrap();
             }
             Some(api::Opcode::Quit) => break,
@@ -790,13 +773,7 @@ fn unhook(cb_conns: &mut [Option<ScalarCallback>; 32]) {
         if let Some(scb) = entry {
             xous::send_message(
                 scb.server_to_cb_cid,
-                xous::Message::new_blocking_scalar(
-                    api::EventCallback::Drop.to_usize().unwrap(),
-                    0,
-                    0,
-                    0,
-                    0,
-                ),
+                xous::Message::new_blocking_scalar(api::EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0),
             )
             .unwrap();
             unsafe {
@@ -809,7 +786,8 @@ fn unhook(cb_conns: &mut [Option<ScalarCallback>; 32]) {
 fn send_event(cb_conns: &[Option<ScalarCallback>; 32]) {
     for entry in cb_conns.iter() {
         if let Some(scb) = entry {
-            // note that the "which" argument is only used for GPIO events, to indicate which pin had the event
+            // note that the "which" argument is only used for GPIO events, to indicate which pin had the
+            // event
             xous::send_message(
                 scb.server_to_cb_cid,
                 xous::Message::new_scalar(
