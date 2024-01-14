@@ -1,4 +1,5 @@
 
+#![cfg_attr(rustfmt, rustfmt_skip)] // don't format generated files
 #![allow(dead_code)]
 use core::convert::TryInto;
 #[cfg(feature="std")]
