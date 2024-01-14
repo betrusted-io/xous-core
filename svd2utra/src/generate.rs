@@ -2,10 +2,11 @@
 // SPDX-FileCopyrightText: 2020 bunnie <bunnie@kosagi.com>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use quick_xml::events::{attributes::Attribute, Event};
-use quick_xml::reader::Reader;
-use quick_xml::name::QName;
 use std::io::{BufRead, BufReader, Read, Write};
+
+use quick_xml::events::{attributes::Attribute, Event};
+use quick_xml::name::QName;
+use quick_xml::reader::Reader;
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -115,14 +116,9 @@ fn parse_u32(value: &[u8]) -> Result<u32, ParseError> {
 
 fn extract_contents<T: BufRead>(reader: &mut Reader<T>) -> Result<String, ParseError> {
     let mut buf = Vec::new();
-    let contents = reader
-        .read_event_into(&mut buf)
-        .map_err(|_| ParseError::UnexpectedTag)?;
+    let contents = reader.read_event_into(&mut buf).map_err(|_| ParseError::UnexpectedTag)?;
     match contents {
-        Event::Text(t) => t
-            .unescape()
-            .map(|s| s.to_string())
-            .map_err(|_| ParseError::NonUTF8),
+        Event::Text(t) => t.unescape().map(|s| s.to_string()).map_err(|_| ParseError::NonUTF8),
         _ => Err(ParseError::UnexpectedTag),
     }
 }
@@ -166,12 +162,8 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
                                 .map_err(|_| ParseError::ParseIntError)?,
                         );
                     }
-                    "bitWidth" => {
-                        bit_width = Some(parse_u32(extract_contents(reader)?.as_bytes())?)
-                    }
-                    "bitOffset" => {
-                        bit_offset = Some(parse_u32(extract_contents(reader)?.as_bytes())?)
-                    }
+                    "bitWidth" => bit_width = Some(parse_u32(extract_contents(reader)?.as_bytes())?),
+                    "bitOffset" => bit_offset = Some(parse_u32(extract_contents(reader)?.as_bytes())?),
                     _ => (),
                 }
             }
@@ -202,10 +194,7 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
     })
 }
 
-fn generate_fields<T: BufRead>(
-    reader: &mut Reader<T>,
-    fields: &mut Vec<Field>,
-) -> Result<(), ParseError> {
+fn generate_fields<T: BufRead>(reader: &mut Reader<T>, fields: &mut Vec<Field>) -> Result<(), ParseError> {
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
@@ -237,13 +226,10 @@ fn generate_register<T: BufRead>(reader: &mut Reader<T>) -> Result<Register, Par
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let tag_binding = e.local_name().as_ref().to_vec();
-                let tag_name = std::str::from_utf8(&tag_binding)
-                        .map_err(|_| ParseError::NonUTF8)?;
+                let tag_name = std::str::from_utf8(&tag_binding).map_err(|_| ParseError::NonUTF8)?;
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
-                    "addressOffset" => {
-                        offset = Some(parse_u64(extract_contents(reader)?.as_bytes())?)
-                    }
+                    "addressOffset" => offset = Some(parse_u64(extract_contents(reader)?.as_bytes())?),
                     "fields" => generate_fields(reader, &mut fields)?,
                     _ => (),
                 }
@@ -277,8 +263,7 @@ fn generate_interrupts<T: BufRead>(
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let tag_binding = e.local_name().as_ref().to_vec();
-                let tag_name = std::str::from_utf8(&tag_binding)
-                    .map_err(|_| ParseError::NonUTF8)?;
+                let tag_name = std::str::from_utf8(&tag_binding).map_err(|_| ParseError::NonUTF8)?;
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
                     "value" => value = Some(parse_u64(extract_contents(reader)?.as_bytes())?),
@@ -352,13 +337,10 @@ fn generate_peripheral<T: BufRead>(
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let tag_binding = e.local_name().as_ref().to_vec();
-                let tag_name = std::str::from_utf8(&tag_binding)
-                    .map_err(|_| ParseError::NonUTF8)?;
+                let tag_name = std::str::from_utf8(&tag_binding).map_err(|_| ParseError::NonUTF8)?;
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
-                    "baseAddress" => {
-                        base = Some(parse_u64(extract_contents(reader)?.as_bytes())?)
-                    }
+                    "baseAddress" => base = Some(parse_u64(extract_contents(reader)?.as_bytes())?),
                     "size" => size = Some(parse_u64(extract_contents(reader)?.as_bytes())?),
                     "registers" => generate_registers(reader, &mut registers)?,
                     "interrupt" => generate_interrupts(reader, &mut interrupts)?,
@@ -402,8 +384,8 @@ fn generate_peripherals<T: BufRead>(reader: &mut Reader<T>) -> Result<Vec<Periph
                 b"peripheral" => {
                     let base_peripheral = match e.attributes().next() {
                         Some(Ok(Attribute { key, value })) if key == QName(b"derivedFrom") => {
-                            let base_peripheral_name = String::from_utf8(value.to_vec())
-                                .map_err(|_| ParseError::NonUTF8)?;
+                            let base_peripheral_name =
+                                String::from_utf8(value.to_vec()).map_err(|_| ParseError::NonUTF8)?;
 
                             let base = peripherals
                                 .iter()
@@ -442,13 +424,10 @@ fn generate_memory_region<T: BufRead>(reader: &mut Reader<T>) -> Result<MemoryRe
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let tag_binding = e.local_name().as_ref().to_vec();
-                let tag_name = std::str::from_utf8(&tag_binding)
-                    .map_err(|_| ParseError::NonUTF8)?;
+                let tag_name = std::str::from_utf8(&tag_binding).map_err(|_| ParseError::NonUTF8)?;
                 match tag_name {
                     "name" => name = Some(extract_contents(reader)?),
-                    "baseAddress" => {
-                        base = Some(parse_u64(extract_contents(reader)?.as_bytes())?)
-                    }
+                    "baseAddress" => base = Some(parse_u64(extract_contents(reader)?.as_bytes())?),
                     "size" => size = Some(parse_u64(extract_contents(reader)?.as_bytes())?),
                     _ => (),
                 }
@@ -488,10 +467,8 @@ fn parse_memory_regions<T: BufRead>(
                         }
                         break;
                     }
-                    description
-                    .memory_regions
-                    .push(mr)
-                },
+                    description.memory_regions.push(mr)
+                }
                 _ => panic!("unexpected tag in <memoryRegions>: {:?}", e),
             },
             Ok(Event::End(ref e)) => match e.name() {
@@ -526,9 +503,7 @@ fn generate_constants<T: BufRead>(
                                     .expect("constant: error parsing attribute value");
                                 match att_name {
                                     _ if att_name == "name" => constant_descriptor.name = att_value,
-                                    _ if att_name == "value" => {
-                                        constant_descriptor.value = att_value
-                                    }
+                                    _ if att_name == "value" => constant_descriptor.value = att_value,
                                     _ => panic!("unexpected attribute name"),
                                 }
                             }
@@ -537,7 +512,12 @@ fn generate_constants<T: BufRead>(
                     }
                     // keep adding _ to the end of the name until it's unique
                     loop {
-                        if description.constants.iter().find(|&c| c.name == constant_descriptor.name).is_some() {
+                        if description
+                            .constants
+                            .iter()
+                            .find(|&c| c.name == constant_descriptor.name)
+                            .is_some()
+                        {
                             constant_descriptor.name.push_str("_X");
                             continue;
                         }
@@ -838,16 +818,8 @@ where
 fn print_memory_regions<U: Write>(regions: &[MemoryRegion], out: &mut U) -> std::io::Result<()> {
     writeln!(out, "// Physical base addresses of memory regions")?;
     for region in regions {
-        writeln!(
-            out,
-            "pub const HW_{}_MEM:     usize = 0x{:08x};",
-            region.name, region.base
-        )?;
-        writeln!(
-            out,
-            "pub const HW_{}_MEM_LEN: usize = {};",
-            region.name, region.size
-        )?;
+        writeln!(out, "pub const HW_{}_MEM:     usize = 0x{:08x};", region.name, region.base)?;
+        writeln!(out, "pub const HW_{}_MEM_LEN: usize = {};", region.name, region.size)?;
     }
     writeln!(out)?;
     Ok(())
@@ -859,18 +831,10 @@ fn print_constants<U: Write>(constants: &[Constant], out: &mut U) -> std::io::Re
         let maybe_intval = constant.value.parse::<u32>();
         match maybe_intval {
             Ok(intval) => {
-                writeln!(
-                    out,
-                    "pub const LITEX_{}: usize = {};",
-                    constant.name, intval
-                )?;
+                writeln!(out, "pub const LITEX_{}: usize = {};", constant.name, intval)?;
             }
             Err(_) => {
-                writeln!(
-                    out,
-                    "pub const LITEX_{}: &str = \"{}\";",
-                    constant.name, constant.value
-                )?;
+                writeln!(out, "pub const LITEX_{}: &str = \"{}\";", constant.name, constant.value)?;
             }
         }
     }
@@ -985,43 +949,19 @@ mod tests {
         for register in &peripheral.registers {
             writeln!(out)?;
             let reg_name = register.name.to_uppercase();
-            writeln!(
-                out,
-                "        let foo = {}.r(utra::{}::{});",
-                per_name, mod_name, reg_name
-            )?;
-            writeln!(
-                out,
-                "        {}.wo(utra::{}::{}, foo);",
-                per_name, mod_name, reg_name
-            )?;
+            writeln!(out, "        let foo = {}.r(utra::{}::{});", per_name, mod_name, reg_name)?;
+            writeln!(out, "        {}.wo(utra::{}::{}, foo);", per_name, mod_name, reg_name)?;
             for field in &register.fields {
                 let field_name = format!("{}_{}", reg_name, field.name.to_uppercase());
-                writeln!(
-                    out,
-                    "        let bar = {}.rf(utra::{}::{});",
-                    per_name, mod_name, field_name
-                )?;
-                writeln!(
-                    out,
-                    "        {}.rmwf(utra::{}::{}, bar);",
-                    per_name, mod_name, field_name
-                )?;
+                writeln!(out, "        let bar = {}.rf(utra::{}::{});", per_name, mod_name, field_name)?;
+                writeln!(out, "        {}.rmwf(utra::{}::{}, bar);", per_name, mod_name, field_name)?;
                 writeln!(
                     out,
                     "        let mut baz = {}.zf(utra::{}::{}, bar);",
                     per_name, mod_name, field_name
                 )?;
-                writeln!(
-                    out,
-                    "        baz |= {}.ms(utra::{}::{}, 1);",
-                    per_name, mod_name, field_name
-                )?;
-                writeln!(
-                    out,
-                    "        {}.wfo(utra::{}::{}, baz);",
-                    per_name, mod_name, field_name
-                )?;
+                writeln!(out, "        baz |= {}.ms(utra::{}::{}, 1);", per_name, mod_name, field_name)?;
+                writeln!(out, "        {}.wfo(utra::{}::{}, baz);", per_name, mod_name, field_name)?;
             }
         }
 
@@ -1032,7 +972,7 @@ mod tests {
     Ok(())
 }
 
-pub fn parse_svd<T: Read>(sources: Vec::<T>) -> Result<Description, ParseError> {
+pub fn parse_svd<T: Read>(sources: Vec<T>) -> Result<Description, ParseError> {
     let mut description = Description::default();
     for src in sources {
         let mut buf = Vec::new();
@@ -1059,7 +999,7 @@ pub fn parse_svd<T: Read>(sources: Vec::<T>) -> Result<Description, ParseError> 
     Ok(description)
 }
 
-pub fn generate<T: Read, U: Write>(src: Vec::<T>, dest: &mut U) -> Result<(), ParseError> {
+pub fn generate<T: Read, U: Write>(src: Vec<T>, dest: &mut U) -> Result<(), ParseError> {
     let description = parse_svd(src)?;
 
     print_header(dest).or(Err(ParseError::WriteError))?;
