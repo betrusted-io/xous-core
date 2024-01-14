@@ -424,7 +424,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // ---- other single-purpose commands ----
         Some("generate-locales") => generate_locales()?,
-        Some("wycheproof-import") => whycheproof_import()?,
+        Some("wycheproof-import") => wycheproof_import()?,
         Some("dummy-template") => generate_app_menus(&Vec::new()),
         _ => print_help(),
     }

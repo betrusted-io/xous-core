@@ -329,7 +329,7 @@ pub(crate) fn generate_locales() -> Result<(), std::io::Error> {
 }
 
 /// Import the Wycheproof test vectors
-pub(crate) fn whycheproof_import() -> Result<(), crate::DynError> {
+pub(crate) fn wycheproof_import() -> Result<(), crate::DynError> {
     let input_file = "tools/wycheproof-import/x25519_test.json";
     let output_file = "services/shellchat/src/cmds/x25519_test.bin";
     let status = Command::new(cargo())
