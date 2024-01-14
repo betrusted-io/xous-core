@@ -52,4 +52,4 @@ cramium-soc = []
 cramium-fpga = []
 
 # Specify a Precusor default so that we can pass packaging CI tests.
-default = ["precursor-pvt", "precursor"]
+default = ["hosted"]
