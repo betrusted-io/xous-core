@@ -1283,7 +1283,7 @@ pub fn fifo_join_test() -> bool {
     a_prog.setup_default_config(&mut sm_a);
     sm_a.config_set_out_pins(0, 32);
     #[cfg(not(feature = "rp2040"))]
-    sm_a.config_set_clkdiv(192.0); // slow down the machine so we can read out the values after writing them...
+    sm_a.config_set_clkdiv(2048.0); // slow down the machine so we can read out the values after writing them...
     #[cfg(feature = "rp2040")]
     sm_a.config_set_clkdiv(32768.0);
     sm_a.config_set_out_shift(false, true, 0);
