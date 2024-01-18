@@ -1,68 +1,28 @@
+use cramium_hal::iox::{Iox, IoxDir, IoxEnable, IoxFunction, IoxPort};
+use cramium_hal::udma;
+use utralib::generated::*;
+
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 
 // location of kernel, as offset from the base of ReRAM. This needs to match up with what is in link.x.
 pub const KERNEL_OFFSET: usize = 0x9000;
 
-#[cfg(feature = "platform-tests")]
-pub mod duart {
-    pub const UART_DOUT: utralib::Register = utralib::Register::new(0, 0xff);
-    pub const UART_DOUT_DOUT: utralib::Field = utralib::Field::new(8, 0, UART_DOUT);
-    pub const UART_CTL: utralib::Register = utralib::Register::new(1, 1);
-    pub const UART_CTL_EN: utralib::Field = utralib::Field::new(1, 0, UART_CTL);
-    pub const UART_BUSY: utralib::Register = utralib::Register::new(2, 1);
-    pub const UART_BUSY_BUSY: utralib::Field = utralib::Field::new(1, 0, UART_BUSY);
-
-    pub const HW_DUART_BASE: usize = 0x4004_2000;
-}
-#[cfg(feature = "platform-tests")]
-struct Duart {
-    csr: utralib::CSR<u32>,
-}
-#[cfg(feature = "platform-tests")]
-impl Duart {
-    pub fn new() -> Self {
-        let mut duart_csr = utralib::CSR::new(duart::HW_DUART_BASE as *mut u32);
-        duart_csr.wfo(duart::UART_CTL_EN, 1);
-        Duart { csr: duart_csr }
-    }
-
-    pub fn putc(&mut self, ch: char) {
-        while self.csr.rf(duart::UART_BUSY_BUSY) != 0 {
-            // spin wait
-        }
-        // the code here bypasses a lot of checks to simulate very fast write cycles so
-        // that the read waitback actually returns something other than not busy.
-        // unsafe {(duart::HW_DUART_BASE as *mut u32).write_volatile(ch as u32) }; // this line really ensures
-        // we have to readback something, but it causes double-printing
-        while unsafe { (duart::HW_DUART_BASE as *mut u32).add(2).read_volatile() } != 0 {
-            // wait
-        }
-        unsafe { (duart::HW_DUART_BASE as *mut u32).write_volatile(ch as u32) };
-    }
-
-    pub fn puts(&mut self, s: &str) {
-        for c in s.as_bytes() {
-            self.putc(*c as char);
-        }
-    }
-}
-#[cfg(feature = "platform-tests")]
-fn test_duart() {
-    // println!("Duart test\n");
-    let mut duart = Duart::new();
-    loop {
-        duart.puts("hello world\n");
-    }
-}
-
-#[cfg(feature = "platform-tests")]
-pub fn platform_tests() { test_duart(); }
-
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() {
+    // Set up the initial clocks. This is done as a "poke array" into a table of addresses.
+    // Why? because this is actually how it's done for the chip verification code. We can
+    // make this nicer and more abstract with register meanings down the road, if necessary,
+    // but for now this actually makes it easier to maintain, because we can visually compare the
+    // register settings directly againt what the designers are using in validation.
+    //
+    // Not all design changes have a rhyme or reason at this stage -- sometimes "it just works,
+    // don't futz with it" is actually the answer that goes to production.
+
     /*
-    // "actual SoC" parameters
+    // "actual SoC" parameters -- swap the comment here when silicon comes back
+    // not making it a "feature" because this is a one-way gate, I don't see
+    // any reason why we'd go back to using the emulator board if we have silicon.
     unsafe {
         (0x400400a0 as *mut u32).write_volatile(0x1F598); // F
         crate::println!("F: {:08x}", ((0x400400a0 as *const u32).read_volatile()));
@@ -95,7 +55,7 @@ pub fn early_init() {
             }
         }
     } */
-    // FPGA board parameters (deals with MMCM instead of PLL)
+    // SoC emulator board parameters (deals with MMCM instead of PLL)
     unsafe {
         let poke_array: [(u32, u32, bool); 9] = [
             (0x40040030, 0x0001, true),  // cgusel1
@@ -124,39 +84,130 @@ pub fn early_init() {
         }
     }
 
-    use utralib::generated::*;
+    // Configure the UDMA UART. This UART's settings will be used as the initial console UART.
+    // This is configured in the loader so that the log crate does not have a dependency
+    // on the cramium-hal crate to be functional.
 
-    // configure the UDMA UART and send a test string. This UART's settings will be
-    // used as the initial console UART.
-    let mut udma_ctrl = CSR::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
-    let iox_csr = utra::iox::HW_IOX_BASE as *mut u32;
-    unsafe {
-        iox_csr.add(0).write_volatile(0b00_00_00_01_01_00_00_00); // PAL AF1 on PA3/PA4
-        iox_csr.add(0x1c / core::mem::size_of::<u32>()).write_volatile(0x1400); // PDH
-        iox_csr.add(0x148 / core::mem::size_of::<u32>()).write_volatile(0x10); // PA4 output
-        iox_csr.add(0x148 / core::mem::size_of::<u32>() + 3).write_volatile(0xffff); // PD
-        iox_csr.add(0x160 / core::mem::size_of::<u32>()).write_volatile(0x8); // PA3 pullup
-    }
-    udma_ctrl.wo(utra::udma_ctrl::REG_CG, 1);
+    // Set up the IO mux to map UART_A0:
+    //  UART_RX_A[0] = PA3
+    //  UART_TX_A[0] = PA4
+    let mut iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
+    iox.set_alternate_function(IoxPort::PA, 3, IoxFunction::AF1);
+    iox.set_alternate_function(IoxPort::PA, 4, IoxFunction::AF1);
+    // rx as input, with pull-up
+    iox.set_gpio_dir(IoxPort::PA, 3, IoxDir::Input);
+    iox.set_gpio_pullup(IoxPort::PA, 3, IoxEnable::Enable);
+    // tx as output
+    iox.set_gpio_dir(IoxPort::PA, 4, IoxDir::Output);
+
+    // Set up the UDMA_UART block to the correct baud rate and enable status
+    let mut udma_global = udma::GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
+    udma_global.clock_on(udma::PeriphId::Uart0);
+    udma_global.map_event(
+        udma::PeriphId::Uart0,
+        udma::PeriphEventType::Uart(udma::EventUartOffset::Rx),
+        udma::EventChannel::Channel0,
+    );
+    udma_global.map_event(
+        udma::PeriphId::Uart0,
+        udma::PeriphEventType::Uart(udma::EventUartOffset::Tx),
+        udma::EventChannel::Channel1,
+    );
 
     let baudrate: u32 = 115200;
     let freq: u32 = 100_000_000;
-    let clk_counter: u32 = (freq + baudrate / 2) / baudrate;
-    let mut udma_uart = CSR::new(utra::udma_uart_0::HW_UDMA_UART_0_BASE as *mut u32);
-    udma_uart.wo(utra::udma_uart_0::REG_UART_SETUP, 0x0306 | (clk_counter << 16));
 
-    /*
-    // send a test string to confirm the UART is configured
-    let tx_buf = utralib::HW_IFRAM0_MEM as *mut u8;
-    for i in 0..16 {
-        unsafe { tx_buf.add(i).write_volatile('a' as u32 as u8 + i as u8) };
+    let mut udma_uart = unsafe {
+        // safety: this is safe to call, because we set up clock and events prior to calling new.
+        udma::Uart::new(utra::udma_uart_0::HW_UDMA_UART_0_BASE, baudrate, freq)
+    };
+
+    // Board bringup: send characters to confirm the UART is configured & ready to go for the logging crate!
+    #[cfg(feature = "board-bringup")]
+    {
+        let tx_buf = unsafe {
+            // safety: it's safe only because we are manually tracking the allocations in IFRAM0. Yuck!
+            core::slice::from_raw_parts_mut(utralib::HW_IFRAM0_MEM as *mut u8, 256)
+        };
+        let rx_buf = unsafe {
+            // safety: it's safe only because we are manually tracking the allocations in IFRAM0. Yuck!
+            core::slice::from_raw_parts_mut((utralib::HW_IFRAM0_MEM + 256) as *mut u8, 1)
+        };
+        const BANNER: &'static str = "\n\rHit any key to continue boot...\r";
+        tx_buf[..BANNER.len()].copy_from_slice(BANNER.as_bytes());
+        udma_uart.write(&tx_buf[0..BANNER.len()]);
+
+        // receive characters
+        for _ in 0..16 {
+            udma_uart.read(rx_buf);
+            tx_buf[0] = rx_buf[0];
+            const DBG_MSG: &'static str = "Got: ";
+            tx_buf[..DBG_MSG.len()].copy_from_slice(DBG_MSG.as_bytes());
+            udma_uart.write(&tx_buf[0..DBG_MSG.len()]);
+            udma_uart.write(&tx_buf[0..1]);
+            tx_buf[0] = '\n' as u32 as u8;
+            tx_buf[1] = '\r' as u32 as u8;
+            udma_uart.write(&tx_buf[0..2]);
+        }
+
+        const ONWARD: &'static str = "\n\rBooting!\r";
+        tx_buf[..ONWARD.len()].copy_from_slice(ONWARD.as_bytes());
+        udma_uart.write(&tx_buf[0..ONWARD.len()]);
     }
-    udma_uart.wo(utra::udma_uart_0::REG_TX_SADDR, tx_buf as u32);
-    udma_uart.wo(utra::udma_uart_0::REG_TX_SIZE, 16);
-    // send it
-    udma_uart.wo(utra::udma_uart_0::REG_TX_CFG, 0x10); // EN
-    // wait for it all to be done
-    while udma_uart.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {   }
-    while (udma_uart.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {  }
-    */
 }
+
+#[cfg(feature = "platform-tests")]
+pub mod duart {
+    pub const UART_DOUT: utralib::Register = utralib::Register::new(0, 0xff);
+    pub const UART_DOUT_DOUT: utralib::Field = utralib::Field::new(8, 0, UART_DOUT);
+    pub const UART_CTL: utralib::Register = utralib::Register::new(1, 1);
+    pub const UART_CTL_EN: utralib::Field = utralib::Field::new(1, 0, UART_CTL);
+    pub const UART_BUSY: utralib::Register = utralib::Register::new(2, 1);
+    pub const UART_BUSY_BUSY: utralib::Field = utralib::Field::new(1, 0, UART_BUSY);
+
+    pub const HW_DUART_BASE: usize = 0x4004_2000;
+}
+#[cfg(feature = "platform-tests")]
+struct Duart {
+    csr: utralib::CSR<u32>,
+}
+#[cfg(feature = "platform-tests")]
+impl Duart {
+    pub fn new() -> Self {
+        let mut duart_csr = utralib::CSR::new(duart::HW_DUART_BASE as *mut u32);
+        duart_csr.wfo(duart::UART_CTL_EN, 1);
+        Duart { csr: duart_csr }
+    }
+
+    pub fn putc(&mut self, ch: char) {
+        while self.csr.rf(duart::UART_BUSY_BUSY) != 0 {
+            // spin wait
+        }
+        // the code here bypasses a lot of checks to simulate very fast write cycles so
+        // that the read waitback actually returns something other than not busy.
+
+        // unsafe {(duart::HW_DUART_BASE as *mut u32).write_volatile(ch as u32) }; // this line really ensures
+        // we have to readback something, but it causes double-printing
+        while unsafe { (duart::HW_DUART_BASE as *mut u32).add(2).read_volatile() } != 0 {
+            // wait
+        }
+        unsafe { (duart::HW_DUART_BASE as *mut u32).write_volatile(ch as u32) };
+    }
+
+    pub fn puts(&mut self, s: &str) {
+        for c in s.as_bytes() {
+            self.putc(*c as char);
+        }
+    }
+}
+#[cfg(feature = "platform-tests")]
+fn test_duart() {
+    // println!("Duart test\n");
+    let mut duart = Duart::new();
+    loop {
+        duart.puts("hello world\n");
+    }
+}
+
+#[cfg(feature = "platform-tests")]
+pub fn platform_tests() { test_duart(); }
