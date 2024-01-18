@@ -394,6 +394,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // ------ Cramium hardware image configs ------
         Some("cramium-fpga") | Some("cramium-soc") => {
             let cramium_pkgs = ["xous-log", "xous-names", "xous-ticktimer", "cram-console"].to_vec();
+            builder.add_loader_feature("debug-print");
+            builder.add_loader_feature("board-bringup");
             match task.as_deref() {
                 Some("cramium-fpga") => builder.target_cramium_fpga(),
                 Some("cramium-soc") => builder.target_cramium_soc(),
