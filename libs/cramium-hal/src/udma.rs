@@ -301,41 +301,38 @@ impl Into<usize> for DmaReg {
     fn into(self) -> usize { self as usize }
 }
 
-/// The common UDMA channel structure shared across all UDMA peripherals
-pub struct Channel {
-    /// This is assumed to point to the base of the peripheral's UDMA register set.
-    csr: CSR<u32>,
-}
-
-impl Channel {
-    pub fn new(udma_base_addr: *mut u32) -> Self { Channel { csr: CSR::new(udma_base_addr) } }
+pub trait Udma {
+    /// Every implementation of Udma has to implement the csr_mut() accessor
+    fn csr_mut(&mut self) -> &mut CSR<u32>;
+    /// Every implementation of Udma has to implement the csr() accessor
+    fn csr(&self) -> &CSR<u32>;
 
     /// `bank` selects which UDMA bank is the target
     /// `buf` is a slice that points to the memory that is the target of the UDMA. Needs to be accessible
     ///    by the UDMA subsystem, e.g. in IFRAM0/IFRAM1 range, and is a *physical address* even in a
     ///    system running on virtual memory (!!!)
     /// `config` is a device-specific word that configures the DMA.
-    pub fn enqueue(&mut self, bank: Bank, buf: &[u8], config: u32) {
+    fn udma_enqueue(&mut self, bank: Bank, buf: &[u8], config: u32) {
         // Safety: only safe when used in the context of UDMA registers.
         unsafe {
-            let bank_addr = self.csr.base().add(bank as usize);
+            let bank_addr = self.csr_mut().base().add(bank as usize);
             let buf_addr = buf.as_ptr() as u32;
             bank_addr.add(DmaReg::Saddr.into()).write_volatile(buf_addr);
             bank_addr.add(DmaReg::Size.into()).write_volatile(buf.len() as u32);
             bank_addr.add(DmaReg::Cfg.into()).write_volatile(config | CFG_EN)
         }
     }
-
-    pub fn can_enqueue(&self, bank: Bank) -> bool {
+    fn udma_can_enqueue(&self, bank: Bank) -> bool {
         // Safety: only safe when used in the context of UDMA registers.
         unsafe {
-            (self.csr.base().add(bank as usize).add(DmaReg::Cfg.into()).read_volatile() & CFG_SHADOW) == 0
+            (self.csr().base().add(bank as usize).add(DmaReg::Cfg.into()).read_volatile() & CFG_SHADOW) == 0
         }
     }
-
-    pub fn busy(&self, bank: Bank) -> bool {
+    fn udma_busy(&self, bank: Bank) -> bool {
         // Safety: only safe when used in the context of UDMA registers.
-        unsafe { (self.csr.base().add(bank as usize).add(DmaReg::Cfg.into()).read_volatile() & CFG_EN) != 0 }
+        unsafe {
+            (self.csr().base().add(bank as usize).add(DmaReg::Cfg.into()).read_volatile() & CFG_EN) != 0
+        }
     }
 }
 
@@ -353,9 +350,15 @@ impl Into<usize> for UartReg {
 pub struct Uart {
     /// This is assumed to point to the base of the peripheral's UDMA register set.
     csr: CSR<u32>,
-    udma: Channel,
 }
 
+/// Blanket implementations to access the CSR within UART. Needed because you can't
+/// have default fields in traits: https://github.com/rust-lang/rfcs/pull/1546
+impl Udma for Uart {
+    fn csr_mut(&mut self) -> &mut CSR<u32> { &mut self.csr }
+
+    fn csr(&self) -> &CSR<u32> { &self.csr }
+}
 impl Uart {
     /// Configures for N81
     ///
@@ -367,7 +370,6 @@ impl Uart {
     /// the clock manually as well once the object is dropped...
     pub unsafe fn new(base_addr: usize, baud: u32, clk_freq: u32) -> Self {
         // now setup the channel
-        let channel = Channel::new(base_addr as *mut u32);
         let csr = CSR::new(base_addr as *mut u32);
 
         let clk_counter: u32 = (clk_freq + baud / 2) / baud;
@@ -379,7 +381,7 @@ impl Uart {
                 .add(UartReg::Setup.into())
                 .write_volatile(0x0306 | (clk_counter << 16))
         }
-        Uart { csr, udma: channel }
+        Uart { csr }
     }
 
     pub fn disable(&mut self) {
@@ -404,19 +406,19 @@ impl Uart {
     }
 
     pub fn wait_tx_done(&self) {
-        while self.udma.busy(Bank::Tx) {}
+        while self.udma_busy(Bank::Tx) {}
         while self.tx_busy() {}
     }
 
-    pub fn wait_rx_done(&self) { while self.udma.busy(Bank::Rx) {} }
+    pub fn wait_rx_done(&self) { while self.udma_busy(Bank::Rx) {} }
 
     pub fn write(&mut self, buf: &[u8]) {
-        self.udma.enqueue(Bank::Tx, buf, CFG_EN | CFG_SIZE_8);
+        self.udma_enqueue(Bank::Tx, buf, CFG_EN | CFG_SIZE_8);
         self.wait_tx_done();
     }
 
     pub fn read(&mut self, buf: &mut [u8]) {
-        self.udma.enqueue(Bank::Rx, buf, CFG_EN | CFG_SIZE_8);
+        self.udma_enqueue(Bank::Rx, buf, CFG_EN | CFG_SIZE_8);
         self.wait_rx_done();
     }
 }
