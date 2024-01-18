@@ -103,6 +103,7 @@ members = [
   "libs/tls",
   "libs/xous-pio",
   "libs/xous-pl230",
+  "libs/cramium-hal",
 ]
 resolver = "2"
 
