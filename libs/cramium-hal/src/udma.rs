@@ -384,7 +384,17 @@ impl Uart {
         Uart { csr }
     }
 
+    /// Gets a handle to the UART. Used for re-acquiring previously initialized
+    /// UART hardware.
+    ///
+    /// Safety: only safe to call in the context of a previously initialized UART
+    pub unsafe fn get_handle(base_addr: usize) -> Self {
+        let csr = CSR::new(base_addr as *mut u32);
+        Uart { csr }
+    }
+
     pub fn disable(&mut self) {
+        self.wait_tx_done();
         // safe only in the context of a UART UDMA address
         unsafe {
             self.csr.base().add(Bank::Custom.into()).add(UartReg::Setup.into()).write_volatile(0x0050_0006);
@@ -406,27 +416,61 @@ impl Uart {
     }
 
     pub fn wait_tx_done(&self) {
-        while self.udma_busy(Bank::Tx) {}
+        while self.udma_busy(Bank::Tx) {
+            #[cfg(not(feature = "baremetal"))]
+            xous::yield_slice();
+        }
         while self.tx_busy() {}
     }
 
-    pub fn wait_rx_done(&self) { while self.udma_busy(Bank::Rx) {} }
+    pub fn wait_rx_done(&self) {
+        while self.udma_busy(Bank::Rx) {
+            #[cfg(not(feature = "baremetal"))]
+            xous::yield_slice();
+        }
+    }
 
+    /// `buf` is assumed to be a virtual address (in Xous), or a machine address
+    /// (in baremetal mode). This function is safe because it will operate as intended
+    /// within a given environment, so long as the `baremetal` flag is applied correctly.
     pub fn write(&mut self, buf: &[u8]) {
+        #[cfg(not(feature = "baremetal"))]
+        {
+            let pa = xous::syscall::virt_to_phys(buf.as_ptr() as usize & !0xFFF)
+                .expect("could not find physical address of buffer");
+            let buf_pa = unsafe { core::slice::from_raw_parts(pa as *const u8, buf.len()) };
+            self.udma_enqueue(Bank::Tx, &buf_pa[..buf.len()], CFG_EN | CFG_SIZE_8);
+        }
+        #[cfg(feature = "baremetal")]
+        self.udma_enqueue(Bank::Tx, buf, CFG_EN | CFG_SIZE_8);
+
+        self.wait_tx_done();
+    }
+
+    /// `buf` must be mapped to the physical address to be written to. This routine
+    /// is `unsafe` because in Xous, there are only virtuall addresses. Therefore, the
+    /// slice passed to this routine is entirely "fictional" -- there is no way for
+    /// the CPU to access it. However, the slice is passed directly to the DMA engine,
+    /// which only takes physical addresses.
+    ///
+    /// The intended use for this is in performance-sensitive applications where
+    /// a syscall to reverse the virtual mapping of `buf` is too expensive, such as
+    /// in the `xous-log` implementation.
+    pub unsafe fn write_phys(&mut self, buf: &[u8]) {
         self.udma_enqueue(Bank::Tx, buf, CFG_EN | CFG_SIZE_8);
         self.wait_tx_done();
     }
 
     pub fn read(&mut self, buf: &mut [u8]) {
+        #[cfg(not(feature = "baremetal"))]
+        {
+            let pa = xous::syscall::virt_to_phys(buf.as_ptr() as usize & !0xFFF)
+                .expect("could not find physical address of buffer");
+            let buf_pa = unsafe { core::slice::from_raw_parts(pa as *const u8, buf.len()) };
+            self.udma_enqueue(Bank::Rx, buf_pa, CFG_EN | CFG_SIZE_8);
+        }
+        #[cfg(feature = "baremetal")]
         self.udma_enqueue(Bank::Rx, buf, CFG_EN | CFG_SIZE_8);
         self.wait_rx_done();
-    }
-}
-
-impl Drop for Uart {
-    fn drop(&mut self) {
-        self.wait_tx_done();
-        self.disable();
-        // NOTE: this does not unmap the clock on drop, because clocks are managed by global shared state.
     }
 }
