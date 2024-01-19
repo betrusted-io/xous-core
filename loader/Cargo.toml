@@ -17,7 +17,9 @@ utralib = { version = "0.1.24", optional = true, default-features = false }
 armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", optional = true }
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
 sha2-loader = { path = "./sha2-loader", default-features = false, optional = true }
-cramium-hal = { path = "../libs/cramium-hal", optional = true }
+cramium-hal = { path = "../libs/cramium-hal", optional = true, features = [
+    "baremetal",
+] }
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
@@ -64,5 +66,5 @@ secboot = []
 simulation-only = []
 board-bringup = []
 #default = ["debug-print"]
-resume = []  # suspend/resume pathway code
-default = []
+resume = []               # suspend/resume pathway code
+default = ["debug-print"]

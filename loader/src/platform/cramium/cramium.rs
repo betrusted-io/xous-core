@@ -100,10 +100,6 @@ pub fn early_init() {
     // tx as output
     iox.set_gpio_dir(IoxPort::PA, 4, IoxDir::Output);
 
-    // This is necessary because an input has to be "high" on an alternate mux for it to work... :-/
-    iox.set_gpio_dir(IoxPort::PD, 13, IoxDir::Input);
-    iox.set_gpio_pullup(IoxPort::PD, 13, IoxEnable::Enable);
-
     // Set up the UDMA_UART block to the correct baud rate and enable status
     let mut udma_global = udma::GlobalConfig::new(utra::udma_ctrl::HW_UDMA_CTRL_BASE as *mut u32);
     udma_global.clock_on(udma::PeriphId::Uart0);
@@ -125,41 +121,46 @@ pub fn early_init() {
         // safety: this is safe to call, because we set up clock and events prior to calling new.
         udma::Uart::new(utra::udma_uart_0::HW_UDMA_UART_0_BASE, baudrate, freq)
     };
-
+    let tx_buf = unsafe {
+        // safety: it's safe only because we are manually tracking the allocations in IFRAM0. Yuck!
+        core::slice::from_raw_parts_mut(
+            (utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096) as *mut u8,
+            4096,
+        )
+    };
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
     // The "boot gutter" also has a role to pause the system in "real mode" before VM is mapped in Xous
     // makes things a little bit cleaner for JTAG ops, it seems.
     #[cfg(feature = "board-bringup")]
     {
-        let tx_buf = unsafe {
-            // safety: it's safe only because we are manually tracking the allocations in IFRAM0. Yuck!
-            core::slice::from_raw_parts_mut(utralib::HW_IFRAM0_MEM as *mut u8, 256)
-        };
         let rx_buf = unsafe {
             // safety: it's safe only because we are manually tracking the allocations in IFRAM0. Yuck!
-            core::slice::from_raw_parts_mut((utralib::HW_IFRAM0_MEM + 256) as *mut u8, 1)
+            core::slice::from_raw_parts_mut(
+                (utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 8192) as *mut u8,
+                1,
+            )
         };
-        const BANNER: &'static str = "\n\rHit any key to continue boot...\r\n";
+        const BANNER: &'static str = "\n\rKeep pressing keys to continue boot...\r\n";
         tx_buf[..BANNER.len()].copy_from_slice(BANNER.as_bytes());
-        udma_uart.write(&tx_buf[0..BANNER.len()]);
+        udma_uart.write(&tx_buf[..BANNER.len()]);
 
-        // receive characters -- print them back. just to prove that this works.
+        // receive characters -- print them back. just to prove that this works. no other reason than that.
         for _ in 0..4 {
             udma_uart.read(rx_buf);
             const DBG_MSG: &'static str = "Got: ";
             tx_buf[..DBG_MSG.len()].copy_from_slice(DBG_MSG.as_bytes());
-            udma_uart.write(&tx_buf[0..DBG_MSG.len()]);
+            udma_uart.write(&tx_buf[..DBG_MSG.len()]);
             tx_buf[0] = rx_buf[0];
-            udma_uart.write(&tx_buf[0..1]);
+            udma_uart.write(&tx_buf[..1]);
             tx_buf[0] = '\n' as u32 as u8;
             tx_buf[1] = '\r' as u32 as u8;
-            udma_uart.write(&tx_buf[0..2]);
+            udma_uart.write(&tx_buf[..2]);
         }
-
-        const ONWARD: &'static str = "\n\rBooting!\r";
-        tx_buf[..ONWARD.len()].copy_from_slice(ONWARD.as_bytes());
-        udma_uart.write(&tx_buf[0..ONWARD.len()]);
     }
+
+    const ONWARD: &'static str = "\n\rBooting!\n\r";
+    tx_buf[..ONWARD.len()].copy_from_slice(ONWARD.as_bytes());
+    udma_uart.write(&tx_buf[..ONWARD.len()]);
 }
 
 #[cfg(feature = "platform-tests")]
