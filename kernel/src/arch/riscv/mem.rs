@@ -870,6 +870,10 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
     Ok((l0_pt.entries[vpn0] >> 10) << 12)
 }
 
+pub fn virt_to_phys_pid(_pid: PID, _virt: usize) -> Result<usize, xous_kernel::Error> {
+    todo!("virt_to_phys_pid is not yet implemented for riscv");
+}
+
 pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Error> {
     // Disallow mapping memory outside of user land
     if !MemoryMapping::current().is_kernel() && address >= USER_AREA_END {
