@@ -1,4 +1,5 @@
 use cramium_hal::iox::{Iox, IoxDir, IoxEnable, IoxFunction, IoxPort};
+use cramium_hal::sce;
 use cramium_hal::udma;
 use utralib::generated::*;
 
@@ -133,6 +134,13 @@ pub fn early_init() {
     // makes things a little bit cleaner for JTAG ops, it seems.
     #[cfg(feature = "board-bringup")]
     {
+        // do a quick TRNG test.
+        let mut trng = sce::trng::Trng::new(HW_TRNG_BASE);
+        trng.setup_raw_generation(256);
+        for _ in 0..8 {
+            crate::println!("trng raw: {:x}", trng.get_u32().unwrap_or(0xDEAD_BEEF));
+        }
+
         let rx_buf = unsafe {
             // safety: it's safe only because we are manually tracking the allocations in IFRAM0. Yuck!
             core::slice::from_raw_parts_mut(
