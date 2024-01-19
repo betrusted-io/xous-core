@@ -9,6 +9,7 @@ edition = "2021"
 utralib = { version = "0.1.24", default-features = false, features = [
     "cramium-soc",
 ] }
+bitflags = "1.2.1"
 
 [target.'cfg(target_os = "xous")'.dependencies]
 xous = { version = "0.9.57", features = ["v2p"] }
