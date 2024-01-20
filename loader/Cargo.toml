@@ -20,6 +20,17 @@ sha2-loader = { path = "./sha2-loader", default-features = false, optional = tru
 cramium-hal = { path = "../libs/cramium-hal", optional = true, features = [
     "baremetal",
 ] }
+xous-pl230 = { path = "../libs/xous-pl230", optional = true, features = [
+    "tests",
+    "pio",
+    "cramium-soc",
+    "baremetal",
+] }
+xous-pio = { path = "../libs/xous-pio", optional = true, features = [
+    "tests",
+    "cramium-soc",
+    "baremetal",
+] }
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
@@ -50,6 +61,8 @@ cramium-soc = [
     "debug-print",
     "simulation-only",
     "cramium-hal",
+    "xous-pio",
+    "xous-pl230",
 ]
 cramium-fpga = [
     "utralib/cramium-fpga",
@@ -66,5 +79,5 @@ secboot = []
 simulation-only = []
 board-bringup = []
 #default = ["debug-print"]
-resume = []               # suspend/resume pathway code
-default = ["debug-print"]
+resume = []                                # suspend/resume pathway code
+default = ["debug-print", "board-bringup"]
