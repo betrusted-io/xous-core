@@ -143,6 +143,7 @@ fn main() {
     let xns = xous_api_names::XousNames::new().unwrap();
     let mbox_sid = xns.register_name("_mbox_", None).expect("can't register server");
     let mbox_cid = xous::connect(mbox_sid).unwrap();
+    log::info!("mbox SID: {:x?}", mbox_sid);
 
     #[cfg(feature = "cramium-fpga")]
     let csr = xous::syscall::map_memory(

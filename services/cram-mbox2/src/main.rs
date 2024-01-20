@@ -154,6 +154,7 @@ fn main() {
     let xns = xous_api_names::XousNames::new().unwrap();
     let client_sid = xns.register_name("_mbox_client_", None).expect("can't register server");
     let client_cid = xous::connect(client_sid).unwrap();
+    log::info!("mbox client SID: {:x?}", client_sid);
 
     let mb_client_csr = xous::syscall::map_memory(
         #[cfg(not(feature = "ext"))]
