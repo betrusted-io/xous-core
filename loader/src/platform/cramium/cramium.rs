@@ -140,6 +140,8 @@ pub fn early_init() {
         for _ in 0..8 {
             crate::println!("trng raw: {:x}", trng.get_u32().unwrap_or(0xDEAD_BEEF));
         }
+        let trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
+        crate::println!("trng status: {:x}", trng_csr.r(utra::trng::SFR_SR));
 
         let rx_buf = unsafe {
             // safety: it's safe only because we are manually tracking the allocations in IFRAM0. Yuck!
