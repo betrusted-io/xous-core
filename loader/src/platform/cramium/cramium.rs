@@ -143,6 +143,12 @@ pub fn early_init() {
         let trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
         crate::println!("trng status: {:x}", trng_csr.r(utra::trng::SFR_SR));
 
+        // do a PL230/PIO test. Toggles PB15 (PIO0) with an LFSR sequence.
+        let mut pl230 = xous_pl230::Pl230::new();
+        xous_pl230::pl230_tests::units::basic_tests(&mut pl230);
+        xous_pl230::pl230_tests::units::pio_test(&mut pl230);
+
+        // Confirm that Rx can work while also adding a boot wait point.
         let rx_buf = unsafe {
             // safety: it's safe only because we are manually tracking the allocations in IFRAM0. Yuck!
             core::slice::from_raw_parts_mut(
