@@ -16,6 +16,7 @@ xous-kernel = { package = "xous", version = "0.9.57", features = [
 ] }
 utralib = { version = "0.1.24", optional = true, default_features = false }
 rand_chacha = { version = "0.3.1", optional = true, default_features = false }
+cramium-hal = { path = "../libs/cramium-hal", optional = true }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
 xous-kernel = { package = "xous", version = "0.9.57", features = [
@@ -37,7 +38,7 @@ xous-kernel = { package = "xous", version = "0.9.57", features = ["v2p"] }
 critical-section = "1.1.1"
 
 [features]
-cramium-soc = ["utralib/cramium-soc"]
+cramium-soc = ["utralib/cramium-soc", "cramium-hal", "rand_chacha"]
 cramium-fpga = ["utralib/cramium-fpga"]
 atsama5d27 = ["utralib/atsama5d27"]
 precursor = ["utralib/precursor"]
@@ -54,9 +55,6 @@ v2p = ["xous-kernel/v2p"]
 
 # patches for simulation targets ONLY. Applying these flags will result in totally broken security.
 hwsim = []
-fake-rng = [
-    "rand_chacha",
-] # works around lack of a real TRNG in the full-chip sim for now. This should go away for production.
 
 # default = ["print-panics", "debug-print", "wrap-print"]
 default = ["print-panics"]
