@@ -17,6 +17,20 @@ utralib = { version = "0.1.24", optional = true, default-features = false }
 armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", optional = true }
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", optional = true }
 sha2-loader = { path = "./sha2-loader", default-features = false, optional = true }
+cramium-hal = { path = "../libs/cramium-hal", optional = true, features = [
+    "baremetal",
+] }
+xous-pl230 = { path = "../libs/xous-pl230", optional = true, features = [
+    "tests",
+    "pio",
+    "cramium-soc",
+    "baremetal",
+] }
+xous-pio = { path = "../libs/xous-pio", optional = true, features = [
+    "tests",
+    "cramium-soc",
+    "baremetal",
+] }
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
@@ -42,8 +56,20 @@ renode = [
     "secboot",
     "sha2-loader",
 ]
-cramium-soc = ["utralib/cramium-soc", "debug-print", "simulation-only"]
-cramium-fpga = ["utralib/cramium-fpga", "debug-print", "simulation-only"]
+cramium-soc = [
+    "utralib/cramium-soc",
+    "debug-print",
+    "simulation-only",
+    "cramium-hal",
+    "xous-pio",
+    "xous-pl230",
+]
+cramium-fpga = [
+    "utralib/cramium-fpga",
+    "debug-print",
+    "simulation-only",
+    "cramium-hal",
+]
 atsama5d27 = ["utralib/atsama5d27", "armv7", "dep:atsama5d27"]
 platform-tests = []
 debug-print = []
@@ -51,6 +77,7 @@ earlyprintk = []
 renode-bypass = []
 secboot = []
 simulation-only = []
+board-bringup = []
 #default = ["debug-print"]
-resume = []  # suspend/resume pathway code
-default = []
+resume = []                                # suspend/resume pathway code
+default = ["debug-print", "board-bringup"]

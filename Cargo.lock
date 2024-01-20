@@ -899,6 +899,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cram-hal-service"
+version = "0.1.0"
+dependencies = [
+ "cramium-hal",
+ "log",
+ "num-derive",
+ "num-traits",
+ "rkyv",
+ "utralib",
+ "xous 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+]
+
+[[package]]
 name = "cram-mbox1"
 version = "0.1.0"
 dependencies = [
@@ -924,6 +940,15 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
+]
+
+[[package]]
+name = "cramium-hal"
+version = "0.1.0"
+dependencies = [
+ "bitflags 1.3.2",
+ "utralib",
+ "xous 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2711,11 +2736,14 @@ dependencies = [
  "armv7",
  "atsama5d27",
  "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?branch=main)",
+ "cramium-hal",
  "curve25519-dalek-loader",
  "ed25519-dalek-loader",
  "lazy_static",
  "sha2-loader",
  "utralib",
+ "xous-pio",
+ "xous-pl230",
 ]
 
 [[package]]
@@ -6150,6 +6178,7 @@ dependencies = [
  "armv7",
  "atsama5d27",
  "bitflags 1.3.2",
+ "cramium-hal",
  "critical-section 1.1.1",
  "crossbeam-channel",
  "gdbstub",
@@ -6169,6 +6198,7 @@ name = "xous-log"
 version = "0.1.28"
 dependencies = [
  "atsama5d27",
+ "cramium-hal",
  "log",
  "num-derive",
  "num-traits",
@@ -6211,6 +6241,7 @@ name = "xous-pl230"
 version = "0.1.0"
 dependencies = [
  "bitfield",
+ "cramium-hal",
  "log",
  "pio",
  "pio-proc",

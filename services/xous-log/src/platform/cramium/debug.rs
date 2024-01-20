@@ -1,6 +1,6 @@
 use core::fmt::{Error, Write};
 
-use utralib::generated::*;
+use cramium_hal::udma;
 
 #[macro_export]
 macro_rules! print
@@ -43,21 +43,32 @@ impl Uart {
 #[cfg(feature = "cramium-soc")]
 impl Uart {
     pub fn putc(&self, c: u8) {
-        let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
-        // enqueue our character to send via DMA
-        unsafe {
-            if crate::implementation::UART_DMA_BUF as usize != 0 {
-                crate::implementation::UART_DMA_BUF.write_volatile(c); // write to the virtual memory address
-            }
+        // check that we've been initialized before attempting to send any characters...
+        if unsafe { DEFAULT_UART_ADDR } as usize == 0 {
+            return;
         }
-        // configure the DMA
-        uart_csr.wo(utra::udma_uart_0::REG_TX_SADDR, utralib::HW_IFRAM0_MEM as u32); // source is the physical address
-        uart_csr.wo(utra::udma_uart_0::REG_TX_SIZE, 1);
-        // send it
-        uart_csr.wo(utra::udma_uart_0::REG_TX_CFG, 0x10); // EN
-        // wait for it all to be done
-        while uart_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {}
-        while (uart_csr.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {}
+        if unsafe { crate::implementation::UART_DMA_TX_BUF_VIRT } as usize == 0 {
+            return;
+        }
+        // safety: safe to call as long as DEFAULT_UART_ADDR is initialized and we exclusively
+        // own it; and the UART has been initialized. For this peripheral, initialization
+        // is handled by the loader and tossed to us.
+        let mut uart = unsafe { udma::Uart::get_handle(DEFAULT_UART_ADDR as usize) };
+
+        // enqueue our character to send via DMA
+        let tx_buf_virt = unsafe {
+            // safety: it's safe only because we are manually tracking the allocations in IFRAM0.
+            core::slice::from_raw_parts_mut(crate::implementation::UART_DMA_TX_BUF_VIRT as *mut u8, 1)
+        };
+        let tx_buf_phys = unsafe {
+            // safety: it's safe only because we are manually tracking the allocations in IFRAM0.
+            core::slice::from_raw_parts_mut(crate::implementation::UART_DMA_TX_BUF_PHYS as *mut u8, 1)
+        };
+        tx_buf_virt[0] = c;
+        // note that write takes *physical* addresses
+        unsafe {
+            uart.write_phys(tx_buf_phys);
+        }
     }
 }
 

@@ -1,0 +1,23 @@
+[package]
+name = "cram-hal-service"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+utralib = { version = "0.1.24", optional = true, default-features = false, features = [
+    "cramium-soc",
+] }
+xous-api-names = "0.9.55"
+xous-api-ticktimer = "0.9.53"
+xous = "0.9.57"
+log-server = { package = "xous-api-log", version = "0.1.53" }
+log = "0.4.14"
+cramium-hal = { path = "../../libs/cramium-hal" }
+
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+] }

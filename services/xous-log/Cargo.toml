@@ -24,6 +24,8 @@ rkyv = { version = "0.4.3", default-features = false, features = [
     "const_generics",
 ], optional = true }
 
+cramium-hal = { path = "../../libs/cramium-hal", optional = true }
+
 [target.'cfg(target_arch = "arm")'.dependencies]
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", features = [
     "lcd-console",
@@ -33,7 +35,7 @@ xous = { version = "0.9.57", features = [
 ] } # v2p feature is used when lcd-console feature is turned on
 
 [features]
-cramium-soc = ["utralib/cramium-soc"]
+cramium-soc = ["utralib/cramium-soc", "cramium-hal"]
 cramium-fpga = ["utralib/cramium-fpga"]
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
