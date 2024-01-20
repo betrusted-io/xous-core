@@ -1,4 +1,4 @@
-#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(feature = "baremetal", no_std)]
 
 use pio::Program;
 use pio::RP2040_MAX_PROGRAM_SIZE;
@@ -134,7 +134,7 @@ pub struct PioSharedState {
     used_machines: [bool; 4],
 }
 impl PioSharedState {
-    #[cfg(all(not(target_os = "xous"), not(feature = "rp2040")))]
+    #[cfg(all(feature = "baremetal", not(feature = "rp2040")))]
     pub fn new() -> Self {
         PioSharedState {
             pio: CSR::new(rp_pio::HW_RP_PIO_BASE as *mut u32),
@@ -143,13 +143,13 @@ impl PioSharedState {
         }
     }
 
-    #[cfg(all(not(target_os = "xous"), feature = "rp2040"))]
+    #[cfg(all(feature = "baremetal", feature = "rp2040"))]
     pub fn new() -> Self {
         crate::pio_tests::report_api(0x5020_0000);
         PioSharedState { pio: CSR::new(0x5020_0000 as *mut u32), used_mask: 0, used_machines: [false; 4] }
     }
 
-    #[cfg(target_os = "xous")]
+    #[cfg(not(feature = "baremetal"))]
     pub fn new() -> Self {
         // Note: this requires a memory region window to be manually specified in create-image
         // so that the loader maps the pages for the PIO block. This is because the PIO block is
@@ -210,7 +210,7 @@ impl PioSharedState {
         };
         self.used_machines[sm] = true;
 
-        #[cfg(target_os = "xous")]
+        #[cfg(not(feature = "baremetal"))]
         let csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(rp_pio::HW_RP_PIO_BASE),
             None,
@@ -218,11 +218,11 @@ impl PioSharedState {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .unwrap();
-        #[cfg(target_os = "xous")]
+        #[cfg(not(feature = "baremetal"))]
         let pio = CSR::new(csr.as_mut_ptr() as *mut u32);
-        #[cfg(all(not(target_os = "xous"), not(feature = "rp2040")))]
+        #[cfg(all(feature = "baremetal", not(feature = "rp2040")))]
         let pio = CSR::new(rp_pio::HW_RP_PIO_BASE as *mut u32);
-        #[cfg(all(not(target_os = "xous"), feature = "rp2040"))]
+        #[cfg(all(feature = "baremetal", feature = "rp2040"))]
         let pio = CSR::new(0x5020_0000 as *mut u32);
 
         Ok(PioSm { pio, sm: sm_bit, config: SmConfig::default() })

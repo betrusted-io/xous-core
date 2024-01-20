@@ -24,6 +24,7 @@ hosted = []
 renode = []
 pio = ["xous-pio"]
 dma-mainram = []
+baremetal = []
 
 tests = ["pio"]
 default = ["tests", "pio"]

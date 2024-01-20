@@ -22,6 +22,8 @@ rp2040 = ["defmt"]
 precursor = []
 hosted = []
 renode = []
+# may be activated in conjunction with "cramium-soc", "rp2040" targets when not running Xous
+baremetal = []
 
 tests = []
 default = ["tests", "cramium-soc"]

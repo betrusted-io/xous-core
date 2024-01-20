@@ -1,6 +1,6 @@
-#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(feature = "baremetal", no_std)]
 
-#[cfg(not(any(target_os = "xous")))]
+#[cfg(feature = "baremetal")]
 mod debug;
 
 #[cfg(feature = "tests")]
@@ -30,7 +30,7 @@ pub struct Pl230 {
 }
 
 impl Pl230 {
-    #[cfg(not(any(target_os = "xous")))]
+    #[cfg(feature = "baremetal")]
     pub fn new() -> Self {
         Pl230 {
             csr: CSR::new(utralib::HW_PL230_BASE as *mut u32),
@@ -38,7 +38,7 @@ impl Pl230 {
         }
     }
 
-    #[cfg(target_os = "xous")]
+    #[cfg(not(feature = "baremetal"))]
     pub fn new() -> Self {
         let csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utralib::HW_PL230_BASE),
