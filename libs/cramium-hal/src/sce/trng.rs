@@ -43,7 +43,7 @@ bitflags! {
         const POSTPROC_OPT_RESEED_ALWAYS  = 0b0_00_00_000000_10_0_0_0_0;
         const POSTPROC_OPT_RESEED_AUTO    = 0b0_00_00_000000_10_0_0_0_0;
 
-        const HEALTHTEST_LEN_POS   = 7;
+        const HEALTHTEST_LEN_POS   = 6;
         const HEALTHTEST_LEN_MASK  = 0b0_00_00_111111_00_0_0_0_0;
         const GEN_INTERVAL_MASK    = 0b0_00_11_000000_00_0_0_0_0;
         const GEN_INTERVAL_1       = 0b0_00_00_000000_00_0_0_0_0;
@@ -100,7 +100,7 @@ impl Trng {
                 .bits(),
         );
         // turn on all the analog generators, and declare their outputs valid
-        self.csr.wo(utra::trng::SFR_AR_GEN, (Analog::ENABLE_MASK | Analog::VALID_MASK).bits());
+        self.csr.wo(utra::trng::SFR_CRANA, (Analog::ENABLE_MASK | Analog::VALID_MASK).bits());
         // set options
         self.csr.wo(
             utra::trng::SFR_OPT,
@@ -111,7 +111,7 @@ impl Trng {
         // set configuration options
         let healthest_len =
             if count as u32 > (Config::HEALTHTEST_LEN_MASK.bits() >> Config::HEALTHTEST_LEN_POS.bits()) {
-                Config::HEALTHTEST_LEN_MASK.bits()
+                Config::HEALTHTEST_LEN_MASK.bits() >> Config::HEALTHTEST_LEN_POS.bits()
             } else {
                 count as u32
             };
@@ -131,7 +131,11 @@ impl Trng {
                     while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
                     Some(self.csr.r(utra::trng::SFR_BUF))
                 } else {
-                    None
+                    // re-init generation automatically
+                    self.setup_raw_generation(256);
+                    self.count -= 1;
+                    while self.csr.r(utra::trng::SFR_SR) & Status::BUFREADY.bits() == 0 {}
+                    Some(self.csr.r(utra::trng::SFR_BUF))
                 }
             }
             Mode::Lfsr => {
