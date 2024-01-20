@@ -12,6 +12,9 @@ bitfield = "0.13.2"
 xous-pio = { path = "../xous-pio", optional = true, default-features = false }
 pio-proc = "0.2.2"
 pio = "0.2.1"
+cramium-hal = { path = "../cramium-hal", optional = true, features = [
+    "baremetal",
+] }
 
 [target.'cfg(target_os = "xous")'.dependencies]
 xous = "0.9.57"
@@ -26,5 +29,5 @@ pio = ["xous-pio"]
 dma-mainram = []
 baremetal = []
 
-tests = ["pio"]
+tests = ["pio", "cramium-hal"]
 default = ["tests", "pio"]
