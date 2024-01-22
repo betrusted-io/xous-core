@@ -12,12 +12,22 @@ utralib = { version = "0.1.24", optional = true, default-features = false, featu
 xous-api-names = "0.9.55"
 xous-api-ticktimer = "0.9.53"
 xous = "0.9.57"
+xous-ipc = "0.9.57"
 log-server = { package = "xous-api-log", version = "0.1.53" }
 log = "0.4.14"
-cramium-hal = { path = "../../libs/cramium-hal" }
+cramium-hal = { path = "../../libs/cramium-hal", features = ["derive-rkyv"] }
+xous-pl230 = { path = "../../libs/xous-pl230", features = ["cramium-soc"] }
+xous-pio = { path = "../../libs/xous-pio", features = ["cramium-soc"] }
+pio-proc = "0.2.2"
+pio = "0.2.1"
 
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.4.3", default-features = false, features = [
     "const_generics",
 ] }
+
+[features]
+pio = []
+pio-memlcd = []
+default = []

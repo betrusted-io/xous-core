@@ -1,5 +1,8 @@
 mod api;
 use api::*;
+#[cfg(feature = "pio")]
+mod pio;
+use cramium_hal::iox;
 use xous::sender::Sender;
 
 fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender) -> Option<usize> {
@@ -67,6 +70,15 @@ fn main() {
     // Top page of IFRAM0 is occupied by the log server's Tx buffer. We can't know the
     // `Sender` of it, so fill it with a value for `Some` that can't map to any PID.
     ifram_allocs[0][31] = Some(Sender::from_usize(usize::MAX));
+
+    let iox_page = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utralib::generated::HW_IOX_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't claim the IOX hardware page");
+    let mut iox = iox::Iox::new(iox_page.as_mut_ptr() as *mut u32);
 
     let mut msg_opt = None;
     log::debug!("Starting main loop");
@@ -150,6 +162,45 @@ fn main() {
                     for record in ifram_allocs[bank][offset..offset + mapped_pages].iter_mut() {
                         *record = None;
                     }
+                }
+            }
+            Opcode::ConfigureIox => {
+                let buf =
+                    unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let config = buf.to_original::<IoxConfigMessage, _>().unwrap();
+                if let Some(f) = config.function {
+                    iox.set_alternate_function(config.port, config.pin, f);
+                }
+                if let Some(d) = config.direction {
+                    iox.set_gpio_dir(config.port, config.pin, d);
+                }
+                if let Some(t) = config.schmitt_trigger {
+                    iox.set_gpio_schmitt_trigger(config.port, config.pin, t);
+                }
+                if let Some(p) = config.pullup {
+                    iox.set_gpio_pullup(config.port, config.pin, p);
+                }
+                if let Some(s) = config.slow_slew {
+                    iox.set_slow_slew_rate(config.port, config.pin, s);
+                }
+                if let Some(s) = config.strength {
+                    iox.set_drive_strength(config.port, config.pin, s);
+                }
+            }
+            Opcode::SetGpioBank => {
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let port: cramium_hal::iox::IoxPort =
+                        num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    let value = scalar.arg2 as u16;
+                    let bitmask = scalar.arg3 as u16;
+                    iox.set_gpio_bank(port, value, bitmask);
+                }
+            }
+            Opcode::GetGpioBank => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let port: cramium_hal::iox::IoxPort =
+                        num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    scalar.arg1 = iox.get_gpio_bank(port) as usize;
                 }
             }
             Opcode::InvalidCall => {
