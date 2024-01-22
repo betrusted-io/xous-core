@@ -224,10 +224,11 @@ pub fn pio_test(pl230: &mut Pl230) -> bool {
     // setup EVC to route requests
     report_api("mdma_base", unsafe { pl230.mdma.base() } as u32);
     // select event number 83, which is PIO[0].
-    // TODO: make this not hard-coded
-    // WTF: oddly enough, it actually maps to... channel 163??? weird. this probably indicates a bug of some
-    // sort.
-    pl230.mdma.wo(utra::mdma::SFR_EVSEL_CR_EVSEL0, 163);
+    // oddly enough, it actually maps to... channel 163, which is 16 more than what reads in the code
+    // turns out this is due to the lower 16 irqs being reserved for...something...causing everything
+    // to be shifted up by 16. oh well!
+    // MDMA EV offsets are now searchable in the utralib::generated::LITEX_IFSUB_EV_* series of constants.
+    pl230.mdma.wo(utra::mdma::SFR_EVSEL_CR_EVSEL0, utralib::generated::LITEX_IFSUB_EV_PIOIRQ0 as u32);
     // bit 0 - enable
     // bit 1 - mode: 1 is edge, 0 is level
     // bit 2 - enable dmareq
