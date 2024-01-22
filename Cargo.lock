@@ -906,12 +906,17 @@ dependencies = [
  "log",
  "num-derive",
  "num-traits",
+ "pio",
+ "pio-proc",
  "rkyv",
  "utralib",
  "xous 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
+ "xous-ipc 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-pio",
+ "xous-pl230",
 ]
 
 [[package]]
@@ -947,6 +952,9 @@ name = "cramium-hal"
 version = "0.1.0"
 dependencies = [
  "bitflags 1.3.2",
+ "num-derive",
+ "num-traits",
+ "rkyv",
  "utralib",
  "xous 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -2170,6 +2178,8 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 name = "graphics-server"
 version = "0.1.0"
 dependencies = [
+ "cram-hal-service",
+ "cramium-hal",
  "keyboard",
  "locales",
  "log",
