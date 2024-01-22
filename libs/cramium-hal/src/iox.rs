@@ -8,17 +8,18 @@ macro_rules! set_pin_in_bank {
         // code below does not add to the raw pointer outside of its approved range,
         // thanks to the constraints placed by the enum type of IoxPort.
         unsafe {
-            let oe_ptr = $self.csr.base();
+            let ptr = $self.csr.base();
 
-            oe_ptr.add($register.offset() + $port as usize).write_volatile(
-                (oe_ptr.add($register.offset() + $port as usize).read_volatile() & !(1u32 << ($pin as u32)))
+            ptr.add($register.offset() + $port as usize).write_volatile(
+                (ptr.add($register.offset() + $port as usize).read_volatile() & !(1u32 << ($pin as u32)))
                     | (($val as u32) << ($pin as u32)),
             )
         }
     }};
 }
 
-#[derive(Copy, Clone)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 #[repr(u32)]
 pub enum IoxPort {
     PA = 0,
@@ -29,6 +30,8 @@ pub enum IoxPort {
     PF = 5,
 }
 
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug)]
 #[repr(u32)]
 pub enum IoxFunction {
     Gpio = 0b00,
@@ -37,6 +40,8 @@ pub enum IoxFunction {
     AF3 = 0b11,
 }
 
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug)]
 #[repr(u32)]
 pub enum IoxDriveStrength {
     Drive2mA = 0b00,
@@ -45,19 +50,24 @@ pub enum IoxDriveStrength {
     Drive12mA = 0b11,
 }
 
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug)]
 #[repr(u32)]
 pub enum IoxDir {
     Input = 0,
     Output = 1,
 }
 
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug)]
 #[repr(u32)]
 pub enum IoxEnable {
     Disable = 0,
     Enable = 1,
 }
 
-#[derive(Copy, Clone)]
+#[cfg_attr(feature = "derive-rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[derive(Debug, Copy, Clone)]
 #[repr(u32)]
 pub enum IoxValue {
     Low = 0,
@@ -85,6 +95,18 @@ impl Iox {
 
     pub fn set_gpio_pin(&mut self, port: IoxPort, pin: u8, value: IoxValue) {
         set_pin_in_bank!(self, iox::SFR_GPIOOUT_CRGO0, port, pin, value)
+    }
+
+    pub fn set_gpio_bank(&mut self, port: IoxPort, value: u16, mask: u16) {
+        // safety: it is safe to manipulate a raw pointer because IoxPort constrains
+        // the offset to be within range.
+        unsafe {
+            let ptr = self.csr.base();
+            ptr.add(iox::SFR_GPIOOUT_CRGO0.offset() + port as usize).write_volatile(
+                ptr.add(iox::SFR_GPIOOUT_CRGO0.offset() + port as usize).read_volatile() & !(mask as u32)
+                    | value as u32,
+            )
+        }
     }
 
     pub fn set_gpio_schmitt_trigger(&mut self, port: IoxPort, pin: u8, enable: IoxEnable) {

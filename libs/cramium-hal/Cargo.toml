@@ -10,10 +10,16 @@ utralib = { version = "0.1.24", default-features = false, features = [
     "cramium-soc",
 ] }
 bitflags = "1.2.1"
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+], optional = true }
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
 
 [target.'cfg(target_os = "xous")'.dependencies]
 xous = { version = "0.9.57", features = ["v2p"] }
 
 [features]
 baremetal = []
+derive-rkyv = ["rkyv"]
 default = []
