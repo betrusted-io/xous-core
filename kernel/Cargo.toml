@@ -16,7 +16,7 @@ xous-kernel = { package = "xous", version = "0.9.57", features = [
 ] }
 utralib = { version = "0.1.24", optional = true, default_features = false }
 rand_chacha = { version = "0.3.1", optional = true, default_features = false }
-cramium-hal = { path = "../libs/cramium-hal", optional = true }
+cramium-hal = { path = "../libs/cramium-hal", optional = true, default_features = false }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
 xous-kernel = { package = "xous", version = "0.9.57", features = [
