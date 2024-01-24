@@ -1,74 +1,128 @@
 {
     "tls.check_trust_prompt": {
         "en": "Please select trusted certificate authorities.",
-        "en-tts": "Please select trusted certificate authorities."
+        "en-tts": "Please select trusted certificate authorities.",
+        "fr": "Please select trusted certificate authorities. *EN*",
+        "ja": "Please select trusted certificate authorities. *EN*",
+        "zh": "Please select trusted certificate authorities. *EN*"
+    },
+    "tls.cmd": {
+        "en": "net tls <sub-command>",
+        "en-tts": "net tls <sub-command>",
+        "fr": "net tls <sub-command> *EN*",
+        "ja": "net tls <sub-command> *EN*",
+        "zh": "net tls <sub-command> *EN*"
     },
     "tls.cmd_help": {
         "en": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls inspect <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser.",
-        "en-tts": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls inspect <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser."
-    },        
-    "tls.cmd": {
-        "en": "net tls <sub-command>",
-        "en-tts": "net tls <sub-command>"
+        "en-tts": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls inspect <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser.",
+        "fr": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls inspect <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser. *EN*",
+        "ja": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls inspect <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser. *EN*",
+        "zh": "Establishing an encrypted tls connection requires the host to provide a signed Certificate of identity. Each Certificate is signed for authenticity by a Certificate Authority. The CA's Certificate will in-turn be signed by yet another CA. These signed Certificates link into a chain of trust back to a trusted Root CA.\n\nTypically, this all happens automagically because many OS's & browsers incorporate a long list of trusted Root CA Certiicates. And this is OK because you trust the CA's that your OS trusts, right!\n\nOn Precursor, you must explicitly trust one or more root CA Certificates. You can:\nnet tls inspect <host>\n\tto trust a specific CA Certificate, or\nnet tls mozilla\n\tto trust all of the CA Certificates incporporated in the Firefox browser. *EN*"
     },
     "tls.deleteall_cmd": {
         "en": "delete ALL trusted Certificates",
-        "en-tts": "delete ALL trusted Certificates"
+        "en-tts": "delete ALL trusted Certificates",
+        "fr": "delete ALL trusted Certificates *EN*",
+        "ja": "delete ALL trusted Certificates *EN*",
+        "zh": "delete ALL trusted Certificates *EN*"
     },
     "tls.deleteall_done": {
         "en": "deleted Certificates",
-        "en-tts": "deleted Certificates"
-    },
-    "tls.list_cmd": {
-        "en": "list trusted CA certificates",
-        "en-tts": "list trusted CA certificates"
-    },
-    "tls.mozilla_cmd": {
-        "en": "trust all Root CA's in webpki-roots",
-        "en-tts": "trust all Root CA's in webpki-roots"
-    },
-    "tls.mozilla_progress": {
-        "en": "trusting Mozilla Root CA's",
-        "en-tts": "trusting Mozilla Root CA's"
-    },
-    "tls.mozilla_done": {
-        "en": "trusted Root CA's",
-        "en-tts": "trusted Root CA's"
+        "en-tts": "deleted Certificates",
+        "fr": "deleted Certificates *EN*",
+        "ja": "deleted Certificates *EN*",
+        "zh": "deleted Certificates *EN*"
     },
     "tls.inspect_cmd": {
         "en": "save host CA'a if trusted",
-        "en-tts": "save host CA'a if trusted"
-    },
-    "tls.inspect_fail_servername": {
-        "en": "failed to create server name from",
-        "en-tts": "failed to create server name from"
-    },
-    "tls.probe_invalid_certificate": {
-        "en": "Invalid certificate : ",
-        "en-tts": "Invalid certificate : "
-    },
-    "tls.probe_help_not_valid_yet": {
-        "en": "error maybe caused by an improperly set clock",
-        "en-tts": "error maybe caused by an improperly set clock"
+        "en-tts": "save host CA'a if trusted",
+        "fr": "save host CA'a if trusted *EN*",
+        "ja": "save host CA'a if trusted *EN*",
+        "zh": "save host CA'a if trusted *EN*"
     },
     "tls.inspect_done": {
         "en": "trusted CA's",
-        "en-tts": "trusted CA's"
+        "en-tts": "trusted CA's",
+        "fr": "trusted CA's *EN*",
+        "ja": "trusted CA's *EN*",
+        "zh": "trusted CA's *EN*"
+    },
+    "tls.inspect_fail_servername": {
+        "en": "failed to create server name from",
+        "en-tts": "failed to create server name from",
+        "fr": "failed to create server name from *EN*",
+        "ja": "failed to create server name from *EN*",
+        "zh": "failed to create server name from *EN*"
+    },
+    "tls.list_cmd": {
+        "en": "list trusted CA certificates",
+        "en-tts": "list trusted CA certificates",
+        "fr": "list trusted CA certificates *EN*",
+        "ja": "list trusted CA certificates *EN*",
+        "zh": "list trusted CA certificates *EN*"
+    },
+    "tls.mozilla_cmd": {
+        "en": "trust all Root CA's in webpki-roots",
+        "en-tts": "trust all Root CA's in webpki-roots",
+        "fr": "trust all Root CA's in webpki-roots *EN*",
+        "ja": "trust all Root CA's in webpki-roots *EN*",
+        "zh": "trust all Root CA's in webpki-roots *EN*"
+    },
+    "tls.mozilla_done": {
+        "en": "trusted Root CA's",
+        "en-tts": "trusted Root CA's",
+        "fr": "trusted Root CA's *EN*",
+        "ja": "trusted Root CA's *EN*",
+        "zh": "trusted Root CA's *EN*"
+    },
+    "tls.mozilla_progress": {
+        "en": "trusting Mozilla Root CA's",
+        "en-tts": "trusting Mozilla Root CA's",
+        "fr": "trusting Mozilla Root CA's *EN*",
+        "ja": "trusting Mozilla Root CA's *EN*",
+        "zh": "trusting Mozilla Root CA's *EN*"
+    },
+    "tls.probe_help_not_valid_yet": {
+        "en": "error maybe caused by an improperly set clock",
+        "en-tts": "error maybe caused by an improperly set clock",
+        "fr": "error maybe caused by an improperly set clock *EN*",
+        "ja": "error maybe caused by an improperly set clock *EN*",
+        "zh": "error maybe caused by an improperly set clock *EN*"
+    },
+    "tls.probe_invalid_certificate": {
+        "en": "Invalid certificate : ",
+        "en-tts": "Invalid certificate : ",
+        "fr": "Invalid certificate :  *EN*",
+        "ja": "Invalid certificate :  *EN*",
+        "zh": "Invalid certificate :  *EN*"
     },
     "tls.test_cmd": {
         "en": "make tls connection to host",
-        "en-tts": "make tls connection to host"
-    },
-    "tls.test_success_tcp": {
-        "en": "tcp connected\n",
-        "en-tts": "tcp connected"
-    },
-    "tls.test_success_get": {
-        "en": "tls accepted GET\n",
-        "en-tts": "tls accepted GET"
+        "en-tts": "make tls connection to host",
+        "fr": "make tls connection to host *EN*",
+        "ja": "make tls connection to host *EN*",
+        "zh": "make tls connection to host *EN*"
     },
     "tls.test_success_bytes": {
         "en": "tls received bytes",
-        "en-tts": "tls received bytes"
+        "en-tts": "tls received bytes",
+        "fr": "tls received bytes *EN*",
+        "ja": "tls received bytes *EN*",
+        "zh": "tls received bytes *EN*"
+    },
+    "tls.test_success_get": {
+        "en": "tls accepted GET\n",
+        "en-tts": "tls accepted GET",
+        "fr": "tls accepted GET\n *EN*",
+        "ja": "tls accepted GET\n *EN*",
+        "zh": "tls accepted GET\n *EN*"
+    },
+    "tls.test_success_tcp": {
+        "en": "tcp connected\n",
+        "en-tts": "tcp connected",
+        "fr": "tcp connected\n *EN*",
+        "ja": "tcp connected\n *EN*",
+        "zh": "tcp connected\n *EN*"
     }
 }
