@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use gam::{EXPECTED_APP_CONTEXTS, EXPECTED_BOOT_CONTEXTS};
 
 /*
@@ -21,7 +23,11 @@ pub(crate) struct TokenManager {
     #[cfg(feature = "unsafe-app-loading")]
     extra_names: Vec<String>,
     trng: trng::Trng,
+    tt: ticktimer_server::Ticktimer,
+    last_time: RefCell<u64>,
 }
+const REPEAT_MSG_INTERVAL_MS: u64 = 5000;
+
 impl<'a> TokenManager {
     pub(crate) fn new(xns: &xous_names::XousNames) -> TokenManager {
         TokenManager {
@@ -29,6 +35,8 @@ impl<'a> TokenManager {
             #[cfg(feature = "unsafe-app-loading")]
             extra_names: Vec::new(),
             trng: trng::Trng::new(&xns).unwrap(),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
+            last_time: RefCell::new(0),
         }
     }
 
@@ -45,20 +53,24 @@ impl<'a> TokenManager {
         } else {
             // throw a bone to the dev who has to debug this error. This typically only triggers after a major
             // refactor and some UX element was removed and we forgot to update it in this table here.
-            log::info!("Occupied token slots: ***");
-            for t in self.tokens.iter() {
-                log::info!("  {}", t.name);
-            }
-            log::info!("Expected token slots:");
-            for t in EXPECTED_BOOT_CONTEXTS.iter() {
-                log::info!("  {}", t);
-            }
-            for t in EXPECTED_APP_CONTEXTS.iter() {
-                log::info!("  {}", t);
-            }
-            #[cfg(feature = "unsafe-app-loading")]
-            for t in self.extra_names.iter() {
-                log::info!("{}", t);
+            let now = self.tt.elapsed_ms();
+            if *self.last_time.borrow() < now - REPEAT_MSG_INTERVAL_MS {
+                log::info!("Occupied token slots: ***");
+                for t in self.tokens.iter() {
+                    log::info!("  {}", t.name);
+                }
+                log::info!("Expected token slots:");
+                for t in EXPECTED_BOOT_CONTEXTS.iter() {
+                    log::info!("  {}", t);
+                }
+                for t in EXPECTED_APP_CONTEXTS.iter() {
+                    log::info!("  {}", t);
+                }
+                #[cfg(feature = "unsafe-app-loading")]
+                for t in self.extra_names.iter() {
+                    log::info!("{}", t);
+                }
+                self.last_time.replace(now);
             }
             false
         }
