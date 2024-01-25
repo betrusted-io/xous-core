@@ -312,13 +312,13 @@ pub trait Udma {
     ///    by the UDMA subsystem, e.g. in IFRAM0/IFRAM1 range, and is a *physical address* even in a
     ///    system running on virtual memory (!!!)
     /// `config` is a device-specific word that configures the DMA.
-    fn udma_enqueue(&mut self, bank: Bank, buf: &[u8], config: u32) {
+    fn udma_enqueue<T>(&mut self, bank: Bank, buf: &[T], config: u32) {
         // Safety: only safe when used in the context of UDMA registers.
         unsafe {
             let bank_addr = self.csr_mut().base().add(bank as usize);
             let buf_addr = buf.as_ptr() as u32;
             bank_addr.add(DmaReg::Saddr.into()).write_volatile(buf_addr);
-            bank_addr.add(DmaReg::Size.into()).write_volatile(buf.len() as u32);
+            bank_addr.add(DmaReg::Size.into()).write_volatile((buf.len() * size_of::<T>()) as u32);
             bank_addr.add(DmaReg::Cfg.into()).write_volatile(config | CFG_EN)
         }
     }
@@ -472,5 +472,176 @@ impl Uart {
         #[cfg(feature = "baremetal")]
         self.udma_enqueue(Bank::Rx, buf, CFG_EN | CFG_SIZE_8);
         self.wait_rx_done();
+    }
+}
+
+// ----------------------------------- SPIM ------------------------------------
+
+/// The SPIM implementation for UDMA does reg-ception, in that they bury
+/// a register set inside a register set. The registers are only accessible by,
+/// surprise, DMA. The idea behind this is you can load a bunch of commands into
+/// memory and just DMA them to the control interface. Sure, cool idea bro.
+///
+/// Anyways, the autodoc system is unable to extract the register
+/// formats for the SPIM. Instead, we have to create a set of hand-crafted
+/// structures to deal with this.
+
+#[repr(u32)]
+#[derive(Copy, Clone)]
+pub enum SpimClkPol {
+    LeadingEdgeRise = 0,
+    LeadingEdgeFall = 1,
+}
+#[repr(u32)]
+#[derive(Copy, Clone)]
+pub enum SpimClkPha {
+    CaptureOnLeading = 0,
+    CaptureOnTrailing = 1,
+}
+#[repr(u32)]
+#[derive(Copy, Clone)]
+pub enum SpimCs {
+    Cs0 = 0,
+    Cs1 = 1,
+    Cs2 = 2,
+    Cs3 = 3,
+}
+#[repr(u32)]
+#[derive(Copy, Clone)]
+pub enum SpimMode {
+    Standard = 0,
+    Quad = 1,
+}
+#[repr(u32)]
+#[derive(Copy, Clone)]
+pub enum SpimByteAlign {
+    Enable = 0,
+    Disable = 1,
+}
+#[repr(u32)]
+#[derive(Copy, Clone)]
+pub enum SpimCheckType {
+    Allbits = 0,
+    OnlyOnes = 1,
+    OnlyZeros = 2,
+}
+#[repr(u32)]
+#[derive(Copy, Clone)]
+pub enum SpimEventGen {
+    Disabled = 0,
+    Enabled = 1,
+}
+#[derive(Copy, Clone)]
+pub enum SpimCmd {
+    /// pol, pha, clkdiv
+    Config(SpimClkPol, SpimClkPha, u8),
+    StartXfer(SpimCs),
+    /// mode, cmd_size (5 bits), command value, left-aligned
+    SendCmd(SpimMode, u8, u16),
+    /// mode, number of address bits (5 bits)
+    SendAddr(SpimMode, u8),
+    /// number of cycles (5 bits)
+    Dummy(u8),
+    /// Wait on an event. Note EventChannel coding needs interpretation prior to use.
+    Wait(EventChannel),
+    /// mode, use byte alignment, number of bits to send
+    TxData(SpimMode, SpimByteAlign, u16),
+    /// mode, use byte alignment, number of bits to receive
+    RxData(SpimMode, SpimByteAlign, u16),
+    /// repeat count
+    RepeatNextCmd(u16),
+    EndXfer(SpimEventGen),
+    EndRepeat,
+    /// mode, use byte alignment, check type, size of comparison (4 bits), comparison data
+    RxCheck(SpimMode, SpimByteAlign, SpimCheckType, u8, u16),
+    /// use byte alignment, size of data
+    FullDuplex(SpimByteAlign, u16),
+}
+impl Into<u32> for SpimCmd {
+    fn into(self) -> u32 {
+        match self {
+            SpimCmd::Config(pol, pha, div) => 0 << 28 | (pol as u32) << 9 | (pha as u32) << 8 | div as u32,
+            SpimCmd::StartXfer(cs) => 1 << 28 | cs as u32,
+            SpimCmd::SendCmd(mode, size, cmd) => {
+                2 << 28 | (mode as u32) << 27 | (size as u32 & 0x1F) << 16 | cmd as u32
+            }
+            SpimCmd::SendAddr(mode, size) => 3 << 28 | (mode as u32) << 27 | (size as u32 & 0x1F) << 16,
+            SpimCmd::Dummy(cycles) => 4 << 28 | (cycles as u32 & 0x1F) << 16,
+            SpimCmd::Wait(channel) => match channel {
+                EventChannel::Channel0 => 5 << 28 | 0,
+                EventChannel::Channel1 => 5 << 28 | 1,
+                EventChannel::Channel2 => 5 << 28 | 2,
+                EventChannel::Channel3 => 5 << 28 | 3,
+            },
+            SpimCmd::TxData(mode, align, len) => {
+                6 << 28 | (mode as u32) << 27 | (align as u32) << 26 | (len as u32)
+            }
+            SpimCmd::RxData(mode, align, len) => {
+                7 << 28 | (mode as u32) << 27 | (align as u32) << 26 | (len as u32)
+            }
+            SpimCmd::RepeatNextCmd(count) => 8 << 28 | count as u32,
+            SpimCmd::EndXfer(event) => 9 << 28 | event as u32,
+            SpimCmd::EndRepeat => 10 << 28,
+            SpimCmd::RxCheck(mode, align, check_type, size, data) => {
+                11 << 28
+                    | (mode as u32) << 27
+                    | (align as u32) << 26
+                    | (check_type as u32) << 24
+                    | (size as u32 & 0xF) << 16
+                    | data as u32
+            }
+            SpimCmd::FullDuplex(align, len) => 12 << 28 | (align as u32) << 26 | len as u32,
+        }
+    }
+}
+pub struct Spim {
+    csr: CSR<u32>,
+    cs: SpimCs,
+    event_channel: Option<EventChannel>,
+    mode: SpimMode,
+    align: SpimByteAlign,
+}
+
+impl Udma for Spim {
+    fn csr_mut(&mut self) -> &mut CSR<u32> { &mut self.csr }
+
+    fn csr(&self) -> &CSR<u32> { &self.csr }
+}
+
+impl Spim {
+    /// This function is `unsafe` because it can only be called after the
+    /// global shared UDMA state has been set up to un-gate clocks and set up
+    /// events.
+    ///
+    /// It is also `unsafe` on Drop because you have to remember to unmap
+    /// the clock manually as well once the object is dropped...
+    pub unsafe fn new(
+        base_addr: usize,
+        spi_clk_freq: u32,
+        sys_clk_freq: u32,
+        pol: SpimClkPol,
+        pha: SpimClkPha,
+        chip_select: SpimCs,
+        event_channel: Option<EventChannel>,
+    ) -> Self {
+        // now setup the channel
+        let csr = CSR::new(base_addr as *mut u32);
+
+        let clk_div = sys_clk_freq / spi_clk_freq;
+        // make this a hard panic -- you'll find out at runtime that you f'd up
+        // but at least you find out.
+        assert!(clk_div < 256, "SPI clock divider is out of range");
+
+        let config_cmd = SpimCmd::Config(pol, pha, clk_div as u8);
+        // TODO: do something with this command.
+
+        Spim { csr, cs: chip_select, event_channel, align: SpimByteAlign::Disable, mode: SpimMode::Standard }
+    }
+
+    // TODO: this command buffer has to be in an Ifram page. Should we just allocate
+    // a dedicate Ifram page for commands? I think so....
+    fn send_cmd_list(&mut self, cmds_phys_addr: &[u32]) {
+        // todo stuff goes here
+        self.udma_enqueue(Bank::Custom, cmds_phys_addr, CFG_EN | CFG_SIZE_32);
     }
 }

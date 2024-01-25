@@ -290,6 +290,7 @@ impl XousDisplay {
         }
     }
 
+    // NEXT UP: translate all the UDMA SPIM calls from the Pulp C source into the udma.rs file in cram-hal!
     fn set_clock(&mut self, clk_mhz: u32) {
         // TODO:
         //  - set up the UDMA block registers
