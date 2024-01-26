@@ -83,29 +83,20 @@ impl OutputWriter {
         }
         #[cfg(feature = "cramium-soc")]
         {
-            // safety: safe to call as long as DEFAULT_UART_ADDR is initialized and we exclusively
+            // safety: safe to call as long as the raw parts are initialized and we exclusively
             // own it; and the UART has been initialized. For this peripheral, initialization
-            // is handled by the loader and tossed to us.
-            let mut uart =
-                unsafe { udma::Uart::get_handle(crate::platform::debug::DEFAULT_UART_ADDR as usize) };
+            // is handled by the loader and tossed to us, and exclusivity of access is something
+            // we just have to not bungle.
+            let mut uart = unsafe {
+                udma::Uart::get_handle(
+                    crate::platform::debug::DEFAULT_UART_ADDR as usize,
+                    UART_DMA_TX_BUF_PHYS,
+                    UART_DMA_TX_BUF_VIRT as usize,
+                )
+            };
 
             // enqueue our character to send via DMA
-            let tx_buf_virt = unsafe {
-                // safety: it's safe only because we are manually tracking the allocations in IFRAM0.
-                core::slice::from_raw_parts_mut(UART_DMA_TX_BUF_VIRT as *mut u8, 1)
-            };
-            let tx_buf_phys = unsafe {
-                // safety: it's safe only because we know that the UART TX buffer is expressly reserved at
-                // this location
-                core::slice::from_raw_parts_mut(UART_DMA_TX_BUF_PHYS as *mut u8, 1)
-            };
-            tx_buf_virt[0] = c;
-            // note that write_phys takes the *physical* address. We use `write_phys` because benchmarks
-            // show significant performance improvements skipping the V2P step inherent `write` (an extra
-            // 2 milliseconds for 15 print statements that are 90 chars in length).
-            unsafe {
-                uart.write_phys(tx_buf_phys);
-            }
+            uart.write(&[c]);
         }
     }
 
@@ -115,34 +106,18 @@ impl OutputWriter {
     pub fn write(&mut self, buf: &[u8]) -> usize {
         #[cfg(feature = "cramium-soc")]
         {
-            // safety: safe to call as long as DEFAULT_UART_ADDR is initialized and we exclusively
+            // safety: safe to call as long as the raw parts are initialized and we exclusively
             // own it; and the UART has been initialized. For this peripheral, initialization
-            // is handled by the loader and tossed to us.
-            let mut uart =
-                unsafe { udma::Uart::get_handle(crate::platform::debug::DEFAULT_UART_ADDR as usize) };
-
-            // enqueue our character to send via DMA
-            let tx_buf_virt = unsafe {
-                // safety: it's safe only because we are manually tracking the allocations in IFRAM0.
-                core::slice::from_raw_parts_mut(UART_DMA_TX_BUF_VIRT as *mut u8, 4096)
+            // is handled by the loader and tossed to us, and exclusivity of access is something
+            // we just have to not bungle.
+            let mut uart = unsafe {
+                udma::Uart::get_handle(
+                    crate::platform::debug::DEFAULT_UART_ADDR as usize,
+                    UART_DMA_TX_BUF_PHYS,
+                    UART_DMA_TX_BUF_VIRT as usize,
+                )
             };
-            // create a "fictional" physical slice at the physical address where our buffer is mapped.
-            let tx_buf_phys = unsafe {
-                // safety: it's safe only because we know that the UART TX buffer is expressly reserved at
-                // this location
-                core::slice::from_raw_parts_mut(UART_DMA_TX_BUF_PHYS as *mut u8, 4096)
-            };
-            let mut writelen = 0;
-            for page in buf.chunks(4096) {
-                tx_buf_virt[..page.len()].copy_from_slice(page);
-                // note that the write_phys uses the *physical address* slice
-                unsafe {
-                    uart.write_phys(&tx_buf_phys[..page.len()]);
-                }
-                writelen += page.len();
-            }
-
-            writelen
+            uart.write(buf)
         }
         #[cfg(feature = "cramium-fpga")]
         {
