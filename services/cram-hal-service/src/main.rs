@@ -2,7 +2,10 @@ mod api;
 use api::*;
 #[cfg(feature = "pio")]
 mod pio;
-use cramium_hal::iox;
+use cramium_hal::{
+    iox,
+    udma::{EventChannel, GlobalConfig, PeriphEventId, PeriphEventType, PeriphId},
+};
 use xous::sender::Sender;
 
 fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender) -> Option<usize> {
@@ -79,6 +82,15 @@ fn main() {
     )
     .expect("couldn't claim the IOX hardware page");
     let mut iox = iox::Iox::new(iox_page.as_mut_ptr() as *mut u32);
+
+    let udma_global_csr = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utralib::generated::HW_UDMA_CTRL_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map UDMA global control");
+    let mut udma_global = GlobalConfig::new(udma_global_csr.as_mut_ptr() as *mut u32);
 
     let mut msg_opt = None;
     log::debug!("Starting main loop");
@@ -201,6 +213,29 @@ fn main() {
                     let port: cramium_hal::iox::IoxPort =
                         num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
                     scalar.arg1 = iox.get_gpio_bank(port) as usize;
+                }
+            }
+            Opcode::ConfigureUdmaClock => {
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    let enable = if scalar.arg2 != 0 { true } else { false };
+                    if enable {
+                        udma_global.clock_on(periph);
+                    } else {
+                        udma_global.clock_off(periph);
+                    }
+                }
+            }
+            Opcode::ConfigureUdmaEvent => {
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    let event_offset = scalar.arg2 as u32;
+                    let to_channel: EventChannel =
+                        num_traits::FromPrimitive::from_usize(scalar.arg3).unwrap();
+                    // note: no "air traffic control" is done to prevent mapping other
+                    // events. Maybe this should be done? but for now, let's leave it
+                    // as bare iron.
+                    udma_global.map_event_with_offset(periph, event_offset, to_channel);
                 }
             }
             Opcode::InvalidCall => {

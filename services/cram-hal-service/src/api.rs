@@ -1,5 +1,9 @@
 use cramium_hal::iox;
 
+/// The Opcode numbers here should not be changed. You can add new ones,
+/// but do not re-use old numbers or repurpose them. This is because the
+/// numbers are hard-coded in other libraries in order to break circular
+/// dependencies on this file.
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 #[repr(usize)]
 pub enum Opcode {
@@ -28,6 +32,12 @@ pub enum Opcode {
     SetGpioBank = 5,
     /// Return the value of a GPIO bank (blocking scalar)
     GetGpioBank = 6,
+
+    /// Configure UDMA clocks & events
+    // blocking scalar
+    ConfigureUdmaClock = 7,
+    // blocking scalar
+    ConfigureUdmaEvent = 8,
 
     /// Exit server
     Quit = 255,

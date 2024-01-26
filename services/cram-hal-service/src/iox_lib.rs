@@ -1,3 +1,5 @@
+use core::sync::atomic::Ordering;
+
 use cramium_hal::iox::{IoxDir, IoxDriveStrength, IoxEnable, IoxFunction, IoxPort, IoxValue};
 use num_traits::*;
 
@@ -136,7 +138,6 @@ impl IoxHal {
     }
 }
 
-use core::sync::atomic::Ordering;
 impl Drop for IoxHal {
     fn drop(&mut self) {
         // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the
