@@ -1,7 +1,4 @@
-use num_traits::*;
-use xous::{send_message, MemoryAddress, MemoryRange, MemorySize, Message, Result};
-
-use crate::{Opcode, SERVER_NAME_CRAM_HAL};
+use xous::{send_message, MemoryRange, Message, Result};
 
 pub enum IframBank {
     Bank0,
@@ -10,11 +7,23 @@ pub enum IframBank {
 
 /// `IframRange` is a range of memory that is suitable for use as a DMA target.
 pub struct IframRange {
-    pub(crate) phys_addr: MemoryAddress,
-    pub(crate) memory: MemoryRange,
-    pub(crate) size: MemorySize,
-    pub(crate) conn: xous::CID,
+    pub(crate) phys_range: MemoryRange,
+    pub(crate) virt_range: MemoryRange,
+    /// The connection is optional, because in some special cases the range "outlives"
+    /// the OS (e.g. serial ports handed to us from the loader), and thus also can't
+    /// be "dropped".
+    pub(crate) conn: Option<xous::CID>,
 }
+
+/// Constrain potential types for UDMA words to only what is representable and valid
+/// for the UDMA subsystem.
+pub trait UdmaWidths {}
+impl UdmaWidths for i8 {}
+impl UdmaWidths for u8 {}
+impl UdmaWidths for i16 {}
+impl UdmaWidths for u16 {}
+impl UdmaWidths for i32 {}
+impl UdmaWidths for u32 {}
 
 impl IframRange {
     /// Request `length` bytes of memory in an optional Bank
@@ -40,17 +49,17 @@ impl IframRange {
     pub unsafe fn request(length: usize, bank: Option<IframBank>) -> Option<Self> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_api_names::XousNames::new().unwrap();
+        // This constant is in fact hard-coded because we are trying to break a circular
+        // dependency on the cram-hal-service crate and make this library "neutral" so it
+        // can be included in any context.
         let conn =
-            xns.request_connection(SERVER_NAME_CRAM_HAL).expect("Couldn't connect to Cramium HAL server");
+            xns.request_connection("_Cramium-SoC HAL_").expect("Couldn't connect to Cramium HAL server");
         let bank_code = match bank {
             Some(IframBank::Bank0) => 0,
             Some(IframBank::Bank1) => 1,
             _ => 2,
         };
-        match send_message(
-            conn,
-            Message::new_blocking_scalar(Opcode::MapIfram.to_usize().unwrap(), length, bank_code, 0, 0),
-        ) {
+        match send_message(conn, Message::new_blocking_scalar(0 /* MapIram */, length, bank_code, 0, 0)) {
             Ok(Result::Scalar5(maybe_size, maybe_phys_address, _, _, _)) => {
                 if maybe_size != 0 && maybe_phys_address != 0 {
                     let mut page_aligned_size = maybe_size / 4096;
@@ -65,10 +74,9 @@ impl IframRange {
                     )
                     .unwrap();
                     Some(IframRange {
-                        phys_addr: MemoryAddress::new(maybe_phys_address).unwrap(),
-                        memory: virtual_pages,
-                        size: MemorySize::new(maybe_size).unwrap(),
-                        conn,
+                        phys_range: MemoryRange::new(maybe_phys_address, maybe_size).unwrap(),
+                        virt_range: virtual_pages,
+                        conn: Some(conn),
                     })
                 } else {
                     if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
@@ -92,32 +100,32 @@ impl IframRange {
         }
     }
 
+    /// Assemble a range from raw pointers. This function is highly unsafe and exists for the
+    /// one special case of the logging crate, where we need to assemble a UART from raw, static
+    /// parts. This allows us to have debug capabilities based on a UART that was initialized by
+    /// the loader.
+    pub unsafe fn from_raw_parts(phys_addr: usize, virt_addr: usize, size: usize) -> Self {
+        IframRange {
+            phys_range: MemoryRange::new(phys_addr, size).unwrap(),
+            virt_range: MemoryRange::new(virt_addr, size).unwrap(),
+            conn: None,
+        }
+    }
+
     /// Returns the IframRange as a slice, useful for passing to the UDMA API calls.
     /// This is `unsafe` because the slice is actually not accessible in virtual memory mode:
     /// any attempt to reference the returned slice will result in a panic. The returned
     /// slice is *only* useful as a range-checked base/bounds for UDMA API calls.
-    pub unsafe fn as_phys_slice(&self) -> &[u8] {
-        core::slice::from_raw_parts(self.phys_addr.get() as *const u8, self.size.get())
+    pub unsafe fn as_phys_slice<T: UdmaWidths>(&self) -> &[T] { self.phys_range.as_slice::<T>() }
+
+    pub fn as_slice<T: UdmaWidths>(&self) -> &[T] {
+        // safe because `UdmaWidths` are always representable on our system
+        unsafe { self.virt_range.as_slice::<T>() }
     }
 
-    pub fn as_slice(&self) -> &[u8] {
-        // safe because `u8` is always representable on our system
-        unsafe { self.memory.as_slice() }
-    }
-
-    pub fn as_slice_u32(&self) -> &[u32] {
-        // safe because `u32` is always representable on our system
-        unsafe { self.memory.as_slice() }
-    }
-
-    pub fn as_slice_mut(&mut self) -> &mut [u8] {
-        // safe because `u8` is always representable on our system
-        unsafe { self.memory.as_slice_mut() }
-    }
-
-    pub fn as_slice_u32_mut(&mut self) -> &mut [u32] {
-        // safe because `u32` is always representable on our system
-        unsafe { self.memory.as_slice_mut() }
+    pub fn as_slice_mut<T: UdmaWidths>(&mut self) -> &mut [T] {
+        // safe because `UdmaWidths` are always representable on our system
+        unsafe { self.virt_range.as_slice_mut::<T>() }
     }
 }
 
@@ -125,29 +133,37 @@ use core::sync::atomic::{AtomicU32, Ordering};
 pub(crate) static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for IframRange {
     fn drop(&mut self) {
-        match send_message(
-            self.conn,
-            Message::new_blocking_scalar(
-                Opcode::UnmapIfram.to_usize().unwrap(),
-                self.size.get(),
-                self.phys_addr.get(),
-                0,
-                0,
-            ),
-        ) {
-            Ok(_) => (),
-            Err(e) => {
-                // This probably never happens, but also probably doesn't need to be a hard-panic
-                // if it does happen because it simply degrades performance; it does not impact
-                // correctness.
-                log::error!("Couldn't de-allocate IframRange: {:?}, IFRAM memory is leaking!", e)
+        // this is all terrible and broken, see https://github.com/betrusted-io/xous-core/issues/482
+        // there's also now a race condition on the connection "take" on Drop, but...let's deal
+        // with that after 482 is dealt with.
+        if let Some(conn) = self.conn.take() {
+            match send_message(
+                conn,
+                Message::new_blocking_scalar(
+                    1, /* UnmapIfram */
+                    self.phys_range.len(),
+                    self.phys_range.as_ptr() as usize,
+                    0,
+                    0,
+                ),
+            ) {
+                Ok(_) => (),
+                Err(e) => {
+                    // This probably never happens, but also probably doesn't need to be a hard-panic
+                    // if it does happen because it simply degrades performance; it does not impact
+                    // correctness.
+                    log::error!("Couldn't de-allocate IframRange: {:?}, IFRAM memory is leaking!", e)
+                }
             }
-        }
-        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the
-        // connection.
-        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
-            unsafe {
-                xous::disconnect(self.conn).unwrap();
+            // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using
+            // the connection.
+            if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
+                unsafe {
+                    xous::disconnect(conn).unwrap();
+                }
+            } else {
+                // replace the connection, since it's still in use.
+                self.conn = Some(conn);
             }
         }
     }
