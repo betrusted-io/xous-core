@@ -306,6 +306,24 @@ impl Builder {
         self
     }
 
+    /// Check if a file exists and is executable
+    pub fn executable_exists(&self, file: &str) -> bool {
+        if let Ok(_metadata) = std::fs::metadata(file) {
+            #[cfg(target_os = "windows")]
+            if file.to_lowercase().ends_with("exe") {
+                return true;
+            }
+            #[cfg(not(target_os = "windows"))]
+            if _metadata.is_file() {
+                use std::os::unix::fs::PermissionsExt;
+                if _metadata.permissions().mode() & 0o100 != 0 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Add just one service
     pub fn add_service<'a>(&'a mut self, service_spec: &str, xip: bool) -> &'a mut Builder {
         let mut spec: CrateSpec = service_spec.into();
@@ -667,7 +685,25 @@ impl Builder {
             }
             // jam in any pre-built local binary files that were specified
             let binary_files_string = self.enumerate_binary_files()?;
-            let mut binary_files: Vec<&str> = binary_files_string.iter().map(|s| s.as_ref()).collect();
+            let mut canonicalized_paths = Vec::new();
+            let mut binary_files_storage = Vec::<String>::new();
+            for f in binary_files_string {
+                if !self.executable_exists(&f) {
+                    panic!("FATAL ERROR: App '{}' does not exist or is not executable.", f);
+                }
+                canonicalized_paths
+                    .push(std::fs::canonicalize(f).expect("Couldn't canonicalize executable target"));
+            }
+            for f in canonicalized_paths {
+                let path_as_str = f.to_str().expect("Couldn't canonicalize executable target").to_string();
+                let windows_clean_path = if path_as_str.starts_with("\\\\?\\") {
+                    path_as_str[4..].to_owned()
+                } else {
+                    path_as_str
+                };
+                binary_files_storage.push(windows_clean_path);
+            }
+            let mut binary_files: Vec<&str> = binary_files_storage.iter().map(|s| s.as_ref()).collect();
             hosted_args.append(&mut binary_files);
 
             if !self.dry_run {
