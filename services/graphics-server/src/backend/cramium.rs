@@ -1,5 +1,6 @@
 use cram_hal_service::IframRange;
 use cramium_hal::iox;
+use cramium_hal::udma::PeriphId;
 use utralib::generated::*;
 use utralib::utra;
 use xous::MemoryRange;
@@ -88,7 +89,7 @@ pub fn claim_main_thread(f: impl FnOnce(MainThreadToken) -> Never + Send + 'stat
 
 pub struct XousDisplay {
     fb: MemoryRange,
-    hwfb: IframRange,
+    hwfb: cramium_hal::udma::Spim,
     next_free_line: usize,
     srfb: [u32; FB_SIZE],
     csr: utralib::CSR<u32>,
@@ -111,8 +112,15 @@ impl XousDisplay {
             }
         }
 
+        // TODO:
+        //  - then convert the line below to create a Spim, instead of an IframRange...
+        let udma_global = cram_hal_service::UdmaGlobal::new();
+        // using bank SPIM_B[1]
+        udma_global.udma_clock_config(PeriphId::Spim1, true);
+
         // safety: this is safe because we bind hwfb to XousDisplay which lives for the entire
         // duration of the OS.
+        /////////////// LEFT OFF HERE
         let hwfb = unsafe {
             cram_hal_service::IframRange::request(4096 * 3, None)
                 .expect("Couldn't allocate a DMA target for graphics!")
