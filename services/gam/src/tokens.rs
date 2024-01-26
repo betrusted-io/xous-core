@@ -54,7 +54,7 @@ impl<'a> TokenManager {
             // throw a bone to the dev who has to debug this error. This typically only triggers after a major
             // refactor and some UX element was removed and we forgot to update it in this table here.
             let now = self.tt.elapsed_ms();
-            if *self.last_time.borrow() < now - REPEAT_MSG_INTERVAL_MS {
+            if *self.last_time.borrow() + REPEAT_MSG_INTERVAL_MS < now {
                 log::info!("Occupied token slots: ***");
                 for t in self.tokens.iter() {
                     log::info!("  {}", t.name);
