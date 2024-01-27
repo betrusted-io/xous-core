@@ -29,6 +29,7 @@ cram-hal-service = { path = "../cram-hal-service", optional = true, features = [
 ] }
 cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
     "derive-rkyv",
+    "std",
 ] }
 
 [target.'cfg(any(windows,unix))'.dependencies]
