@@ -36,7 +36,12 @@ cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
 minifb = "0.23.0"
 
 [features]
-cramium-soc = ["utralib/cramium-soc", "cram-hal-service", "cramium-hal"]
+cramium-soc = [
+    "utralib/cramium-soc",
+    "cram-hal-service",
+    "cramium-hal",
+    "cramium-hal/std",
+]
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
@@ -44,4 +49,4 @@ debugprint = []
 braille = []
 gfx-testing = []
 ditherpunk = []
-default = []
+default = ["cramium-soc"]
