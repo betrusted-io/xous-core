@@ -35,8 +35,8 @@ func RenderLoaderFileTemplate(f FontSpec, gs GlyphSet) string {
 	context := loaderFileTemplateContext{f, gs, fname}
 	return renderTemplate(loaderFileTemplate, "loaderfile", context)
 }
-func RenderFontmapTemplate(fd []FontMap) string {
-	context := fontmapTemplateContext{fd}
+func RenderFontmapTemplate(fd []FontMap, small_fd []FontMap) string {
+	context := fontmapTemplateContext{fd, small_fd}
 	return renderTemplate(fontmapTemplate, "fontmap", context)
 }
 func RenderLoadermodTemplate(fd []FontSummary) string {
@@ -67,7 +67,8 @@ type loaderFileTemplateContext struct {
 
 // Holds data for rendering fontmapTemplate
 type fontmapTemplateContext struct {
-	FontDir []FontMap
+	FontDir      []FontMap
+	SmallFontDir []FontMap
 }
 type loadermodTemplateContext struct {
 	FontDir []FontSummary
@@ -120,12 +121,12 @@ pub const MAX_HEIGHT: u8 = {{.Font.Size}};
 pub const CODEPOINTS: [u32; {{.GS.CodepointsLen}}] = [
 {{.GS.Codepoints}}];
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature="precursor", feature="renode", feature="cramium-soc"))]
 pub(crate) static GLYPH_LOCATION: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 pub(crate) const GLYPH_LEN: usize = {{.GS.GlyphsLen}};
 
 pub(crate) fn glyphs() -> &'static [u32] {
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature="precursor", feature="renode", feature="cramium-soc"))]
     unsafe {
         let data: *const u32 = core::mem::transmute(GLYPH_LOCATION.load(core::sync::atomic::Ordering::SeqCst));
         core::slice::from_raw_parts(data, GLYPH_LEN)
@@ -177,5 +178,15 @@ const fontmapTemplate = `#![cfg_attr(rustfmt, rustfmt_skip)]
 // The order of these modules affects the link order in the loader, which is referred to in the graphics engine.
 // To make changes, see <xous_root>/services/graphics-server/src/blitstr2/codegen/main.go
 #![allow(dead_code)]
-{{range $f := .FontDir}}pub const {{$f.Name}}: usize = 0x{{$f.Len}};
-{{end}}`
+#[cfg(not(feature = "cramium-soc"))]
+pub const FONT_BASE: usize = 0x2053_0000;
+#[cfg(feature = "cramium-soc")]
+pub const FONT_BASE: usize = 0x6001_0000;
+
+{{range $f := .FontDir}}#[cfg(not(feature = "cramium-soc"))]
+pub const {{$f.Name}}: usize = 0x{{$f.Len}};
+{{end}}
+{{range $fs := .SmallFontDir}}#[cfg(feature = "cramium-soc")]
+pub const {{$fs.Name}}: usize = 0x{{$fs.Len}};
+{{end}}
+`

@@ -21,7 +21,8 @@
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
       "rustout": "../fonts/emoji.rs",
-      "loaderout": "../../../../../loader/src/fonts/emoji.rs"
+      "loaderout": "../../../../../loader/src/fonts/emoji.rs",
+      "small": true
     },
     {
       "name": "zh",
@@ -35,7 +36,8 @@
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
       "rustout": "../fonts/zh.rs",
-      "loaderout": "../../../../../loader/src/fonts/zh.rs"
+      "loaderout": "../../../../../loader/src/fonts/zh.rs",
+      "small": false
     },
     {
       "name": "ja",
@@ -49,7 +51,8 @@
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
       "rustout": "../fonts/ja.rs",
-      "loaderout": "../../../../../loader/src/fonts/ja.rs"
+      "loaderout": "../../../../../loader/src/fonts/ja.rs",
+      "small": false
     },
     {
       "name": "kr",
@@ -63,7 +66,8 @@
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
       "rustout": "../fonts/kr.rs",
-      "loaderout": "../../../../../loader/src/fonts/kr.rs"
+      "loaderout": "../../../../../loader/src/fonts/kr.rs",
+      "small": false
     },
     {
       "name": "Bold",
@@ -77,7 +81,8 @@
       "indexType": "json-grid-coord",
       "glyphTrim": "proportional",
       "rustout": "../fonts/bold.rs",
-      "loaderout": "../../../../../loader/src/fonts/bold.rs"
+      "loaderout": "../../../../../loader/src/fonts/bold.rs",
+      "small": true
     },
     {
       "name": "Mono",
@@ -91,7 +96,8 @@
       "indexType": "json-grid-coord",
       "glyphTrim": "monospace",
       "rustout": "../fonts/mono.rs",
-      "loaderout": "../../../../../loader/src/fonts/mono.rs"
+      "loaderout": "../../../../../loader/src/fonts/mono.rs",
+      "small": true
     },
     {
       "name": "Regular",
@@ -105,7 +111,8 @@
       "indexType": "json-grid-coord",
       "glyphTrim": "proportional",
       "rustout": "../fonts/regular.rs",
-      "loaderout": "../../../../../loader/src/fonts/regular.rs"
+      "loaderout": "../../../../../loader/src/fonts/regular.rs",
+      "small": false
     },
     {
       "name": "Tall",
@@ -119,7 +126,8 @@
       "indexType": "json-grid-coord",
       "glyphTrim": "proportional",
       "rustout": "../fonts/tall.rs",
-      "loaderout": "../../../../../loader/src/fonts/tall.rs"
+      "loaderout": "../../../../../loader/src/fonts/tall.rs",
+      "small": true
     },
     {
       "name": "Small",
@@ -133,7 +141,8 @@
       "indexType": "json-grid-coord",
       "glyphTrim": "proportional",
       "rustout": "../fonts/small.rs",
-      "loaderout": "../../../../../loader/src/fonts/small.rs"
+      "loaderout": "../../../../../loader/src/fonts/small.rs",
+      "small": false
     }
   ]
 }
