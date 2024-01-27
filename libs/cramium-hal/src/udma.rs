@@ -380,6 +380,7 @@ impl Into<usize> for UartReg {
 pub struct Uart {
     /// This is assumed to point to the base of the peripheral's UDMA register set.
     csr: CSR<u32>,
+    #[allow(dead_code)] // suppress warning with `std` is not selected
     ifram: IframRange,
 }
 
@@ -618,6 +619,19 @@ pub enum SpimEventGen {
     Disabled = 0,
     Enabled = 1,
 }
+#[repr(u32)]
+#[derive(Copy, Clone)]
+pub enum SpimWordsPerXfer {
+    Words1 = 0,
+    Words2 = 1,
+    Words4 = 2,
+}
+#[repr(u32)]
+#[derive(Copy, Clone)]
+pub enum SpimEndian {
+    MsbFirst = 0,
+    LsbFirst = 1,
+}
 #[derive(Copy, Clone)]
 pub enum SpimCmd {
     /// pol, pha, clkdiv
@@ -631,10 +645,10 @@ pub enum SpimCmd {
     Dummy(u8),
     /// Wait on an event. Note EventChannel coding needs interpretation prior to use.
     Wait(EventChannel),
-    /// mode, use byte alignment, number of bits to send
-    TxData(SpimMode, SpimByteAlign, u16),
-    /// mode, use byte alignment, number of bits to receive
-    RxData(SpimMode, SpimByteAlign, u16),
+    /// mode, words per xfer, bits per word, endianness, number of words to send
+    TxData(SpimMode, SpimWordsPerXfer, u8, SpimEndian, u16),
+    /// mode, words per xfer, bits per word, endianness, number of words to receive
+    RxData(SpimMode, SpimWordsPerXfer, u8, SpimEndian, u16),
     /// repeat count
     RepeatNextCmd(u16),
     EndXfer(SpimEventGen),
@@ -660,11 +674,21 @@ impl Into<u32> for SpimCmd {
                 EventChannel::Channel2 => 5 << 28 | 2,
                 EventChannel::Channel3 => 5 << 28 | 3,
             },
-            SpimCmd::TxData(mode, align, len) => {
-                6 << 28 | (mode as u32) << 27 | (align as u32) << 26 | (len as u32)
+            SpimCmd::TxData(mode, words_per_xfer, bits_per_word, endian, len) => {
+                6 << 28
+                    | (mode as u32) << 27
+                    | ((words_per_xfer as u32) & 0x3) << 21
+                    | (bits_per_word as u32 - 1) << 16
+                    | (len as u32 - 1)
+                    | (endian as u32) << 26
             }
-            SpimCmd::RxData(mode, align, len) => {
-                7 << 28 | (mode as u32) << 27 | (align as u32) << 26 | (len as u32)
+            SpimCmd::RxData(mode, words_per_xfer, bits_per_word, endian, len) => {
+                7 << 28
+                    | (mode as u32) << 27
+                    | ((words_per_xfer as u32) & 0x3) << 21
+                    | (bits_per_word as u32 - 1) << 16
+                    | (len as u32 - 1)
+                    | (endian as u32) << 26
             }
             SpimCmd::RepeatNextCmd(count) => 8 << 28 | count as u32,
             SpimCmd::EndXfer(event) => 9 << 28 | event as u32,
@@ -786,7 +810,7 @@ impl Spim {
             ..(self.tx_buf_len_bytes + self.rx_buf_len_bytes) / size_of::<T>()]
     }
 
-    unsafe fn rx_buf_phys<T: UdmaWidths>(&self) -> &[T] {
+    pub unsafe fn rx_buf_phys<T: UdmaWidths>(&self) -> &[T] {
         &self.ifram.as_phys_slice()[(self.tx_buf_len_bytes) / size_of::<T>()
             ..(self.tx_buf_len_bytes + self.rx_buf_len_bytes) / size_of::<T>()]
     }
@@ -795,7 +819,7 @@ impl Spim {
         &mut self.ifram.as_slice_mut()[..self.tx_buf_len_bytes / size_of::<T>()]
     }
 
-    unsafe fn tx_buf_phys<T: UdmaWidths>(&mut self) -> &[T] {
+    pub unsafe fn tx_buf_phys<T: UdmaWidths>(&self) -> &[T] {
         &self.ifram.as_phys_slice()[..self.tx_buf_len_bytes / size_of::<T>()]
     }
 
@@ -814,5 +838,127 @@ impl Spim {
                 );
             }
         }
+    }
+
+    pub fn is_tx_busy(&self) -> bool { self.udma_busy(Bank::Tx) }
+
+    /// `tx_data_async` will queue a data buffer into the SPIM interface and return as soon as the enqueue
+    /// is completed (which can be before the transmission is actually done). The function may partially
+    /// block, however, if the size of the buffer to be sent is larger than the largest allowable DMA
+    /// transfer. In this case, it will block until the last chunk that can be transferred without
+    /// blocking.
+    pub fn tx_data_async<T: UdmaWidths + Copy>(&mut self, data: &[T], use_cs: bool, eot_event: bool) {
+        unsafe {
+            self.tx_data_async_inner(Some(data), None, use_cs, eot_event);
+        }
+    }
+
+    /// `tx_data_async_from_parts` does a similar function as `tx_data_async`, but it expects that the
+    /// data to send is already copied into the DMA buffer. In this case, no copying is done, and the
+    /// `(start, len)` pair is used to specify the beginning and the length of the data to send that is
+    /// already resident in the DMA buffer.
+    ///
+    /// Safety:
+    ///   - Only safe to use when the data has already been copied into the DMA buffer, and the size and len
+    ///     fields are within bounds.
+    pub unsafe fn tx_data_async_from_parts<T: UdmaWidths + Copy>(
+        &mut self,
+        start: usize,
+        len: usize,
+        use_cs: bool,
+        eot_event: bool,
+    ) {
+        self.tx_data_async_inner(None::<&[T]>, Some((start, len)), use_cs, eot_event);
+    }
+
+    /// This is the inner implementation of the two prior calls. A lot of the boilerplate is the same,
+    /// the main difference is just whether the passed data shall be copied or not.
+    ///
+    /// Panics: Panics if both `data` and `parts` are `None`. If both are `Some`, `data` will take precedence.
+    unsafe fn tx_data_async_inner<T: UdmaWidths + Copy>(
+        &mut self,
+        data: Option<&[T]>,
+        parts: Option<(usize, usize)>,
+        use_cs: bool,
+        eot_event: bool,
+    ) {
+        let bits_per_xfer = size_of::<T>() * 8;
+        let total_words = if let Some(data) = data {
+            data.len()
+        } else if let Some((_start, len)) = parts {
+            len
+        } else {
+            // I can't figure out how to wrap a... &[T] in an enum? A slice of a type of trait
+            // seems to need some sort of `dyn` keyword plus other stuff that is a bit heavy for
+            // a function that is private (note the visibility on this function). Handling this
+            // instead with a runtime check-to-panic.
+            panic!("Inner function was set up with incorrect arguments");
+        };
+        let mut words_sent: usize = 0;
+
+        if use_cs {
+            self.send_cmd_list(&[SpimCmd::StartXfer(self.cs)])
+        }
+        while words_sent < total_words {
+            // determine the valid length of data we could send -- has to fit into a u16::MAX
+            let tx_len = if (total_words - words_sent) >= u16::MAX as usize {
+                u16::MAX as usize
+            } else {
+                total_words - words_sent
+            };
+            // setup the command list for data to send
+            let cmd_list = [SpimCmd::TxData(
+                self.mode,
+                SpimWordsPerXfer::Words1,
+                bits_per_xfer as u8,
+                SpimEndian::LsbFirst,
+                tx_len as u16,
+            )];
+            self.send_cmd_list(&cmd_list);
+            let cfg_size = match size_of::<T>() {
+                1 => CFG_SIZE_8,
+                2 => CFG_SIZE_16,
+                4 => CFG_SIZE_32,
+                _ => panic!("Illegal size of UdmaWidths: should not be possible"),
+            };
+            if let Some(data) = data {
+                for (src, dst) in
+                    data[words_sent..words_sent + tx_len].iter().zip(self.tx_buf_mut().iter_mut())
+                {
+                    *dst = *src;
+                }
+                // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+                unsafe { self.udma_enqueue(Bank::Tx, &self.tx_buf_phys::<T>()[..tx_len], CFG_EN | cfg_size) }
+            } else if let Some((start, _len)) = parts {
+                // safety: this is safe because tx_buf_phys() slice is only used as a base/bounds reference
+                // This will correctly panic if the size of the data to be sent is larger than the physical
+                // tx_buf.
+                unsafe {
+                    self.udma_enqueue(
+                        Bank::Tx,
+                        &self.tx_buf_phys::<T>()[start + words_sent..start + words_sent + tx_len],
+                        CFG_EN | cfg_size,
+                    )
+                }
+            } // the else clause "shouldn't happen" because of the runtime check up top!
+            words_sent += tx_len;
+
+            // wait until the transfer is done before doing the next iteration, if there is a next iteration
+            // last iteration falls through without waiting...
+            if words_sent < total_words {
+                while self.udma_busy(Bank::Tx) {
+                    #[cfg(feature = "std")]
+                    xous::yield_slice();
+                }
+            }
+        }
+        if use_cs {
+            let evt = if eot_event { SpimEventGen::Enabled } else { SpimEventGen::Disabled };
+            self.send_cmd_list(&[SpimCmd::EndXfer(evt)])
+        }
+    }
+
+    pub fn rx_data<T: UdmaWidths + Copy>(&mut self, _rx_data: &mut [T], _cs: Option<SpimCs>) {
+        todo!("Not yet done...let's see if tx_data works first before templating");
     }
 }
