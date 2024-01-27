@@ -404,8 +404,10 @@ impl Uart {
     /// the clock manually as well once the object is dropped...
     ///
     /// Allocates a 4096-deep buffer for tx/rx purposes: the first 2048 bytes
-    /// are used for Tx, the second 2048 bytes for Rx.
-    #[cfg(not(feature = "baremetal"))]
+    /// are used for Tx, the second 2048 bytes for Rx. If this buffer size has
+    /// to change, be sure to update the loader, as it takes this as an assumption
+    /// since no IFRAM allocator is running at that time.
+    #[cfg(feature = "std")]
     pub unsafe fn new(channel: UartChannel, baud: u32, clk_freq: u32) -> Self {
         assert!(UART_RX_BUF_SIZE + UART_TX_BUF_SIZE == 4096, "Configuration error in UDMA UART");
         let bank_addr = match channel {
@@ -452,6 +454,19 @@ impl Uart {
         }
     }
 
+    pub fn set_baud(&self, baud: u32, clk_freq: u32) {
+        let clk_counter: u32 = (clk_freq + baud / 2) / baud;
+        // setup baud, bits, parity, etc.
+        // safety: this is safe to call as long as the base address points at a valid UART.
+        unsafe {
+            self.csr
+                .base()
+                .add(Bank::Custom.into())
+                .add(UartReg::Setup.into())
+                .write_volatile(0x0306 | (clk_counter << 16));
+        }
+    }
+
     pub fn disable(&mut self) {
         self.wait_tx_done();
         // safe only in the context of a UART UDMA address
@@ -476,7 +491,7 @@ impl Uart {
 
     pub fn wait_tx_done(&self) {
         while self.udma_busy(Bank::Tx) {
-            #[cfg(not(feature = "baremetal"))]
+            #[cfg(feature = "std")]
             xous::yield_slice();
         }
         while self.tx_busy() {}
@@ -484,23 +499,23 @@ impl Uart {
 
     pub fn wait_rx_done(&self) {
         while self.udma_busy(Bank::Rx) {
-            #[cfg(not(feature = "baremetal"))]
+            #[cfg(feature = "std")]
             xous::yield_slice();
         }
     }
 
-    /// `buf` is assumed to be a virtual address (in Xous), or a machine address
+    /// `buf` is assumed to be a virtual address (in `std`), or a machine address
     /// (in baremetal mode). This function is safe because it will operate as intended
-    /// within a given environment, so long as the `baremetal` flag is applied correctly.
+    /// within a given environment, so long as the `std` flag is applied correctly.
     ///
-    /// In "baremetal" mode, it's *also* assumed that `buf` is range-checked to be valid
+    /// When not in `std`, it's *also* assumed that `buf` is range-checked to be valid
     /// for the UDMA engine.
     ///
     /// returns: total length of bytes written
     pub fn write(&mut self, buf: &[u8]) -> usize {
         let mut writelen = 0;
         for chunk in buf.chunks(UART_TX_BUF_SIZE) {
-            #[cfg(not(feature = "baremetal"))]
+            #[cfg(feature = "std")]
             {
                 self.ifram.as_slice_mut()[..chunk.len()].copy_from_slice(chunk);
                 // safety: the slice is in the physical range for the UDMA, and length-checked
@@ -513,7 +528,7 @@ impl Uart {
                 }
                 writelen += chunk.len();
             }
-            #[cfg(feature = "baremetal")]
+            #[cfg(not(feature = "std"))]
             unsafe {
                 self.udma_enqueue(Bank::Tx, chunk, CFG_EN | CFG_SIZE_8);
                 writelen += chunk.len();
@@ -526,7 +541,7 @@ impl Uart {
 
     pub fn read(&mut self, buf: &mut [u8]) {
         for chunk in buf.chunks_mut(UART_RX_BUF_SIZE) {
-            #[cfg(not(feature = "baremetal"))]
+            #[cfg(feature = "std")]
             unsafe {
                 self.udma_enqueue(
                     Bank::Rx,
@@ -534,7 +549,7 @@ impl Uart {
                     CFG_EN | CFG_SIZE_8,
                 );
             }
-            #[cfg(feature = "baremetal")]
+            #[cfg(not(feature = "std"))]
             unsafe {
                 self.udma_enqueue(
                     Bank::Rx,
@@ -704,6 +719,7 @@ impl Spim {
     ///
     /// Return: the function can return None if it can't allocate enough memory
     /// for the requested tx/rx length.
+    #[cfg(feature = "std")]
     pub unsafe fn new(
         channel: SpimChannel,
         spi_clk_freq: u32,

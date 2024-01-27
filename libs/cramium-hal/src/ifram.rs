@@ -46,6 +46,7 @@ impl IframRange {
     /// scope, but the trade-off is that IFRAM is very limited in capacity
     /// and hanging on to chunks much longer than necessary can lead to memory
     /// exhaustion.
+    #[cfg(feature = "std")]
     pub unsafe fn request(length: usize, bank: Option<IframBank>) -> Option<Self> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_api_names::XousNames::new().unwrap();
@@ -152,6 +153,7 @@ impl Drop for IframRange {
                     // This probably never happens, but also probably doesn't need to be a hard-panic
                     // if it does happen because it simply degrades performance; it does not impact
                     // correctness.
+                    #[cfg(feature = "std")]
                     log::error!("Couldn't de-allocate IframRange: {:?}, IFRAM memory is leaking!", e)
                 }
             }
