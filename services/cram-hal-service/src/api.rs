@@ -103,20 +103,3 @@ pub struct IoxConfigMessage {
     pub slow_slew: Option<iox::IoxEnable>,
     pub strength: Option<iox::IoxDriveStrength>,
 }
-
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub enum IoxRequest {
-    // possible requests
-    Direction(iox::IoxDir),
-    Pullup(iox::IoxEnable),
-    SchmittTrigger(iox::IoxEnable),
-    SlowSlew(iox::IoxEnable),
-    DriveStrength(iox::IoxDriveStrength),
-    SetAlternateFunction(iox::IoxFunction),
-    SetPioFromPioBitmask(u32),
-    SetPioFromPortAndPin(bool),
-    // possible return results
-    ResultPortPin(iox::IoxPort, u8),
-    ResultOk,
-    ResultErr,
-}

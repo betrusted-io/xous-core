@@ -4,7 +4,7 @@ use api::*;
 mod pio;
 use cramium_hal::{
     iox,
-    udma::{EventChannel, GlobalConfig, PeriphEventId, PeriphEventType, PeriphId},
+    udma::{EventChannel, GlobalConfig, PeriphId},
 };
 use xous::sender::Sender;
 
