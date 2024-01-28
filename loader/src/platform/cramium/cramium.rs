@@ -7,7 +7,7 @@ pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 
 // location of kernel, as offset from the base of ReRAM. This needs to match up with what is in link.x.
-pub const KERNEL_OFFSET: usize = 0x9000;
+pub const KERNEL_OFFSET: usize = 0x28000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() {
