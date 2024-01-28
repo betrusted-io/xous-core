@@ -43,6 +43,7 @@ func codegen() {
 	conf := NewConfig("config.json")
 	fsList := conf.Fonts()
 	var fdir []FontSummary
+	var small_fdir []FontSummary
 	var offsets []FontMap
 	var small_offsets []FontMap
 	var cur_address int = 0
@@ -64,6 +65,9 @@ func codegen() {
 			Len:  gs.GlyphsLen,
 		}
 		fdir = append(fdir, summary)
+		if f.Small {
+			small_fdir = append(small_fdir, summary)
+		}
 
 		offset := lib.FontMap{
 			Name: strings.ToUpper(f.Name) + "_OFFSET",
@@ -71,6 +75,10 @@ func codegen() {
 		}
 		offsets = append(offsets, offset)
 		if f.Small {
+			offset := lib.FontMap{
+				Name: strings.ToUpper(f.Name) + "_OFFSET",
+				Len:  fmt.Sprintf("%x", small_cur_address),
+			}
 			small_offsets = append(small_offsets, offset)
 		}
 		length := lib.FontMap{
@@ -99,7 +107,7 @@ func codegen() {
 	for _, fs := range fdir {
 		fmt.Println(fs)
 	}
-	loadermod := RenderLoadermodTemplate(fdir)
+	loadermod := RenderLoadermodTemplate(fdir, small_fdir)
 	fmt.Println("Writing to", conf.GetLoaderMod())
 	ioutil.WriteFile(conf.GetLoaderMod(), []byte(loadermod), 0644)
 
