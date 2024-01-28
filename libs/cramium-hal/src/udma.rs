@@ -393,6 +393,7 @@ impl Udma for Uart {
 }
 /// The sum of UART_TX_BUF_SIZE + UART_RX_BUF_SIZE should be 4096.
 const UART_TX_BUF_SIZE: usize = 2048;
+const UART_RX_BUF_START: usize = UART_TX_BUF_SIZE;
 const UART_RX_BUF_SIZE: usize = 2048;
 impl Uart {
     /// Configures for N81
@@ -530,9 +531,16 @@ impl Uart {
                 writelen += chunk.len();
             }
             #[cfg(not(feature = "std"))]
-            unsafe {
-                self.udma_enqueue(Bank::Tx, chunk, CFG_EN | CFG_SIZE_8);
-                writelen += chunk.len();
+            {
+                self.ifram.as_slice_mut()[..chunk.len()].copy_from_slice(chunk);
+                unsafe {
+                    self.udma_enqueue(
+                        Bank::Tx,
+                        &self.ifram.as_phys_slice::<u8>()[..chunk.len()],
+                        CFG_EN | CFG_SIZE_8,
+                    );
+                    writelen += chunk.len();
+                }
             }
 
             self.wait_tx_done();
@@ -546,7 +554,7 @@ impl Uart {
             unsafe {
                 self.udma_enqueue(
                     Bank::Rx,
-                    &self.ifram.as_phys_slice::<u8>()[UART_TX_BUF_SIZE..UART_TX_BUF_SIZE + chunk.len()],
+                    &self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + chunk.len()],
                     CFG_EN | CFG_SIZE_8,
                 );
             }
@@ -554,11 +562,21 @@ impl Uart {
             unsafe {
                 self.udma_enqueue(
                     Bank::Rx,
-                    &chunk[UART_TX_BUF_SIZE..UART_TX_BUF_SIZE + chunk.len()],
+                    &self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + chunk.len()],
                     CFG_EN | CFG_SIZE_8,
                 );
             }
             self.wait_rx_done();
+            #[cfg(feature = "std")]
+            chunk.copy_from_slice(
+                &self.ifram.as_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + chunk.len()],
+            );
+            #[cfg(not(feature = "std"))]
+            unsafe {
+                chunk.copy_from_slice(
+                    &self.ifram.as_phys_slice::<u8>()[UART_RX_BUF_START..UART_RX_BUF_START + chunk.len()],
+                );
+            }
         }
     }
 }
