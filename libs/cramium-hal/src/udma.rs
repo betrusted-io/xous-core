@@ -651,6 +651,11 @@ pub enum SpimEndian {
     LsbFirst = 1,
 }
 #[derive(Copy, Clone)]
+pub enum SpimWaitType {
+    Event(EventChannel),
+    Cycles(u8),
+}
+#[derive(Copy, Clone)]
 pub enum SpimCmd {
     /// pol, pha, clkdiv
     Config(SpimClkPol, SpimClkPha, u8),
@@ -662,7 +667,8 @@ pub enum SpimCmd {
     /// number of cycles (5 bits)
     Dummy(u8),
     /// Wait on an event. Note EventChannel coding needs interpretation prior to use.
-    Wait(EventChannel),
+    /// type of wait, channel, cycle count
+    Wait(SpimWaitType),
     /// mode, words per xfer, bits per word, endianness, number of words to send
     TxData(SpimMode, SpimWordsPerXfer, u8, SpimEndian, u16),
     /// mode, words per xfer, bits per word, endianness, number of words to receive
@@ -686,12 +692,16 @@ impl Into<u32> for SpimCmd {
             }
             SpimCmd::SendAddr(mode, size) => 3 << 28 | (mode as u32) << 27 | (size as u32 & 0x1F) << 16,
             SpimCmd::Dummy(cycles) => 4 << 28 | (cycles as u32 & 0x1F) << 16,
-            SpimCmd::Wait(channel) => match channel {
-                EventChannel::Channel0 => 5 << 28 | 0,
-                EventChannel::Channel1 => 5 << 28 | 1,
-                EventChannel::Channel2 => 5 << 28 | 2,
-                EventChannel::Channel3 => 5 << 28 | 3,
-            },
+            SpimCmd::Wait(wait_type) => {
+                let wait_code = match wait_type {
+                    SpimWaitType::Event(EventChannel::Channel0) => 0,
+                    SpimWaitType::Event(EventChannel::Channel1) => 1,
+                    SpimWaitType::Event(EventChannel::Channel2) => 2,
+                    SpimWaitType::Event(EventChannel::Channel3) => 3,
+                    SpimWaitType::Cycles(cyc) => cyc as u32 | 0x1_00,
+                };
+                5 << 28 | wait_code
+            }
             SpimCmd::TxData(mode, words_per_xfer, bits_per_word, endian, len) => {
                 6 << 28
                     | (mode as u32) << 27
@@ -732,6 +742,8 @@ pub enum SpimChannel {
 pub struct Spim {
     csr: CSR<u32>,
     cs: SpimCs,
+    sot_wait: u8,
+    eot_wait: u8,
     event_channel: Option<EventChannel>,
     mode: SpimMode,
     align: SpimByteAlign,
@@ -769,6 +781,10 @@ impl Spim {
         pol: SpimClkPol,
         pha: SpimClkPha,
         chip_select: SpimCs,
+        // cycles to wait between CS assert and data start
+        sot_wait: u8,
+        // cycles to wait after data stop and CS de-assert
+        eot_wait: u8,
         event_channel: Option<EventChannel>,
         max_tx_len_bytes: usize,
         max_rx_len_bytes: usize,
@@ -780,7 +796,14 @@ impl Spim {
             SpimChannel::Channel2 => utra::udma_spim_2::HW_UDMA_SPIM_2_BASE,
             SpimChannel::Channel3 => utra::udma_spim_3::HW_UDMA_SPIM_3_BASE,
         };
-        let csr = CSR::new(base_addr as *mut u32);
+        let csr_range = xous::syscall::map_memory(
+            xous::MemoryAddress::new(base_addr),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map serial port");
+        let csr = CSR::new(csr_range.as_mut_ptr() as *mut u32);
 
         let clk_div = sys_clk_freq / spi_clk_freq;
         // make this a hard panic -- you'll find out at runtime that you f'd up
@@ -796,6 +819,8 @@ impl Spim {
             let mut spim = Spim {
                 csr,
                 cs: chip_select,
+                sot_wait,
+                eot_wait,
                 event_channel,
                 align: SpimByteAlign::Disable,
                 mode: SpimMode::Standard,
@@ -915,7 +940,14 @@ impl Spim {
         let mut words_sent: usize = 0;
 
         if use_cs {
-            self.send_cmd_list(&[SpimCmd::StartXfer(self.cs)])
+            if self.sot_wait == 0 {
+                self.send_cmd_list(&[SpimCmd::StartXfer(self.cs)])
+            } else {
+                self.send_cmd_list(&[
+                    SpimCmd::StartXfer(self.cs),
+                    SpimCmd::Wait(SpimWaitType::Cycles(self.sot_wait)),
+                ])
+            }
         }
         while words_sent < total_words {
             // determine the valid length of data we could send -- has to fit into a u16::MAX
@@ -954,7 +986,7 @@ impl Spim {
                 unsafe {
                     self.udma_enqueue(
                         Bank::Tx,
-                        &self.tx_buf_phys::<T>()[start + words_sent..start + words_sent + tx_len],
+                        &self.tx_buf_phys::<T>()[(start + words_sent)..(start + words_sent + tx_len)],
                         CFG_EN | cfg_size,
                     )
                 }
@@ -972,7 +1004,14 @@ impl Spim {
         }
         if use_cs {
             let evt = if eot_event { SpimEventGen::Enabled } else { SpimEventGen::Disabled };
-            self.send_cmd_list(&[SpimCmd::EndXfer(evt)])
+            if self.eot_wait == 0 {
+                self.send_cmd_list(&[SpimCmd::EndXfer(evt)])
+            } else {
+                self.send_cmd_list(&[
+                    SpimCmd::Wait(SpimWaitType::Cycles(self.eot_wait)),
+                    SpimCmd::EndXfer(evt),
+                ])
+            }
         }
     }
 
