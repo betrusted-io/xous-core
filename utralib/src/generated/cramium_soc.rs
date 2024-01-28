@@ -247,7 +247,7 @@ pub const HW_SCE_MEM_LEN: usize = 32768;
 pub const HW_SYSCTRL_MEM:     usize = 0x40040000;
 pub const HW_SYSCTRL_MEM_LEN: usize = 65536;
 pub const HW_IFSUB_MEM:     usize = 0x50120000;
-pub const HW_IFSUB_MEM_LEN: usize = 65536;
+pub const HW_IFSUB_MEM_LEN: usize = 12288;
 pub const HW_CORESUB_MEM:     usize = 0x40010000;
 pub const HW_CORESUB_MEM_LEN: usize = 65536;
 pub const HW_SECSUB_MEM:     usize = 0x40050000;
@@ -316,6 +316,10 @@ pub const HW_MDMA_MEM:     usize = 0x40012000;
 pub const HW_MDMA_MEM_LEN: usize = 4096;
 pub const HW_MBOX_APB_MEM:     usize = 0x40013000;
 pub const HW_MBOX_APB_MEM_LEN: usize = 4096;
+pub const HW_IOX_MEM:     usize = 0x5012f000;
+pub const HW_IOX_MEM_LEN: usize = 4096;
+pub const HW_AOC_MEM:     usize = 0x40060000;
+pub const HW_AOC_MEM_LEN: usize = 4096;
 
 // Physical base addresses of registers
 pub const HW_D11CTIME_BASE :   usize = 0xe0000000;

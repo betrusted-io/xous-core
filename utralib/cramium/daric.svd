@@ -15427,7 +15427,7 @@ soc/candidate/mbox_v0.1.sv]]></description>
             <memoryRegion>
                 <name>IFSUB</name>
                 <baseAddress>0x50120000</baseAddress>
-                <size>0x00010000</size>
+                <size>0x00003000</size>
             </memoryRegion>
             <memoryRegion>
                 <name>CORESUB</name>
@@ -15597,6 +15597,16 @@ soc/candidate/mbox_v0.1.sv]]></description>
             <memoryRegion>
                 <name>MBOX_APB</name>
                 <baseAddress>0x40013000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>IOX</name>
+                <baseAddress>0x5012F000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>AOC</name>
+                <baseAddress>0x40060000</baseAddress>
                 <size>0x00001000</size>
             </memoryRegion>
         </memoryRegions>
