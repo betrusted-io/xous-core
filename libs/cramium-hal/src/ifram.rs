@@ -63,10 +63,8 @@ impl IframRange {
         match send_message(conn, Message::new_blocking_scalar(0 /* MapIram */, length, bank_code, 0, 0)) {
             Ok(Result::Scalar5(_, maybe_size, maybe_phys_address, _, _)) => {
                 if maybe_size != 0 && maybe_phys_address != 0 {
-                    let mut page_aligned_size = maybe_size / 4096;
-                    if maybe_size % 4096 != 0 {
-                        page_aligned_size += 1;
-                    }
+                    // round up to the nearest whole page
+                    let page_aligned_size = ((maybe_size + 4095) / 4096) * 4096;
                     let virtual_pages = xous::map_memory(
                         core::num::NonZeroUsize::new(maybe_phys_address),
                         None,
