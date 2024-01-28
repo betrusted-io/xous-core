@@ -41,10 +41,10 @@ impl IoxHal {
             xous::Message::new_blocking_scalar(
                 Opcode::SetGpioBank.to_usize().unwrap(),
                 port as usize,
-                // which pin, as a bitmask
-                1 << pin as usize,
                 // values to set
                 (value as usize) << (pin as usize),
+                // which pin, as a bitmask
+                1 << pin as usize,
                 0,
             ),
         )
