@@ -61,7 +61,7 @@ impl IframRange {
             _ => 2,
         };
         match send_message(conn, Message::new_blocking_scalar(0 /* MapIram */, length, bank_code, 0, 0)) {
-            Ok(Result::Scalar5(maybe_size, maybe_phys_address, _, _, _)) => {
+            Ok(Result::Scalar5(_, maybe_size, maybe_phys_address, _, _)) => {
                 if maybe_size != 0 && maybe_phys_address != 0 {
                     let mut page_aligned_size = maybe_size / 4096;
                     if maybe_size % 4096 != 0 {
