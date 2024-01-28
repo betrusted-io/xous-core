@@ -169,6 +169,19 @@ impl Ball {
     pub fn draw_boot(&self) { self.gfx.draw_boot_logo().ok(); }
 
     pub fn update(&mut self) {
+        /* // for testing fonts, etc.
+        use std::fmt::Write;
+        let mut tv = graphics_server::TextView::new(
+            graphics_server::Gid::new([0, 0, 0, 0]),
+            graphics_server::TextBounds::BoundingBox(self.clip),
+        );
+        tv.clip_rect = Some(self.clip);
+        tv.set_dry_run(false);
+        tv.set_op(graphics_server::TextOp::Render);
+        tv.style = graphics_server::api::GlyphStyle::Tall;
+        write!(tv.text, "hello world! 😀").ok();
+        self.gfx.draw_textview(&mut tv).ok();
+        */
         let mut draw_list = ClipObjectList::default();
 
         // clear the previous location of the ball
