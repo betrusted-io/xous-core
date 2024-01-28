@@ -63,6 +63,8 @@
 //! is a fairly long setup/hold time requirement on it and there does not seem
 //! to be a provision in the UDMA block to put guardbands around the CS timing.
 
+use core::mem::size_of;
+
 use cram_hal_service::IoxHal;
 use cramium_hal::udma::PeriphId;
 use cramium_hal::{iox, udma};
@@ -75,7 +77,10 @@ pub const FB_WIDTH_WORDS: usize = 11;
 pub const FB_WIDTH_PIXELS: usize = WIDTH as usize;
 pub const FB_LINES: usize = LINES as usize;
 pub const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
-const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
+
+// TODO: need to confirm actual clock sent to UDMA block, but empirically, this is what I see
+// on the FPGA emulator
+const CONFIG_CLOCK_FREQUENCY: u32 = 50_000_000;
 
 const SPI_CS_PIN: u8 = 10;
 const SPI_CLK_PIN: u8 = 7;
@@ -117,8 +122,6 @@ impl XousDisplay {
             }
         }
 
-        // TODO:
-        //  - then convert the line below to create a Spim, instead of an IframRange...
         let udma_global = cram_hal_service::UdmaGlobal::new();
         // using bank SPIM_B[1]
         udma_global.udma_clock_config(PeriphId::Spim1, true);
@@ -129,13 +132,15 @@ impl XousDisplay {
             cramium_hal::udma::Spim::new(
                 udma::SpimChannel::Channel1,
                 2_000_000,
-                100_000_000,
+                CONFIG_CLOCK_FREQUENCY,
                 udma::SpimClkPol::LeadingEdgeRise,
-                udma::SpimClkPha::CaptureOnTrailing,
+                udma::SpimClkPha::CaptureOnLeading,
                 udma::SpimCs::Cs0,
+                3,
+                2,
                 None,
                 // one extra line for handling the addressing setup
-                FB_SIZE + FB_WIDTH_WORDS * 4,
+                (FB_LINES + 1) * FB_WIDTH_WORDS * size_of::<u32>(),
                 0,
             )
             .expect("Couldn't allocate SPI channel for LCD")
@@ -165,12 +170,14 @@ impl XousDisplay {
             Some(iox::IoxEnable::Enable),
             Some(iox::IoxDriveStrength::Drive2mA),
         );
-        // SPIM_SCSN0_B[1] - as GPIO
+        // SPIM_SCSN0_B[1]
+        // chip select toggle by UDMA has ~6 cycles setup and 1 cycles hold time, which
+        // meets the requirements for the display.
         iox.setup_io_pin(
             SPI_PORT,
             SPI_CS_PIN,
             Some(iox::IoxDir::Output),
-            Some(iox::IoxFunction::Gpio),
+            Some(iox::IoxFunction::AF2),
             None,
             Some(iox::IoxEnable::Enable),
             Some(iox::IoxEnable::Enable),
@@ -197,7 +204,7 @@ impl XousDisplay {
     /// The addresses of these structures are passed as `u32` and unsafely cast back
     /// into pointers on the user's side. We do this because the panic handler is special:
     /// it grabs ahold of the low-level hardware, yanking control from the higher level
-    /// control functons, without having to map its own separate pages.
+    /// control functions, without having to map its own separate pages.
     ///
     /// Of course, "anyone" with a copy of this data can clobber existing graphics operations. Thus,
     /// any access to these registers have to be protected with a mutex of some form. In the case of
@@ -269,7 +276,7 @@ impl XousDisplay {
         // this code is safe because u32 is representable on the system
         let fb = unsafe { self.fb.as_slice_mut::<u32>() };
         // copy to the soft frame buffer
-        fb.copy_from_slice(bmp);
+        fb[..bmp.len()].copy_from_slice(bmp);
         // now copy for DMA
         for line_no in 0..FB_LINES {
             self.copy_line_to_dma(line_no);
@@ -288,51 +295,52 @@ impl XousDisplay {
     /// Copies a display line to the DMA buffer, while setting up all the bits for
     /// the DMA operation. Manages the DMA line pointer as well.
     fn copy_line_to_dma(&mut self, src_line: usize) {
-        // safety: this is safe because the underlying data types (u32) are representable on the system
-        unsafe {
-            let hwfb = self.spim.tx_buf_mut();
-            let fb = self.fb.as_slice::<u32>();
-            // set the mode and address
-            // the very first line is unused, except for the mode & address info
-            // this is done just to keep the math easy for computing strides & alignments
-            hwfb[(self.next_free_line + 1) * FB_WIDTH_WORDS - 1] =
-                (hwfb[(self.next_free_line + 1) * FB_WIDTH_WORDS - 1] & 0x0000_FFFFF)
-                    | ((src_line as u32) << 6)
-                    | 0b001;
-            // now copy the data
-            hwfb[(self.next_free_line + 1) * FB_WIDTH_WORDS..(self.next_free_line + 2) * FB_WIDTH_WORDS]
-                .copy_from_slice(&fb[src_line * FB_WIDTH_WORDS..(src_line + 1) * FB_WIDTH_WORDS]);
-            if self.devboot && src_line == 7 {
-                for w in hwfb
-                    [(self.next_free_line + 1) * FB_WIDTH_WORDS..(self.next_free_line + 2) * FB_WIDTH_WORDS]
-                    .iter_mut()
-                {
-                    *w = *w & 0xCCCC_CCCC; // hash over the status line
-                }
+        let hwfb = self.spim.tx_buf_mut();
+        // safety: this is safe because `u32` has no invalid values
+        let fb = unsafe { self.fb.as_slice::<u32>() };
+        // set the mode and address
+        // the very first line is unused, except for the mode & address info
+        // this is done just to keep the math easy for computing strides & alignments
+        hwfb[(self.next_free_line + 1) * FB_WIDTH_WORDS - 1] =
+            (hwfb[(self.next_free_line + 1) * FB_WIDTH_WORDS - 1] & 0x0000_FFFF)
+                | (((src_line as u32) << 6) | 0b001) << 16;
+        // now copy the data
+        hwfb[(self.next_free_line + 1) * FB_WIDTH_WORDS..(self.next_free_line + 2) * FB_WIDTH_WORDS]
+            .copy_from_slice(&fb[src_line * FB_WIDTH_WORDS..(src_line + 1) * FB_WIDTH_WORDS]);
+        if self.devboot && src_line == 7 {
+            for w in hwfb
+                [(self.next_free_line + 1) * FB_WIDTH_WORDS..(self.next_free_line + 2) * FB_WIDTH_WORDS]
+                .iter_mut()
+            {
+                *w = *w & 0xCCCC_CCCC; // hash over the status line
             }
+        }
 
+        if self.next_free_line < LINES as usize {
             self.next_free_line += 1;
+        } else {
+            log::warn!(
+                "Line overflow in DMA detected. Suspect missing `update_dirty` call. Further lines will overwrite the last line."
+            );
         }
     }
 
     fn update_dirty(&mut self) {
         if self.next_free_line != 0 {
-            // manual toggle of CS pins is necessary in part to meet setup/hold time of the LCD
-            self.iox.set_gpio_pin_value(SPI_PORT, SPI_CS_PIN, iox::IoxValue::High);
             // safety: this function is safe to call because:
             //   - `is_virtual` is `false` => data should be a physical buffer that is pre-populated with the
             //     transmit data this is done by `copy_line_to_dma()`
             //   - the `data` argument is a physical buffer slice, which is only used as a base/bounds
             //     argument
             unsafe {
-                self.spim.tx_data_async_from_parts::<u32>(
-                    FB_WIDTH_WORDS - 1,
-                    (self.next_free_line + 1) * FB_WIDTH_WORDS,
-                    false,
+                self.spim.tx_data_async_from_parts::<u16>(
+                    FB_WIDTH_WORDS * 2 - 1,
+                    // +1 for the trailing dummy bits
+                    self.next_free_line * FB_WIDTH_WORDS * 2 + 1,
+                    true,
                     false,
                 );
             }
-            self.iox.set_gpio_pin_value(SPI_PORT, SPI_CS_PIN, iox::IoxValue::Low);
             self.next_free_line = 0;
         }
     }
