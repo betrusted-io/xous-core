@@ -14,6 +14,8 @@ log-server = { package = "xous-api-log", version = "0.1.53" }
 log = "0.4.14"
 xous-pio = { path = "../../libs/xous-pio", optional = true }
 xous-pl230 = { path = "../../libs/xous-pl230", optional = true }
+# this is temporary, until we get GAM/modals pulled in
+graphics-server = { path = "../graphics-server" }
 
 [features]
 "cramium-fpga" = ["utralib/cramium-fpga", "xous-pl230/cramium-fpga"]
