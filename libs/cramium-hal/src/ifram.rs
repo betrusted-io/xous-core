@@ -1,4 +1,6 @@
-use xous::{send_message, MemoryRange, Message, Result};
+#[cfg(feature = "std")]
+use xous::Result;
+use xous::{send_message, MemoryRange, Message};
 
 pub enum IframBank {
     Bank0,
@@ -147,12 +149,12 @@ impl Drop for IframRange {
                 ),
             ) {
                 Ok(_) => (),
-                Err(e) => {
+                Err(_e) => {
                     // This probably never happens, but also probably doesn't need to be a hard-panic
                     // if it does happen because it simply degrades performance; it does not impact
                     // correctness.
                     #[cfg(feature = "std")]
-                    log::error!("Couldn't de-allocate IframRange: {:?}, IFRAM memory is leaking!", e)
+                    log::error!("Couldn't de-allocate IframRange: {:?}, IFRAM memory is leaking!", _e)
                 }
             }
             // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using
