@@ -206,8 +206,9 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
         if !is_panic.load(Ordering::Relaxed) {
             // non-panic graphics operations if we are in a panic situation
             let mut msg = xous::receive_message(sid).unwrap();
-            log::trace!("Message: {:?}", msg);
-            match FromPrimitive::from_usize(msg.body.id()) {
+            let op = FromPrimitive::from_usize(msg.body.id());
+            log::trace!("{:?}", op);
+            match op {
                 #[cfg(not(feature = "cramium-soc"))]
                 Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                     display.suspend();
