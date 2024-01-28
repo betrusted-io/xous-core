@@ -888,6 +888,7 @@ dependencies = [
 name = "cram-console"
 version = "0.1.0"
 dependencies = [
+ "graphics-server",
  "log",
  "utralib",
  "xous 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
