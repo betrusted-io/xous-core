@@ -25,10 +25,23 @@ rkyv = { version = "0.4.3", default-features = false, features = [
 
 utralib = { version = "0.1.24", optional = true, default-features = false }
 
+cram-hal-service = { path = "../cram-hal-service", optional = true, features = [
+] }
+cramium-hal = { path = "../../libs/cramium-hal", optional = true, features = [
+    "derive-rkyv",
+    "std",
+] }
+
 [target.'cfg(any(windows,unix))'.dependencies]
 minifb = "0.23.0"
 
 [features]
+cramium-soc = [
+    "utralib/cramium-soc",
+    "cram-hal-service",
+    "cramium-hal",
+    "cramium-hal/std",
+]
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
@@ -36,4 +49,4 @@ debugprint = []
 braille = []
 gfx-testing = []
 ditherpunk = []
-default = []
+default = ["cramium-soc"]

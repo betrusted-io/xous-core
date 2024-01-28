@@ -14,9 +14,6 @@ import (
 	"strings"
 )
 
-// Location of the font base in the loader
-const font_base = 0x2053_0000
-
 // Command line switch to confirm intent of writing output files
 const confirm = "--write"
 
@@ -46,12 +43,11 @@ func codegen() {
 	conf := NewConfig("config.json")
 	fsList := conf.Fonts()
 	var fdir []FontSummary
+	var small_fdir []FontSummary
 	var offsets []FontMap
+	var small_offsets []FontMap
 	var cur_address int = 0
-	offsets = append(offsets, lib.FontMap{
-		Name: "FONT_BASE",
-		Len:  fmt.Sprintf("%x", font_base),
-	})
+	var small_cur_address int = 0
 	for _, f := range fsList {
 		// Find all the glyphs and pack them into a list of blit pattern objects
 		pl := patternListFromSpriteSheet(f)
@@ -69,32 +65,53 @@ func codegen() {
 			Len:  gs.GlyphsLen,
 		}
 		fdir = append(fdir, summary)
+		if f.Small {
+			small_fdir = append(small_fdir, summary)
+		}
 
 		offset := lib.FontMap{
 			Name: strings.ToUpper(f.Name) + "_OFFSET",
 			Len:  fmt.Sprintf("%x", cur_address),
 		}
 		offsets = append(offsets, offset)
+		if f.Small {
+			offset := lib.FontMap{
+				Name: strings.ToUpper(f.Name) + "_OFFSET",
+				Len:  fmt.Sprintf("%x", small_cur_address),
+			}
+			small_offsets = append(small_offsets, offset)
+		}
 		length := lib.FontMap{
 			Name: strings.ToUpper(f.Name) + "_LEN",
 			Len:  fmt.Sprintf("%x", gs.GlyphsLen*4),
 		}
 		offsets = append(offsets, length)
+		if f.Small {
+			small_offsets = append(small_offsets, length)
+		}
 		cur_address = cur_address + gs.GlyphsLen*4
+		if f.Small {
+			small_cur_address = small_cur_address + gs.GlyphsLen*4
+		}
 	}
 	total := lib.FontMap{
 		Name: "FONT_TOTAL_LEN",
 		Len:  fmt.Sprintf("%x", cur_address),
 	}
 	offsets = append(offsets, total)
+	small_total := lib.FontMap{
+		Name: "FONT_TOTAL_LEN",
+		Len:  fmt.Sprintf("%x", small_cur_address),
+	}
+	small_offsets = append(small_offsets, small_total)
 	for _, fs := range fdir {
 		fmt.Println(fs)
 	}
-	loadermod := RenderLoadermodTemplate(fdir)
+	loadermod := RenderLoadermodTemplate(fdir, small_fdir)
 	fmt.Println("Writing to", conf.GetLoaderMod())
 	ioutil.WriteFile(conf.GetLoaderMod(), []byte(loadermod), 0644)
 
-	fontmap := RenderFontmapTemplate(offsets)
+	fontmap := RenderFontmapTemplate(offsets, small_offsets)
 	fmt.Println("Writing to", conf.GetFontMap())
 	ioutil.WriteFile(conf.GetFontMap(), []byte(fontmap), 0644)
 }

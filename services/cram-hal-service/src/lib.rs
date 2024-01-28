@@ -1,148 +1,64 @@
 pub mod api;
-use core::sync::atomic::{AtomicU32, Ordering};
+pub mod iox_lib;
 
 pub use api::*;
+use cramium_hal::udma::{EventChannel, PeriphEventType, PeriphId};
+pub use iox_lib::*;
 use num_traits::*;
-use xous::{send_message, MemoryAddress, MemoryRange, MemorySize, Message, Result};
 
-static REFCOUNT: AtomicU32 = AtomicU32::new(0);
-
+/// Do not change this constant, it is hard-coded into libraries in order to break
+/// circular dependencies on the IFRAM block.
 pub const SERVER_NAME_CRAM_HAL: &str = "_Cramium-SoC HAL_";
 
-pub enum IframBank {
-    Bank0,
-    Bank1,
+use core::sync::atomic::{AtomicU32, Ordering};
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
+
+pub struct UdmaGlobal {
+    conn: xous::CID,
 }
 
-/// `IframRange` is a range of memory that is suitable for use as a DMA target.
-pub struct IframRange {
-    pub(crate) phys_addr: MemoryAddress,
-    pub(crate) memory: MemoryRange,
-    pub(crate) size: MemorySize,
-    pub(crate) conn: xous::CID,
-}
-
-impl IframRange {
-    /// Request `length` bytes of memory in an optional Bank
-    ///
-    /// Safety: the caller must ensure that the `IframRange` object lives for the
-    /// entire lifetime of the *hardware* operation.
-    ///
-    /// Example of how things can go wrong: `IframRange` is used to allocate
-    /// a buffer for data that takes a long time to send via a slow UART.
-    /// The DMA is initiated, and the function exits, dropping `IframRange`.
-    /// At this point, the range could be re-allocated for another purpose.
-    ///
-    /// An `IframRange` would naturally live as long as a DMA request
-    /// if a sender synchronizes on the completion of the DMA request. Thus,
-    /// the `unsafe` bit happens in "fire-and-forget" contexts, and the
-    /// caller has to explicitly manage the lifetime of this object to
-    /// match the maximum duration of the call.
-    ///
-    /// A simple way to do this is to simply bind the structure to a long-lived
-    /// scope, but the trade-off is that IFRAM is very limited in capacity
-    /// and hanging on to chunks much longer than necessary can lead to memory
-    /// exhaustion.
-    pub unsafe fn request(length: usize, bank: Option<IframBank>) -> Option<Self> {
+impl UdmaGlobal {
+    pub fn new() -> Self {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_api_names::XousNames::new().unwrap();
         let conn =
             xns.request_connection(SERVER_NAME_CRAM_HAL).expect("Couldn't connect to Cramium HAL server");
-        let bank_code = match bank {
-            Some(IframBank::Bank0) => 0,
-            Some(IframBank::Bank1) => 1,
-            _ => 2,
-        };
-        match send_message(
-            conn,
-            Message::new_blocking_scalar(Opcode::MapIfram.to_usize().unwrap(), length, bank_code, 0, 0),
-        ) {
-            Ok(Result::Scalar5(maybe_size, maybe_phys_address, _, _, _)) => {
-                if maybe_size != 0 && maybe_phys_address != 0 {
-                    let mut page_aligned_size = maybe_size / 4096;
-                    if maybe_size % 4096 != 0 {
-                        page_aligned_size += 1;
-                    }
-                    let virtual_pages = xous::map_memory(
-                        core::num::NonZeroUsize::new(maybe_phys_address),
-                        None,
-                        page_aligned_size,
-                        xous::MemoryFlags::R | xous::MemoryFlags::W,
-                    )
-                    .unwrap();
-                    Some(IframRange {
-                        phys_addr: MemoryAddress::new(maybe_phys_address).unwrap(),
-                        memory: virtual_pages,
-                        size: MemorySize::new(maybe_size).unwrap(),
-                        conn,
-                    })
-                } else {
-                    if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
-                        // "almost" safe because we checked our reference count before disconnecting
-                        // there is a race condition possibly if someone allocates a connection between
-                        // the check above, and the disconnect below.
-                        unsafe { xous::disconnect(conn).unwrap() }
-                    };
-                    None
-                }
-            }
-            _ => {
-                if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
-                    // "almost" safe because we checked our reference count before disconnecting
-                    // there is a race condition possibly if someone allocates a connection between
-                    // the check above, and the disconnect below.
-                    unsafe { xous::disconnect(conn).unwrap() }
-                };
-                None
-            }
-        }
+        UdmaGlobal { conn }
     }
 
-    /// Returns the IframRange as a slice, useful for passing to the UDMA API calls.
-    /// This is `unsafe` because the slice is actually not accessible in virtual memory mode:
-    /// any attempt to reference the returned slice will result in a panic. The returned
-    /// slice is *only* useful as a range-checked base/bounds for UDMA API calls.
-    pub unsafe fn as_phys_slice(&self) -> &[u8] {
-        core::slice::from_raw_parts(self.phys_addr.get() as *const u8, self.size.get())
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        // safe because `u8` is always representable on our system
-        unsafe { self.memory.as_slice() }
-    }
-
-    pub fn as_slice_mut(&mut self) -> &mut [u8] {
-        // safe because `u8` is always representable on our system
-        unsafe { self.memory.as_slice_mut() }
-    }
-}
-
-impl Drop for IframRange {
-    fn drop(&mut self) {
-        match send_message(
+    pub fn udma_clock_config(&self, peripheral: PeriphId, enable: bool) {
+        xous::send_message(
             self.conn,
-            Message::new_blocking_scalar(
-                Opcode::UnmapIfram.to_usize().unwrap(),
-                self.size.get(),
-                self.phys_addr.get(),
+            xous::Message::new_blocking_scalar(
+                Opcode::ConfigureUdmaClock.to_usize().unwrap(),
+                peripheral as u32 as usize,
+                if enable { 1 } else { 0 },
                 0,
                 0,
             ),
-        ) {
-            Ok(_) => (),
-            Err(e) => {
-                // This probably never happens, but also probably doesn't need to be a hard-panic
-                // if it does happen because it simply degrades performance; it does not impact
-                // correctness.
-                log::error!("Couldn't de-allocate IframRange: {:?}, IFRAM memory is leaking!", e)
-            }
-        }
-        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the
-        // connection.
-        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
-            unsafe {
-                xous::disconnect(self.conn).unwrap();
-            }
-        }
+        )
+        .expect("Couldn't setup UDMA clock");
+    }
+
+    /// Safety: this event does no checking if an event has been previously mapped. It is up
+    /// to the caller to ensure that no events are being stomped on.
+    pub unsafe fn udma_event_map(
+        &self,
+        peripheral: PeriphId,
+        event_type: PeriphEventType,
+        to_channel: EventChannel,
+    ) {
+        let et_u32: u32 = event_type.into();
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::ConfigureUdmaEvent.to_usize().unwrap(),
+                peripheral as u32 as usize,
+                et_u32 as usize,
+                to_channel as u32 as usize,
+                0,
+            ),
+        )
+        .expect("Couldn't setup UDMA event mapping");
     }
 }

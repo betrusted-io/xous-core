@@ -50,25 +50,20 @@ impl Uart {
         if unsafe { crate::implementation::UART_DMA_TX_BUF_VIRT } as usize == 0 {
             return;
         }
-        // safety: safe to call as long as DEFAULT_UART_ADDR is initialized and we exclusively
+        // safety: safe to call as long as the raw parts are initialized and we exclusively
         // own it; and the UART has been initialized. For this peripheral, initialization
-        // is handled by the loader and tossed to us.
-        let mut uart = unsafe { udma::Uart::get_handle(DEFAULT_UART_ADDR as usize) };
+        // is handled by the loader and tossed to us, and exclusivity of access is something
+        // we just have to not bungle.
+        let mut uart = unsafe {
+            udma::Uart::get_handle(
+                crate::platform::debug::DEFAULT_UART_ADDR as usize,
+                crate::implementation::UART_DMA_TX_BUF_PHYS,
+                crate::implementation::UART_DMA_TX_BUF_VIRT as usize,
+            )
+        };
 
         // enqueue our character to send via DMA
-        let tx_buf_virt = unsafe {
-            // safety: it's safe only because we are manually tracking the allocations in IFRAM0.
-            core::slice::from_raw_parts_mut(crate::implementation::UART_DMA_TX_BUF_VIRT as *mut u8, 1)
-        };
-        let tx_buf_phys = unsafe {
-            // safety: it's safe only because we are manually tracking the allocations in IFRAM0.
-            core::slice::from_raw_parts_mut(crate::implementation::UART_DMA_TX_BUF_PHYS as *mut u8, 1)
-        };
-        tx_buf_virt[0] = c;
-        // note that write takes *physical* addresses
-        unsafe {
-            uart.write_phys(tx_buf_phys);
-        }
+        uart.write(&[c]);
     }
 }
 

@@ -1,5 +1,11 @@
 mod api;
 use api::*;
+#[cfg(feature = "pio")]
+mod pio;
+use cramium_hal::{
+    iox,
+    udma::{EventChannel, GlobalConfig, PeriphId},
+};
 use xous::sender::Sender;
 
 fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender) -> Option<usize> {
@@ -7,20 +13,25 @@ fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender
     if size % 4096 != 0 {
         size_pages += 1;
     }
+    log::trace!("try_alloc search for {} pages in alloc vector {:?}", size_pages, ifram_allocs);
     let mut free_start = None;
     let mut found_len = 0;
     for (index, page) in ifram_allocs.iter().enumerate() {
+        log::trace!("Checking index {}: {:?}", index, page);
         if page.is_some() {
+            log::trace!("Page was allocated, restarting search");
             free_start = None;
             found_len = 0;
             continue;
         } else {
             if free_start.is_some() {
+                log::trace!("Adding unallocated page at {} to length", index);
                 found_len += 1;
                 if found_len >= size_pages {
                     break;
                 }
             } else {
+                log::trace!("Starting allocation search at {}", index);
                 free_start = Some(index);
                 found_len = 1;
             }
@@ -68,6 +79,24 @@ fn main() {
     // `Sender` of it, so fill it with a value for `Some` that can't map to any PID.
     ifram_allocs[0][31] = Some(Sender::from_usize(usize::MAX));
 
+    let iox_page = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utralib::generated::HW_IOX_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't claim the IOX hardware page");
+    let mut iox = iox::Iox::new(iox_page.as_mut_ptr() as *mut u32);
+
+    let udma_global_csr = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utralib::generated::HW_UDMA_CTRL_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map UDMA global control");
+    let mut udma_global = GlobalConfig::new(udma_global_csr.as_mut_ptr() as *mut u32);
+
     let mut msg_opt = None;
     log::debug!("Starting main loop");
     loop {
@@ -83,7 +112,7 @@ fn main() {
 
                     let mut allocated_address = None;
                     for (bank, table) in ifram_allocs.iter_mut().enumerate() {
-                        if bank == requested_bank || bank > 1 {
+                        if bank == requested_bank || requested_bank > 1 {
                             match try_alloc(table, requested_size, msg.sender) {
                                 Some(offset) => {
                                     let base = if bank == 0 {
@@ -150,6 +179,68 @@ fn main() {
                     for record in ifram_allocs[bank][offset..offset + mapped_pages].iter_mut() {
                         *record = None;
                     }
+                }
+            }
+            Opcode::ConfigureIox => {
+                let buf =
+                    unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let config = buf.to_original::<IoxConfigMessage, _>().unwrap();
+                if let Some(f) = config.function {
+                    iox.set_alternate_function(config.port, config.pin, f);
+                }
+                if let Some(d) = config.direction {
+                    iox.set_gpio_dir(config.port, config.pin, d);
+                }
+                if let Some(t) = config.schmitt_trigger {
+                    iox.set_gpio_schmitt_trigger(config.port, config.pin, t);
+                }
+                if let Some(p) = config.pullup {
+                    iox.set_gpio_pullup(config.port, config.pin, p);
+                }
+                if let Some(s) = config.slow_slew {
+                    iox.set_slow_slew_rate(config.port, config.pin, s);
+                }
+                if let Some(s) = config.strength {
+                    iox.set_drive_strength(config.port, config.pin, s);
+                }
+            }
+            Opcode::SetGpioBank => {
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let port: cramium_hal::iox::IoxPort =
+                        num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    let value = scalar.arg2 as u16;
+                    let bitmask = scalar.arg3 as u16;
+                    iox.set_gpio_bank(port, value, bitmask);
+                }
+            }
+            Opcode::GetGpioBank => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let port: cramium_hal::iox::IoxPort =
+                        num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    scalar.arg1 = iox.get_gpio_bank(port) as usize;
+                }
+            }
+            Opcode::ConfigureUdmaClock => {
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    let enable = if scalar.arg2 != 0 { true } else { false };
+                    if enable {
+                        udma_global.clock_on(periph);
+                    } else {
+                        udma_global.clock_off(periph);
+                    }
+                }
+            }
+            Opcode::ConfigureUdmaEvent => {
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let periph: PeriphId = num_traits::FromPrimitive::from_usize(scalar.arg1).unwrap();
+                    let event_offset = scalar.arg2 as u32;
+                    let to_channel: EventChannel =
+                        num_traits::FromPrimitive::from_usize(scalar.arg3).unwrap();
+                    // note: no "air traffic control" is done to prevent mapping other
+                    // events. Maybe this should be done? but for now, let's leave it
+                    // as bare iron.
+                    udma_global.map_event_with_offset(periph, event_offset, to_channel);
                 }
             }
             Opcode::InvalidCall => {

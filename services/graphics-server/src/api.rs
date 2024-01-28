@@ -114,6 +114,7 @@ pub(crate) enum Opcode {
     TestPattern,
 
     /// SuspendResume callback
+    #[cfg(not(feature = "cramium-soc"))]
     SuspendResume,
 
     /// draw the boot logo (for continuity as apps initialize)

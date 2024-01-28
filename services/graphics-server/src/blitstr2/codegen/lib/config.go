@@ -32,6 +32,7 @@ type ConfigGlyphSet struct {
 	GlyphTrim string
 	RustOut   string
 	LoaderOut string
+	Small     bool
 }
 
 // Holds data parsed from a json index file
@@ -71,6 +72,7 @@ func (c Config) Fonts() []FontSpec {
 			gs.codepointMap(),
 			gs.RustOut, gs.GlyphTrim,
 			gs.LoaderOut,
+			gs.Small,
 		}
 		list = append(list, fs)
 	}

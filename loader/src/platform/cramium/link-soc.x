@@ -2,6 +2,7 @@ MEMORY
 {
   /* we are using an unsigned loader, so the offset is not 1k offset */
   FLASH : ORIGIN = 0x60000000, LENGTH = 4M
+  FONTS : ORIGIN = 0x60010000, LENGTH = 96k
   RAM : ORIGIN = 0x61000000, LENGTH = 2M
 }
 /*
@@ -89,10 +90,10 @@ SECTIONS
     _edata = .;
   } > REGION_DATA AT > REGION_RODATA
 
-  /* .fonts : ALIGN(65536)
+  .fonts : ALIGN(65536)
   {
       KEEP(*(.fontdata));
-  } > FONTS */
+  } > FONTS
 
   .bss (NOLOAD) :
   {

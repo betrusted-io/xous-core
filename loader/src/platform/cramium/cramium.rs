@@ -7,7 +7,7 @@ pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
 
 // location of kernel, as offset from the base of ReRAM. This needs to match up with what is in link.x.
-pub const KERNEL_OFFSET: usize = 0x9000;
+pub const KERNEL_OFFSET: usize = 0x28000;
 
 #[cfg(feature = "cramium-soc")]
 pub fn early_init() {
@@ -118,17 +118,16 @@ pub fn early_init() {
     let baudrate: u32 = 115200;
     let freq: u32 = 100_000_000;
 
+    // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
+    // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
+    // for things to work.
+    let uart_buf_addr = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
     let mut udma_uart = unsafe {
         // safety: this is safe to call, because we set up clock and events prior to calling new.
-        udma::Uart::new(utra::udma_uart_0::HW_UDMA_UART_0_BASE, baudrate, freq)
+        udma::Uart::get_handle(utra::udma_uart_0::HW_UDMA_UART_0_BASE, uart_buf_addr, uart_buf_addr)
     };
-    let tx_buf = unsafe {
-        // safety: it's safe only because we are manually tracking the allocations in IFRAM0. Yuck!
-        core::slice::from_raw_parts_mut(
-            (utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096) as *mut u8,
-            4096,
-        )
-    };
+    udma_uart.set_baud(baudrate, freq);
+
     // Board bring-up: send characters to confirm the UART is configured & ready to go for the logging crate!
     // The "boot gutter" also has a role to pause the system in "real mode" before VM is mapped in Xous
     // makes things a little bit cleaner for JTAG ops, it seems.
@@ -148,35 +147,25 @@ pub fn early_init() {
         xous_pl230::pl230_tests::units::basic_tests(&mut pl230);
         xous_pl230::pl230_tests::units::pio_test(&mut pl230);
 
-        // Confirm that Rx can work while also adding a boot wait point.
-        let rx_buf = unsafe {
-            // safety: it's safe only because we are manually tracking the allocations in IFRAM0. Yuck!
-            core::slice::from_raw_parts_mut(
-                (utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 8192) as *mut u8,
-                1,
-            )
-        };
         const BANNER: &'static str = "\n\rKeep pressing keys to continue boot...\r\n";
-        tx_buf[..BANNER.len()].copy_from_slice(BANNER.as_bytes());
-        udma_uart.write(&tx_buf[..BANNER.len()]);
+        udma_uart.write(BANNER.as_bytes());
+
+        // space for one character, plus appending CRLF for the return
+        let mut rx_buf = [0u8; 3];
 
         // receive characters -- print them back. just to prove that this works. no other reason than that.
         for _ in 0..4 {
-            udma_uart.read(rx_buf);
+            udma_uart.read(&mut rx_buf[..1]);
             const DBG_MSG: &'static str = "Got: ";
-            tx_buf[..DBG_MSG.len()].copy_from_slice(DBG_MSG.as_bytes());
-            udma_uart.write(&tx_buf[..DBG_MSG.len()]);
-            tx_buf[0] = rx_buf[0];
-            udma_uart.write(&tx_buf[..1]);
-            tx_buf[0] = '\n' as u32 as u8;
-            tx_buf[1] = '\r' as u32 as u8;
-            udma_uart.write(&tx_buf[..2]);
+            udma_uart.write(&DBG_MSG.as_bytes());
+            rx_buf[1] = '\n' as u32 as u8;
+            rx_buf[2] = '\r' as u32 as u8;
+            udma_uart.write(&rx_buf);
         }
     }
 
     const ONWARD: &'static str = "\n\rBooting!\n\r";
-    tx_buf[..ONWARD.len()].copy_from_slice(ONWARD.as_bytes());
-    udma_uart.write(&tx_buf[..ONWARD.len()]);
+    udma_uart.write(&ONWARD.as_bytes());
 }
 
 #[cfg(feature = "platform-tests")]

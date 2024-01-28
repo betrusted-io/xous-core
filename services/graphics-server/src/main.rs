@@ -87,6 +87,42 @@ fn map_fonts() -> MemoryRange {
     fontregion
 }
 
+#[cfg(any(feature = "cramium-soc"))]
+fn map_fonts() -> MemoryRange {
+    log::trace!("mapping fonts");
+    // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
+    // because the reserved area is much larger
+    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
+    log::trace!("requesting map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
+    let fontregion = xous::syscall::map_memory(
+        xous::MemoryAddress::new(fontmap::FONT_BASE),
+        None,
+        fontlen as usize,
+        xous::MemoryFlags::R,
+    )
+    .expect("couldn't map fonts");
+    log::info!(
+        "font base at virtual 0x{:08x}, len of 0x{:08x}",
+        fontregion.as_ptr() as usize,
+        usize::from(fontregion.len())
+    );
+
+    log::trace!(
+        "mapping tall font to 0x{:08x}",
+        fontregion.as_ptr() as usize + fontmap::TALL_OFFSET as usize
+    );
+    blitstr2::fonts::bold::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::emoji::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::EMOJI_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::mono::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::MONO_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::tall::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::TALL_OFFSET as usize) as u32, Ordering::SeqCst);
+
+    fontregion
+}
+
 #[cfg(not(target_os = "xous"))]
 fn map_fonts() -> MemoryRange {
     // does nothing
@@ -145,13 +181,17 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
     let sid = xns.register_name(api::SERVER_NAME_GFX, Some(2)).expect("can't register server");
     #[cfg(not(target_os = "xous"))]
     let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
+    #[cfg(feature = "cramium-soc")]
+    let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
 
     let screen_clip = Rectangle::new(Point::new(0, 0), display.screen_size());
 
     display.redraw();
 
     // register a suspend/resume listener
+    #[cfg(not(feature = "cramium-soc"))]
     let sr_cid = xous::connect(sid).expect("couldn't create suspend callback connection");
+    #[cfg(not(feature = "cramium-soc"))]
     let mut susres =
         susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, Opcode::SuspendResume as u32, sr_cid)
             .expect("couldn't create suspend/resume object");
@@ -166,8 +206,10 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
         if !is_panic.load(Ordering::Relaxed) {
             // non-panic graphics operations if we are in a panic situation
             let mut msg = xous::receive_message(sid).unwrap();
-            log::trace!("Message: {:?}", msg);
-            match FromPrimitive::from_usize(msg.body.id()) {
+            let op = FromPrimitive::from_usize(msg.body.id());
+            log::trace!("{:?}", op);
+            match op {
+                #[cfg(not(feature = "cramium-soc"))]
                 Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                     display.suspend();
                     susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");

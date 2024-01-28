@@ -11131,12 +11131,12 @@ pub const CODEPOINTS: [u32; 11081] = [
 0x0FFE5,
 ];
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature="precursor", feature="renode", feature="cramium-soc"))]
 pub(crate) static GLYPH_LOCATION: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 pub(crate) const GLYPH_LEN: usize = 88648;
 
 pub(crate) fn glyphs() -> &'static [u32] {
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature="precursor", feature="renode", feature="cramium-soc"))]
     unsafe {
         let data: *const u32 = core::mem::transmute(GLYPH_LOCATION.load(core::sync::atomic::Ordering::SeqCst));
         core::slice::from_raw_parts(data, GLYPH_LEN)
