@@ -112,7 +112,7 @@
       "glyphTrim": "proportional",
       "rustout": "../fonts/regular.rs",
       "loaderout": "../../../../../loader/src/fonts/regular.rs",
-      "small": false
+      "small": true
     },
     {
       "name": "Tall",
@@ -142,7 +142,7 @@
       "glyphTrim": "proportional",
       "rustout": "../fonts/small.rs",
       "loaderout": "../../../../../loader/src/fonts/small.rs",
-      "small": false
+      "small": true
     }
   ]
 }
