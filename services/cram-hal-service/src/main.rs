@@ -13,20 +13,25 @@ fn try_alloc(ifram_allocs: &mut Vec<Option<Sender>>, size: usize, sender: Sender
     if size % 4096 != 0 {
         size_pages += 1;
     }
+    log::trace!("try_alloc search for {} pages in alloc vector {:?}", size_pages, ifram_allocs);
     let mut free_start = None;
     let mut found_len = 0;
     for (index, page) in ifram_allocs.iter().enumerate() {
+        log::trace!("Checking index {}: {:?}", index, page);
         if page.is_some() {
+            log::trace!("Page was allocated, restarting search");
             free_start = None;
             found_len = 0;
             continue;
         } else {
             if free_start.is_some() {
+                log::trace!("Adding unallocated page at {} to length", index);
                 found_len += 1;
                 if found_len >= size_pages {
                     break;
                 }
             } else {
+                log::trace!("Starting allocation search at {}", index);
                 free_start = Some(index);
                 found_len = 1;
             }
@@ -107,7 +112,7 @@ fn main() {
 
                     let mut allocated_address = None;
                     for (bank, table) in ifram_allocs.iter_mut().enumerate() {
-                        if bank == requested_bank || bank > 1 {
+                        if bank == requested_bank || requested_bank > 1 {
                             match try_alloc(table, requested_size, msg.sender) {
                                 Some(offset) => {
                                     let base = if bank == 0 {
