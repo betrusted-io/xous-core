@@ -234,8 +234,14 @@ impl Typesetter {
         space.kern = 0;
         let mut ellipsis = style_glyph('…', base_style);
         ellipsis.kern = 0;
-        let mut large_space = style_glyph(' ', &GlyphStyle::Cjk);
-        large_space.wide = glyph_to_height_hint(GlyphStyle::Cjk) as u8;
+
+        #[cfg(feature = "cramium-soc")]
+        let base_style = GlyphStyle::Tall;
+        #[cfg(not(feature = "cramium-soc"))]
+        let base_style = GlyphStyle::Cjk;
+
+        let mut large_space = style_glyph(' ', &base_style);
+        large_space.wide = glyph_to_height_hint(base_style) as u8;
         Typesetter {
             charpos: 0,
             cursor: Cursor::new(0, 0, 0),
