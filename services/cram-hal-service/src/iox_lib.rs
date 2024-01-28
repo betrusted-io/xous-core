@@ -78,7 +78,7 @@ impl IoxHal {
                 0,
             ),
         ) {
-            Ok(xous::Result::Scalar5(value, _, _, _, _)) => {
+            Ok(xous::Result::Scalar5(_, value, _, _, _)) => {
                 if value & (1 << pin as usize) != 0 {
                     IoxValue::High
                 } else {
@@ -100,7 +100,7 @@ impl IoxHal {
                 0,
             ),
         ) {
-            Ok(xous::Result::Scalar5(value, _, _, _, _)) => value as u32,
+            Ok(xous::Result::Scalar5(_, value, _, _, _)) => value as u32,
             _ => panic!("Internal Error: Couldn't get GPIO pin value"),
         }
     }
