@@ -184,7 +184,6 @@ class Main(object):
                     print("%s\t%s\t%s" % (i18n, lang_path, status))
         return 0
 
-    # TODO: make a call to chatgipptiy to attempt a machine translation
     def stub_missing(self, i18n, is_manifest):
         i18n_path = os.path.join(self.args.xousdir, i18n)
         f = open(
@@ -205,7 +204,10 @@ class Main(object):
             for lang in self.languages:
                 lang_path = jqpath + "." + lang
                 if not lang in translation:
-                    stub = f"{translation['en']} *EN*"
+                    if lang == "en-tts":
+                        stub = translation['en']}
+                    else:
+                        stub = f"{translation['en']} *EN*"
                     print(f"In {i18n}, at {lang_path} with en stub: {stub}")
                     translation[lang] = stub
         # blow 'em away. That's what git is for after all.
