@@ -1193,7 +1193,7 @@ dependencies = [
  "rfc6979 0.2.0",
  "serde",
  "serde_json",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "subtle",
  "trng",
  "untrusted",
@@ -1581,7 +1581,7 @@ dependencies = [
  "ed25519",
  "rand 0.7.3",
  "serde",
- "sha2 0.9.8",
+ "sha2 0.9.9",
  "zeroize",
 ]
 
@@ -2078,7 +2078,7 @@ dependencies = [
  "num-traits",
  "qrcode",
  "rkyv",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "trng",
  "tts-frontend",
  "utralib",
@@ -3248,7 +3248,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "sec1",
- "sha2 0.9.8",
+ "sha2 0.9.9",
 ]
 
 [[package]]
@@ -3388,7 +3388,7 @@ dependencies = [
  "digest 0.10.7",
  "hmac 0.12.1",
  "password-hash",
- "sha2 0.10.7",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -3417,7 +3417,7 @@ dependencies = [
  "rand_core 0.5.1",
  "rkyv",
  "root-keys",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "spinor",
  "subtle",
  "trng",
@@ -4146,7 +4146,7 @@ dependencies = [
  "num-traits",
  "rand_core 0.5.1",
  "rkyv",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "spinor",
  "subtle",
  "trng",
@@ -4465,34 +4465,31 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.9.8"
+version = "0.9.9"
 dependencies = [
  "block-buffer 0.9.0",
+ "cfg-if",
+ "cpufeatures",
  "digest 0.9.0",
- "log",
- "num-derive",
- "num-traits",
  "opaque-debug",
- "rkyv",
- "trng",
- "utralib",
- "xous 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-api-log",
- "xous-api-names",
- "xous-api-susres",
- "xous-api-ticktimer",
- "xous-ipc 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "sha2"
-version = "0.10.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "479fb9d862239e610720565ca91403019f2f00410f1864c5aa7479b950a76ed8"
+version = "0.10.8"
 dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest 0.10.7",
+ "log",
+ "num-derive",
+ "num-traits",
+ "rkyv",
+ "xous 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-susres",
+ "xous-ipc 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4557,7 +4554,7 @@ dependencies = [
  "ring",
  "rkyv",
  "root-keys",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "spinor",
  "threadpool",
  "tls",
@@ -4726,7 +4723,7 @@ dependencies = [
  "pddb",
  "rkyv",
  "root-keys",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "trng",
  "usb-device-xous",
  "userprefs",
@@ -5018,7 +5015,7 @@ dependencies = [
  "rkyv",
  "rustls",
  "rustls-webpki 0.101.5",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "ureq",
  "webpki-roots 0.24.0",
  "x509-parser",
@@ -5059,7 +5056,7 @@ dependencies = [
  "pem",
  "pkcs8",
  "ring",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "svd2utra",
  "xmas-elf",
  "xous-semver",
@@ -5538,7 +5535,7 @@ dependencies = [
  "random-pick",
  "rkyv",
  "sha-1",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "sntpc",
  "subtle",
  "trng",
