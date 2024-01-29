@@ -223,8 +223,10 @@ fn wrapped_main() -> ! {
     // ------------------ lay out our public API infrastructure
     // ok, now that we have a GID, we can continue on with our merry way
     let status_gid: Gid = Gid::new(canvas_gid);
-    // allow only one connection, from keyboard to us.
-    let status_sid = xns.register_name(SERVER_NAME_STATUS, Some(1)).unwrap();
+    // Expected connections:
+    //   - from keyboard
+    //   - from USB HID
+    let status_sid = xns.register_name(SERVER_NAME_STATUS, Some(2)).unwrap();
     // create a connection for callback hooks
     let cb_cid = xous::connect(status_sid).unwrap();
     unsafe { CB_TO_MAIN_CONN = Some(cb_cid) };
@@ -395,6 +397,9 @@ fn wrapped_main() -> ! {
     kbd.lock()
         .unwrap()
         .register_observer(SERVER_NAME_STATUS, StatusOpcode::Keypress.to_u32().unwrap() as usize);
+    // register the USB U2F event listener - point to the same handler as key press since our intention is to
+    // just toggle the backlight
+    usb_hid.register_u2f_observer(SERVER_NAME_STATUS, StatusOpcode::Keypress.to_u32().unwrap() as usize);
 
     let autobacklight_enabled = Arc::new(Mutex::new(true));
     let (tx, rx): (Sender<BacklightThreadOps>, Receiver<BacklightThreadOps>) = unbounded();
