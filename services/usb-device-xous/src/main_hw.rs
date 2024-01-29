@@ -294,6 +294,10 @@ pub(crate) fn main_hw() -> ! {
     let mut was_suspend = true;
     let mut autotype_delay_ms = 30;
 
+    // event observer connection
+    let mut observer_conn: Option<xous::CID> = None;
+    let mut observer_op: Option<usize> = None;
+
     #[cfg(feature = "minimal")]
     std::thread::spawn(move || {
         // this keeps the watchdog alive in minimal mode; if there's no event, eventually the watchdog times
@@ -492,6 +496,15 @@ pub(crate) fn main_hw() -> ! {
                 xous::return_scalar(msg.sender, 1).expect("couldn't return compatibility status")
             }),
             Some(Opcode::U2fRxDeferred) => {
+                // notify the event listener, if any
+                if observer_conn.is_some() && observer_op.is_some() {
+                    xous::try_send_message(
+                        observer_conn.unwrap(),
+                        xous::Message::new_scalar(observer_op.unwrap(), 0, 0, 0, 0),
+                    )
+                    .ok();
+                }
+
                 if fido_listener_pid.is_none() {
                     fido_listener_pid = msg.sender.pid();
                 }
@@ -1535,6 +1548,23 @@ pub(crate) fn main_hw() -> ! {
                     }
                 } else {
                     serial_trng_interval.store(TRNG_REFILL_DELAY_MS, Ordering::SeqCst);
+                }
+            }
+            Some(Opcode::RegisterUsbObserver) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let ur = buffer.as_flat::<UsbListenerRegistration, _>().unwrap();
+                if observer_conn.is_none() {
+                    match xns.request_connection_blocking(ur.server_name.as_str()) {
+                        Ok(cid) => {
+                            observer_conn = Some(cid);
+                            observer_op = Some(ur.listener_op_id as usize);
+                        }
+                        Err(e) => {
+                            log::error!("couldn't connect to observer: {:?}", e);
+                            observer_conn = None;
+                            observer_op = None;
+                        }
+                    }
                 }
             }
             Some(Opcode::Quit) => {

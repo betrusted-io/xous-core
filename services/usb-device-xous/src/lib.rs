@@ -370,6 +370,16 @@ impl UsbHid {
         )
         .unwrap();
     }
+
+    pub fn register_u2f_observer(&self, server_name: &str, action_opcode: usize) {
+        let kr = UsbListenerRegistration {
+            server_name: xous_ipc::String::<64>::from_str(server_name),
+            listener_op_id: action_opcode,
+        };
+        let buf = Buffer::into_buf(kr).unwrap();
+        buf.lend(self.conn, Opcode::RegisterUsbObserver.to_u32().unwrap())
+            .expect("couldn't register listener");
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
