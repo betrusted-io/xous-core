@@ -29,7 +29,7 @@
         "menu_name": {
             "appmenu.chat-test": {
                 "en": "Chat UI test",
-                "en-tts": "Chat UI test *EN*",
+                "en-tts": "Chat UI test",
                 "fr": "Chat UI test *EN*",
                 "ja": "Chat UI test *EN*",
                 "zh": "Chat UI test *EN*"
@@ -54,7 +54,7 @@
         "menu_name": {
             "appmenu.mtxchat": {
                 "en": "[matrix]",
-                "en-tts": "[matrix] *EN*",
+                "en-tts": "[matrix]",
                 "fr": "[matrix] *EN*",
                 "ja": "[matrix] *EN*",
                 "zh": "[matrix] *EN*"
@@ -91,7 +91,7 @@
         "menu_name": {
             "appmenu.sigchat": {
                 "en": "Signal",
-                "en-tts": "Signal *EN*",
+                "en-tts": "Signal",
                 "fr": "Signal *EN*",
                 "ja": "Signal *EN*",
                 "zh": "Signal *EN*"
@@ -104,7 +104,7 @@
         "menu_name": {
             "appmenu.transientdisk": {
                 "en": "Transient USB disk",
-                "en-tts": "Transient USB disk *EN*",
+                "en-tts": "Transient USB disk",
                 "fr": "Transient USB disk *EN*",
                 "ja": "Transient USB disk *EN*",
                 "zh": "Transient USB disk *EN*"
