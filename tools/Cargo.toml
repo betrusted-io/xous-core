@@ -21,7 +21,7 @@ svd2utra = "0.1.22"
 xmas-elf = "0.9.0"
 xous-semver = "0.1.2"
 ed25519-dalek = "1.0.1"
-sha2 = "0.9.5"
+sha2 = { version = "0.10.8", features = ["precursor"] }
 pkcs8 = { version = "0.8.0", features = ["pem"] }
 base64 = "0.20.0"
 
