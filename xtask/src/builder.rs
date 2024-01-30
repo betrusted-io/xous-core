@@ -324,23 +324,32 @@ impl Builder {
         false
     }
 
-    /// Add just one service
+    /// Add just one service. Services can only be local.
     pub fn add_service<'a>(&'a mut self, service_spec: &str, xip: bool) -> &'a mut Builder {
+        let spec = CrateSpec::Local(service_spec.to_owned(), xip);
+        self.services.push(spec);
+        self
+    }
+
+    /// Add just one service. This one, if it contains the `@` specifier, will be interpreted as a crates.io
+    /// domiciled service
+    #[allow(dead_code)]
+    pub fn add_remote_service<'a>(&'a mut self, service_spec: &str, xip: bool) -> &'a mut Builder {
         let mut spec: CrateSpec = service_spec.into();
         spec.set_xip(xip);
         self.services.push(spec);
         self
     }
 
-    /// Add a list of services
+    /// Add a list of services. Services can only be local.
     pub fn add_services<'a>(&'a mut self, service_list: &Vec<String>) -> &'a mut Builder {
         for service in service_list {
-            self.services.push(service.as_str().into());
+            self.services.push(CrateSpec::Local(service.to_string(), false));
         }
         self
     }
 
-    /// Add just one app
+    /// Add just one app. Apps can be remote or downloaded externally.
     #[allow(dead_code)]
     pub fn add_app<'a>(&'a mut self, app_spec: &str, xip: bool) -> &'a mut Builder {
         let mut spec: CrateSpec = app_spec.into();
@@ -349,7 +358,7 @@ impl Builder {
         self
     }
 
-    /// Add a list of apps
+    /// Add a list of apps. Apps can be remote or downloaded externally.
     pub fn add_apps<'a>(&'a mut self, app_list: &Vec<String>) -> &'a mut Builder {
         for app in app_list {
             self.apps.push(app.as_str().into());
@@ -916,11 +925,15 @@ impl Builder {
 
         for i in init {
             args.push("--init");
+            // strip '@' version specifiers out of the package names, if they exist.
+            let i = if i.contains("@") { i.split("@").next().unwrap() } else { i };
             args.push(i);
         }
 
         for i in inif {
             args.push("--inif");
+            // strip '@' version specifiers out of the package names, if they exist.
+            let i = if i.contains("@") { i.split("@").next().unwrap() } else { i };
             args.push(i);
         }
 
