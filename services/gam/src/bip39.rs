@@ -31,7 +31,7 @@ pub(crate) fn bytes_to_bip39(bytes: &Vec<u8>) -> Result<Vec<String>, Bip39Error>
         16 | 20 | 24 | 28 | 32 => (),
         _ => return Err(Bip39Error::InvalidLength),
     }
-    let mut hasher = sha2::Sha256::new();
+    let mut hasher = sha2::Sha256Sw::new();
     hasher.update(bytes);
     let digest = hasher.finalize();
     let checksum_bits = bytes.len() / 4;
@@ -112,7 +112,7 @@ pub(crate) fn bip39_to_bytes(bip39: &Vec<String>) -> Result<Vec<u8>, Bip39Error>
         bucket as u8
     };
 
-    let mut hasher = sha2::Sha256::new();
+    let mut hasher = sha2::Sha256Sw::new();
     hasher.update(&data);
     let digest = hasher.finalize();
     let checksum_bits = data.len() / 4;
