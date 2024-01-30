@@ -1,8 +1,7 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use digest::Digest;
 use num_traits::*;
-use sha2::*;
+use sha2::Digest;
 use xous_ipc::String;
 
 use crate::{CommonEnv, ShellCmdApi};
@@ -25,7 +24,7 @@ const TEST_ITERS: usize = 1000;
 const TEST_MAX_LEN: usize = 8192;
 const TEST_FIXED_LEN: bool = true;
 /*
-benchamrk notes:
+benchmark notes:
 TEST_MAX_LEN = 16384 (fixed length) / TEST_ITERS = 1000: hw 25.986ms/hash, sw 155.11ms/hash
 TEST_MAX_LEN = 16384 (random length) / TEST_ITERS = 1000: hw 15.262ms/hash, sw 80.053ms/hash
 TEST_MAX_LEN = 256 (random length) / TEST_ITERS = 1000: hw 6.968ms/hash, sw 3.987ms/hash
@@ -72,9 +71,10 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 let mut hasher = match FromPrimitive::from_usize(msg.body.id()) {
                     Some(BenchOp::StartSha512Sw) => {
                         hw_mode = false;
-                        sha2::Sha512::new_with_strategy(FallbackStrategy::SoftwareOnly)
+                        // should be software-only, but we can't specify that with the lastest API...
+                        sha2::Sha512::new()
                     }
-                    _ => sha2::Sha512::new_with_strategy(FallbackStrategy::WaitForHardware),
+                    _ => sha2::Sha512::new(), // should be "wait for hardware"...
                 };
                 let mut accumulator = [0 as u8; 64];
                 for i in 0..TEST_ITERS {
@@ -190,7 +190,7 @@ impl<'a> ShellCmdApi<'a> for Sha {
                     ];
 
                     let mut pass: bool = true;
-                    let mut hasher = sha2::Sha512::new_with_strategy(FallbackStrategy::WaitForHardware);
+                    let mut hasher = sha2::Sha512::new();
 
                     hasher.update(K_DATA);
                     let digest = hasher.finalize();
@@ -217,8 +217,7 @@ impl<'a> ShellCmdApi<'a> for Sha {
                     ];
 
                     let mut pass: bool = true;
-                    let mut hasher =
-                        sha2::Sha512Trunc256::new_with_strategy(FallbackStrategy::WaitForHardware);
+                    let mut hasher = sha2::Sha512_256::new();
 
                     hasher.update(K_DATA);
                     let digest = hasher.finalize();

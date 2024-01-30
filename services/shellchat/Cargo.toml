@@ -121,6 +121,7 @@ spinortest = [
 ] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
 benchmarks = [
 ] # adds the benchmark routines. Left off normally to free up code and memory space.
+hashtest = []
 aestests = [] # adds AES tests
 tts = [] # adds text to speech plugin
 pddbtest = ["rand_chacha"]
@@ -146,4 +147,4 @@ extra-tests = []
 mass-storage = []
 locktests = [
 ] # for debugging some specific `std` tests cherry-picked out of the test suite
-default = [] # "debugprint"
+default = ["hashtest"] # "debugprint"
