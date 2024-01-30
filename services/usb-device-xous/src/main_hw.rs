@@ -27,8 +27,6 @@ use xous_usb_hid::device::DeviceClass;
 use xous_usb_hid::page::Keyboard;
 use xous_usb_hid::prelude::*;
 
-use crate::*;
-
 /// Time allowed for switchover between device core types. It's longer because some hosts
 /// get really confused when you have the same VID/PID show up with a different set of endpoints.
 const EXTENDED_CORE_RESET_MS: usize = 4000;
@@ -98,7 +96,7 @@ pub(crate) fn main_hw() -> ! {
         if soc_ver < minimum_ver {
             if soc_ver.min != 0 {
                 // don't show during hosted mode, which reports 0.0.0+0
-                tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
+                    tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
                 let modals = modals::Modals::new(&xns).unwrap();
                 modals.show_notification(
                     &format!("SoC version >= 0.9.8+20 required for USB HID. Detected rev: {}. Refusing to start USB driver.",
@@ -499,7 +497,10 @@ pub(crate) fn main_hw() -> ! {
                         };
                     }
                     Views::HIDv2 => {
-                        hidv2.force_reset()
+                        match hidv2.force_reset() {
+                            Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                            _ => (),
+                        };
                     }
                     Views::Serial => match serial_device.force_reset() {
                         Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
