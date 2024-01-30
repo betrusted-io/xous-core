@@ -2725,6 +2725,8 @@ impl<'a> RootKeys {
             pb
         });
 
+        // FIXME: this should turn back into a Scalar-from-hash routine when Ed25519 gets API-bumped to be
+        // compatible with the hasher
         let mut output = [0u8; 64];
         output.copy_from_slice(hasher.finalize().as_slice());
         let r = Scalar::from_bytes_mod_order_wide(&output);
@@ -2767,6 +2769,8 @@ impl<'a> RootKeys {
             pb.increment_work(1);
         }
 
+        // FIXME: this should turn back into a Scalar-from-hash routine when Ed25519 gets API-bumped to be
+        // compatible with the hasher
         let mut output = [0u8; 64];
         output.copy_from_slice(hasher.finalize().as_slice());
         let k = Scalar::from_bytes_mod_order_wide(&output);
