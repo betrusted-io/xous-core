@@ -53,12 +53,12 @@ impl From<GlyphStyle> for usize {
 /// so, this is one spot where we have to manually maintain a link.
 pub fn glyph_to_height_hint(g: GlyphStyle) -> usize {
     match g {
-        GlyphStyle::Small => 12, // crate::blitstr2::fonts::small::MAX_HEIGHT as usize,
-        GlyphStyle::Regular => 15, // crate::blitstr2::fonts::regular::MAX_HEIGHT as usize,
-        GlyphStyle::Bold => 15, // crate::blitstr2::fonts::regular::MAX_HEIGHT as usize,
-        GlyphStyle::Monospace => 15, // crate::blitstr2::fonts::mono::MAX_HEIGHT as usize,
-        GlyphStyle::Cjk => 16, // crate::blistr2::fonts::emoji::MAX_HEIGHT as usize,
-        GlyphStyle::Large => 24, // 2x of small
+        GlyphStyle::Small => 12,      // crate::blitstr2::fonts::small::MAX_HEIGHT as usize,
+        GlyphStyle::Regular => 15,    // crate::blitstr2::fonts::regular::MAX_HEIGHT as usize,
+        GlyphStyle::Bold => 15,       // crate::blitstr2::fonts::regular::MAX_HEIGHT as usize,
+        GlyphStyle::Monospace => 15,  // crate::blitstr2::fonts::mono::MAX_HEIGHT as usize,
+        GlyphStyle::Cjk => 16,        // crate::blistr2::fonts::emoji::MAX_HEIGHT as usize,
+        GlyphStyle::Large => 24,      // 2x of small
         GlyphStyle::ExtraLarge => 30, // 2x of regular
         GlyphStyle::Tall => 19,
     }

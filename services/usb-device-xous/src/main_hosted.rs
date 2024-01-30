@@ -1,15 +1,15 @@
-use crate::*;
-
-use num_traits::*;
-use xous_usb_hid::device::fido::RawFidoReport;
-use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
-use xous_semver::SemVer;
 use core::num::NonZeroU8;
 use core::sync::atomic::AtomicUsize;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
+use num_traits::*;
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use xous_ipc::Buffer;
-use std::collections::VecDeque;
+use xous_semver::SemVer;
+use xous_usb_hid::device::fido::RawFidoReport;
+
+use crate::*;
 
 pub(crate) fn main_hosted() -> ! {
     log_server::init_wait().unwrap();
@@ -22,10 +22,11 @@ pub(crate) fn main_hosted() -> ! {
     let llio = llio::Llio::new(&xns);
     let tt = ticktimer_server::Ticktimer::new().unwrap();
 
-    let minimum_ver = SemVer {maj: 0, min: 9, rev: 8, extra: 20, commit: None};
+    let minimum_ver = SemVer { maj: 0, min: 9, rev: 8, extra: 20, commit: None };
     let soc_ver = llio.soc_gitrev().unwrap();
     if soc_ver < minimum_ver {
-        if soc_ver.min != 0 { // don't show during hosted mode, which reports 0.0.0+0
+        if soc_ver.min != 0 {
+            // don't show during hosted mode, which reports 0.0.0+0
             tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
             let modals = modals::Modals::new(&xns).unwrap();
             modals.show_notification(
@@ -39,9 +40,11 @@ pub(crate) fn main_hosted() -> ! {
         loop {
             let msg = xous::receive_message(usbdev_sid).unwrap();
             match FromPrimitive::from_usize(msg.body.id()) {
-                Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
-                    xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
-                }),
+                Some(Opcode::DebugUsbOp) => {
+                    msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
+                        xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
+                    })
+                }
                 Some(Opcode::U2fRxDeferred) => {
                     // block any rx requests forever
                     fido_listener = Some(msg);
@@ -61,7 +64,8 @@ pub(crate) fn main_hosted() -> ! {
                         arg2: _,
                         arg3: _,
                         arg4: _,
-                    }) = msg.body {
+                    }) = msg.body
+                    {
                         log::warn!("Returning bogus result");
                         xous::return_scalar(msg.sender, 0).unwrap();
                     }
@@ -77,16 +81,13 @@ pub(crate) fn main_hosted() -> ! {
 
     // register a suspend/resume listener
     let cid = xous::connect(usbdev_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(
-        None,
-        &xns,
-        api::Opcode::SuspendResume as u32,
-        cid
-    ).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, cid)
+        .expect("couldn't create suspend/resume object");
 
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
     // under the theory that PIDs are unforgeable. TODO: check that PIDs are unforgeable.
-    // also if someone commandeers a process, all bets are off within that process (this is a general statement)
+    // also if someone commandeers a process, all bets are off within that process (this is a general
+    // statement)
     let mut fido_listener_pid: Option<NonZeroU8> = None;
     let mut fido_rx_queue = VecDeque::<[u8; 64]>::new();
 
@@ -97,18 +98,18 @@ pub(crate) fn main_hosted() -> ! {
         let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("{:?}", opcode);
         match opcode {
-            #[cfg(feature="mass-storage")]
+            #[cfg(feature = "mass-storage")]
             Some(Opcode::SetBlockDevice) => {
                 log::info!("ignoring SetBlockDevice in hosted mode");
-            },
-            #[cfg(feature="mass-storage")]
+            }
+            #[cfg(feature = "mass-storage")]
             Some(Opcode::SetBlockDeviceSID) => {
                 log::info!("ignoring SetBlockDeviceSID in hosted mode");
-            },
-            #[cfg(feature="mass-storage")]
+            }
+            #[cfg(feature = "mass-storage")]
             Some(Opcode::ResetBlockDevice) => {
                 log::info!("ignoring ResetBlockDevice in hosted mode");
-            },
+            }
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 usbmgmt.xous_suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
@@ -126,14 +127,23 @@ pub(crate) fn main_hosted() -> ! {
                     fido_listener_pid = msg.sender.pid();
                 }
                 if fido_listener.is_some() {
-                    log::error!("Double-listener request detected. There should only ever by one registered listener at a time.");
-                    log::error!("This will cause an upstream server to misbehave, but not panicing so the problem can be debugged.");
-                    // the receiver will get a response with the `code` field still in the `RxWait` state to indicate the problem
+                    log::error!(
+                        "Double-listener request detected. There should only ever by one registered listener at a time."
+                    );
+                    log::error!(
+                        "This will cause an upstream server to misbehave, but not panicing so the problem can be debugged."
+                    );
+                    // the receiver will get a response with the `code` field still in the `RxWait` state to
+                    // indicate the problem
                 }
                 if fido_listener_pid == msg.sender.pid() {
                     // preferentially pull from the rx queue if it has elements
                     if let Some(data) = fido_rx_queue.pop_front() {
-                        log::debug!("no deferral: ret queued data: {:?} queue len: {}", &data[..8], fido_rx_queue.len() + 1);
+                        log::debug!(
+                            "no deferral: ret queued data: {:?} queue len: {}",
+                            &data[..8],
+                            fido_rx_queue.len() + 1
+                        );
                         let mut response = unsafe {
                             Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                         };
@@ -147,8 +157,12 @@ pub(crate) fn main_hosted() -> ! {
                         fido_listener = Some(msg);
                     }
                 } else {
-                    log::warn!("U2F interface capability is locked on first use; additional servers are ignored: {:?}", msg.sender);
-                    let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    log::warn!(
+                        "U2F interface capability is locked on first use; additional servers are ignored: {:?}",
+                        msg.sender
+                    );
+                    let mut buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                     let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
                     u2f_ipc.code = U2fCode::Denied;
                     buffer.replace(u2f_ipc).unwrap();
@@ -169,7 +183,8 @@ pub(crate) fn main_hosted() -> ! {
                 if fido_listener_pid.is_none() {
                     fido_listener_pid = msg.sender.pid();
                 }
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
                 if fido_listener_pid == msg.sender.pid() {
                     let mut u2f_msg = RawFidoReport::default();
@@ -182,9 +197,7 @@ pub(crate) fn main_hosted() -> ! {
                 }
                 buffer.replace(u2f_ipc).unwrap();
             }
-            Some(Opcode::UsbIrqHandler) => {
-
-            },
+            Some(Opcode::UsbIrqHandler) => {}
             Some(Opcode::SwitchCores) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {
                 if core == 1 {
                     log::info!("Connecting USB device core; disconnecting debug USB core");
@@ -240,23 +253,17 @@ pub(crate) fn main_hosted() -> ! {
                         usbmgmt.disable_debug(false);
                     }
                 }
-                // at this point, *read back* the new state -- don't assume it "took". The readback is always based on
-                // a real hardware value and not the requested value. for now, always false.
-                let is_locked = if usbmgmt.get_disable_debug() {
-                    1
-                } else {
-                    0
-                };
+                // at this point, *read back* the new state -- don't assume it "took". The readback is always
+                // based on a real hardware value and not the requested value. for now, always
+                // false.
+                let is_locked = if usbmgmt.get_disable_debug() { 1 } else { 0 };
 
-                // this is a performance optimization. we could always redraw the status, but, instead we only redraw when
-                // the status has changed. However, there is an edge case: on a resume from suspend, the status needs a redraw,
-                // even if nothing has changed. Thus, we have this separate boolean we send back to force an update in the
+                // this is a performance optimization. we could always redraw the status, but, instead we only
+                // redraw when the status has changed. However, there is an edge case: on a
+                // resume from suspend, the status needs a redraw, even if nothing has
+                // changed. Thus, we have this separate boolean we send back to force an update in the
                 // case that we have just come out of a suspend.
-                let force_update = if lockstatus_force_update {
-                    1
-                } else {
-                    0
-                };
+                let force_update = if lockstatus_force_update { 1 } else { 0 };
                 xous::return_scalar2(msg.sender, is_locked, force_update).expect("couldn't return status");
                 lockstatus_force_update = false;
             }),
@@ -267,7 +274,8 @@ pub(crate) fn main_hosted() -> ! {
                 xous::return_scalar(msg.sender, 1).unwrap();
             }
             Some(Opcode::SendString) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let usb_send = buffer.to_original::<api::UsbString, _>().unwrap(); // suppress mut warning on hosted mode
                 buffer.replace(usb_send).unwrap();
             }
@@ -277,8 +285,8 @@ pub(crate) fn main_hosted() -> ! {
             Some(Opcode::Quit) => {
                 log::warn!("Quit received, goodbye world!");
                 break;
-            },
-            _  => log::warn!("Opcode not supported: {:?}", msg),
+            }
+            _ => log::warn!("Opcode not supported: {:?}", msg),
         }
     }
     // clean up our program

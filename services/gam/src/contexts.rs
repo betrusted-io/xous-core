@@ -1,18 +1,20 @@
-use crate::*;
+use std::collections::HashMap;
+
+use enum_dispatch::enum_dispatch;
+use gam::MAIN_MENU_NAME;
 use graphics_server::*;
 use ime_plugin_api::{ImeFrontEndApi, ImefDescriptor};
-use xous_ipc::{Buffer, String};
-use crate::api::Opcode;
-use gam::MAIN_MENU_NAME;
-
 use log::info;
-use std::collections::HashMap;
-use enum_dispatch::enum_dispatch;
+use xous_ipc::{Buffer, String};
+
+use crate::api::Opcode;
+use crate::*;
 
 // todo:
-// - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and reduce latency
+// - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and
+//   reduce latency
 
-pub (crate) const MISC_CONTEXT_DEFAULT_TRUST: u8 = 127;
+pub(crate) const MISC_CONTEXT_DEFAULT_TRUST: u8 = 127;
 
 #[derive(PartialEq, Eq)]
 pub(crate) enum LayoutBehavior {
@@ -24,16 +26,27 @@ pub(crate) enum LayoutBehavior {
 
 #[enum_dispatch]
 pub(crate) trait LayoutApi {
-    fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut HashMap<Gid, Canvas>) -> Result<(), xous::Error>;
+    fn clear(
+        &self,
+        gfx: &graphics_server::Gfx,
+        canvases: &mut HashMap<Gid, Canvas>,
+    ) -> Result<(), xous::Error>;
     // for Chats, this resizes the height of the input area; for menus, it resizes the overall height
-    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_cliprect: &Rectangle, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error>;
+    fn resize_height(
+        &mut self,
+        gfx: &graphics_server::Gfx,
+        new_height: i16,
+        status_cliprect: &Rectangle,
+        canvases: &mut HashMap<Gid, Canvas>,
+    ) -> Result<Point, xous::Error>;
     fn get_gids(&self) -> Vec<GidRecord>;
     //fn get_input_canvas(&self) -> Option<Gid> { None }
     //fn get_prediction_canvas(&self) -> Option<Gid> { None }
     //fn get_content_canvas(&self) -> Gid; // layouts always have a content canvas
-    // when the argument is true, the context is moved "onscreen" by moving the canvases into the screen clipping rectangle
-    // when false, the context is moved "offscreen" by moving the canvases outside the screen clipping rectangle
-    // note that this visibility state is an independent variable from the trust level draw-ability
+    // when the argument is true, the context is moved "onscreen" by moving the canvases into the screen
+    // clipping rectangle when false, the context is moved "offscreen" by moving the canvases outside the
+    // screen clipping rectangle note that this visibility state is an independent variable from the trust
+    // level draw-ability
     fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>);
     fn behavior(&self) -> LayoutBehavior;
 }
@@ -52,15 +65,19 @@ pub(crate) struct UxContext {
     /// the type of the Ux defined here
     pub layout: UxLayout,
     /// what prediction engine is being used
-    pub predictor: Option<String::<64>>,
-    /// a putative human-readable name given to the context. The name itself is stored in the TokenManager, not in this struct.
-    /// Passed to the TokenManager to compute a trust level; add the app's name to tokens.rs EXPECTED_BOOT_CONTEXTS if you want this to succeed.
-    pub app_token: [u32; 4], // shared with the app, can be used for other auths to other servers (e.g. audio codec)
-    /// a token associated with the UxContext, but private to the GAM (not shared with the app). (used by predictor to set API tokens)
+    pub predictor: Option<String<64>>,
+    /// a putative human-readable name given to the context. The name itself is stored in the TokenManager,
+    /// not in this struct. Passed to the TokenManager to compute a trust level; add the app's name to
+    /// tokens.rs EXPECTED_BOOT_CONTEXTS if you want this to succeed.
+    pub app_token: [u32; 4], /* shared with the app, can be used for other auths to other servers (e.g.
+                              * audio codec) */
+    /// a token associated with the UxContext, but private to the GAM (not shared with the app). (used by
+    /// predictor to set API tokens)
     pub gam_token: [u32; 4],
     /// set to true if keyboard vibrate is turned on
     pub vibe: bool,
-    /// API token for the predictor. Allows our prediction history to be shown only when our context is active.
+    /// API token for the predictor. Allows our prediction history to be shown only when our context is
+    /// active.
     pub pred_token: Option<[u32; 4]>,
 
     /// CID to send ContextEvents
@@ -89,10 +106,10 @@ pub(crate) const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 */
 pub(crate) struct ContextManager {
     tm: TokenManager,
-    contexts: HashMap::<[u32; 4], UxContext>,
+    contexts: HashMap<[u32; 4], UxContext>,
     focused_context: Option<[u32; 4]>, // app_token of the app that has I/O focus, if any
-    last_context: Option<[u32; 4]>, // previously focused context, if any
-    context_stack: Vec::<[u32; 4]>,
+    last_context: Option<[u32; 4]>,    // previously focused context, if any
+    context_stack: Vec<[u32; 4]>,
     imef: ime_plugin_api::ImeFrontEnd,
     imef_active: bool,
     kbd: keyboard::Keyboard,
@@ -127,39 +144,44 @@ impl ContextManager {
             allow_mainmenu: false,
         }
     }
-    pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
-        self.tm.claim_token(name)
-    }
-    #[cfg(feature="unsafe-app-loading")]
+
+    pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> { self.tm.claim_token(name) }
+
+    #[cfg(feature = "unsafe-app-loading")]
     pub(crate) fn register_name(&mut self, name: &str, auth_token: &[u32; 4]) {
-	    self.tm.register_name(name, auth_token);
+        self.tm.register_name(name, auth_token);
     }
-    pub(crate) fn allow_untrusted_code(&self) -> bool {
-        self.tm.allow_untrusted_code()
-    }
-    pub(crate) fn is_token_valid(&self, token: [u32; 4]) -> bool {
-        self.tm.is_token_valid(token)
-    }
-    pub(crate) fn register(&mut self,
-                gfx: &graphics_server::Gfx,
-                trng: &trng::Trng,
-                status_cliprect: &Rectangle,
-                canvases: &mut HashMap<Gid, Canvas>,
-                registration: UxRegistration)
-            -> Option<[u32; 4]> {
+
+    pub(crate) fn allow_untrusted_code(&self) -> bool { self.tm.allow_untrusted_code() }
+
+    pub(crate) fn is_token_valid(&self, token: [u32; 4]) -> bool { self.tm.is_token_valid(token) }
+
+    pub(crate) fn register(
+        &mut self,
+        gfx: &graphics_server::Gfx,
+        trng: &trng::Trng,
+        status_cliprect: &Rectangle,
+        canvases: &mut HashMap<Gid, Canvas>,
+        registration: UxRegistration,
+    ) -> Option<[u32; 4]> {
         let maybe_token = self.tm.claim_token(registration.app_name.as_str().unwrap());
         if let Some(token) = maybe_token {
             match registration.ux_type {
                 UxType::Chat => {
-                    let mut chatlayout = ChatLayout::init(&gfx, &trng,
-                        status_cliprect, canvases).expect("couldn't create chat layout");
+                    let mut chatlayout = ChatLayout::init(&gfx, &trng, status_cliprect, canvases)
+                        .expect("couldn't create chat layout");
                     // default to off-screen for all layouts
                     chatlayout.set_visibility_state(false, canvases);
-                        let ux_context = UxContext {
+                    let ux_context = UxContext {
                         layout: UxLayout::ChatLayout(chatlayout),
                         predictor: registration.predictor,
                         app_token: token,
-                        gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
+                        gam_token: [
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                        ],
                         listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
                         redraw_id: registration.redraw_id,
                         gotinput_id: registration.gotinput_id,
@@ -172,10 +194,10 @@ impl ContextManager {
                         pred_token: None,
                     };
                     self.contexts.insert(token, ux_context);
-                },
+                }
                 UxType::Menu => {
-                    let mut menulayout = MenuLayout::init(&gfx, &trng,
-                        canvases).expect("couldn't create menu layout");
+                    let mut menulayout =
+                        MenuLayout::init(&gfx, &trng, canvases).expect("couldn't create menu layout");
                     // default to off-screen for all layouts
                     menulayout.set_visibility_state(false, canvases);
                     log::debug!("debug menu layout: {:?}", menulayout);
@@ -183,7 +205,12 @@ impl ContextManager {
                         layout: UxLayout::MenuLayout(menulayout),
                         predictor: None,
                         app_token: token,
-                        gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
+                        gam_token: [
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                        ],
                         listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
                         redraw_id: registration.redraw_id,
                         gotinput_id: None,
@@ -197,14 +224,17 @@ impl ContextManager {
 
                     if registration.app_name.as_str().unwrap() == MAIN_MENU_NAME {
                         log::debug!("main menu found and registered!");
-                        assert!(self.main_menu_app_token == None, "attempt to double-register main menu handler, this should never happen.");
+                        assert!(
+                            self.main_menu_app_token == None,
+                            "attempt to double-register main menu handler, this should never happen."
+                        );
                         self.main_menu_app_token = Some(token);
                     }
                     self.contexts.insert(token, ux_context);
                 }
                 UxType::Modal => {
-                    let mut modallayout = ModalLayout::init(&gfx, &trng,
-                        canvases).expect("couldn't create modal layout");
+                    let mut modallayout =
+                        ModalLayout::init(&gfx, &trng, canvases).expect("couldn't create modal layout");
                     // default to off-screen for all layouts
                     modallayout.set_visibility_state(false, canvases);
                     log::debug!("debug modal layout: {:?}", modallayout);
@@ -212,7 +242,12 @@ impl ContextManager {
                         layout: UxLayout::ModalLayout(modallayout),
                         predictor: None,
                         app_token: token,
-                        gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
+                        gam_token: [
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                        ],
                         listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
                         redraw_id: registration.redraw_id,
                         gotinput_id: None,
@@ -226,22 +261,28 @@ impl ContextManager {
                     self.contexts.insert(token, ux_context);
                     // this check gives permissions to password boxes to render inverted text
                     if registration.app_name.as_str().unwrap() == gam::ROOTKEY_MODAL_NAME
-                    || registration.app_name.as_str().unwrap() == gam::PDDB_MODAL_NAME {
+                        || registration.app_name.as_str().unwrap() == gam::PDDB_MODAL_NAME
+                    {
                         if !self.set_context_trust_level(token, BOOT_CONTEXT_TRUSTLEVEL - 1, canvases) {
                             log::error!("Couldn't set password box trust levels to fully trusted");
                         }
                     }
                 }
                 UxType::Framebuffer => {
-                    let mut raw_fb = Framebuffer::init(&gfx, &trng,
-                        &status_cliprect, canvases).expect("couldn't create raw fb layout");
+                    let mut raw_fb = Framebuffer::init(&gfx, &trng, &status_cliprect, canvases)
+                        .expect("couldn't create raw fb layout");
                     raw_fb.set_visibility_state(false, canvases);
                     log::debug!("debug raw fb layout: {:?}", raw_fb);
                     let ux_context = UxContext {
                         layout: UxLayout::Framebuffer(raw_fb),
                         predictor: None,
                         app_token: token,
-                        gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
+                        gam_token: [
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                            trng.get_u32().unwrap(),
+                        ],
                         listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
                         redraw_id: registration.redraw_id,
                         gotinput_id: None,
@@ -264,8 +305,15 @@ impl ContextManager {
 
         maybe_token
     }
-    /// private function to set a trust level. should only be done on contexts that we ... trust. returns true if the token is found, false if not.
-    fn set_context_trust_level(&self, token: [u32; 4], level: u8, canvases: &mut HashMap<Gid, Canvas>) -> bool {
+
+    /// private function to set a trust level. should only be done on contexts that we ... trust. returns true
+    /// if the token is found, false if not.
+    fn set_context_trust_level(
+        &self,
+        token: [u32; 4],
+        level: u8,
+        canvases: &mut HashMap<Gid, Canvas>,
+    ) -> bool {
         if let Some(context) = self.contexts.get(&token) {
             let mut success = true;
             for gr in context.layout.get_gids().iter() {
@@ -280,6 +328,7 @@ impl ContextManager {
             false
         }
     }
+
     pub(crate) fn get_content_canvas(&self, token: [u32; 4]) -> Option<Gid> {
         if let Some(context) = self.contexts.get(&token) {
             let gids = context.layout.get_gids();
@@ -292,43 +341,56 @@ impl ContextManager {
             None
         }
     }
-    pub(crate) fn set_canvas_height(&mut self,
+
+    pub(crate) fn set_canvas_height(
+        &mut self,
         gfx: &graphics_server::Gfx,
         gam_token: [u32; 4],
         new_height: i16,
         status_cliprect: &Rectangle,
-        canvases: &mut HashMap<Gid, Canvas>) -> Option<Point> {
-
+        canvases: &mut HashMap<Gid, Canvas>,
+    ) -> Option<Point> {
         for context in self.contexts.values_mut() {
             if context.gam_token == gam_token {
-                let result = context.layout.resize_height(gfx, new_height, status_cliprect, canvases).expect("couldn't adjust height of active Ux context");
-                return Some(result)
+                let result = context
+                    .layout
+                    .resize_height(gfx, new_height, status_cliprect, canvases)
+                    .expect("couldn't adjust height of active Ux context");
+                return Some(result);
             }
         }
         None
     }
-    // hmmm...feels wrong to have basically a dupe of the above. Maybe this abstraction needs to be cleaned up a bit.
-    pub(crate) fn set_canvas_height_app_token(&mut self,
+
+    // hmmm...feels wrong to have basically a dupe of the above. Maybe this abstraction needs to be cleaned up
+    // a bit.
+    pub(crate) fn set_canvas_height_app_token(
+        &mut self,
         gfx: &graphics_server::Gfx,
         app_token: [u32; 4],
         new_height: i16,
         status_cliprect: &Rectangle,
-        canvases: &mut HashMap<Gid, Canvas>) -> Option<Point> {
-
+        canvases: &mut HashMap<Gid, Canvas>,
+    ) -> Option<Point> {
         if let Some(context) = self.contexts.get_mut(&app_token) {
-            let result = context.layout.resize_height(gfx, new_height, status_cliprect, canvases).expect("couldn't adjust height of active Ux context");
+            let result = context
+                .layout
+                .resize_height(gfx, new_height, status_cliprect, canvases)
+                .expect("couldn't adjust height of active Ux context");
             Some(result)
         } else {
             None
         }
     }
+
     fn get_context_by_token_mut(&'_ mut self, token: [u32; 4]) -> Option<&'_ mut UxContext> {
         self.contexts.get_mut(&token)
     }
-    fn get_context_by_token(&'_ self, token: [u32; 4]) -> Option<&'_ UxContext> {
-        self.contexts.get(&token)
-    }
-    pub(crate) fn activate(&mut self,
+
+    fn get_context_by_token(&'_ self, token: [u32; 4]) -> Option<&'_ UxContext> { self.contexts.get(&token) }
+
+    pub(crate) fn activate(
+        &mut self,
         gfx: &graphics_server::Gfx,
         canvases: &mut HashMap<Gid, Canvas>,
         token: [u32; 4],
@@ -357,32 +419,40 @@ impl ContextManager {
             if let Some(context) = maybe_new_focus {
                 if let Some(leaving_focused_context) = maybe_leaving_focused_context {
                     if token != leaving_focused_context.app_token {
-                        if  // alert covering an alert
-                        (context.layout.behavior()                 == LayoutBehavior::Alert) &&
-                        (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
+                        if
+                        // alert covering an alert
+                        (context.layout.behavior() == LayoutBehavior::Alert)
+                            && (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert)
+                        {
                             // just disallow alerts covering alerts for now...it's first come, first-serve.
                             log::warn!("Disallowing raise of alert over alert");
-                            return Err(xous::Error::ShareViolation)
+                            return Err(xous::Error::ShareViolation);
                             // context.layout.set_visibility_state(true, canvases);
                             // leaving_visibility = false;
-                        } else if // app covering an app
-                        (context.layout.behavior()                 == LayoutBehavior::App) &&
-                        (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
+                        } else if
+                        // app covering an app
+                        (context.layout.behavior() == LayoutBehavior::App)
+                            && (leaving_focused_context.layout.behavior() == LayoutBehavior::App)
+                        {
                             log::debug!("resolved: app covering app");
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = false;
                             self.context_stack.pop();
                             self.context_stack.push(token);
-                        } else if // alert covering an app
-                        (context.layout.behavior()                 == LayoutBehavior::Alert) &&
-                        (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
+                        } else if
+                        // alert covering an app
+                        (context.layout.behavior() == LayoutBehavior::Alert)
+                            && (leaving_focused_context.layout.behavior() == LayoutBehavior::App)
+                        {
                             log::debug!("resolved: alert covering app");
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = true;
                             self.context_stack.push(token);
-                        } else if // app covering an alert
-                        (context.layout.behavior()                 == LayoutBehavior::App) &&
-                        (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
+                        } else if
+                        // app covering an alert
+                        (context.layout.behavior() == LayoutBehavior::App)
+                            && (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert)
+                        {
                             log::debug!("resolved: app covering alert");
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = false;
@@ -406,7 +476,8 @@ impl ContextManager {
         }
         log::trace!("hiding old context");
         {
-            // let all the previous operations go out of scope, so we can "check out" the old copy and modify it
+            // let all the previous operations go out of scope, so we can "check out" the old copy and modify
+            // it
             if self.focused_context.is_some() {
                 // immutable borrow here can't be combined with mutable borrow below
                 if let Some(old_context) = self.get_context_by_token_mut(self.focused_context.unwrap()) {
@@ -422,27 +493,37 @@ impl ContextManager {
                 if context.predictor.is_some() {
                     // only hook up the IMEF if a predictor is selected for this context
                     let descriptor = ImefDescriptor {
-                        input_canvas:
-                            if let Some(gr) =
-                            context.layout.get_gids().iter().filter(|&gr| gr.canvas_type == CanvasType::ChatInput)
-                            .next() {
-                                Some(gr.gid)
-                            } else {
-                                None
-                            },
-                        prediction_canvas:
-                            if let Some(gr) =
-                            context.layout.get_gids().iter().filter(|&gr| gr.canvas_type == CanvasType::ChatPreditive)
-                            .next() {
-                                Some(gr.gid)
-                            } else {
-                                None
-                            },
+                        input_canvas: if let Some(gr) = context
+                            .layout
+                            .get_gids()
+                            .iter()
+                            .filter(|&gr| gr.canvas_type == CanvasType::ChatInput)
+                            .next()
+                        {
+                            Some(gr.gid)
+                        } else {
+                            None
+                        },
+                        prediction_canvas: if let Some(gr) = context
+                            .layout
+                            .get_gids()
+                            .iter()
+                            .filter(|&gr| gr.canvas_type == CanvasType::ChatPreditive)
+                            .next()
+                        {
+                            Some(gr.gid)
+                        } else {
+                            None
+                        },
                         predictor: context.predictor,
                         token: context.gam_token,
                         predictor_token: context.pred_token,
                     };
-                    log::debug!("context gam token: {:x?}, pred token: {:x?}", context.gam_token, context.pred_token);
+                    log::debug!(
+                        "context gam token: {:x?}, pred token: {:x?}",
+                        context.gam_token,
+                        context.pred_token
+                    );
                     self.imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
                     self.imef_active = true;
                 } else {
@@ -477,7 +558,8 @@ impl ContextManager {
                 self.focused_context = Some(last_token);
             }
             log::trace!("context stack: {:x?}", self.context_stack);
-            if self.context_stack.len() > 1 { // we've now got a stack of contexts, start stashing copies
+            if self.context_stack.len() > 1 {
+                // we've now got a stack of contexts, start stashing copies
                 log::trace!("stashing");
                 gfx.stash(true);
             }
@@ -501,6 +583,7 @@ impl ContextManager {
         // log::set_max_level(log::LevelFilter::Info);
         Ok(())
     }
+
     pub(crate) fn set_pred_api_token(&mut self, at: ApiToken) {
         for context in self.contexts.values_mut() {
             if context.gam_token == at.gam_token {
@@ -510,7 +593,9 @@ impl ContextManager {
             }
         }
     }
-    pub(crate) fn revert_focus(&mut self,
+
+    pub(crate) fn revert_focus(
+        &mut self,
         gfx: &graphics_server::Gfx,
         canvases: &mut HashMap<Gid, Canvas>,
     ) -> Result<(), xous::Error> {
@@ -520,45 +605,83 @@ impl ContextManager {
             Err(xous::Error::UseBeforeInit)
         }
     }
+
     pub(crate) fn notify_app_switch(&self, new_app_token: [u32; 4]) -> Result<(), xous::Error> {
         log::debug!("Foregrounding {:?} / {:x?}", self.tm.lookup_name(&new_app_token), new_app_token);
         if let Some(current_focus) = self.focused_context {
             if let Some(old_context) = self.get_context_by_token(current_focus) {
                 if let Some(focuschange_id) = old_context.focuschange_id {
-                    log::debug!("Backgrounding  {:?} (listener {}, id {} / {:x?})", self.tm.lookup_name(&current_focus), old_context.listener, old_context.redraw_id, current_focus);
-                    xous::send_message(old_context.listener,
-                        xous::Message::new_scalar(focuschange_id as usize, gam::FocusState::Background as usize, 0, 0, 0)
-                    ).map(|_| ())?;
+                    log::debug!(
+                        "Backgrounding  {:?} (listener {}, id {} / {:x?})",
+                        self.tm.lookup_name(&current_focus),
+                        old_context.listener,
+                        old_context.redraw_id,
+                        current_focus
+                    );
+                    xous::send_message(
+                        old_context.listener,
+                        xous::Message::new_scalar(
+                            focuschange_id as usize,
+                            gam::FocusState::Background as usize,
+                            0,
+                            0,
+                            0,
+                        ),
+                    )
+                    .map(|_| ())?;
                 } else {
-                    // don't return an error -- this just means that the listener doesn't recognize focus changes. This should not
-                    // deprive the later app of a notification that it is coming into focus!
+                    // don't return an error -- this just means that the listener doesn't recognize focus
+                    // changes. This should not deprive the later app of a notification
+                    // that it is coming into focus!
                 }
             }
         }
 
         if let Some(new_context) = self.get_context_by_token(new_app_token) {
             if let Some(focuschange_id) = new_context.focuschange_id {
-                log::trace!("Foreground focus change to {:?} ({}, id {} / {:x?})", self.tm.lookup_name(&new_app_token), new_context.listener, new_context.redraw_id, new_app_token);
-                xous::send_message(new_context.listener,
-                    xous::Message::new_scalar(focuschange_id as usize, gam::FocusState::Foreground as usize, 0, 0, 0)
-                ).map(|_| ())?;
+                log::trace!(
+                    "Foreground focus change to {:?} ({}, id {} / {:x?})",
+                    self.tm.lookup_name(&new_app_token),
+                    new_context.listener,
+                    new_context.redraw_id,
+                    new_app_token
+                );
+                xous::send_message(
+                    new_context.listener,
+                    xous::Message::new_scalar(
+                        focuschange_id as usize,
+                        gam::FocusState::Foreground as usize,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .map(|_| ())?;
             } else {
                 return Err(xous::Error::ServerNotFound);
             }
         }
         Ok(())
     }
-    pub(crate) fn redraw(&self) -> Result<(), xous::Error> { // redraws the currently focused context
+
+    pub(crate) fn redraw(&self) -> Result<(), xous::Error> {
+        // redraws the currently focused context
         if let Some(token) = self.focused_app() {
             if let Some(context) = self.contexts.get(&token) {
-                log::debug!("redraw msg to {:?} ({}, id {})", self.tm.lookup_name(&token), context.listener, context.redraw_id);
-                let ret = match xous::try_send_message(context.listener,
-                    xous::Message::new_scalar(context.redraw_id as usize, 0, 0, 0, 0)
+                log::debug!(
+                    "redraw msg to {:?} ({}, id {})",
+                    self.tm.lookup_name(&token),
+                    context.listener,
+                    context.redraw_id
+                );
+                let ret = match xous::try_send_message(
+                    context.listener,
+                    xous::Message::new_scalar(context.redraw_id as usize, 0, 0, 0, 0),
                 ) {
                     Err(xous::Error::ServerQueueFull) => {
                         log::warn!("server queue full, redraw skipped");
                         Ok(())
-                    },
+                    }
                     Ok(_r) => Ok(()),
                     Err(e) => Err(e),
                 };
@@ -566,13 +689,14 @@ impl ContextManager {
                 // in particular, this helps sequence the case where one modal is erased, and the next one is
                 // raised, in quick succession.
                 self.tt.sleep_ms(20).unwrap();
-                return ret
+                return ret;
             }
         } else {
-            return Err(xous::Error::UseBeforeInit)
+            return Err(xous::Error::UseBeforeInit);
         }
         Err(xous::Error::ServerNotFound)
     }
+
     pub(crate) fn redraw_imef(&self) -> Result<(), xous::Error> {
         if let Some(context) = self.focused_context() {
             if context.predictor.is_some() {
@@ -582,34 +706,35 @@ impl ContextManager {
         }
         Ok(())
     }
-    pub(crate) fn find_app_token_by_name(&self, name: &str) -> Option<[u32; 4]> {
-        self.tm.find_token(name)
-    }
-    pub(crate) fn focused_app(&self) -> Option<[u32; 4]> {
-        self.focused_context
-    }
-    pub(crate) fn forward_input(&self, input: String::<4000>) -> Result<(), xous::Error> {
+
+    pub(crate) fn find_app_token_by_name(&self, name: &str) -> Option<[u32; 4]> { self.tm.find_token(name) }
+
+    pub(crate) fn focused_app(&self) -> Option<[u32; 4]> { self.focused_context }
+
+    pub(crate) fn forward_input(&self, input: String<4000>) -> Result<(), xous::Error> {
         if let Some(token) = self.focused_app() {
             if let Some(context) = self.contexts.get(&token) {
                 if let Some(input_op) = context.gotinput_id {
                     let buf = Buffer::into_buf(input).or(Err(xous::Error::InternalError)).unwrap();
-                    return buf.send(context.listener, input_op).map(|_| ())
+                    return buf.send(context.listener, input_op).map(|_| ());
                 }
             }
         } else {
-            return Err(xous::Error::UseBeforeInit)
+            return Err(xous::Error::UseBeforeInit);
         }
         Err(xous::Error::ServerNotFound)
     }
-    pub(crate) fn allow_mainmenu(&mut self) {
-        self.allow_mainmenu = true;
-    }
-    pub(crate) fn key_event(&mut self, keys: [char; 4],
+
+    pub(crate) fn allow_mainmenu(&mut self) { self.allow_mainmenu = true; }
+
+    pub(crate) fn key_event(
+        &mut self,
+        keys: [char; 4],
         gfx: &graphics_server::Gfx,
         canvases: &mut HashMap<Gid, Canvas>,
     ) {
-        // only pop up the menu if the primary key hit is the menu key (search just the first entry of keys); reject multi-key hits
-        // only pop up the menu if it isn't already popped up
+        // only pop up the menu if the primary key hit is the menu key (search just the first entry of keys);
+        // reject multi-key hits only pop up the menu if it isn't already popped up
         if keys[0] == '∴' {
             if let Some(context) = self.get_context_by_token(self.focused_context.unwrap()) {
                 if context.layout.behavior() == LayoutBehavior::App {
@@ -636,54 +761,56 @@ impl ContextManager {
             // use the IMEF
             self.imef.send_keyevent(keys).expect("couldn't send keys to the IMEF");
         }
-        
+
         // forward the keyboard hits to the current context
         log::debug!("forwarding raw key event");
         if let Some(context) = self.focused_context() {
             if let Some(rawkeys_id) = context.rawkeys_id {
-                xous::send_message(context.listener,
-                    xous::Message::new_scalar(rawkeys_id as usize,
-                    keys[0] as u32 as usize,
-                    keys[1] as u32 as usize,
-                    keys[2] as u32 as usize,
-                    keys[3] as u32 as usize,
-                )).expect("couldn't forward raw keys onto context listener");
+                xous::send_message(
+                    context.listener,
+                    xous::Message::new_scalar(
+                        rawkeys_id as usize,
+                        keys[0] as u32 as usize,
+                        keys[1] as u32 as usize,
+                        keys[2] as u32 as usize,
+                        keys[3] as u32 as usize,
+                    ),
+                )
+                .expect("couldn't forward raw keys onto context listener");
             }
-        }        
+        }
     }
 
     fn focused_context(&'_ self) -> Option<&'_ UxContext> {
-        if let Some(focus) = self.focused_app() {
-            self.get_context_by_token(focus)
-        } else {
-            None
-        }
+        if let Some(focus) = self.focused_app() { self.get_context_by_token(focus) } else { None }
     }
+
     fn focused_context_mut(&'_ mut self) -> Option<&'_ mut UxContext> {
-        if let Some(focus) = self.focused_app() {
-            self.get_context_by_token_mut(focus)
-        } else {
-            None
-        }
+        if let Some(focus) = self.focused_app() { self.get_context_by_token_mut(focus) } else { None }
     }
+
     pub(crate) fn set_audio_op(&mut self, audio_op: SetAudioOpcode) {
         if let Some(context) = self.focused_context_mut() {
             (*context).audioframe_id = Some(audio_op.opcode);
         }
     }
+
     pub(crate) fn vibe(&mut self, set_vibe: bool) {
         self.kbd.set_vibe(set_vibe).expect("couldn't set vibe on keyboard");
         if let Some(context) = self.focused_context_mut() {
             (*context).vibe = set_vibe;
         }
     }
+
     pub(crate) fn toggle_menu_mode(&mut self, token: [u32; 4]) {
         if let Some(context) = self.contexts.get_mut(&token) {
             context.imef_menu_mode = !context.imef_menu_mode;
             log::debug!("menu mode for token {:?} is now {}", token, context.imef_menu_mode);
         }
     }
-    pub(crate) fn raise_menu(&mut self,
+
+    pub(crate) fn raise_menu(
+        &mut self,
         name: &str,
         gfx: &graphics_server::Gfx,
         canvases: &mut HashMap<Gid, Canvas>,
@@ -697,9 +824,9 @@ impl ContextManager {
                 // but alerts can be raised without authentication
                 if context.layout.behavior() == LayoutBehavior::Alert {
                     log::debug!("activating context");
-                    return self.activate(gfx, canvases, token, false)
+                    return self.activate(gfx, canvases, token, false);
                 } else {
-                    return Err(xous::Error::AccessDenied)
+                    return Err(xous::Error::AccessDenied);
                 }
             }
         }

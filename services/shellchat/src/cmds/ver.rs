@@ -1,15 +1,20 @@
-use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
 
-#[derive(Debug)]
-pub struct Ver {
-}
+use crate::{CommonEnv, ShellCmdApi};
 
+#[derive(Debug)]
+pub struct Ver {}
 
 impl<'a> ShellCmdApi<'a> for Ver {
-    cmd_api!(ver); // inserts boilerplate for command API
+    cmd_api!(ver);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    // inserts boilerplate for command API
+
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
         let helpstring = "ver [ec] [wf200] [soc] [dna] [xous] [ecreset]";
@@ -23,7 +28,15 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     let dirtystr = if dirty { "dirty" } else { "clean" };
                     write!(ret, "EC gateware commit: {:x}, {}\n", rev, dirtystr).unwrap();
                     let ec_ver = env.com.get_ec_sw_tag().unwrap();
-                    log::info!("{}VER.EC,{},{},{},{},{}", xous::BOOKEND_START, ec_ver.maj, ec_ver.min, ec_ver.rev, ec_ver.extra, xous::BOOKEND_END);
+                    log::info!(
+                        "{}VER.EC,{},{},{},{},{}",
+                        xous::BOOKEND_START,
+                        ec_ver.maj,
+                        ec_ver.min,
+                        ec_ver.rev,
+                        ec_ver.extra,
+                        xous::BOOKEND_END
+                    );
                     write!(ret, "EC sw tag: {}", ec_ver.to_string()).unwrap();
                 }
                 "wf200" => {
@@ -33,14 +46,27 @@ impl<'a> ShellCmdApi<'a> for Ver {
                 "soc" => {
                     let soc_rev = env.llio.soc_gitrev().unwrap();
                     write!(ret, "SoC git rev {}", soc_rev.to_string()).unwrap();
-                    log::info!("{}VER.SOC,{},{},{},{},{}", xous::BOOKEND_START, soc_rev.maj, soc_rev.min, soc_rev.rev, soc_rev.extra, xous::BOOKEND_END);
+                    log::info!(
+                        "{}VER.SOC,{},{},{},{},{}",
+                        xous::BOOKEND_START,
+                        soc_rev.maj,
+                        soc_rev.min,
+                        soc_rev.rev,
+                        soc_rev.extra,
+                        xous::BOOKEND_END
+                    );
                 }
                 "dna" => {
                     write!(ret, "SoC silicon DNA: 0x{:x}", env.llio.soc_dna().unwrap()).unwrap();
                 }
                 "xous" => {
                     write!(ret, "Xous version: {}", env.ticktimer.get_version()).unwrap();
-                    log::info!("{}VER.XOUS,{},{}", xous::BOOKEND_START, env.ticktimer.get_version(), xous::BOOKEND_END);
+                    log::info!(
+                        "{}VER.XOUS,{},{}",
+                        xous::BOOKEND_START,
+                        env.ticktimer.get_version(),
+                        xous::BOOKEND_END
+                    );
                 }
                 "ecreset" => {
                     env.llio.ec_reset().unwrap();
@@ -53,7 +79,6 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     write!(ret, "{}", helpstring).unwrap();
                 }
             }
-
         } else {
             write!(ret, "{}", helpstring).unwrap();
         }

@@ -37,7 +37,7 @@ impl Endian for LittleEndian {
         // Case 2: More than 1 byte but the MSB at the beginning of the input
         // is already in position 7 so no shifting is required
         } else if S::USIZE == 7 {
-            // Since we aren't shrinking the data down by aligning the fields, the output 
+            // Since we aren't shrinking the data down by aligning the fields, the output
             // buffer must be at least as long as the input
             assert!(output_bytes.len() >= input_bytes.len());
 
@@ -50,19 +50,19 @@ impl Endian for LittleEndian {
                 output_bytes[i_len-1] >>= E::USIZE;
             }
 
-        // Note: Case 3 and 4 could be merged with some minor tweaks around the input start 
+        // Note: Case 3 and 4 could be merged with some minor tweaks around the input start
         //       and an extra negative offset to output index for case 4 but I've left them
         //       split up for ease of debugging while testing edge cases for now.
         // Case 3: More than 1 byte, MSB at the beginning ISN'T at position 7 and we aren't
         // shrinking the data down by aligning the fields. We need to shift every byte
         } else {
             let n_bytes = if S::USIZE >= E::USIZE {
-                // Since we aren't shrinking the data down by aligning the fields, the output 
+                // Since we aren't shrinking the data down by aligning the fields, the output
                 // buffer must be at least as long as the input
                 assert!(output_bytes.len() >= input_bytes.len());
                 i_len
             } else {
-                // Since we are shrinking the data down by aligning the fields, the output 
+                // Since we are shrinking the data down by aligning the fields, the output
                 // buffer can be 1 smaller than the input
                 assert!(output_bytes.len() >= input_bytes.len() - 1);
                 i_len - 1
@@ -92,8 +92,8 @@ impl Endian for LittleEndian {
 
                     output_bytes[i] |= val << S::USIZE+1;
                 }
-            }  
-        } 
+            }
+        }
     }
 
     fn restore_field_bits<S: Bit, E: Bit>(input_bytes: &[u8], output_bytes: &mut [u8]) {

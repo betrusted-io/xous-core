@@ -2,11 +2,12 @@
 // SPDX-FileCopyrightText: 2023 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use core::fmt;
+
 use crate::{
     args::KernelArguments,
     io::{SerialRead, SerialWrite},
 };
-use core::fmt;
 
 /// Instance of the shell output.
 pub static mut OUTPUT: Option<Output> = None;
@@ -100,6 +101,14 @@ fn handle_character(b: u8) {
                 });
             });
         }
+        #[cfg(all(baremetal, target_arch = "riscv32"))]
+        b'k' => {
+            println!("Checking RAM for duplicate pages (this will take a few minutes)");
+            crate::mem::MemoryManager::with(|mm| {
+                mm.check_for_duplicates();
+            });
+            println!("Check complete");
+        }
         b'm' => {
             println!("Printing memory page tables");
             crate::services::SystemServices::with(|system_services| {
@@ -116,11 +125,7 @@ fn handle_character(b: u8) {
                         println!();
                     }
                 }
-                system_services
-                    .get_process(current_pid)
-                    .unwrap()
-                    .activate()
-                    .unwrap();
+                system_services.get_process(current_pid).unwrap().activate().unwrap();
             });
         }
         b'p' => {
@@ -146,11 +151,7 @@ fn handle_character(b: u8) {
                         );
                     }
                 }
-                system_services
-                    .get_process(current_pid)
-                    .unwrap()
-                    .activate()
-                    .unwrap();
+                system_services.get_process(current_pid).unwrap().activate().unwrap();
             });
         }
         b'P' => {
@@ -171,11 +172,7 @@ fn handle_character(b: u8) {
                         println!();
                     }
                 }
-                system_services
-                    .get_process(current_pid)
-                    .unwrap()
-                    .activate()
-                    .unwrap();
+                system_services.get_process(current_pid).unwrap().activate().unwrap();
             });
         }
         b'r' => {
@@ -228,6 +225,8 @@ fn print_help() {
     println!("--- + -----------------------");
     println!(" h  | print this message");
     println!(" i  | print irq handlers");
+    #[cfg(all(baremetal, target_arch = "riscv32"))]
+    println!(" k  | check RAM to make sure pages are unique");
     println!(" m  | print MMU page tables of all processes");
     println!(" p  | print all processes");
     println!(" P  | print all processes and threads");

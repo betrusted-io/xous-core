@@ -109,44 +109,32 @@ impl SID {
             Some(SID(sid))
         }
     }
-    pub const fn from_u32(a0: u32, a1: u32, a2: u32, a3: u32) -> SID {
-        SID([a0, a1, a2, a3])
-    }
-    pub const fn from_array(a: [u32; 4]) -> SID {
-        SID(a)
-    }
-    pub const fn to_u32(&self) -> (u32, u32, u32, u32) {
-        (self.0[0], self.0[1], self.0[2], self.0[3])
-    }
-    pub const fn to_array(&self) -> [u32; 4] {
-        self.0
-    }
+
+    pub const fn from_u32(a0: u32, a1: u32, a2: u32, a3: u32) -> SID { SID([a0, a1, a2, a3]) }
+
+    pub const fn from_array(a: [u32; 4]) -> SID { SID(a) }
+
+    pub const fn to_u32(&self) -> (u32, u32, u32, u32) { (self.0[0], self.0[1], self.0[2], self.0[3]) }
+
+    pub const fn to_array(&self) -> [u32; 4] { self.0 }
 }
 
 impl core::str::FromStr for SID {
     type Err = ();
 
-    fn from_str(s: &str) -> core::result::Result<SID, ()> {
-        Self::from_bytes(s.as_bytes()).ok_or(())
-    }
+    fn from_str(s: &str) -> core::result::Result<SID, ()> { Self::from_bytes(s.as_bytes()).ok_or(()) }
 }
 
 impl From<[u32; 4]> for SID {
-    fn from(src: [u32; 4]) -> Self {
-        Self::from_u32(src[0], src[1], src[2], src[3])
-    }
+    fn from(src: [u32; 4]) -> Self { Self::from_u32(src[0], src[1], src[2], src[3]) }
 }
 
 impl From<&[u32; 4]> for SID {
-    fn from(src: &[u32; 4]) -> Self {
-        Self::from_array(*src)
-    }
+    fn from(src: &[u32; 4]) -> Self { Self::from_array(*src) }
 }
 
 impl From<SID> for [u32; 4] {
-    fn from(s: SID) -> [u32; 4] {
-        s.0
-    }
+    fn from(s: SID) -> [u32; 4] { s.0 }
 }
 
 /// Connection ID
@@ -232,6 +220,7 @@ impl Error {
             _ => UnknownError,
         }
     }
+
     pub fn to_usize(&self) -> usize {
         use crate::Error::*;
         match *self {
@@ -379,10 +368,7 @@ pub enum Result {
     None,
 
     /// Memory was returned, and more information is available.
-    MemoryReturned(
-        Option<MemorySize>, /* offset */
-        Option<MemorySize>, /* valid */
-    ),
+    MemoryReturned(Option<MemorySize> /* offset */, Option<MemorySize> /* valid */),
 
     /// Returned when a process has started. This describes the new process to
     /// the caller.
@@ -399,9 +385,7 @@ pub enum Result {
 
 impl Result {
     fn add_opcode(opcode: usize, args: [usize; 7]) -> [usize; 8] {
-        [
-            opcode, args[0], args[1], args[2], args[3], args[4], args[5], args[6],
-        ]
+        [opcode, args[0], args[1], args[2], args[3], args[4], args[5], args[6]]
     }
 
     pub fn to_args(&self) -> [usize; 8] {
@@ -421,9 +405,7 @@ impl Result {
             Result::ConnectionID(cid) => [7, *cid as usize, 0, 0, 0, 0, 0, 0],
             Result::MessageEnvelope(me) => {
                 let me_enc = me.to_usize();
-                [
-                    9, me_enc[0], me_enc[1], me_enc[2], me_enc[3], me_enc[4], me_enc[5], me_enc[6],
-                ]
+                [9, me_enc[0], me_enc[1], me_enc[2], me_enc[3], me_enc[4], me_enc[5], me_enc[6]]
             }
             Result::ThreadID(ctx) => [10, *ctx, 0, 0, 0, 0, 0, 0],
             Result::ProcessID(pid) => [11, pid.get() as _, 0, 0, 0, 0, 0, 0],
@@ -433,16 +415,7 @@ impl Result {
             Result::Scalar2(a, b) => [15, *a, *b, 0, 0, 0, 0, 0],
             Result::NewServerID(sid, cid) => {
                 let s = sid.to_u32();
-                [
-                    8,
-                    s.0 as _,
-                    s.1 as _,
-                    s.2 as _,
-                    s.3 as _,
-                    *cid as usize,
-                    0,
-                    0,
-                ]
+                [8, s.0 as _, s.1 as _, s.2 as _, s.3 as _, *cid as usize, 0, 0]
             }
             Result::RetryCall => [16, 0, 0, 0, 0, 0, 0, 0],
             Result::None => [17, 0, 0, 0, 0, 0, 0, 0],
@@ -460,9 +433,7 @@ impl Result {
             Result::Scalar5(a, b, c, d, e) => [20, *a, *b, *c, *d, *e, 0, 0],
             Result::Message(message) => {
                 let encoded = message.to_usize();
-                [
-                    21, encoded[0], encoded[1], encoded[2], encoded[3], encoded[4], encoded[5], 0,
-                ]
+                [21, encoded[0], encoded[1], encoded[2], encoded[3], encoded[4], encoded[5], 0]
             }
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
@@ -492,12 +463,7 @@ impl Result {
             }
             4 => Result::ReadyThreads(src[1], src[2], src[3], src[4], src[5], src[6], src[7]),
             5 => Result::ResumeProcess,
-            6 => Result::ServerID(SID::from_u32(
-                src[1] as _,
-                src[2] as _,
-                src[3] as _,
-                src[4] as _,
-            )),
+            6 => Result::ServerID(SID::from_u32(src[1] as _, src[2] as _, src[3] as _, src[4] as _)),
             7 => Result::ConnectionID(src[1] as CID),
             8 => Result::NewServerID(
                 SID::from_u32(src[1] as _, src[2] as _, src[3] as _, src[4] as _),
@@ -518,9 +484,7 @@ impl Result {
                         None => return Result::Error(Error::InternalError),
                         Some(s) => Message::Move(s),
                     },
-                    3 => Message::Scalar(ScalarMessage::from_usize(
-                        src[3], src[4], src[5], src[6], src[7],
-                    )),
+                    3 => Message::Scalar(ScalarMessage::from_usize(src[3], src[4], src[5], src[6], src[7])),
                     4 => Message::BlockingScalar(ScalarMessage::from_usize(
                         src[3], src[4], src[5], src[6], src[7],
                     )),
@@ -555,12 +519,10 @@ impl Result {
                     None => return Result::Error(Error::InternalError),
                     Some(s) => Message::Move(s),
                 },
-                3 => Message::Scalar(ScalarMessage::from_usize(
-                    src[2], src[3], src[4], src[5], src[6],
-                )),
-                4 => Message::BlockingScalar(ScalarMessage::from_usize(
-                    src[2], src[3], src[4], src[5], src[6],
-                )),
+                3 => Message::Scalar(ScalarMessage::from_usize(src[2], src[3], src[4], src[5], src[6])),
+                4 => {
+                    Message::BlockingScalar(ScalarMessage::from_usize(src[2], src[3], src[4], src[5], src[6]))
+                }
                 _ => return Result::Error(Error::InternalError),
             }),
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
@@ -578,9 +540,7 @@ impl Result {
 }
 
 impl From<Error> for Result {
-    fn from(e: Error) -> Self {
-        Result::Error(e)
-    }
+    fn from(e: Error) -> Self { Result::Error(e) }
 }
 
 pub type SysCallRequest = core::result::Result<crate::syscall::SysCall, Error>;
@@ -589,7 +549,7 @@ pub type SysCallResult = core::result::Result<Result, Error>;
 #[macro_export]
 macro_rules! msg_scalar_unpack {
     // the args are `tt` so that you can specify _ as the arg
-    ($msg:ident, $arg1:tt, $arg2:tt, $arg3:tt, $arg4:tt, $body: block) => {{
+    ($msg:ident, $arg1:tt, $arg2:tt, $arg3:tt, $arg4:tt, $body:block) => {{
         if let xous::Message::Scalar(xous::ScalarMessage {
             id: _,
             arg1: $arg1,
@@ -608,7 +568,7 @@ macro_rules! msg_scalar_unpack {
 #[macro_export]
 macro_rules! msg_blocking_scalar_unpack {
     // the args are `tt` so that you can specify _ as the arg
-    ($msg:ident, $arg1:tt, $arg2:tt, $arg3:tt, $arg4:tt, $body: block) => {{
+    ($msg:ident, $arg1:tt, $arg2:tt, $arg3:tt, $arg4:tt, $body:block) => {{
         if let xous::Message::BlockingScalar(xous::ScalarMessage {
             id: _,
             arg1: $arg1,

@@ -72,13 +72,16 @@ func NewBlitPattern(img image.Image, font FontSpec, cs CharSpec, dbg bool) BlitP
 
 // Convert blit pattern to rust source code for part of an array of bytes
 func ConvertPatternToRust(pattern BlitPattern) string {
-	patternStr := ""
+	patternStr := "    "
 	wordsPerRow := uint32(8)
 	ceilRow := uint32(len(pattern.Words)) / wordsPerRow
 	if uint32(len(pattern.Words))%wordsPerRow > 0 {
 		ceilRow += 1
 	}
 	for i := uint32(0); i < ceilRow; i++ {
+		if i != 0 {
+			patternStr += "    "
+		}
 		start := i * wordsPerRow
 		end := min(uint32(len(pattern.Words)), (i+1)*wordsPerRow)
 		line := pattern.Words[start:end]
@@ -86,9 +89,8 @@ func ConvertPatternToRust(pattern BlitPattern) string {
 		for _, word := range line {
 			s = append(s, fmt.Sprintf("0x%08x", word))
 		}
-		patternStr += strings.Join(s, ", ") + ","
+		patternStr += strings.Join(s, ", ") + ",\n"
 	}
-	patternStr += "\n"
 	return patternStr
 }
 

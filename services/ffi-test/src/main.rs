@@ -7,7 +7,6 @@ mod api;
 use api::*;
 pub mod bindings;
 pub use bindings::*;
-
 use num_traits::FromPrimitive;
 
 fn main() -> ! {
@@ -19,16 +18,17 @@ fn main() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     let mut a = 0;
     for _ in 0..5 {
-        a = unsafe{add_one(a)};
+        a = unsafe { add_one(a) };
         log::info!("ffi test: {}", a);
     }
-    log::info!("malloc test result: {}", unsafe{malloc_test()});
+    log::info!("malloc test result: {}", unsafe { malloc_test() });
 
     log::info!("registering with xns");
     let ffitest_sid = xns.register_name(api::SERVER_NAME_FFITEST, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", ffitest_sid);
 
-    // spawn a small thread that keeps the watchdog timer from firing and lets us know other things didn't crash
+    // spawn a small thread that keeps the watchdog timer from firing and lets us know other things didn't
+    // crash
     std::thread::spawn({
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
@@ -44,9 +44,7 @@ fn main() -> ! {
     loop {
         let msg = xous::receive_message(ffitest_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Opcode::Quit) => {
-                break
-            }
+            Some(Opcode::Quit) => break,
             _ => {
                 log::info!("couldn't convert opcode {:?}", msg);
             }

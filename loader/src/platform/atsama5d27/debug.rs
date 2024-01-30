@@ -2,13 +2,12 @@
 // SPDX-FileCopyrightText: 2023 Foundation Devices, Inc <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use atsama5d27::uart::{Uart as UartHw, Uart1};
 use armv7::structures::paging::{
-    PageTable as L2PageTable, TranslationTable,
-    TranslationTableType, PageTableType,
-    TranslationTableMemory, PageTableMemory,
+    PageTable as L2PageTable, PageTableMemory, PageTableType, TranslationTable, TranslationTableMemory,
+    TranslationTableType,
 };
 use armv7::PhysicalAddress;
+use atsama5d27::uart::{Uart as UartHw, Uart1};
 
 type UartType = UartHw<Uart1>;
 
@@ -18,11 +17,7 @@ pub struct Uart {
 
 impl Uart {
     #[allow(dead_code)]
-    pub fn new() -> Self {
-        Self {
-            inner: UartType::new(),
-        }
-    }
+    pub fn new() -> Self { Self { inner: UartType::new() } }
 }
 
 use core::fmt::{Error, Write};
@@ -101,14 +96,12 @@ fn print_l2_pagetable(vpn1: usize, phys_addr: PhysicalAddress) {
         let _phys_addr = pt_desc.get_addr().expect("addr");
 
         match pt_desc.get_type() {
-            PageTableType::LargePage => println!(
-                "        - {:02x} (64K) Large Page {:08x} -> {:08x}",
-                i, _virt_addr, _phys_addr
-            ),
-            PageTableType::SmallPage => println!(
-                "        - {:02x} (4K)  Small Page {:08x} -> {:08x}",
-                i, _virt_addr, _phys_addr
-            ),
+            PageTableType::LargePage => {
+                println!("        - {:02x} (64K) Large Page {:08x} -> {:08x}", i, _virt_addr, _phys_addr)
+            }
+            PageTableType::SmallPage => {
+                println!("        - {:02x} (4K)  Small Page {:08x} -> {:08x}", i, _virt_addr, _phys_addr)
+            }
             _ => (),
         }
     }
@@ -134,25 +127,16 @@ pub fn print_pagetable(root: usize) {
         match tt_desc.get_type() {
             TranslationTableType::Page => {
                 let _virt_addr = i << 20;
-                println!(
-                    "    - {:03x} (1MB) {:08x} L2 page table @ {:08x}",
-                    i, _virt_addr, phys_addr
-                );
+                println!("    - {:03x} (1MB) {:08x} L2 page table @ {:08x}", i, _virt_addr, phys_addr);
                 print_l2_pagetable(i, phys_addr);
             }
             TranslationTableType::Section => {
                 let _virt_addr = i * 1024; // 1 MB
-                println!(
-                    "    - {:03x} (1MB)  section {:08x} -> {:08x}",
-                    i, _virt_addr, phys_addr
-                );
+                println!("    - {:03x} (1MB)  section {:08x} -> {:08x}", i, _virt_addr, phys_addr);
             }
             TranslationTableType::Supersection => {
                 let _virt_addr = i * (1024 * 16); // 16 MB
-                println!(
-                    "    - {:03x} (16MB) supersection {:08x} -> {:08x}",
-                    i, _virt_addr, phys_addr
-                );
+                println!("    - {:03x} (16MB) supersection {:08x} -> {:08x}", i, _virt_addr, phys_addr);
             }
 
             _ => (),

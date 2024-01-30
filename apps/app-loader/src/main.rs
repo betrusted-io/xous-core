@@ -10,9 +10,7 @@ fn main() -> ! {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let sid = xns
-        .register_name(SERVER_NAME_APP_LOADER, None)
-        .expect("Couldn't create server");
+    let sid = xns.register_name(SERVER_NAME_APP_LOADER, None).expect("Couldn't create server");
 
     // start off by adding hello world
     let mut app_loader = AppLoader::new(&xns, &sid);

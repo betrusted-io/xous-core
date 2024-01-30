@@ -1,5 +1,6 @@
-use anyhow::{Result, anyhow, bail};
 use std::str::FromStr;
+
+use anyhow::{anyhow, bail, Result};
 use protobuf::Message;
 
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -47,40 +48,48 @@ pub fn otpauth_to_entry(uri: &url::Url) -> Result<backup::TotpEntry, anyhow::Err
     Ok(t)
 }
 
-fn migration_payload_to_entry(param: otpauth_migration::migration_payload::OtpParameters) -> Result<backup::TotpEntry, anyhow::Error> {
+fn migration_payload_to_entry(
+    param: otpauth_migration::migration_payload::OtpParameters,
+) -> Result<backup::TotpEntry, anyhow::Error> {
     match param.type_.enum_value_or_default() {
         otpauth_migration::migration_payload::OtpType::OTP_TYPE_TOTP => {
             let mut t = backup::TotpEntry::default();
             t.step_seconds = 30;
             match param.digits.enum_value_or_default() {
-                otpauth_migration::migration_payload::DigitCount::DIGIT_COUNT_UNSPECIFIED =>
-                    t.digit_count = 6,
-                otpauth_migration::migration_payload::DigitCount::DIGIT_COUNT_SIX =>
-                    t.digit_count = 6,
-                otpauth_migration::migration_payload::DigitCount::DIGIT_COUNT_EIGHT =>
-                    t.digit_count = 8,
+                otpauth_migration::migration_payload::DigitCount::DIGIT_COUNT_UNSPECIFIED => {
+                    t.digit_count = 6
+                }
+                otpauth_migration::migration_payload::DigitCount::DIGIT_COUNT_SIX => t.digit_count = 6,
+                otpauth_migration::migration_payload::DigitCount::DIGIT_COUNT_EIGHT => t.digit_count = 8,
             }
             match param.algorithm.enum_value_or_default() {
-                otpauth_migration::migration_payload::Algorithm::ALGORITHM_UNSPECIFIED =>
-                    t.algorithm = backup::HashAlgorithms::SHA1,
-                otpauth_migration::migration_payload::Algorithm::ALGORITHM_SHA1 =>
-                    t.algorithm = backup::HashAlgorithms::SHA1,
-                otpauth_migration::migration_payload::Algorithm::ALGORITHM_SHA256 =>
-                    t.algorithm = backup::HashAlgorithms::SHA256,
-                otpauth_migration::migration_payload::Algorithm::ALGORITHM_SHA512 =>
-                    t.algorithm = backup::HashAlgorithms::SHA512,
-                otpauth_migration::migration_payload::Algorithm::ALGORITHM_MD5 =>
+                otpauth_migration::migration_payload::Algorithm::ALGORITHM_UNSPECIFIED => {
+                    t.algorithm = backup::HashAlgorithms::SHA1
+                }
+                otpauth_migration::migration_payload::Algorithm::ALGORITHM_SHA1 => {
+                    t.algorithm = backup::HashAlgorithms::SHA1
+                }
+                otpauth_migration::migration_payload::Algorithm::ALGORITHM_SHA256 => {
+                    t.algorithm = backup::HashAlgorithms::SHA256
+                }
+                otpauth_migration::migration_payload::Algorithm::ALGORITHM_SHA512 => {
+                    t.algorithm = backup::HashAlgorithms::SHA512
+                }
+                otpauth_migration::migration_payload::Algorithm::ALGORITHM_MD5 => {
                     bail!("ALGORITHM_MD5 not supported")
+                }
             }
             t.name = param.name;
             set_issuer(&mut t, param.issuer);
             t.shared_secret = base32::encode(base32::Alphabet::RFC4648 { padding: false }, &param.secret);
             Ok(t)
         }
-        otpauth_migration::migration_payload::OtpType::OTP_TYPE_HOTP =>
-            Err(anyhow!("OTP_TYPE_HOTP not supported")),
-        otpauth_migration::migration_payload::OtpType::OTP_TYPE_UNSPECIFIED =>
-            Err(anyhow!("OTP_TYPE_UNSPECIFIED not supported")),
+        otpauth_migration::migration_payload::OtpType::OTP_TYPE_HOTP => {
+            Err(anyhow!("OTP_TYPE_HOTP not supported"))
+        }
+        otpauth_migration::migration_payload::OtpType::OTP_TYPE_UNSPECIFIED => {
+            Err(anyhow!("OTP_TYPE_UNSPECIFIED not supported"))
+        }
     }
 }
 

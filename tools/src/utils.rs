@@ -23,9 +23,7 @@ pub enum ConfigError {
 }
 
 impl std::convert::From<io::Error> for ConfigError {
-    fn from(e: io::Error) -> ConfigError {
-        ConfigError::IoError(e)
-    }
+    fn from(e: io::Error) -> ConfigError { ConfigError::IoError(e) }
 }
 
 pub fn get_base(value: &str) -> (&str, u32) {
@@ -89,10 +87,7 @@ pub fn parse_csr_csv(filename: &str) -> Result<CsrConfig, ConfigError> {
                     } else {
                         map.insert(
                             region_name.to_string().to_lowercase(),
-                            CsrMemoryRegion {
-                                start: base_addr,
-                                length,
-                            },
+                            CsrMemoryRegion { start: base_addr, length },
                         );
                     }
                 }
@@ -104,13 +99,7 @@ pub fn parse_csr_csv(filename: &str) -> Result<CsrConfig, ConfigError> {
     if csr_base != 0 && csr_top != 0 {
         csr_top += 1;
         csr_top = (csr_top + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-        map.insert(
-            "csr".to_string(),
-            CsrMemoryRegion {
-                start: csr_base,
-                length: csr_top - csr_base,
-            },
-        );
+        map.insert("csr".to_string(), CsrMemoryRegion { start: csr_base, length: csr_top - csr_base });
     }
     Ok(CsrConfig { regions: map })
 }

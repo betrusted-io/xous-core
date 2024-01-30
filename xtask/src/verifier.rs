@@ -1,10 +1,10 @@
 use std::env;
-use crate::builder::CrateSpec;
-use std::path::Path;
 use std::fs;
 use std::fs::File;
 use std::io::{BufReader, Read};
+use std::path::Path;
 
+use crate::builder::CrateSpec;
 use crate::DynError;
 
 pub fn check_project_consistency() -> Result<(), DynError> {
@@ -12,20 +12,20 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     // TODO: retire utralib/svd2utra from publication as well
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous@0.9.55",
-        "xous-ipc@0.9.55",
-        "xous-api-log@0.1.51",
-        "xous-api-names@0.9.53",
-        "xous-api-susres@0.9.51",
-        "xous-api-ticktimer@0.9.51",
+        "xous@0.9.57",
+        "xous-ipc@0.9.57",
+        "xous-api-log@0.1.53",
+        "xous-api-names@0.9.55",
+        "xous-api-susres@0.9.53",
+        "xous-api-ticktimer@0.9.53",
     ];
     // utra/svd2utra changes are downgraded to warnings because these now prefer to pull
     // from the local patch version, so any inconsistency simply indicates we forgot to
     // publish the packages, rather than something nefarious has happened.
     let warn_pkgs = [
         // this set is only updated if the utralib changes
-        "utralib@0.1.23",
-        "svd2utra@0.1.21",
+        "utralib@0.1.24",
+        "svd2utra@0.1.22",
     ];
     for pkg in check_pkgs {
         verify(pkg.into(), true)?;
@@ -47,32 +47,37 @@ pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
             let path = entry.path();
             // this should *really* exist if the build system is stable, so just unwrap all the things
             let regdir = path.file_name().unwrap().to_str().unwrap().to_string();
-            if regdir.contains("crates.io") { // crates.io sticks sources in something with git yadda yadda...docs don't really say what/why/how...
+            if regdir.contains("crates.io") {
+                // crates.io sticks sources in something with git yadda yadda...docs don't really say
+                // what/why/how...
                 cache_leaf.push_str(&regdir);
             }
         }
         if cache_leaf.len() == 0 {
-            return Err("Can't find expected registry source location".into())
+            return Err("Can't find expected registry source location".into());
         }
         // this now has the path to the cache directory
         cache_path.push(cache_leaf);
         // form the package source name
         cache_path.push(format!("{}-{}", name, version));
         if !cache_path.exists() {
-            println!("Package not in registry, skipping consistency check: {}", cache_path.as_os_str().to_str().unwrap());
+            println!(
+                "Package not in registry, skipping consistency check: {}",
+                cache_path.as_os_str().to_str().unwrap()
+            );
             return Ok(());
         }
 
         // form the local source path
-        let subdir = if name.contains("-api-") {
-            "api"
-        } else {
-            "services"
-        };
+        let subdir = if name.contains("-api-") { "api" } else { "services" };
         let subdir = format!("./{}/{}/", subdir, name);
         // handle special cases of xous kernel and ipc crates
-        let src_path = if name != "xous" && name != "xous-ipc" && name != "xous-kernel"
-        && name != "utralib" && name != "svd2utra" {
+        let src_path = if name != "xous"
+            && name != "xous-ipc"
+            && name != "xous-kernel"
+            && name != "utralib"
+            && name != "svd2utra"
+        {
             Path::new(&subdir)
         } else {
             if name == "xous" {
@@ -91,21 +96,28 @@ pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
         };
 
         // now recurse through the source path and check that it matches the cache, except for Cargo.toml
-        println!("Comparing {} <-> {}", src_path.as_os_str().to_str().unwrap(), cache_path.as_os_str().to_str().unwrap());
+        println!(
+            "Comparing {} <-> {}",
+            src_path.as_os_str().to_str().unwrap(),
+            cache_path.as_os_str().to_str().unwrap()
+        );
         match compare_dirs(src_path, &cache_path) {
             Ok(true) => Ok(()),
-            Ok(false) => if hard_failure {
-                    Err("Crates.io downloaded data does not match local source".into())}
-                else {
-                    println!("**WARNING**: Local package does not match the published source. Third parties downloading from crates.io will be inconsistent with this build.");
+            Ok(false) => {
+                if hard_failure {
+                    Err("Crates.io downloaded data does not match local source".into())
+                } else {
+                    println!(
+                        "**WARNING**: Local package does not match the published source. Third parties downloading from crates.io will be inconsistent with this build."
+                    );
                     Ok(())
-                },
+                }
+            }
             _ => Err("Error matching local source to crates.io cache files".into()),
         }
     } else {
         Err("Can't verify crates that aren't from crates.io".into())
     }
-
 }
 
 fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
@@ -115,30 +127,35 @@ fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
             let fname = entry.file_name();
             if fname.as_os_str().to_str().unwrap() == "Cargo.toml" {
                 /*
-                    This is awful. The Cargo.toml file is parsed and reformatted by the packaging tool to normalize its contents.
-                    Thus, the Cargo.toml file of the downloaded version never matches the Cargo.toml file that's actually used.
-                    Unfortunately, there doesn't seem to be an easy way to check the equivalence of two Cargo.toml files,
-                    except for recursively and deeply parsing through and comparing all the possibile keys and values of
-                    the abstract key/value tree.
+                   This is awful. The Cargo.toml file is parsed and reformatted by the packaging tool to normalize its contents.
+                   Thus, the Cargo.toml file of the downloaded version never matches the Cargo.toml file that's actually used.
+                   Unfortunately, there doesn't seem to be an easy way to check the equivalence of two Cargo.toml files,
+                   except for recursively and deeply parsing through and comparing all the possible keys and values of
+                   the abstract key/value tree.
 
-                    As a hack, we compare to the Cargo.toml.orig file. Which is...kind of OK, but really, this opens us
-                    up to attacks where someone just has to replace a version on a package or even just swap out an
-                    entire package for a malicious one by just using package name re-assignment which is a thing that
-                    the format supports. In other words, all this checking is kind of pointless because it's super-easy
-                    to swap out key crates for whole other crates and have it go undetected.
-                 */
+                   As a hack, we compare to the Cargo.toml.orig file. Which is...kind of OK, but really, this opens us
+                   up to attacks where someone just has to replace a version on a package or even just swap out an
+                   entire package for a malicious one by just using package name re-assignment which is a thing that
+                   the format supports. In other words, all this checking is kind of pointless because it's super-easy
+                   to swap out key crates for whole other crates and have it go undetected.
+                */
                 let mut other_file = other.to_path_buf();
                 other_file.push("Cargo.toml.orig");
                 let mut src_file = src.to_path_buf();
                 src_file.push(&fname);
-                // println!("comparing {} <-> {}", src_file.as_os_str().to_str().unwrap(), other_file.as_os_str().to_str().unwrap());
+                // println!("comparing {} <-> {}", src_file.as_os_str().to_str().unwrap(),
+                // other_file.as_os_str().to_str().unwrap());
                 match compare_files(&src_file, &other_file) {
-                    Ok(true) => {},
+                    Ok(true) => {}
                     Ok(false) => {
-                        println!("Cargo.toml FAIL: {} <-> {}", src_file.as_os_str().to_str().unwrap(), other_file.as_os_str().to_str().unwrap());
-                        return Ok(false)
-                    },
-                    Err(_) => return Err("Access error comparing remote and local crates".into())
+                        println!(
+                            "Cargo.toml FAIL: {} <-> {}",
+                            src_file.as_os_str().to_str().unwrap(),
+                            other_file.as_os_str().to_str().unwrap()
+                        );
+                        return Ok(false);
+                    }
+                    Err(_) => return Err("Access error comparing remote and local crates".into()),
                 }
                 // Cargo.toml's do *not* match
                 /* turns out it's *really hard* to check equivalence of cargo files...you have to deep parse it into all the values.
@@ -202,21 +219,28 @@ fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
                 other_file.push(&fname);
                 let mut src_file = src.to_path_buf();
                 src_file.push(&fname);
-                // println!("comparing {} <-> {}", src_file.as_os_str().to_str().unwrap(), other_file.as_os_str().to_str().unwrap());
+                // println!("comparing {} <-> {}", src_file.as_os_str().to_str().unwrap(),
+                // other_file.as_os_str().to_str().unwrap());
                 if (src_file.as_os_str().to_str().unwrap().contains("ticktimer")
                     && fname.as_os_str().to_str().unwrap() == "version.rs")
-                    || src_file.as_os_str().to_str().unwrap().contains("Cargo.lock") {
+                    || src_file.as_os_str().to_str().unwrap().contains("Cargo.lock")
+                {
                     // don't compare the version.rs, as it's supposed to be different due to the timestamp
                     // don't compare Cargo.lock files that happen to be checked into packages
-                    // println!("skipping ticktimer version.rs or Cargo.lock file"); // this line is helpful to ensure our skip exception isn't too broad.
+                    // println!("skipping ticktimer version.rs or Cargo.lock file"); // this line is helpful
+                    // to ensure our skip exception isn't too broad.
                 } else {
                     match compare_files(&src_file, &other_file) {
-                        Ok(true) => {},
+                        Ok(true) => {}
                         Ok(false) => {
-                            println!("DIFF FAIL: {} <-> {}", src_file.as_os_str().to_str().unwrap(), other_file.as_os_str().to_str().unwrap());
-                            return Ok(false)
-                        },
-                        Err(_) => return Err("Access error comparing remote and local crates".into())
+                            println!(
+                                "DIFF FAIL: {} <-> {}",
+                                src_file.as_os_str().to_str().unwrap(),
+                                other_file.as_os_str().to_str().unwrap()
+                            );
+                            return Ok(false);
+                        }
+                        Err(_) => return Err("Access error comparing remote and local crates".into()),
                     }
                 }
             }
@@ -230,14 +254,19 @@ fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
             other_dir.push(&dname);
             let mut src_dir = src.to_path_buf();
             src_dir.push(&dname);
-            // println!("comparing {}/ <-> {}/", src_dir.as_os_str().to_str().unwrap(), &other_dir.as_os_str().to_str().unwrap());
+            // println!("comparing {}/ <-> {}/", src_dir.as_os_str().to_str().unwrap(),
+            // &other_dir.as_os_str().to_str().unwrap());
             match compare_dirs(&src_dir, &other_dir) {
-                Ok(true) => {},
+                Ok(true) => {}
                 Ok(false) => {
-                    println!("DIR FAIL: {}/ <-> {}/", src_dir.as_os_str().to_str().unwrap(), &other_dir.as_os_str().to_str().unwrap());
-                    return Ok(false)
-                },
-                Err(_) => return Err("Access error comparing remote to local crates".into())
+                    println!(
+                        "DIR FAIL: {}/ <-> {}/",
+                        src_dir.as_os_str().to_str().unwrap(),
+                        &other_dir.as_os_str().to_str().unwrap()
+                    );
+                    return Ok(false);
+                }
+                Err(_) => return Err("Access error comparing remote to local crates".into()),
             };
         }
     }
@@ -261,11 +290,7 @@ fn compare_files(a: &Path, b: &Path) -> Result<bool, DynError> {
         // text do CRLF substitutions
         let f1 = s1?.replace("\r\n", "\n");
         let f2 = s2?.replace("\r\n", "\n");
-        if f1 == f2 {
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        if f1 == f2 { Ok(true) } else { Ok(false) }
     } else {
         // do a binary compare
         let f1 = BufReader::new(f1);

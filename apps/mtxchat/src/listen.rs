@@ -1,11 +1,13 @@
-use crate::{get_username, web, MTX_LONG_TIMEOUT_MS};
-use chat::ChatOp;
 use std::sync::Arc;
+
+use chat::ChatOp;
+use locales::t;
 use tls::xtls::TlsConnector;
 use url::Url;
 use xous::CID;
 use xous_ipc::Buffer;
-use locales::t;
+
+use crate::{get_username, web, MTX_LONG_TIMEOUT_MS};
 
 pub fn listen(
     url: &mut Url,
@@ -18,18 +20,10 @@ pub fn listen(
 ) {
     log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT_MS);
 
-    let mut agent = ureq::builder()
-        .tls_connector(Arc::new(TlsConnector{}))
-        .build();
-    if let Some((_since, events)) = web::client_sync(
-        url,
-        filter,
-        since,
-        MTX_LONG_TIMEOUT_MS,
-        &room_id,
-        &token,
-        &mut agent,
-    ) {
+    let mut agent = ureq::builder().tls_connector(Arc::new(TlsConnector {})).build();
+    if let Some((_since, events)) =
+        web::client_sync(url, filter, since, MTX_LONG_TIMEOUT_MS, &room_id, &token, &mut agent)
+    {
         // TODO utilize "since"
         // and you probably want to have a look at Dialogue::MAX_BYTES
 
@@ -55,18 +49,14 @@ pub fn listen(
             }
             .expect("failed to convert post into buffer");
             event_count += 1;
-            chat::cf_set_status_text(chat_cid,
-                &format!("{} {}",
-                t!("mtxchat.busy.rx_events", locales::LANG),
-                event_count)
+            chat::cf_set_status_text(
+                chat_cid,
+                &format!("{} {}", t!("mtxchat.busy.rx_events", locales::LANG), event_count),
             );
         }
     }
     chat::cf_set_busy_state(chat_cid, false);
     // trigger the chat ui to save the dialogue to the pddb
-    xous::send_message(
-        chat_cid,
-        xous::Message::new_scalar(ChatOp::DialogueSave as usize, 0, 0, 0, 0),
-    )
-    .expect("failed to send new inbound msgs");
+    xous::send_message(chat_cid, xous::Message::new_scalar(ChatOp::DialogueSave as usize, 0, 0, 0, 0))
+        .expect("failed to send new inbound msgs");
 }

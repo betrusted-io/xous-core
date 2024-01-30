@@ -3,18 +3,17 @@
 
 mod api;
 mod time; // why is this here? because it's the only place it'll fit. :-/
-use api::*;
-
-use net::NetIpAddr;
-use num_traits::*;
-use xous::msg_scalar_unpack;
-
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
+
+use api::*;
+use net::NetIpAddr;
+use num_traits::*;
+use xous::msg_scalar_unpack;
 use xous_ipc::{Buffer, String};
 
 // KISS DNS
@@ -47,11 +46,7 @@ struct Message {
 const FLAG_RD: u16 = 0x0100; // Recursion desired
 
 impl Message {
-    pub fn from(datagram: &[u8]) -> Self {
-        Self {
-            datagram: Vec::from(datagram),
-        }
-    }
+    pub fn from(datagram: &[u8]) -> Self { Self { datagram: Vec::from(datagram) } }
 
     pub fn query(qname: &str, qtype: QueryType, qclass: QueryClass, id: u16) -> Self {
         let mut datagram = Vec::new();
@@ -85,21 +80,11 @@ impl Message {
         Self { datagram }
     }
 
-    pub fn id(&self) -> u16 {
-        u16::from_be_bytes(self.datagram[0..2].try_into().unwrap())
-    }
+    pub fn id(&self) -> u16 { u16::from_be_bytes(self.datagram[0..2].try_into().unwrap()) }
 
-    pub fn header(&self) -> u16 {
-        u16::from_be_bytes(self.datagram[2..4].try_into().unwrap())
-    }
+    pub fn header(&self) -> u16 { u16::from_be_bytes(self.datagram[2..4].try_into().unwrap()) }
 
-    pub fn is_response(&self) -> bool {
-        if (self.header() & (1 << 15)) == 0 {
-            false
-        } else {
-            true
-        }
-    }
+    pub fn is_response(&self) -> bool { if (self.header() & (1 << 15)) == 0 { false } else { true } }
 
     fn fast_foward_name(&self, start: usize) -> Result<usize, DnsResponseCode> {
         use DnsResponseCode::FormatError;
@@ -156,9 +141,7 @@ impl Message {
                 // pointer
                 index += 1;
                 if self.datagram[index] != 0xc {
-                    log::error!(
-                        "Found aname pointer, but value does not conform to length of aname header"
-                    );
+                    log::error!("Found aname pointer, but value does not conform to length of aname header");
                     return Err(FormatError);
                 }
                 index += 1;
@@ -195,10 +178,10 @@ impl Message {
                         log::error!("Got a 4-byte address, but ATYPE != A (1)");
                         return Err(FormatError);
                     }
-                    // this copy happens because I can't figure out how to get Ipv4Addr::from() to realize it's casting from a [u8;4]
+                    // this copy happens because I can't figure out how to get Ipv4Addr::from() to realize
+                    // it's casting from a [u8;4]
                     let mut rdata: [u8; 4] = [0; 4];
-                    for (&src, dst) in self.datagram[index..index + 4].iter().zip(rdata.iter_mut())
-                    {
+                    for (&src, dst) in self.datagram[index..index + 4].iter().zip(rdata.iter_mut()) {
                         *dst = src;
                     }
                     let addr = IpAddr::V4(Ipv4Addr::from(rdata));
@@ -211,12 +194,10 @@ impl Message {
                         log::error!("Got a 16-byte address, but ATYPE != AAAA (28)");
                         return Err(FormatError);
                     }
-                    // this copy happens because I can't figure out how to get Ipv6Addr::from() to realize it's casting from a [u8;4]
+                    // this copy happens because I can't figure out how to get Ipv6Addr::from() to realize
+                    // it's casting from a [u8;4]
                     let mut rdata: [u8; 16] = [0; 16];
-                    for (&src, dst) in self.datagram[index..index + 16]
-                        .iter()
-                        .zip(rdata.iter_mut())
-                    {
+                    for (&src, dst) in self.datagram[index..index + 16].iter().zip(rdata.iter_mut()) {
                         *dst = src;
                     }
                     let addr = IpAddr::V6(Ipv6Addr::from(rdata));
@@ -317,15 +298,13 @@ impl Resolver {
     pub fn new(xns: &xous_names::XousNames) -> Resolver {
         let trng = trng::Trng::new(&xns).unwrap();
         let local_port = (49152 + trng.get_u32().unwrap() % 16384) as u16;
-        let socket = UdpSocket::bind(
-            format!("0.0.0.0:{}", local_port),
-        )
-        .expect("couldn't create socket for DNS resolver");
+        let socket = UdpSocket::bind(format!("0.0.0.0:{}", local_port))
+            .expect("couldn't create socket for DNS resolver");
         let timeout = Duration::from_millis(10_000); // 10 seconds for DNS to resolve by default
         socket.set_read_timeout(Some(timeout)).unwrap();
         socket.set_nonblocking(false).unwrap(); // we want this to block.
-                                                // we /could/ do a non-blocking DNS resolver, but...what would you do in the meantime??
-                                                // blocking is probably what we actually want this time.
+        // we /could/ do a non-blocking DNS resolver, but...what would you do in the meantime??
+        // blocking is probably what we actually want this time.
 
         Resolver {
             mgr: net::protocols::DnsServerManager::register(&xns)
@@ -336,26 +315,23 @@ impl Resolver {
             freeze: false,
         }
     }
-    pub fn add_server(&mut self, addr: IpAddr) {
-        self.mgr.add_server(addr);
-    }
-    pub fn remove_server(&mut self, addr: IpAddr) {
-        self.mgr.remove_server(addr);
-    }
-    pub fn clear_all_servers(&mut self) {
-        self.mgr.clear();
-    }
+
+    pub fn add_server(&mut self, addr: IpAddr) { self.mgr.add_server(addr); }
+
+    pub fn remove_server(&mut self, addr: IpAddr) { self.mgr.remove_server(addr); }
+
+    pub fn clear_all_servers(&mut self) { self.mgr.clear(); }
+
     pub fn set_freeze_config(&mut self, freeze: bool) {
         self.freeze = freeze;
         self.mgr.set_freeze(freeze);
     }
-    pub fn get_freeze(&self) -> bool {
-        self.freeze
-    }
+
+    pub fn get_freeze(&self) -> bool { self.freeze }
+
     /// this allows us to re-use the TRNG object
-    pub fn trng_u32(&self) -> u32 {
-        self.trng.get_u32().unwrap()
-    }
+    pub fn trng_u32(&self) -> u32 { self.trng.get_u32().unwrap() }
+
     pub fn resolve(&mut self, name: &str) -> Result<HashMap<IpAddr, u32>, DnsResponseCode> {
         if let Some(dns_address) = self.mgr.get_random() {
             let dns_port = 53;
@@ -366,9 +342,7 @@ impl Resolver {
             let qclass = QueryClass::IN;
             let query = Message::query(qname, qtype, qclass, self.trng.get_u32().unwrap() as u16);
 
-            self.socket
-                .send_to(&query.datagram, &server)
-                .map_err(|_| DnsResponseCode::NetworkError)?;
+            self.socket.send_to(&query.datagram, &server).map_err(|_| DnsResponseCode::NetworkError)?;
 
             match self.socket.recv(&mut self.buf) {
                 Ok(len) => {
@@ -407,10 +381,7 @@ enum NameConversionError {
 }
 
 fn name_from_msg(env: &xous::MessageEnvelope) -> Result<&str, NameConversionError> {
-    let msg = env
-        .body
-        .memory_message()
-        .ok_or(NameConversionError::InvalidMessageType)?;
+    let msg = env.body.memory_message().ok_or(NameConversionError::InvalidMessageType)?;
     let valid_bytes = msg.valid.map(|v| v.get()).unwrap_or_else(|| msg.buf.len());
     if valid_bytes > DNS_NAME_LENGTH_LIMIT || valid_bytes < 1 {
         log::error!("valid bytes exceeded DNS name limit");
@@ -418,8 +389,7 @@ fn name_from_msg(env: &xous::MessageEnvelope) -> Result<&str, NameConversionErro
     }
     // Safe because we've already validated that it's a valid range
     let str_slice = unsafe { core::slice::from_raw_parts(msg.buf.as_ptr(), valid_bytes) };
-    let name_string =
-        core::str::from_utf8(str_slice).map_err(|_| NameConversionError::InvalidString)?;
+    let name_string = core::str::from_utf8(str_slice).map_err(|_| NameConversionError::InvalidString)?;
 
     Ok(name_string)
 }
@@ -494,9 +464,7 @@ fn main() -> ! {
     time::start_time_ux();
 
     let xns = xous_names::XousNames::new().unwrap();
-    let dns_sid = xns
-        .register_name(api::SERVER_NAME_DNS, None)
-        .expect("can't register server");
+    let dns_sid = xns.register_name(api::SERVER_NAME_DNS, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", dns_sid);
 
     // this will magically populate a list of DNS servers when they become available
@@ -572,12 +540,9 @@ fn main() -> ! {
                 };
             }
             Some(Opcode::Lookup) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let name = buf
-                    .to_original::<String<DNS_NAME_LENGTH_LIMIT>, _>()
-                    .unwrap();
+                let mut buf =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let name = buf.to_original::<String<DNS_NAME_LENGTH_LIMIT>, _>().unwrap();
                 let name_std = std::string::String::from(name.as_str().unwrap());
                 if let Some(cache_entry) = dns_cache.get(&name_std) {
                     // pick a random entry
@@ -617,30 +582,20 @@ fn main() -> ! {
                                 }
                             } else {
                                 // no names found
-                                let response = DnsResponse {
-                                    addr: None,
-                                    code: DnsResponseCode::NameError,
-                                };
+                                let response = DnsResponse { addr: None, code: DnsResponseCode::NameError };
                                 buf.replace(response).unwrap();
                             }
                         }
                         Err(e) => {
                             log::debug!("DNS query failed: {}->{:?}", name, e);
-                            let response = DnsResponse {
-                                addr: None,
-                                code: e,
-                            };
+                            let response = DnsResponse { addr: None, code: e };
                             buf.replace(response).unwrap();
                         }
                     }
                 }
             }
             Some(Opcode::UpdateTtl) => msg_scalar_unpack!(msg, incr_secs, _, _, _, {
-                let increment = if incr_secs < u32::MAX as usize {
-                    incr_secs as u32
-                } else {
-                    u32::MAX
-                };
+                let increment = if incr_secs < u32::MAX as usize { incr_secs as u32 } else { u32::MAX };
                 if !resolver.get_freeze() {
                     let mut expired_names = Vec::<std::string::String>::new();
                     for (name, cache_map) in dns_cache.iter_mut() {

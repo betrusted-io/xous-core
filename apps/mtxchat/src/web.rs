@@ -1,8 +1,9 @@
-use crate::Msg;
 use serde::{Deserialize, Serialize};
 use ureq::serde_json::{Map, Value};
 use ureq::{Agent, ErrorKind};
 use url::Url;
+
+use crate::Msg;
 
 const ACCEPT: &str = "Accept";
 const ACCEPT_JSON: &str = "application/json";
@@ -64,29 +65,14 @@ pub fn get_json(url: &Url, agent: &mut Agent) -> Result<ureq::Response, ureq::Er
     agent.get(&url.as_str()).set(ACCEPT, ACCEPT_JSON).call()
 }
 
-pub fn get_json_auth(
-    url: &Url,
-    token: &str,
-    agent: &mut Agent,
-) -> Result<ureq::Response, ureq::Error> {
+pub fn get_json_auth(url: &Url, token: &str, agent: &mut Agent) -> Result<ureq::Response, ureq::Error> {
     let mut authorization = String::from(BEARER);
     authorization.push_str(token);
-    agent
-        .get(&url.as_str())
-        .set(ACCEPT, ACCEPT_JSON)
-        .set(AUTHORIZATION, &authorization)
-        .call()
+    agent.get(&url.as_str()).set(ACCEPT, ACCEPT_JSON).set(AUTHORIZATION, &authorization).call()
 }
 
-pub fn post_string(
-    url: &Url,
-    request_body: &str,
-    agent: &mut Agent,
-) -> Result<ureq::Response, ureq::Error> {
-    agent
-        .post(&url.as_str())
-        .set(ACCEPT, ACCEPT_JSON)
-        .send_string(request_body)
+pub fn post_string(url: &Url, request_body: &str, agent: &mut Agent) -> Result<ureq::Response, ureq::Error> {
+    agent.post(&url.as_str()).set(ACCEPT, ACCEPT_JSON).send_string(request_body)
 }
 
 pub fn post_string_auth(
@@ -174,25 +160,13 @@ struct AuthRequest {
 
 impl AuthRequest {
     pub fn new(user: &str, password: &str) -> Self {
-        let identifier = AuthIdentifier {
-            type_: MTX_ID_USER.to_string(),
-            user: user.to_string(),
-        };
-        AuthRequest {
-            type_: MTX_LOGIN_PASSWORD.to_string(),
-            identifier: identifier,
-            password: password.to_string(),
-        }
+        let identifier = AuthIdentifier { type_: MTX_ID_USER.to_string(), user: user.to_string() };
+        AuthRequest { type_: MTX_LOGIN_PASSWORD.to_string(), identifier, password: password.to_string() }
     }
 }
 
 // fn authenticate_user() -> Result<String, ureq::Error> {
-pub fn authenticate_user(
-    url: &mut Url,
-    user: &str,
-    password: &str,
-    agent: &mut Agent,
-) -> Option<String> {
+pub fn authenticate_user(url: &mut Url, user: &str, password: &str, agent: &mut Agent) -> Option<String> {
     let mut maybe_token: Option<String> = None;
     url.set_path("_matrix/client/r0/login");
     let auth_request = AuthRequest::new(user, password);
@@ -208,12 +182,7 @@ pub fn authenticate_user(
     maybe_token
 }
 
-pub fn get_room_id(
-    url: &mut Url,
-    room_server: &str,
-    token: &str,
-    agent: &mut Agent,
-) -> Option<String> {
+pub fn get_room_id(url: &mut Url, room_server: &str, token: &str, agent: &mut Agent) -> Option<String> {
     let mut path = String::from("_matrix/client/v3/directory/room/");
     path.push_str(&room_server);
     url.set_path(&path);
@@ -263,11 +232,7 @@ impl RoomEventFilter {
         types.push(type_0.to_string());
         let mut rooms: Vec<String> = Vec::new();
         rooms.push(room_id.to_string());
-        RoomEventFilter {
-            limit,
-            types,
-            rooms,
-        }
+        RoomEventFilter { limit, types, rooms }
     }
 }
 
@@ -288,13 +253,7 @@ impl RoomFilter {
         rooms.push(room_id.to_string());
         let state = EventFilter::new(0);
         let timeline = RoomEventFilter::new(10, room_id, "m.room.message");
-        RoomFilter {
-            account_data,
-            ephemeral,
-            rooms,
-            state,
-            timeline,
-        }
+        RoomFilter { account_data, ephemeral, rooms, state, timeline }
     }
 }
 
@@ -316,12 +275,7 @@ impl FilterRequest {
         event_fields.push("origin_server_ts".to_string());
         let presence = EventFilter::new(0);
         let room = RoomFilter::new(room_id);
-        FilterRequest {
-            account_data,
-            event_fields,
-            presence,
-            room,
-        }
+        FilterRequest { account_data, event_fields, presence, room }
     }
 }
 
@@ -381,10 +335,7 @@ fn get_messages(body: Map<String, Value>, room_id: &str) -> Vec<Msg> {
                                             .map(|c| c.get("body").map(|b| b.to_string()))
                                             .flatten(),
                                         sender: event.get("sender").map(|s| s.to_string()),
-                                        ts: event
-                                            .get("origin_server_ts")
-                                            .map(|t| t.as_u64())
-                                            .flatten(),
+                                        ts: event.get("origin_server_ts").map(|t| t.as_u64()).flatten(),
                                     });
                                 }
                             }
@@ -409,8 +360,7 @@ pub fn client_sync(
     log::info!("heap usage: {}", crate::heap_usage());
     url.set_path("_matrix/client/r0/sync");
     url.query_pairs_mut().append_pair("filter", &filter);
-    url.query_pairs_mut()
-        .append_pair("timeout", &timeout.to_string());
+    url.query_pairs_mut().append_pair("timeout", &timeout.to_string());
     if let Some(since) = since {
         url.query_pairs_mut().append_pair("since", since);
     }

@@ -7,45 +7,54 @@ description = "Network middleware"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.55"
-xous-ipc = "0.9.55"
-log-server = { package = "xous-api-log", version = "0.1.51" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.51" }
-xous-names = { package = "xous-api-names", version = "0.9.53" }
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+xous-names = { package = "xous-api-names", version = "0.9.55" }
 log = "0.4.14"
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-susres = {package = "xous-api-susres", version = "0.9.51"}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+susres = { package = "xous-api-susres", version = "0.9.53" }
 #rkyv = "0.7.18"
-rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
-llio = {path = "../llio"}
-com = {path = "../com"}
+rkyv = { version = "0.4.3", features = [
+  "const_generics",
+], default-features = false }
+llio = { path = "../llio" }
+com = { path = "../com" }
 byteorder = { version = "1.0", default-features = false }
-trng = {path = "../trng"}
+trng = { path = "../trng" }
 com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
-modals = {path = "../modals"}
-locales = {path = "../../locales"}
-utralib = { version = "0.1.23", optional = true, default-features = false }
+modals = { path = "../modals" }
+locales = { path = "../../locales" }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 
 # for automatic SSID management and AP list storage
-pddb = {path = "../pddb"}
+pddb = { path = "../pddb" }
 
 xous-semver = "0.1.2"
 
 [dependencies.smoltcp]
-# smoltcp is pinned to a fork on betrusted-io until a new release is available.
+version = "0.11.0"
+
 # path = "../../../smoltcp"
-git = "https://github.com/betrusted-io/smoltcp.git"
-rev = "8b59d57d9e392d704fdeb5029d691b9155a3687a"
+# git = "https://github.com/betrusted-io/smoltcp.git"
+# rev = "8b59d57d9e392d704fdeb5029d691b9155a3687a"
 # branch = "main"
 
 default-features = false
 features = [
-  "std", "log", # needed for `cargo test --no-default-features --features default` :/
-  "medium-ethernet", "medium-ip",
+  "std",
+  "log",             # needed for `cargo test --no-default-features --features default` :/
+  "medium-ethernet",
+  "medium-ip",
   "phy-raw_socket",
-  "proto-ipv4", "proto-ipv6",
-  "socket-raw", "socket-icmp", "socket-udp", "socket-tcp",
+  "proto-ipv4",
+  "proto-ipv6",
+  "socket-raw",
+  "socket-icmp",
+  "socket-udp",
+  "socket-tcp",
 ]
 
 [features]

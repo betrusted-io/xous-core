@@ -28,6 +28,7 @@ pub enum Return {
     /// A connection was successfully made with the given CID; an optional "disconnect token" is provided
     CID((xous::CID, Option<[u32; 4]>)),
 
-    /// Operation requested was otherwise successful (currently only used by disconnect to ack the disconnect)
+    /// Operation requested was otherwise successful (currently only used by disconnect to ack the
+    /// disconnect)
     Success,
 }

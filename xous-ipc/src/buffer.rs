@@ -2,8 +2,8 @@ use core::convert::TryInto;
 
 use rkyv::{ser::Serializer, Fallible};
 use xous::{
-    map_memory, send_message, unmap_memory, Error, MemoryAddress, MemoryFlags, MemoryMessage,
-    MemoryRange, MemorySize, Message, Result, CID,
+    map_memory, send_message, unmap_memory, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
+    MemorySize, Message, Result, CID,
 };
 
 #[derive(Debug)]
@@ -29,11 +29,7 @@ impl rkyv::Fallible for XousDeserializer {
 impl<'a> Buffer<'a> {
     #[allow(dead_code)]
     pub fn new(len: usize) -> Self {
-        let remainder = if ((len & 0xFFF) == 0) && (len > 0) {
-            0
-        } else {
-            0x1000 - (len & 0xFFF)
-        };
+        let remainder = if ((len & 0xFFF) == 0) && (len > 0) { 0 } else { 0x1000 - (len & 0xFFF) };
 
         let flags = MemoryFlags::R | MemoryFlags::W;
 
@@ -47,13 +43,10 @@ impl<'a> Buffer<'a> {
         )
         .expect("Buffer: error in new()/map_memory");
 
-        let valid =
-            unsafe { MemoryRange::new(new_mem.as_mut_ptr() as usize, len + remainder).unwrap() };
+        let valid = unsafe { MemoryRange::new(new_mem.as_mut_ptr() as usize, len + remainder).unwrap() };
         Buffer {
             range: new_mem,
-            slice: unsafe {
-                core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), len + remainder)
-            },
+            slice: unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), len + remainder) },
             valid,
             offset: None,
             should_drop: true,
@@ -76,29 +69,23 @@ impl<'a> Buffer<'a> {
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
 
-    // use to serialize a buffer between process-local threads. mainly for spawning new threads with more complex argument structures.
+    // use to serialize a buffer between process-local threads. mainly for spawning new threads with more
+    // complex argument structures.
     #[allow(dead_code)]
     pub unsafe fn to_raw_parts(&self) -> (usize, usize, usize) {
         if let Some(offset) = self.offset {
-            (
-                self.valid.as_ptr() as usize,
-                self.valid.len(),
-                usize::from(offset),
-            )
+            (self.valid.as_ptr() as usize, self.valid.len(), usize::from(offset))
         } else {
             (self.valid.as_ptr() as usize, self.valid.len(), 0)
         }
     }
 
-    // use to serialize a buffer between process-local threads. mainly for spawning new threads with more complex argument structures.
+    // use to serialize a buffer between process-local threads. mainly for spawning new threads with more
+    // complex argument structures.
     #[allow(dead_code)]
     pub unsafe fn from_raw_parts(address: usize, len: usize, offset: usize) -> Self {
         let mem = MemoryRange::new(address, len).expect("invalid memory range args");
-        let off = if offset != 0 {
-            Some(offset.try_into().unwrap())
-        } else {
-            None
-        };
+        let off = if offset != 0 { Some(offset.try_into().unwrap()) } else { None };
         Buffer {
             range: mem,
             slice: core::slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()),
@@ -238,7 +225,8 @@ impl<'a> Buffer<'a> {
         Ok(())
     }
 
-    /// Zero-copy representation of the data on the receiving side, wrapped in an "Archived" trait and left in the heap. Cheap so uses "as_" prefix.
+    /// Zero-copy representation of the data on the receiving side, wrapped in an "Archived" trait and left in
+    /// the heap. Cheap so uses "as_" prefix.
     #[allow(dead_code)]
     pub fn as_flat<T, U>(&self) -> core::result::Result<&U, ()>
     where
@@ -249,7 +237,8 @@ impl<'a> Buffer<'a> {
         Ok(r)
     }
 
-    /// A representation identical to the original, but reequires copying to the stack. More expensive so uses "to_" prefix.
+    /// A representation identical to the original, but reequires copying to the stack. More expensive so uses
+    /// "to_" prefix.
     #[allow(dead_code)]
     pub fn to_original<T, U>(&self) -> core::result::Result<T, ()>
     where
@@ -263,29 +252,21 @@ impl<'a> Buffer<'a> {
 }
 
 impl<'a> core::convert::AsRef<[u8]> for Buffer<'a> {
-    fn as_ref(&self) -> &[u8] {
-        self.slice
-    }
+    fn as_ref(&self) -> &[u8] { self.slice }
 }
 
 impl<'a> core::convert::AsMut<[u8]> for Buffer<'a> {
-    fn as_mut(&mut self) -> &mut [u8] {
-        self.slice
-    }
+    fn as_mut(&mut self) -> &mut [u8] { self.slice }
 }
 
 impl<'a> core::ops::Deref for Buffer<'a> {
     type Target = [u8];
 
-    fn deref(&self) -> &Self::Target {
-        &*self.slice
-    }
+    fn deref(&self) -> &Self::Target { &*self.slice }
 }
 
 impl<'a> core::ops::DerefMut for Buffer<'a> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.slice
-    }
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut *self.slice }
 }
 
 impl<'a> Drop for Buffer<'a> {

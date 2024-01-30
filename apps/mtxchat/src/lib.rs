@@ -2,7 +2,11 @@ pub mod api;
 mod listen;
 mod web;
 
-use crate::web::get_username;
+use std::fmt::Write as _;
+use std::io::{Error, ErrorKind, Read, Write as StdWrite};
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 pub use api::*;
 use chat::Chat;
 use listen::listen;
@@ -10,14 +14,12 @@ use locales::t;
 use modals::Modals;
 use pddb::Pddb;
 use ticktimer_server::Ticktimer;
-use std::fmt::Write as _;
-use std::io::{Error, ErrorKind, Read, Write as StdWrite};
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tls::xtls::TlsConnector;
 use trng::*;
 use ureq::Agent;
 use url::Url;
+
+use crate::web::get_username;
 
 /// PDDB Dict for mtxchat keys
 const MTXCHAT_STATE: &str = "mtxchat.state";
@@ -97,16 +99,14 @@ impl<'a> MtxChat<'a> {
         let status = t!("mtxchat.status.default", locales::LANG).to_owned();
         chat.set_status_text(&status);
         MtxChat {
-            chat: chat,
-            trng: trng,
-            pddb: pddb,
+            chat,
+            trng,
+            pddb,
             netmgr: net::NetManager::new(),
             user_id: None,
             user_name: None,
             user_domain: Some(DOMAIN_MATRIX.to_string()),
-            agent: ureq::builder()
-                .tls_connector(Arc::new(TlsConnector{}))
-                .build(),
+            agent: ureq::builder().tls_connector(Arc::new(TlsConnector {})).build(),
             token: None,
             logged_in: false,
             room_id: None,
@@ -115,7 +115,7 @@ impl<'a> MtxChat<'a> {
             filter: None,
             since: None,
             listening: false,
-            modals: modals,
+            modals,
             new_username: false,
             new_room: false,
             tt: ticktimer_server::Ticktimer::new().unwrap(),
@@ -124,18 +124,12 @@ impl<'a> MtxChat<'a> {
 
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), Error> {
         if key.starts_with("__") {
-            Err(Error::new(
-                ErrorKind::PermissionDenied,
-                "may not set a variable beginning with __ ",
-            ))
+            Err(Error::new(ErrorKind::PermissionDenied, "may not set a variable beginning with __ "))
         } else {
             log::info!("set '{}' = '{}'", key, value);
             // delete key first to ensure data in a prior longer key is gone
             self.pddb.delete_key(MTXCHAT_STATE, key, None).ok();
-            match self
-                .pddb
-                .get(MTXCHAT_STATE, key, None, true, true, None, None::<fn()>)
-            {
+            match self.pddb.get(MTXCHAT_STATE, key, None, true, true, None, None::<fn()>) {
                 Ok(mut pddb_key) => match pddb_key.write(&value.as_bytes()) {
                     Ok(len) => {
                         self.pddb.sync().ok();
@@ -178,10 +172,7 @@ impl<'a> MtxChat<'a> {
 
     pub fn unset(&mut self, key: &str) -> Result<(), Error> {
         if key.starts_with("__") {
-            Err(Error::new(
-                ErrorKind::PermissionDenied,
-                "may not unset a variable beginning with __ ",
-            ))
+            Err(Error::new(ErrorKind::PermissionDenied, "may not unset a variable beginning with __ "))
         } else {
             log::info!("unset '{}'", key);
             match self.pddb.delete_key(MTXCHAT_STATE, key, None) {
@@ -219,10 +210,7 @@ impl<'a> MtxChat<'a> {
     }
 
     pub fn get(&self, key: &str) -> Result<Option<String>, Error> {
-        let value = match self
-            .pddb
-            .get(MTXCHAT_STATE, key, None, true, false, None, None::<fn()>)
-        {
+        let value = match self.pddb.get(MTXCHAT_STATE, key, None, true, false, None, None::<fn()>) {
             Ok(mut pddb_key) => {
                 let mut buffer = [0; 256];
                 match pddb_key.read(&mut buffer) {
@@ -301,12 +289,9 @@ impl<'a> MtxChat<'a> {
                     Some(index) => index,
                     None => user_id.len(),
                 };
-                self.set(USER_ID_KEY, &user_id)
-                    .expect("failed to save user id");
-                self.set(USER_NAME_KEY, &user_id[i..j])
-                    .expect("failed to save user name");
-                self.set(USER_DOMAIN_KEY, &user_id[j + 1..])
-                    .expect("failed to save user domain");
+                self.set(USER_ID_KEY, &user_id).expect("failed to save user id");
+                self.set(USER_NAME_KEY, &user_id[i..j]).expect("failed to save user name");
+                self.set(USER_DOMAIN_KEY, &user_id[j + 1..]).expect("failed to save user domain");
                 self.logged_in = true;
             }
         }
@@ -339,8 +324,7 @@ impl<'a> MtxChat<'a> {
             log::info!("login failed");
             // unset credentials to facilitate re-attempt
             self.unset(TOKEN_KEY).expect("failed to unset token");
-            self.unset(USER_DOMAIN_KEY)
-                .expect("failed to unset user domain");
+            self.unset(USER_DOMAIN_KEY).expect("failed to unset user domain");
         }
         self.chat.set_busy_state(false);
         self.logged_in
@@ -349,19 +333,14 @@ impl<'a> MtxChat<'a> {
     pub fn login_modal(&mut self) {
         const HIDE: &str = "*****";
         let mut old_username = String::new();
-        let mut builder = self
-            .modals
-            .alert_builder(t!("mtxchat.login.title", locales::LANG));
+        let mut builder = self.modals.alert_builder(t!("mtxchat.login.title", locales::LANG));
         let builder = match self.get(USER_NAME_KEY) {
             // TODO add TextValidationFn
             Ok(Some(user)) => {
                 old_username = user.clone();
                 builder.field_placeholder_persist(Some(user), None)
             }
-            _ => builder.field(
-                Some(t!("mtxchat.user_name", locales::LANG).to_string()),
-                None,
-            ),
+            _ => builder.field(Some(t!("mtxchat.user_name", locales::LANG).to_string()), None),
         };
         let builder = match self.get(USER_DOMAIN_KEY) {
             // TODO add TextValidationFn
@@ -370,35 +349,27 @@ impl<'a> MtxChat<'a> {
         };
         let builder = match self.get(PASSWORD_KEY) {
             Ok(Some(_pwd)) => builder.field_placeholder_persist(Some(HIDE.to_string()), None),
-            _ => builder.field(
-                Some(t!("mtxchat.password", locales::LANG).to_string()),
-                None,
-            ),
+            _ => builder.field(Some(t!("mtxchat.password", locales::LANG).to_string()), None),
         };
         if let Ok(payloads) = builder.build() {
             self.unset_debug(TOKEN_KEY);
             if let Ok(content) = payloads.content()[0].content.as_str() {
-                self.set(USER_NAME_KEY, content)
-                    .expect("failed to save username");
+                self.set(USER_NAME_KEY, content).expect("failed to save username");
                 self.new_username = content.ne(&old_username);
             }
             if let Ok(content) = payloads.content()[1].content.as_str() {
-                self.set(USER_DOMAIN_KEY, content)
-                    .expect("failed to save server");
+                self.set(USER_DOMAIN_KEY, content).expect("failed to save server");
             }
             if let Ok(content) = payloads.content()[2].content.as_str() {
                 if content.ne(HIDE) {
-                    self.set(PASSWORD_KEY, content)
-                        .expect("failed to save password");
+                    self.set(PASSWORD_KEY, content).expect("failed to save password");
                 }
             }
             if let Some(user_name) = &self.user_name {
                 if let Some(user_domain) = &self.user_domain {
                     let mut user_id = String::new();
-                    write!(user_id, "@{}:{}", user_name, user_domain)
-                        .expect("failed to write user_id");
-                    self.set(USER_ID_KEY, &user_id)
-                        .expect("failed to save user");
+                    write!(user_id, "@{}:{}", user_name, user_domain).expect("failed to write user_id");
+                    self.set(USER_ID_KEY, &user_id).expect("failed to save user");
                 }
             }
         }
@@ -419,8 +390,7 @@ impl<'a> MtxChat<'a> {
         let log_entry = match (&self.room_name, &self.room_domain) {
             (Some(room_name), Some(room_domain)) => {
                 let mut room_alias = String::new();
-                write!(room_alias, "#{}:{}", &room_name, &room_domain)
-                    .expect("failed to write room");
+                write!(room_alias, "#{}:{}", &room_name, &room_domain).expect("failed to write room");
                 return Some(room_alias);
             }
             (None, _) => "No room name set",
@@ -432,20 +402,13 @@ impl<'a> MtxChat<'a> {
 
     pub fn get_room_id(&mut self) -> Option<String> {
         self.room_modal();
-        let log_entry = match (
-            self.logged_in,
-            &self.token,
-            &self.user_domain,
-            &self.room_alias(),
-        ) {
+        let log_entry = match (self.logged_in, &self.token, &self.user_domain, &self.room_alias()) {
             (true, Some(token), Some(user_domain), Some(room_alias)) => {
                 let mut url = Url::parse("https://matrix.org").unwrap();
                 url.set_host(Some(user_domain)).expect("failed to set host");
                 self.chat.set_status_text(t!("mtxchat.busy.room_id", locales::LANG));
                 self.chat.set_busy_state(true);
-                if let Some(room_id) =
-                    web::get_room_id(&mut url, &room_alias, &token, &mut self.agent)
-                {
+                if let Some(room_id) = web::get_room_id(&mut url, &room_alias, &token, &mut self.agent) {
                     self.set_debug(ROOM_ID_KEY, &room_id);
                     self.chat.set_busy_state(false);
                     return Some(room_id);
@@ -463,25 +426,18 @@ impl<'a> MtxChat<'a> {
         None
     }
 
-    pub fn redraw(&self) {
-        self.chat.redraw();
-    }
+    pub fn redraw(&self) { self.chat.redraw(); }
 
     pub fn room_modal(&mut self) {
         let mut old_room = String::new();
-        let mut builder = self
-            .modals
-            .alert_builder(t!("mtxchat.room.title", locales::LANG));
+        let mut builder = self.modals.alert_builder(t!("mtxchat.room.title", locales::LANG));
         let builder = match self.get(ROOM_NAME_KEY) {
             // TODO add TextValidationFn
             Ok(Some(room)) => {
                 old_room = room.clone();
                 builder.field_placeholder_persist(Some(room), None)
             }
-            _ => builder.field(
-                Some(t!("mtxchat.room.name", locales::LANG).to_string()),
-                None,
-            ),
+            _ => builder.field(Some(t!("mtxchat.room.name", locales::LANG).to_string()), None),
         };
         let builder = match self.get(ROOM_DOMAIN_KEY) {
             // TODO add TextValidationFn
@@ -493,30 +449,21 @@ impl<'a> MtxChat<'a> {
             self.unset_debug(SINCE_KEY);
             self.unset_debug(FILTER_KEY);
             if let Ok(content) = payloads.content()[0].content.as_str() {
-                self.set(ROOM_NAME_KEY, content)
-                    .expect("failed to save server");
+                self.set(ROOM_NAME_KEY, content).expect("failed to save server");
                 self.new_room = content.ne(&old_room);
             }
             if let Ok(content) = payloads.content()[1].content.as_str() {
-                self.set(ROOM_DOMAIN_KEY, content)
-                    .expect("failed to save server");
+                self.set(ROOM_DOMAIN_KEY, content).expect("failed to save server");
             }
         }
-        log::info!(
-            "# ROOM_NAME_KEY set '{}' => clearing ROOM_ID_KEY, SINCE_KEY, FILTER_KEY",
-            ROOM_NAME_KEY
-        );
+        log::info!("# ROOM_NAME_KEY set '{}' => clearing ROOM_ID_KEY, SINCE_KEY, FILTER_KEY", ROOM_NAME_KEY);
     }
 
     pub fn dialogue_set(&self, room_alias: Option<&str>) {
-        self.chat
-            .dialogue_set(MTXCHAT_DIALOGUE, room_alias)
-            .expect("failed to set dialogue");
+        self.chat.dialogue_set(MTXCHAT_DIALOGUE, room_alias).expect("failed to set dialogue");
     }
 
-    pub fn help(&self) {
-        self.chat.help();
-    }
+    pub fn help(&self) { self.chat.help(); }
 
     pub fn get_filter(&mut self) -> bool {
         let log_entry = match (
@@ -531,21 +478,11 @@ impl<'a> MtxChat<'a> {
             (_, true, Some(token), Some(user_id), Some(user_domain), Some(room_id)) => {
                 let mut url = Url::parse("https://matrix.org").unwrap();
                 url.set_host(Some(user_domain)).expect("failed to set host");
-                log::info!(
-                    "get_filter {} : {} : {} : {}",
-                    &user_id,
-                    &url.as_str(),
-                    &room_id,
-                    &token
-                );
+                log::info!("get_filter {} : {} : {} : {}", &user_id, &url.as_str(), &room_id, &token);
                 if let Some(new_filter) =
                     web::get_filter(&user_id, &mut url, &room_id, &token, &mut self.agent)
                 {
-                    if self.set_debug(FILTER_KEY, &new_filter) {
-                        "set filter"
-                    } else {
-                        "failed to set"
-                    }
+                    if self.set_debug(FILTER_KEY, &new_filter) { "set filter" } else { "failed to set" }
                 } else {
                     "failed to get filter"
                 }
@@ -584,15 +521,7 @@ impl<'a> MtxChat<'a> {
                     let room_alias = room_alias.clone();
                     let chat_cid = self.chat.cid().clone();
                     move || {
-                        listen(
-                            &mut url,
-                            &token,
-                            &room_id,
-                            since.as_deref(),
-                            &filter,
-                            &room_alias,
-                            chat_cid,
-                        );
+                        listen(&mut url, &token, &room_id, since.as_deref(), &filter, &room_alias, chat_cid);
                     }
                 });
                 "Started listening"
@@ -622,21 +551,13 @@ impl<'a> MtxChat<'a> {
     pub fn gen_txn_id(&mut self) -> String {
         let mut txn_id = self.trng.get_u32().expect("unable to generate random u32");
         log::info!("trng.get_u32() = {}", txn_id);
-        txn_id += SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .subsec_nanos();
+        txn_id += SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards").subsec_nanos();
         txn_id.to_string()
     }
 
     pub fn post(&mut self, text: &str) {
         let txn_id = self.gen_txn_id();
-        let log_entry = match (
-            self.logged_in,
-            &self.token,
-            &self.user_domain,
-            &self.room_id,
-        ) {
+        let log_entry = match (self.logged_in, &self.token, &self.user_domain, &self.room_id) {
             (true, Some(token), Some(user_domain), Some(room_id)) => {
                 self.chat.set_status_text(t!("mtxchat.busy.sending", locales::LANG));
                 self.chat.set_busy_state(true);
@@ -650,11 +571,7 @@ impl<'a> MtxChat<'a> {
                         break;
                     }
                 }
-                let r = if success {
-                    "SENT"
-                } else {
-                    "FAILED TO SEND"
-                };
+                let r = if success { "SENT" } else { "FAILED TO SEND" };
                 self.chat.set_busy_state(false);
                 r
             }
@@ -708,9 +625,7 @@ impl<'a> MtxChat<'a> {
     fn wifi_try_modal(&self) -> bool {
         self.modals.add_list_item("yes").expect("failed radio yes");
         self.modals.add_list_item("no").expect("failed radio no");
-        self.modals
-            .get_radiobutton("Connect to WiFi?")
-            .expect("failed radiobutton modal");
+        self.modals.get_radiobutton("Connect to WiFi?").expect("failed radiobutton modal");
         match self.modals.get_radio_index() {
             Ok(button) => button == 0,
             _ => false,

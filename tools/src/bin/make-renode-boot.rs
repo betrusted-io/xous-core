@@ -23,9 +23,7 @@ struct RamConfig {
 
 fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
     let mut found_ram_name = None;
-    fn round_mem(src: u32) -> u32 {
-        (src + 4095) & !4095
-    }
+    fn round_mem(src: u32) -> u32 { (src + 4095) & !4095 }
     // Look for the largest "ram" block, which we'll treat as main memory
     for (k, v) in &hv.regions {
         if k.find("ram").is_some() && v.length > ram_config.size {
@@ -54,9 +52,7 @@ fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
         if round_mem(v.length) == 0 {
             continue;
         }
-        ram_config
-            .regions
-            .add(MemoryRegion::new(v.start, round_mem(v.length), region_name));
+        ram_config.regions.add(MemoryRegion::new(v.start, round_mem(v.length), region_name));
     }
 }
 fn create_image(init_programs: &[String]) -> std::io::Result<Vec<u8>> {
@@ -119,10 +115,9 @@ fn create_image(init_programs: &[String]) -> std::io::Result<Vec<u8>> {
         args.add(ram_config.regions);
     }
 
-    let kernel = process_program(include_bytes!(
-        "../../../target/riscv32imac-unknown-xous-elf/release/xous-kernel"
-    ))
-    .expect("unable to read kernel");
+    let kernel =
+        process_program(include_bytes!("../../../target/riscv32imac-unknown-xous-elf/release/xous-kernel"))
+            .expect("unable to read kernel");
     process_names.set(1, "kernel");
 
     let pid = 2;
@@ -134,26 +129,23 @@ fn create_image(init_programs: &[String]) -> std::io::Result<Vec<u8>> {
     process_names.set(pid, "xous-ticktimer");
 
     let pid = pid + 1;
-    let init = process_minielf(include_bytes!(
-        "../../../target/riscv32imac-unknown-xous-elf/release/xous-log"
-    ))
-    .expect("couldn't parse init file");
+    let init =
+        process_minielf(include_bytes!("../../../target/riscv32imac-unknown-xous-elf/release/xous-log"))
+            .expect("couldn't parse init file");
     args.add(IniE::new(init.entry_point, init.sections, init.program));
     process_names.set(pid, "xous-log");
 
     let pid = pid + 1;
-    let init = process_minielf(include_bytes!(
-        "../../../target/riscv32imac-unknown-xous-elf/release/xous-names"
-    ))
-    .expect("couldn't parse init file");
+    let init =
+        process_minielf(include_bytes!("../../../target/riscv32imac-unknown-xous-elf/release/xous-names"))
+            .expect("couldn't parse init file");
     args.add(IniE::new(init.entry_point, init.sections, init.program));
     process_names.set(pid, "xous-names");
 
     let pid = pid + 1;
-    let init = process_minielf(include_bytes!(
-        "../../../target/riscv32imac-unknown-xous-elf/release/xous-susres"
-    ))
-    .expect("couldn't parse init file");
+    let init =
+        process_minielf(include_bytes!("../../../target/riscv32imac-unknown-xous-elf/release/xous-susres"))
+            .expect("couldn't parse init file");
     args.add(IniE::new(init.entry_point, init.sections, init.program));
     process_names.set(pid, "xous-susres");
 
@@ -195,22 +187,19 @@ fn create_image(init_programs: &[String]) -> std::io::Result<Vec<u8>> {
 
     println!("Arguments: {}", args);
 
-    println!(
-        "Runtime will require {} bytes to track memory allocations",
-        ram_config.memory_required
-    );
+    println!("Runtime will require {} bytes to track memory allocations", ram_config.memory_required);
     Ok(f)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args: VecDeque<String> = std::env::args().collect();
     println!("Args: {:?}", args);
-    let program = args.pop_front().ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::Other, "program name not present")
-    })?;
-    let output_filename = args.pop_front().ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::Other, "output filename not present")
-    })?;
+    let program = args
+        .pop_front()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "program name not present"))?;
+    let output_filename = args
+        .pop_front()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "output filename not present"))?;
     args.make_contiguous();
 
     if args.len() == 0 {

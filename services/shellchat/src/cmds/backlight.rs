@@ -1,14 +1,20 @@
-use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
 
+use crate::{CommonEnv, ShellCmdApi};
+
 #[derive(Debug)]
-pub struct Backlight {
-}
+pub struct Backlight {}
 
 impl<'a> ShellCmdApi<'a> for Backlight {
-    cmd_api!(backlight); // inserts boilerplate for command API
+    cmd_api!(backlight);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    // inserts boilerplate for command API
+
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
         let helpstring = "backlight [on] [off] [0-5]";
@@ -16,8 +22,8 @@ impl<'a> ShellCmdApi<'a> for Backlight {
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
-            // note that the secondary backlight appears brighter, so generally, we want to set it to a lower setting
-            // to save battery power
+            // note that the secondary backlight appears brighter, so generally, we want to set it to a lower
+            // setting to save battery power
             match sub_cmd {
                 "on" => {
                     env.com.set_backlight(255, 255).unwrap();
@@ -55,7 +61,6 @@ impl<'a> ShellCmdApi<'a> for Backlight {
                     write!(ret, "{}", helpstring).unwrap();
                 }
             }
-
         } else {
             write!(ret, "{}", helpstring).unwrap();
         }

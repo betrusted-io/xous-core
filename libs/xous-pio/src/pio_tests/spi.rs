@@ -1,13 +1,10 @@
 use utralib::generated::utra::rp_pio;
-use crate::*;
+
 use super::report_api;
+use crate::*;
 
 #[inline(always)]
-pub fn pio_spi_write8_read8_blocking (
-    pio_sm: &mut PioSm,
-    src: &[u8],
-    dst: &mut [u8],
-) {
+pub fn pio_spi_write8_read8_blocking(pio_sm: &mut PioSm, src: &[u8], dst: &mut [u8]) {
     assert!(src.len() == dst.len(), "src and dst arrays are not the same length!");
 
     let mut src_iter = src.iter();
@@ -50,7 +47,7 @@ pub fn pio_spi_write8_read8_blocking (
             rx_done = true;
         }
         if tx_done && rx_done {
-            break
+            break;
         }
     }
 }
@@ -89,7 +86,7 @@ pub fn pio_spi_init(
     cpol: bool,
     pin_sck: usize,
     pin_mosi: usize,
-    pin_miso: usize
+    pin_miso: usize,
 ) {
     pio_sm.sm_set_enabled(false);
     // this applies a default config to the PioSm object that is relevant to the program
@@ -103,13 +100,10 @@ pub fn pio_spi_init(
     pio_sm.config_set_clkdiv(clkdiv);
 
     // MOSI, SCK output are low, MISO is input
-    pio_sm.sm_set_pins_with_mask(
-        0,
-        (1 << pin_sck) | (1 << pin_mosi)
-    );
+    pio_sm.sm_set_pins_with_mask(0, (1 << pin_sck) | (1 << pin_mosi));
     pio_sm.sm_set_pindirs_with_mask(
         (1 << pin_sck) | (1 << pin_mosi),
-        (1 << pin_sck) | (1 << pin_mosi) | (1 << pin_miso)
+        (1 << pin_sck) | (1 << pin_mosi) | (1 << pin_miso),
     );
 
     pio_sm.gpio_set_outover(pin_sck, cpol);
@@ -136,12 +130,14 @@ pub fn spi_test() -> bool {
     let mut pio_sm = pio_ss.alloc_sm().unwrap();
 
     // spi_cpha0 example
+    #[rustfmt::skip]
     let spi_cpha0_prog = pio_proc::pio_asm!(
         ".side_set 1",
         "out pins, 1 side 0 [1]",
         "in pins, 1  side 1 [1]",
     );
     // spi_cpha1 example
+    #[rustfmt::skip]
     let spi_cpha1_prog = pio_proc::pio_asm!(
         ".side_set 1",
         "out x, 1    side 0", // Stall here on empty (keep SCK deasserted)
@@ -169,7 +165,7 @@ pub fn spi_test() -> bool {
             cpol,
             PIN_SCK,
             PIN_MOSI,
-            PIN_MISO
+            PIN_MISO,
         );
         report_api(0x05D1_0003);
         if spi_test_core(&mut pio_sm) == false {
@@ -186,7 +182,7 @@ pub fn spi_test() -> bool {
             cpol,
             PIN_SCK,
             PIN_MOSI,
-            PIN_MISO
+            PIN_MISO,
         );
         report_api(0x05D1_0005);
         if spi_test_core(&mut pio_sm) == false {

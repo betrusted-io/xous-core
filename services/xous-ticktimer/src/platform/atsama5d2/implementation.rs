@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
+
 use atsama5d27::tc::Tc;
+use log::error;
 #[cfg(feature = "debug-print")]
 use log::{info, trace};
-use log::error;
 use utralib::*;
 use xous::arch::irq::IrqNumber;
 
@@ -46,7 +47,7 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
                 arg4: 0,
             }),
         )
-            .ok();
+        .ok();
 
         // Save the response so we can be sure we don't double-return messages.
         xtt.last_response = Some(response);
@@ -63,7 +64,7 @@ impl XousTickTimer {
             0x1000, // 16K
             xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::DEV,
         )
-            .expect("couldn't map TC0 CSR range");
+        .expect("couldn't map TC0 CSR range");
 
         let mut timer = Tc::with_alt_base_addr(csr.as_ptr() as u32);
         timer.init();
@@ -81,7 +82,7 @@ impl XousTickTimer {
             handle_irq,
             (&mut xtt) as *mut XousTickTimer as *mut usize,
         )
-            .expect("couldn't claim irq");
+        .expect("couldn't claim irq");
 
         xtt
     }
@@ -90,13 +91,10 @@ impl XousTickTimer {
         // no-op, the TC0 timer resets itself every time it's started
     }
 
-    pub fn last_response(&self) -> &Option<TimerRequest> {
-        &self.last_response
-    }
+    pub fn last_response(&self) -> &Option<TimerRequest> { &self.last_response }
 
-    pub fn clear_last_response(&mut self) {
-        self.last_response = None;
-    }
+    pub fn clear_last_response(&mut self) { self.last_response = None; }
+
     pub fn raw_ticktime(&self) -> u32 {
         let ticktime = self.timer.counter();
         #[cfg(feature = "debug-print")]
@@ -138,11 +136,7 @@ impl XousTickTimer {
         let irq_target = request.msec.saturating_sub(self.running_counter as i64);
 
         if irq_target > u32::MAX as i64 {
-            error!(
-                "Invalid sleep target: {} can't be more than {} ms",
-                irq_target,
-                u32::MAX
-            );
+            error!("Invalid sleep target: {} can't be more than {} ms", irq_target, u32::MAX);
             return;
         }
 
@@ -214,10 +208,7 @@ impl XousTickTimer {
             self.schedule_response(next_response);
         } else {
             #[cfg(feature = "debug-print")]
-            info!(
-                "not scheduling a response since the sleep heap is empty ({:?})",
-                sleep_heap
-            );
+            info!("not scheduling a response since the sleep heap is empty ({:?})", sleep_heap);
         }
     }
 
@@ -237,7 +228,12 @@ impl XousTickTimer {
         log::trace!("Elapsed: {}", elapsed);
         self.clear_last_response();
 
-        log::trace!("Increasing running counter {} by {}: {}", self.running_counter, elapsed, self.running_counter + elapsed as u64);
+        log::trace!(
+            "Increasing running counter {} by {}: {}",
+            self.running_counter,
+            elapsed,
+            self.running_counter + elapsed as u64
+        );
         self.running_counter += elapsed as u64;
 
         // If we have a new sleep request, add it to the heap.

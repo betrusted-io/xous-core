@@ -40,7 +40,7 @@ pub struct GlyphSprite {
 #[derive(Debug)]
 pub(crate) struct TypesetWord {
     /// glyph data to directly render the word
-    pub gs: Vec::<GlyphSprite>,
+    pub gs: Vec<GlyphSprite>,
     /// top left origin point for rendering of the glyphs
     pub origin: Pt,
     /// width of the word

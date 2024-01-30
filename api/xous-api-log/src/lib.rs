@@ -1,6 +1,7 @@
 #![cfg_attr(any(target_os = "none", feature = "nostd"), no_std)]
 use core::fmt::Write;
 use core::sync::atomic::{AtomicU32, Ordering};
+
 use num_traits::ToPrimitive;
 
 pub mod api;
@@ -53,12 +54,7 @@ impl XousLogger {
 
         xous::send_message(
             XOUS_LOGGER_CONNECTION.load(Ordering::Relaxed),
-            xous::Message::new_lend(
-                crate::api::Opcode::LogRecord.to_usize().unwrap(),
-                buf,
-                None,
-                None,
-            ),
+            xous::Message::new_lend(crate::api::Opcode::LogRecord.to_usize().unwrap(), buf, None, None),
         )
         .unwrap();
     }
@@ -66,20 +62,17 @@ impl XousLogger {
     fn resume(&self) {
         xous::send_message(
             XOUS_LOGGER_CONNECTION.load(Ordering::Relaxed),
-            xous::Message::new_scalar(2000, 0, 0, 0, 0), // logger is one of the few servers that uses special, non-encoded message IDs.
+            xous::Message::new_scalar(2000, 0, 0, 0, 0), /* logger is one of the few servers that uses
+                                                          * special, non-encoded message IDs. */
         )
         .expect("couldn't send resume message to the logger implementation");
     }
 }
 
 impl log::Log for XousLogger {
-    fn enabled(&self, _metadata: &log::Metadata) -> bool {
-        true
-    }
+    fn enabled(&self, _metadata: &log::Metadata) -> bool { true }
 
-    fn log(&self, record: &log::Record) {
-        XOUS_LOGGER.log_impl(record);
-    }
+    fn log(&self, record: &log::Record) { XOUS_LOGGER.log_impl(record); }
 
     fn flush(&self) {}
 }
@@ -98,15 +91,10 @@ pub fn init() -> Result<(), LogError> {
 pub fn init_wait() -> Result<(), ()> {
     let sid = xous::SID::from_bytes(b"xous-log-server ").unwrap();
     let cid = xous::connect(sid).or(Err(()))?;
-    XOUS_LOGGER_CONNECTION.store(
-        cid,
-        Ordering::Relaxed,
-    );
+    XOUS_LOGGER_CONNECTION.store(cid, Ordering::Relaxed);
     log::set_logger(&XOUS_LOGGER).or(Err(()))?;
     log::set_max_level(log::LevelFilter::Info);
     Ok(())
 }
 
-pub fn resume() {
-    XOUS_LOGGER.resume();
-}
+pub fn resume() { XOUS_LOGGER.resume(); }

@@ -2,7 +2,7 @@ use gam::*;
 use locales::t;
 use num_traits::*;
 
-use crate::{StatusOpcode, app_autogen};
+use crate::{app_autogen, StatusOpcode};
 
 pub fn create_app_menu(status_conn: xous::CID) {
     let mut menu_items = Vec::<MenuItem>::new();

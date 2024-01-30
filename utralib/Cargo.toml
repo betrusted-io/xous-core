@@ -1,6 +1,6 @@
 [package]
 name = "utralib"
-version = "0.1.23"
+version = "0.1.24"
 authors = ["Sean Cross <sean@xobs.io>", "bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -12,7 +12,7 @@ homepage = "https://betrusted.io/xous-book/"
 [dependencies]
 
 [build-dependencies]
-svd2utra = "0.1.21"
+svd2utra = "0.1.22"
 
 # UTRA pre-generated version tracker
 [features]
@@ -32,7 +32,7 @@ std = []
 # Maintainer note: add checks in build.rs to ensure only one is selected.
 precursor-perflib = []
 precursor-dvt = []
-precursor-pvt = [] # based on 2020.08 litex, v0.9.11 tag
+precursor-pvt = []     # based on 2020.08 litex, v0.9.11 tag
 
 # The SVD gitrev as specified above is only invoked to track fine-grained
 # changes between target revisions. Below is the overall target switch,
@@ -52,4 +52,4 @@ cramium-soc = []
 cramium-fpga = []
 
 # Specify a Precusor default so that we can pass packaging CI tests.
-default = ["precursor-pvt", "precursor"]
+default = ["hosted"]

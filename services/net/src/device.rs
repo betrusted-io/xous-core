@@ -1,17 +1,18 @@
-use com::Com;
-use com::api::NET_MTU;
-
-use smoltcp::phy::{self, DeviceCapabilities, Medium, ChecksumCapabilities};
-use smoltcp::wire::{ArpPacket, ArpRepr, ArpOperation, Ipv4Address,
-    EthernetAddress, EthernetFrame, EthernetProtocol, Ipv4Packet,
-    Ipv4Repr, /* IpProtocol, TcpPacket, TcpRepr, IpAddress, UdpPacket, UdpRepr */};
-use num_traits::*;
-use std::convert::TryInto;
-
-use crate::{MAC_ADDRESS_LSB, MAC_ADDRESS_MSB, IPV4_ADDRESS};
 use core::sync::atomic::Ordering;
 use std::collections::VecDeque;
+use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
+
+use com::api::NET_MTU;
+use com::Com;
+use num_traits::*;
+use smoltcp::phy::{self, ChecksumCapabilities, DeviceCapabilities, Medium};
+use smoltcp::wire::{
+    ArpOperation, ArpPacket, ArpRepr, EthernetAddress, EthernetFrame, EthernetProtocol, Ipv4Address,
+    Ipv4Packet, Ipv4Repr, /* IpProtocol, TcpPacket, TcpRepr, IpAddress, UdpPacket, UdpRepr */
+};
+
+use crate::{IPV4_ADDRESS, MAC_ADDRESS_LSB, MAC_ADDRESS_MSB};
 
 pub struct NetPhy {
     rx_buffer: [u8; NET_MTU],
@@ -20,7 +21,7 @@ pub struct NetPhy {
     rx_avail: Option<u16>,
     loopback_conn: xous::CID,
     // tracks the length (and count) of the loopback packets pending
-    loopback_pending: Arc::<Mutex::<VecDeque<u16>>>,
+    loopback_pending: Arc<Mutex<VecDeque<u16>>>,
 }
 
 impl<'a> NetPhy {
@@ -34,6 +35,7 @@ impl<'a> NetPhy {
             loopback_pending: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
+
     // returns None if there was a slot to put the availability into
     // returns Some(len) if not
     pub fn push_rx_avail(&mut self, len: u16) -> Option<u16> {
@@ -50,34 +52,45 @@ impl phy::Device for NetPhy {
     type RxToken<'a> = NetPhyRxToken<'a>;
     type TxToken<'a> = NetPhyTxToken<'a>;
 
-    fn receive(&mut self, _instant: smoltcp::time::Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
+    fn receive(
+        &mut self,
+        _instant: smoltcp::time::Instant,
+    ) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         let csum_copy = self.capabilities().checksum.clone();
         if let Some(rx_len) = self.loopback_pending.lock().unwrap().pop_front() {
             log::debug!("loopback injected {} bytes", rx_len);
             // loopback takes precedence
-            self.com.wlan_fetch_loopback_packet(&mut self.rx_buffer[..rx_len as usize]).expect("Couldn't call wlan_fetch_packet in device adapter");
+            self.com
+                .wlan_fetch_loopback_packet(&mut self.rx_buffer[..rx_len as usize])
+                .expect("Couldn't call wlan_fetch_packet in device adapter");
 
-            Some((NetPhyRxToken{buf: &mut self.rx_buffer[..rx_len as usize]},
-            NetPhyTxToken{
-                buf: &mut self.tx_buffer[..],
-                com: & self.com,
-                loopback_conn: self.loopback_conn,
-                loopback_count: self.loopback_pending.clone(),
-                caps: csum_copy
-            }))
+            Some((
+                NetPhyRxToken { buf: &mut self.rx_buffer[..rx_len as usize] },
+                NetPhyTxToken {
+                    buf: &mut self.tx_buffer[..],
+                    com: &self.com,
+                    loopback_conn: self.loopback_conn,
+                    loopback_count: self.loopback_pending.clone(),
+                    caps: csum_copy,
+                },
+            ))
         } else {
             if let Some(rx_len) = self.rx_avail.take() {
                 log::debug!("device rx of {} bytes", rx_len);
-                self.com.wlan_fetch_packet(&mut self.rx_buffer[..rx_len as usize]).expect("Couldn't call wlan_fetch_packet in device adapter");
+                self.com
+                    .wlan_fetch_packet(&mut self.rx_buffer[..rx_len as usize])
+                    .expect("Couldn't call wlan_fetch_packet in device adapter");
 
-                Some((NetPhyRxToken{buf: &mut self.rx_buffer[..rx_len as usize]},
-                NetPhyTxToken{
-                    buf: &mut self.tx_buffer[..],
-                    com: & self.com,
-                    loopback_conn: self.loopback_conn,
-                    loopback_count: self.loopback_pending.clone(),
-                    caps: csum_copy
-                }))
+                Some((
+                    NetPhyRxToken { buf: &mut self.rx_buffer[..rx_len as usize] },
+                    NetPhyTxToken {
+                        buf: &mut self.tx_buffer[..],
+                        com: &self.com,
+                        loopback_conn: self.loopback_conn,
+                        loopback_count: self.loopback_pending.clone(),
+                        caps: csum_copy,
+                    },
+                ))
             } else {
                 log::trace!("nothing to rx");
                 None
@@ -88,12 +101,12 @@ impl phy::Device for NetPhy {
     fn transmit(&mut self, _instant: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
         let csum_copy = self.capabilities().checksum.clone();
         log::debug!("device tx");
-        Some(NetPhyTxToken{
+        Some(NetPhyTxToken {
             buf: &mut self.tx_buffer[..],
             com: &self.com,
             loopback_conn: self.loopback_conn,
             loopback_count: self.loopback_pending.clone(),
-            caps: csum_copy
+            caps: csum_copy,
         })
     }
 
@@ -112,7 +125,8 @@ pub struct NetPhyRxToken<'a> {
 
 impl<'a, 'c> phy::RxToken for NetPhyRxToken<'a> {
     fn consume<R, F>(mut self, f: F) -> R
-        where F: FnOnce(&mut [u8]) -> R
+    where
+        F: FnOnce(&mut [u8]) -> R,
     {
         let result = f(&mut self.buf);
         //log::info!("rx: {:x?}", self.buf);
@@ -124,24 +138,27 @@ pub struct NetPhyTxToken<'a> {
     buf: &'a mut [u8],
     com: &'a Com,
     loopback_conn: xous::CID,
-    loopback_count: Arc::<Mutex::<VecDeque<u16>>>,
+    loopback_count: Arc<Mutex<VecDeque<u16>>>,
     caps: ChecksumCapabilities,
 }
-impl <'a> NetPhyTxToken<'a> {
+impl<'a> NetPhyTxToken<'a> {
     /// Initiates the Rx side of things to read out the loopback packet that was queued
     fn loopback_rx(&self, rxlen: usize) {
         // this will initiate a target trace
         // log::set_max_level(log::LevelFilter::Trace);
         self.loopback_count.lock().unwrap().push_back(rxlen as u16);
-        xous::try_send_message(self.loopback_conn,
-            xous::Message::new_scalar(crate::Opcode::LoopbackRx.to_usize().unwrap(), rxlen, 0, 0, 0)
-        ).ok();
+        xous::try_send_message(
+            self.loopback_conn,
+            xous::Message::new_scalar(crate::Opcode::LoopbackRx.to_usize().unwrap(), rxlen, 0, 0, 0),
+        )
+        .ok();
     }
 
-    // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this issue as well:
-    // https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
+    // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this issue
+    // as well: https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
     // this function creates the ARP packets for injection
-    fn wlan_queue_localhost_arp(&self,
+    fn wlan_queue_localhost_arp(
+        &self,
         target_mac: &[u8; 6],
         target_addr: Ipv4Address,
         remote_hw_addr: EthernetAddress,
@@ -177,14 +194,15 @@ impl <'a> NetPhyTxToken<'a> {
 
 impl<'a> phy::TxToken for NetPhyTxToken<'a> {
     fn consume<R, F>(self, len: usize, f: F) -> R
-        where F: FnOnce(&mut [u8]) -> R
+    where
+        F: FnOnce(&mut [u8]) -> R,
     {
         let result = f(&mut self.buf[..len]);
         log::debug!("txlen: {}", len);
 
         {
-            // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this issue as well:
-            // https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
+            // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking
+            // this issue as well: https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
             // detect an outbound loopback packet, and shove it back in
             if let Ok(mut eth_frame) = EthernetFrame::new_checked(&mut self.buf[..len]) {
                 let mut local_hwaddr = [0u8; 6];
@@ -210,15 +228,23 @@ impl<'a> phy::TxToken for NetPhyTxToken<'a> {
                 match eth_frame.ethertype() {
                     EthernetProtocol::Ipv4 => {
                         if let Ok(packet) = Ipv4Packet::new_checked(&packet_clone[..payload_len]) {
-                            log::debug!("IPV4 packet checksum: {:x} ({:?})", packet.checksum(), packet.verify_checksum());
+                            log::debug!(
+                                "IPV4 packet checksum: {:x} ({:?})",
+                                packet.checksum(),
+                                packet.verify_checksum()
+                            );
                             if let Ok(ipv4_parsed) = Ipv4Repr::parse(&packet, &self.caps) {
                                 log::debug!("IPV4 parsed: {:?}", ipv4_parsed);
                                 if ipv4_parsed.dst_addr.as_bytes() == [127, 0, 0, 1] {
                                     log::debug!("patching destination 127.0.0.1");
                                     // patch the destination MAC address
                                     let mut local_hwaddr = [0u8; 6];
-                                    local_hwaddr[2..6].copy_from_slice(&MAC_ADDRESS_LSB.load(Ordering::SeqCst).to_be_bytes());
-                                    local_hwaddr[0..2].copy_from_slice(&MAC_ADDRESS_MSB.load(Ordering::SeqCst).to_be_bytes());
+                                    local_hwaddr[2..6].copy_from_slice(
+                                        &MAC_ADDRESS_LSB.load(Ordering::SeqCst).to_be_bytes(),
+                                    );
+                                    local_hwaddr[0..2].copy_from_slice(
+                                        &MAC_ADDRESS_MSB.load(Ordering::SeqCst).to_be_bytes(),
+                                    );
                                     eth_frame.set_dst_addr(smoltcp::wire::EthernetAddress(local_hwaddr));
 
                                     /* this is no longer necessary in smoltcp 0.9 or later - an interface can bind to multiple sockets, one of which being 127.0.0.1
@@ -315,15 +341,20 @@ impl<'a> phy::TxToken for NetPhyTxToken<'a> {
                         }
                     }
                     EthernetProtocol::Arp => {
-                        // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this issue as well:
-                        // https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
-                        // this part of the hack finds ARP packets to and from the local device, and responds to them with packet injections
-                        // we're parsing packets that came from our own stack -- they better be OK!
+                        // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but
+                        // tracking this issue as well: https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
+                        // this part of the hack finds ARP packets to and from the local device, and responds
+                        // to them with packet injections we're parsing packets that
+                        // came from our own stack -- they better be OK!
                         let arp_packet = ArpPacket::new_checked(eth_frame.payload_mut()).unwrap();
                         let arp_repr = ArpRepr::parse(&arp_packet).unwrap();
                         match arp_repr {
                             ArpRepr::EthernetIpv4 {
-                                operation, source_hardware_addr, source_protocol_addr, target_protocol_addr, ..
+                                operation,
+                                source_hardware_addr,
+                                source_protocol_addr,
+                                target_protocol_addr,
+                                ..
                             } => {
                                 log::debug!("outgoing arp: {:?} {:?} {:?}", source_hardware_addr, source_protocol_addr, target_protocol_addr);
                                 let local_addr = IPV4_ADDRESS.load(Ordering::SeqCst).to_be_bytes();
@@ -357,14 +388,15 @@ impl<'a> phy::TxToken for NetPhyTxToken<'a> {
                                     // don't do anything, pass it on
                                 } */
                             }
-                            _ => {}, // pass it on
+                            _ => {} // pass it on
                         }
                     }
                     _ => {}
                 }
             }
         }
-        // forward the packet on if it's not a loopback (loopback will call return early and exit before getting to this line)
+        // forward the packet on if it's not a loopback (loopback will call return early and exit before
+        // getting to this line)
         self.com.wlan_send_packet(&self.buf[..len]).expect("driver error sending WLAN packet");
 
         result

@@ -1,9 +1,11 @@
-use crate::{ShellCmdApi,CommonEnv};
-use xous_ipc::String;
-use xous::{MessageEnvelope, Message};
-use codec::*;
 use core::fmt::Write;
+
+use codec::*;
 use locales::t;
+use xous::{Message, MessageEnvelope};
+use xous_ipc::String;
+
+use crate::{CommonEnv, ShellCmdApi};
 
 #[derive(Debug)]
 pub struct Audio {
@@ -16,13 +18,7 @@ pub struct Audio {
 impl Audio {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_REPL).unwrap();
-        Audio {
-            callback_id: None,
-            callback_conn,
-            framecount: 0,
-            play_sample: 0.0,
-            freq: 440.0,
-        }
+        Audio { callback_id: None, callback_conn, framecount: 0, play_sample: 0.0, freq: 440.0 }
     }
 }
 
@@ -51,7 +47,7 @@ fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntErro
                 }
                 significance /= 10;
             } else {
-                return "z".parse::<i32>() // you can't create a ParseIntError any other way
+                return "z".parse::<i32>(); // you can't create a ParseIntError any other way
             }
         }
         Ok(result)
@@ -64,7 +60,11 @@ fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntErro
 impl<'a> ShellCmdApi<'a> for Audio {
     cmd_api!(audio);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         let helpstring = t!("replapp.audio.help", locales::LANG);
         let mut tokens = args.as_str().unwrap().split(' ');
@@ -114,7 +114,8 @@ impl<'a> ShellCmdApi<'a> for Audio {
                         move || {
                             let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
                             ticktimer.sleep_ms((duration * 1000.0) as usize).unwrap();
-                            xous::send_message(conn, Message::new_scalar(cb_id as usize, 0, 0, 0, STOP_ID)).unwrap();
+                            xous::send_message(conn, Message::new_scalar(cb_id as usize, 0, 0, 0, STOP_ID))
+                                .unwrap();
                         }
                     });
                     write!(ret, "{}", t!("replapp.audio.start", locales::LANG)).unwrap();
@@ -123,16 +124,25 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     write!(ret, "{}", helpstring).unwrap();
                 }
             }
-
         }
         Ok(Some(ret))
     }
 
-    fn callback(&mut self, msg: &MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(
+        &mut self,
+        msg: &MessageEnvelope,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         const AMPLITUDE: f32 = 0.8;
 
         match &msg.body {
-            Message::Scalar(xous::ScalarMessage{id: _, arg1: free_play, arg2: _avail_rec, arg3: _, arg4: routing_id}) => {
+            Message::Scalar(xous::ScalarMessage {
+                id: _,
+                arg1: free_play,
+                arg2: _avail_rec,
+                arg3: _,
+                arg4: routing_id,
+            }) => {
                 if *routing_id == codec::AUDIO_CB_ROUTING_ID {
                     let mut frames: FrameRing = FrameRing::new();
                     let frames_to_push = if frames.writeable_count() < *free_play {
@@ -144,11 +154,14 @@ impl<'a> ShellCmdApi<'a> for Audio {
 
                     log::debug!("f{} p{}", self.framecount, frames_to_push);
                     for _ in 0..frames_to_push {
-                        let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
+                        let mut frame: [u32; codec::FIFO_DEPTH] =
+                            [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
                         // put the "expensive" f32 comparison outside the cosine wave table computation loop
                         let omega = self.freq * 2.0 * std::f32::consts::PI / SAMPLE_RATE_HZ;
                         for sample in frame.iter_mut() {
-                            let raw_sine: i16 = (AMPLITUDE * cos_table::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
+                            let raw_sine: i16 = (AMPLITUDE
+                                * cos_table::cos(self.play_sample * omega)
+                                * i16::MAX as f32) as i16;
                             let left = raw_sine as u16;
                             let right = raw_sine as u16;
                             *sample = right as u32 | (left as u32) << 16;
@@ -156,26 +169,28 @@ impl<'a> ShellCmdApi<'a> for Audio {
                         }
 
                         frames.nq_frame(frame).unwrap();
-
                     }
                     env.codec.swap_frames(&mut frames).unwrap();
                 } else if *routing_id == STOP_ID {
                     let mut ret = String::<1024>::new();
                     env.codec.abort().unwrap(); // this should stop callbacks from occurring too.
-                    write!(ret, "{} {} {}.",
+                    write!(
+                        ret,
+                        "{} {} {}.",
                         t!("replapp.audio.completion_a", locales::LANG),
                         self.framecount,
                         t!("replapp.audio.completion_b", locales::LANG),
-                    ).unwrap();
+                    )
+                    .unwrap();
                     self.framecount = 0;
                     self.play_sample = 0.0;
                     env.codec.power_off().unwrap();
                     return Ok(Some(ret));
                 }
-            },
+            }
             Message::Move(_mm) => {
                 log::error!("received memory message when not expected")
-            },
+            }
             _ => {
                 log::error!("received unknown callback type")
             }

@@ -1,4 +1,5 @@
 use core::arch::asm;
+
 use crate::platform;
 // Assembly stubs for entering into the loader, and exiting it.
 
@@ -6,11 +7,12 @@ use crate::platform;
 #[link_section = ".text.init"]
 #[export_name = "_start"]
 pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     let _kernel_args = _kernel_args;
-    #[cfg(any(feature="cramium-soc", feature="cramium-fpga"))]
+    #[cfg(any(feature = "cramium-soc", feature = "cramium-fpga"))]
     let _kernel_args = _start as *const usize as usize + platform::KERNEL_OFFSET;
     unsafe {
+        #[rustfmt::skip]
         asm! (
             "li          t0, 0xffffffff",
             "csrw        mideleg, t0",
@@ -53,9 +55,10 @@ pub extern "C" fn _start(_kernel_args: usize, loader_sig: usize) {
 /// This is only used in debug mode
 pub extern "C" fn abort() {
     unsafe {
-        asm! (
+        #[rustfmt::skip]
+        asm!(
             "300:", // abort
-                "j 300b",
+            "j 300b",
             options(noreturn)
         );
     }
@@ -76,6 +79,7 @@ pub extern "C" fn start_kernel(
     let debug: usize = if debug_ { 1 } else { 0 };
     let resume: usize = if resume_ { 1 } else { 0 };
     unsafe {
+        #[rustfmt::skip]
         asm! (
             // these generate redundant mv's but it ensures that the arguments are marked as used
             "mv          a0, {args}",
@@ -122,4 +126,3 @@ pub extern "C" fn start_kernel(
         );
     }
 }
-

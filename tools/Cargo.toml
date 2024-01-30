@@ -17,9 +17,13 @@ ring = "0.16.20"
 env_logger = "0.7.1"
 log = "0.4.14"
 pem = "0.8.3"
-svd2utra = "0.1.21"
+svd2utra = "0.1.22"
 xmas-elf = "0.9.0"
 xous-semver = "0.1.2"
+ed25519-dalek = "1.0.1"
+sha2 = "0.9.5"
+pkcs8 = { version = "0.8.0", features = ["pem"] }
+base64 = "0.20.0"
 
 [[bin]]
 name = "copy-object"

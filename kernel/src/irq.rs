@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::arch;
 use xous_kernel::{MemoryAddress, PID};
+
+use crate::arch;
 
 static mut IRQ_HANDLERS: [Option<(PID, MemoryAddress, Option<MemoryAddress>)>; 32] = [None; 32];
 
@@ -22,13 +23,18 @@ pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::E
                     return SystemServices::with_mut(|ss| {
                         // Disable all other IRQs and redirect into userspace
                         arch::irq::disable_all_irqs();
-                        klog!("Making a callback to PID{}: {:x?} ({:08x}, {:x?})", pid, f, irq_no as usize, arg);
+                        klog!(
+                            "Making a callback to PID{}: {:x?} ({:08x}, {:x?})",
+                            pid,
+                            f,
+                            irq_no as usize,
+                            arg
+                        );
                         ss.make_callback_to(
                             *pid,
                             f.get() as *mut usize,
                             irq_no,
-                            arg.map(|x| x.get() as *mut usize)
-                                .unwrap_or(core::ptr::null_mut::<usize>()),
+                            arg.map(|x| x.get() as *mut usize).unwrap_or(core::ptr::null_mut::<usize>()),
                         )
                         .map(|_| xous_kernel::Result::ResumeProcess)
                     });

@@ -38,21 +38,14 @@ use xous_kernel::*;
 /// # Safety
 ///
 /// This is safe to call only to initialize the kernel.
-pub unsafe extern "C" fn init(
-    arg_offset: *const u32,
-    init_offset: *const u32,
-    rpt_offset: *mut u32,
-) {
+pub unsafe extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offset: *mut u32) {
     args::KernelArguments::init(arg_offset);
     let args = args::KernelArguments::get();
     // Everything needs memory, so the first thing we should do is initialize the memory manager.
     crate::mem::MemoryManager::with_mut(|mm| {
-        mm.init_from_memory(rpt_offset, &args)
-            .expect("couldn't initialize memory manager")
+        mm.init_from_memory(rpt_offset, &args).expect("couldn't initialize memory manager")
     });
-    SystemServices::with_mut(|system_services| {
-        system_services.init_from_memory(init_offset, &args)
-    });
+    SystemServices::with_mut(|system_services| system_services.init_from_memory(init_offset, &args));
 
     // Now that the memory manager is set up, perform any architecture and
     // platform specific initializations.
@@ -61,7 +54,8 @@ pub unsafe extern "C" fn init(
 
     println!("KMAIN (clean boot): Supervisor mode started...");
 
-    // rand::init() already clears the initial pipe, but pump the TRNG a little more out of no other reason than sheer paranoia
+    // rand::init() already clears the initial pipe, but pump the TRNG a little more out of no other reason
+    // than sheer paranoia
     platform::rand::get_u32();
     platform::rand::get_u32();
 }
@@ -75,9 +69,8 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
     let next_pid = last_pid.map(|v| v.get() as usize).unwrap_or(1);
 
     SystemServices::with(|system_services| {
-        for process in system_services.processes[next_pid..]
-            .iter()
-            .chain(system_services.processes[..next_pid].iter())
+        for process in
+            system_services.processes[next_pid..].iter().chain(system_services.processes[..next_pid].iter())
         {
             if process.runnable() {
                 return Some(process.pid);
@@ -138,6 +131,4 @@ pub extern "C" fn kmain() {
 /// The main entrypoint when run in hosted mode. When running in embedded mode,
 /// this function does not exist.
 #[cfg(all(not(baremetal)))]
-fn main() {
-    kmain();
-}
+fn main() { kmain(); }

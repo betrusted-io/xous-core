@@ -1,6 +1,6 @@
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub mod dns;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 pub use dns::*;
 #[cfg(not(target_os = "xous"))]
 pub mod dns_hosted;

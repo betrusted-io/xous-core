@@ -1,5 +1,6 @@
-use clap::{crate_version, App, Arg};
 use std::io::{Error, ErrorKind};
+
+use clap::{crate_version, App, Arg};
 use tools::sign_image::{load_pem, sign_file};
 
 const DEVKEY_PATH: &str = "devkey/dev.key";
@@ -70,31 +71,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .required(true),
         )
         .arg(
-            Arg::with_name("defile").help(
-                "patch the resulting image, to create a test file to catch signature failure",
-            ),
+            Arg::with_name("defile")
+                .help("patch the resulting image, to create a test file to catch signature failure"),
         )
         .get_matches();
 
-    let minver = if let Some(minver_str) = matches.value_of("min-xous-ver") {
-        Some(SemVer::from_str(minver_str).map_err(|_| {
-            Error::new(
-                ErrorKind::InvalidInput,
-                "Minimum version semver format incorrect",
-            )
-        })?)
-    } else {
-        None
-    };
+    let minver =
+        if let Some(minver_str) = matches.value_of("min-xous-ver") {
+            Some(SemVer::from_str(minver_str).map_err(|_| {
+                Error::new(ErrorKind::InvalidInput, "Minimum version semver format incorrect")
+            })?)
+        } else {
+            None
+        };
 
     // Sign the loader, if an output file was specified
     if let Some(loader_output) = matches.value_of("loader-output") {
-        let loader_key = matches
-            .value_of("loader-key")
-            .expect("no loader key specified");
-        let loader_image = matches
-            .value_of("loader-image")
-            .expect("no loader image specified");
+        let loader_key = matches.value_of("loader-key").expect("no loader key specified");
+        let loader_image = matches.value_of("loader-image").expect("no loader image specified");
 
         let loader_pkey = load_pem(loader_key)?;
         if loader_pkey.tag != "PRIVATE KEY" {
@@ -102,22 +96,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err("invalid loader private key type")?;
         }
         println!("Signing loader");
-        sign_file(
-            &loader_image,
-            &loader_output,
-            &loader_pkey,
-            matches.is_present("defile"),
-            &minver,
-        )?;
+        sign_file(&loader_image, &loader_output, &loader_pkey, matches.is_present("defile"), &minver, false)?;
     }
 
     if let Some(kernel_output) = matches.value_of("kernel-output") {
-        let kernel_key = matches
-            .value_of("kernel-key")
-            .expect("no kernel key specified");
-        let kernel_image = matches
-            .value_of("kernel-image")
-            .expect("no kernel image specified");
+        let kernel_key = matches.value_of("kernel-key").expect("no kernel key specified");
+        let kernel_image = matches.value_of("kernel-image").expect("no kernel image specified");
 
         let kernel_pkey = load_pem(kernel_key)?;
         if kernel_pkey.tag != "PRIVATE KEY" {
@@ -125,13 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err("invalid kernel private key type")?;
         }
         println!("Signing kernel");
-        sign_file(
-            &kernel_image,
-            &kernel_output,
-            &kernel_pkey,
-            matches.is_present("defile"),
-            &minver,
-        )?;
+        sign_file(&kernel_image, &kernel_output, &kernel_pkey, matches.is_present("defile"), &minver, true)?;
     }
     Ok(())
 }

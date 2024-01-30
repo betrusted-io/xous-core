@@ -36,12 +36,11 @@ impl From<[usize; 2]> for BattStats {
     }
 }
 
-impl From<BattStats> for [usize; 2]{
+impl From<BattStats> for [usize; 2] {
     fn from(stats: BattStats) -> [usize; 2] {
         [
             (stats.voltage as usize & 0xffff) | ((stats.soc as usize) << 16) & 0xFF_0000,
-            (stats.remaining_capacity as usize & 0xffff)
-                | ((stats.current as usize) << 16) & 0xffff_0000,
+            (stats.remaining_capacity as usize & 0xffff) | ((stats.current as usize) << 16) & 0xffff_0000,
         ]
     }
 }
@@ -56,27 +55,19 @@ pub(crate) struct FlashRecord {
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SsidRecord {
     pub name: xous_ipc::String<32>,
-    /// rssi is reported as the negative of actual rssi in dBm. Example: an rssi of -42dBm is reported as `42u8`.
+    /// rssi is reported as the negative of actual rssi in dBm. Example: an rssi of -42dBm is reported as
+    /// `42u8`.
     pub rssi: u8,
 }
 impl Default for SsidRecord {
-    fn default() -> Self {
-        SsidRecord {
-            name: xous_ipc::String::<32>::new(),
-            rssi: 0,
-        }
-    }
+    fn default() -> Self { SsidRecord { name: xous_ipc::String::<32>::new(), rssi: 0 } }
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct SsidReturn {
     pub list: [SsidRecord; 8],
 }
 impl Default for SsidReturn {
-    fn default() -> Self {
-        SsidReturn {
-            list: [SsidRecord::default(); 8],
-        }
-    }
+    fn default() -> Self { SsidReturn { list: [SsidRecord::default(); 8] } }
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct WlanStatusIpc {

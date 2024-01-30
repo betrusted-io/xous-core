@@ -7,22 +7,24 @@ description = "SPINOR ROM operations server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.55"
-log-server = { package = "xous-api-log", version = "0.1.51" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.51" }
-xous-names = { package = "xous-api-names", version = "0.9.53" }
+xous = "0.9.57"
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+xous-names = { package = "xous-api-names", version = "0.9.55" }
 log = "0.4.14"
-susres = {package = "xous-api-susres", version = "0.9.51"}
+susres = { package = "xous-api-susres", version = "0.9.53" }
 trng = { path = "../trng" }
 com = { path = "../com" }
 llio = { path = "../llio" }
 
-rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
-xous-ipc = "0.9.55"
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+] }
+xous-ipc = "0.9.57"
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
 
-utralib = { version = "0.1.23", optional = true, default-features = false }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 
 [dev-dependencies]
 lazy_static = "1.4.0"

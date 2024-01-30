@@ -1,4 +1,4 @@
-pub(crate) const SERVER_NAME_TTS: &str     = "_Text to speech front end_";
+pub(crate) const SERVER_NAME_TTS: &str = "_Text to speech front end_";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
@@ -16,5 +16,5 @@ pub(crate) enum Opcode {
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TtsFrontendMsg {
-    pub text: xous_ipc::String::<2048>,
+    pub text: xous_ipc::String<2048>,
 }

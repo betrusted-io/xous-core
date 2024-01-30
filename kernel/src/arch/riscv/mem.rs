@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::arch::process::InitialProcess;
-use crate::mem::MemoryManager;
 use core::fmt;
+
 use riscv::register::satp;
-#[cfg(feature="gdb-stub")]
+#[cfg(feature = "gdb-stub")]
 use riscv::register::sstatus;
 use xous_kernel::{MemoryFlags, PID};
+
+use crate::arch::process::InitialProcess;
+use crate::mem::MemoryManager;
 
 // pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;
 pub const DEFAULT_HEAP_BASE: usize = 0x2000_0000;
@@ -110,28 +112,21 @@ impl MemoryMapping {
     //     self.satp: 0x8000_0000 | (((pid as usize) << 22) & (((1 << 9) - 1) << 22)) | (root_addr >> 12)
     // }
     #[allow(dead_code)]
-    pub unsafe fn from_raw(&mut self, satp: usize) {
-        self.satp = satp;
-    }
+    pub unsafe fn from_raw(&mut self, satp: usize) { self.satp = satp; }
 
-    pub unsafe fn from_init_process(&mut self, init: InitialProcess) {
-        self.satp = init.satp;
-    }
+    pub unsafe fn from_init_process(&mut self, init: InitialProcess) { self.satp = init.satp; }
 
     /// Allocate a brand-new memory mapping. When this memory mapping is created,
     /// it will be ready to use in a new process, however it will have no actual
     /// program code. It will, however, have the following pages mapped:
     ///
-    ///     1. The kernel will be mapped to superpage 1023, meaning the kernel can
-    ///        switch to this process and do things.
-    ///     2. A page will be allocated for superpage 1022, to contain pages for
-    ///        process-specific code.
-    ///     3. A page will be allocated for superpage 1021, to contain pages for
-    ///        managing pages.
-    ///     4. The root pagetable will be allocated and mapped at 0xff800000,
-    ///        ensuring new superpages can be allocated.
-    ///     5. A context page will be allocated at 0xff801000, ensuring the
-    ///        process can actually be run.
+    ///     1. The kernel will be mapped to superpage 1023, meaning the kernel can switch to this process and
+    ///        do things.
+    ///     2. A page will be allocated for superpage 1022, to contain pages for process-specific code.
+    ///     3. A page will be allocated for superpage 1021, to contain pages for managing pages.
+    ///     4. The root pagetable will be allocated and mapped at 0xff800000, ensuring new superpages can be
+    ///        allocated.
+    ///     5. A context page will be allocated at 0xff801000, ensuring the process can actually be run.
     ///     6. Individual pagetable mappings are mapped at 0xff400000
     /// At the end of this operation, the following mapping will take place. Note that
     /// names are repeated in the chart below to indicate they are the same page
@@ -144,14 +139,14 @@ impl MemoryMapping {
     ///                         +----------------+
     ///                                  |
     ///                  +---------------+-------------------+------------------+
-    ///                  |                                   |                  |           
-    ///               [1021]                              [1022]             [1023]      
-    ///                  v                                   v                  v          
+    ///                  |                                   |                  |
+    ///               [1021]                              [1022]             [1023]
+    ///                  v                                   v                  v
     ///          +--------------+                    +--------------+       +--------+
     ///          | Level 0/1021 |                    | Level 0/1022 |       | Kernel |
     ///          |   pages_l0   |                    |  process_l0  |       |        |
     ///          +--------------+                    +--------------+       +--------+
-    ///                  |                                   |          
+    ///                  |                                   |
     ///          +-------+---------+                     +---+-----------+
     ///          |                 |                     |               |
     ///       [1021]            [1022]                  [0]             [1]
@@ -179,31 +174,26 @@ impl MemoryMapping {
             let pages_l0_virt = PAGE_TABLE_OFFSET + 4096 * 1021;
             let pages_l0_phys = super::mem::virt_to_phys(pages_l0_temp_virt as usize)? as usize;
             let pages_l0_vpn0 = (pages_l0_virt as usize >> 12) & ((1 << 10) - 1);
-            let pages_l0_ppn =
-                ((pages_l0_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
+            let pages_l0_ppn = ((pages_l0_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
 
             // Superpage that points to process-specific pages
             let process_l0_temp_virt = memory_manager.map_zeroed_page(current_pid, false)?;
             let process_l0_virt = PAGE_TABLE_OFFSET + 4096 * 1022;
             let process_l0_phys = super::mem::virt_to_phys(process_l0_temp_virt as usize)? as usize;
             let process_l0_vpn0 = (process_l0_virt as usize >> 12) & ((1 << 10) - 1);
-            let process_l0_ppn =
-                ((process_l0_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
+            let process_l0_ppn = ((process_l0_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
 
             // Context switch information containing all thread information.
             let context_temp_virt = memory_manager.map_zeroed_page(current_pid, false)?;
             let context_virt = THREAD_CONTEXT_AREA;
             let context_phys = super::mem::virt_to_phys(context_temp_virt as usize)? as usize;
             let context_vpn0 = (context_virt as usize >> 12) & ((1 << 10) - 1);
-            let context_ppn =
-                ((context_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
+            let context_ppn = ((context_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
 
             // Map the kernel into the new process mapping so we can continue
             // execution when it is activated. We can copy this value from our
             // current pagetable mapping.
-            let krn_pg1023_ptr = (PAGE_TABLE_ROOT_OFFSET as *const usize)
-                .add(1023)
-                .read_volatile();
+            let krn_pg1023_ptr = (PAGE_TABLE_ROOT_OFFSET as *const usize).add(1023).read_volatile();
             root_temp_virt.add(1023).write_volatile(krn_pg1023_ptr);
 
             // Map the process superpage into itself.
@@ -218,17 +208,11 @@ impl MemoryMapping {
 
             // Map the root pagetable and the context page into the new process
             process_l0_temp_virt.add(root_vpn0).write_volatile(root_ppn);
-            process_l0_temp_virt
-                .add(context_vpn0)
-                .write_volatile(context_ppn);
+            process_l0_temp_virt.add(context_vpn0).write_volatile(context_ppn);
 
             // Add the the pagetable superpage to the l0 pagetable.
-            pages_l0_temp_virt
-                .add(process_l0_vpn0)
-                .write_volatile(process_l0_ppn);
-            pages_l0_temp_virt
-                .add(pages_l0_vpn0)
-                .write_volatile(pages_l0_ppn);
+            pages_l0_temp_virt.add(process_l0_vpn0).write_volatile(process_l0_ppn);
+            pages_l0_temp_virt.add(pages_l0_vpn0).write_volatile(pages_l0_ppn);
 
             // Mark the four pages as being owned by the new process
             memory_manager.move_page_raw(root_phys as *mut usize, pid)?;
@@ -252,20 +236,14 @@ impl MemoryMapping {
 
     /// Get the currently active memory mapping.  Note that the actual root pages
     /// may be found at virtual address `PAGE_TABLE_ROOT_OFFSET`.
-    pub fn current() -> MemoryMapping {
-        MemoryMapping {
-            satp: satp::read().bits(),
-        }
-    }
+    pub fn current() -> MemoryMapping { MemoryMapping { satp: satp::read().bits() } }
 
     /// Get the "PID" (actually, ASID) from the current mapping
-    pub fn get_pid(&self) -> PID {
-        PID::new((self.satp >> 22 & ((1 << 9) - 1)) as _).unwrap()
-    }
+    pub fn get_pid(&self) -> Option<PID> { PID::new((self.satp >> 22 & ((1 << 9) - 1)) as _) }
 
-    pub fn is_kernel(&self) -> bool {
-        self.get_pid().get() == 1
-    }
+    pub fn is_allocated(&self) -> bool { self.get_pid().is_some() }
+
+    pub fn is_kernel(&self) -> bool { self.get_pid().map(|v| v.get() == 1).unwrap_or(false) }
 
     /// Set this mapping as the systemwide mapping.
     /// **Note:** This should only be called from an interrupt in the
@@ -279,8 +257,51 @@ impl MemoryMapping {
         Ok(())
     }
 
+    pub fn phys_to_virt(&self, phys: usize) -> Result<Option<u32>, xous_kernel::Error> {
+        let mut found = None;
+        let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
+        if phys & PAGE_SIZE - 1 != 0 {
+            return Err(xous_kernel::Error::BadAlignment);
+        }
+        for (i, l1_entry) in l1_pt.entries.iter().enumerate() {
+            if *l1_entry == 0 {
+                continue;
+            }
+            let _superpage_addr = i as u32 * (1 << 22);
+
+            // Page 1023 is only available to PID1
+            if i == 1023 && !self.is_kernel() {
+                continue;
+            }
+            let l0_pt = unsafe { &mut (*((PAGE_TABLE_OFFSET + i * 4096) as *mut LeafPageTable)) };
+            for (j, l0_entry) in l0_pt.entries.iter().enumerate() {
+                if *l0_entry & 0x7 == 0 {
+                    continue;
+                }
+                let _page_addr = j as u32 * (1 << 12);
+                let virt_addr = _superpage_addr + _page_addr;
+                let phys_addr = (*l0_entry >> 10) << 12;
+                let valid = (l0_entry & MMUFlags::VALID.bits()) != 0;
+                let shared = (l0_entry & MMUFlags::S.bits()) != 0;
+                if phys_addr == phys && (valid || shared) {
+                    if found.is_none() {
+                        found = Some(virt_addr);
+                    } else {
+                        println!("Page is mapped twice within process {:08x}!", phys_addr);
+                        return Err(xous_kernel::Error::MemoryInUse);
+                    }
+                }
+            }
+        }
+        Ok(found)
+    }
+
     pub fn print_map(&self) {
-        println!("Memory Maps for PID {}:", self.get_pid());
+        if !self.is_allocated() {
+            println!("Process isn't allocated!");
+            return;
+        }
+        println!("Memory Maps for PID {}:", self.get_pid().map(|v| v.get()).unwrap_or(0));
         let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
         for (i, l1_entry) in l1_pt.entries.iter().enumerate() {
             if *l1_entry == 0 {
@@ -344,14 +365,7 @@ impl MemoryMapping {
             unsafe { flush_mmu() };
 
             // Map the new physical page to the virtual page, so we can access it.
-            map_page_inner(
-                mm,
-                pid,
-                l0pt_phys,
-                l0pt_virt,
-                MemoryFlags::W | MemoryFlags::R,
-                false,
-            )?;
+            map_page_inner(mm, pid, l0pt_phys, l0pt_virt, MemoryFlags::W | MemoryFlags::R, false)?;
 
             // Zero-out the new page
             let page_addr = l0pt_virt as *mut usize;
@@ -483,8 +497,7 @@ pub fn peek_memory<T>(addr: *mut T) -> Result<T, xous_kernel::Error> {
 
     // Ensure the entry has already been mapped, and that we're allowed
     // to read it.
-    if l0_pt.entries[vpn0] & (MMUFlags::R | MMUFlags::VALID).bits()
-        != (MMUFlags::R | MMUFlags::VALID).bits()
+    if l0_pt.entries[vpn0] & (MMUFlags::R | MMUFlags::VALID).bits() != (MMUFlags::R | MMUFlags::VALID).bits()
     {
         return Err(xous_kernel::Error::BadAddress);
     }
@@ -582,12 +595,7 @@ pub fn map_page_inner(
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
     let vpo = virt & ((1 << 12) - 1);
 
-    let flags = translate_flags(req_flags)
-        | if map_user {
-            MMUFlags::USER
-        } else {
-            MMUFlags::NONE
-        };
+    let flags = translate_flags(req_flags) | if map_user { MMUFlags::USER } else { MMUFlags::NONE };
 
     assert!(ppn1 < 4096);
     assert!(ppn0 < 1024);
@@ -613,21 +621,12 @@ pub fn map_page_inner(
         // Mark this entry as a leaf node (WRX as 0), and indicate
         // it is a valid page by setting "V".
         unsafe {
-            l1_pt
-                .add(vpn1)
-                .write_volatile(((l0_pt_phys >> 12) << 10) | MMUFlags::VALID.bits());
+            l1_pt.add(vpn1).write_volatile(((l0_pt_phys >> 12) << 10) | MMUFlags::VALID.bits());
             flush_mmu();
         }
 
         // Map the new physical page to the virtual page, so we can access it.
-        map_page_inner(
-            mm,
-            pid,
-            l0_pt_phys,
-            l0_pt as usize,
-            MemoryFlags::W | MemoryFlags::R,
-            false,
-        )?;
+        map_page_inner(mm, pid, l0_pt_phys, l0_pt as usize, MemoryFlags::W | MemoryFlags::R, false)?;
 
         // Zero-out the new page
         unsafe { zeropage(l0_pt as *mut u32) };
@@ -639,9 +638,7 @@ pub fn map_page_inner(
     }
     unsafe {
         l0_pt.add(vpn0).write_volatile(
-            (ppn1 << 20)
-                | (ppn0 << 10)
-                | (flags | MMUFlags::VALID | MMUFlags::D | MMUFlags::A).bits(),
+            (ppn1 << 20) | (ppn0 << 10) | (flags | MMUFlags::VALID | MMUFlags::D | MMUFlags::A).bits(),
         )
     };
     unsafe { flush_mmu() };
@@ -709,26 +706,17 @@ pub fn move_page_inner(
     let phys = previous_entry >> 10 << 12;
     let flags = untranslate_flags(previous_entry);
 
-    let result = map_page_inner(
-        mm,
-        dest_pid,
-        phys,
-        dest_addr as usize,
-        flags,
-        dest_pid.get() != 1,
-    );
+    let result = map_page_inner(mm, dest_pid, phys, dest_addr as usize, flags, dest_pid.get() != 1);
 
     // Switch back to the original address space and return
     src_space.activate().unwrap();
     result
 }
 
-/// Determine if a page has been lent.
+/// Determine if a virtual page has been lent.
 pub fn page_is_lent(src_addr: *mut u8) -> bool {
-    pagetable_entry(src_addr as usize).map_or(
-        false,
-        |v| unsafe { v.read_volatile() } & MMUFlags::S.bits() != 0,
-    )
+    pagetable_entry(src_addr as usize)
+        .map_or(false, |v| unsafe { v.read_volatile() } & MMUFlags::S.bits() != 0)
 }
 
 /// Mark the given virtual address as being lent.  If `writable`, clear the
@@ -789,14 +777,7 @@ pub fn lend_page_inner(
 
     // Switch to the new address space and map the page
     dest_space.activate()?;
-    let result = map_page_inner(
-        mm,
-        dest_pid,
-        phys,
-        dest_addr as usize,
-        new_flags,
-        dest_pid.get() != 1,
-    );
+    let result = map_page_inner(mm, dest_pid, phys, dest_addr as usize, new_flags, dest_pid.get() != 1);
     unsafe { flush_mmu() };
 
     // Switch back to our proces space
@@ -831,8 +812,7 @@ pub fn return_page_inner(
 
     // Switch to the destination address space
     dest_space.activate()?;
-    let dest_entry =
-        pagetable_entry(dest_addr as usize).expect("page wasn't lent in destination space");
+    let dest_entry = pagetable_entry(dest_addr as usize).expect("page wasn't lent in destination space");
     let dest_entry_value = unsafe { dest_entry.read_volatile() };
 
     // If the page wasn't marked as `Shared` in the destination address space,
@@ -843,9 +823,8 @@ pub fn return_page_inner(
 
     // Clear the `SHARED` and `PREVIOUSLY-WRITABLE` bits, and set the `VALID` bit.
     unsafe {
-        dest_entry.write_volatile(
-            dest_entry_value & !(MMUFlags::S | MMUFlags::P).bits() | MMUFlags::VALID.bits(),
-        )
+        dest_entry
+            .write_volatile(dest_entry_value & !(MMUFlags::S | MMUFlags::P).bits() | MMUFlags::VALID.bits())
     };
     unsafe { flush_mmu() };
 
@@ -891,6 +870,11 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
     Ok((l0_pt.entries[vpn0] >> 10) << 12)
 }
 
+#[allow(dead_code)]
+pub fn virt_to_phys_pid(_pid: PID, _virt: usize) -> Result<usize, xous_kernel::Error> {
+    todo!("virt_to_phys_pid is not yet implemented for riscv");
+}
+
 pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Error> {
     // Disallow mapping memory outside of user land
     if !MemoryMapping::current().is_kernel() && address >= USER_AREA_END {
@@ -919,16 +903,13 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
     }
 
     let new_page = MemoryManager::with_mut(|mm| {
-        mm.alloc_page(crate::arch::process::current_pid())
-            .expect("Couldn't allocate new page")
+        mm.alloc_page(crate::arch::process::current_pid()).expect("Couldn't allocate new page")
     });
     let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
     let ppn0 = (new_page >> 12) & ((1 << 10) - 1);
     unsafe {
         // Map the page to our process
-        *entry = (ppn1 << 20)
-            | (ppn0 << 10)
-            | (flags | FLG_VALID /* valid */ | FLG_D /* D */ | FLG_A/* A */);
+        *entry = (ppn1 << 20) | (ppn0 << 10) | (flags | FLG_VALID /* valid */ | FLG_D /* D */ | FLG_A/* A */);
         flush_mmu();
 
         // Zero-out the page
@@ -1003,11 +984,7 @@ pub fn page_flags(virt: usize) -> Option<MemoryFlags> {
         return_flags = return_flags | MemoryFlags::X;
     }
 
-    if return_flags.is_empty() {
-        None
-    } else {
-        Some(return_flags)
-    }
+    if return_flags.is_empty() { None } else { Some(return_flags) }
 }
 
 pub fn update_page_flags(virt: usize, flags: MemoryFlags) -> Result<(), xous_kernel::Error> {

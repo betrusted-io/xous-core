@@ -1,4 +1,5 @@
-// Copyright 2019-2021 Google LLC
+#![cfg_attr(rustfmt, rustfmt_skip)]
+// Copyright2019-2021 Google LLC
 //
 // Licensed under the Apache License, Version 2 (the "License");
 // you may not use this file except in compliance with the License.

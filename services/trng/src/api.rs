@@ -94,8 +94,10 @@ pub(crate) enum EventCallback {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub(crate) struct ScalarHook {
     pub sid: (u32, u32, u32, u32),
-    pub id: u32, // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
-    pub cid: xous::CID, // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
+    pub id: u32, /* ID of the scalar message to send through (e.g. the discriminant of the Enum on the
+                  * caller's side API) */
+    pub cid: xous::CID, /* caller-side connection ID for the scalar message to route to. Created by the
+                         * caller before hooking. */
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq, Copy, Clone)]
@@ -108,10 +110,10 @@ pub enum TrngTestMode {
     Ro,
     // Combined RO + AV data without any CPRNG conditioning
     Both,
-    // Output of the CPRNG that is constantly re-seeded by RO + AV data. This is the "normal" mode of operation.
-    // The CPRNG serves as a "belt and suspenders" safety measure over raw RO + AV data, so that small drop-outs
-    // in the TRNG don't lead to disastrous consequences. Of course this also masks large failures, but there are
-    // online tests that should help to pick that up.
+    // Output of the CPRNG that is constantly re-seeded by RO + AV data. This is the "normal" mode of
+    // operation. The CPRNG serves as a "belt and suspenders" safety measure over raw RO + AV data, so
+    // that small drop-outs in the TRNG don't lead to disastrous consequences. Of course this also masks
+    // large failures, but there are online tests that should help to pick that up.
     Cprng,
 }
 

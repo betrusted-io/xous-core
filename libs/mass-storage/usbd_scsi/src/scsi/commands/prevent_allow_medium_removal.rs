@@ -15,7 +15,7 @@ use crate::scsi::{
 pub struct PreventAllowMediumRemovalCommand {
     #[pkd(7, 0, 0, 0)]
     pub op_code: u8,
-    
+
     #[pkd(1, 0, 4, 4)]
     pub prevent: u8,
 

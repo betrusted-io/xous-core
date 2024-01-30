@@ -12,8 +12,8 @@
 /// raw fuse values once burned -- they can only be implied through a set of readback calls.
 /// This means the fuse life cycle looks like this:
 ///   * Initial, unprogrammed factory state is all 0's
-///   * USER/KEY data is coded by blowing only the 1's. An ECC code must also be blown simultaneously
-///     to match the final pattern of 1's for correct readout
+///   * USER/KEY data is coded by blowing only the 1's. An ECC code must also be blown simultaneously to
+///     match the final pattern of 1's for correct readout
 ///   * It seems that patches to fuses can be done, so long as it only involves changing 0->1 and results
 ///     in a valid state after ECC is factored in. This is especially true for data values striped across
 ///     multiple banks.
@@ -30,10 +30,8 @@
 /// of code that can convert the physical bank information into the logical view. Validation code thus
 /// works with a set of calls that can validate bank-by-bank, which are then called by the meta-functions
 /// which will implement the logical KEY/USER/CNTL requests.
-///
-
 use crate::efuse_ecc::efuse_ecc::*;
-use crate::{JtagMach, JtagChain, JtagEndian, JtagLeg};
+use crate::{JtagChain, JtagEndian, JtagLeg, JtagMach};
 
 /// There are 13 banks of fuses, 12 of which (key/user) are "hamming" ECC, 1 of which (config) is "dup" ECC.
 pub struct EfusePhy {
@@ -64,12 +62,15 @@ impl EfusePhy {
     }
 
     pub fn user(&self) -> u32 { self.user }
+
     pub fn cntl(&self) -> u8 { self.cntl }
+
     pub fn key(&self) -> [u8; 32] { self.key }
 
     /// this is a TEST FUNCTION ONLY. Unfortunately, the Rust test directive does not
     /// like this no_std runtime / std test environment.
-    pub fn bank_patch(&mut self, index: usize, data: u32) { // this is just for test routines
+    pub fn bank_patch(&mut self, index: usize, data: u32) {
+        // this is just for test routines
         self.banks[index] = data;
         // re-derive key bits from bank data
         for i in 0..32 {
@@ -100,10 +101,10 @@ impl EfusePhy {
                 if index == 0 {
                     // first bank is special because it's split with the user fuse
                     bank_data = data.pop_u32(16, JtagEndian::Little).unwrap();
-                    self.banks[11-index] = bank_data;
+                    self.banks[11 - index] = bank_data;
                 } else {
                     bank_data = data.pop_u32(24, JtagEndian::Little).unwrap();
-                    self.banks[11-index] = add_ecc(bank_data);
+                    self.banks[11 - index] = add_ecc(bank_data);
                 }
             }
         } else {
@@ -112,7 +113,8 @@ impl EfusePhy {
         // derive bits from bank data, to debug any bit-order issues on readout, etc.
         for index in 0..32 {
             // key reversal from hw storage state is handled here
-            self.key[31 - index] = ((self.banks[((index / 3) + 1) as usize] >> ((index % 3) * 8)) & 0xFF) as u8;
+            self.key[31 - index] =
+                ((self.banks[((index / 3) + 1) as usize] >> ((index % 3) * 8)) & 0xFF) as u8;
         }
 
         jm.pause(2000);
@@ -133,7 +135,7 @@ impl EfusePhy {
             self.banks[11] |= (user_data & 0xFF) << 16;
             self.banks[11] = add_ecc(self.banks[11]);
 
-            self.banks[12] = add_ecc( (user_data >> 8) & 0xFF_FF_FF);
+            self.banks[12] = add_ecc((user_data >> 8) & 0xFF_FF_FF);
         } else {
             assert!(false);
         }
@@ -169,24 +171,23 @@ pub struct EfuseApi {
 }
 
 impl EfuseApi {
-    pub fn new() -> Self {
-        EfuseApi {
-            key: [0; 32],
-            user: 0,
-            cntl: 0,
-            phy: EfusePhy::new(),
-        }
-    }
+    pub fn new() -> Self { EfuseApi { key: [0; 32], user: 0, cntl: 0, phy: EfusePhy::new() } }
+
     /// phy_ series of calls returns the current "phy" state, that is, the actual programmed state
     pub fn phy_key(&self) -> [u8; 32] { self.phy.key() }
+
     pub fn phy_user(&self) -> u32 { self.phy.user() }
+
     pub fn phy_cntl(&self) -> u8 { self.phy.cntl() }
 
-    /// api_ series of call returns the current "api" state, which is the intended state to be programmed if not yet programmed
+    /// api_ series of call returns the current "api" state, which is the intended state to be programmed if
+    /// not yet programmed
     #[allow(dead_code)]
     pub fn api_key(&self) -> [u8; 32] { self.key }
+
     #[allow(dead_code)]
     pub fn api_user(&self) -> u32 { self.user }
+
     #[allow(dead_code)]
     pub fn api_cntl(&self) -> u8 { self.cntl }
 
@@ -208,7 +209,9 @@ impl EfuseApi {
             self.key[i] = new_key[31 - i]; // key is reversed in byte order
         }
     }
+
     pub fn set_user(&mut self, new_user: u32) { self.user = new_user; }
+
     pub fn set_cntl(&mut self, new_cntl: u8) { self.cntl = new_cntl; }
 
     pub fn is_valid(&mut self) -> bool {
@@ -220,19 +223,32 @@ impl EfuseApi {
                 // handle cntl special case
                 if ((self.phy.banks[0] & 0x3F) as u8 ^ self.cntl) & (self.phy.banks[0] & 0x3F) as u8 != 0 {
                     valid = false;
-                    log::warn!("proposed efuse cntl setting is not valid {:x?} -> {:x?}", self.phy.banks[0] & 0x3F, self.cntl);
+                    log::warn!(
+                        "proposed efuse cntl setting is not valid {:x?} -> {:x?}",
+                        self.phy.banks[0] & 0x3F,
+                        self.cntl
+                    );
                 }
             } else if index == 12 {
                 // handle user special case
                 if ((self.phy.banks[index] ^ add_ecc(self.user >> 8)) & self.phy.banks[index]) != 0 {
-                    log::warn!("proposed efuse user setting is not valid {:x?} -> {:x?}", self.phy.banks[index], add_ecc(self.user >> 8));
+                    log::warn!(
+                        "proposed efuse user setting is not valid {:x?} -> {:x?}",
+                        self.phy.banks[index],
+                        add_ecc(self.user >> 8)
+                    );
                     valid = false;
                 }
             } else if index == 11 {
                 // handle user + key special case
-                let raw_fuse: u32 = ((self.user & 0xFF) << 16) | (self.key[31] as u32) << 8 | self.key[30] as u32;
+                let raw_fuse: u32 =
+                    ((self.user & 0xFF) << 16) | (self.key[31] as u32) << 8 | self.key[30] as u32;
                 if ((self.phy.banks[index] ^ add_ecc(raw_fuse)) & self.phy.banks[index]) != 0 {
-                    log::warn!("proposed user/key overlap area setting is not valid {:x?} -> {:x?}", self.phy.banks[index], add_ecc(raw_fuse));
+                    log::warn!(
+                        "proposed user/key overlap area setting is not valid {:x?} -> {:x?}",
+                        self.phy.banks[index],
+                        add_ecc(raw_fuse)
+                    );
                     valid = false;
                 }
             } else {
@@ -240,10 +256,14 @@ impl EfuseApi {
                 let mut raw_fuse: u32 = 0;
                 for i in 0..3 {
                     raw_fuse <<= 8;
-                    raw_fuse |= self.key[(index-1)*3 + 2-i] as u32;
+                    raw_fuse |= self.key[(index - 1) * 3 + 2 - i] as u32;
                 }
                 if ((self.phy.banks[index] ^ add_ecc(raw_fuse)) & self.phy.banks[index]) != 0 {
-                    log::warn!("proposed key setting is not valid {:x?} -> {:x?}", self.phy.banks[index],  add_ecc(raw_fuse));
+                    log::warn!(
+                        "proposed key setting is not valid {:x?} -> {:x?}",
+                        self.phy.banks[index],
+                        add_ecc(raw_fuse)
+                    );
                     valid = false;
                 }
             }
@@ -251,7 +271,7 @@ impl EfuseApi {
         valid
     }
 
-    fn jtag_seq(&mut self, jm: &mut JtagMach, cmds: &[(JtagChain, usize, u64, &str)] ) -> u128 {
+    fn jtag_seq(&mut self, jm: &mut JtagMach, cmds: &[(JtagChain, usize, u64, &str)]) -> u128 {
         let mut ret: u128 = 0;
 
         for tuple in cmds.iter() {
@@ -273,14 +293,16 @@ impl EfuseApi {
     }
 
     fn burn_bank(&mut self, bank: usize, ones: u32, jm: &mut JtagMach) {
-        if ones == 0 { // skip the bank if nothing to burn
+        if ones == 0 {
+            // skip the bank if nothing to burn
             return;
         }
         jm.pause(2500); // 2.5ms pause between banks
 
         let mut bank_select: u8 = 1; // bank 0 by default (special case)
         let mut word_select: u8 = 3;
-        if bank > 0 { // rest of banks
+        if bank > 0 {
+            // rest of banks
             bank_select = (bank as u8 - 1) * 8 + 0xA1;
             word_select = bank_select | 0b10;
         }
@@ -300,7 +322,12 @@ impl EfuseApi {
             if (curbit & 0x1) == 1 {
                 let bit_burn: [(JtagChain, usize, u64, &str); 3] = [
                     (JtagChain::IR, 6, 0b110000, "EFUSE"),
-                    (JtagChain::DR, 64, (0xa08a28ac00004000 | (word_select as u64)) + ((i as u64) << 8), "KEY_BIT"),
+                    (
+                        JtagChain::DR,
+                        64,
+                        (0xa08a28ac00004000 | (word_select as u64)) + ((i as u64) << 8),
+                        "KEY_BIT",
+                    ),
                     (JtagChain::DR, 64, 0x0, "KEY_BIT_WAIT"),
                 ];
                 self.jtag_seq(jm, &bit_burn);
@@ -312,31 +339,30 @@ impl EfuseApi {
 
     // burns fuses to the FPGA bank
     pub fn burn(&mut self, jm: &mut JtagMach) -> bool {
-        const COMMIT_SEQ: [(JtagChain, usize, u64, &str); 22] =
-            [
-                (JtagChain::DR, 64, 0xff000000ff, "EFUSE_COMMIT"),
-                (JtagChain::IR, 6, 0b000010, "USER1"),
-                (JtagChain::DR, 32, 0, "USER1"),
-                (JtagChain::IR, 6, 0b000010, "USER1"),
-                (JtagChain::DR, 17, 0xF000, "USER1"),
-                (JtagChain::DR, 75, 0xA9, "USER1"),
-                (JtagChain::IR, 6, 0b100010, "USER3"),
-                (JtagChain::DR, 17, 0xF000, "USER3"),
-                (JtagChain::DR, 75, 0xA9, "USER3"),
-                (JtagChain::IR, 6, 0b111111, "BYPASS"),
-                (JtagChain::IR, 6, 0b000011, "USER2"),
-                (JtagChain::DR, 32, 0x0, "USER2"),
-                (JtagChain::IR, 6, 0b111111, "BYPASS"),
-                (JtagChain::IR, 6, 0b000011, "USER2"),
-                (JtagChain::DR, 42, 0x69, "USER2"),
-                (JtagChain::IR, 6, 0b111111, "BYPASS"),
-                (JtagChain::IR, 6, 0b000011, "USER2"),
-                (JtagChain::DR, 6, 0xC, "USER2"),
-                (JtagChain::DR, 42, 0x69, "USER2"),
-                (JtagChain::IR, 6, 0b111111, "BYPASS"),
-                (JtagChain::IR, 6, 0b000011, "USER2"),
-                (JtagChain::DR, 36, 0x0, "USER2"),
-            ];
+        const COMMIT_SEQ: [(JtagChain, usize, u64, &str); 22] = [
+            (JtagChain::DR, 64, 0xff000000ff, "EFUSE_COMMIT"),
+            (JtagChain::IR, 6, 0b000010, "USER1"),
+            (JtagChain::DR, 32, 0, "USER1"),
+            (JtagChain::IR, 6, 0b000010, "USER1"),
+            (JtagChain::DR, 17, 0xF000, "USER1"),
+            (JtagChain::DR, 75, 0xA9, "USER1"),
+            (JtagChain::IR, 6, 0b100010, "USER3"),
+            (JtagChain::DR, 17, 0xF000, "USER3"),
+            (JtagChain::DR, 75, 0xA9, "USER3"),
+            (JtagChain::IR, 6, 0b111111, "BYPASS"),
+            (JtagChain::IR, 6, 0b000011, "USER2"),
+            (JtagChain::DR, 32, 0x0, "USER2"),
+            (JtagChain::IR, 6, 0b111111, "BYPASS"),
+            (JtagChain::IR, 6, 0b000011, "USER2"),
+            (JtagChain::DR, 42, 0x69, "USER2"),
+            (JtagChain::IR, 6, 0b111111, "BYPASS"),
+            (JtagChain::IR, 6, 0b000011, "USER2"),
+            (JtagChain::DR, 6, 0xC, "USER2"),
+            (JtagChain::DR, 42, 0x69, "USER2"),
+            (JtagChain::IR, 6, 0b111111, "BYPASS"),
+            (JtagChain::IR, 6, 0b000011, "USER2"),
+            (JtagChain::DR, 36, 0x0, "USER2"),
+        ];
 
         let ok: bool = true;
 
@@ -363,26 +389,38 @@ impl EfuseApi {
                 // handle user special case
                 if (self.phy.banks[index] ^ add_ecc(self.user >> 8)) != 0 {
                     // compute just the 0->1's and pass that on to burn_bank
-                    self.burn_bank(index, self.phy.banks[index] ^ add_ecc(self.user >> 8) & add_ecc(self.user >> 8), jm);
+                    self.burn_bank(
+                        index,
+                        self.phy.banks[index] ^ add_ecc(self.user >> 8) & add_ecc(self.user >> 8),
+                        jm,
+                    );
                 }
             } else if index == 11 {
                 // handle user + key special case
-                let raw_fuse: u32 = ((self.user & 0xFF) << 16) | (self.key[31] as u32) << 8 | self.key[30] as u32;
+                let raw_fuse: u32 =
+                    ((self.user & 0xFF) << 16) | (self.key[31] as u32) << 8 | self.key[30] as u32;
                 if (self.phy.banks[index] ^ add_ecc(raw_fuse)) != 0 {
-                    self.burn_bank(index, (self.phy.banks[index] ^ add_ecc(raw_fuse)) & add_ecc(raw_fuse), jm);
+                    self.burn_bank(
+                        index,
+                        (self.phy.banks[index] ^ add_ecc(raw_fuse)) & add_ecc(raw_fuse),
+                        jm,
+                    );
                 }
             } else {
                 // handle key fuses (most of the bank)
                 let mut raw_fuse: u32 = 0;
                 for i in 0..3 {
                     raw_fuse <<= 8;
-                    raw_fuse |= self.key[(index-1)*3 + 2-i] as u32;
+                    raw_fuse |= self.key[(index - 1) * 3 + 2 - i] as u32;
                 }
                 if (self.phy.banks[index] ^ add_ecc(raw_fuse)) != 0 {
-                    self.burn_bank(index, (self.phy.banks[index] ^ add_ecc(raw_fuse)) & add_ecc(raw_fuse), jm);
+                    self.burn_bank(
+                        index,
+                        (self.phy.banks[index] ^ add_ecc(raw_fuse)) & add_ecc(raw_fuse),
+                        jm,
+                    );
                 }
             }
-
         }
         jm.pause(2000);
         self.jtag_seq(jm, &COMMIT_SEQ);
@@ -390,5 +428,4 @@ impl EfuseApi {
         jm.reset();
         ok
     }
-
 }

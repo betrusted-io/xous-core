@@ -1,19 +1,19 @@
-use crate::Tls;
-use locales::t;
-#[cfg(feature = "rootCA")]
-use modals::Modals;
 use std::convert::TryInto;
 use std::io::Read;
 use std::io::Write;
 use std::net::TcpStream;
 use std::str::from_utf8;
 use std::sync::Arc;
+
+use locales::t;
+#[cfg(feature = "rootCA")]
+use modals::Modals;
 #[cfg(feature = "rootCA")]
 use xous_names::XousNames;
 
-pub fn shellchat<'a>(
-    mut tokens: impl Iterator<Item = &'a str>,
-) -> Result<Option<String>, xous::Error> {
+use crate::Tls;
+
+pub fn shellchat<'a>(mut tokens: impl Iterator<Item = &'a str>) -> Result<Option<String>, xous::Error> {
     use core::fmt::Write;
     let mut ret = String::new();
     match tokens.next() {
@@ -21,7 +21,7 @@ pub fn shellchat<'a>(
         Some("deleteall") => {
             log::info!("starting TLS delete certificates");
             let tls = Tls::new();
-            let count = tls.del_all_cert().unwrap();
+            let count = tls.del_all_rota().unwrap();
             write!(ret, "{} {}", count, t!("tls.deleteall_done", locales::LANG)).ok();
             log::info!("finished TLS delete certificates");
         }
@@ -62,32 +62,27 @@ pub fn shellchat<'a>(
             count = 0;
             let tls = Tls::new();
             for rota in rotas {
-                tls.save_cert(&rota).unwrap_or_else(|e| log::warn!("{e}"));
+                tls.save_rota(&rota).unwrap_or_else(|e| log::warn!("{e}"));
                 modals.update_progress(count).expect("no progress");
                 count += 1;
             }
             modals.finish_progress().expect("finish progress");
             write!(ret, "{} {}", count, t!("tls.mozilla_done", locales::LANG)).ok();
         }
-        // probe establishes a tls connection to the supplied host, extracts the
+        // inspect establishes a tls connection to the supplied host, extracts the
         // certificates offered and immediately closes the connection.
         // The certificates are presented by modal to the user, and saved to the
         // pddb if trusted.
-        Some("probe") => {
+        Some("inspect") => {
             log::set_max_level(log::LevelFilter::Info);
             let target = match tokens.next() {
                 Some(target) => target,
                 None => "betrusted.io",
             };
             let tls = Tls::new();
-            match tls.probe(target) {
-                Ok(count) => write!(ret, "{} {}", count, t!("tls.probe_done", locales::LANG)).ok(),
-                Err(_) => write!(
-                    ret,
-                    "{} {target}",
-                    t!("tls.probe_fail_servername", locales::LANG)
-                )
-                .ok(),
+            match tls.inspect(target) {
+                Ok(count) => write!(ret, "{} {}", count, t!("tls.inspect_done", locales::LANG)).ok(),
+                Err(_) => write!(ret, "{} {target}", t!("tls.inspect_fail_servername", locales::LANG)).ok(),
             };
             log::set_max_level(log::LevelFilter::Info);
         }
@@ -107,8 +102,7 @@ pub fn shellchat<'a>(
             };
             log::info!("point TLS to {}", target);
             let mut conn =
-                rustls::ClientConnection::new(Arc::new(config), target.try_into().unwrap())
-                    .unwrap();
+                rustls::ClientConnection::new(Arc::new(config), target.try_into().unwrap()).unwrap();
 
             log::info!("connect TCPstream to {}", target);
             match TcpStream::connect((target, 443)) {
@@ -117,7 +111,10 @@ pub fn shellchat<'a>(
                     write!(ret, "{}", t!("tls.test_success_tcp", locales::LANG)).ok();
                     let mut tls = rustls::Stream::new(&mut conn, &mut sock);
                     log::info!("create http headers and write to server");
-                    let msg = format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n", target);
+                    let msg = format!(
+                        "GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
+                        target
+                    );
                     match tls.write_all(msg.as_bytes()) {
                         Ok(()) => {
                             log::info!("tls accepted GET");
@@ -127,13 +124,8 @@ pub fn shellchat<'a>(
                             match tls.read_to_end(&mut plaintext) {
                                 Ok(n) => {
                                     log::info!("tls received {} bytes", n);
-                                    write!(
-                                        ret,
-                                        "{} {}\n",
-                                        t!("tls.test_success_bytes", locales::LANG),
-                                        n
-                                    )
-                                    .ok();
+                                    write!(ret, "{} {}\n", t!("tls.test_success_bytes", locales::LANG), n)
+                                        .ok();
                                     log::info!("{}", from_utf8(&plaintext).unwrap_or("utf-error"));
                                 }
                                 Err(e) => {
@@ -158,28 +150,13 @@ pub fn shellchat<'a>(
         }
         None | _ => {
             write!(ret, "{}\n", t!("tls.cmd", locales::LANG)).ok();
-            write!(
-                ret,
-                "\tdeleteall\t{}\n",
-                t!("tls.deleteall_cmd", locales::LANG)
-            )
-            .ok();
+            write!(ret, "\tdeleteall\t{}\n", t!("tls.deleteall_cmd", locales::LANG)).ok();
             write!(ret, "\thelp\n").ok();
             write!(ret, "\tlist\t{}\n", t!("tls.list_cmd", locales::LANG)).ok();
             #[cfg(feature = "rootCA")]
             write!(ret, "\tmozilla\t{}\n", t!("tls.mozilla_cmd", locales::LANG)).ok();
-            write!(
-                ret,
-                "\tprobe <host>\t{}\n",
-                t!("tls.probe_cmd", locales::LANG)
-            )
-            .ok();
-            write!(
-                ret,
-                "\ttest <host>\t{}\n",
-                t!("tls.test_cmd", locales::LANG)
-            )
-            .ok();
+            write!(ret, "\tinspect <host>\t{}\n", t!("tls.inspect_cmd", locales::LANG)).ok();
+            write!(ret, "\ttest <host>\t{}\n", t!("tls.test_cmd", locales::LANG)).ok();
         }
     }
     Ok(Some(ret))

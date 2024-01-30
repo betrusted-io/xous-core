@@ -1,6 +1,7 @@
-use crate::api::*;
 use std::cmp::max;
 use std::convert::TryInto;
+
+use crate::api::*;
 //////////////////////// Tile -------- author: nworbnhoj
 
 /*
@@ -62,17 +63,11 @@ impl Tile {
         }
     }
 
-    pub fn bound(&self) -> Rectangle {
-        self.bound
-    }
+    pub fn bound(&self) -> Rectangle { self.bound }
 
-    pub fn set_bound(&mut self, bound: Rectangle) {
-        self.bound = bound
-    }
+    pub fn set_bound(&mut self, bound: Rectangle) { self.bound = bound }
 
-    pub fn max_bound(&self) -> Rectangle {
-        self.max_bound
-    }
+    pub fn max_bound(&self) -> Rectangle { self.max_bound }
 
     pub fn area(&self) -> u32 {
         let size = self.size();
@@ -104,14 +99,10 @@ impl Tile {
         }
     }
 
-    pub fn get_word(&self, point: Point) -> Word {
-        self.words[self.word_index(point)]
-    }
+    pub fn get_word(&self, point: Point) -> Word { self.words[self.word_index(point)] }
 
     /// Adding a word outside of bound (but within max_bound) will expand bound.
-    pub fn set_word(&mut self, point: Point, word: Word) {
-        self.words[self.word_index_mut(point)] = word;
-    }
+    pub fn set_word(&mut self, point: Point, word: Word) { self.words[self.word_index_mut(point)] = word; }
 
     pub fn get_line(&self, point: Point) -> Vec<Word> {
         let first_pixel_in_line = Point::new(self.bound.tl.x, point.y);
@@ -165,7 +156,5 @@ impl Tile {
         self.max_bound = Rectangle::new(self.bound.tl, Point::new(max_x, max_y));
     }
 
-    pub fn crop(&mut self, bound: Rectangle) {
-        self.bound = bound;
-    }
+    pub fn crop(&mut self, bound: Rectangle) { self.bound = bound; }
 }

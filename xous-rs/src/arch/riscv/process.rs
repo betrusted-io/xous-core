@@ -68,14 +68,11 @@ impl From<&ProcessInit> for [usize; 7] {
 
 impl TryFrom<[usize; 7]> for ProcessInit {
     type Error = crate::Error;
+
     fn try_from(src: [usize; 7]) -> Result<ProcessInit, Self::Error> {
         Ok(ProcessInit {
-            stack: unsafe {
-                crate::MemoryRange::new(src[0], src[1]).or(Err(crate::Error::OutOfMemory))?
-            },
-            text: unsafe {
-                crate::MemoryRange::new(src[2], src[3]).or(Err(crate::Error::OutOfMemory))?
-            },
+            stack: unsafe { crate::MemoryRange::new(src[0], src[1]).or(Err(crate::Error::OutOfMemory))? },
+            text: unsafe { crate::MemoryRange::new(src[2], src[3]).or(Err(crate::Error::OutOfMemory))? },
             text_destination: crate::MemoryAddress::new(src[4]).ok_or(crate::Error::OutOfMemory)?,
             start: crate::MemoryAddress::new(src[5]).ok_or(crate::Error::OutOfMemory)?,
         })
@@ -94,17 +91,12 @@ pub struct ProcessStartup {
 }
 
 impl ProcessStartup {
-    pub fn new(pid: crate::PID, connection: crate::CID) -> Self {
-        ProcessStartup { pid, connection }
-    }
+    pub fn new(pid: crate::PID, connection: crate::CID) -> Self { ProcessStartup { pid, connection } }
 }
 
 impl From<&[usize; 7]> for ProcessStartup {
     fn from(src: &[usize; 7]) -> ProcessStartup {
-        ProcessStartup {
-            pid: crate::PID::new(src[0] as _).unwrap(),
-            connection: src[1] as _,
-        }
+        ProcessStartup { pid: crate::PID::new(src[0] as _).unwrap(), connection: src[1] as _ }
     }
 }
 
@@ -115,17 +107,12 @@ impl From<[usize; 8]> for ProcessStartup {
             None => unsafe { crate::PID::new_unchecked(255) },
         };
         let cid = src[2] as _;
-        ProcessStartup {
-            pid,
-            connection: cid,
-        }
+        ProcessStartup { pid, connection: cid }
     }
 }
 
 impl From<&ProcessStartup> for [usize; 7] {
-    fn from(src: &ProcessStartup) -> [usize; 7] {
-        [src.pid.get() as _, src.connection as _, 0, 0, 0, 0, 0]
-    }
+    fn from(src: &ProcessStartup) -> [usize; 7] { [src.pid.get() as _, src.connection as _, 0, 0, 0, 0, 0] }
 }
 
 pub struct ProcessHandle {
@@ -136,9 +123,7 @@ pub struct ProcessHandle {
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessKey([u8; 8]);
 impl ProcessKey {
-    pub fn new(key: [u8; 8]) -> ProcessKey {
-        ProcessKey(key)
-    }
+    pub fn new(key: [u8; 8]) -> ProcessKey { ProcessKey(key) }
 }
 
 /// Convert the `ProcessArgs` structure passed by the user into a `ProcessInit`
@@ -172,10 +157,7 @@ pub fn create_process_post(
     _init: ProcessInit,
     startup: ProcessStartup,
 ) -> core::result::Result<ProcessHandle, crate::Error> {
-    Ok(ProcessHandle {
-        pid: startup.pid,
-        cid: startup.connection,
-    })
+    Ok(ProcessHandle { pid: startup.pid, cid: startup.connection })
 }
 
 /// Wait for a process to terminate.

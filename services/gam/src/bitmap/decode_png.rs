@@ -10,20 +10,19 @@
  *
  *
  * The png image format includes a signature (8  bytes) followed by chunks
- * - Each chunk includes the chunk begins with its length (4 bytes) and name (4 bytes) and ends
- *   with a checksum (4 bytes)
- * - The IHDR chunk must be first and contains width, height, bit_depth, color_type,
- *   compression_method, filter_method, and an interlace flag.
+ * - Each chunk includes the chunk begins with its length (4 bytes) and name (4 bytes) and ends with a
+ *   checksum (4 bytes)
+ * - The IHDR chunk must be first and contains width, height, bit_depth, color_type, compression_method,
+ *   filter_method, and an interlace flag.
  * - The Palette chunck is currently unsupported
  * - Consecutive IDAT chunks hold the image data in bytes.
  * - The IEND chunk must be last.
  * - Other chunk types are ignored in this decoder.
  * - The bytes in the IDAT chunks must be concatenated and uncompressed (zlib)
  * - The uncompressed bytes are arranged in scanlines, left-right, top-bottom.
- * - The first byte in each scan-line representes a filter_type which is used to unfilter
- *   the remaining bytes in the scan-line. (filters is used to improve compression)
- * - The uncompressed, unfiltered bytes now represent pixels in the specified color_type
- *   (eg RGB, RGBa etc)
+ * - The first byte in each scan-line representes a filter_type which is used to unfilter the remaining
+ *   bytes in the scan-line. (filters is used to improve compression)
+ * - The uncompressed, unfiltered bytes now represent pixels in the specified color_type (eg RGB, RGBa etc)
  *
  * This development is gratefully based on PNG Pong - Copyright © 2019-2021 Jeron Aldaron Lau
  *
@@ -91,15 +90,13 @@ pub struct DecodePng<R: Read> {
 impl<R: Read> Iterator for DecodePng<R> {
     type Item = u8;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.unfilter()
-    }
+    fn next(&mut self) -> Option<Self::Item> { self.unfilter() }
 }
 
 impl<R: Read> DecodePng<R> {
     pub fn new(reader: R) -> Result<DecodePng<R>> {
         let mut png = Self {
-            reader: reader,
+            reader,
             width: 0,
             height: 0,
             bit_depth: 0,
@@ -141,18 +138,13 @@ impl<R: Read> DecodePng<R> {
         Ok(png)
     }
 
-    pub fn width(&self) -> u32 {
-        self.width
-    }
-    pub fn height(&self) -> u32 {
-        self.height
-    }
-    pub fn color_type(&self) -> u8 {
-        self.color_type
-    }
-    pub fn bit_depth(&self) -> u8 {
-        self.bit_depth
-    }
+    pub fn width(&self) -> u32 { self.width }
+
+    pub fn height(&self) -> u32 { self.height }
+
+    pub fn color_type(&self) -> u8 { self.color_type }
+
+    pub fn bit_depth(&self) -> u8 { self.bit_depth }
 
     /// Prepare a chunk for reading, capturing name & length.
     pub(crate) fn prepare_chunk(&mut self) -> Result<([u8; 4], u32)> {
@@ -167,11 +159,7 @@ impl<R: Read> DecodePng<R> {
         if length > MAX_CHUNK_SIZE as u32 {
             log::warn!("failed to decode png chunk: oversize");
         }
-        log::trace!(
-            "found png chunk name={:?} with length={}",
-            String::from_utf8_lossy(&name),
-            length
-        );
+        log::trace!("found png chunk name={:?} with length={}", String::from_utf8_lossy(&name), length);
         Ok((name, length))
     }
 
@@ -237,15 +225,9 @@ impl<R: Read> DecodePng<R> {
         } else if self.interlace {
             return Err(Error::new(InvalidData, "interlace is not supported"));
         } else if self.bytes_per_pixel < 1 {
-            return Err(Error::new(
-                InvalidData,
-                "less than 8 bits per pixel is not supported",
-            ));
+            return Err(Error::new(InvalidData, "less than 8 bits per pixel is not supported"));
         } else if self.color_type == 3 {
-            return Err(Error::new(
-                InvalidData,
-                "color_type = 3 palette is not supported",
-            ));
+            return Err(Error::new(InvalidData, "color_type = 3 palette is not supported"));
         } else {
             color_type.check_png_color_validity(self.bit_depth)?;
         };
@@ -268,9 +250,7 @@ impl<R: Read> DecodePng<R> {
                     self.ignore_crc()?;
                     Some(palette)
                 }
-                (IMAGE_DATA, _) => {
-                    return Err(Error::new(InvalidData, "data chunk before palette"))
-                }
+                (IMAGE_DATA, _) => return Err(Error::new(InvalidData, "data chunk before palette")),
                 (IMAGE_END, _) => return Err(Error::new(InvalidData, "end chunk before palette")),
                 (_, length) => {
                     self.ignore_chunk(length)?;
@@ -324,18 +304,11 @@ impl<R: Read> DecodePng<R> {
 
     /// Get a u32 out of the reader
     pub(crate) fn u32(&mut self) -> Result<u32> {
-        Ok(u32::from_be_bytes([
-            self.u8()?,
-            self.u8()?,
-            self.u8()?,
-            self.u8()?,
-        ]))
+        Ok(u32::from_be_bytes([self.u8()?, self.u8()?, self.u8()?, self.u8()?]))
     }
 
     /// Ignore the CRC bytes for performance.
-    pub(crate) fn ignore_crc(&mut self) -> Result<u32> {
-        self.u32()
-    }
+    pub(crate) fn ignore_crc(&mut self) -> Result<u32> { self.u32() }
 
     // Reads u8 bytes from the png idat chunk into the idat_buffer
     // If the idat chunk is exhausted then ignore the checksum and
@@ -478,11 +451,7 @@ impl<R: Read> DecodePng<R> {
         let (a, b, c) = if index < bpp {
             (0, self.prior_line[index], 0)
         } else {
-            (
-                self.prior_px[index % bpp],
-                self.prior_line[index],
-                self.prior_line[index - bpp],
-            )
+            (self.prior_px[index % bpp], self.prior_line[index], self.prior_line[index - bpp])
         };
         let x = match filter {
             0 => fx,
@@ -501,9 +470,7 @@ impl<R: Read> DecodePng<R> {
 }
 
 // in the notation from https://www.w3.org/TR/PNG/#9Filters
-fn average(a: u8, b: u8) -> u8 {
-    ((a as u16 + b as u16) >> 1) as u8
-}
+fn average(a: u8, b: u8) -> u8 { ((a as u16 + b as u16) >> 1) as u8 }
 
 // in the notation from https://www.w3.org/TR/PNG/#9Filters
 fn paeth(a: u8, b: u8, c: u8) -> u8 {

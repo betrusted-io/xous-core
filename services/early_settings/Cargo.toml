@@ -7,18 +7,23 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = {version = "0.4", features = ["max_level_trace", "release_max_level_trace"]}
-log-server = {package = "xous-api-log", version = "0.1.51"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.51"}
-xous = "0.9.55"
-xous-ipc = "0.9.55"
-xous-names = {package = "xous-api-names", version = "0.9.53"}
-susres = {package = "xous-api-susres", version = "0.9.51"}
-spinor = {path = "../../services/spinor"}
+log = { version = "0.4", features = [
+    "max_level_trace",
+    "release_max_level_trace",
+] }
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+xous-names = { package = "xous-api-names", version = "0.9.55" }
+susres = { package = "xous-api-susres", version = "0.9.53" }
+spinor = { path = "../../services/spinor" }
 
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+] }
 
-utralib = {version = "0.1.23", optional = true, default-features = false }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 once_cell = "1.17.1"

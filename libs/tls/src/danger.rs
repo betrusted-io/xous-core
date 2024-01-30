@@ -34,26 +34,25 @@ impl rustls::client::ServerCertVerifier for StifledCertificateVerification {
             Err(Error::InvalidCertificate(e)) => {
                 let xns = XousNames::new().unwrap();
                 let modals = Modals::new(&xns).unwrap();
-                modals
-                    .show_notification(
-                        format!("{}\n{:?}", t!("tls.probe_invalid_certificate", locales::LANG), e).as_str(),
-                        None,
-                    )
-                    .expect("modal failed");
                 match e {
-                    CertificateError::UnknownIssuer => {
-                        modals
-                            .show_notification(t!("tls.probe_help_unknown_issuer", locales::LANG), None)
-                            .expect("modal failed");
-                        Ok(ServerCertVerified::assertion())
-                    }
+                    CertificateError::UnknownIssuer => Ok(ServerCertVerified::assertion()),
                     CertificateError::NotValidYet => {
                         modals
                             .show_notification(t!("tls.probe_help_not_valid_yet", locales::LANG), None)
                             .expect("modal failed");
                         Err(Error::InvalidCertificate(e))
                     }
-                    _ => Err(Error::InvalidCertificate(e)),
+                    _ => {
+                        modals
+                            .show_notification(
+                                format!("{}\n{:?}", t!("tls.probe_invalid_certificate", locales::LANG), e)
+                                    .as_str(),
+                                None,
+                            )
+                            .expect("modal failed");
+
+                        Err(Error::InvalidCertificate(e))
+                    }
                 }
             }
             Err(e) => Err(e),

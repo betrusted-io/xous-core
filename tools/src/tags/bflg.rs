@@ -1,6 +1,7 @@
-use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 use std::fmt;
 use std::io;
+
+use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 
 #[derive(Debug, Default)]
 pub struct Bflg {
@@ -46,14 +47,17 @@ impl Bflg {
         //     debug_: false,
         // }
     }
+
     pub fn no_copy(mut self) -> Bflg {
         self.no_copy_ = true;
         self
     }
+
     pub fn absolute(mut self) -> Bflg {
         self.absolute_ = true;
         self
     }
+
     pub fn debug(mut self) -> Bflg {
         self.debug_ = true;
         self
@@ -61,12 +65,10 @@ impl Bflg {
 }
 
 impl XousArgument for Bflg {
-    fn code(&self) -> XousArgumentCode {
-        u32::from_le_bytes(*b"Bflg")
-    }
-    fn length(&self) -> XousSize {
-        4
-    }
+    fn code(&self) -> XousArgumentCode { u32::from_le_bytes(*b"Bflg") }
+
+    fn length(&self) -> XousSize { 4 }
+
     fn serialize(&self, output: &mut dyn io::Write) -> io::Result<usize> {
         let mut written = 0;
         let mut val = 0u32;

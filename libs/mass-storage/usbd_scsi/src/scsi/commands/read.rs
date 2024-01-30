@@ -66,7 +66,7 @@ pub struct Read10Command {
     pub lba: u32,
 
     #[pkd(4, 0, 6, 6)]
-    pub group_number: u8, 
+    pub group_number: u8,
 
     #[pkd(7, 0, 7, 8)]
     pub transfer_length: u16,

@@ -1,8 +1,7 @@
-use ime_plugin_api::*;
-
-use num_traits::*;
 use std::thread;
 
+use ime_plugin_api::*;
+use num_traits::*;
 use xous::{msg_scalar_unpack, CID};
 use xous_ipc::Buffer;
 
@@ -31,15 +30,9 @@ pub(crate) fn server(_cid: Option<CID>, icons: [&str; 4]) {
     // however, because the predictor is connected only on demand -- we leave this as open-ended, which
     // means anyone could send something to this server if they knew the name of it.
 
-    let ime_sh_sid = xns
-        .register_name(SERVER_NAME_ICONTRAY, None)
-        .expect("can't register server");
+    let ime_sh_sid = xns.register_name(SERVER_NAME_ICONTRAY, None).expect("can't register server");
 
-    let mytriggers = PredictionTriggers {
-        newline: false,
-        punctuation: false,
-        whitespace: false,
-    };
+    let mytriggers = PredictionTriggers { newline: false, punctuation: false, whitespace: false };
 
     let mut api_token: Option<[u32; 4]> = None;
     loop {
@@ -47,9 +40,8 @@ pub(crate) fn server(_cid: Option<CID>, icons: [&str; 4]) {
         log::trace!("received message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::Acquire) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut ret = buffer.to_original::<AcquirePredictor, _>().unwrap();
                 if api_token.is_none() {
                     if let Some(token) = ret.token {
@@ -85,25 +77,19 @@ pub(crate) fn server(_cid: Option<CID>, icons: [&str; 4]) {
             }
             Some(Opcode::Prediction) => {
                 // we don't check the API token here, because our "predictions" are just the four menu slots
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut prediction: Prediction = buffer.to_original::<Prediction, _>().unwrap();
                 // every key press, the four slots get queried
                 prediction.string.clear();
                 if prediction.index < icons.len() as u32 {
-                    prediction
-                        .string
-                        .append(icons[prediction.index as usize])
-                        .ok();
+                    prediction.string.append(icons[prediction.index as usize]).ok();
                     prediction.valid = true;
                 } else {
                     prediction.valid = false;
                 }
                 // pack our data back into the buffer to return
-                buffer
-                    .replace(Return::Prediction(prediction))
-                    .expect("couldn't return Prediction");
+                buffer.replace(Return::Prediction(prediction)).expect("couldn't return Prediction");
             }
             Some(Opcode::Unpick) => {
                 // ignore

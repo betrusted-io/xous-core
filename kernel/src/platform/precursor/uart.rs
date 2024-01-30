@@ -2,14 +2,15 @@
 // SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use utralib::generated::*;
+use xous_kernel::{MemoryFlags, MemoryType};
+
 use crate::{
     debug::shell::process_characters,
     io::{SerialRead, SerialWrite},
     mem::MemoryManager,
     PID,
 };
-use utralib::generated::*;
-use xous_kernel::{MemoryFlags, MemoryType};
 
 /// UART virtual address.
 ///
@@ -29,15 +30,10 @@ pub struct Uart {
 
 impl Uart {
     pub fn new(addr: usize, callback: fn(&mut Self)) -> Uart {
-        Uart {
-            uart_csr: CSR::new(addr as *mut u32),
-            callback,
-        }
+        Uart { uart_csr: CSR::new(addr as *mut u32), callback }
     }
 
-    pub fn init(&mut self) {
-        self.uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
-    }
+    pub fn init(&mut self) { self.uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1); }
 
     pub fn irq(_irq_number: usize, arg: *mut usize) {
         let uart = unsafe { &mut *(arg as *mut Uart) };

@@ -1,6 +1,7 @@
-use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 use std::fmt;
 use std::io;
+
+use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 
 /// Convert a four-letter string into a 32-bit int.
 macro_rules! make_type {
@@ -52,12 +53,7 @@ impl fmt::Display for MemoryRegions {
 
 impl MemoryRegion {
     pub fn new(start: XousSize, length: XousSize, name: u32) -> MemoryRegion {
-        MemoryRegion {
-            start,
-            length,
-            name,
-            _padding: 0,
-        }
+        MemoryRegion { start, length, name, _padding: 0 }
     }
 
     pub fn make_name(name: &str) -> u32 {
@@ -81,27 +77,20 @@ impl MemoryRegion {
 }
 
 impl MemoryRegions {
-    pub fn new() -> MemoryRegions {
-        Default::default()
-    }
-    pub fn add(&mut self, region: MemoryRegion) {
-        self.regions.push(region)
-    }
-    pub fn len(&self) -> usize {
-        self.regions.len()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.regions.is_empty()
-    }
+    pub fn new() -> MemoryRegions { Default::default() }
+
+    pub fn add(&mut self, region: MemoryRegion) { self.regions.push(region) }
+
+    pub fn len(&self) -> usize { self.regions.len() }
+
+    pub fn is_empty(&self) -> bool { self.regions.is_empty() }
 }
 
 impl XousArgument for MemoryRegions {
-    fn code(&self) -> XousArgumentCode {
-        u32::from_le_bytes(*b"MREx")
-    }
-    fn length(&self) -> XousSize {
-        (self.regions.len() * std::mem::size_of::<MemoryRegion>()) as XousSize
-    }
+    fn code(&self) -> XousArgumentCode { u32::from_le_bytes(*b"MREx") }
+
+    fn length(&self) -> XousSize { (self.regions.len() * std::mem::size_of::<MemoryRegion>()) as XousSize }
+
     fn serialize(&self, output: &mut dyn io::Write) -> io::Result<usize> {
         let mut written = 0;
         for region in &self.regions {

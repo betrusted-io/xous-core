@@ -1,6 +1,7 @@
-use crate::*;
-use core::ops::Deref;
 use core::mem::size_of;
+use core::ops::Deref;
+
+use crate::*;
 
 pub(crate) const SCD_VERSION_MIGRATION1: u32 = 1;
 
@@ -24,15 +25,18 @@ impl StaticCryptoDataV1 {
 }
 impl Deref for StaticCryptoDataV1 {
     type Target = [u8];
+
     fn deref(&self) -> &[u8] {
         unsafe {
-            core::slice::from_raw_parts(self as *const StaticCryptoDataV1 as *const u8, size_of::<StaticCryptoDataV1>())
-                as &[u8]
+            core::slice::from_raw_parts(
+                self as *const StaticCryptoDataV1 as *const u8,
+                size_of::<StaticCryptoDataV1>(),
+            ) as &[u8]
         }
     }
 }
 
-pub(crate) fn data_aad_v1(pddb_os: &PddbOs, name: &str) -> Vec::<u8> {
+pub(crate) fn data_aad_v1(pddb_os: &PddbOs, name: &str) -> Vec<u8> {
     let mut aad = Vec::<u8>::new();
     aad.extend_from_slice(&name.as_bytes());
     let (old_version, _new_version) = PDDB_MIGRATE_1;

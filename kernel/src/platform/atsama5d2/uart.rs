@@ -1,14 +1,15 @@
 // SPDX-FileCopyrightText: 2022 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use atsama5d27::uart::{Uart as UartHw, Uart1, UART_BASE_ADDRESS};
+use xous_kernel::{arch::irq::IrqNumber, MemoryFlags, MemoryType};
+
 use crate::{
     debug::shell::process_characters,
     io::{SerialRead, SerialWrite},
     mem::MemoryManager,
     PID,
 };
-use atsama5d27::uart::{Uart as UartHw, Uart1, UART_BASE_ADDRESS};
-use xous_kernel::{MemoryFlags, MemoryType, arch::irq::IrqNumber};
 
 const UART_NUMBER: usize = 1;
 type UartType = UartHw<Uart1>; // Make sure this matches the UART_NUMBER above
@@ -34,10 +35,7 @@ pub struct Uart {
 
 impl Uart {
     pub fn new(addr: usize, callback: fn(&mut Self)) -> Uart {
-        Uart {
-            uart_csr: UartHw::with_alt_base_addr(addr as u32),
-            callback,
-        }
+        Uart { uart_csr: UartHw::with_alt_base_addr(addr as u32), callback }
     }
 
     pub fn init(&mut self) {
@@ -56,15 +54,11 @@ impl Uart {
 }
 
 impl SerialWrite for Uart {
-    fn putc(&mut self, c: u8) {
-        self.uart_csr.write_byte(c);
-    }
+    fn putc(&mut self, c: u8) { self.uart_csr.write_byte(c); }
 }
 
 impl SerialRead for Uart {
-    fn getc(&mut self) -> Option<u8> {
-        self.uart_csr.getc_nonblocking()
-    }
+    fn getc(&mut self) -> Option<u8> { self.uart_csr.getc_nonblocking() }
 }
 
 /// Initialize UART driver and debug shell.
@@ -96,7 +90,8 @@ pub fn init() {
             UART_IRQ_NUM as usize,
             Uart::irq,
             (UART.as_mut().unwrap() as *mut Uart) as *mut usize,
-        ).expect("Couldn't claim debug interrupts");
+        )
+        .expect("Couldn't claim debug interrupts");
         (UART.as_mut().unwrap() as &mut Uart).enable_rx_irq();
     }
 }

@@ -50,11 +50,7 @@ impl Bitmap {
         while tl.y <= size.y {
             let mut tile = Tile::new(Rectangle::new(tl, br));
             let max_bound = tile.max_bound();
-            br = if max_bound.br.y > size.y {
-                size
-            } else {
-                Point::new(size.x, max_bound.br.y)
-            };
+            br = if max_bound.br.y > size.y { size } else { Point::new(size.x, max_bound.br.y) };
             tile.set_bound(Rectangle::new(tl, br));
             if tile_bits == 0 {
                 tile_bits = ((br.x - tl.x + 1) * (br.y - tl.y + 1)) as usize;
@@ -63,22 +59,14 @@ impl Bitmap {
             tl = Point::new(0, br.y + 1);
             br = Point::new(size.x, tl.y);
         }
-        Self {
-            width: size.x as usize + 1,
-            bound: Rectangle::new(Point::new(0, 0), size),
-            tile_bits,
-            mosaic,
-        }
+        Self { width: size.x as usize + 1, bound: Rectangle::new(Point::new(0, 0), size), tile_bits, mosaic }
     }
 
     pub fn from_img(img: &Img, fit: Option<Point>) -> Self {
         Bitmap::from_iter(
             img.iter().cloned(),
             img.px_type,
-            Point::new(
-                img.width().try_into().unwrap(),
-                img.height().try_into().unwrap(),
-            ),
+            Point::new(img.width().try_into().unwrap(), img.height().try_into().unwrap()),
             fit,
         )
     }
@@ -98,10 +86,7 @@ impl Bitmap {
             (6, 16) => PixelType::U16x4,
             (_, _) => PixelType::U0, // Invalid combination
         };
-        let px_size = Point::new(
-            png.width().try_into().unwrap(),
-            png.height().try_into().unwrap(),
-        );
+        let px_size = Point::new(png.width().try_into().unwrap(), png.height().try_into().unwrap());
         Bitmap::from_iter(png, px_type, px_size, fit)
     }
 
@@ -117,10 +102,7 @@ impl Bitmap {
             Some(fit) => Self::fit(px_size, fit),
             None => (false, from_width),
         };
-        let words = bytes
-            .to_grey(px_type)
-            .shrink(from_width, to_width)
-            .dither(&burkes, to_width);
+        let words = bytes.to_grey(px_type).shrink(from_width, to_width).dither(&burkes, to_width);
 
         let mut mosaic: Vec<Tile> = Vec::new();
 
@@ -164,11 +146,7 @@ impl Bitmap {
             mosaic,
         };
 
-        if rotate {
-            bm.rotate90()
-        } else {
-            bm
-        }
+        if rotate { bm.rotate90() } else { bm }
     }
 
     fn fit(from: Point, into: Point) -> (bool, usize) {
@@ -197,9 +175,7 @@ impl Bitmap {
         (x * y) as u32
     }
 
-    pub fn size(&self) -> (usize, usize) {
-        (self.bound.br.x as usize, self.bound.br.y as usize)
-    }
+    pub fn size(&self) -> (usize, usize) { (self.bound.br.x as usize, self.bound.br.y as usize) }
 
     fn get_tile_index(&self, point: Point) -> usize {
         if self.bound.intersects_point(point) {
@@ -222,24 +198,13 @@ impl Bitmap {
             hull_tl.y = min(hull_tl.y, tile_bound.tl.y);
             hull_br.x = max(hull_br.x, tile_bound.br.x);
             hull_br.y = max(hull_br.y, tile_bound.br.y);
-            tile_area +=
-                (1 + tile_bound.br.x - tile_bound.tl.x) * (1 + tile_bound.br.y - tile_bound.tl.y);
+            tile_area += (1 + tile_bound.br.x - tile_bound.tl.x) * (1 + tile_bound.br.y - tile_bound.tl.y);
         }
         let hull_area = (1 + hull_br.x - hull_tl.x) * (1 + hull_br.y - hull_tl.y);
         if tile_area < hull_area {
-            log::warn!(
-                "Bitmap Tile gaps: tile_area={} hull_area={} {:?}",
-                tile_area,
-                hull_area,
-                mosaic
-            );
+            log::warn!("Bitmap Tile gaps: tile_area={} hull_area={} {:?}", tile_area, hull_area, mosaic);
         } else if tile_area > hull_area {
-            log::warn!(
-                "Bitmap Tile overlap: tile_area={} hull_area={} {:?}",
-                tile_area,
-                hull_area,
-                mosaic
-            );
+            log::warn!("Bitmap Tile overlap: tile_area={} hull_area={} {:?}", tile_area, hull_area, mosaic);
         }
         Rectangle::new(hull_tl, hull_br)
     }
@@ -254,21 +219,13 @@ impl Bitmap {
         &mut self.mosaic.as_mut_slice()[tile]
     }
 
-    pub fn get_line(&self, point: Point) -> Vec<Word> {
-        self.get_tile(point).get_line(point)
-    }
+    pub fn get_line(&self, point: Point) -> Vec<Word> { self.get_tile(point).get_line(point) }
 
-    fn get_word(&self, point: Point) -> Word {
-        self.get_tile(point).get_word(point)
-    }
+    fn get_word(&self, point: Point) -> Word { self.get_tile(point).get_word(point) }
 
-    fn set_word(&mut self, point: Point, word: Word) {
-        self.get_mut_tile(point).set_word(point, word);
-    }
+    fn set_word(&mut self, point: Point, word: Word) { self.get_mut_tile(point).set_word(point, word); }
 
-    pub fn get_pixel(&self, point: Point) -> PixelColor {
-        self.get_tile(point).get_pixel(point)
-    }
+    pub fn get_pixel(&self, point: Point) -> PixelColor { self.get_tile(point).get_pixel(point) }
 
     pub fn set_pixel(&mut self, point: Point, color: PixelColor) {
         self.get_mut_tile(point).set_pixel(point, color)
@@ -303,11 +260,7 @@ impl Bitmap {
             while y >= 0 {
                 let mut b = 0;
                 while b < block.len() {
-                    block[b] = if y >= 0 {
-                        self.get_word(Point::new(x, y))
-                    } else {
-                        0
-                    };
+                    block[b] = if y >= 0 { self.get_word(Point::new(x, y)) } else { 0 };
                     y -= 1;
                     b += 1;
                 }
@@ -336,9 +289,7 @@ impl Bitmap {
 impl Deref for Bitmap {
     type Target = Vec<Tile>;
 
-    fn deref(&self) -> &Self::Target {
-        &self.mosaic
-    }
+    fn deref(&self) -> &Self::Target { &self.mosaic }
 }
 
 impl From<[Option<Tile>; 6]> for Bitmap {
@@ -359,15 +310,13 @@ impl From<[Option<Tile>; 6]> for Bitmap {
             width: (tile_size.x + 1) as usize,
             bound: Self::hull(&mosaic),
             tile_bits: (tile_size.x + 1) as usize * (tile_size.y + 1) as usize,
-            mosaic: mosaic,
+            mosaic,
         }
     }
 }
 
 impl<'a> From<&Img> for Bitmap {
-    fn from(image: &Img) -> Self {
-        Bitmap::from_img(image, None)
-    }
+    fn from(image: &Img) -> Self { Bitmap::from_img(image, None) }
 }
 
 // **********************************************************************

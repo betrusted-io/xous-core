@@ -17,7 +17,8 @@ pub enum Opcode {
     /// force a WDT update
     PingWdt = 4,
 
-    /// Return the version string of Xous. We bury it here because this is a small, lightweight server we can rebuild on every run.
+    /// Return the version string of Xous. We bury it here because this is a small, lightweight server we can
+    /// rebuild on every run.
     GetVersion = 5,
 
     /// Lock the given Mutex, blocking if it is already locked.

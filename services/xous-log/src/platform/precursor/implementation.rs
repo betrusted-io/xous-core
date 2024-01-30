@@ -1,4 +1,5 @@
 use core::fmt::{Error, Write};
+
 use utralib::generated::*;
 
 pub struct Output {}
@@ -11,7 +12,7 @@ pub fn init() -> Output {
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
-            .expect("couldn't map serial port");
+        .expect("couldn't map serial port");
         unsafe { crate::platform::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _ };
         println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
         let mut uart_csr = CSR::new(uart.as_mut_ptr() as *mut u32);
@@ -24,7 +25,7 @@ pub fn init() -> Output {
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
-            .expect("couldn't map keyinjection CSR range");
+        .expect("couldn't map keyinjection CSR range");
         println!("Note: character injection via console UART is enabled.");
 
         println!("Allocating IRQ...");
@@ -33,7 +34,7 @@ pub fn init() -> Output {
             handle_console_irq,
             inject_mem.as_mut_ptr() as *mut usize,
         )
-            .expect("couldn't claim interrupt");
+        .expect("couldn't claim interrupt");
         println!("Claimed IRQ {}", utra::console::CONSOLE_IRQ);
         uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
     }
@@ -41,9 +42,7 @@ pub fn init() -> Output {
 }
 
 impl Output {
-    pub fn get_writer(&self) -> OutputWriter {
-        OutputWriter {}
-    }
+    pub fn get_writer(&self) -> OutputWriter { OutputWriter {} }
 
     pub fn run(&mut self) {
         loop {
@@ -59,10 +58,7 @@ fn handle_console_irq(_irq_no: usize, arg: *mut usize) {
         // println!("rxe {}", uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY));
         while uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY) == 0 {
             // I really rather think this is more readable, than the "Rusty" version below.
-            inject_csr.wfo(
-                utra::keyinject::UART_CHAR_CHAR,
-                uart_csr.rf(utra::uart::RXTX_RXTX),
-            );
+            inject_csr.wfo(utra::keyinject::UART_CHAR_CHAR, uart_csr.rf(utra::uart::RXTX_RXTX));
             uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
 
             // I guess this is how you would do it if you were "really doing Rust"
@@ -99,25 +95,11 @@ impl OutputWriter {
             while uart_csr.r(utra::uart::TXFULL) != 0 {}
             uart_csr.wo(utra::uart::RXTX, c as u32);
 
-            // there's a race condition in the handler, if a new character comes in while handling the interrupt,
-            // the pending bit never clears. If the console seems to freeze, uncomment this line.
-            // This kind of works around that, at the expense of maybe losing some Rx characters.
-            // uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
+            // there's a race condition in the handler, if a new character comes in while handling the
+            // interrupt, the pending bit never clears. If the console seems to freeze, uncomment
+            // this line. This kind of works around that, at the expense of maybe losing some Rx
+            // characters. uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
         }
-    }
-
-    /// Write a buffer to the output and return the number of
-    /// bytes written. This is mostly compatible with `std::io::Write`,
-    /// except it is infallible.
-    pub fn write(&mut self, buf: &[u8]) -> usize {
-        for c in buf {
-            self.putc(*c);
-        }
-        buf.len()
-    }
-
-    pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> {
-        Ok(self.write(buf))
     }
 }
 

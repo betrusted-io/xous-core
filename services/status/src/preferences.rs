@@ -1,8 +1,10 @@
-use crate::wifi;
+use std::fmt::Display;
+
 use locales::t;
 use num_traits::*;
-use std::fmt::Display;
 use userprefs::Manager;
+
+use crate::wifi;
 
 pub trait PrefHandler {
     // If handle() returns true, it has handled the operation.
@@ -71,15 +73,11 @@ enum DevicePrefsError {
 }
 
 impl From<userprefs::Error> for DevicePrefsError {
-    fn from(e: userprefs::Error) -> Self {
-        Self::PrefsError(e)
-    }
+    fn from(e: userprefs::Error) -> Self { Self::PrefsError(e) }
 }
 
 impl From<xous::Error> for DevicePrefsError {
-    fn from(e: xous::Error) -> Self{
-        Self::XousError(e)
-    }
+    fn from(e: xous::Error) -> Self { Self::XousError(e) }
 }
 
 impl Display for DevicePrefsError {
@@ -99,7 +97,7 @@ struct DevicePrefs {
     gam: gam::Gam,
     kbd: keyboard::Keyboard,
     time_ux_cid: xous::CID,
-    #[cfg(not(feature="no-codec"))]
+    #[cfg(not(feature = "no-codec"))]
     codec: codec::Codec,
     menu: Option<gam::MenuMatic>,
     menu_manager_sid: xous::SID,
@@ -113,7 +111,7 @@ impl PrefHandler for DevicePrefs {
         if match FromPrimitive::from_usize(op) {
             Some(other) => {
                 let other: PrefsMenuUpdateOp = other;
-                #[cfg(not(feature="no-codec"))]
+                #[cfg(not(feature = "no-codec"))]
                 match other {
                     PrefsMenuUpdateOp::UpdateMenuAudioEnabled => self.alter_menu_audio_off(),
                     PrefsMenuUpdateOp::UpdateMenuAudioDisabled => self.alter_menu_audio_on(),
@@ -141,10 +139,11 @@ impl PrefHandler for DevicePrefs {
             }
         };
         // trigger the status thread to reload preferences, as some may have changed
-        xous::send_message(self.status_cid, xous::Message::new_scalar(
-            crate::StatusOpcode::ReloadPrefs.to_usize().unwrap(),
-            0, 0, 0, 0)
-        ).ok();
+        xous::send_message(
+            self.status_cid,
+            xous::Message::new_scalar(crate::StatusOpcode::ReloadPrefs.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .ok();
 
         result
     }
@@ -181,17 +180,16 @@ impl DevicePrefs {
         time_ux_cid: xous::CID,
         menu_manager_sid: xous::SID,
         menu_conn: xous::CID,
-        #[cfg(not(feature="no-codec"))]
-        codec: codec::Codec,
+        #[cfg(not(feature = "no-codec"))] codec: codec::Codec,
         status_conn: xous::CID,
-) -> Self {
+    ) -> Self {
         Self {
             up: Manager::new(),
             modals: modals::Modals::new(&xns).unwrap(),
             gam: gam::Gam::new(&xns).unwrap(),
             kbd: keyboard::Keyboard::new(&xns).unwrap(),
             time_ux_cid,
-            #[cfg(not(feature="no-codec"))]
+            #[cfg(not(feature = "no-codec"))]
             codec,
             menu: None,
             menu_manager_sid,
@@ -224,7 +222,7 @@ impl DevicePrefs {
             SetTime,
             SetTimezone,
         ];
-        #[cfg(not(feature="no-codec"))]
+        #[cfg(not(feature = "no-codec"))]
         if self.codec.is_running().unwrap_or_default() {
             ret.push(AudioOff);
 
@@ -254,13 +252,13 @@ impl DevicePrefs {
             WLANMenu => self.wlan_menu(),
             SetTime => self.set_time_menu(),
             SetTimezone => self.set_timezone_menu(),
-            #[cfg(not(feature="no-codec"))]
+            #[cfg(not(feature = "no-codec"))]
             AudioOn => self.audio_on(),
-            #[cfg(not(feature="no-codec"))]
+            #[cfg(not(feature = "no-codec"))]
             AudioOff => self.audio_off(),
-            #[cfg(not(feature="no-codec"))]
+            #[cfg(not(feature = "no-codec"))]
             HeadsetVolume => self.headset_volume(),
-            #[cfg(not(feature="no-codec"))]
+            #[cfg(not(feature = "no-codec"))]
             EarpieceVolume => self.earpiece_volume(),
 
             _ => unimplemented!("should not end up here!"),
@@ -271,10 +269,7 @@ impl DevicePrefs {
 
     fn show_error_modal(&self, e: DevicePrefsError) {
         self.modals
-            .show_notification(
-                format!("{}: {}", t!("wlan.error", locales::LANG), e).as_str(),
-                None,
-            )
+            .show_notification(format!("{}: {}", t!("wlan.error", locales::LANG), e).as_str(), None)
             .unwrap()
     }
 }
@@ -287,8 +282,11 @@ impl DevicePrefs {
 
         let new_result = yes_no_to_bool(
             self.modals
-                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
-                    bool_to_yes_no(cv)))
+                .get_radiobutton(&format!(
+                    "{} {}",
+                    t!("prefs.current_setting", locales::LANG),
+                    bool_to_yes_no(cv)
+                ))
                 .unwrap()
                 .as_str(),
         );
@@ -296,17 +294,31 @@ impl DevicePrefs {
         if new_result {
             #[cfg(not(target_os = "xous"))]
             log::info!("HOSTED: enable bl");
-            xous::send_message(self.status_cid, xous::Message::new_scalar(
-                crate::StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(),
-                0, 0, 0, 0)
-            ).ok();
+            xous::send_message(
+                self.status_cid,
+                xous::Message::new_scalar(
+                    crate::StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(),
+                    0,
+                    0,
+                    0,
+                    0,
+                ),
+            )
+            .ok();
         } else {
             #[cfg(not(target_os = "xous"))]
             log::info!("HOSTED: disable bl");
-            xous::send_message(self.status_cid, xous::Message::new_scalar(
-                crate::StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(),
-                0, 0, 0, 0)
-            ).ok();
+            xous::send_message(
+                self.status_cid,
+                xous::Message::new_scalar(
+                    crate::StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(),
+                    0,
+                    0,
+                    0,
+                    0,
+                ),
+            )
+            .ok();
         }
 
         Ok(self.up.set_autobacklight_on_boot(new_result)?)
@@ -334,9 +346,7 @@ impl DevicePrefs {
                 Some(cv.to_string()),
                 Some(|tf| match tf.as_str().parse::<u64>() {
                     Ok(_) => None,
-                    Err(_) => Some(xous_ipc::String::from_str(
-                        t!("prefs.autobacklight_err", locales::LANG),
-                    )),
+                    Err(_) => Some(xous_ipc::String::from_str(t!("prefs.autobacklight_err", locales::LANG))),
                 }),
             )
             .build()
@@ -357,9 +367,7 @@ impl DevicePrefs {
                 Some(cv.to_string()),
                 Some(|tf| match tf.as_str().parse::<u64>() {
                     Ok(_) => None,
-                    Err(_) => Some(xous_ipc::String::from_str(
-                        t!("prefs.autobacklight_err", locales::LANG),
-                    )),
+                    Err(_) => Some(xous_ipc::String::from_str(t!("prefs.autobacklight_err", locales::LANG))),
                 }),
             )
             .build()
@@ -376,8 +384,11 @@ impl DevicePrefs {
         self.modals.add_list(vec![t!("prefs.yes", locales::LANG), t!("prefs.no", locales::LANG)]).unwrap();
         let new_result = yes_no_to_bool(
             self.modals
-                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
-                    bool_to_yes_no(cv)))
+                .get_radiobutton(&format!(
+                    "{} {}",
+                    t!("prefs.current_setting", locales::LANG),
+                    bool_to_yes_no(cv)
+                ))
                 .unwrap()
                 .as_str(),
         );
@@ -392,8 +403,11 @@ impl DevicePrefs {
 
         let new_result = yes_no_to_bool(
             self.modals
-                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
-                    bool_to_yes_no(cv)))
+                .get_radiobutton(&format!(
+                    "{} {}",
+                    t!("prefs.current_setting", locales::LANG),
+                    bool_to_yes_no(cv)
+                ))
                 .unwrap()
                 .as_str(),
         );
@@ -417,8 +431,11 @@ impl DevicePrefs {
 
         let new_result = yes_no_to_bool(
             self.modals
-                .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
-                    bool_to_yes_no(cv)))
+                .get_radiobutton(&format!(
+                    "{} {}",
+                    t!("prefs.current_setting", locales::LANG),
+                    bool_to_yes_no(cv)
+                ))
                 .unwrap()
                 .as_str(),
         );
@@ -443,13 +460,7 @@ impl DevicePrefs {
 
         xous::send_message(
             self.time_ux_cid,
-            xous::Message::new_scalar(
-                dns::TimeUxOp::SetTime.to_usize().unwrap(),
-                0,
-                0,
-                0,
-                0,
-            ),
+            xous::Message::new_scalar(dns::TimeUxOp::SetTime.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .unwrap();
 
@@ -461,13 +472,7 @@ impl DevicePrefs {
 
         xous::send_message(
             self.time_ux_cid,
-            xous::Message::new_scalar(
-                dns::TimeUxOp::SetTimeZone.to_usize().unwrap(),
-                0,
-                0,
-                0,
-                0,
-            ),
+            xous::Message::new_scalar(dns::TimeUxOp::SetTimeZone.to_usize().unwrap(), 0, 0, 0, 0),
         )
         .unwrap();
 
@@ -483,25 +488,24 @@ impl DevicePrefs {
 
         let new_result = self
             .modals
-            .get_radiobutton(&format!("{} {}", t!("prefs.current_setting", locales::LANG),
-                keyboard::KeyMap::from(kl)))
+            .get_radiobutton(&format!(
+                "{} {}",
+                t!("prefs.current_setting", locales::LANG),
+                keyboard::KeyMap::from(kl)
+            ))
             .unwrap();
 
-        let new_result = match mappings
-            .iter()
-            .position(|&elem| elem == new_result.as_str())
-        {
+        let new_result = match mappings.iter().position(|&elem| elem == new_result.as_str()) {
             Some(val) => val,
             None => 0,
         };
 
-        self.kbd
-            .set_keymap(keyboard::KeyMap::from(new_result))
-            .unwrap();
+        self.kbd.set_keymap(keyboard::KeyMap::from(new_result)).unwrap();
 
         Ok(())
     }
-    #[cfg(not(feature="no-codec"))]
+
+    #[cfg(not(feature = "no-codec"))]
     fn audio_on(&mut self) -> Result<(), DevicePrefsError> {
         self.codec.setup_8k_stream()?;
 
@@ -510,7 +514,8 @@ impl DevicePrefs {
 
         Ok(())
     }
-    #[cfg(not(feature="no-codec"))]
+
+    #[cfg(not(feature = "no-codec"))]
     fn alter_menu_audio_on(&mut self) {
         let menu = self.menu.as_ref().unwrap();
 
@@ -546,7 +551,8 @@ impl DevicePrefs {
             close_on_select: true,
         });
     }
-    #[cfg(not(feature="no-codec"))]
+
+    #[cfg(not(feature = "no-codec"))]
     fn audio_off(&mut self) -> Result<(), DevicePrefsError> {
         self.codec.power_off()?;
 
@@ -555,7 +561,8 @@ impl DevicePrefs {
 
         Ok(())
     }
-    #[cfg(not(feature="no-codec"))]
+
+    #[cfg(not(feature = "no-codec"))]
     fn alter_menu_audio_off(&mut self) {
         let menu = self.menu.as_ref().unwrap();
         // hide volume toggles
@@ -578,7 +585,8 @@ impl DevicePrefs {
             close_on_select: true,
         });
     }
-    #[cfg(not(feature="no-codec"))]
+
+    #[cfg(not(feature = "no-codec"))]
     fn headphone_connected(&mut self) -> Result<bool, DevicePrefsError> {
         match self.codec.poll_headphone_state()? {
             codec::HeadphoneState::PresentWithMic => Ok(true),
@@ -586,7 +594,8 @@ impl DevicePrefs {
             _ => Ok(false),
         }
     }
-    #[cfg(not(feature="no-codec"))]
+
+    #[cfg(not(feature = "no-codec"))]
     fn volume_slider(&mut self, title: &str, headset: bool) -> Result<(i32, u32), DevicePrefsError> {
         // We're aiming at 20 step levels in the UI, which is the result of dividing
         // 80dB levels available through codec by 4 (https://xkcd.com/221/).
@@ -602,16 +611,20 @@ impl DevicePrefs {
 
         Ok((db_val as i32, val as u32))
     }
-    #[cfg(not(feature="no-codec"))]
-    fn headset_volume(&mut self) -> Result<(), DevicePrefsError> { // headset -> headphone
+
+    #[cfg(not(feature = "no-codec"))]
+    fn headset_volume(&mut self) -> Result<(), DevicePrefsError> {
+        // headset -> headphone
         let (db_val, slider_val) = self.volume_slider(t!("prefs.headphone_volume", locales::LANG), true)?;
         self.codec.set_headphone_volume(codec::VolumeOps::Set, Some(db_val as f32))?;
         self.up.set_headset_volume(slider_val)?;
 
         Ok(())
     }
-    #[cfg(not(feature="no-codec"))]
-    fn earpiece_volume(&mut self) -> Result<(), DevicePrefsError> { // earpiece -> speaker
+
+    #[cfg(not(feature = "no-codec"))]
+    fn earpiece_volume(&mut self) -> Result<(), DevicePrefsError> {
+        // earpiece -> speaker
         let (db_val, slider_val) = self.volume_slider(t!("prefs.speaker_volume", locales::LANG), false)?;
         self.codec.set_speaker_volume(codec::VolumeOps::Set, Some(db_val as f32))?;
         self.up.set_earpiece_volume(slider_val)?;
@@ -622,7 +635,7 @@ impl DevicePrefs {
 pub fn percentage_to_db(value: u32) -> i32 {
     let negated_val = 100 - value;
 
-    (negated_val as i32 * -80)/100
+    (negated_val as i32 * -80) / 100
 }
 
 fn yes_no_to_bool(val: &str) -> bool {
@@ -656,15 +669,15 @@ fn run_menu_thread(sid: xous::SID, status_cid: xous::CID) {
 
     // --------------------------- spawn a time UX manager thread
     let time_cid = xns.request_connection_blocking(dns::api::TIME_UX_NAME).unwrap();
-    #[cfg(not(feature="no-codec"))]
+    #[cfg(not(feature = "no-codec"))]
     let codec = codec::Codec::new(&xns).unwrap();
 
-    #[cfg(not(feature="no-codec"))]
+    #[cfg(not(feature = "no-codec"))]
     let mut handlers: Vec<Box<dyn PrefHandler>> = vec![
         Box::new(DevicePrefs::new(&xns, time_cid, menumatic_sid, menu_conn, codec, status_cid)),
         Box::new(wifi::WLANMan::new(&xns)),
     ];
-    #[cfg(feature="no-codec")]
+    #[cfg(feature = "no-codec")]
     let mut handlers: Vec<Box<dyn PrefHandler>> = vec![
         Box::new(DevicePrefs::new(&xns, time_cid, menumatic_sid, menu_conn, status_cid)),
         Box::new(wifi::WLANMan::new(&xns)),

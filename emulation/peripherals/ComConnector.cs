@@ -13,13 +13,13 @@ using Antmicro.Renode.Utilities;
 
 namespace Antmicro.Renode.Peripherals.SPI.Betrusted
 {
-    public interface IComPeripheral : IPeripheral, IInterestingType
+    public interface IComPeripheral : IPeripheral
     {
         ushort Transmit(ushort data);
         bool HasData();
         void FinishTransmission();
     }
-    public interface IComController : IPeripheral, IInterestingType, IGPIOReceiver
+    public interface IComController : IPeripheral, IGPIOReceiver
     {
         ushort Transmit(ushort data);
         void FinishTransmission();

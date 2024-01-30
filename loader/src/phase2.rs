@@ -4,12 +4,58 @@ use crate::*;
 ///
 /// Set up all the page tables, allocating new root page tables for SATPs and corresponding
 /// sub-pages starting from the base of previously copied process data.
-pub fn phase_2(cfg: &mut BootConfig) {
+pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
     let args = cfg.args;
 
     // This is the offset in RAM where programs are loaded from.
     let mut process_offset = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
     println!("\n\nPhase2: Processess start out @ {:08x}", process_offset);
+
+    // Construct an environment block. This will be used by processes
+    // to access environment variables and system parameters. This
+    // is hardcoded for now, and can be expanded later.
+    #[rustfmt::skip]
+    let mut env = [
+        0x41, 0x70, 0x70, 0x50, // 'AppP' indicating application parameters
+        0x08, 0x00, 0x00, 0x00, // Size of AppP tag contents
+        0xb2, 0x00, 0x00, 0x00, // Size of entire AppP block including all tags
+        0x02, 0x00, 0x00, 0x00, // Number of tags present
+        0x45, 0x6e, 0x76, 0x42, // 'EnvB' indicating an environment block
+        0x9a, 0x00, 0x00, 0x00, // Number of bytes that follows for the environment block
+        0x01, 0x00, // Number of environment variables
+        0x14, 0x00, // Length of name of first variable
+        // Name of first variable 'ROOT_FILESYSTEM_HASH':
+        0x52, 0x4f, 0x4f, 0x54, 0x5f, 0x46, 0x49, 0x4c, 0x45, 0x53, 0x59, 0x53, 0x54, 0x45, 0x4d,
+        0x5f, 0x48, 0x41, 0x53, 0x48,
+        // Length of the contents of the first variable
+        0x80, 0x00,
+        // Root filesystem hash contents begin here:
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+    ];
+    // Convert the fs_prehash into a hex ascii string, suitable for environment variables
+    // The initial loader environment is hard-coded, so we use a hard-coded offset for the string
+    // destination. It was a deliberate decision to not include a generic environment variable
+    // handler in the loader because we want to keep the loader compact and with a small attack
+    // surface; a generic environment handling routine would add significant size without much
+    // benefit.
+    //
+    // Note that the main purpose for environment variables is for test & debug tooling, where
+    // single programs are run in hosted or emulated environments with arguments passed for fast
+    // debugging. The sole purpose for the environment variable in the loader's context is to
+    // pass this computed hash onto the userspace environments.
+    const HEX_DIGITS: [u8; 16] = *b"0123456789abcdef";
+    for (i, &byte) in fs_prehash.iter().enumerate() {
+        env[env.len() - 128 + i * 2] = HEX_DIGITS[(byte >> 4) as usize];
+        env[env.len() - 128 + i * 2 + 1] = HEX_DIGITS[(byte & 0xF) as usize];
+    }
 
     // Go through all Init processes and the kernel, setting up their
     // page tables and mapping memory to them.
@@ -34,14 +80,14 @@ pub fn phase_2(cfg: &mut BootConfig) {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
             println!("\n\nCopying IniE program into memory");
-            let allocated = inie.load(cfg, process_offset, pid, false);
+            let allocated = inie.load(cfg, process_offset, pid, &env, false);
             println!("IniE Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"IniF") {
             let inif = MiniElf::new(&tag);
             println!("\n\nMapping IniF program into memory");
-            let allocated = inif.load(cfg, process_offset, pid, true);
+            let allocated = inif.load(cfg, process_offset, pid, &env, true);
             println!("IniF Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
@@ -56,12 +102,13 @@ pub fn phase_2(cfg: &mut BootConfig) {
             }
             #[cfg(feature = "atsama5d27")]
             {
-                (ktext_offset, kdata_offset, kernel_exception_sp, kernel_irq_sp) = xkrn.load(cfg, process_offset - load_size_rounded, 1);
+                (ktext_offset, kdata_offset, kernel_exception_sp, kernel_irq_sp) =
+                    xkrn.load(cfg, process_offset - load_size_rounded, 1);
                 (ktext_size, kdata_size, ktext_virt_offset, kdata_virt_offset) = (
                     (xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1),
                     (((xkrn.data_size + xkrn.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)),
                     xkrn.text_offset as usize,
-                    xkrn.data_offset as usize
+                    xkrn.data_offset as usize,
                 );
             }
             process_offset -= load_size_rounded;
@@ -91,8 +138,8 @@ pub fn phase_2(cfg: &mut BootConfig) {
                 addr + krn_struct_start,
                 addr + KERNEL_ARGUMENT_OFFSET,
                 FLG_R | FLG_W | FLG_VALID,
+                1 as XousPid,
             );
-            cfg.change_owner(1 as XousPid, (addr + krn_struct_start) as usize);
         }
 
         // Copy the kernel's "MMU Page 1023" into every process.
@@ -142,10 +189,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
             println!();
         }
     }
-    println!(
-        "Runtime Page Tracker: {} bytes",
-        cfg.runtime_page_tracker.len()
-    );
+    println!("Runtime Page Tracker: {} bytes", cfg.runtime_page_tracker.len());
     // mark pages used by suspend/resume according to their needs
     cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 1; // claim the loader stack -- do not allow tampering, as it contains backup kernel args
     cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 1; // 8k in total (to allow for digital signatures to be computed)
@@ -201,8 +245,7 @@ impl ProgramDescription {
             assert!(self.text_offset as usize == KERNEL_LOAD_OFFSET);
             assert!(((self.text_offset + self.text_size) as usize) < EXCEPTION_STACK_TOP);
             assert!(
-                ((self.data_offset + self.data_size + self.bss_size) as usize)
-                    < EXCEPTION_STACK_TOP - 16
+                ((self.data_offset + self.data_size + self.bss_size) as usize) < EXCEPTION_STACK_TOP - 16
             );
             assert!(self.data_offset as usize >= KERNEL_LOAD_OFFSET);
         } else {
@@ -221,29 +264,31 @@ impl ProgramDescription {
 
         // Turn the satp address into a pointer
         let satp = unsafe { &mut *(satp_address as *mut PageTable) };
-        allocator.map_page(satp, satp_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W | FLG_VALID);
-        allocator.change_owner(pid as XousPid, satp_address as usize);
+        allocator.map_page(
+            satp,
+            satp_address,
+            PAGE_TABLE_ROOT_OFFSET,
+            FLG_R | FLG_W | FLG_VALID,
+            pid as XousPid,
+        );
 
         // Allocate context for this process
         let thread_address = allocator.alloc() as usize;
-        allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID);
-        allocator.change_owner(pid as XousPid, thread_address as usize);
+        allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID, pid as XousPid);
 
         // Allocate stack pages.
-        for i in 0..if is_kernel {
-            KERNEL_STACK_PAGE_COUNT
-        } else {
-            STACK_PAGE_COUNT
-        } {
+        for i in 0..if is_kernel { KERNEL_STACK_PAGE_COUNT } else { STACK_PAGE_COUNT } {
             if i == 0 {
+                // Pre-allocate the first stack offset, since it
+                // will definitely be used
                 let sp_page = allocator.alloc() as usize;
                 allocator.map_page(
                     satp,
                     sp_page,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             } else {
                 // Reserve every page other than the 1st stack page
                 allocator.map_page(
@@ -251,6 +296,7 @@ impl ProgramDescription {
                     0,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults & !FLG_VALID,
+                    pid as XousPid,
                 );
             }
 
@@ -262,8 +308,8 @@ impl ProgramDescription {
                     sp_page,
                     (EXCEPTION_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             }
         }
 
@@ -277,53 +323,56 @@ impl ProgramDescription {
         // Either this is on SPI flash at an aligned address, or it
         // has been copied into RAM already.  This is why we ignore `self.load_offset`
         // and use the `load_offset` parameter instead.
-        let rounded_data_bss =
-            ((self.data_size + self.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let rounded_data_bss = ((self.data_size + self.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
 
         // let load_size_rounded = (self.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         for offset in (0..self.text_size as usize).step_by(PAGE_SIZE) {
-            if VDBG {println!(
-                "   TEXT: Mapping {:08x} -> {:08x}",
-                load_offset + offset + rounded_data_bss,
-                self.text_offset as usize + offset
-            );}
+            if VDBG {
+                println!(
+                    "   TEXT: Mapping {:08x} -> {:08x}",
+                    load_offset + offset + rounded_data_bss,
+                    self.text_offset as usize + offset
+                );
+            }
             allocator.map_page(
                 satp,
                 load_offset + offset + rounded_data_bss,
                 self.text_offset as usize + offset,
                 flag_defaults | FLG_X | FLG_VALID,
+                pid as XousPid,
             );
-            allocator.change_owner(pid as XousPid, load_offset + offset + rounded_data_bss);
         }
 
         // Map the process data section into RAM.
         for offset in (0..(self.data_size + self.bss_size) as usize).step_by(PAGE_SIZE as usize) {
             // let page_addr = allocator.alloc();
-            if VDBG {println!(
-                "   DATA: Mapping {:08x} -> {:08x}",
-                load_offset + offset,
-                self.data_offset as usize + offset
-            );}
+            if VDBG {
+                println!(
+                    "   DATA: Mapping {:08x} -> {:08x}",
+                    load_offset + offset,
+                    self.data_offset as usize + offset
+                );
+            }
             allocator.map_page(
                 satp,
                 load_offset + offset,
                 self.data_offset as usize + offset,
                 flag_defaults,
+                pid as XousPid,
             );
-            allocator.change_owner(pid as XousPid, load_offset as usize + offset);
         }
 
         // Allocate pages for .bss, if necessary
 
         // Our "earlyprintk" equivalent
         if cfg!(feature = "earlyprintk") && is_kernel {
-            allocator.map_page(satp, 0xF000_2000, 0xffcf_0000, FLG_R | FLG_W | FLG_VALID);
-            allocator.change_owner(pid as XousPid, 0xF000_2000);
+            allocator.map_page(satp, 0xF000_2000, 0xffcf_0000, FLG_R | FLG_W | FLG_VALID, pid as XousPid);
         }
 
         let process = &mut allocator.processes[pid_idx];
         process.entrypoint = self.entrypoint as usize;
         process.sp = stack_addr;
+        process.env = 0;
         process.satp = 0x8000_0000 | ((pid as usize) << 22) | (satp_address >> 12);
     }
 }

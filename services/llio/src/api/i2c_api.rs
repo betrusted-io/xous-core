@@ -1,7 +1,7 @@
 use rkyv::{Archive, Deserialize, Serialize};
 
 // ///////////////////// I2C
-pub(crate) const SERVER_NAME_I2C: &str       = "_Threaded I2C manager_";
+pub(crate) const SERVER_NAME_I2C: &str = "_Threaded I2C manager_";
 // a small book-keeping struct used to report back to I2C requestors as to the status of a transaction
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
 pub enum I2cStatus {
@@ -35,7 +35,7 @@ pub(crate) enum I2cCallback {
 // and create a "public" version for return values via callbacks. But for now, it's pretty
 // convenient to reach into the state of the I2C machine to debug problems in the callbacks.
 #[allow(dead_code)]
-pub (crate) const I2C_MAX_LEN: usize = 33;
+pub(crate) const I2C_MAX_LEN: usize = 33;
 #[derive(Debug, Copy, Clone, Archive, Serialize, Deserialize)]
 pub struct I2cTransaction {
     pub bus_addr: u8,
@@ -49,7 +49,15 @@ pub struct I2cTransaction {
 }
 impl I2cTransaction {
     pub fn new() -> Self {
-        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 500, use_repeated_start: true }
+        I2cTransaction {
+            bus_addr: 0,
+            txbuf: None,
+            txlen: 0,
+            rxbuf: None,
+            rxlen: 0,
+            timeout_ms: 500,
+            use_repeated_start: true,
+        }
     }
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

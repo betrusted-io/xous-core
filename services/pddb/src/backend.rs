@@ -11,7 +11,6 @@ pub use fastspace::*;
 mod types;
 pub use types::*;
 mod bcrypt;
-pub use bcrypt::*;
 
 // local to the backend
 mod murmur3;
@@ -28,5 +27,5 @@ mod hosted;
 #[cfg(not(target_os = "xous"))]
 pub(crate) use hosted::*;
 
-#[cfg(feature="migration1")]
+#[cfg(feature = "migration1")]
 mod migration1to2;

@@ -1,16 +1,11 @@
 use smoltcp::wire::IpAddress;
-use crate::*;
 
+use crate::*;
 
 pub(crate) fn parse_address(data: &[u8]) -> Option<smoltcp::wire::IpAddress> {
     let mut i = data.iter();
     match i.next() {
-        Some(&4) => Some(smoltcp::wire::IpAddress::v4(
-            *i.next()?,
-            *i.next()?,
-            *i.next()?,
-            *i.next()?,
-        )),
+        Some(&4) => Some(smoltcp::wire::IpAddress::v4(*i.next()?, *i.next()?, *i.next()?, *i.next()?)),
         Some(&6) => {
             let mut new_addr = [0u8; 16];
             for octet in new_addr.iter_mut() {

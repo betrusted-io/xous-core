@@ -2,30 +2,30 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::*;
-
-use num_traits::*;
-use xous_ipc::Buffer;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
-
 use core::sync::atomic::{AtomicBool, Ordering};
-
 use std::collections::HashSet;
 
-#[cfg(any(feature="precursor", feature="renode"))]
+use api::*;
+use num_traits::*;
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
+use xous_ipc::Buffer;
+
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation {
-    use utralib::generated::*;
-    #[cfg(feature="extra_flush")]
-    use xous::MemoryRange;
-    use crate::api::*;
-    use susres::{RegManager, RegOrField, SuspendResume};
     use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
     use num_traits::*;
+    use susres::{RegManager, RegOrField, SuspendResume};
+    use utralib::generated::*;
+    #[cfg(feature = "extra_flush")]
+    use xous::MemoryRange;
+
+    use crate::api::*;
 
     #[derive(Debug)]
     enum FlashOp {
-        EraseSector(u32), // 4k sector
-        EraseBlock(u32), // 64k block
+        EraseSector(u32),                   // 4k sector
+        EraseBlock(u32),                    // 64k block
         WritePages(u32, [u8; 4096], usize), // page address, data, len
         ReadId,
     }
@@ -68,7 +68,7 @@ mod implementation {
                     }
                 }
                 flash_rdsr(&mut spinor.csr, 0); // dummy read to clear the "read lock" bit
-            },
+            }
             Some(FlashOp::EraseBlock(block_address)) => {
                 // enable writes: set wren mode
                 loop {
@@ -100,11 +100,14 @@ mod implementation {
                     }
                 }
                 flash_rdsr(&mut spinor.csr, 0); // dummy read to clear the "read lock" bit
-            },
+            }
             Some(FlashOp::WritePages(start_addr, data, len)) => {
                 // assumption: data being written to is already erased (set to 0xFF)
                 assert!(len <= 4096, "data len is too large");
-                assert!((len % 2) == 0, "data is not a multiple of 2 in length: the SPI DDR interface always requires two bytes per transfer");
+                assert!(
+                    (len % 2) == 0,
+                    "data is not a multiple of 2 in length: the SPI DDR interface always requires two bytes per transfer"
+                );
                 let mut cur_addr = start_addr;
                 let mut pre_align = 0;
                 let mut more_aligned_pages = true;
@@ -112,7 +115,8 @@ mod implementation {
                     // do a partial-page program to get us into page alignment:
                     //   - it's OK to send an address that isn't page-aligned, but:
                     //   - you can only write data that would program up to the end of the page
-                    //   - excess data would "wrap around" and program bytes at the beginning of the page, which is incorrect behavior
+                    //   - excess data would "wrap around" and program bytes at the beginning of the page,
+                    //     which is incorrect behavior
                     pre_align = 0x100 - (cur_addr & 0xFF);
 
                     if pre_align >= len as u32 {
@@ -156,7 +160,10 @@ mod implementation {
                     cur_addr += pre_align; // increment the address, even if we "skipped" the region
                 }
                 if ((result & 0x20) == 0) && more_aligned_pages {
-                    assert!(cur_addr & 0xff == 0, "data is not page-aligned going into the aligned write phase");
+                    assert!(
+                        cur_addr & 0xff == 0,
+                        "data is not page-aligned going into the aligned write phase"
+                    );
                     // now write the remaining, aligned pages. The last chunk can be short of data,
                     // that's also fine; the write will not affect bytes that are not transmitted
                     for page in data[pre_align as usize..len].chunks(256) {
@@ -212,13 +219,13 @@ mod implementation {
                     }
                 }
                 flash_rdsr(&mut spinor.csr, 0); // dummy read to clear the "read lock" bit
-            },
+            }
             Some(FlashOp::ReadId) => {
                 let upper = flash_rdid(&mut spinor.csr, 2);
                 let lower = flash_rdid(&mut spinor.csr, 1);
                 // re-assemble the ID word from the duplicated bytes read
                 result = (lower & 0xFF) | ((lower >> 8) & 0xFF00) | (upper & 0xFF_0000);
-            },
+            }
             None => {
                 panic!("Improper entry to SPINOR safe context.");
             }
@@ -275,26 +282,32 @@ mod implementation {
 
         flash_rdsr(&mut spinor.csr, 0); // dummy read to clear the "read lock" bit
 
-        xous::try_send_message(spinor.handler_conn,
-            xous::Message::new_scalar(Opcode::EccError.to_usize().unwrap(),
+        xous::try_send_message(
+            spinor.handler_conn,
+            xous::Message::new_scalar(
+                Opcode::EccError.to_usize().unwrap(),
                 spinor.csr.rf(utra::spinor::ECC_ADDRESS_ECC_ADDRESS) as usize,
                 failstat as usize,
                 u32::from_le_bytes(failaddr) as usize,
-                u32::from_le_bytes(failaddr2) as usize,)
-            ).map(|_|()).unwrap();
+                u32::from_le_bytes(failaddr2) as usize,
+            ),
+        )
+        .map(|_| ())
+        .unwrap();
 
         spinor.csr.wfo(utra::spinor::EV_PENDING_ECC_ERROR, 1);
     }
 
     fn flash_rdsr(csr: &mut utralib::CSR<u32>, lock_reads: u32) -> u32 {
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
-        csr.wo(utra::spinor::COMMAND,
+        csr.wo(
+            utra::spinor::COMMAND,
             csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
             | csr.ms(utra::spinor::COMMAND_LOCK_READS, lock_reads)
             | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x05) // RDSR
             | csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
             | csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
-            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1),
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
         csr.r(utra::spinor::CMD_RBK_DATA)
@@ -302,13 +315,14 @@ mod implementation {
 
     fn flash_rdcr2(csr: &mut utralib::CSR<u32>, addr: u32) -> u32 {
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, addr);
-        csr.wo(utra::spinor::COMMAND,
+        csr.wo(
+            utra::spinor::COMMAND,
             csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
             | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
             | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x71) // RDCR2
             | csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
             | csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
-            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1),
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
         csr.r(utra::spinor::CMD_RBK_DATA)
@@ -316,26 +330,28 @@ mod implementation {
 
     fn flash_wrcr2(csr: &mut utralib::CSR<u32>, addr: u32) {
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, addr);
-        csr.wo(utra::spinor::COMMAND,
+        csr.wo(
+            utra::spinor::COMMAND,
             csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
             | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
             | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x72) // WRCR2
             | csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 0)
             | csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
-            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1),
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
 
     fn flash_rdscur(csr: &mut utralib::CSR<u32>) -> u32 {
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
-        csr.wo(utra::spinor::COMMAND,
-              csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+        csr.wo(
+            utra::spinor::COMMAND,
+            csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
             | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
             | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x2B) // RDSCUR
             | csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
             | csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
-            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1),
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
         csr.r(utra::spinor::CMD_RBK_DATA)
@@ -343,12 +359,13 @@ mod implementation {
 
     fn flash_rdid(csr: &mut utralib::CSR<u32>, offset: u32) -> u32 {
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
-        csr.wo(utra::spinor::COMMAND,
+        csr.wo(
+            utra::spinor::COMMAND,
             csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
           | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x9f)  // RDID
           | csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
           | csr.ms(utra::spinor::COMMAND_DATA_WORDS, offset) // 2 -> 0x3b3b8080, // 1 -> 0x8080c2c2
-          | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+          | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1),
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
         csr.r(utra::spinor::CMD_RBK_DATA)
@@ -356,42 +373,46 @@ mod implementation {
 
     fn flash_wren(csr: &mut utralib::CSR<u32>) {
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
-        csr.wo(utra::spinor::COMMAND,
+        csr.wo(
+            utra::spinor::COMMAND,
             csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
           | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x06)  // WREN
-          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1),
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
 
     fn flash_wrdi(csr: &mut utralib::CSR<u32>) {
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
-        csr.wo(utra::spinor::COMMAND,
+        csr.wo(
+            utra::spinor::COMMAND,
             csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
           | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x04)  // WRDI
-          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1),
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
 
     fn flash_se4b(csr: &mut utralib::CSR<u32>, sector_address: u32) {
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, sector_address);
-        csr.wo(utra::spinor::COMMAND,
+        csr.wo(
+            utra::spinor::COMMAND,
             csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
           | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x21)  // SE4B
           | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
-          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1),
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
 
     fn flash_be4b(csr: &mut utralib::CSR<u32>, block_address: u32) {
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, block_address);
-        csr.wo(utra::spinor::COMMAND,
+        csr.wo(
+            utra::spinor::COMMAND,
             csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
           | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0xdc)  // BE4B
           | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
-          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1),
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
@@ -400,31 +421,32 @@ mod implementation {
         let data_words = data_bytes / 2;
         assert!(data_words <= 128, "data_words specified is longer than one page!");
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, address);
-        csr.wo(utra::spinor::COMMAND,
+        csr.wo(
+            utra::spinor::COMMAND,
             csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
           | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x12)  // PP4B
           | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
           | csr.ms(utra::spinor::COMMAND_DATA_WORDS, data_words)
-          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1),
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
 
-    #[cfg(feature="extra_flush")]
+    #[cfg(feature = "extra_flush")]
     const CACHE_LINE_WIDTH: usize = 32; // in bytes
-    #[cfg(feature="extra_flush")]
+    #[cfg(feature = "extra_flush")]
     const FLUSH_SIZE_BYTES: usize = 16384 * 8; // cache capacity * 4 ways x2 to force overlap
 
     pub struct Spinor {
         id: u32,
         handler_conn: xous::CID,
         csr: utralib::CSR<u32>,
-        susres: RegManager::<{utra::spinor::SPINOR_NUMREGS}>,
+        susres: RegManager<{ utra::spinor::SPINOR_NUMREGS }>,
         softirq: utralib::CSR<u32>,
         cur_op: Option<FlashOp>,
         ticktimer: ticktimer_server::Ticktimer,
         // TODO: refactor ecup command to use spinor to operate the reads
-        #[cfg(feature="extra_flush")]
+        #[cfg(feature = "extra_flush")]
         flusher: MemoryRange,
     }
 
@@ -444,7 +466,7 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map SPINOR soft interrupt CSR range");
-            #[cfg(feature="extra_flush")]
+            #[cfg(feature = "extra_flush")]
             let flusher = xous::syscall::map_memory(
                 None,
                 None,
@@ -461,7 +483,7 @@ mod implementation {
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
                 cur_op: None,
                 ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
-                #[cfg(feature="extra_flush")]
+                #[cfg(feature = "extra_flush")]
                 flusher,
             }
         }
@@ -476,12 +498,8 @@ mod implementation {
             self.softirq.wfo(utra::spinor_soft_int::EV_PENDING_SPINOR_INT, 1);
             self.softirq.wfo(utra::spinor_soft_int::EV_ENABLE_SPINOR_INT, 1);
 
-            xous::claim_interrupt(
-                utra::spinor::SPINOR_IRQ,
-                ecc_handler,
-                self as *mut Spinor as *mut usize,
-            )
-            .expect("couldn't claim SPINOR irq");
+            xous::claim_interrupt(utra::spinor::SPINOR_IRQ, ecc_handler, self as *mut Spinor as *mut usize)
+                .expect("couldn't claim SPINOR irq");
             self.csr.wfo(utra::spinor::EV_PENDING_ECC_ERROR, 1);
             self.csr.wfo(utra::spinor::EV_ENABLE_ECC_ERROR, 1);
             self.susres.push_fixed_value(RegOrField::Reg(utra::spinor::EV_PENDING), 0xFFFF_FFFF);
@@ -495,9 +513,10 @@ mod implementation {
             self.id = SPINOR_RESULT.load(Ordering::SeqCst);
         }
 
-        /// changes into the spinor interrupt handler context, which is "safe" for ROM operations because we guarantee
-        /// we don't touch the SPINOR block inside that interrupt context
-        /// we name it with _blocking suffix to remind ourselves that this op should full-block Xous, no exceptions, until the flash op is done.
+        /// changes into the spinor interrupt handler context, which is "safe" for ROM operations because we
+        /// guarantee we don't touch the SPINOR block inside that interrupt context
+        /// we name it with _blocking suffix to remind ourselves that this op should full-block Xous, no
+        /// exceptions, until the flash op is done.
         fn call_spinor_context_blocking(&mut self) -> u32 {
             if self.cur_op.is_none() {
                 log::error!("called with no spinor op set. This is an internal error...panicing!");
@@ -507,9 +526,11 @@ mod implementation {
             SPINOR_RUNNING.store(true, Ordering::SeqCst);
             self.softirq.wfo(utra::spinor_soft_int::SOFTINT_SOFTINT, 1);
             while SPINOR_RUNNING.load(Ordering::SeqCst) {
-                // there is no timeout condition that makes sense. If we're in a very long flash op -- and they can take hundreds of ms --
-                // simply timing out and trying to move on could lead to hardware damage as we'd be accessing a ROM that is in progress.
-                // in other words: if the flash memory is broke, you're broke too, ain't nobody got time for that.
+                // there is no timeout condition that makes sense. If we're in a very long flash op -- and
+                // they can take hundreds of ms -- simply timing out and trying to move on
+                // could lead to hardware damage as we'd be accessing a ROM that is in progress.
+                // in other words: if the flash memory is broke, you're broke too, ain't nobody got time for
+                // that.
             }
             self.ticktimer.ping_wdt();
             self.flush_dcache(0, 4096); // the arch call doesn't use the Vex-specific instruction for cache flush; this one does.
@@ -549,6 +570,7 @@ mod implementation {
         #[inline]
         fn flush_dcache(&self, _start: u32, _len: u32) {
             unsafe {
+                #[rustfmt::skip]
                 core::arch::asm!(
                     ".word 0x500F",
                     "nop",
@@ -563,13 +585,15 @@ mod implementation {
                 );
             }
             // augment with manual flushing, because the above instruction didn't seem to do the trick??
-            #[cfg(feature="extra_flush")]
+            #[cfg(feature = "extra_flush")]
             {
                 let flush_ptr = self.flusher.as_ptr() as *const u32;
                 let mut dummy: u32 = 0;
                 // only visit the first word of every line
-                for i in (0..FLUSH_SIZE_BYTES / core::mem::size_of::<u32>()).step_by(CACHE_LINE_WIDTH / core::mem::size_of::<u32>()) {
-                    dummy += unsafe{flush_ptr.add(i).read_volatile()};
+                for i in (0..FLUSH_SIZE_BYTES / core::mem::size_of::<u32>())
+                    .step_by(CACHE_LINE_WIDTH / core::mem::size_of::<u32>())
+                {
+                    dummy += unsafe { flush_ptr.add(i).read_volatile() };
                 }
                 log::trace!("Dcache flush completed: {}", dummy);
             }
@@ -583,14 +607,17 @@ mod implementation {
             }*/
 
             // log::trace!("processing write_region with {:x?}", wr);
-            if wr.start + wr.len > SPINOR_SIZE_BYTES { // basic security check. this is necessary so we don't have wrap-around attacks on the SoC gateware region
+            if wr.start + wr.len > SPINOR_SIZE_BYTES {
+                // basic security check. this is necessary so we don't have wrap-around attacks on the SoC
+                // gateware region
                 return SpinorError::InvalidRequest;
             }
 
             if !wr.clean_patch {
                 // the `lib.rs` side has ostensibly already done the following checks for us:
                 //   - made sure there is some "dirty" data in this page
-                //   - provided us with a copy of any existing data we want to replace after the patch within the given page
+                //   - provided us with a copy of any existing data we want to replace after the patch within
+                //     the given page
                 //   - ensured that the request is aligned with an erase sector
                 let alignment_mask = SPINOR_ERASE_SIZE - 1;
                 if (wr.start & alignment_mask) != 0 {
@@ -600,7 +627,11 @@ mod implementation {
                 log::trace!("erase: {:x?}", wr.start);
                 let erase_result = self.call_spinor_context_blocking();
                 if erase_result & 0x40 != 0 {
-                    log::error!("E_FAIL set, erase failed: result 0x{:02x}, sector addr 0x{:08x}", erase_result, wr.start);
+                    log::error!(
+                        "E_FAIL set, erase failed: result 0x{:02x}, sector addr 0x{:08x}",
+                        erase_result,
+                        wr.start
+                    );
                     return SpinorError::EraseFailed;
                 }
 
@@ -609,10 +640,15 @@ mod implementation {
                 log::trace!("write: len:{}, start:{:x}", wr.len, wr.start);
                 //let logsize = if wr.len < 0x80 { wr.len as usize } else { 0x80 };
                 //log::trace!("write data begin: {:02x?}", &wr.data[..logsize]);
-                //log::trace!("write data end: {:02x?}", &wr.data[wr.len as usize - logsize..wr.len as usize]);
+                //log::trace!("write data end: {:02x?}", &wr.data[wr.len as usize - logsize..wr.len as
+                // usize]);
                 let write_result = self.call_spinor_context_blocking();
                 if write_result & 0x20 != 0 {
-                    log::error!("P_FAIL set, program failed/partial abort: result 0x{:02x}, sector addr 0x{:08x}", write_result, wr.start);
+                    log::error!(
+                        "P_FAIL set, program failed/partial abort: result 0x{:02x}, sector addr 0x{:08x}",
+                        write_result,
+                        wr.start
+                    );
                     return SpinorError::WriteFailed;
                 }
                 //log::set_max_level(log_level);
@@ -621,16 +657,21 @@ mod implementation {
                 // clean patch path:
                 // we're just patching sectors -- the caller PROMISES the data has been erased already
                 // this function has no way of knowing, because we don't have read priveledges...
-                // here, almost any data alignment and length is acceptable -- we can patch even just two bytes using
-                // this call.
+                // here, almost any data alignment and length is acceptable -- we can patch even just two
+                // bytes using this call.
                 self.cur_op = Some(FlashOp::WritePages(wr.start, wr.data, wr.len as usize));
                 log::trace!("clean write: len:{}, start: {:x}", wr.len, wr.start);
                 //let logsize = if wr.len < 0x80 { wr.len as usize } else { 0x80 };
                 //log::trace!("clean write data begin: {:02x?}", &wr.data[..logsize]);
-                //log::trace!("clean write data end: {:02x?}", &wr.data[wr.len as usize - logsize..wr.len as usize]);
+                //log::trace!("clean write data end: {:02x?}", &wr.data[wr.len as usize - logsize..wr.len as
+                // usize]);
                 let write_result = self.call_spinor_context_blocking();
                 if write_result & 0x20 != 0 {
-                    log::error!("P_FAIL set, program failed/partial abort: result 0x{:02x}, sector addr 0x{:08x}", write_result, wr.start);
+                    log::error!(
+                        "P_FAIL set, program failed/partial abort: result 0x{:02x}, sector addr 0x{:08x}",
+                        write_result,
+                        wr.start
+                    );
                     return SpinorError::WriteFailed;
                 }
                 //log::set_max_level(log_level);
@@ -652,16 +693,19 @@ mod implementation {
                 log::trace!("bulk erase: {:x?}", block);
                 let erase_result = self.call_spinor_context_blocking();
                 if erase_result & 0x40 != 0 {
-                    log::error!("E_FAIL set, erase failed: result 0x{:02x}, block addr 0x{:08x}", erase_result, block);
+                    log::error!(
+                        "E_FAIL set, erase failed: result 0x{:02x}, block addr 0x{:08x}",
+                        erase_result,
+                        block
+                    );
                     return SpinorError::EraseFailed;
                 }
             }
-            return SpinorError::NoError
+            return SpinorError::NoError;
         }
 
-        pub fn suspend(&mut self) {
-            self.susres.suspend();
-        }
+        pub fn suspend(&mut self) { self.susres.suspend(); }
+
         pub fn resume(&mut self) {
             self.susres.resume();
             self.softirq.wfo(utra::spinor_soft_int::EV_PENDING_SPINOR_INT, 1);
@@ -674,28 +718,26 @@ mod implementation {
 #[cfg(not(target_os = "xous"))]
 mod implementation {
     use crate::api::*;
-    pub struct Spinor {
-    }
+    pub struct Spinor {}
 
     impl Spinor {
-        pub fn new(_conn: xous::CID) -> Spinor {
-            Spinor {
-            }
-        }
+        pub fn new(_conn: xous::CID) -> Spinor { Spinor {} }
+
         pub fn init(&mut self) {}
-        pub fn suspend(&self) {
-        }
-        pub fn resume(&self) {
-        }
+
+        pub fn suspend(&self) {}
+
+        pub fn resume(&self) {}
+
         pub(crate) fn write_region(&mut self, _wr: &mut WriteRegion) -> SpinorError {
             SpinorError::ImplementationError
         }
+
         pub(crate) fn bulk_erase(&mut self, _be: &mut BulkErase) -> SpinorError {
             SpinorError::ImplementationError
         }
     }
 }
-
 
 static OP_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static SUSPEND_FAILURE: AtomicBool = AtomicBool::new(false);
@@ -707,9 +749,17 @@ fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(susres_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, api::SusResOps::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(
+        Some(susres::SuspendOrder::Later),
+        &xns,
+        api::SusResOps::SuspendResume as u32,
+        sr_cid,
+    )
+    .expect("couldn't create suspend/resume object");
 
-    let main_cid = xns.request_connection_blocking(api::SERVER_NAME_SPINOR).expect("couldn't connect to our main thread for susres coordination");
+    let main_cid = xns
+        .request_connection_blocking(api::SERVER_NAME_SPINOR)
+        .expect("couldn't connect to our main thread for susres coordination");
 
     log::trace!("starting SPINOR suspend/resume manager loop");
     loop {
@@ -721,15 +771,21 @@ fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 while OP_IN_PROGRESS.load(Ordering::Relaxed) {
                     xous::yield_slice();
                 }
-                xous::send_message(main_cid,
-                    xous::Message::new_blocking_scalar(Opcode::SuspendInner.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't send suspend message");
+                xous::send_message(
+                    main_cid,
+                    xous::Message::new_blocking_scalar(Opcode::SuspendInner.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't send suspend message");
                 if susres.suspend_until_resume(token).expect("couldn't execute suspend/resume") == false {
                     SUSPEND_FAILURE.store(true, Ordering::Relaxed);
                 } else {
                     SUSPEND_FAILURE.store(false, Ordering::Relaxed);
                 }
-                xous::send_message(main_cid,
-                    xous::Message::new_blocking_scalar(Opcode::ResumeInner.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't send suspend message");
+                xous::send_message(
+                    main_cid,
+                    xous::Message::new_blocking_scalar(Opcode::ResumeInner.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't send suspend message");
                 SUSPEND_PENDING.store(false, Ordering::Relaxed);
             }),
             Some(SusResOps::Quit) => {
@@ -744,7 +800,6 @@ fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     xns.unregister_server(susres_sid).unwrap();
     xous::destroy_server(susres_sid).unwrap();
 }
-
 
 fn main() -> ! {
     use crate::implementation::Spinor;
@@ -763,13 +818,14 @@ fn main() -> ! {
           - PDDB
           - keyboard (for updating the key map setting, which needs to be loaded upstream of the PDDB)
     */
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(5)).expect("can't register server");
     #[cfg(not(target_os = "xous"))]
     let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, None).expect("can't register server"); // hosted mode we don't care about security of the spinor server
     log::trace!("registered with NS -- {:?}", spinor_sid);
 
-    let handler_conn = xous::connect(spinor_sid).expect("couldn't create interrupt handler callback connection");
+    let handler_conn =
+        xous::connect(spinor_sid).expect("couldn't create interrupt handler callback connection");
     let mut spinor = Box::new(Spinor::new(handler_conn));
     spinor.init();
 
@@ -779,7 +835,8 @@ fn main() -> ! {
     // we can't interrupt an erase or program operation, so the op MUST finish before we can suspend.
     let susres_mgr_sid = xous::create_server().unwrap();
     let (sid0, sid1, sid2, sid3) = susres_mgr_sid.to_u32();
-    xous::create_thread_4(susres_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start susres handler thread");
+    xous::create_thread_4(susres_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize)
+        .expect("couldn't start susres handler thread");
 
     let llio = llio::Llio::new(&xns);
 
@@ -803,31 +860,38 @@ fn main() -> ! {
             Some(Opcode::RegisterSocToken) => msg_scalar_unpack!(msg, id0, id1, id2, id3, {
                 // only the first process to claim it can have it!
                 // make sure to do it correctly at boot: this must be done extremely early in the
-                // boot process; any attempt to access this unit for functional ops before this is registered shall panic
-                // this is to mitigate a DoS attack on the legitimate registrar that gives way for the incorrect
-                // process to grab this token
+                // boot process; any attempt to access this unit for functional ops before this is registered
+                // shall panic this is to mitigate a DoS attack on the legitimate registrar
+                // that gives way for the incorrect process to grab this token
                 if soc_token.is_none() {
                     soc_token = Some([id0 as u32, id1 as u32, id2 as u32, id3 as u32]);
                 }
             }),
-            Some(Opcode::SetStagingWriteProtect)  => msg_scalar_unpack!(msg, id0, id1, id2, id3, {
+            Some(Opcode::SetStagingWriteProtect) => msg_scalar_unpack!(msg, id0, id1, id2, id3, {
                 if let Some(token) = soc_token {
-                    if token[0] == id0 as u32 && token[1] == id1 as u32 &&
-                    token[2] == id2 as u32 && token[3] == id3 as u32 {
+                    if token[0] == id0 as u32
+                        && token[1] == id1 as u32
+                        && token[2] == id2 as u32
+                        && token[3] == id3 as u32
+                    {
                         staging_write_protect = true;
                     }
                 }
             }),
-            Some(Opcode::ClearStagingWriteProtect)  => msg_scalar_unpack!(msg, id0, id1, id2, id3, {
+            Some(Opcode::ClearStagingWriteProtect) => msg_scalar_unpack!(msg, id0, id1, id2, id3, {
                 if let Some(token) = soc_token {
-                    if token[0] == id0 as u32 && token[1] == id1 as u32 &&
-                    token[2] == id2 as u32 && token[3] == id3 as u32 {
+                    if token[0] == id0 as u32
+                        && token[1] == id1 as u32
+                        && token[2] == id2 as u32
+                        && token[3] == id3 as u32
+                    {
                         staging_write_protect = false;
                     }
                 }
             }),
             Some(Opcode::AcquireExclusive) => msg_blocking_scalar_unpack!(msg, id0, id1, id2, id3, {
-                if soc_token.is_none() { // reject any ops until a soc token is registered
+                if soc_token.is_none() {
+                    // reject any ops until a soc token is registered
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
                 if client_id.is_none() && !SUSPEND_PENDING.load(Ordering::Relaxed) {
@@ -860,16 +924,22 @@ fn main() -> ! {
                 xous::return_scalar(msg.sender, 1).expect("couldn't ack ReleaseSuspendLock");
             }),
             Some(Opcode::WriteRegion) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut wr = buffer.to_original::<WriteRegion, _>().unwrap();
                 let mut authorized = true;
                 if let Some(st) = soc_token {
-                    if staging_write_protect && ((wr.start >= xous::SOC_REGION_LOC) && (wr.start < xous::LOADER_LOC)) ||
-                    !staging_write_protect && ((wr.start >= xous::SOC_REGION_LOC) && (wr.start < xous::SOC_STAGING_GW_LOC)) {
-                        // if only the holder of the ID that matches the SoC token can write to the SOC flash area
-                        // other areas are not as strictly controlled because signature checks ostensibly should catch
-                        // attempts to modify them. However, access to the gateware definition would allow one to rewrite
-                        // the boot ROM, which would then change the trust root. Therefore, we check this region specifically.
+                    if staging_write_protect
+                        && ((wr.start >= xous::SOC_REGION_LOC) && (wr.start < xous::LOADER_LOC))
+                        || !staging_write_protect
+                            && ((wr.start >= xous::SOC_REGION_LOC) && (wr.start < xous::SOC_STAGING_GW_LOC))
+                    {
+                        // if only the holder of the ID that matches the SoC token can write to the SOC flash
+                        // area other areas are not as strictly controlled because
+                        // signature checks ostensibly should catch attempts to modify
+                        // them. However, access to the gateware definition would allow one to rewrite
+                        // the boot ROM, which would then change the trust root. Therefore, we check this
+                        // region specifically.
                         if st != wr.id {
                             wr.result = Some(SpinorError::AccessDenied);
                             authorized = false;
@@ -888,24 +958,27 @@ fn main() -> ! {
                             } else {
                                 wr.result = Some(SpinorError::IdMismatch);
                             }
-                        },
+                        }
                         _ => {
                             wr.result = Some(SpinorError::NoId);
                         }
                     }
                 }
                 buffer.replace(wr).expect("couldn't return response code to WriteRegion");
-            },
+            }
             Some(Opcode::BulkErase) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut wr = buffer.to_original::<BulkErase, _>().unwrap();
-                // bounds check to within the PDDB region for bulk erases. Please use standard patching for other regions.
-                let authorized =
-                    if (wr.start >= xous::PDDB_LOC) && ((wr.start + wr.len) <= (xous::PDDB_LOC + xous::PDDB_LEN)) {
-                        true
-                    } else {
-                        false
-                    };
+                // bounds check to within the PDDB region for bulk erases. Please use standard patching for
+                // other regions.
+                let authorized = if (wr.start >= xous::PDDB_LOC)
+                    && ((wr.start + wr.len) <= (xous::PDDB_LOC + xous::PDDB_LEN))
+                {
+                    true
+                } else {
+                    false
+                };
                 if authorized {
                     match client_id {
                         Some(id) => {
@@ -914,7 +987,7 @@ fn main() -> ! {
                             } else {
                                 wr.result = Some(SpinorError::IdMismatch);
                             }
-                        },
+                        }
                         _ => {
                             wr.result = Some(SpinorError::NoId);
                         }
@@ -926,41 +999,54 @@ fn main() -> ! {
             }
             Some(Opcode::EccError) => msg_scalar_unpack!(msg, hw_rep, status, lower_addr, upper_addr, {
                 /*
-                  Historical notes:
-                    - First ECC failure noted June 27, 2022 on CI unit (24/7 re-write testing, few times/day, 2-3 yrs continuous)
-                      Location 0x7305030, code 0xb3.
-                        Meaning: ecc error; 2 bits flipped (detect but uncorrectable); failure chunk 3.
-                        Address is 0x7305030. Chunk 3 means bits 48-63 offset from the address on the left.
-                           The lower 4 bits are 0, so the chunk is the bit-offset of the failure into the 16 bytes encoded by the 4 lowest bits.
-                           So more precisely, somewhere around 0x7305036-7 range there is a bit flip.
-                           This is fairly deep within the PDDB array...suspect possibly a bad power-down event during the CI process?
-                    This is the raw log:
-                    ERR :spinor: ECC error reported: 0xfffffffc 0xb3b30000 0x3305080 0x7305030 (services\spinor\src\main.rs:830)
-                    Archived here: https://ci.betrusted.io/view/Enabled/job/ctap2-tests/64/console
-                    - Second ECC failure noted July 13, 2022 on the high-cycle dev unit. The failure actually may
-                      be linked to an aborted write during backup generation; it was reported at an address that
-                      up until now was never used. This error was different from the previous one in that after
-                      tripping the ROM would only return 0xFF, and it would not clear. The error address
-                      was 0x01D7_F0A0 - just inside the backup block. The backup code has been fixed to not
-                      use two disjoint patch operations to merge its data, and to instead merge the write data
-                      before patching. Error was cleared by erasing the block, and has not since been observed again.
-                 */
-                if !ecc_errors.contains(&(hw_rep as u32, status as u32, lower_addr as u32, upper_addr as u32)) {
+                 Historical notes:
+                   - First ECC failure noted June 27, 2022 on CI unit (24/7 re-write testing, few times/day, 2-3 yrs continuous)
+                     Location 0x7305030, code 0xb3.
+                       Meaning: ecc error; 2 bits flipped (detect but uncorrectable); failure chunk 3.
+                       Address is 0x7305030. Chunk 3 means bits 48-63 offset from the address on the left.
+                          The lower 4 bits are 0, so the chunk is the bit-offset of the failure into the 16 bytes encoded by the 4 lowest bits.
+                          So more precisely, somewhere around 0x7305036-7 range there is a bit flip.
+                          This is fairly deep within the PDDB array...suspect possibly a bad power-down event during the CI process?
+                   This is the raw log:
+                   ERR :spinor: ECC error reported: 0xfffffffc 0xb3b30000 0x3305080 0x7305030 (services\spinor\src\main.rs:830)
+                   Archived here: https://ci.betrusted.io/view/Enabled/job/ctap2-tests/64/console
+                   - Second ECC failure noted July 13, 2022 on the high-cycle dev unit. The failure actually may
+                     be linked to an aborted write during backup generation; it was reported at an address that
+                     up until now was never used. This error was different from the previous one in that after
+                     tripping the ROM would only return 0xFF, and it would not clear. The error address
+                     was 0x01D7_F0A0 - just inside the backup block. The backup code has been fixed to not
+                     use two disjoint patch operations to merge its data, and to instead merge the write data
+                     before patching. Error was cleared by erasing the block, and has not since been observed again.
+                */
+                if !ecc_errors.contains(&(hw_rep as u32, status as u32, lower_addr as u32, upper_addr as u32))
+                {
                     if ecc_errors.len() < MAX_ERRLOG_LEN {
-                        ecc_errors.insert((hw_rep as u32, status as u32, lower_addr as u32, upper_addr as u32));
+                        ecc_errors.insert((
+                            hw_rep as u32,
+                            status as u32,
+                            lower_addr as u32,
+                            upper_addr as u32,
+                        ));
                     } else {
                         log::warn!("ECC log overflow, error not stored");
                     }
-                    log::error!("ECC error reported: 0x{:x} 0x{:x} 0x{:x} 0x{:x}", hw_rep, status, lower_addr, upper_addr);
+                    log::error!(
+                        "ECC error reported: 0x{:x} 0x{:x} 0x{:x} 0x{:x}",
+                        hw_rep,
+                        status,
+                        lower_addr,
+                        upper_addr
+                    );
                     // how to read:
-                    // first word is what address the HW PHY was set to when the interrupt flipped. This doesn't seem to be useful.
-                    // second word is the status. Top 16 bits -> top 512Mbits; lower 16 bits is lower 512Mbits
-                    //    the 16-bit word will be double-byte repeated because DDR.
-                    // third word is the lower 512Mbit address
-                    // fourth word is the upper 512Mbit address
-                    // There is only an error if the second word is non-zero for a given ECC address. That is, it seems
-                    //   the address word is always updated, so you'll read something out akin to the last thing touched
-                    //   by the ECC engine, but there's only an error if the status word indicates that.
+                    // first word is what address the HW PHY was set to when the interrupt flipped. This
+                    // doesn't seem to be useful. second word is the status. Top 16 bits
+                    // -> top 512Mbits; lower 16 bits is lower 512Mbits    the 16-bit word
+                    // will be double-byte repeated because DDR. third word is the lower
+                    // 512Mbit address fourth word is the upper 512Mbit address
+                    // There is only an error if the second word is non-zero for a given ECC address. That is,
+                    // it seems   the address word is always updated, so you'll read
+                    // something out akin to the last thing touched   by the ECC engine,
+                    // but there's only an error if the status word indicates that.
                 }
             }),
             Some(Opcode::EccLog) => {
@@ -971,15 +1057,21 @@ fn main() -> ! {
             }
             None => {
                 log::error!("couldn't convert opcode");
-                break
+                break;
             }
         }
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");
     let quitconn = xous::connect(susres_mgr_sid).unwrap();
-    xous::send_message(quitconn, xous::Message::new_scalar(api::SusResOps::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-    unsafe{xous::disconnect(quitconn).unwrap();}
+    xous::send_message(
+        quitconn,
+        xous::Message::new_scalar(api::SusResOps::Quit.to_usize().unwrap(), 0, 0, 0, 0),
+    )
+    .unwrap();
+    unsafe {
+        xous::disconnect(quitconn).unwrap();
+    }
 
     xns.unregister_server(spinor_sid).unwrap();
     xous::destroy_server(spinor_sid).unwrap();

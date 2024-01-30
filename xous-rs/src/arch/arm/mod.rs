@@ -15,13 +15,9 @@ pub struct ProcessHandle {
     pub cid: crate::CID,
 }
 
-pub fn wait_thread<T>(_joiner: WaitHandle<T>) -> crate::SysCallResult {
-    todo!()
-}
+pub fn wait_thread<T>(_joiner: WaitHandle<T>) -> crate::SysCallResult { todo!() }
 
-pub fn create_process_pre(_args: &ProcessArgs) -> core::result::Result<ProcessInit, crate::Error> {
-    todo!()
-}
+pub fn create_process_pre(_args: &ProcessArgs) -> core::result::Result<ProcessInit, crate::Error> { todo!() }
 
 pub fn create_process_post(
     _args: ProcessArgs,
@@ -50,10 +46,7 @@ where
     todo!()
 }
 
-pub fn create_thread_post<F, T>(
-    _f: F,
-    _thread_id: TID,
-) -> core::result::Result<WaitHandle<T>, crate::Error>
+pub fn create_thread_post<F, T>(_f: F, _thread_id: TID) -> core::result::Result<WaitHandle<T>, crate::Error>
 where
     F: FnOnce() -> T,
     F: Send + 'static,
@@ -193,13 +186,7 @@ where
     T: Send + 'static,
     U: Send + 'static,
 {
-    create_thread_n_pre(
-        *f as usize,
-        unsafe { core::mem::transmute(arg) },
-        &0,
-        &0,
-        &0,
-    )
+    create_thread_n_pre(*f as usize, unsafe { core::mem::transmute(arg) }, &0, &0, &0)
 }
 
 pub fn create_thread_simple_post<T, U>(
@@ -250,10 +237,7 @@ pub fn create_thread_n_post<U>(
 where
     U: Send + 'static,
 {
-    Ok(WaitHandle {
-        tid: thread_id,
-        data: core::marker::PhantomData,
-    })
+    Ok(WaitHandle { tid: thread_id, data: core::marker::PhantomData })
 }
 
 pub fn map_memory_pre(
@@ -275,13 +259,9 @@ pub fn map_memory_post(
     Ok(range)
 }
 
-pub fn unmap_memory_pre(_range: &MemoryRange) -> core::result::Result<(), crate::Error> {
-    Ok(())
-}
+pub fn unmap_memory_pre(_range: &MemoryRange) -> core::result::Result<(), crate::Error> { Ok(()) }
 
-pub fn unmap_memory_post(_range: MemoryRange) -> core::result::Result<(), crate::Error> {
-    Ok(())
-}
+pub fn unmap_memory_post(_range: MemoryRange) -> core::result::Result<(), crate::Error> { Ok(()) }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ThreadInit {
@@ -295,22 +275,8 @@ pub struct ThreadInit {
 }
 
 impl ThreadInit {
-    pub fn new(
-        call: usize,
-        stack: MemoryRange,
-        arg1: usize,
-        arg2: usize,
-        arg3: usize,
-        arg4: usize,
-    ) -> Self {
-        ThreadInit {
-            call,
-            stack,
-            arg1,
-            arg2,
-            arg3,
-            arg4,
-        }
+    pub fn new(call: usize, stack: MemoryRange, arg1: usize, arg2: usize, arg3: usize, arg4: usize) -> Self {
+        ThreadInit { call, stack, arg1, arg2, arg3, arg4 }
     }
 }
 

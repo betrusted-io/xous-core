@@ -6,6 +6,7 @@ extern crate crc;
 use std::convert::TryInto;
 use std::fs::File;
 
+use clap::{App, Arg};
 use tools::elf::{read_minielf, read_program};
 use tools::tags::bflg::Bflg;
 use tools::tags::inie::IniE;
@@ -15,8 +16,6 @@ use tools::tags::pnam::ProcessNames;
 use tools::tags::xkrn::XousKernel;
 use tools::utils::{parse_csr_csv, parse_u32};
 use tools::xous_arguments::XousArguments;
-
-use clap::{App, Arg};
 
 struct RamConfig {
     offset: u32,
@@ -28,15 +27,15 @@ struct RamConfig {
 
 fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
     let mut found_ram_name = None;
-    fn round_mem(src: u32) -> u32 {
-        (src + 4095) & !4095
-    }
+    fn round_mem(src: u32) -> u32 { (src + 4095) & !4095 }
     // Look for the largest memory block, which we'll treat as main memory
     for (k, v) in &hv.regions {
         if (
             k.find("sram").is_some()  // uniquely finds region on Precursor and Cramium (excludes 'reram' correctly)
-            || k.find("ddr_ram").is_some() // finds region on atsama5d27 uniquely
-        ) && v.length > ram_config.size {
+            || k.find("ddr_ram").is_some()
+            // finds region on atsama5d27 uniquely
+        ) && v.length > ram_config.size
+        {
             ram_config.size = round_mem(v.length);
             ram_config.offset = v.start;
             found_ram_name = Some(k.clone());
@@ -66,7 +65,7 @@ fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
         raw_regions.push(MemoryRegion::new(v.start, round_mem(v.length), region_name));
     }
     // condense adjacent regions & eliminate overlapping regions
-    raw_regions.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap() );
+    raw_regions.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap());
     let mut candidate_region = raw_regions[0];
     for r in raw_regions[1..].iter() {
         if r.start > candidate_region.start + candidate_region.length {
@@ -139,7 +138,7 @@ fn main() {
                 .help("extra SVD files")
                 .takes_value(true)
                 .multiple(true)
-                .number_of_values(1)
+                .number_of_values(1),
         )
         .arg(
             Arg::with_name("ram")
@@ -234,9 +233,7 @@ fn main() {
                     region.name.to_lowercase(),
                     tools::utils::CsrMemoryRegion {
                         start: region.base.try_into().unwrap(),
-                        length: length
-                            .try_into()
-                            .unwrap(),
+                        length: length.try_into().unwrap(),
                     },
                 );
             } else {
@@ -298,12 +295,8 @@ fn main() {
         args.add(Bflg::new().debug());
     }
 
-    let kernel = read_program(
-        matches
-            .value_of("kernel")
-            .expect("kernel was somehow missing"),
-    )
-    .expect("unable to read kernel");
+    let kernel = read_program(matches.value_of("kernel").expect("kernel was somehow missing"))
+        .expect("unable to read kernel");
 
     process_names.set(1, "kernel");
     let mut pid = 2;
@@ -358,18 +351,13 @@ fn main() {
     // immediately follow the tags.  Therefore, we must know the length of the tags
     // before we create them.
 
-    let output_filename = matches
-        .value_of("output")
-        .expect("output filename not present");
+    let output_filename = matches.value_of("output").expect("output filename not present");
     let f = File::create(output_filename)
         .unwrap_or_else(|_| panic!("Couldn't create output file {}", output_filename));
     args.write(&f).expect("Couldn't write to args");
 
     println!("Arguments: {}", args);
 
-    println!(
-        "Runtime will require {} bytes to track memory allocations",
-        ram_config.memory_required
-    );
+    println!("Runtime will require {} bytes to track memory allocations", ram_config.memory_required);
     println!("Image created in file {}", output_filename);
 }

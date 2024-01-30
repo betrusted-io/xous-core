@@ -2,12 +2,11 @@
 
 use std::io::{ErrorKind, IoSlice, IoSliceMut, Read, Write};
 use std::net::*;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::channel;
 use std::thread;
 use std::time::{Duration, Instant};
-
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 static PORT: AtomicUsize = AtomicUsize::new(0);
 
@@ -47,7 +46,7 @@ fn bind_error() {
 
 #[test]
 fn connect_error() {
-    match TcpStream::connect(("0.0.0.0",1)) {
+    match TcpStream::connect(("0.0.0.0", 1)) {
         Ok(..) => panic!(),
         Err(e) => assert!(
             e.kind() == ErrorKind::ConnectionRefused
@@ -158,7 +157,8 @@ fn write_close() {
                     e.kind() == ErrorKind::ConnectionReset
                         || e.kind() == ErrorKind::BrokenPipe
                         || e.kind() == ErrorKind::ConnectionAborted,
-                    "unknown error: {}", e
+                    "unknown error: {}",
+                    e
                 );
             }
         }
@@ -356,8 +356,7 @@ fn double_bind() {
             ),
             Err(e) => {
                 assert!(
-                    e.kind() == ErrorKind::ConnectionRefused
-                        || e.kind() == ErrorKind::AddrInUse,
+                    e.kind() == ErrorKind::ConnectionRefused || e.kind() == ErrorKind::AddrInUse,
                     "unknown error: {} {:?}",
                     e,
                     e.kind()
@@ -678,11 +677,7 @@ fn test_read_timeout() {
     let mut buf = [0; 10];
     let start = Instant::now();
     let kind = stream.read_exact(&mut buf).err().expect("expected error").kind();
-    assert!(
-        kind == ErrorKind::WouldBlock || kind == ErrorKind::TimedOut,
-        "unexpected_error: {:?}",
-        kind
-    );
+    assert!(kind == ErrorKind::WouldBlock || kind == ErrorKind::TimedOut, "unexpected_error: {:?}", kind);
     assert!(start.elapsed() > Duration::from_millis(400));
     drop(listener);
 }
@@ -705,11 +700,7 @@ fn test_read_with_timeout() {
 
     let start = Instant::now();
     let kind = stream.read_exact(&mut buf).err().expect("expected error").kind();
-    assert!(
-        kind == ErrorKind::WouldBlock || kind == ErrorKind::TimedOut,
-        "unexpected_error: {:?}",
-        kind
-    );
+    assert!(kind == ErrorKind::WouldBlock || kind == ErrorKind::TimedOut, "unexpected_error: {:?}", kind);
     assert!(start.elapsed() > Duration::from_millis(400));
     drop(listener);
 }

@@ -16,11 +16,7 @@ pub struct Output {
 pub fn init() -> Output {
     let (tx, rx) = channel();
 
-    Output {
-        tx,
-        rx,
-        stdout: std::io::stdout(),
-    }
+    Output { tx, rx, stdout: std::io::stdout() }
 }
 
 impl Output {
@@ -42,17 +38,11 @@ impl Output {
         }
     }
 
-    pub fn get_writer(&self) -> OutputWriter {
-        OutputWriter {
-            tx: self.tx.clone(),
-        }
-    }
+    pub fn get_writer(&self) -> OutputWriter { OutputWriter { tx: self.tx.clone() } }
 }
 
 impl Drop for Output {
-    fn drop(&mut self) {
-        self.tx.send(ControlMessage::Exit).unwrap();
-    }
+    fn drop(&mut self) { self.tx.send(ControlMessage::Exit).unwrap(); }
 }
 
 impl Write for Output {
@@ -68,23 +58,7 @@ pub struct OutputWriter {
 }
 
 impl OutputWriter {
-    pub fn putc(&self, c: u8) {
-        self.tx.send(ControlMessage::Byte(c)).unwrap();
-    }
-
-    /// Write a buffer to the output and return the number of
-    /// bytes written. This is mostly compatible with `std::io::Write`,
-    /// except it is infallible.
-    pub fn write(&mut self, buf: &[u8]) -> usize {
-        for c in buf {
-            self.putc(*c);
-        }
-        buf.len()
-    }
-
-    pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> {
-        Ok(self.write(buf))
-    }
+    pub fn putc(&self, c: u8) { self.tx.send(ControlMessage::Byte(c)).unwrap(); }
 }
 
 impl Write for OutputWriter {

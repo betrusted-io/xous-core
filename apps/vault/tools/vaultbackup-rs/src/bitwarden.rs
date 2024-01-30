@@ -99,9 +99,7 @@ impl std::fmt::Display for FormatError {
 impl std::error::Error for FormatError {}
 
 impl From<serde_json::Error> for FormatError {
-    fn from(e: serde_json::Error) -> FormatError {
-        FormatError::SerdeError(e)
-    }
+    fn from(e: serde_json::Error) -> FormatError { FormatError::SerdeError(e) }
 }
 
 impl TryFrom<Vec<u8>> for Items {

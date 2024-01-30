@@ -22,7 +22,7 @@ or `riscv32imac-unknown-none-elf` target for Rust.
    ${target_arch}`
 5. Get an executable binary: `riscv64-unknown-elf-gcc -O binary
    target/${target}/xous-stage1 xous-stage1.bin`
-   
+
 If you have made changes to the [assembly trampoline](https://github.com/betrusted-io/xous-core/blob/master/loader/src/asm.S) which sets up
 the loader, you will need to manually rebuild this, by running [assemble.sh](https://github.com/betrusted-io/xous-core/blob/master/loader/assemble.sh).
 This will replace a set of objects in the [`bin`](https://github.com/betrusted-io/xous-core/tree/master/loader/bin) directory.

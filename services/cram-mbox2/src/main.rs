@@ -1,5 +1,5 @@
-use utralib::generated::*;
 use num_traits::*;
+use utralib::generated::*;
 
 pub struct MailboxClient {
     csr: utralib::CSR<u32>,
@@ -14,9 +14,10 @@ pub struct MailboxClient {
 impl MailboxClient {
     pub fn send(&mut self, data: &[u32], force_overflow: bool) {
         // defer aborts until this interaction is done
-        self.csr_irq.wo(utra::mb_client::EV_ENABLE,
-            self.csr_irq.r(utra::mb_client::EV_ENABLE) &
-            !self.csr_irq.ms(utra::mb_client::EV_ENABLE_ABORT_INIT, 1)
+        self.csr_irq.wo(
+            utra::mb_client::EV_ENABLE,
+            self.csr_irq.r(utra::mb_client::EV_ENABLE)
+                & !self.csr_irq.ms(utra::mb_client::EV_ENABLE_ABORT_INIT, 1),
         );
         // interact with the FIFO
         for &d in data {
@@ -32,26 +33,33 @@ impl MailboxClient {
             // the pending write register.
             self.csr.wfo(utra::mb_client::WDATA_WDATA, 0xfeed_face);
             self.csr.wfo(utra::mb_client::WDATA_WDATA, 0xdead_beef);
-            log::info!("max-length write overflow test result: {}", self.csr.rf(utra::mb_client::STATUS_TX_FREE));
+            log::info!(
+                "max-length write overflow test result: {}",
+                self.csr.rf(utra::mb_client::STATUS_TX_FREE)
+            );
         } else {
             // this should indicate free at this point
             assert!(self.csr.rf(utra::mb_client::STATUS_TX_FREE) == 1);
         }
         self.csr.wfo(utra::mb_client::DONE_DONE, 1);
         // re-enable aborts
-        self.csr_irq.wo(utra::mb_client::EV_ENABLE,
-            self.csr_irq.r(utra::mb_client::EV_ENABLE) |
-            self.csr_irq.ms(utra::mb_client::EV_ENABLE_ABORT_INIT, 1)
+        self.csr_irq.wo(
+            utra::mb_client::EV_ENABLE,
+            self.csr_irq.r(utra::mb_client::EV_ENABLE)
+                | self.csr_irq.ms(utra::mb_client::EV_ENABLE_ABORT_INIT, 1),
         );
     }
+
     pub fn get(&mut self, ret: &mut [u32]) -> usize {
         // defer aborts until this interaction is done
-        self.csr_irq.wo(utra::mb_client::EV_ENABLE,
-            self.csr_irq.r(utra::mb_client::EV_ENABLE) &
-            !self.csr_irq.ms(utra::mb_client::EV_ENABLE_ABORT_INIT, 1)
+        self.csr_irq.wo(
+            utra::mb_client::EV_ENABLE,
+            self.csr_irq.r(utra::mb_client::EV_ENABLE)
+                & !self.csr_irq.ms(utra::mb_client::EV_ENABLE_ABORT_INIT, 1),
         );
         // interact with the FIFO
-        // note: this only works because rx_words is the LSB of the register. We don't have to shift the MS'd value.
+        // note: this only works because rx_words is the LSB of the register. We don't have to shift the MS'd
+        // value.
         while self.csr.rf(utra::mb_client::STATUS_RX_AVAIL) == 0 {
             // wait for data to be available
         }
@@ -72,12 +80,14 @@ impl MailboxClient {
             }
         }
         // re-enable aborts
-        self.csr_irq.wo(utra::mb_client::EV_ENABLE,
-            self.csr_irq.r(utra::mb_client::EV_ENABLE) |
-            self.csr_irq.ms(utra::mb_client::EV_ENABLE_ABORT_INIT, 1)
+        self.csr_irq.wo(
+            utra::mb_client::EV_ENABLE,
+            self.csr_irq.r(utra::mb_client::EV_ENABLE)
+                | self.csr_irq.ms(utra::mb_client::EV_ENABLE_ABORT_INIT, 1),
         );
         rx_words
     }
+
     pub fn abort(&mut self) {
         log::warn!("abort initiated");
         self.csr.wfo(utra::mb_client::CONTROL_ABORT, 1);
@@ -97,30 +107,43 @@ fn handle_irq(_irq_no: usize, arg: *mut usize) {
     let mb_client = unsafe { &mut *(arg as *mut MailboxClient) };
 
     let pending = mb_client.csr_irq.r(utra::mb_client::EV_PENDING);
-    mb_client.csr_irq
-        .wo(utra::mb_client::EV_PENDING, mb_client.csr_irq.r(utra::mb_client::EV_PENDING));
+    mb_client.csr_irq.wo(utra::mb_client::EV_PENDING, mb_client.csr_irq.r(utra::mb_client::EV_PENDING));
 
     if pending & mb_client.csr_irq.ms(utra::mb_client::EV_PENDING_ERROR, 1) != 0 {
         let status = mb_client.csr.r(utra::mb_client::STATUS); // this clears the error
-        xous::try_send_message(mb_client.cid, xous::Message::new_scalar(
-            Opcode::ProtocolError.to_usize().unwrap(), pending as usize, status as usize, 0, 0)
-        ).ok();
+        xous::try_send_message(
+            mb_client.cid,
+            xous::Message::new_scalar(
+                Opcode::ProtocolError.to_usize().unwrap(),
+                pending as usize,
+                status as usize,
+                0,
+                0,
+            ),
+        )
+        .ok();
     }
     if pending & mb_client.csr_irq.ms(utra::mb_client::EV_PENDING_ABORT_INIT, 1) != 0 {
         mb_client.abort_pending = true;
-        xous::try_send_message(mb_client.cid, xous::Message::new_scalar(
-            Opcode::AbortInit.to_usize().unwrap(), pending as usize, 0, 0, 0)
-        ).ok();
+        xous::try_send_message(
+            mb_client.cid,
+            xous::Message::new_scalar(Opcode::AbortInit.to_usize().unwrap(), pending as usize, 0, 0, 0),
+        )
+        .ok();
     }
     if pending & mb_client.csr_irq.ms(utra::mb_client::EV_PENDING_ABORT_DONE, 1) != 0 {
-        xous::try_send_message(mb_client.cid, xous::Message::new_scalar(
-            Opcode::AbortDone.to_usize().unwrap(), pending as usize, 0, 0, 0)
-        ).ok();
+        xous::try_send_message(
+            mb_client.cid,
+            xous::Message::new_scalar(Opcode::AbortDone.to_usize().unwrap(), pending as usize, 0, 0, 0),
+        )
+        .ok();
     }
     if pending & mb_client.csr_irq.ms(utra::mb_client::EV_PENDING_AVAILABLE, 1) != 0 {
-        xous::try_send_message(mb_client.cid, xous::Message::new_scalar(
-            Opcode::Incoming.to_usize().unwrap(), pending as usize, 0, 0, 0)
-        ).ok();
+        xous::try_send_message(
+            mb_client.cid,
+            xous::Message::new_scalar(Opcode::Incoming.to_usize().unwrap(), pending as usize, 0, 0, 0),
+        )
+        .ok();
     }
 }
 
@@ -131,11 +154,12 @@ fn main() {
     let xns = xous_api_names::XousNames::new().unwrap();
     let client_sid = xns.register_name("_mbox_client_", None).expect("can't register server");
     let client_cid = xous::connect(client_sid).unwrap();
+    log::info!("mbox client SID: {:x?}", client_sid);
 
     let mb_client_csr = xous::syscall::map_memory(
-        #[cfg(not(feature="ext"))]
+        #[cfg(not(feature = "ext"))]
         xous::MemoryAddress::new(utra::mb_client::HW_MB_CLIENT_BASE),
-        #[cfg(feature="ext")]
+        #[cfg(feature = "ext")]
         xous::MemoryAddress::new(utra::mbox_apb::HW_MBOX_APB_BASE),
         None,
         4096,
@@ -143,7 +167,7 @@ fn main() {
     )
     .expect("couldn't map mbox client CSR range");
     let mb_client = CSR::new(mb_client_csr.as_mut_ptr() as *mut u32);
-    #[cfg(feature="ext")]
+    #[cfg(feature = "ext")]
     let mb_client_irq_csr = xous::syscall::map_memory(
         xous::MemoryAddress::new(utra::irqarray19::HW_IRQARRAY19_BASE),
         None,
@@ -154,25 +178,25 @@ fn main() {
 
     let mut mb_client = MailboxClient {
         csr: mb_client,
-        #[cfg(feature="ext")]
+        #[cfg(feature = "ext")]
         csr_irq: CSR::new(mb_client_irq_csr.as_mut_ptr() as *mut u32),
-        #[cfg(not(feature="ext"))]
+        #[cfg(not(feature = "ext"))]
         csr_irq: CSR::new(mb_client_csr.as_mut_ptr() as *mut u32),
         cid: client_cid,
         abort_pending: false,
     };
     xous::claim_interrupt(
-        #[cfg(not(feature="ext"))]
+        #[cfg(not(feature = "ext"))]
         utra::mb_client::MB_CLIENT_IRQ,
-        #[cfg(feature="ext")]
+        #[cfg(feature = "ext")]
         utra::irqarray19::IRQARRAY19_IRQ,
         handle_irq,
         (&mut mb_client) as *mut MailboxClient as *mut usize,
     )
     .expect("couldn't claim irq");
-    #[cfg(feature="ext")]
+    #[cfg(feature = "ext")]
     mb_client.csr_irq.wo(utra::irqarray19::EV_EDGE_TRIGGERED, 0b1110); // filter for rising edges on these bits
-    #[cfg(feature="ext")]
+    #[cfg(feature = "ext")]
     mb_client.csr_irq.wo(utra::irqarray19::EV_POLARITY, 0b1110); // rising edge
 
     mb_client.csr_irq.wo(utra::mb_client::EV_ENABLE, 0b1111); // enable everything
@@ -183,14 +207,11 @@ fn main() {
     let mut expect_error = false;
 
     loop {
-        xous::reply_and_receive_next_legacy(client_sid, &mut msg_opt, &mut return_type)
-            .unwrap();
+        xous::reply_and_receive_next_legacy(client_sid, &mut msg_opt, &mut return_type).unwrap();
         let msg = msg_opt.as_mut().unwrap();
-        let op = num_traits::FromPrimitive::from_usize(msg.body.id())
-            .unwrap_or(Opcode::InvalidCall);
+        let op = num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidCall);
         log::info!("Got {:?}", op);
-        match op
-        {
+        match op {
             Opcode::Incoming => {
                 if mb_client.abort_pending {
                     log::info!("Got abort in between rx IRQ and rx handler");
@@ -204,7 +225,8 @@ fn main() {
                     }
                     let test_seq = test_data[0] & 0xFFFF;
                     log::info!("rx seq {}, {} words", test_seq, len);
-                    if test_seq == 8 { // abort on case #8
+                    if test_seq == 8 {
+                        // abort on case #8
                         mb_client.abort();
                     } else {
                         if test_seq == 4 {
@@ -231,7 +253,11 @@ fn main() {
             Opcode::ProtocolError => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     if !expect_error {
-                        log::error!("Protocol error received: {:x}, {:x}, aborting test", scalar.arg1, scalar.arg2);
+                        log::error!(
+                            "Protocol error received: {:x}, {:x}, aborting test",
+                            scalar.arg1,
+                            scalar.arg2
+                        );
                         break;
                     } else {
                         log::info!("Expected protocol error received: {:x}, {:x}", scalar.arg1, scalar.arg2);
@@ -245,6 +271,5 @@ fn main() {
                 log::error!("Invalid opcode: {:?}", msg);
             }
         }
-
     }
 }

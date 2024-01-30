@@ -1,15 +1,16 @@
-use xous::{MessageEnvelope, Message,StringBuffer};
-use xous_ipc::String as XousString;
 use core::fmt::Write;
-
+use core::str::FromStr;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Read, Write as StdWrite, Error, ErrorKind};
+use std::io::{Error, ErrorKind, Read, Write as StdWrite};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH}; // to help gen_txn_id
-use core::str::FromStr;
 
-mod migrations;  use migrations::run_migrations;
+use xous::{Message, MessageEnvelope, StringBuffer};
+use xous_ipc::String as XousString;
+
+mod migrations;
+use migrations::run_migrations;
 mod url;
 mod web;
 
@@ -69,12 +70,11 @@ fn get_version(ticktimer: &ticktimer_server::Ticktimer) -> String {
     let v: Vec<&str> = xous_version.split('-').collect();
     if v.len() > 2 {
         let n = v[1].parse::<usize>().expect("could not parse version");
-        let version = format!("{}-{:04}",v[0], n);
+        let version = format!("{}-{:04}", v[0], n);
         log::info!("version={}=", version);
         version
     } else {
-        log::info!("ERROR, couldn't find version from xous_version: {}",
-                    xous_version);
+        log::info!("ERROR, couldn't find version from xous_version: {}", xous_version);
         xous_version
     }
 }
@@ -83,9 +83,17 @@ fn get_version(ticktimer: &ticktimer_server::Ticktimer) -> String {
 pub trait ShellCmdApi<'a> {
     // user implemented:
     // called to process the command with the remainder of the string attached
-    fn process(&mut self, args: XousString::<1024>, env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error>;
+    fn process(
+        &mut self,
+        args: XousString<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<XousString<1024>>, xous::Error>;
     // called to process incoming messages that may have been origniated by the most recently issued command
-    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error> {
+    fn callback(
+        &mut self,
+        msg: &MessageEnvelope,
+        _env: &mut CommonEnv,
+    ) -> Result<Option<XousString<1024>>, xous::Error> {
         log::info!("received unhandled message {:?}", msg);
         Ok(None)
     }
@@ -99,16 +107,8 @@ pub trait ShellCmdApi<'a> {
 // the argument to this macro is the command verb
 macro_rules! cmd_api {
     ($verb:expr) => {
-        fn verb(&self) -> &'static str {
-            stringify!($verb)
-        }
-        fn matches(&self, verb: &str) -> bool {
-            if verb == stringify!($verb) {
-                true
-            } else {
-                false
-            }
-        }
+        fn verb(&self) -> &'static str { stringify!($verb) }
+        fn matches(&self, verb: &str) -> bool { if verb == stringify!($verb) { true } else { false } }
     };
 }
 
@@ -117,7 +117,7 @@ use trng::*;
 #[derive(Debug)]
 pub struct CommonEnv {
     ticktimer: ticktimer_server::Ticktimer,
-    cb_registrations: HashMap::<u32, XousString::<256>>,
+    cb_registrations: HashMap<u32, XousString<256>>,
     async_msg_callback_id: u32,
     async_msg_conn: u32,
     trng: Trng,
@@ -139,8 +139,7 @@ pub struct CommonEnv {
 }
 impl CommonEnv {
     pub fn new() -> CommonEnv {
-        let ticktimer = ticktimer_server::Ticktimer::new()
-            .expect("Couldn't connect to Ticktimer");
+        let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
         let cb_registrations = HashMap::new();
         let async_msg_callback_id: u32 = 0;
         let async_msg_conn: u32 = 0;
@@ -172,7 +171,7 @@ impl CommonEnv {
         common
     }
 
-    pub fn register_handler(&mut self, verb: XousString::<256>) -> u32 {
+    pub fn register_handler(&mut self, verb: XousString<256>) -> u32 {
         let mut key: u32;
         loop {
             key = self.trng.get_u32().unwrap();
@@ -193,31 +192,25 @@ impl CommonEnv {
     }
 
     pub fn scalar_async_msg(&self, async_msg_id: usize) {
-        let msg = Message::new_scalar(self.async_msg_callback_id as usize,
-                                      0, 0, 0, async_msg_id);
+        let msg = Message::new_scalar(self.async_msg_callback_id as usize, 0, 0, 0, async_msg_id);
         xous::send_message(self.async_msg_conn, msg).unwrap();
     }
 
     pub fn send_async_msg(&self, async_msg: &str) {
-        let str_buf = StringBuffer::from_str(async_msg)
-            .expect("unable to create string message");
-        str_buf.send(self.async_msg_conn, self.async_msg_callback_id)
-            .expect("unable to send string message");
+        let str_buf = StringBuffer::from_str(async_msg).expect("unable to create string message");
+        str_buf.send(self.async_msg_conn, self.async_msg_callback_id).expect("unable to send string message");
     }
 
     pub fn gen_txn_id(&mut self) -> String {
-        let mut txn_id = self.trng.get_u32()
-            .expect("unable to generate random u32");
+        let mut txn_id = self.trng.get_u32().expect("unable to generate random u32");
         log::info!("trng.get_u32() = {}", txn_id);
-        txn_id += SystemTime::now().duration_since(UNIX_EPOCH)
-            .expect("Time went backwards").subsec_nanos();
+        txn_id += SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards").subsec_nanos();
         txn_id.to_string()
     }
 
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), Error> {
         if key.starts_with("__") {
-            Err(Error::new(ErrorKind::PermissionDenied,
-                           "may not set a variable beginning with __ "))
+            Err(Error::new(ErrorKind::PermissionDenied, "may not set a variable beginning with __ "))
         } else {
             log::info!("set '{}' = '{}'", key, value);
             let mut keypath = PathBuf::new();
@@ -230,16 +223,33 @@ impl CommonEnv {
             }
             keypath.push(key);
             File::create(keypath)?.write_all(value.as_bytes())?;
-            match key { // special case side effects
-                FILTER_KEY => { self.filter = value.to_string(); }
-                PASSWORD_KEY => { self.set_password(); }
-                ROOM_ID_KEY => { self.room_id = value.to_string(); }
-                ROOM_KEY => { self.set_room(); }
-                SERVER_KEY => { self.server = value.to_string(); }
-                SINCE_KEY => { self.since = value.to_string(); }
-                USERNAME_KEY => { self.username = value.to_string(); }
-                USER_KEY => { self.set_user(value); }
-                _ => { }
+            match key {
+                // special case side effects
+                FILTER_KEY => {
+                    self.filter = value.to_string();
+                }
+                PASSWORD_KEY => {
+                    self.set_password();
+                }
+                ROOM_ID_KEY => {
+                    self.room_id = value.to_string();
+                }
+                ROOM_KEY => {
+                    self.set_room();
+                }
+                SERVER_KEY => {
+                    self.server = value.to_string();
+                }
+                SINCE_KEY => {
+                    self.since = value.to_string();
+                }
+                USERNAME_KEY => {
+                    self.username = value.to_string();
+                }
+                USER_KEY => {
+                    self.set_user(value);
+                }
+                _ => {}
             }
             Ok(())
         }
@@ -248,9 +258,7 @@ impl CommonEnv {
     // will log on error (vs. panic)
     pub fn set_debug(&mut self, key: &str, value: &str) -> bool {
         match self.set(key, value) {
-            Ok(()) => {
-                true
-            },
+            Ok(()) => true,
             Err(e) => {
                 log::info!("error setting key {}: {:?}", key, e);
                 false
@@ -261,12 +269,12 @@ impl CommonEnv {
     pub fn set_user(&mut self, value: &str) {
         log::info!("# USER_KEY set '{}' = '{}'", USER_KEY, value);
         let i = match value.find('@') {
-            Some(index) => { index + 1 },
-            None => { 0 },
+            Some(index) => index + 1,
+            None => 0,
         };
         let j = match value.find(':') {
-            Some(index) => { index },
-            None => { value.len() },
+            Some(index) => index,
+            None => value.len(),
         };
         self.username = (&value[i..j]).to_string();
         if j < value.len() {
@@ -296,8 +304,7 @@ impl CommonEnv {
 
     pub fn unset(&mut self, key: &str) -> Result<(), Error> {
         if key.starts_with("__") {
-            Err(Error::new(ErrorKind::PermissionDenied,
-                           "may not unset a variable beginning with __ "))
+            Err(Error::new(ErrorKind::PermissionDenied, "may not unset a variable beginning with __ "))
         } else {
             log::info!("unset '{}'", key);
             let mut keypath = PathBuf::new();
@@ -309,18 +316,32 @@ impl CommonEnv {
                 std::fs::create_dir_all(&keypath)?;
             }
             keypath.push(key);
-            if std::fs::metadata(&keypath).is_ok() { // keypath exists
+            if std::fs::metadata(&keypath).is_ok() {
+                // keypath exists
                 log::info!("dict:key = '{}:{}' exists.. deleting it", MTXCLI_DICT, key);
                 std::fs::remove_file(keypath)?;
             }
-            match key { // special case side effects -- update cached values
-                FILTER_KEY => { self.filter = EMPTY.to_string(); }
-                ROOM_ID_KEY => { self.room_id = EMPTY.to_string(); }
-                SINCE_KEY => { self.since = EMPTY.to_string(); }
-                SERVER_KEY => { self.server = EMPTY.to_string(); }
-                USER_KEY => { self.user = EMPTY.to_string(); }
-                USERNAME_KEY => { self.username = EMPTY.to_string(); }
-                _ => { }
+            match key {
+                // special case side effects -- update cached values
+                FILTER_KEY => {
+                    self.filter = EMPTY.to_string();
+                }
+                ROOM_ID_KEY => {
+                    self.room_id = EMPTY.to_string();
+                }
+                SINCE_KEY => {
+                    self.since = EMPTY.to_string();
+                }
+                SERVER_KEY => {
+                    self.server = EMPTY.to_string();
+                }
+                USER_KEY => {
+                    self.user = EMPTY.to_string();
+                }
+                USERNAME_KEY => {
+                    self.username = EMPTY.to_string();
+                }
+                _ => {}
             }
             Ok(())
         }
@@ -329,9 +350,7 @@ impl CommonEnv {
     // will log on error (vs. panic)
     pub fn unset_debug(&mut self, key: &str) -> bool {
         match self.unset(key) {
-            Ok(()) => {
-                true
-            },
+            Ok(()) => true,
             Err(e) => {
                 log::info!("error unsetting key {}: {:?}", key, e);
                 false
@@ -352,7 +371,7 @@ impl CommonEnv {
                 std::fs::create_dir_all(&keypath)?;
             }
             keypath.push(key);
-            if let Ok(mut file)= File::open(keypath) {
+            if let Ok(mut file) = File::open(keypath) {
                 let mut value = String::new();
                 file.read_to_string(&mut value)?;
                 log::info!("get '{}' = '{}'", key, value);
@@ -365,12 +384,8 @@ impl CommonEnv {
 
     pub fn get_default(&mut self, key: &str, default: &str) -> String {
         match self.get(key) {
-            Ok(None) => {
-                default.to_string()
-            },
-            Ok(Some(value)) => {
-                value.to_string()
-            }
+            Ok(None) => default.to_string(),
+            Ok(Some(value)) => value.to_string(),
             Err(e) => {
                 log::info!("error getting key {}: {:?}", key, e);
                 default.to_string()
@@ -379,18 +394,18 @@ impl CommonEnv {
     }
 
     pub fn user_says(&mut self, text: &str) {
-        if ! self.logged_in {
-            if ! self.login() {
+        if !self.logged_in {
+            if !self.login() {
                 return;
             }
         }
         if self.room_id.len() == 0 {
-            if ! self.get_room_id() {
+            if !self.get_room_id() {
                 return;
             }
         }
         if self.filter.len() == 0 {
-            if ! self.get_filter() {
+            if !self.get_filter() {
                 return;
             }
         }
@@ -413,7 +428,7 @@ impl CommonEnv {
                 self.logged_in = true;
             }
         }
-        if ! self.logged_in {
+        if !self.logged_in {
             if web::get_login_type(&self.server) {
                 let user = self.get_default(USER_KEY, USER_KEY);
                 if user.len() == 0 {
@@ -427,7 +442,7 @@ impl CommonEnv {
                         self.set_debug(TOKEN_KEY, &new_token);
                         self.logged_in = true;
                     } else {
-                       log::info!("Error: cannnot login with type: {}", web::MTX_LOGIN_PASSWORD);
+                        log::info!("Error: cannnot login with type: {}", web::MTX_LOGIN_PASSWORD);
                     }
                 }
             }
@@ -461,18 +476,14 @@ impl CommonEnv {
                 false
             } else {
                 let mut room_server = String::new();
-                if ! room.starts_with("#") {
+                if !room.starts_with("#") {
                     room_server.push_str("#");
                 }
                 room_server.push_str(&room);
                 room_server.push_str(":");
                 let i = match server.find(HTTPS) {
-                    Some(index) => {
-                        index + HTTPS.len()
-                    },
-                    None => {
-                        server.len()
-                    },
+                    Some(index) => index + HTTPS.len(),
+                    None => server.len(),
                 };
                 if i >= server.len() {
                     self.scalar_async_msg(SET_SERVER_ID);
@@ -496,8 +507,7 @@ impl CommonEnv {
         if self.filter.len() > 0 {
             true
         } else {
-            if let Some(new_filter) = web::get_filter(&self.user, &self.server,
-                                                      &self.room_id, &self.token) {
+            if let Some(new_filter) = web::get_filter(&self.user, &self.server, &self.room_id, &self.token) {
                 self.set_debug(FILTER_KEY, &new_filter);
                 true
             } else {
@@ -512,17 +522,17 @@ impl CommonEnv {
             log::info!("Already listening");
             return;
         }
-        if ! self.logged_in {
+        if !self.logged_in {
             log::info!("Not logged in");
             return;
         }
         if self.room_id.len() == 0 {
-            if ! self.get_room_id() {
+            if !self.get_room_id() {
                 return;
             }
         }
         if self.filter.len() == 0 {
-            if ! self.get_filter() {
+            if !self.get_filter() {
                 return;
             }
         }
@@ -540,16 +550,16 @@ impl CommonEnv {
                 // log::info!("client_sync for {} ms...", MTX_LONG_TIMEOUT);
                 let mut response = String::new();
                 response.push(SENTINEL);
-                if let Some((since, messages)) = web::client_sync(&server, &filter, &since, MTX_LONG_TIMEOUT, &room_id, &token) {
+                if let Some((since, messages)) =
+                    web::client_sync(&server, &filter, &since, MTX_LONG_TIMEOUT, &room_id, &token)
+                {
                     response.push_str(&since);
                     response.push(SENTINEL);
                     response.push_str(&messages);
                     response.push(SENTINEL);
                 }
-                let str_buf = StringBuffer::from_str(&response)
-                    .expect("unable to create string message");
-                str_buf.send(async_msg_conn, async_msg_callback_id)
-                    .expect("unable to send string message");
+                let str_buf = StringBuffer::from_str(&response).expect("unable to create string message");
+                str_buf.send(async_msg_conn, async_msg_callback_id).expect("unable to send string message");
             }
         });
     }
@@ -580,18 +590,26 @@ impl CommonEnv {
 */
 
 ///// 1. add your module here, and pull its namespace into the local crate
-mod get;       use get::*;
-mod heap;      use heap::*;
-mod help;      use help::*;
-mod login;     use login::*;
-mod logout;    use logout::*;
-mod set;       use set::*;
-mod status;    use status::*;
-mod unset;     use unset::*;
+mod get;
+use get::*;
+mod heap;
+use heap::*;
+mod help;
+use help::*;
+mod login;
+use login::*;
+mod logout;
+use logout::*;
+mod set;
+use set::*;
+mod status;
+use status::*;
+mod unset;
+use unset::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
-    lastverb: XousString::<256>,
+    lastverb: XousString<256>,
     ///// 2. declare storage for your command here.
     get_cmd: Get,
     heap_cmd: Heap,
@@ -621,11 +639,15 @@ impl CmdEnv {
         }
     }
 
-    pub fn dispatch(&mut self, maybe_cmdline: Option<&mut XousString::<1024>>, maybe_callback: Option<&MessageEnvelope>) -> Result<Option<XousString::<1024>>, xous::Error> {
+    pub fn dispatch(
+        &mut self,
+        maybe_cmdline: Option<&mut XousString<1024>>,
+        maybe_callback: Option<&MessageEnvelope>,
+    ) -> Result<Option<XousString<1024>>, xous::Error> {
         let mut ret = XousString::<1024>::new();
         self.common_env.first_line = true;
 
-        let commands: &mut [& mut dyn ShellCmdApi] = &mut [
+        let commands: &mut [&mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut self.get_cmd,
             &mut self.heap_cmd,
@@ -645,7 +667,7 @@ impl CmdEnv {
             }
         }
         if self.common_env.wifi_connected != prev_wifi_connected {
-            if self.common_env.wifi_connected  {
+            if self.common_env.wifi_connected {
                 self.common_env.scalar_async_msg(WIFI_CONNECTED_ID);
             } else {
                 self.common_env.scalar_async_msg(WIFI_NOT_CONNECTED_ID);
@@ -653,17 +675,17 @@ impl CmdEnv {
         }
 
         if let Some(cmdline) = maybe_cmdline {
-            if ! self.common_env.initialized {
+            if !self.common_env.initialized {
                 log::info!("initializing");
                 log::info!("WiFi connected: {}", self.common_env.wifi_connected);
                 if clock_not_set() {
                     self.common_env.scalar_async_msg(CLOCK_NOT_SET_ID);
                 }
-                if ! self.common_env.wifi_connected && ! prev_wifi_connected {
+                if !self.common_env.wifi_connected && !prev_wifi_connected {
                     self.common_env.scalar_async_msg(WIFI_NOT_CONNECTED_ID);
                 }
                 let pddb = pddb::PddbMountPoller::new();
-                if ! pddb.is_mounted_nonblocking() {
+                if !pddb.is_mounted_nonblocking() {
                     self.common_env.scalar_async_msg(PDDB_NOT_MOUNTED_ID);
                 } else {
                     log::info!("PDDB is mounted");
@@ -685,16 +707,17 @@ impl CmdEnv {
                 }
             }
 
-            if ! self.common_env.listening &&
-                self.common_env.logged_in &&
-                (HOSTED_MODE || self.common_env.wifi_connected) &&
-                self.common_env.initialized {
+            if !self.common_env.listening
+                && self.common_env.logged_in
+                && (HOSTED_MODE || self.common_env.wifi_connected)
+                && self.common_env.initialized
+            {
                 self.common_env.listen();
             }
 
             let maybe_verb = tokenize(cmdline);
 
-            let mut cmd_ret: Result<Option<XousString::<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<XousString<1024>>, xous::Error> = Ok(None);
             if let Some(verb_string) = maybe_verb {
                 let verb = verb_string.to_str();
 
@@ -729,7 +752,8 @@ impl CmdEnv {
                     } else {
                         cmd_ret
                     }
-                } else { // chat
+                } else {
+                    // chat
                     let mut text = String::from(verb);
                     text.push_str(" ");
                     text.push_str(cmdline.to_str());
@@ -742,15 +766,11 @@ impl CmdEnv {
                 Ok(None)
             }
         } else if let Some(callback) = maybe_callback {
-            let mut cmd_ret: Result<Option<XousString::<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<XousString<1024>>, xous::Error> = Ok(None);
             // first check and see if we have a callback registration; if not, just map to the last verb
             let verb = match self.common_env.cb_registrations.get(&(callback.body.id() as u32)) {
-                Some(verb) => {
-                    verb.to_str()
-                },
-                None => {
-                    self.lastverb.to_str()
-                }
+                Some(verb) => verb.to_str(),
+                None => self.lastverb.to_str(),
             };
             // now dispatch
             let mut verbfound = false;
@@ -761,22 +781,17 @@ impl CmdEnv {
                     break;
                 };
             }
-            if verbfound {
-                cmd_ret
-            } else {
-                Ok(None)
-            }
+            if verbfound { cmd_ret } else { Ok(None) }
         } else {
             Ok(None)
         }
     }
 }
 
-
 /// extract the first token, as delimited by spaces
 /// modifies the incoming line by removing the token and returning the remainder
 /// returns the found token
-pub fn tokenize(line: &mut XousString::<1024>) -> Option<XousString::<1024>> {
+pub fn tokenize(line: &mut XousString<1024>) -> Option<XousString<1024>> {
     let mut token = XousString::<1024>::new();
     let mut retline = XousString::<1024>::new();
 
@@ -799,15 +814,13 @@ pub fn tokenize(line: &mut XousString::<1024>) -> Option<XousString::<1024>> {
     }
     line.clear();
     write!(line, "{}", retline.as_str().unwrap()).unwrap();
-    if token.len() > 0 {
-        Some(token)
-    } else {
-        None
-    }
+    if token.len() > 0 { Some(token) } else { None }
 }
 
 pub(crate) fn heap_usage() -> usize {
-    match xous::rsyscall(xous::SysCall::IncreaseHeap(0, xous::MemoryFlags::R)).expect("couldn't get heap size") {
+    match xous::rsyscall(xous::SysCall::IncreaseHeap(0, xous::MemoryFlags::R))
+        .expect("couldn't get heap size")
+    {
         xous::Result::MemoryRange(m) => {
             let usage = m.len();
             usage
@@ -815,15 +828,13 @@ pub(crate) fn heap_usage() -> usize {
         _ => {
             log::info!("Couldn't measure heap usage");
             0
-         },
+        }
     }
 }
 
-
 pub fn clock_not_set() -> bool {
     let now = SystemTime::now();
-    let since_the_epoch = now.duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
+    let since_the_epoch = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
     let seconds: u64 = since_the_epoch.as_secs();
     if seconds < DATE_2023 {
         log::info!("clock NOT set, seconds since epoch: {}", seconds);

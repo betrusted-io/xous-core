@@ -17,20 +17,10 @@ pub struct Cursor {
 #[allow(dead_code)]
 impl Cursor {
     // Make a new Cursor. When in doubt, set line_height = 0.
-    pub fn new(x: i16, y: i16, line_height: usize) -> Cursor {
-        Cursor {
-            pt: Pt { x, y },
-            line_height,
-        }
-    }
+    pub fn new(x: i16, y: i16, line_height: usize) -> Cursor { Cursor { pt: Pt { x, y }, line_height } }
 
     // Make a Cursor aligned at the top left corner of a ClipRect
-    pub fn from_top_left_of(r: ClipRect) -> Cursor {
-        Cursor {
-            pt: r.min,
-            line_height: 0,
-        }
-    }
+    pub fn from_top_left_of(r: ClipRect) -> Cursor { Cursor { pt: r.min, line_height: 0 } }
 
     pub fn update_glyph(&mut self, glyph: &GlyphSprite) {
         self.pt.x += glyph.wide as i16;
@@ -45,7 +35,7 @@ impl Cursor {
     pub fn add(&self, other: Cursor) -> Cursor {
         Cursor {
             pt: Pt::new(self.pt.x + other.pt.x, self.pt.y + other.pt.y),
-            line_height: self.line_height.max(other.line_height)
+            line_height: self.line_height.max(other.line_height),
         }
     }
 }
@@ -56,10 +46,7 @@ mod tests {
 
     #[test]
     fn test_cursor_equivalence() {
-        let c1 = Cursor {
-            pt: Pt { x: 1, y: 2 },
-            line_height: 0,
-        };
+        let c1 = Cursor { pt: Pt { x: 1, y: 2 }, line_height: 0 };
         let c2 = Cursor::new(1, 2, 0);
         assert_eq!(c1, c2);
         let clip = ClipRect::new(1, 2, 3, 4);

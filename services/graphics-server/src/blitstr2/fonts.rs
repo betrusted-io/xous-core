@@ -9,8 +9,8 @@ pub mod kr;
 pub mod mono;
 pub mod regular;
 pub mod small;
-pub mod zh;
 pub mod tall;
+pub mod zh;
 
 use crate::GlyphSprite;
 

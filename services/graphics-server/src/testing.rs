@@ -1,6 +1,7 @@
+use core::fmt::Write;
+
 use graphics_server::api::GlyphStyle;
 use graphics_server::*;
-use core::fmt::Write;
 use num_traits::*;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -31,7 +32,7 @@ pub fn tests() {
                 let blackout = Rectangle::new_with_style(
                     Point::new(0, 0),
                     screensize,
-                    DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1)
+                    DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1),
                 );
                 gfx.draw_rectangle(blackout).unwrap();
                 gfx.flush().unwrap();
@@ -53,8 +54,8 @@ pub fn tests() {
                 match FromPrimitive::from_usize(index) {
                     Some(TestType::BusyAnimation) => {
                         let anim_rect = Rectangle::new_coords(10, 10, 240, 30);
-                        let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
-                        TextBounds::BoundingBox(anim_rect));
+                        let mut tv =
+                            TextView::new(Gid::new([0, 0, 0, 0]), TextBounds::BoundingBox(anim_rect));
                         tv.clip_rect = Some(clipping_area);
                         tv.style = GlyphStyle::Small;
                         tv.ellipsis = false;
@@ -64,9 +65,8 @@ pub fn tests() {
                         tv.busy_animation_state = Some(0);
                         for y in 0..30 {
                             gfx.draw_rectangle(checkbound).unwrap();
-                            tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new_coords(
-                                10, 10 +  y, 240, 30 + y
-                            ));
+                            tv.bounds_hint =
+                                TextBounds::BoundingBox(Rectangle::new_coords(10, 10 + y, 240, 30 + y));
                             for _ in 0..5 {
                                 gfx.draw_textview(&mut tv).unwrap();
                                 gfx.flush().unwrap();
@@ -75,10 +75,8 @@ pub fn tests() {
                         }
                     }
                     Some(TestType::BoundingBox) => {
-                        let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
-                        TextBounds::BoundingBox(
-                            text_bounds
-                        ));
+                        let mut tv =
+                            TextView::new(Gid::new([0, 0, 0, 0]), TextBounds::BoundingBox(text_bounds));
                         tv.clip_rect = Some(clipping_area);
                         tv.style = TEST_STYLE;
                         tv.ellipsis = true;
@@ -93,11 +91,13 @@ pub fn tests() {
                         ticktimer.sleep_ms(1000).unwrap();
                     }
                     Some(TestType::LowerRight) => {
-                        let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
-                        TextBounds::GrowableFromBr(
-                            Point::new(text_bounds.br().x - 4, text_bounds.br().y - 4),
-                            ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16
-                        ));
+                        let mut tv = TextView::new(
+                            Gid::new([0, 0, 0, 0]),
+                            TextBounds::GrowableFromBr(
+                                Point::new(text_bounds.br().x - 4, text_bounds.br().y - 4),
+                                ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16,
+                            ),
+                        );
                         tv.clip_rect = Some(clipping_area);
                         tv.style = TEST_STYLE;
                         tv.ellipsis = true;
@@ -111,11 +111,13 @@ pub fn tests() {
                         ticktimer.sleep_ms(1000).unwrap();
                     }
                     Some(TestType::LowerLeft) => {
-                        let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
-                        TextBounds::GrowableFromBl(
-                            Point::new(text_bounds.tl().x + 4, text_bounds.br().y - 4),
-                            ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16
-                        ));
+                        let mut tv = TextView::new(
+                            Gid::new([0, 0, 0, 0]),
+                            TextBounds::GrowableFromBl(
+                                Point::new(text_bounds.tl().x + 4, text_bounds.br().y - 4),
+                                ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16,
+                            ),
+                        );
                         tv.clip_rect = Some(clipping_area);
                         tv.style = TEST_STYLE;
                         tv.ellipsis = true;
@@ -130,11 +132,13 @@ pub fn tests() {
                         ticktimer.sleep_ms(1000).unwrap();
                     }
                     Some(TestType::TopLeft) => {
-                        let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
-                        TextBounds::GrowableFromTl(
-                            Point::new(text_bounds.tl().x + 4, text_bounds.tl().y + 4),
-                            ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16 + 20
-                        ));
+                        let mut tv = TextView::new(
+                            Gid::new([0, 0, 0, 0]),
+                            TextBounds::GrowableFromTl(
+                                Point::new(text_bounds.tl().x + 4, text_bounds.tl().y + 4),
+                                ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16 + 20,
+                            ),
+                        );
                         tv.clip_rect = Some(clipping_area);
                         tv.style = TEST_STYLE;
                         tv.ellipsis = false;
@@ -148,11 +152,13 @@ pub fn tests() {
                         ticktimer.sleep_ms(1000).unwrap();
                     }
                     Some(TestType::TopRight) => {
-                        let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
-                        TextBounds::GrowableFromTr(
-                            Point::new(text_bounds.tr().x - 4, text_bounds.tl().y + 4),
-                            ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16 + 30
-                        ));
+                        let mut tv = TextView::new(
+                            Gid::new([0, 0, 0, 0]),
+                            TextBounds::GrowableFromTr(
+                                Point::new(text_bounds.tr().x - 4, text_bounds.tl().y + 4),
+                                ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16 + 30,
+                            ),
+                        );
                         tv.clip_rect = Some(clipping_area);
                         tv.style = TEST_STYLE;
                         tv.ellipsis = false;
@@ -179,10 +185,8 @@ pub fn tests() {
                             gfx.draw_rectangle(checkbound).unwrap();
                             gfx.flush().unwrap();
 
-                            let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
-                            TextBounds::BoundingBox(
-                                text_bounds
-                            ));
+                            let mut tv =
+                                TextView::new(Gid::new([0, 0, 0, 0]), TextBounds::BoundingBox(text_bounds));
                             tv.clip_rect = Some(clipping_area);
                             tv.style = TEST_STYLE;
                             tv.ellipsis = false;
@@ -202,10 +206,8 @@ pub fn tests() {
                         gfx.draw_rectangle(checkbound).unwrap();
                         gfx.flush().unwrap();
 
-                        let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
-                        TextBounds::BoundingBox(
-                            text_bounds
-                        ));
+                        let mut tv =
+                            TextView::new(Gid::new([0, 0, 0, 0]), TextBounds::BoundingBox(text_bounds));
                         tv.clip_rect = Some(clipping_area);
                         tv.style = TEST_STYLE;
                         tv.ellipsis = true;

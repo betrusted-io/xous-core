@@ -1,7 +1,8 @@
 use pio::RP2040_MAX_PROGRAM_SIZE;
-use utralib::utra::rp_pio::{self, SFR_FDEBUG, SFR_FLEVEL, SFR_FSTAT, SFR_DBG_CFGINFO};
-use crate::*;
+use utralib::utra::rp_pio::{self, SFR_DBG_CFGINFO, SFR_FDEBUG, SFR_FLEVEL, SFR_FSTAT};
+
 use super::report_api;
+use crate::*;
 
 /// Test the sticky out bits
 pub fn sticky_test() {
@@ -33,15 +34,15 @@ pub fn sticky_test() {
     report_api(0x51C2_0001);
     pio_ss.clear_instruction_memory();
     report_api(0x51C2_0002);
-    let mut sm_a = unsafe{pio_ss.force_alloc_sm(1).unwrap()};
+    let mut sm_a = unsafe { pio_ss.force_alloc_sm(1).unwrap() };
     report_api(0x51C2_0003);
-    let mut sm_b = unsafe{pio_ss.force_alloc_sm(2).unwrap()};
+    let mut sm_b = unsafe { pio_ss.force_alloc_sm(2).unwrap() };
     report_api(0x51C2_0004);
     sm_a.sm_set_enabled(false);
     report_api(0x51C2_0005);
     sm_b.sm_set_enabled(false);
     report_api(0x51C2_0006);
-
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "set pins, 1",
         "set pins, 2",
@@ -51,6 +52,7 @@ pub fn sticky_test() {
         "nop"
     );
     let a_prog = LoadedProg::load(a_code.program, &mut pio_ss).unwrap();
+    #[rustfmt::skip]
     let b_code = pio_proc::pio_asm!(
         // bit 4 indicates enable; bit 3 is the "B" machine flag. bits 2:0 are the payload
         "nop",
@@ -60,7 +62,8 @@ pub fn sticky_test() {
         "set pins, 0x1D", // with enable
         "set pins, 0x0E", // without enable
     );
-    // note: this loads using sm_a so we can share the "used" vector state, but the code is global across all SM's
+    // note: this loads using sm_a so we can share the "used" vector state, but the code is global across all
+    // SM's
     let b_prog = LoadedProg::load(b_code.program, &mut pio_ss).unwrap();
 
     report_api(0x51C2_0007);
@@ -89,9 +92,9 @@ pub fn sticky_test() {
     sm_a.pio.wo(
         rp_pio::SFR_CTRL,
         sm_a.pio.ms(rp_pio::SFR_CTRL_CLKDIV_RESTART, sm_a.sm_bitmask())
-        | sm_a.pio.ms(rp_pio::SFR_CTRL_RESTART, sm_a.sm_bitmask())
-        | sm_a.pio.ms(rp_pio::SFR_CTRL_CLKDIV_RESTART, sm_b.sm_bitmask())
-        | sm_a.pio.ms(rp_pio::SFR_CTRL_RESTART, sm_b.sm_bitmask())
+            | sm_a.pio.ms(rp_pio::SFR_CTRL_RESTART, sm_a.sm_bitmask())
+            | sm_a.pio.ms(rp_pio::SFR_CTRL_CLKDIV_RESTART, sm_b.sm_bitmask())
+            | sm_a.pio.ms(rp_pio::SFR_CTRL_RESTART, sm_b.sm_bitmask()),
     );
     while (sm_a.pio.r(rp_pio::SFR_CTRL) & !0xF) != 0 {
         // wait for the bits to self-reset to acknowledge that the command has executed
@@ -101,7 +104,7 @@ pub fn sticky_test() {
     sm_a.pio.wo(
         rp_pio::SFR_CTRL,
         sm_a.pio.ms(rp_pio::SFR_CTRL_EN, sm_a.sm_bitmask())
-        | sm_a.pio.ms(rp_pio::SFR_CTRL_EN, sm_b.sm_bitmask())
+            | sm_a.pio.ms(rp_pio::SFR_CTRL_EN, sm_b.sm_bitmask()),
     );
     // wait for it to run
     for i in 0..16 {
@@ -126,9 +129,9 @@ pub fn sticky_test() {
     sm_a.pio.wo(
         rp_pio::SFR_CTRL,
         sm_a.pio.ms(rp_pio::SFR_CTRL_CLKDIV_RESTART, sm_a.sm_bitmask())
-        | sm_a.pio.ms(rp_pio::SFR_CTRL_RESTART, sm_a.sm_bitmask())
-        | sm_a.pio.ms(rp_pio::SFR_CTRL_CLKDIV_RESTART, sm_b.sm_bitmask())
-        | sm_a.pio.ms(rp_pio::SFR_CTRL_RESTART, sm_b.sm_bitmask())
+            | sm_a.pio.ms(rp_pio::SFR_CTRL_RESTART, sm_a.sm_bitmask())
+            | sm_a.pio.ms(rp_pio::SFR_CTRL_CLKDIV_RESTART, sm_b.sm_bitmask())
+            | sm_a.pio.ms(rp_pio::SFR_CTRL_RESTART, sm_b.sm_bitmask()),
     );
     while (sm_a.pio.r(rp_pio::SFR_CTRL) & !0xF) != 0 {
         // wait for the bits to self-reset to acknowledge that the command has executed
@@ -138,7 +141,7 @@ pub fn sticky_test() {
     sm_a.pio.wo(
         rp_pio::SFR_CTRL,
         sm_a.pio.ms(rp_pio::SFR_CTRL_EN, sm_a.sm_bitmask())
-        | sm_a.pio.ms(rp_pio::SFR_CTRL_EN, sm_b.sm_bitmask())
+            | sm_a.pio.ms(rp_pio::SFR_CTRL_EN, sm_b.sm_bitmask()),
     );
     // wait for it to run
     for i in 0..16 {
@@ -162,7 +165,7 @@ pub fn sticky_test() {
 pub fn delay(count: usize) {
     let mut target = [0u32; 1];
     for i in 0..count * 2 {
-        unsafe {target.as_mut_ptr().write_volatile(i as u32)}
+        unsafe { target.as_mut_ptr().write_volatile(i as u32) }
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
 }
@@ -195,9 +198,9 @@ fn wait_rx_or_fail(sm: &mut PioSm, rxval: u32, mask: Option<u32>, timeout: Optio
 }
 
 fn wait_gpio_or_fail(ss: &PioSharedState, pinval: u32, mask: Option<u32>, timeout: Option<usize>) {
-    #[cfg(feature="rp2040")]
+    #[cfg(feature = "rp2040")]
     let io_mask = 0x3FFF_FFFF;
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     let io_mask = 0xFFFF_FFFF;
 
     let mask = mask.unwrap_or(io_mask);
@@ -242,9 +245,9 @@ fn wait_irq_exactly_or_fail(sm: &PioSm, irq_index: usize, timeout: Option<usize>
 /// corner cases
 pub fn corner_cases() {
     report_api(0xF1F0_0000);
-    #[cfg(feature="rp2040")]
+    #[cfg(feature = "rp2040")]
     let io_mask = 0x3FFF_FFFF;
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     let io_mask = 0xFFFF_FFFF;
 
     report_api(0xcc00_0000);
@@ -254,7 +257,7 @@ pub fn corner_cases() {
     let mut sm_a = pio_ss.alloc_sm().unwrap();
     pio_ss.clear_instruction_memory();
     pio_ss.pio.rmwf(rp_pio::SFR_CTRL_EN, 0);
-
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "out y, 0", // 32 is coded as 0. If you put 32 in, this changes the "y" source to "null"!
         "in  y, 0", // 32 is coded as 0
@@ -288,6 +291,7 @@ pub fn corner_cases() {
 
     report_api(0xcc00_1111);
     // exec corner case: EXEC instruction should side-effect the PC -----------------------
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "set x, 17",          // 18
         "exec_loop:",         // normally you'd want out exec, 32 to keep things simple but out exec, 16 will cause two instructions to run per pull of the fifo
@@ -362,6 +366,7 @@ pub fn corner_cases() {
     report_api(0xcc00_2222);
     // exec corner case: exec can clear stalled IRQ -----------------------
     let mut sm_b = pio_ss.alloc_sm().unwrap(); // run this on SM_B so we can test `rel` irqs
+    #[rustfmt::skip]
     let b_code = pio_proc::pio_asm!(
         "set x, 12",          // 0x1d put an initial value in x
         "wait 1 irq 6 rel",   // 0x1e this should stall <--- wait target
@@ -378,7 +383,7 @@ pub fn corner_cases() {
     sm_b.sm_clear_fifos(); // ensure the fifos are cleared for this test
     sm_b.sm_set_enabled(true);
 
-    wait_addr_or_fail(&sm_b, 0x1e, Some(100));  // manual match to wait target
+    wait_addr_or_fail(&sm_b, 0x1e, Some(100)); // manual match to wait target
     let exec_set_irq6 = pio_proc::pio_asm!("irq set 6 rel").program.code[0];
     sm_b.sm_exec(exec_set_irq6);
     wait_rx_or_fail(&mut sm_b, 12, None, None);
@@ -388,6 +393,7 @@ pub fn corner_cases() {
 
     // exec corner case: exec can clear stalled IRQ --------------------------------
     // exec corner case: exec can break out of stalled instruction with JMP --------
+    #[rustfmt::skip]
     let b_code = pio_proc::pio_asm!(
         "top:",
         "  set y, 12",          // 0x1a put an initial value in y
@@ -403,37 +409,37 @@ pub fn corner_cases() {
     // check multiple clkdiv cases to capture corners in the irq_stb logic
     let divs = [1.0f32, 3.5f32, 4.0f32];
     let mut divstate = 0x3333u32;
-    divs.map(
-        |clkdiv: f32| {
-            report_api(0xcc00_0000 + divstate);
-            divstate += 0x1111;
-            sm_b.sm_set_enabled(false);
-            b_prog.setup_default_config(&mut sm_b);
-            sm_b.config_set_out_pins(0, 32);
-            sm_b.config_set_clkdiv(clkdiv);
-            sm_b.config_set_out_shift(true, true, 32);
-            sm_b.config_set_in_shift(false, true, 32);
-            sm_b.sm_init(b_prog.entry());
-            sm_b.sm_clear_fifos(); // ensure the fifos are cleared for this test
-            sm_b.sm_set_enabled(true);
+    divs.map(|clkdiv: f32| {
+        report_api(0xcc00_0000 + divstate);
+        divstate += 0x1111;
+        sm_b.sm_set_enabled(false);
+        b_prog.setup_default_config(&mut sm_b);
+        sm_b.config_set_out_pins(0, 32);
+        sm_b.config_set_clkdiv(clkdiv);
+        sm_b.config_set_out_shift(true, true, 32);
+        sm_b.config_set_in_shift(false, true, 32);
+        sm_b.sm_init(b_prog.entry());
+        sm_b.sm_clear_fifos(); // ensure the fifos are cleared for this test
+        sm_b.sm_set_enabled(true);
 
-            wait_addr_or_fail(&sm_b, 0x1b, Some(100));  // manual match to wait target
-            let exec_set_irq6 = pio_proc::pio_asm!("irq set 6 rel").program.code[0];
-            sm_b.sm_exec(exec_set_irq6);
-            // exactly one entry should go into the Rx fifo. If the irq does not self-clear after exec, we will get more than one, and the next check fails.
-            wait_rx_or_fail(&mut sm_b, 12, None, None);
+        wait_addr_or_fail(&sm_b, 0x1b, Some(100)); // manual match to wait target
+        let exec_set_irq6 = pio_proc::pio_asm!("irq set 6 rel").program.code[0];
+        sm_b.sm_exec(exec_set_irq6);
+        // exactly one entry should go into the Rx fifo. If the irq does not self-clear after exec, we will
+        // get more than one, and the next check fails.
+        wait_rx_or_fail(&mut sm_b, 12, None, None);
 
-            // program will loop back to top, and will be stuck at wait again
-            wait_addr_or_fail(&sm_b, 0x1b, Some(100));  // manual match to wait target
-            let exec_jmp_bypass = pio_proc::pio_asm!("jmp y--, 0x1e").program.code[0];
-            sm_b.sm_exec(exec_jmp_bypass);
-            wait_rx_or_fail(&mut sm_b, !11, None, None);
-        }
-    );
+        // program will loop back to top, and will be stuck at wait again
+        wait_addr_or_fail(&sm_b, 0x1b, Some(100)); // manual match to wait target
+        let exec_jmp_bypass = pio_proc::pio_asm!("jmp y--, 0x1e").program.code[0];
+        sm_b.sm_exec(exec_jmp_bypass);
+        wait_rx_or_fail(&mut sm_b, !11, None, None);
+    });
 
     // exec corner case: OUT EXEC can clear stalled IRQ -------------------
     pio_ss.clear_instruction_memory();
     report_api(0xcc00_6666);
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "top:",
         "  set y, 5",           // 0x19 put an initial value in y
@@ -456,16 +462,16 @@ pub fn corner_cases() {
     sm_a.sm_clear_fifos(); // ensure the fifos are cleared for this test
     sm_a.sm_set_enabled(true);
 
-    wait_addr_or_fail(&sm_a, 0x1a, Some(100));  // manual match to wait target
+    wait_addr_or_fail(&sm_a, 0x1a, Some(100)); // manual match to wait target
     let exec_set_irq2 = pio_proc::pio_asm!("irq set 2 rel").program.code[0];
     sm_a.sm_txfifo_push_u32(exec_set_irq2 as u32);
     wait_rx_or_fail(&mut sm_a, 5, None, None);
 
     // exec corner case: writing over stalled instruction breaks stall ----------
-    wait_addr_or_fail(&sm_a, 0x1a, Some(100));  // manual match to wait target
+    wait_addr_or_fail(&sm_a, 0x1a, Some(100)); // manual match to wait target
     let nop = pio_proc::pio_asm!("mov y, y").program.code[0];
     sm_a.sm_txfifo_push_u32(nop as u32); // break the out exec stall, but get stuck at "wait 1 irq 2 rel"
-    wait_addr_or_fail(&sm_a, 0x1b, Some(100));  // manual match to wait target
+    wait_addr_or_fail(&sm_a, 0x1b, Some(100)); // manual match to wait target
     let set_y_31 = pio_proc::pio_asm!("set y, 31").program.code[0];
     // slot this over the blocked instruction: 0x1b == 27
     pio_ss.pio.wfo(rp_pio::SFR_INSTR_MEM27_INSTR, set_y_31 as u32);
@@ -488,6 +494,7 @@ pub fn corner_cases() {
     // IO corner case: side-set happens when SM is stalled --------------------
     pio_ss.clear_instruction_memory();
     report_api(0xcc00_7777);
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         ".side_set 1 opt"
         "top:",
@@ -527,6 +534,7 @@ pub fn corner_cases() {
     pio_ss.clear_instruction_memory();
     report_api(0xcc00_8888);
     // this one will toggle pins via a side-set
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         ".side_set 1 opt"
         "  mov osr, null",           // 0x1b load OSR with 0
@@ -562,6 +570,7 @@ pub fn corner_cases() {
     pio_ss.clear_instruction_memory();
     sm_a.sm_set_enabled(false);
     report_api(0xcc00_9999);
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         ".side_set 5",
         "  out pins, 16   side 0x1A", // 0x1d
@@ -574,7 +583,7 @@ pub fn corner_cases() {
     sm_a.config_set_clkdiv(1.15);
     sm_a.config_set_out_shift(true, true, 16);
     sm_a.config_set_out_pins(24, 16); // should wrap to lower 8 bits
-    sm_a.config_set_set_pins(28, 5);  // should wrap 1 bit over
+    sm_a.config_set_set_pins(28, 5); // should wrap 1 bit over
     sm_a.config_set_sideset_pins(30); // should wrap 3 bits over
     sm_a.sm_init(a_prog.entry());
     sm_a.sm_clear_fifos();
@@ -619,8 +628,9 @@ pub fn corner_cases() {
     sm_a.sm_set_enabled(false);
     report_api(0xcc00_aaaa);
     // set all the output
-    #[cfg(feature="rp2040")]
+    #[cfg(feature = "rp2040")]
     sm_a.sm_set_pindirs_with_mask(0xffff_ffff, 0xffff_ffff);
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "  out pins, 0",
         "  in  pins, 24",
@@ -642,12 +652,13 @@ pub fn corner_cases() {
     sm_a.sm_set_enabled(true);
 
     sm_a.sm_txfifo_push_u32(0xaa12_3455);
-    // the differences from the pushed is due to the test bench harnessing, some gpio pins are not looped back or are modified by the test bench for other tests!
-    // this value is just read back manually from the waveforms
-    #[cfg(not(feature="rp2040"))]
-    let model = rot_left(0x2a12_345D, 32-9) & 0xFF_FFFF;
-    #[cfg(feature="rp2040")]
-    let model = rot_left(0xaa12_3455 & io_mask & !(1 << 25), 32-9) & 0xFF_FFFF; // top 2 bits don't exist on rp2040, bit 25 is for LED
+    // the differences from the pushed is due to the test bench harnessing, some gpio pins are not looped back
+    // or are modified by the test bench for other tests! this value is just read back manually from the
+    // waveforms
+    #[cfg(not(feature = "rp2040"))]
+    let model = rot_left(0x2a12_345D, 32 - 9) & 0xFF_FFFF;
+    #[cfg(feature = "rp2040")]
+    let model = rot_left(0xaa12_3455 & io_mask & !(1 << 25), 32 - 9) & 0xFF_FFFF; // top 2 bits don't exist on rp2040, bit 25 is for LED
     report_api(model);
     wait_rx_or_fail(&mut sm_a, model, None, None);
 
@@ -661,14 +672,15 @@ pub fn corner_cases() {
 
     // autopush/pull cases ----------------------------------------------------
     // 1. auto p/p does not happen while SM is disabled
-    // 2. auto pull happens on an EXEC, even when SM is disabled
-    //    a. case of EXEC is an instruction that would do a pull, but stalled instruction does not do pull
-    //    b. case of EXEC is an instruction that is NOP, but stalled instruction does do pull
+    // 2. auto pull happens on an EXEC, even when SM is disabled a. case of EXEC is an instruction that would
+    //    do a pull, but stalled instruction does not do pull b. case of EXEC is an instruction that is NOP,
+    //    but stalled instruction does do pull
     // 3. OUT with empty OSR but nonempty TX FIFO should not set TX stall flag, + 1-cycle stall
     // 4. EXEC of OUT 32 to disabled SM, with empty OSR + filled FIFO consumes two words from FIFO
     pio_ss.clear_instruction_memory();
     sm_a.sm_set_enabled(false);
     report_api(0xcc00_bbbb);
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "  out x, 0",
         "  in  x, 0",   // loop back for testing
@@ -711,6 +723,7 @@ pub fn corner_cases() {
     pio_ss.clear_instruction_memory();
     sm_a.sm_set_enabled(false);
     report_api(0xcc04_bbbb);
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "  wait 1 irq 0",  // this will do a wait
         "  in  x, 0",
@@ -753,6 +766,7 @@ pub fn corner_cases() {
     report_api(0xcc08_cccc);
     pio_ss.clear_instruction_memory();
     sm_a.sm_set_enabled(false);
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "  out x, 0",
         "  in  x, 0",   // loop back for testing
@@ -776,9 +790,7 @@ pub fn corner_cases() {
 
     report_api(0xcc00_600d);
 }
-fn rot_left(word: u32, count: u32) -> u32 {
-    (word << count) | ((word >> (32-count)) & ((1 << count) - 1))
-}
+fn rot_left(word: u32, count: u32) -> u32 { (word << count) | ((word >> (32 - count)) & ((1 << count) - 1)) }
 
 pub fn instruction_tests() {
     report_api(0x1c5f_0000);
@@ -788,6 +800,7 @@ pub fn instruction_tests() {
     pio_ss.pio.rmwf(rp_pio::SFR_CTRL_EN, 0);
 
     // check mov, irq, wait corners ------------------------------------------------------
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "irq set 7",      // just to make sure this is behaving correctly (staring at waveforms)
         "out x, 0",
@@ -805,8 +818,9 @@ pub fn instruction_tests() {
     let a_prog = LoadedProg::load(a_code.program, &mut pio_ss).unwrap();
     sm_a.sm_set_enabled(false);
     a_prog.setup_default_config(&mut sm_a);
-    // if this is set to <2.0 the "retrograde PC" check at the bottom needs to be commented out, because the PC moves too fast for the APB to reliably sample
-    // also, this should not be an even multiple, otherwise we can end up sampling the exact same phase over and over again.
+    // if this is set to <2.0 the "retrograde PC" check at the bottom needs to be commented out, because the
+    // PC moves too fast for the APB to reliably sample also, this should not be an even multiple,
+    // otherwise we can end up sampling the exact same phase over and over again.
     sm_a.config_set_clkdiv(5.0);
     sm_a.config_set_out_shift(true, true, 32);
     sm_a.config_set_in_shift(true, true, 32);
@@ -822,25 +836,24 @@ pub fn instruction_tests() {
             rp_pio::SFR_SM0_EXECCTRL,
             pio_ss.pio.zf(
                 rp_pio::SFR_SM0_EXECCTRL_STATUS_SEL,
-                pio_ss.pio.zf(rp_pio::SFR_SM0_EXECCTRL_STATUS_N,
-                    pio_ss.pio.r(rp_pio::SFR_SM0_EXECCTRL)
-                )
-            )
-            | pio_ss.pio.ms(rp_pio::SFR_SM0_EXECCTRL_STATUS_SEL, status_sel as u32)
-            | pio_ss.pio.ms(rp_pio::SFR_SM0_EXECCTRL_STATUS_N, level as u32)
+                pio_ss.pio.zf(rp_pio::SFR_SM0_EXECCTRL_STATUS_N, pio_ss.pio.r(rp_pio::SFR_SM0_EXECCTRL)),
+            ) | pio_ss.pio.ms(rp_pio::SFR_SM0_EXECCTRL_STATUS_SEL, status_sel as u32)
+                | pio_ss.pio.ms(rp_pio::SFR_SM0_EXECCTRL_STATUS_N, level as u32),
         );
-        let expected_value = if 2 < level {0xFFFF_FFFF} else {0};
+        let expected_value = if 2 < level { 0xFFFF_FFFF } else { 0 };
 
         // reset the PC
         let mut a = pio::Assembler::<32>::new();
         let mut initial_label = a.label_at_offset(a_prog.entry() as u8);
         a.jmp(pio::JmpCondition::Always, &mut initial_label);
-        let p= a.assemble_program();
+        let p = a.assemble_program();
         sm_a.sm_exec(p.code[p.origin.unwrap_or(0) as usize]);
         pio_ss.pio.wfo(rp_pio::SFR_CTRL_RESTART, sm_a.sm_bitmask());
         sm_a.sm_set_enabled(true);
 
-        for i in 1..=5 { // put 5 entries in; the first two should go to the Rx fifo, 1 should be in the state machine, 2 remaining in the FIFO
+        for i in 1..=5 {
+            // put 5 entries in; the first two should go to the Rx fifo, 1 should be in the state machine, 2
+            // remaining in the FIFO
             sm_a.sm_txfifo_push_u32(0x1c5f_0000 + i);
         }
         // we should now have a level == 2 for both
@@ -864,9 +877,9 @@ pub fn instruction_tests() {
         wait_rx_or_fail(&mut sm_a, 0x1c5f_0002, None, None);
         report_api(expected_value);
         wait_rx_or_fail(&mut sm_a, expected_value, None, None);
-        // retrograde movement of address would indicate we're in the loop (this might not work perfectly on real hardware due to synchronizers)
-        // commented out, because this test is too sensitive to external clock config
-        // wait_addr_or_fail(&sm_a, 31, None);
+        // retrograde movement of address would indicate we're in the loop (this might not work perfectly on
+        // real hardware due to synchronizers) commented out, because this test is too sensitive to
+        // external clock config wait_addr_or_fail(&sm_a, 31, None);
         // wait_addr_or_fail(&sm_a, 30, None);
 
         level += 1;
@@ -885,6 +898,7 @@ pub fn instruction_tests() {
     pio_ss.pio.rmwf(rp_pio::SFR_CTRL_EN, 0);
     report_api(0x1c5f_1111);
     // all the jumps --------------------------------------------------------------
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "  set x, 3",
         "test_notx:",
@@ -950,6 +964,7 @@ pub fn instruction_tests() {
     pio_ss.pio.rmwf(rp_pio::SFR_CTRL_EN, 0);
     report_api(0x1c5f_2222);
     // all the ISRs and OSRs (left shifting) -------------------------------------------------
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "start:",
         "pull ifempty block",   // 09 get a value from the Tx FIFO -> OSR
@@ -1028,6 +1043,7 @@ pub fn instruction_tests() {
     pio_ss.pio.rmwf(rp_pio::SFR_CTRL_EN, 0);
     report_api(0x1c5f_3333);
     // all the MOVs (plus right shifting) -------------------------------------------------
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "start:",
         "pull block",
@@ -1077,12 +1093,12 @@ pub fn instruction_tests() {
     sm_a.sm_txfifo_push_u32(0b101_110 | 0xFF00_0000); // shifting right, so we'll take these LSBs; or something else at the top so we can detect if it shifted the other way
     wait_irq_exactly_or_fail(&sm_a, 0, None);
     wait_rx_or_fail(&mut sm_a, !0x1234_abcd, None, None);
-    wait_rx_or_fail(&mut sm_a, 0b100_011 << (32-6), None, None);
+    wait_rx_or_fail(&mut sm_a, 0b100_011 << (32 - 6), None, None);
     report_api(0x1c5f_3334);
-    #[cfg(not(feature="rp2040"))]
-    let gpio_val = 0b011_101 << (32-6);
-    #[cfg(feature="rp2040")]
-    let gpio_val = (0b011_101 << (32-6)) & !(1 << 25) & 0x3FFF_FFFF;
+    #[cfg(not(feature = "rp2040"))]
+    let gpio_val = 0b011_101 << (32 - 6);
+    #[cfg(feature = "rp2040")]
+    let gpio_val = (0b011_101 << (32 - 6)) & !(1 << 25) & 0x3FFF_FFFF;
     report_api(gpio_val);
     wait_gpio_or_fail(&pio_ss, gpio_val, None, None);
     // clear the IRQ wait
@@ -1091,12 +1107,12 @@ pub fn instruction_tests() {
     // pins <- pins mov test
     report_api(0x1c5f_3335);
     wait_irq_exactly_or_fail(&sm_a, 1, None);
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     {
         let rbk_val = !rot_left(gpio_val | 0xC, 16); // 0xC is or'd in due to the i2c loopback pins
         wait_gpio_or_fail(&pio_ss, rbk_val, Some(!0x8000_000C), None); // ignore the pins not looped back by the test bench (2,3,31)
     }
-    #[cfg(feature="rp2040")]
+    #[cfg(feature = "rp2040")]
     {
         let rbk_val = !rot_left(gpio_val & 0x3FFF_FFFF | 3, 16); // lowest 2 bits read back back as 11
         report_api(rbk_val);
@@ -1122,6 +1138,7 @@ pub fn instruction_tests() {
     pio_ss.clear_instruction_memory();
     pio_ss.pio.rmwf(rp_pio::SFR_CTRL_EN, 0);
     report_api(0x1c5f_4444);
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "start:",
         "  set x, 0",
@@ -1182,6 +1199,7 @@ pub fn restart_imm_test() {
     pio_ss.pio.rmwf(rp_pio::SFR_CTRL_EN, 0);
 
     let mut sm_a = pio_ss.alloc_sm().unwrap();
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "set pins, 1",
         "set pins, 2",
@@ -1207,7 +1225,7 @@ pub fn restart_imm_test() {
 
     let mut a = pio::Assembler::<32>::new();
     a.out(pio::OutDestination::PINS, 16);
-    let p= a.assemble_program();
+    let p = a.assemble_program();
 
     // this should stall the state machine
     sm_a.sm_exec(p.code[p.origin.unwrap_or(0) as usize]);
@@ -1243,9 +1261,9 @@ pub fn restart_imm_test() {
 
 pub fn fifo_join_test() -> bool {
     report_api(0xF1F0_0000);
-    #[cfg(feature="rp2040")]
+    #[cfg(feature = "rp2040")]
     let io_mask = 0x3FFF_FFFF;
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     let io_mask = 0xFFFF_FFFF;
 
     let mut pio_ss = PioSharedState::new();
@@ -1254,6 +1272,7 @@ pub fn fifo_join_test() -> bool {
 
     // test TX fifo with non-join. Simple program that just copies the TX fifo content to pins, then stalls.
     let mut sm_a = pio_ss.alloc_sm().unwrap();
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         "out pins, 32",
     );
@@ -1263,9 +1282,9 @@ pub fn fifo_join_test() -> bool {
     pio_ss.pio.wo(rp_pio::SFR_IRQ1_INTE, 0);
     a_prog.setup_default_config(&mut sm_a);
     sm_a.config_set_out_pins(0, 32);
-    #[cfg(not(feature="rp2040"))]
-    sm_a.config_set_clkdiv(192.0); // slow down the machine so we can read out the values after writing them...
-    #[cfg(feature="rp2040")]
+    #[cfg(not(feature = "rp2040"))]
+    sm_a.config_set_clkdiv(2048.0); // slow down the machine so we can read out the values after writing them...
+    #[cfg(feature = "rp2040")]
     sm_a.config_set_clkdiv(32768.0);
     sm_a.config_set_out_shift(false, true, 0);
     sm_a.sm_init(a_prog.entry());
@@ -1273,7 +1292,8 @@ pub fn fifo_join_test() -> bool {
 
     report_api(0xF1F0_1111);
     // load up the TX fifo, count how many entries it takes until it is full
-    // note: full test requires manual inspection of waveform to confirm GPIO out has the expected report value.
+    // note: full test requires manual inspection of waveform to confirm GPIO out has the expected report
+    // value.
     let mut entries = 0;
     while !sm_a.sm_txfifo_is_full() {
         entries += 1;
@@ -1332,7 +1352,7 @@ pub fn fifo_join_test() -> bool {
     sm_a.sm_init(a_prog.entry());
 
     // ----------- now test with "margin" on the FIFOs. ----------
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     {
         assert!(sm_a.sm_get_tx_fifo_margin() == 0);
         sm_a.sm_set_tx_fifo_margin(1);
@@ -1341,7 +1361,8 @@ pub fn fifo_join_test() -> bool {
 
         // repeat, this time measuring the depth of the FIFO with margin
         let mut entries = 0;
-        // loop looks at the raw interrupt value, the asserts look at the feedback INTS value, so we have coverage of both views
+        // loop looks at the raw interrupt value, the asserts look at the feedback INTS value, so we have
+        // coverage of both views
         while (pio_ss.pio.rf(rp_pio::SFR_INTR_INTR_TXNFULL) & sm_a.sm_bitmask()) != 0 {
             entries += 1;
             sm_a.sm_txfifo_push_u32(0xF1F0_0000 + entries);
@@ -1373,7 +1394,7 @@ pub fn fifo_join_test() -> bool {
                 last_val = latest_val;
             }
         }
-        report_api(0xF1F0_2100 + if passing {1} else {0});
+        report_api(0xF1F0_2100 + if passing { 1 } else { 0 });
         sm_a.sm_set_tx_fifo_margin(0);
 
         // this should reset join TX and also halt the engine
@@ -1388,7 +1409,8 @@ pub fn fifo_join_test() -> bool {
 
         // repeat, this time measuring the depth of the FIFO with margin
         let mut entries = 0;
-        // loop looks at the raw interrupt value, the asserts look at the feedback INTS value, so we have coverage of both views
+        // loop looks at the raw interrupt value, the asserts look at the feedback INTS value, so we have
+        // coverage of both views
         while (sm_a.pio.rf(rp_pio::SFR_INTR_INTR_TXNFULL) & sm_a.sm_bitmask()) != 0 {
             entries += 1;
             sm_a.sm_txfifo_push_u32(0xF1F0_0000 + entries);
@@ -1424,11 +1446,12 @@ pub fn fifo_join_test() -> bool {
         }
     }
     sm_a.sm_irq0_source_enabled(PioIntSource::TxNotFull, false);
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     sm_a.sm_set_tx_fifo_margin(0);
     sm_a.sm_irq0_source_enabled(PioIntSource::RxNotEmpty, true);
 
     // a program for testing IN
+    #[rustfmt::skip]
     let b_code = pio_proc::pio_asm!(
         "   set x, 16",
         "loop: ",
@@ -1460,9 +1483,7 @@ pub fn fifo_join_test() -> bool {
         if val != expected {
             passing = false;
         }
-        report_api(
-            0xF1F0_0000 + val
-        );
+        report_api(0xF1F0_0000 + val);
         entries += 1;
         expected -= 1;
     }
@@ -1487,9 +1508,7 @@ pub fn fifo_join_test() -> bool {
         if val != (expected & io_mask) {
             passing = false;
         }
-        report_api(
-            0xF1F0_0000 + val
-        );
+        report_api(0xF1F0_0000 + val);
         entries += 1;
         expected -= 1;
     }
@@ -1497,7 +1516,7 @@ pub fn fifo_join_test() -> bool {
     report_api(0xF1F0_4000 + entries);
 
     // no join, but with margin
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     {
         sm_a.config_set_fifo_join(PioFifoJoin::None);
         sm_a.sm_init(b_prog.entry());
@@ -1519,14 +1538,12 @@ pub fn fifo_join_test() -> bool {
         sm_a.pio.wfo(rp_pio::SFR_CTRL_EN, 0);
         entries = 0;
         expected = 16;
-        while (pio_ss.pio.rf(rp_pio::SFR_INTR_INTR_RXNEMPTY) & sm_a.sm_bitmask()) != 0  {
+        while (pio_ss.pio.rf(rp_pio::SFR_INTR_INTR_RXNEMPTY) & sm_a.sm_bitmask()) != 0 {
             let val = sm_a.sm_rxfifo_pull_u32();
             if val != (expected & io_mask) {
                 passing = false;
             }
-            report_api(
-                0xF1F0_0000 + val
-            );
+            report_api(0xF1F0_0000 + val);
             entries += 1;
             expected -= 1;
         }
@@ -1558,14 +1575,12 @@ pub fn fifo_join_test() -> bool {
         sm_a.pio.wfo(rp_pio::SFR_CTRL_EN, 0);
         entries = 0;
         expected = 16;
-        while (pio_ss.pio.rf(rp_pio::SFR_INTR_INTR_RXNEMPTY) & sm_a.sm_bitmask()) != 0  {
+        while (pio_ss.pio.rf(rp_pio::SFR_INTR_INTR_RXNEMPTY) & sm_a.sm_bitmask()) != 0 {
             let val = sm_a.sm_rxfifo_pull_u32();
             if val != (expected & io_mask) {
                 passing = false;
             }
-            report_api(
-                0xF1F0_0000 + val
-            );
+            report_api(0xF1F0_0000 + val);
             entries += 1;
             expected -= 1;
         }
@@ -1579,7 +1594,7 @@ pub fn fifo_join_test() -> bool {
 
     // clean up
     sm_a.sm_irq0_source_enabled(PioIntSource::RxNotEmpty, false);
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     sm_a.sm_set_rx_fifo_margin(0);
     pio_ss.clear_instruction_memory();
 
@@ -1621,7 +1636,6 @@ pub fn fifo_join_test() -> bool {
 /// 18..20           SM1 sideset via pindirs
 /// 20..22           SM2 sideset
 /// 31               synchronizing GPIO input
-///
 
 pub fn register_tests() {
     const REGTEST_DIV: f32 = 2.5;
@@ -1636,6 +1650,7 @@ pub fn register_tests() {
     sm_a.pio.wo(rp_pio::SFR_FDEBUG, 0xFFFF_FFFF); // clear all the FIFO debug registers
 
     #[cfg(not(feature="rp2040"))]
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         ".side_set 2 opt",
         "   set x, 24",                 // 18
@@ -1649,6 +1664,7 @@ pub fn register_tests() {
         "   jmp x--, loop",             // 1F
     );
     #[cfg(feature="rp2040")]
+    #[rustfmt::skip]
     let a_code = pio_proc::pio_asm!(
         ".side_set 2 opt",
         "   set x, 24",                 // 18
@@ -1670,12 +1686,12 @@ pub fn register_tests() {
     sm_a.config_set_out_shift(false, true, 0);
     sm_a.config_set_sideset_pins(16);
     sm_a.config_set_clkdiv(REGTEST_DIV);
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     sm_a.config_set_set_pins(31, 1); // special case, A is used to set GPIO 31 to resume machines on wait
-    #[cfg(feature="rp2040")]
+    #[cfg(feature = "rp2040")]
     sm_a.config_set_set_pins(28, 1); // special case, A is used to set GPIO 31 to resume machines on wait
     sm_a.sm_init(a_prog.entry());
-
+    #[rustfmt::skip]
     let b_code = pio_proc::pio_asm!(
         ".side_set 2 opt pindirs",
         "   set y, 16 [1]",             // 10 start with some variable delay to prove syncing works
@@ -1693,9 +1709,9 @@ pub fn register_tests() {
     sm_b.sm_set_enabled(false);
     b_prog.setup_default_config(&mut sm_b);
     sm_b.config_set_out_pins(4, 4);
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     sm_b.config_set_in_pins(31); // maps pin 0 to GPIO 31
-    #[cfg(feature="rp2040")]
+    #[cfg(feature = "rp2040")]
     sm_b.config_set_in_pins(28); // maps pin 0 to GPIO 28
     sm_b.config_set_out_shift(false, true, 0);
     sm_b.config_set_sideset_pins(18);
@@ -1703,6 +1719,7 @@ pub fn register_tests() {
     sm_b.sm_init(b_prog.entry());
 
     #[cfg(not(feature="rp2040"))]
+    #[rustfmt::skip]
     let c_code = pio_proc::pio_asm!(
         ".side_set 2 opt",
         "   set x, 8 [2]",
@@ -1716,6 +1733,7 @@ pub fn register_tests() {
         "   jmp x--, loop",
     );
     #[cfg(feature="rp2040")]
+    #[rustfmt::skip]
     let c_code = pio_proc::pio_asm!(
         ".side_set 2 opt",
         "   set x, 8 [2]",
@@ -1728,7 +1746,7 @@ pub fn register_tests() {
         "   wait 0 gpio 28 side 1",     // wait until GPIO 28 is 0
         "   jmp x--, loop",
     );
-    let mut sm_c =  pio_ss.alloc_sm().unwrap();
+    let mut sm_c = pio_ss.alloc_sm().unwrap();
     let c_prog = LoadedProg::load(c_code.program, &mut pio_ss).unwrap();
     sm_c.sm_set_enabled(false);
     c_prog.setup_default_config(&mut sm_c);
@@ -1738,7 +1756,7 @@ pub fn register_tests() {
     sm_c.config_set_sideset_pins(20);
     sm_c.config_set_clkdiv(REGTEST_DIV);
     sm_c.sm_init(c_prog.entry());
-
+    #[rustfmt::skip]
     let d_code = pio_proc::pio_asm!(
         ".side_set 2 opt",
         "   set y, 2  [3]",
@@ -1751,14 +1769,14 @@ pub fn register_tests() {
         "   wait 0 pin 7   side 0",     // wait until the mapped input pin is 0. Map this to GPIO 31.
         "   jmp y--, loop",
     );
-    let mut sm_d =  pio_ss.alloc_sm().unwrap();
+    let mut sm_d = pio_ss.alloc_sm().unwrap();
     let d_prog = LoadedProg::load(d_code.program, &mut pio_ss).unwrap();
     sm_d.sm_set_enabled(false);
     d_prog.setup_default_config(&mut sm_d);
     sm_d.config_set_out_pins(12, 4);
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     sm_d.config_set_in_pins(24); // maps pin 7 to GPIO 31
-    #[cfg(feature="rp2040")]
+    #[cfg(feature = "rp2040")]
     sm_d.config_set_in_pins(21); // maps pin 7 to GPIO 28
     sm_d.config_set_out_shift(false, true, 0);
     sm_d.config_set_sideset_pins(14); // deliberate conflict with out_pins
@@ -1778,57 +1796,23 @@ pub fn register_tests() {
 
     // dump the loaded instructions. Tests all the INSTR registers for readback.
     // must be re-generated every time programs are updated
-    #[cfg(not(feature="rp2040"))]
+    #[cfg(not(feature = "rp2040"))]
     let expected_instrs: [u16; 32] = [
-        0xe342,
-        0x5e40,
-        0x8020,
-        0xd801,
-        0x7400,
-        0x30a7,
-        0x3027,
-        0x0081,
-        0xe228,
-        0x5d20,
-        0x8220,
-        0x38c1,
-        0x7400,
-        0x309f,
-        0x341f,
-        0x0049,
-        0xe150,
-        0x5d40,
-        0x8120,
-        0x38c1,
-        0x7400,
-        0x30a0,
-        0x3420,
-        0x0091,
-        0xe038,
-        0x5e20,
-        0x8120,
-        0x38c1,
-        0x7400,
-        0x309f,
-        0x341f,
-        0x0059,
+        0xe342, 0x5e40, 0x8020, 0xd801, 0x7400, 0x30a7, 0x3027, 0x0081, 0xe228, 0x5d20, 0x8220, 0x38c1,
+        0x7400, 0x309f, 0x341f, 0x0049, 0xe150, 0x5d40, 0x8120, 0x38c1, 0x7400, 0x30a0, 0x3420, 0x0091,
+        0xe038, 0x5e20, 0x8120, 0x38c1, 0x7400, 0x309f, 0x341f, 0x0059,
     ];
     for i in 0..RP2040_MAX_PROGRAM_SIZE {
-        let rbk = unsafe{sm_a.pio.base().add(rp_pio::SFR_INSTR_MEM0.offset() + i).read_volatile()};
+        let rbk = unsafe { sm_a.pio.base().add(rp_pio::SFR_INSTR_MEM0.offset() + i).read_volatile() };
         report_api(rbk + ((i as u32) << 24));
-        #[cfg(not(feature="rp2040"))]
+        #[cfg(not(feature = "rp2040"))]
         assert!(rbk as u16 == expected_instrs[i]); // on RP2040 you can't read back the instructions
     }
     report_api(0x1336_0002);
 
     // load the TX fifos with output data we expect to see on the GPIO pins
     let tx_vals: [[u32; 4]; 4] =
-    [
-        [0x3, 0xC, 0x6, 0x0],
-        [0xA, 0x5, 0x0, 0xF],
-        [0xC, 0x0, 0x1, 0x2],
-        [0x3, 0x2, 0x1, 0x0],
-    ];
+        [[0x3, 0xC, 0x6, 0x0], [0xA, 0x5, 0x0, 0xF], [0xC, 0x0, 0x1, 0x2], [0x3, 0x2, 0x1, 0x0]];
     // load the FIFO values, and check that the levels & flags change as we expected.
     let mut sm_array = [sm_a, sm_b, sm_c, sm_d];
     for (sm_index, sm) in sm_array.iter_mut().enumerate() {
@@ -1872,10 +1856,11 @@ pub fn register_tests() {
     let clear_bit31_oe = pio_proc::pio_asm!("set pindirs, 0").program.code[0];
     // prepare an instruction that stalls
     let p_wait = pio_proc::pio_asm!("wait 1 irq 0").program.code[0];
-    // prepare an instruction that can set & clear the *pin*, not just the pindir. For RP2040 HW test, because we can't hack the OE to IN as a loopback like we can in a verilog model.
-    #[cfg(feature="rp2040")]
+    // prepare an instruction that can set & clear the *pin*, not just the pindir. For RP2040 HW test, because
+    // we can't hack the OE to IN as a loopback like we can in a verilog model.
+    #[cfg(feature = "rp2040")]
     let pinset = pio_proc::pio_asm!("set pins, 1").program.code[0];
-    #[cfg(feature="rp2040")]
+    #[cfg(feature = "rp2040")]
     let pinclear = pio_proc::pio_asm!("set pins, 0").program.code[0];
 
     // check that the RX FIFOs have the correct levels
@@ -1889,7 +1874,7 @@ pub fn register_tests() {
     sm_array[0].pio.wo(
         rp_pio::SFR_CTRL,
         sm_array[0].pio.ms(rp_pio::SFR_CTRL_CLKDIV_RESTART, 0xF)
-        | sm_array[0].pio.ms(rp_pio::SFR_CTRL_EN, 0xF)
+            | sm_array[0].pio.ms(rp_pio::SFR_CTRL_EN, 0xF),
     ); // sync the clocks; the clock free-runs after the div is setup, and the divs are set up at arbitrary points in time
     while (sm_array[0].pio.r(rp_pio::SFR_CTRL) & !0xF) != 0 {
         // wait for the bits to self-reset to acknowledge that the command has executed
@@ -1909,9 +1894,10 @@ pub fn register_tests() {
         for (index, vals) in tx_vals.iter().enumerate() {
             expected |= (vals[waiting_for] & 0xF) << (index as u32 * 4);
         }
-        // compensate for sideset override on SM3 (doesn't apply, because the sideset is out of phase with out)
-        // expected &= 0x3FFF;
-        // expected |= 0x4000; // "side 1" should be executed on SM3 on bits 14-16, overriding any TX fifo value
+        // compensate for sideset override on SM3 (doesn't apply, because the sideset is out of phase with
+        // out) expected &= 0x3FFF;
+        // expected |= 0x4000; // "side 1" should be executed on SM3 on bits 14-16, overriding any TX fifo
+        // value
 
         let outputs = sm_array[0].pio.r(rp_pio::SFR_DBG_PADOUT);
         report_api(0x1336_0000 | (outputs & 0xFFFF));
@@ -1938,16 +1924,24 @@ pub fn register_tests() {
 
             // read the address of the PC, and confirm the instruction is correct
             report_api(0x1336_0008);
-            #[cfg(not(feature="rp2040"))] // can't read instructions on actual rp2040
+            #[cfg(not(feature = "rp2040"))] // can't read instructions on actual rp2040
             {
-                assert!(expected_instrs[sm_array[0].pio.rf(rp_pio::SFR_SM0_ADDR_PC) as usize] ==
-                        sm_array[0].pio.rf(rp_pio::SFR_SM0_INSTR_IMM_INSTR) as u16);
-                assert!(expected_instrs[sm_array[1].pio.rf(rp_pio::SFR_SM1_ADDR_PC) as usize] ==
-                        sm_array[1].pio.rf(rp_pio::SFR_SM1_INSTR_IMM_INSTR) as u16);
-                assert!(expected_instrs[sm_array[2].pio.rf(rp_pio::SFR_SM2_ADDR_PC) as usize] ==
-                        sm_array[2].pio.rf(rp_pio::SFR_SM2_INSTR_IMM_INSTR) as u16);
-                assert!(expected_instrs[sm_array[3].pio.rf(rp_pio::SFR_SM3_ADDR_PC) as usize] ==
-                        sm_array[3].pio.rf(rp_pio::SFR_SM3_INSTR_IMM_INSTR) as u16);
+                assert!(
+                    expected_instrs[sm_array[0].pio.rf(rp_pio::SFR_SM0_ADDR_PC) as usize]
+                        == sm_array[0].pio.rf(rp_pio::SFR_SM0_INSTR_IMM_INSTR) as u16
+                );
+                assert!(
+                    expected_instrs[sm_array[1].pio.rf(rp_pio::SFR_SM1_ADDR_PC) as usize]
+                        == sm_array[1].pio.rf(rp_pio::SFR_SM1_INSTR_IMM_INSTR) as u16
+                );
+                assert!(
+                    expected_instrs[sm_array[2].pio.rf(rp_pio::SFR_SM2_ADDR_PC) as usize]
+                        == sm_array[2].pio.rf(rp_pio::SFR_SM2_INSTR_IMM_INSTR) as u16
+                );
+                assert!(
+                    expected_instrs[sm_array[3].pio.rf(rp_pio::SFR_SM3_ADDR_PC) as usize]
+                        == sm_array[3].pio.rf(rp_pio::SFR_SM3_INSTR_IMM_INSTR) as u16
+                );
             }
 
             // execute the "program" that flips the OE bit, which should get us to the next iteration
@@ -1958,12 +1952,13 @@ pub fn register_tests() {
             report_api(0x1336_000A);
             assert!(sm_array[0].pio.rf(rp_pio::SFR_SM0_EXECCTRL_EXEC_STALLED_RO0) == 1);
 
-            // now exec the instruction that should clear the wait condition on an input pin by flipping bit 31 via a side-set operation
-            // this requires the testbench to reflect that bit back correctly!
-            #[cfg(feature="rp2040")]
+            // now exec the instruction that should clear the wait condition on an input pin by flipping bit
+            // 31 via a side-set operation this requires the testbench to reflect that bit back
+            // correctly!
+            #[cfg(feature = "rp2040")]
             sm_array[0].sm_exec(pinset);
             sm_array[0].sm_exec(set_bit31_oe);
-            #[cfg(feature="rp2040")]
+            #[cfg(feature = "rp2040")]
             sm_array[0].sm_exec(pinclear);
             sm_array[0].sm_exec(clear_bit31_oe);
             delay(4); // give some time for the state machines to run to the stall point (necessary for fast pclk case)
@@ -1977,10 +1972,9 @@ pub fn register_tests() {
     report_api(0x1336_000C);
     sm_array[0].pio.wfo(rp_pio::SFR_CTRL_EN, 0);
 
-    // since the program ran one extra iteration out the bottom of the loop, we should have overflowed the RX fifo, etc.
-    report_api(
-        sm_array[0].pio.r(rp_pio::SFR_FDEBUG)
-    );
+    // since the program ran one extra iteration out the bottom of the loop, we should have overflowed the RX
+    // fifo, etc.
+    report_api(sm_array[0].pio.r(rp_pio::SFR_FDEBUG));
     assert!(sm_array[0].pio.r(rp_pio::SFR_FDEBUG) == 0xF); // stalls should be asserted
     sm_array[0].pio.wfo(rp_pio::SFR_FDEBUG_RXSTALL, 0xF); // clear the stall
     assert!(sm_array[0].pio.r(rp_pio::SFR_FDEBUG) == 0); // confirm it is cleared

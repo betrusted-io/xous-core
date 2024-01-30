@@ -1,10 +1,10 @@
-use xous::{Error, MemoryMessage, Result, CID};
-
 use core::pin::Pin;
+
 use rkyv::archived_value;
 use rkyv::ser::Serializer;
 use rkyv::ArchiveUnsized;
 use rkyv::SerializeUnsized;
+use xous::{Error, MemoryMessage, Result, CID};
 
 #[derive(Copy, Clone)]
 pub struct String<const N: usize> {
@@ -13,12 +13,7 @@ pub struct String<const N: usize> {
 }
 
 impl<const N: usize> String<N> {
-    pub fn new() -> String<N> {
-        String {
-            bytes: [0; N],
-            len: 0,
-        }
-    }
+    pub fn new() -> String<N> { String { bytes: [0; N], len: 0 } }
 
     // use a volatile write to ensure a clear operation is not optimized out
     // for ensuring that a string is cleared, e.g. at the exit of a function
@@ -30,9 +25,9 @@ impl<const N: usize> String<N> {
             }
         }
         self.len = 0; // also set my length to 0
-                      // Ensure the compiler doesn't re-order the clear.
-                      // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
-                      // *reads*, but this method only *writes* to the locations.
+        // Ensure the compiler doesn't re-order the clear.
+        // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
+        // *reads*, but this method only *writes* to the locations.
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
 
@@ -58,26 +53,18 @@ impl<const N: usize> String<N> {
         s
     }
 
-    pub fn as_bytes(&self) -> [u8; N] {
-        self.bytes
-    }
+    pub fn as_bytes(&self) -> [u8; N] { self.bytes }
 
     pub fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
         core::str::from_utf8(&self.bytes[0..self.len as usize])
     }
 
-    pub fn len(&self) -> usize {
-        self.len as usize
-    }
+    pub fn len(&self) -> usize { self.len as usize }
 
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
+    pub fn is_empty(&self) -> bool { self.len == 0 }
 
     /// Convert a `MemoryMessage` into a `String`
-    pub fn from_message(
-        message: &MemoryMessage,
-    ) -> core::result::Result<String<N>, core::str::Utf8Error> {
+    pub fn from_message(message: &MemoryMessage) -> core::result::Result<String<N>, core::str::Utf8Error> {
         let buf = unsafe { crate::Buffer::from_memory_message(message) };
         let bytes = Pin::new(buf.as_ref());
         let value = unsafe { archived_value::<String<N>>(&bytes, message.id as usize) };
@@ -98,9 +85,7 @@ impl<const N: usize> String<N> {
         // id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
         let mut writer = rkyv::ser::serializers::BufferSerializer::new(crate::Buffer::new(N));
-        let pos = writer
-            .serialize_value(self)
-            .expect("xous::String -- couldn't archive self");
+        let pos = writer.serialize_value(self).expect("xous::String -- couldn't archive self");
         let xous_buffer = writer.into_inner();
 
         // note that "id" is actually used as the position into the rkyv buffer
@@ -114,9 +99,7 @@ impl<const N: usize> String<N> {
         // id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
         let mut writer = rkyv::ser::serializers::BufferSerializer::new(crate::Buffer::new(N));
-        let pos = writer
-            .serialize_value(&self)
-            .expect("xous::String -- couldn't archive self");
+        let pos = writer.serialize_value(&self).expect("xous::String -- couldn't archive self");
         let xous_buffer = writer.into_inner();
 
         xous_buffer.send(connection, pos as u32)
@@ -128,9 +111,7 @@ impl<const N: usize> String<N> {
         self.bytes = [0; N];
     }
 
-    pub fn to_str(&self) -> &str {
-        unsafe { core::str::from_utf8_unchecked(&self.bytes[0..self.len()]) }
-    }
+    pub fn to_str(&self) -> &str { unsafe { core::str::from_utf8_unchecked(&self.bytes[0..self.len()]) } }
 
     /// awful, O(N) implementation because we have to iterate through the entire string
     /// and decode variable-length utf8 characters, until we can't.
@@ -220,15 +201,11 @@ impl<const N: usize> String<N> {
 }
 
 impl<const N: usize> Default for String<N> {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl<const N: usize> core::fmt::Display for String<N> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.to_str())
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, "{}", self.to_str()) }
 }
 
 impl<const N: usize> core::fmt::Write for String<N> {
@@ -244,21 +221,16 @@ impl<const N: usize> core::fmt::Write for String<N> {
 }
 
 impl<const N: usize> core::fmt::Debug for String<N> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.to_str())
-    }
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, "{}", self.to_str()) }
 }
 
 impl<const N: usize> core::convert::AsRef<str> for String<N> {
-    fn as_ref(&self) -> &str {
-        self.to_str()
-    }
+    fn as_ref(&self) -> &str { self.to_str() }
 }
 
 impl<const N: usize> PartialEq for String<N> {
     fn eq(&self, other: &Self) -> bool {
-        self.bytes[..self.len as usize] == other.bytes[..other.len as usize]
-            && self.len == other.len
+        self.bytes[..self.len as usize] == other.bytes[..other.len as usize] && self.len == other.len
     }
 }
 

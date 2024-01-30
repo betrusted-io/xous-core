@@ -2,12 +2,14 @@
 // SPDX-FileCopyrightText: 2023 Foundation Devices, Inc <hello@foundationdevices.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::consts::{CONTEXT_OFFSET, EXCEPTION_STACK_TOP, FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, KERNEL_LOAD_OFFSET, PAGE_TABLE_ROOT_OFFSET, USER_AREA_END, USER_STACK_TOP, KERNEL_STACK_PAGE_COUNT, KERNEL_STACK_TOP, IRQ_STACK_PAGE_COUNT, IRQ_STACK_TOP};
-use crate::{
-    println, BootConfig, ProgramDescription,
-    XousPid, PAGE_SIZE, STACK_PAGE_COUNT, VDBG,
-};
 use armv7::structures::paging::TranslationTableMemory;
+
+use crate::consts::{
+    CONTEXT_OFFSET, EXCEPTION_STACK_TOP, FLG_R, FLG_U, FLG_VALID, FLG_W, FLG_X, IRQ_STACK_PAGE_COUNT,
+    IRQ_STACK_TOP, KERNEL_LOAD_OFFSET, KERNEL_STACK_PAGE_COUNT, KERNEL_STACK_TOP, PAGE_TABLE_ROOT_OFFSET,
+    USER_AREA_END, USER_STACK_TOP,
+};
+use crate::{println, BootConfig, ProgramDescription, XousPid, PAGE_SIZE, STACK_PAGE_COUNT, VDBG};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -32,8 +34,12 @@ impl ProgramDescription {
     /// either on SPI flash or in RAM.  The `load_offset` argument
     /// that is passed in should be used instead of `self.load_offset`
     /// for this reason.
-    pub fn load(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid)
-                -> (usize, usize, usize, usize) {
+    pub fn load(
+        &self,
+        allocator: &mut BootConfig,
+        load_offset: usize,
+        pid: XousPid,
+    ) -> (usize, usize, usize, usize) {
         assert_ne!(pid, 0, "PID must not be 0");
 
         println!("Mapping PID {} into offset {:08x}", pid, load_offset);
@@ -49,8 +55,7 @@ impl ProgramDescription {
             assert_eq!(self.text_offset as usize, KERNEL_LOAD_OFFSET);
             assert!(((self.text_offset + self.text_size) as usize) < EXCEPTION_STACK_TOP);
             assert!(
-                ((self.data_offset + self.data_size + self.bss_size) as usize)
-                    < EXCEPTION_STACK_TOP - 16
+                ((self.data_offset + self.data_size + self.bss_size) as usize) < EXCEPTION_STACK_TOP - 16
             );
             assert!(self.data_offset as usize >= KERNEL_LOAD_OFFSET);
         } else {
@@ -81,8 +86,8 @@ impl ProgramDescription {
                 tt_address + offset,
                 PAGE_TABLE_ROOT_OFFSET + offset,
                 FLG_R | FLG_W | FLG_VALID,
+                pid as XousPid,
             );
-            allocator.change_owner(pid as XousPid, tt_address);
         }
 
         // Allocate context for this process
@@ -96,15 +101,11 @@ impl ProgramDescription {
             thread_address,
             CONTEXT_OFFSET,
             FLG_R | FLG_W | FLG_VALID,
+            pid as XousPid,
         );
-        allocator.change_owner(pid as XousPid, thread_address);
 
         // Allocate stack pages.
-        let total_stack_pages = if is_kernel {
-            KERNEL_STACK_PAGE_COUNT
-        } else {
-            STACK_PAGE_COUNT
-        };
+        let total_stack_pages = if is_kernel { KERNEL_STACK_PAGE_COUNT } else { STACK_PAGE_COUNT };
 
         if VDBG {
             println!("Mapping {} stack pages for PID {}", total_stack_pages, pid);
@@ -121,8 +122,8 @@ impl ProgramDescription {
                     sp_page,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             } else {
                 // Reserve every page other than the 1st stack page
                 allocator.map_page(
@@ -130,6 +131,7 @@ impl ProgramDescription {
                     0,
                     (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults & !FLG_VALID,
+                    pid as XousPid,
                 );
             }
 
@@ -146,8 +148,8 @@ impl ProgramDescription {
                     sp_page,
                     (EXCEPTION_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             }
         }
 
@@ -167,8 +169,8 @@ impl ProgramDescription {
                     sp_page,
                     (IRQ_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
+                    pid as XousPid,
                 );
-                allocator.change_owner(pid as XousPid, sp_page);
             }
         }
 
@@ -182,8 +184,7 @@ impl ProgramDescription {
         // Either this is on SPI flash at an aligned address, or it
         // has been copied into RAM already.  This is why we ignore `self.load_offset`
         // and use the `load_offset` parameter instead.
-        let rounded_data_bss =
-            ((self.data_size + self.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let rounded_data_bss = ((self.data_size + self.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
 
         // let load_size_rounded = (self.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         let text_phys_offset = load_offset + rounded_data_bss;
@@ -200,8 +201,8 @@ impl ProgramDescription {
                 load_offset + offset + rounded_data_bss,
                 self.text_offset as usize + offset,
                 flag_defaults | FLG_X | FLG_VALID,
+                pid as XousPid,
             );
-            allocator.change_owner(pid as XousPid, load_offset + offset + rounded_data_bss);
         }
 
         // Map the process data section into RAM.

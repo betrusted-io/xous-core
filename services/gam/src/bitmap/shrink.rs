@@ -19,7 +19,7 @@ pub struct Shrink<I> {
     in_y: usize,
     /// the current x coord of the outbound image
     out_x: usize,
-    /// the current y coord of the outbound image    
+    /// the current y coord of the outbound image
     out_y: usize,
     /// a buffer the width of the outbound image to stove horizontal averages
     buf: Vec<u16>,
@@ -33,11 +33,7 @@ impl<I: Iterator<Item = u8>> Shrink<I> {
     fn new(iter: I, in_width: usize, out_width: usize) -> Shrink<I> {
         let scale = in_width as f32 / out_width as f32;
         // set up a buffer to average the surrounding pixels
-        let buf: Vec<u16> = if scale <= 1.0 {
-            Vec::new()
-        } else {
-            vec![0u16; out_width]
-        };
+        let buf: Vec<u16> = if scale <= 1.0 { Vec::new() } else { vec![0u16; out_width] };
 
         // Pretabulate horizontal pixel positions
         let mut in_x_cap: Vec<u16> = Vec::with_capacity(out_width);
@@ -47,24 +43,11 @@ impl<I: Iterator<Item = u8>> Shrink<I> {
             in_x_cap.push((in_x).min(max_width));
         }
         let out_x_last = out_width;
-        Self {
-            iter,
-            out_width,
-            scale,
-            in_x_cap,
-            in_y: 0,
-            out_x: 0,
-            out_y: 1,
-            buf,
-            y_div: 0,
-            out_x_last,
-        }
+        Self { iter, out_width, scale, in_x_cap, in_y: 0, out_x: 0, out_y: 1, buf, y_div: 0, out_x_last }
     }
 
     #[allow(dead_code)]
-    fn next_xy(&self) -> (usize, usize) {
-        (self.out_x, self.out_y)
-    }
+    fn next_xy(&self) -> (usize, usize) { (self.out_x, self.out_y) }
 }
 /// Adaptor Iterator to shrink an image dimensions from in_width to out_width
 impl<I: Iterator<Item = u8>> Iterator for Shrink<I> {

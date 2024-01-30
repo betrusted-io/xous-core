@@ -12,13 +12,7 @@ struct ConnectRequest {
 }
 
 impl Default for ConnectRequest {
-    fn default() -> Self {
-        ConnectRequest {
-            name: [0u8; 64],
-            len: 0,
-            _padding: [0u8; 4096 - 4 - 64],
-        }
-    }
+    fn default() -> Self { ConnectRequest { name: [0u8; 64], len: 0, _padding: [0u8; 4096 - 4 - 64] } }
 }
 
 impl ConnectRequest {
@@ -45,11 +39,7 @@ impl ConnectRequest {
             return None;
         }
 
-        if cr.len == 0 {
-            None
-        } else {
-            Some(cr)
-        }
+        if cr.len == 0 { None } else { Some(cr) }
     }
 }
 

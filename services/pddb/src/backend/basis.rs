@@ -1,43 +1,60 @@
+use core::mem::size_of;
+use core::num::NonZeroU32;
+use core::ops::{Deref, DerefMut};
+use std::cmp::Ordering;
+use std::cmp::Reverse;
+use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
+use std::convert::TryInto;
+use std::io::{Error, ErrorKind, Result};
+use std::iter::IntoIterator;
+
+use aes::cipher::generic_array::GenericArray;
+use aes::Aes256;
+use aes_gcm_siv::{aead::KeyInit, Aes256GcmSiv};
+
+use super::*;
 /// # The Organization of Basis Data
 ///
 /// ## Overview
 /// In basis space, the BasisRoot is located at VPAGE #1 (VPAGE #0 is always invalid).
-/// A VPAGE is 0xFE0 (4,064) bytes long, which is equal to a PAGE of 4k minus 32 bytes of encryption+journal
-/// overhead.
+/// A VPAGE is 0xFE0 (4,064) bytes long, which is equal to a PAGE of 4k minus 32 bytes of
+/// encryption+journal overhead.
 ///
 /// *NB: The factors of 4,064 are: 1, 2, 4, 8, 16, 32, 127, 254, 508, 1016, 2032, 4064*
 ///
 /// AAD associated with the BasisRoot consist of a bytewise concatenation of:
 ///   - Basis name
 ///   - version number (should match version inside; complicates downgrade attacks)
-///   - FPGA's silicon DNA number (makes a naive raw-copy of the data to another device unusable;
-///     but of course, the DNA ID can be forged minor efforts)
+///   - FPGA's silicon DNA number (makes a naive raw-copy of the data to another device unusable; but of
+///     course, the DNA ID can be forged minor efforts)
 ///
 /// Usage Assumptions:
 ///   - Most mutability happens on the data keys themselves (keys are read/write/modify routinely).
 ///   - Dictionary modifications (key addition or removal) are about 20x less frequent than key mods.
-///   - Basis modifications (creation/removal of dictionaries) is about 10x less frequent than dictionary mods.
-///   - According to https://www.pdl.cmu.edu/PDL-FTP/HECStorage/Yifan_Final.pdf, 0.01% of files (1 in 10,000)
-///     require a name over 100 bytes long; 0.1% require longer than 64 bytes. There longest filename identified
-///     was 143 bytes long. Study surveys ~14M files on the LANL network.
+///   - Basis modifications (creation/removal of dictionaries) is about 10x less frequent than dictionary
+///     mods.
+///   - According to https://www.pdl.cmu.edu/PDL-FTP/HECStorage/Yifan_Final.pdf, 0.01% of files (1 in
+///     10,000) require a name over 100 bytes long; 0.1% require longer than 64 bytes. There longest
+///     filename identified was 143 bytes long. Study surveys ~14M files on the LANL network.
 ///   - Same study says 99.9% of directories have under 1k files, 99.999% under 10k
 ///
 /// The root basis structure takes up the first valid VPAGE in the virtual memory space.
 /// It contains a count of the number of valid dictionaries in the Basis. Dictionaries are found at
-/// fixed offsets starting at 0xFE_0000 and repeating every 0xFE_0000 intervals, with up to 16383 dictionaries
-/// allowed. A naive linear search is used to scan for dictionaries, starting at the lowest address,
-/// scanning every 0xFE_0000, until the number of valid dictionaries have been found that matches the valid
-/// dictionary count prescribed in the Basis root. A dictionary can be effectively deleted by just marking its
-/// descriptor as invalid.
+/// fixed offsets starting at 0xFE_0000 and repeating every 0xFE_0000 intervals, with up to 16383
+/// dictionaries allowed. A naive linear search is used to scan for dictionaries, starting at the lowest
+/// address, scanning every 0xFE_0000, until the number of valid dictionaries have been found that
+/// matches the valid dictionary count prescribed in the Basis root. A dictionary can be effectively
+/// deleted by just marking its descriptor as invalid.
 ///
 /// A stride of 0xFE_0000 means that dictionary descriptors can be up to 4096 VPAGEs long. A dictionary
 /// descriptor consists of a `DictDescriptor` header, some bookkeeping data, plus a count of the number
-/// of keys in the dictionary. Following the header is a list of key descriptors. Similar to the DictDescriptors,
-/// the key descriptors are stored at a stride of 127 (or 32 per VPAGE); they can be deleted by being marked
-/// as invalid, and a linear scan is used to identify all the entries. A KeyDescriptor contains the name
-/// of the key, flags, its age, and pointers to the key data in virtual memory space + its length.
-/// This leads to a name length restriction of roughly 115 characters for keys and dictionaries, which is
-/// about half of what most filesystems allow, but accommodates roughly 99.99% of the use cases.
+/// of keys in the dictionary. Following the header is a list of key descriptors. Similar to the
+/// DictDescriptors, the key descriptors are stored at a stride of 127 (or 32 per VPAGE); they can be
+/// deleted by being marked as invalid, and a linear scan is used to identify all the entries. A
+/// KeyDescriptor contains the name of the key, flags, its age, and pointers to the key data in virtual
+/// memory space + its length. This leads to a name length restriction of roughly 115 characters for keys
+/// and dictionaries, which is about half of what most filesystems allow, but accommodates roughly 99.99%
+/// of the use cases.
 ///
 /// Thus adding a new dictionary always consumes at least one 4k page, but you can have up to 15 keys
 /// in that dictionary with no extra bookkeeping cost once the dictionary is added.
@@ -83,8 +100,8 @@
 /// Large keys are the simplest - each key starts at a VPAGE-aligned address, and allocates
 /// up from there. Any unused amount is wasted, but with a ~32k threshold you'll have no worse
 /// than 12.5% unused space, probably closer to ~7%-ish if all your data hovered around the threshold.
-/// The allocation is a simple pointer that just keeps going up. De-allocated space is never defragmented,
-/// and we just rely on the space being "huge" to save us.
+/// The allocation is a simple pointer that just keeps going up. De-allocated space is never
+/// defragmented, and we just rely on the space being "huge" to save us.
 ///
 /// Small keys are kept in VPAGE-sized pools of data, and compacted together in RAM. The initial, naive
 /// implementation simply keeps all small keys in a HashMap in RAM, and when it comes time to sync them
@@ -94,33 +111,35 @@
 ///
 /// ## The Alignment and Serialization Chronicles
 ///
-/// We're using Repr(C) and alignment to 64-bits to create a consistent "FFI" layout; we use an unsafe cast
-/// to [u8] as our method to serialize the structure, which means we could be subject to breakage if the Rust
-/// compiler decides to change its Repr(C) FFI (it's not guaranteed, but I think at this point in the lifecycle
-/// with simple primitive types it's hard to see it changing). This puts some requirements on the ordering of
-/// fields in the struct below. Note that the serialization is all double-checked by the pddbdbg.py script.
+/// We're using Repr(C) and alignment to 64-bits to create a consistent "FFI" layout; we use an unsafe
+/// cast to [u8] as our method to serialize the structure, which means we could be subject to breakage if
+/// the Rust compiler decides to change its Repr(C) FFI (it's not guaranteed, but I think at this point
+/// in the lifecycle with simple primitive types it's hard to see it changing). This puts some
+/// requirements on the ordering of fields in the struct below. Note that the serialization is all
+/// double-checked by the pddbdbg.py script.
 ///
-/// In coming to the choice to use Repr(C), I experimented with rkyv and bincode. bincode relies on the serde
-/// crate, which, as of Nov 2021, has troubles taking in const generics, and thus barfs on our fixed-sized
-/// string allocations that are longer than 32 bytes. Version 2.0 of bincode /might/ do this better, but as
-/// of the design of this crate, it's in "alpha" with no official release to crates.io, so we're avoiding it;
-/// but for sure 1.3.3 of bincode (latest stable as of the design) cannot do the job, and there's a few other
-/// users reporting the issue so I'm pretty sure it's not "user error" on my part.
+/// In coming to the choice to use Repr(C), I experimented with rkyv and bincode. bincode relies on the
+/// serde crate, which, as of Nov 2021, has troubles taking in const generics, and thus barfs on our
+/// fixed-sized string allocations that are longer than 32 bytes. Version 2.0 of bincode /might/ do this
+/// better, but as of the design of this crate, it's in "alpha" with no official release to crates.io, so
+/// we're avoiding it; but for sure 1.3.3 of bincode (latest stable as of the design) cannot do the job,
+/// and there's a few other users reporting the issue so I'm pretty sure it's not "user error" on my
+/// part.
 ///
-/// rkyv handles const generics well, and it perhaps very reasonably shuffles around the order of structures
-/// in the struct to improve the packing efficiency. However, this has the property that rkyv ser will never break
-/// rkyv deser, but unfortunately you can't interoperate with anything that isn't rkyv (e.g., describing the data
-/// layout to someone who wants to do a C implementation). There's also a risk that if we are forced to
-/// upgrade rkyv later on we might break compatibility with what's stored on disk, although I'm pretty sure the
-/// maintainer of rkyv tries to avoid that as much as possible.
+/// rkyv handles const generics well, and it perhaps very reasonably shuffles around the order of
+/// structures in the struct to improve the packing efficiency. However, this has the property that rkyv
+/// ser will never break rkyv deser, but unfortunately you can't interoperate with anything that isn't
+/// rkyv (e.g., describing the data layout to someone who wants to do a C implementation). There's also a
+/// risk that if we are forced to upgrade rkyv later on we might break compatibility with what's stored
+/// on disk, although I'm pretty sure the maintainer of rkyv tries to avoid that as much as possible.
 ///
 /// Repr(C), while also not guaranteed to be stable, has pressure from the CFFI users at least to keep
-/// things as stable as possible, and it is by definition inter-operable with C. Repr(C) is native to Rust,
-/// with no additional dependencies to pull in, which helps reduce the code base size overall.
-/// So, we're using a repr(C) with an align(8), and then carefully checking our structure organization and
-/// elements to keep things "in spec" with what C can natively understand, in an effort to create a disk
-/// storage structure that can persist through future versions of Rust and also other implementations in other
-/// languages.
+/// things as stable as possible, and it is by definition inter-operable with C. Repr(C) is native to
+/// Rust, with no additional dependencies to pull in, which helps reduce the code base size overall.
+/// So, we're using a repr(C) with an align(8), and then carefully checking our structure organization
+/// and elements to keep things "in spec" with what C can natively understand, in an effort to create a
+/// disk storage structure that can persist through future versions of Rust and also other
+/// implementations in other languages.
 ///
 /// ## Known Repr(C) footguns:
 ///  - When you start laying in 64-bit types, stuff has to be 64-bit aligned, or else you'll start to get
@@ -129,25 +148,7 @@
 ///    wrapped, we're using a NonZeroU64 format. The compiler knows how to turn that into a 64-bit C-friendly
 ///    structure and serialize/deserialize that into the correct Rust structure. See
 ///    https://doc.rust-lang.org/nomicon/other-reprs.html for a citation on that.
-
 use crate::api::*;
-use super::*;
-
-use core::ops::{Deref, DerefMut};
-use core::mem::size_of;
-use std::convert::TryInto;
-use aes_gcm_siv::{
-    aead::KeyInit,
-    Aes256GcmSiv,
-};
-use aes::Aes256;
-use aes::cipher::generic_array::GenericArray;
-use std::iter::IntoIterator;
-use std::collections::{BinaryHeap, HashMap, HashSet, BTreeSet};
-use std::io::{Result, Error, ErrorKind};
-use std::cmp::Reverse;
-use std::cmp::Ordering;
-use core::num::NonZeroU32;
 
 pub(crate) const SMALL_POOL_START: u64 = 0x0000_003F_8000_0000;
 pub(crate) const SMALL_POOL_END: u64 = 0x0000_007E_FF02_0000;
@@ -213,12 +214,13 @@ pub(crate) struct BasisRoot {
     pub(crate) age: u32,
     /// number of dictionaries.
     pub(crate) num_dictionaries: u32,
-    /* at this point, we are aligned to a 64-bit boundary. All data must stay aligned to this boundary from here out! */
+    /* at this point, we are aligned to a 64-bit boundary. All data must stay aligned to this boundary
+     * from here out! */
     /// 64-byte name; aligns to 64-bits
     pub(crate) name: BasisRootName,
 }
 impl BasisRoot {
-    pub(crate) fn aad(&self, dna: u64) -> Vec::<u8> {
+    pub(crate) fn aad(&self, dna: u64) -> Vec<u8> {
         let mut aad = Vec::<u8>::new();
         aad.extend_from_slice(&self.name.data[..self.name.len as usize]);
         aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
@@ -228,30 +230,37 @@ impl BasisRoot {
 }
 impl Deref for BasisRoot {
     type Target = [u8];
+
     fn deref(&self) -> &[u8] {
         unsafe {
-            core::slice::from_raw_parts(self as *const BasisRoot as *const u8, core::mem::size_of::<BasisRoot>())
-                as &[u8]
+            core::slice::from_raw_parts(
+                self as *const BasisRoot as *const u8,
+                core::mem::size_of::<BasisRoot>(),
+            ) as &[u8]
         }
     }
 }
 impl DerefMut for BasisRoot {
     fn deref_mut(&mut self) -> &mut [u8] {
         unsafe {
-            core::slice::from_raw_parts_mut(self as *mut BasisRoot as *mut u8, core::mem::size_of::<BasisRoot>())
-                as &mut [u8]
+            core::slice::from_raw_parts_mut(
+                self as *mut BasisRoot as *mut u8,
+                core::mem::size_of::<BasisRoot>(),
+            ) as &mut [u8]
         }
     }
 }
 
-/// A list of open Basis that we can use to search and operate upon. Sort of the "root" data structure of the PDDB.
+/// A list of open Basis that we can use to search and operate upon. Sort of the "root" data structure of the
+/// PDDB.
 ///
-/// Note to self: it's tempting to integrate the "hw" parameter (the pointer to the PddbOs structure). However, this
-/// results in interior mutability problems. I guess we could wrap it in a Rc or RefCell or something like that; but
-/// the inconvenience of passing the hw structure around doesn't seem too bad so far...
+/// Note to self: it's tempting to integrate the "hw" parameter (the pointer to the PddbOs structure).
+/// However, this results in interior mutability problems. I guess we could wrap it in a Rc or RefCell or
+/// something like that; but the inconvenience of passing the hw structure around doesn't seem too bad so
+/// far...
 pub(crate) struct BasisCache {
     /// the cache entries themselves
-    cache: Vec::<BasisCacheEntry>,
+    cache: Vec<BasisCacheEntry>,
     /// ticktimer reference, for managing atimes
     pub(crate) tt: ticktimer_server::Ticktimer,
     /// data cache - stores the most recently decrypted pages of data
@@ -265,21 +274,24 @@ impl BasisCache {
             data_cache: PlaintextCache { data: None, tag: None },
         }
     }
+
     /// Returns a Vec which is a list of Bases to visit, in order of visitation, to create the union view.
-    pub(crate) fn access_list(&self) -> Vec::<String> {
+    pub(crate) fn access_list(&self) -> Vec<String> {
         let mut al = Vec::<String>::new();
         for entry in self.cache.iter().rev() {
             al.push(entry.name.to_string());
         }
         al
     }
+
     pub(crate) fn rekey(&self, hw: &mut PddbOs, op: PddbRekeyOp) -> PddbRekeyOp {
         hw.pddb_rekey(op, &self.cache)
     }
+
     fn select_basis(&self, basis_name: Option<&str>) -> Option<usize> {
         if self.cache.len() == 0 {
             log::error!("Can't select basis: PDDB is not mounted");
-            return None
+            return None;
         }
         if let Some(n) = basis_name {
             self.cache.iter().position(|bc| bc.name == n)
@@ -287,7 +299,8 @@ impl BasisCache {
             Some(self.cache.len() - 1)
         }
     }
-    pub(crate) fn basis_count(&self) -> usize {self.cache.len()}
+
+    pub(crate) fn basis_count(&self) -> usize { self.cache.len() }
 
     /// Adds a dictionary with `name` to:
     ///    - if `basis_name` is None, the most recently opened basis
@@ -329,7 +342,7 @@ impl BasisCache {
             let mut init_flags = DictFlags(0);
             init_flags.set_valid(true);
             let mut free_keys = BinaryHeap::<Reverse<FreeKeyRange>>::new();
-            free_keys.push(Reverse(FreeKeyRange{start: 1, run: KEY_MAXCOUNT as u32 - 1}));
+            free_keys.push(Reverse(FreeKeyRange { start: 1, run: KEY_MAXCOUNT as u32 - 1 }));
             let dict_cache = DictCacheEntry {
                 index: NonZeroU32::new(dict_index).unwrap(),
                 keys: HashMap::<String, KeyCacheEntry>::new(),
@@ -363,7 +376,7 @@ impl BasisCache {
     /// Returns a list of all the known dictionaries, across all the basis. A HashSet is returned
     /// because you can have the same-named dictionary in multiple basis, and what we're asking for
     /// is the union of all the dictionary names, without duplicates.
-    pub(crate) fn dict_list(&mut self, hw: &mut PddbOs, basis_name: Option<&str>) -> HashSet::<String> {
+    pub(crate) fn dict_list(&mut self, hw: &mut PddbOs, basis_name: Option<&str>) -> HashSet<String> {
         let mut dict_set = HashSet::<String>::new();
         if basis_name.is_some() {
             if let Some(basis_index) = self.select_basis(basis_name) {
@@ -387,7 +400,13 @@ impl BasisCache {
         }
         dict_set
     }
-    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<(BTreeSet::<String>, u32, u32)> {
+
+    pub(crate) fn key_list(
+        &mut self,
+        hw: &mut PddbOs,
+        dict: &str,
+        basis_name: Option<&str>,
+    ) -> Result<(BTreeSet<String>, u32, u32)> {
         let mut merge_list = BTreeSet::<String>::new();
         let mut found_dict = false;
         let mut key_count: u32 = 0;
@@ -417,7 +436,7 @@ impl BasisCache {
         if found_dict {
             Ok((merge_list, key_count, found_key_count))
         } else {
-            return Err(Error::new(ErrorKind::NotFound, "dictionary not found"))
+            return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
         }
     }
 
@@ -425,8 +444,12 @@ impl BasisCache {
     /// Perhaps there also needs to be a `dict_remove_all` call which iterates through every basis
     /// makes sure the dictionary is removed from all the possible known basis. Anyways, that function
     /// would be a variant of this targeted version.
-    pub(crate) fn dict_remove(&mut self,
-        hw: &mut PddbOs, dict: &str, basis_name: Option<&str>, paranoid: bool
+    pub(crate) fn dict_remove(
+        &mut self,
+        hw: &mut PddbOs,
+        dict: &str,
+        basis_name: Option<&str>,
+        paranoid: bool,
     ) -> Result<()> {
         if let Some(basis_index) = self.select_basis(basis_name) {
             log::debug!("deleting dict {}", dict);
@@ -443,8 +466,14 @@ impl BasisCache {
         }
     }
 
-    pub(crate) fn key_read(&mut self, hw: &mut PddbOs, dict: &str, key: &str, data: &mut [u8],
-        offset: Option<usize>, basis_name:Option<&str>
+    pub(crate) fn key_read(
+        &mut self,
+        hw: &mut PddbOs,
+        dict: &str,
+        key: &str,
+        data: &mut [u8],
+        offset: Option<usize>,
+        basis_name: Option<&str>,
     ) -> Result<usize> {
         if let Some(basis_index) = self.select_basis(basis_name) {
             let basis = &mut self.cache[basis_index];
@@ -454,14 +483,24 @@ impl BasisCache {
             if let Some(dict_entry) = basis.dicts.get_mut(dict) {
                 if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, key) {
                     let mut needs_fill = false;
-                    loop { // this weird loop works around an interior mutability issue with filling key data. It's awful, like a `goto`.
+                    loop {
+                        // this weird loop works around an interior mutability issue with filling key data.
+                        // It's awful, like a `goto`.
                         if needs_fill {
                             // fetch the data from disk
                             log::debug!("Small key evicted: filling {}:{}", dict, key);
-                            // this call does a mutable borrow of dict_entry, which interferes with getting kcache below.
-                            dict_entry.refill_small_key(hw, &basis.v2p_map, &basis.cipher, &mut self.data_cache, key);
+                            // this call does a mutable borrow of dict_entry, which interferes with getting
+                            // kcache below.
+                            dict_entry.refill_small_key(
+                                hw,
+                                &basis.v2p_map,
+                                &basis.cipher,
+                                &mut self.data_cache,
+                                key,
+                            );
                         }
-                        let kcache = dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
+                        let kcache =
+                            dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
                         kcache.set_atime(self.tt.elapsed_ms());
                         // the key exists, *and* there's sufficient space for the data
                         if kcache.start < SMALL_POOL_END {
@@ -490,43 +529,71 @@ impl BasisCache {
                             }
                         } else {
                             if offset.unwrap_or(0) as u64 > kcache.len {
-                                return Err(Error::new(ErrorKind::UnexpectedEof, "offest requested is beyond the key length"));
+                                return Err(Error::new(
+                                    ErrorKind::UnexpectedEof,
+                                    "offest requested is beyond the key length",
+                                ));
                             }
-                            if data.len() == 0 { // mostly because i don't want to have to think about this case in the later logic.
-                                return Ok(0)
+                            if data.len() == 0 {
+                                // mostly because i don't want to have to think about this case in the later
+                                // logic.
+                                return Ok(0);
                             }
                             // large pool fetch
                             let mut abs_cursor = offset.unwrap_or(0) as u64;
                             let mut blocks_read = 0;
                             let mut bytes_read = 0;
                             loop {
-                                let start_vpage_addr = ((kcache.start + abs_cursor) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
+                                let start_vpage_addr =
+                                    ((kcache.start + abs_cursor) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
 
-                                if let Some(pp) = basis.v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()) {
+                                if let Some(pp) = basis.v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap())
+                                {
                                     let block_start_pos = (abs_cursor % VPAGE_SIZE as u64) as usize;
                                     assert!(pp.valid(), "v2p returned an invalid page");
-                                    let pt_data = hw.data_decrypt_page(&basis.cipher, &basis.aad, pp).expect("Decryption auth error");
+                                    let pt_data = hw
+                                        .data_decrypt_page(&basis.cipher, &basis.aad, pp)
+                                        .expect("Decryption auth error");
                                     if blocks_read != 0 {
-                                        assert!(block_start_pos == 0, "algorithm error in handling offset data");
+                                        assert!(
+                                            block_start_pos == 0,
+                                            "algorithm error in handling offset data"
+                                        );
                                     }
                                     if blocks_read == 0 {
-                                        log::debug!("reading {} abs: {}, block_start: {}, block: {}, data.len:{} kcache.len:{}",
-                                            key, abs_cursor, block_start_pos, blocks_read, data.len(), kcache.len);
+                                        log::debug!(
+                                            "reading {} abs: {}, block_start: {}, block: {}, data.len:{} kcache.len:{}",
+                                            key,
+                                            abs_cursor,
+                                            block_start_pos,
+                                            blocks_read,
+                                            data.len(),
+                                            kcache.len
+                                        );
                                     } else {
-                                        log::debug!("  reading {} abs: {}, block_start: {}, block: {}, remaining.data:{} kcache.len:{}",
-                                            key, abs_cursor, block_start_pos, blocks_read, data.len() - bytes_read, kcache.len);
+                                        log::debug!(
+                                            "  reading {} abs: {}, block_start: {}, block: {}, remaining.data:{} kcache.len:{}",
+                                            key,
+                                            abs_cursor,
+                                            block_start_pos,
+                                            blocks_read,
+                                            data.len() - bytes_read,
+                                            kcache.len
+                                        );
                                     }
                                     let data_offset = bytes_read;
                                     for (&src, dst) in
-                                    pt_data[
-                                        size_of::<JournalType>() // always this fixed offset per block
-                                        + block_start_pos
-                                        ..
-                                    ].iter().zip(data[data_offset..].iter_mut()) {
+                                        pt_data[size_of::<JournalType>() // always this fixed offset per block
+                                        + block_start_pos..]
+                                            .iter()
+                                            .zip(data[data_offset..].iter_mut())
+                                    {
                                         *dst = src;
-                                        // it'd be computationally more efficient to figure out what this should be going into
-                                        // every copy loop, but it's logically easier to think about in this form. Without this
-                                        // check, a user could read past the allocated space for a block...
+                                        // it'd be computationally more efficient to figure out what this
+                                        // should be going into
+                                        // every copy loop, but it's logically easier to think about in this
+                                        // form. Without this check, a
+                                        // user could read past the allocated space for a block...
                                         if abs_cursor >= kcache.len {
                                             break;
                                         }
@@ -535,8 +602,14 @@ impl BasisCache {
                                     }
                                     blocks_read += 1;
                                 } else {
-                                    log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, abs_cursor, data.len());
-                                    return Ok(bytes_read as usize)
+                                    log::warn!(
+                                        "Not enough bytes available to read for key {}:{} ({}/{})",
+                                        dict,
+                                        key,
+                                        abs_cursor,
+                                        data.len()
+                                    );
+                                    return Ok(bytes_read as usize);
                                 }
                                 if abs_cursor >= kcache.len {
                                     break;
@@ -545,10 +618,11 @@ impl BasisCache {
                                     break;
                                 }
                             }
-                            return Ok(bytes_read as usize)
+                            return Ok(bytes_read as usize);
                         }
                         // note that from this point forward, either the "if" or the "else" branch returns;
-                        // the end of this loop is never seen, unless a `continue` statement is hit within the loop.
+                        // the end of this loop is never seen, unless a `continue` statement is hit within the
+                        // loop.
                     }
                 } else {
                     return Err(Error::new(ErrorKind::NotFound, "key not found"));
@@ -561,8 +635,13 @@ impl BasisCache {
         }
     }
 
-    pub(crate) fn key_remove(&mut self,
-        hw: &mut PddbOs, dict: &str, key: &str, basis_name: Option<&str>, paranoid: bool
+    pub(crate) fn key_remove(
+        &mut self,
+        hw: &mut PddbOs,
+        dict: &str,
+        key: &str,
+        basis_name: Option<&str>,
+        paranoid: bool,
     ) -> Result<()> {
         if let Some(basis_index) = self.select_basis(basis_name) {
             let basis = &mut self.cache[basis_index];
@@ -583,7 +662,10 @@ impl BasisCache {
 
                     // sync the key pools to disk
                     if !dict_entry.sync_small_pool(hw, &mut basis.v2p_map, &basis.cipher) {
-                        return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of memory syncing small pool"));
+                        return Err(Error::new(
+                            ErrorKind::OutOfMemory,
+                            "Ran out of memory syncing small pool",
+                        ));
                     }
                     dict_entry.sync_large_pool();
                     // encrypt and write the dict entry to disk
@@ -592,7 +674,7 @@ impl BasisCache {
                     basis.basis_sync(hw);
                     // finally, sync the page tables.
                     basis.pt_sync(hw);
-                    return Ok(())
+                    return Ok(());
                 } else {
                     return Err(Error::new(ErrorKind::NotFound, "key not found"));
                 }
@@ -604,8 +686,12 @@ impl BasisCache {
         }
     }
 
-    pub(crate) fn key_list_remove(&mut self,
-        hw: &mut PddbOs, dict: &str, key_list: Vec::<String>, basis_name: Option<&str>
+    pub(crate) fn key_list_remove(
+        &mut self,
+        hw: &mut PddbOs,
+        dict: &str,
+        key_list: Vec<String>,
+        basis_name: Option<&str>,
     ) -> Result<()> {
         if let Some(basis_index) = self.select_basis(basis_name) {
             let basis = &mut self.cache[basis_index];
@@ -618,7 +704,10 @@ impl BasisCache {
                 for key in key_list {
                     if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, &key) {
                         dict_entry.key_remove(hw, &mut basis.v2p_map, &basis.cipher, &key, false);
-                        assert!(dict_entry.clean == false, "dictionary entry should have been marked unclean");
+                        assert!(
+                            dict_entry.clean == false,
+                            "dictionary entry should have been marked unclean"
+                        );
                     }
                 }
                 // sync the key pools to disk
@@ -643,10 +732,17 @@ impl BasisCache {
 
     /// Updates a key in a dictionary; if it doesn't exist, creates it. User can specify a basis,
     /// or rely upon the auto-basis select algorithm.
-    pub(crate) fn key_update(&mut self,
-        hw: &mut PddbOs, dict: &str, key: &str, data: &[u8], offset: Option<usize>,
-        alloc_hint: Option<usize>, basis_name: Option<&str>, truncate: bool) -> Result<()> {
-
+    pub(crate) fn key_update(
+        &mut self,
+        hw: &mut PddbOs,
+        dict: &str,
+        key: &str,
+        data: &[u8],
+        offset: Option<usize>,
+        alloc_hint: Option<usize>,
+        basis_name: Option<&str>,
+        truncate: bool,
+    ) -> Result<()> {
         // we have to estimate how many pages are needed *before* we do anything, because we can't
         // mutate the page table to allocate data while we're accessing the page table. This huge gob of code
         // computes the pages needed. :-/
@@ -654,17 +750,15 @@ impl BasisCache {
         let reserved = if data.len() + offset.unwrap_or(0) > alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) {
             data.len() + offset.unwrap_or(0)
         } else {
-            if alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) == 0 { // disallow 0-sized alloc hints, round up to the default size if someone tries 0
+            if alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) == 0 {
+                // disallow 0-sized alloc hints, round up to the default size if someone tries 0
                 DEFAULT_ALLOC_HINT
             } else {
                 alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT)
             }
         };
-        let reserved_pages = if reserved % VPAGE_SIZE == 0 {
-            reserved / VPAGE_SIZE
-        } else {
-            (reserved / VPAGE_SIZE) + 1
-        };
+        let reserved_pages =
+            if reserved % VPAGE_SIZE == 0 { reserved / VPAGE_SIZE } else { (reserved / VPAGE_SIZE) + 1 };
         if let Some(basis_index) = self.select_basis(basis_name) {
             let basis = &mut self.cache[basis_index];
             if !basis.ensure_dict_in_cache(hw, dict) {
@@ -679,14 +773,31 @@ impl BasisCache {
                         if let Some(key_index) = small_storage_index_from_key(&kcache, dict_entry.index) {
                             // it's probably going in the small pool.
                             // index exists, see if the page exists
-                            if reserved == 0 { // something went wrong here
+                            if reserved == 0 {
+                                // something went wrong here
                                 log::debug!("reserved {}", reserved);
-                                log::debug!("{}:{} - [{}]{:x}+{}->{}", dict, key, kcache.descriptor_index, kcache.start, kcache.len, kcache.reserved);
+                                log::debug!(
+                                    "{}:{} - [{}]{:x}+{}->{}",
+                                    dict,
+                                    key,
+                                    kcache.descriptor_index,
+                                    kcache.start,
+                                    kcache.len,
+                                    kcache.reserved
+                                );
                             }
                             if dict_entry.small_pool.len() > key_index {
-                                log::trace!("resolved key index {}, small pool len: {}", key_index, dict_entry.small_pool.len());
+                                log::trace!(
+                                    "resolved key index {}, small pool len: {}",
+                                    key_index,
+                                    dict_entry.small_pool.len()
+                                );
                                 // see if the pool's address exists in the page table
-                                let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(dict_entry.index, key_index)).unwrap();
+                                let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(
+                                    dict_entry.index,
+                                    key_index,
+                                ))
+                                .unwrap();
                                 if !basis.v2p_map.contains_key(&pool_vaddr) {
                                     pages_needed += 1;
                                 }
@@ -707,21 +818,24 @@ impl BasisCache {
                         pages_needed += reserved_pages;
                     }
                 } else {
-                    // there's no key cache entry. For simplicity, let's just assume this means none of the data
-                    // has been allocated, and ask for it to be available.
+                    // there's no key cache entry. For simplicity, let's just assume this means none of the
+                    // data has been allocated, and ask for it to be available.
                     //
                     // At least in v1 of the code, this is the case. Later on maybe you could
-                    // evict a key key cache entry to trim memory usage; if we do this, we'll have to implement a
-                    // routine that is like ensure_key_entry() but doesn't do any allocations - it just does the search
-                    // for the key record and if it doesn't exist reports that we'll need one, but if the key does exist
+                    // evict a key key cache entry to trim memory usage; if we do this, we'll have to
+                    // implement a routine that is like ensure_key_entry() but doesn't do
+                    // any allocations - it just does the search for the key record and if
+                    // it doesn't exist reports that we'll need one, but if the key does exist
                     // and simply wasn't loaded into cache, then don't ask for the reservation.
                     //
-                    // But this should be a "last resort" move: preferably, if we have memory pressure, we should take
-                    // the data entries in the key cache and turn them into None to reduce data pressure, rather than
-                    // evicting the key indices themselves (because it causes bookkeeping problems like this). I guess
-                    // if someone wanted to allocate thousand and thousands of keys, we'd eventually consume a megabyte of
-                    // RAM, which is relatively precious, but....anyways. Maybe the answer is "don't do that" on a small memory
-                    // machine and expect it to work?
+                    // But this should be a "last resort" move: preferably, if we have memory pressure, we
+                    // should take the data entries in the key cache and turn them into
+                    // None to reduce data pressure, rather than evicting the key indices
+                    // themselves (because it causes bookkeeping problems like this). I guess
+                    // if someone wanted to allocate thousand and thousands of keys, we'd eventually consume a
+                    // megabyte of RAM, which is relatively precious, but....anyways.
+                    // Maybe the answer is "don't do that" on a small memory machine and
+                    // expect it to work?
                     pages_needed += reserved_pages;
                 }
             }
@@ -736,39 +850,46 @@ impl BasisCache {
         // now actually do the update
         if let Some(basis_index) = self.select_basis(basis_name) {
             let dict_found = (&mut self.cache[basis_index]).ensure_dict_in_cache(hw, dict);
-            if !dict_found { // now that we're clear of the deep search, mutate the basis if we are sure it's not there
+            if !dict_found {
+                // now that we're clear of the deep search, mutate the basis if we are sure it's not there
                 self.dict_add(hw, dict, basis_name).expect("couldn't add dictionary");
             }
             // at this point, the dictionary should definitely be in cache
             // pre-flight & allocatefree space requirements
             if let Some(dict_entry) = self.cache[basis_index].dicts.get(dict) {
                 hw.ensure_fast_space_alloc(dict_entry.alloc_estimate_small(), &self.cache);
-                // large pools don't have caching implemented, so we don't have to check for free space for them
+                // large pools don't have caching implemented, so we don't have to check for free space for
+                // them
             }
-            // refetch the basis here to avoid the re-borrow problem, now that all the potential dict cache mutations are done
+            // refetch the basis here to avoid the re-borrow problem, now that all the potential dict cache
+            // mutations are done
             let basis = &mut self.cache[basis_index];
 
             // bumping this every key update affects performance *a lot* -- don't think this is worth it.
-            // the bases should only "age" when dicts or keys are modified, not when any data in it is updated for any reason.
-            // basis.age = basis.age.saturating_add(1);
+            // the bases should only "age" when dicts or keys are modified, not when any data in it is updated
+            // for any reason. basis.age = basis.age.saturating_add(1);
             // basis.clean = false;
 
             // now do the sync
             if let Some(dict_entry) = basis.dicts.get_mut(dict) {
-                let updated_ptr = dict_entry.key_update(hw, &mut basis.v2p_map,
-                    &basis.cipher, key, data,
+                let updated_ptr = dict_entry.key_update(
+                    hw,
+                    &mut basis.v2p_map,
+                    &basis.cipher,
+                    key,
+                    data,
                     offset.unwrap_or(0),
                     alloc_hint,
                     truncate,
-                    basis.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START))
+                    basis.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START)),
                 )?;
                 basis.large_alloc_ptr = Some(updated_ptr);
 
                 if !dict_entry.sync_small_pool(hw, &mut basis.v2p_map, &basis.cipher) {
                     return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of memory syncing small pool"));
                 }
-                // we don't have large pool caches yet, but this is a placeholder to remember to do "something" at this point,
-                // once we do have them.
+                // we don't have large pool caches yet, but this is a placeholder to remember to do
+                // "something" at this point, once we do have them.
                 dict_entry.sync_large_pool();
 
                 // encrypt and write the dict entry to disk
@@ -778,7 +899,10 @@ impl BasisCache {
                 // finally, sync the page tables.
                 basis.pt_sync(hw);
             } else {
-                return Err(Error::new(ErrorKind::NotFound, "Requested dictionary not found, or could not be allocated."));
+                return Err(Error::new(
+                    ErrorKind::NotFound,
+                    "Requested dictionary not found, or could not be allocated.",
+                ));
             }
 
             Ok(())
@@ -787,7 +911,13 @@ impl BasisCache {
         }
     }
 
-    pub(crate) fn key_attributes(&mut self, hw: &mut PddbOs, dict: &str, key: &str, basis_name: Option<&str>) -> Result<KeyAttributes> {
+    pub(crate) fn key_attributes(
+        &mut self,
+        hw: &mut PddbOs,
+        dict: &str,
+        key: &str,
+        basis_name: Option<&str>,
+    ) -> Result<KeyAttributes> {
         if basis_name.is_none() {
             for basis in self.cache.iter_mut().rev() {
                 if !basis.ensure_dict_in_cache(hw, dict) {
@@ -807,7 +937,7 @@ impl BasisCache {
                             basis: (&basis.name).to_string(),
                             flags: kcache.flags,
                             index: kcache.descriptor_index,
-                        })
+                        });
                     } else {
                         // this is not a hard error, it just means that the key wasn't in this basis.
                         // that's alright, it could be in one of the other ones!
@@ -824,7 +954,8 @@ impl BasisCache {
                 } else {
                     let dict_entry = basis.dicts.get_mut(dict).expect("Entry was assured, but not there!");
                     if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, key) {
-                        let kcache = dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
+                        let kcache =
+                            dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
                         Ok(KeyAttributes {
                             len: kcache.len as usize,
                             reserved: kcache.reserved as usize,
@@ -844,7 +975,12 @@ impl BasisCache {
         }
     }
 
-    pub(crate) fn dict_attributes(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<DictAttributes> {
+    pub(crate) fn dict_attributes(
+        &mut self,
+        hw: &mut PddbOs,
+        dict: &str,
+        basis_name: Option<&str>,
+    ) -> Result<DictAttributes> {
         if basis_name.is_none() {
             for basis in self.cache.iter_mut().rev() {
                 if !basis.ensure_dict_in_cache(hw, dict) {
@@ -870,23 +1006,33 @@ impl BasisCache {
         }
     }
 
-    /// this largely copies code from the pddb_mount() routine. Perhaps this should be modified a little bit to
-    /// re-use that code. However, there are material differences in how the passwords are handled between
-    /// these two methods, so the API calls are different. pddb_mount mounts the system basis with the intention
-    /// of making it persistent, and assuming you're coming up from a blank slate. This routine makes no such
-    /// assumptions and allows one to specify a persistence.
-    pub(crate) fn basis_unlock(&mut self, hw: &mut PddbOs, name: &str, password: &str,
-    policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
-        let basis_key =  hw.basis_derive_key(name, password);
+    /// this largely copies code from the pddb_mount() routine. Perhaps this should be modified a little bit
+    /// to re-use that code. However, there are material differences in how the passwords are handled
+    /// between these two methods, so the API calls are different. pddb_mount mounts the system basis with
+    /// the intention of making it persistent, and assuming you're coming up from a blank slate. This
+    /// routine makes no such assumptions and allows one to specify a persistence.
+    pub(crate) fn basis_unlock(
+        &mut self,
+        hw: &mut PddbOs,
+        name: &str,
+        password: &str,
+        policy: BasisRetentionPolicy,
+    ) -> Option<BasisCacheEntry> {
+        let basis_key = hw.basis_derive_key(name, password);
         if let Some(basis_map) = hw.pt_scan_key(&basis_key.pt, &basis_key.data, name) {
             let aad = hw.data_aad(name);
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
                 let vpage = match hw.data_decrypt_page_with_commit(&basis_key.data, &aad, root_page) {
                     Some(data) => data,
-                    None => {log::error!("Could not find basis {} root", name); return None;},
+                    None => {
+                        log::error!("Could not find basis {} root", name);
+                        return None;
+                    }
                 };
                 let mut basis_root = BasisRoot::default();
-                for (&src, dst) in vpage[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut()) {
+                for (&src, dst) in
+                    vpage[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut())
+                {
                     *dst = src;
                 }
                 if basis_root.magic != PDDB_MAGIC {
@@ -897,7 +1043,8 @@ impl BasisCache {
                     log::error!("PDDB version mismatch in system basis root. Unrecoverable error.");
                     return None;
                 }
-                let basis_name = std::str::from_utf8(&basis_root.name.data[..basis_root.name.len as usize]).expect("basis name is not valid utf-8");
+                let basis_name = std::str::from_utf8(&basis_root.name.data[..basis_root.name.len as usize])
+                    .expect("basis name is not valid utf-8");
                 if basis_name != name {
                     log::error!("PDDB mount requested {}, but got {}; aborting.", name, basis_name);
                     return None;
@@ -922,7 +1069,7 @@ impl BasisCache {
             return Err(Error::new(ErrorKind::OutOfMemory, "No free space to create basis"));
         };
 
-        let basis_key =  hw.basis_derive_key(name, password);
+        let basis_key = hw.basis_derive_key(name, password);
 
         if let Some(_basis_map) = hw.pt_scan_key(&basis_key.pt, &basis_key.data, name) {
             return Err(Error::new(ErrorKind::AlreadyExists, "Basis already exists"));
@@ -934,7 +1081,7 @@ impl BasisCache {
             version: PDDB_VERSION,
             name: BasisRootName::try_from_str(name).unwrap(),
             age: 0,
-            num_dictionaries: 0
+            num_dictionaries: 0,
         };
         // allocate one page for the basis root
         if let Some(alloc) = hw.try_fast_space_alloc() {
@@ -951,8 +1098,7 @@ impl BasisCache {
         let pp = basis_v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap()).unwrap();
         assert!(pp.valid(), "v2p returned an invalid page");
         let journal_bytes = (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes();
-        let slice_iter =
-            journal_bytes.iter() // journal rev
+        let slice_iter = journal_bytes.iter() // journal rev
             .chain(basis_root.as_ref().iter());
         let mut block = [0 as u8; KCOM_CT_LEN];
         for (&src, dst) in slice_iter.zip(block.iter_mut()) {
@@ -960,7 +1106,7 @@ impl BasisCache {
         }
         hw.data_encrypt_and_patch_page_with_commit(&basis_key.data, &aad, &mut block, &pp);
 
-        let cipher =  Aes256::new(GenericArray::from_slice(&basis_key.pt));
+        let cipher = Aes256::new(GenericArray::from_slice(&basis_key.pt));
         for (&virt, phys) in basis_v2p_map.iter_mut() {
             hw.pt_patch_mapping(virt, phys.page_number(), &cipher);
             // mark the entry as clean, as it has been sync'd to disk
@@ -977,6 +1123,7 @@ impl BasisCache {
         }
         ret
     }
+
     pub(crate) fn basis_latest(&self) -> Option<&str> {
         if let Some(basis_index) = self.select_basis(None) {
             let basis = &self.cache[basis_index];
@@ -986,9 +1133,7 @@ impl BasisCache {
         }
     }
 
-    pub(crate) fn basis_add(&mut self, basis: BasisCacheEntry) {
-        self.cache.push(basis);
-    }
+    pub(crate) fn basis_add(&mut self, basis: BasisCacheEntry) { self.cache.push(basis); }
 
     pub(crate) fn basis_unmount(&mut self, hw: &mut PddbOs, basis_name: &str) -> Result<()> {
         if let Some(basis_index) = self.select_basis(Some(basis_name)) {
@@ -1004,15 +1149,15 @@ impl BasisCache {
     pub(crate) fn basis_contains(&self, by_name: &str) -> bool {
         for bcache in &self.cache {
             if bcache.name == by_name {
-                return true
+                return true;
             }
         }
         false
     }
 
     /// note: you can "delete" a basis simply by forgetting its password, but this is more thorough.
-    /// there might also need to be a variant to make which is a "change my password" function, but that is actually
-    /// surprisingly hard.
+    /// there might also need to be a variant to make which is a "change my password" function, but that is
+    /// actually surprisingly hard.
     pub(crate) fn basis_delete(&mut self, hw: &mut PddbOs, basis_name: &str) -> Result<()> {
         if let Some(basis_index) = self.select_basis(Some(basis_name)) {
             let basis = &mut self.cache[basis_index];
@@ -1058,13 +1203,12 @@ impl BasisCache {
                     if basis.policy_state >= sleeps {
                         lock_list.push(basis.name.clone());
                     }
-                }
-                /*
-                BasisRetentionPolicy::TimeOutSecs(secs) => {
-                    if secs < basis.policy_state {
-                        lock_list.push(basis.name.clone());
-                    }
-                }*/
+                } /*
+                  BasisRetentionPolicy::TimeOutSecs(secs) => {
+                      if secs < basis.policy_state {
+                          lock_list.push(basis.name.clone());
+                      }
+                  }*/
             }
         }
         for basis in lock_list {
@@ -1086,13 +1230,15 @@ impl BasisCache {
         }
         total_size
     }
+
     /// attempts to prune `target_bytes` out of the cached data set
     pub(crate) fn cache_prune(&mut self, hw: &mut PddbOs, target_bytes: usize) -> usize {
         let mut pruned = 0;
         // this does it a "dumb" way, but at least it's sort of obvious how it works
-        // 0. sync the basis and dictionaries to disk, so that removing cache entries are guaranteed not to be problematic.
-        // 1. iterate through all the known keys, creating a sorted heap of fully-specified keys (basis/dict/key)
-        //    sorted by access time
+        // 0. sync the basis and dictionaries to disk, so that removing cache entries are guaranteed not to be
+        //    problematic.
+        // 1. iterate through all the known keys, creating a sorted heap of fully-specified keys
+        //    (basis/dict/key) sorted by access time
         // 2. evict keys with the oldest access time, until target_bytes is hit.
         self.sync(hw, None, false).unwrap();
 
@@ -1102,15 +1248,13 @@ impl BasisCache {
                 if dict.flags.valid() {
                     for (key_name, key) in dict.keys.iter() {
                         if key.flags.valid() {
-                            candidates.push(Reverse(
-                                KeyAge {
-                                    atime: key.atime(),
-                                    _size: key.size(),
-                                    key: key_name.to_string(),
-                                    dict: dict_name.to_string(),
-                                    basis: basis.name.to_string(),
-                                }
-                            ));
+                            candidates.push(Reverse(KeyAge {
+                                atime: key.atime(),
+                                _size: key.size(),
+                                key: key_name.to_string(),
+                                dict: dict_name.to_string(),
+                                basis: basis.name.to_string(),
+                            }));
                         }
                     }
                 }
@@ -1124,7 +1268,13 @@ impl BasisCache {
                         match basis.dicts.get_mut(&ka.dict) {
                             Some(dentry) => {
                                 let freed = dentry.evict_keycache_entry(&ka.key);
-                                log::trace!("pruned {} bytes from atime {} / total {} key {}", freed, ka.atime, pruned, ka.key);
+                                log::trace!(
+                                    "pruned {} bytes from atime {} / total {} key {}",
+                                    freed,
+                                    ka.atime,
+                                    pruned,
+                                    ka.key
+                                );
                                 pruned += freed;
                                 if pruned >= target_bytes {
                                     return pruned;
@@ -1152,19 +1302,13 @@ struct KeyAge {
     basis: String,
 }
 impl Ord for KeyAge {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.atime.cmp(&other.atime)
-    }
+    fn cmp(&self, other: &Self) -> Ordering { self.atime.cmp(&other.atime) }
 }
 impl PartialOrd for KeyAge {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
 }
 impl PartialEq for KeyAge {
-    fn eq(&self, other: &Self) -> bool {
-        self.atime == other.atime
-    }
+    fn eq(&self, other: &Self) -> bool { self.atime == other.atime }
 }
 impl Eq for KeyAge {}
 
@@ -1177,25 +1321,29 @@ pub(crate) struct BasisCacheEntry {
     /// last sync time, in systicks, if any. Updated by any sync of basis, dict, or pt.
     pub last_sync: Option<u64>,
     /// Number of dictionaries. This should be greater than or equal to the number of elements in dicts.
-    /// If dicts has less elements than num_dicts, it means there are still dicts on-disk that haven't been cached.
+    /// If dicts has less elements than num_dicts, it means there are still dicts on-disk that haven't been
+    /// cached.
     pub num_dicts: u32,
     /// dictionary array.
-    pub dicts: HashMap::<String, DictCacheEntry>,
+    pub dicts: HashMap<String, DictCacheEntry>,
     /// A cached copy of the absolute offset of the next free dictionary slot,
     /// expressed as a number that needs to be multiplied by DICT_VSIZE to arrive at a virtual address
     pub free_dict_offset: Option<u32>,
     /// the cipher for the basis
     pub cipher: Aes256GcmSiv,
-    /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the cipher key schedule
+    /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the
+    /// cipher key schedule
     pub cipher_ecb: Aes256,
-    /// raw AES page table key -- needed because we have to do a low-level PT scan to generate FSCB, and sometimes the key comes from
-    /// a copy cached here, or from one derived solely for the FSCB scan. There is no way to copy an Aes256 record, so, we include
-    /// the raw key because we can copy that. :P so much for semantics.
+    /// raw AES page table key -- needed because we have to do a low-level PT scan to generate FSCB, and
+    /// sometimes the key comes from a copy cached here, or from one derived solely for the FSCB scan.
+    /// There is no way to copy an Aes256 record, so, we include the raw key because we can copy that. :P
+    /// so much for semantics.
     pub pt_key: GenericArray<u8, cipher::consts::U32>,
-    /// raw AES data key -- needed because we have to use this to derive commitment keys for the basis root record, to work around AES-GCM-SIV salamanders
+    /// raw AES data key -- needed because we have to use this to derive commitment keys for the basis root
+    /// record, to work around AES-GCM-SIV salamanders
     pub key: GenericArray<u8, cipher::consts::U32>,
     /// the AAD associated with this Basis
-    pub aad: Vec::<u8>,
+    pub aad: Vec<u8>,
     /// modification count
     pub age: u32,
     /// virtual to physical page map. It's the reverse mapping of the physical page table on disk.
@@ -1214,7 +1362,13 @@ impl BasisCacheEntry {
     /// the basis. If `lazy` is true, it stops with the minimal amount of effort to respond to a query.
     /// If it `lazy` is false, it will populate the dictionary cache and key cache entries, as well as
     /// discover the location of the `large_alloc_ptr`.
-    pub(crate) fn mount(hw: &mut PddbOs, name: &str,  key: &BasisKeys, lazy: bool, policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
+    pub(crate) fn mount(
+        hw: &mut PddbOs,
+        name: &str,
+        key: &BasisKeys,
+        lazy: bool,
+        policy: BasisRetentionPolicy,
+    ) -> Option<BasisCacheEntry> {
         if let Some(basis_map) = hw.pt_scan_key(&key.pt, &key.data, name) {
             let cipher = Aes256GcmSiv::new(&key.data.into());
             let aad = hw.data_aad(name);
@@ -1222,12 +1376,21 @@ impl BasisCacheEntry {
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
                 let vpage = match hw.data_decrypt_page_with_commit(&key.data, &aad, root_page) {
                     Some(data) => data,
-                    None => {log::error!("System basis decryption did not authenticate. Unrecoverable error."); return None;},
+                    None => {
+                        log::error!("System basis decryption did not authenticate. Unrecoverable error.");
+                        return None;
+                    }
                 };
-                // if the below assertion fails, you will need to re-code this to decrypt more than one VPAGE and stripe into a basis root struct
-                assert!(size_of::<BasisRoot>() <= VPAGE_SIZE, "BasisRoot has grown past a single VPAGE, this routine needs to be re-coded to accommodate the extra bulk");
+                // if the below assertion fails, you will need to re-code this to decrypt more than one VPAGE
+                // and stripe into a basis root struct
+                assert!(
+                    size_of::<BasisRoot>() <= VPAGE_SIZE,
+                    "BasisRoot has grown past a single VPAGE, this routine needs to be re-coded to accommodate the extra bulk"
+                );
                 let mut basis_root = BasisRoot::default();
-                for (&src, dst) in vpage[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut()) {
+                for (&src, dst) in
+                    vpage[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut())
+                {
                     *dst = src;
                 }
                 if basis_root.magic != PDDB_MAGIC {
@@ -1238,9 +1401,13 @@ impl BasisCacheEntry {
                     log::error!("PDDB version mismatch in system basis root. Unrecoverable error.");
                     return None;
                 }
-                let basis_name = std::str::from_utf8(&basis_root.name.data[..basis_root.name.len as usize]).expect("basis name is not valid utf-8");
+                let basis_name = std::str::from_utf8(&basis_root.name.data[..basis_root.name.len as usize])
+                    .expect("basis name is not valid utf-8");
                 if basis_name != String::from(name) {
-                    log::error!("Discovered basis name does not match the requested name: {}; aborting mount operation.", basis_name);
+                    log::error!(
+                        "Discovered basis name does not match the requested name: {}; aborting mount operation.",
+                        basis_name
+                    );
                     return None;
                 }
                 let mut bcache = BasisCacheEntry {
@@ -1268,7 +1435,8 @@ impl BasisCacheEntry {
                 log::info!("Basis {} found and reconstructed", name);
                 return Some(bcache);
             } else {
-                // i guess technically we could try a brute-force search for the page if it went missing, but meh.
+                // i guess technically we could try a brute-force search for the page if it went missing, but
+                // meh.
                 log::error!("Basis {} did not contain a root page -- unrecoverable error.", name);
                 return None;
             }
@@ -1277,6 +1445,7 @@ impl BasisCacheEntry {
             None
         }
     }
+
     /// called during the initial basis scan to track where the large allocation pointer end should be.
     /// basically try to find the maximal extent of already allocated data, and start allocating from there.
     pub(crate) fn large_pool_update(&mut self, maybe_end: u64) {
@@ -1294,13 +1463,15 @@ impl BasisCacheEntry {
                 num_valid += 1;
             }
         }
-        // note to self: this should be true, because even if we didn't read all the dictionaries in from the basis,
-        // and then say, deleted a bunch of dictionaries and then added a bunch more, the num_dicts field should
-        // move up and down with the additions/deletions, and thus should relatively be larger than or equal to the num_valid
-        // at all times. In other words, the difference of self.num_dicts vs num_valid should be precisely the number
-        // of dictionary entries on disk that we haven't loaded into the cache.
+        // note to self: this should be true, because even if we didn't read all the dictionaries in from the
+        // basis, and then say, deleted a bunch of dictionaries and then added a bunch more, the
+        // num_dicts field should move up and down with the additions/deletions, and thus should
+        // relatively be larger than or equal to the num_valid at all times. In other words, the
+        // difference of self.num_dicts vs num_valid should be precisely the number of dictionary
+        // entries on disk that we haven't loaded into the cache.
         assert!(num_valid <= self.num_dicts, "Inconsistency in number of dictionaries in the basis");
-        if num_valid == self.num_dicts { // no need to scan the index, just refresh the dictionaries themselves
+        if num_valid == self.num_dicts {
+            // no need to scan the index, just refresh the dictionaries themselves
             let mut largest_extent = 0;
             for dict in self.dicts.values_mut() {
                 if dict.flags.valid() {
@@ -1311,7 +1482,8 @@ impl BasisCacheEntry {
                 }
             }
             self.large_pool_update(largest_extent);
-        } else { // scan the full index
+        } else {
+            // scan the full index
             let mut try_entry = 1;
             let mut dict_count = 0;
             while try_entry <= DICT_MAXCOUNT && dict_count < self.num_dicts {
@@ -1320,7 +1492,9 @@ impl BasisCacheEntry {
                     assert!(pp.valid(), "v2p returned an invalid page");
                     if let Some(dict) = self.dict_decrypt(hw, &pp) {
                         if dict.flags.valid() {
-                            let dict_name = std::str::from_utf8(&dict.name.data[..dict.name.len as usize]).expect("dict name is not valid utf-8").to_string();
+                            let dict_name = std::str::from_utf8(&dict.name.data[..dict.name.len as usize])
+                                .expect("dict name is not valid utf-8")
+                                .to_string();
                             let dict_present_and_valid = if let Some(d) = self.dicts.get(&dict_name) {
                                 d.flags.valid()
                             } else {
@@ -1332,25 +1506,37 @@ impl BasisCacheEntry {
                                 self.dicts.insert(dict_name.to_string(), dcache);
                                 self.large_pool_update(max_large_alloc.get());
                             } else {
-                                let dcache = self.dicts.get_mut(&dict_name).expect("dict should be present, as we checked for it already...");
+                                let dcache = self
+                                    .dicts
+                                    .get_mut(&dict_name)
+                                    .expect("dict should be present, as we checked for it already...");
                                 let extent = dcache.fill(hw, &mut self.v2p_map, &self.cipher, false).get();
                                 self.large_pool_update(extent);
                             }
                             dict_count += 1;
                         } else {
-                            // this is an empty dictionary entry. we could stick a dictionary in here later on, take note if we haven't already computed that
-                            if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
+                            // this is an empty dictionary entry. we could stick a dictionary in here later
+                            // on, take note if we haven't already computed that
+                            if self.free_dict_offset.is_none() {
+                                self.free_dict_offset = Some(try_entry as u32);
+                            }
                         }
                     } else {
-                        if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
+                        if self.free_dict_offset.is_none() {
+                            self.free_dict_offset = Some(try_entry as u32);
+                        }
                     }
                 } else {
-                    if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
+                    if self.free_dict_offset.is_none() {
+                        self.free_dict_offset = Some(try_entry as u32);
+                    }
                 }
                 try_entry += 1;
             }
             if try_entry <= DICT_MAXCOUNT {
-                if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
+                if self.free_dict_offset.is_none() {
+                    self.free_dict_offset = Some(try_entry as u32);
+                }
             }
         }
     }
@@ -1368,7 +1554,8 @@ impl BasisCacheEntry {
             // ensure all the keys are in RAM
             dcache.fill(hw, &self.v2p_map, &self.cipher, false);
 
-            // allocate a copy of the key list, to avoid interior mutability problems with the next remove step
+            // allocate a copy of the key list, to avoid interior mutability problems with the next remove
+            // step
             let mut key_list = Vec::<String>::new();
             for (key, entry) in dcache.keys.iter() {
                 if entry.flags.valid() {
@@ -1382,10 +1569,12 @@ impl BasisCacheEntry {
             }
             // wipe & de-allocate any small pages
             for index in 0..dcache.small_pool.len() {
-                let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(dcache.index, index)).unwrap();
+                let pool_vaddr =
+                    VirtAddr::new(small_storage_base_vaddr_from_indices(dcache.index, index)).unwrap();
                 if let Some(pp) = self.v2p_map.get_mut(&pool_vaddr) {
                     assert!(pp.valid(), "v2p returned an invalid page");
-                    { // always nuke old data
+                    {
+                        // always nuke old data
                         let mut random = [0u8; PAGE_SIZE];
                         hw.trng_slice(&mut random);
                         hw.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
@@ -1398,16 +1587,25 @@ impl BasisCacheEntry {
             /* for pp in self.v2p_map.values() {
                 log::info!("v2p entry: {:x?}", pp);
             } */
-            // erase the entire dictionary + key allocation area by writing over with random data. It's important to
-            // do a comprehensive erase, because if the dictionary slot is re-used, the previously allocated key entries
-            // decrypt correctly, are interpreted as valid keys, and thus cause consistency errors.
+            // erase the entire dictionary + key allocation area by writing over with random data. It's
+            // important to do a comprehensive erase, because if the dictionary slot is re-used,
+            // the previously allocated key entries decrypt correctly, are interpreted as valid
+            // keys, and thus cause consistency errors.
             let key_pages = 1 + (dcache.last_disk_key_index + 1) as usize / DK_PER_VPAGE;
             for page in 0..key_pages {
-                // note: check this code against dict_indices_to_vaddr() -- it's recoded here because we go by page, not by index, but this needs to be consistent with that function
-                let dk_vaddr = VirtAddr::new(dcache.index.get() as u64 * DICT_VSIZE as u64 + page as u64 * VPAGE_SIZE as u64).unwrap();
+                // note: check this code against dict_indices_to_vaddr() -- it's recoded here because we go by
+                // page, not by index, but this needs to be consistent with that function
+                let dk_vaddr = VirtAddr::new(
+                    dcache.index.get() as u64 * DICT_VSIZE as u64 + page as u64 * VPAGE_SIZE as u64,
+                )
+                .unwrap();
                 if let Some(pp) = self.v2p_map.get_mut(&dk_vaddr) {
                     assert!(pp.valid(), "v2p returned an invalid page");
-                    log::info!("erasing dk page 0x{:x}/0x{:x}", dk_vaddr, pp.page_number() as usize * PAGE_SIZE);
+                    log::info!(
+                        "erasing dk page 0x{:x}/0x{:x}",
+                        dk_vaddr,
+                        pp.page_number() as usize * PAGE_SIZE
+                    );
                     let mut random = [0u8; PAGE_SIZE];
                     hw.trng_slice(&mut random);
                     hw.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
@@ -1415,7 +1613,9 @@ impl BasisCacheEntry {
                     hw.fast_space_free(pp);
                     assert!(pp.valid() == false, "pp is still marked as valid!");
                 } else {
-                    log::warn!("Inconsistent internal state: requested dictionary didn't have a mapping in the page table.");
+                    log::warn!(
+                        "Inconsistent internal state: requested dictionary didn't have a mapping in the page table."
+                    );
                 }
             }
 
@@ -1433,7 +1633,8 @@ impl BasisCacheEntry {
     }
 
     /// Called to compute the next free index. Normally this will get filled during a disk search for
-    /// cache entries, but it could be None if a new dict entry was allocated and no other entries were loaded.
+    /// cache entries, but it could be None if a new dict entry was allocated and no other entries were
+    /// loaded.
     pub(crate) fn dict_get_free_offset(&mut self, hw: &mut PddbOs) -> u32 {
         if let Some(offset) = self.free_dict_offset.take() {
             return offset;
@@ -1445,22 +1646,23 @@ impl BasisCacheEntry {
                     assert!(pp.valid(), "v2p returned an invalid page");
                     if self.dict_decrypt(hw, &pp).is_none() {
                         // mapping exists, but the data is invalid. It's a free entry.
-                        return try_entry as u32
+                        return try_entry as u32;
                     }
                 } else {
                     // mapping doesn't exist yet, that's a free entry
-                    return try_entry as u32
+                    return try_entry as u32;
                 }
                 try_entry += 1;
             }
         }
-        // maybe we should handle this better? but, I think this should be super-rare, as we allow 16384 dictionaries per Basis,
-        // so if we got here I'm guessing it's more likely due to a coding error than an actually full Basis.
+        // maybe we should handle this better? but, I think this should be super-rare, as we allow 16384
+        // dictionaries per Basis, so if we got here I'm guessing it's more likely due to a coding
+        // error than an actually full Basis.
         panic!("Basis full, can't allocate dictionary");
     }
 
-    /// Returns a tuple of "dictionary offset" , "dictionary"; the "dictionary offset" needs to be multiplied by DICT_VSIZE to arrive
-    /// at a fully expanded virtual address.
+    /// Returns a tuple of "dictionary offset" , "dictionary"; the "dictionary offset" needs to be multiplied
+    /// by DICT_VSIZE to arrive at a fully expanded virtual address.
     pub(crate) fn dict_deep_search(&mut self, hw: &mut PddbOs, name: &str) -> Option<(u32, Dictionary)> {
         let mut try_entry = 1;
         let mut dict_count = 0;
@@ -1469,19 +1671,22 @@ impl BasisCacheEntry {
             if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
                 assert!(pp.valid(), "v2p returned an invalid page");
                 if let Some(dict) = self.dict_decrypt(hw, &pp) {
-                    let dict_name = std::str::from_utf8(&dict.name.data[..dict.name.len as usize]).expect("dict name is not valid utf-8");
+                    let dict_name = std::str::from_utf8(&dict.name.data[..dict.name.len as usize])
+                        .expect("dict name is not valid utf-8");
                     if (dict_name == name) && dict.flags.valid() {
-                        return Some((try_entry as u32, dict))
+                        return Some((try_entry as u32, dict));
                     }
                     dict_count += 1;
                 } else {
-                    // this is an empty dictionary entry. we could stick a dictionary in here later on, take note if we haven't already computed that
+                    // this is an empty dictionary entry. we could stick a dictionary in here later on, take
+                    // note if we haven't already computed that
                     if self.free_dict_offset.is_none() {
                         self.free_dict_offset = Some(try_entry as u32);
                     }
                 }
             } else {
-                // this is an empty dictionary entry. we could stick a dictionary in here later on, take note if we haven't already computed that
+                // this is an empty dictionary entry. we could stick a dictionary in here later on, take note
+                // if we haven't already computed that
                 if self.free_dict_offset.is_none() {
                     self.free_dict_offset = Some(try_entry as u32);
                 }
@@ -1518,7 +1723,8 @@ impl BasisCacheEntry {
                 hw.pt_erase(phys.page_number());
             }
         }
-        // have to do this in a second phase due to interior mutability problems doing it inside the first iterator
+        // have to do this in a second phase due to interior mutability problems doing it inside the first
+        // iterator
         for kill in kill_list {
             if self.v2p_map.remove(&kill).is_none() {
                 log::warn!("went to remove PTE from v2p map but it wasn't there: {:x}", kill);
@@ -1552,11 +1758,18 @@ impl BasisCacheEntry {
         if let Some(dict) = self.dicts.get_mut(&String::from(name)) {
             let dict_offset = VirtAddr::new(dict.index.get() as u64 * DICT_VSIZE).unwrap();
             if cleanup && (dict.key_count != dict.found_key_count) {
-                log::info!("Cleaning up key_count inconsistency: {} -> {}", dict.key_count, dict.found_key_count);
+                log::info!(
+                    "Cleaning up key_count inconsistency: {} -> {}",
+                    dict.key_count,
+                    dict.found_key_count
+                );
                 dict.key_count = dict.found_key_count;
             }
             if !dict.clean {
-                let dict_name = DictName::try_from_str(name).or(Err(Error::new(ErrorKind::InvalidInput, "dictionary name invalid: invalid utf-8 or length")))?;
+                let dict_name = DictName::try_from_str(name).or(Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "dictionary name invalid: invalid utf-8 or length",
+                )))?;
                 let dict_disk = Dictionary {
                     flags: dict.flags,
                     age: dict.age,
@@ -1566,13 +1779,15 @@ impl BasisCacheEntry {
                 };
                 log::debug!("syncing dict {} with {} keys", name, dict.key_count);
                 // log::info!("raw: {:x?}", dict_disk.deref());
-                // observation: all keys to be flushed to disk will be in the KeyCacheEntry. Some may be clean,
-                // but definitely all the dirty ones are in there (if they aren't, where else would they be??)
+                // observation: all keys to be flushed to disk will be in the KeyCacheEntry. Some may be
+                // clean, but definitely all the dirty ones are in there (if they aren't,
+                // where else would they be??)
 
                 // this is the virtual page within the dictionary region that we're currently serializing
                 let mut vpage_num = 0; // because the root record is dirty, we always need to regenerate page 0.
-                // note: other pages are only generated on-demand, based on if there is a dirty key in that page or not.
-                let mut loopcheck= 0;
+                // note: other pages are only generated on-demand, based on if there is a dirty key in that
+                // page or not.
+                let mut loopcheck = 0;
                 let mut sync_count = 0;
                 loop {
                     loopcheck += 1;
@@ -1580,7 +1795,8 @@ impl BasisCacheEntry {
                         log::warn!("potential infinite loop detected sync dict {}", name);
                     }
                     // 1. resolve the virtual address to a target page
-                    let cur_vpage = VirtAddr::new(dict_offset.get() + (vpage_num as u64 * VPAGE_SIZE as u64)).unwrap();
+                    let cur_vpage =
+                        VirtAddr::new(dict_offset.get() + (vpage_num as u64 * VPAGE_SIZE as u64)).unwrap();
                     let pp = self.v2p_map.entry(cur_vpage).or_insert_with(|| {
                         let mut ap = hw.try_fast_space_alloc().expect("FastSpace empty");
                         ap.set_valid(true);
@@ -1603,12 +1819,14 @@ impl BasisCacheEntry {
                     }
 
                     // 2(b). fill in the target vpage with data: general key case
-                    // Scan the DictCacheEntry.keys record for valid keys within the current target vpage's range
-                    // this is not a terribly efficient operation right now, because the DictCacheEntry is designed to
-                    // be searched by name, but in this case, we want to check for an index range. There's a lot
-                    // of things we could do to optimize this, depending on the memory/time trade-off we want to
-                    // make, but for now, let's do it with a dumb O(N) scan through the KeyCacheEntry, running under
-                    // the assumption that the KeyCacheEntry doesn't ever get to a very large N.
+                    // Scan the DictCacheEntry.keys record for valid keys within the current target vpage's
+                    // range this is not a terribly efficient operation right now, because
+                    // the DictCacheEntry is designed to be searched by name, but in this
+                    // case, we want to check for an index range. There's a lot
+                    // of things we could do to optimize this, depending on the memory/time trade-off we want
+                    // to make, but for now, let's do it with a dumb O(N) scan through the
+                    // KeyCacheEntry, running under the assumption that the KeyCacheEntry
+                    // doesn't ever get to a very large N.
                     let next_vpage = VirtAddr::new(cur_vpage.get() + VPAGE_SIZE as u64).unwrap();
                     let mut invalidate = Vec::<String>::new(); // remember which keys to invalidate
                     for (key_name, key) in dict.keys.iter_mut() {
@@ -1619,12 +1837,16 @@ impl BasisCacheEntry {
                             );
                         }*/
                         if key.flags.valid() {
-                            if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
-                            key.descriptor_vaddr(dict_offset) < next_vpage {
+                            if key.descriptor_vaddr(dict_offset) >= cur_vpage
+                                && key.descriptor_vaddr(dict_offset) < next_vpage
+                            {
                                 log::trace!("merging in key {}", key_name);
                                 // key is within the current page, add it to the target list
                                 let mut dk_entry = DictKeyEntry::default();
-                                let kn = KeyName::try_from_str(key_name).or(Err(Error::new(ErrorKind::InvalidInput, "key name invalid: invalid utf-8 or length")))?;
+                                let kn = KeyName::try_from_str(key_name).or(Err(Error::new(
+                                    ErrorKind::InvalidInput,
+                                    "key name invalid: invalid utf-8 or length",
+                                )))?;
                                 let key_desc = KeyDescriptor {
                                     start: key.start,
                                     len: key.len,
@@ -1636,14 +1858,21 @@ impl BasisCacheEntry {
                                 for (&src, dst) in key_desc.deref().iter().zip(dk_entry.data.iter_mut()) {
                                     *dst = src;
                                 }
-                                dk_vpage.elements[key.descriptor_index.get() as usize % DK_PER_VPAGE] = Some(dk_entry);
+                                dk_vpage.elements[key.descriptor_index.get() as usize % DK_PER_VPAGE] =
+                                    Some(dk_entry);
                                 key.clean = true;
                             } else {
-                                log::debug!("proposed key fell outside of our vpage: {} vpage{:x}/vaddr{:x}", key_name, cur_vpage.get(), key.descriptor_vaddr(dict_offset));
+                                log::debug!(
+                                    "proposed key fell outside of our vpage: {} vpage{:x}/vaddr{:x}",
+                                    key_name,
+                                    cur_vpage.get(),
+                                    key.descriptor_vaddr(dict_offset)
+                                );
                             }
                         } else {
-                            if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
-                            key.descriptor_vaddr(dict_offset) < next_vpage {
+                            if key.descriptor_vaddr(dict_offset) >= cur_vpage
+                                && key.descriptor_vaddr(dict_offset) < next_vpage
+                            {
                                 dk_vpage.elements[key.descriptor_index.get() as usize % DK_PER_VPAGE] = None;
                                 invalidate.push(key_name.to_string());
                             }
@@ -1661,18 +1890,25 @@ impl BasisCacheEntry {
                         data
                     } else {
                         log::trace!("existing data invalid, creating a new page");
-                        // the existing data was invalid (this happens e.g. on the first time a dict is created). Just overwrite the whole page.
+                        // the existing data was invalid (this happens e.g. on the first time a dict is
+                        // created). Just overwrite the whole page.
                         let mut d = vec![0u8; VPAGE_SIZE + size_of::<JournalType>()];
-                        for (&src, dst) in (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes().iter().zip(d[..size_of::<JournalType>()].iter_mut()) {
+                        for (&src, dst) in (hw.trng_u32() % JOURNAL_RAND_RANGE)
+                            .to_le_bytes()
+                            .iter()
+                            .zip(d[..size_of::<JournalType>()].iter_mut())
+                        {
                             *dst = src;
                         }
                         d
                     };
-                    for (index, stride) in page[size_of::<JournalType>()..].chunks_mut(DK_STRIDE).enumerate() {
+                    for (index, stride) in page[size_of::<JournalType>()..].chunks_mut(DK_STRIDE).enumerate()
+                    {
                         if let Some(elem) = dk_vpage.elements[index] {
                             stride.copy_from_slice(&elem.data);
                         } else {
-                            // actively zero-ize fields that are `None` so they don't decrypt to valid records later on.
+                            // actively zero-ize fields that are `None` so they don't decrypt to valid records
+                            // later on.
                             stride.copy_from_slice(&[0u8; DK_STRIDE]);
                         }
                     }
@@ -1680,15 +1916,22 @@ impl BasisCacheEntry {
                     log::debug!("patching pp {:x?} with aad {:x?}, data {:x?}", pp, self.aad, &page[..256]);
                     hw.data_encrypt_and_patch_page(&self.cipher, &self.aad, &mut page, &pp);
 
-                    // 4. Check for dirty keys, if there are still some, update vpage_num to target them; otherwise
+                    // 4. Check for dirty keys, if there are still some, update vpage_num to target them;
+                    //    otherwise
                     // exit the loop
                     let mut found_next = false;
                     for (name, key) in dict.keys.iter() {
                         if !key.clean && key.flags.valid() || !key.flags.valid() {
                             found_next = true;
-                            // note: we don't care *which* vpage we do next -- so we just break after finding the first one
+                            // note: we don't care *which* vpage we do next -- so we just break after finding
+                            // the first one
                             vpage_num = key.descriptor_vpage_num();
-                            log::debug!("sync searching again because key {} was valid {} clean {}", name, key.clean, key.flags.valid());
+                            log::debug!(
+                                "sync searching again because key {} was valid {} clean {}",
+                                name,
+                                key.clean,
+                                key.flags.valid()
+                            );
                             sync_count += 1;
                             break;
                         }
@@ -1730,13 +1973,14 @@ impl BasisCacheEntry {
                 age: self.age,
                 num_dictionaries: self.num_dicts,
             };
-            let pp = self.v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
+            let pp = self
+                .v2p_map
+                .get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
                 .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
             assert!(pp.valid(), "basis page was invalid");
             log::debug!("{} before-sync journal: {}", self.name, self.journal);
             let journal_bytes = self.journal.to_le_bytes(); // journal gets bumped by the patching function now
-            let slice_iter =
-                journal_bytes.iter() // journal rev
+            let slice_iter = journal_bytes.iter() // journal rev
                 .chain(basis_root.as_ref().iter());
             let mut block = [0 as u8; KCOM_CT_LEN];
             for (&src, dst) in slice_iter.zip(block.iter_mut()) {
@@ -1754,17 +1998,15 @@ impl BasisCacheEntry {
     pub(crate) fn ensure_dict_in_cache(&mut self, hw: &mut PddbOs, name: &str) -> bool {
         let mut dict_found = false;
         let dict_in_cache_and_valid =
-            if let Some(dict) = self.dicts.get(name) {
-                dict.flags.valid()
-            } else {
-                false
-            };
+            if let Some(dict) = self.dicts.get(name) { dict.flags.valid() } else { false };
         if !dict_in_cache_and_valid {
             log::debug!("dict: key not in cache {}", name);
             // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
             // doesn't exist. Do a comprehensive search if our cache isn't complete.
             if let Some((index, dict_record)) = self.dict_deep_search(hw, name) {
-                let dict_name = std::str::from_utf8(&dict_record.name.data[..dict_record.name.len as usize]).expect("dict name is not valid utf-8").to_string();
+                let dict_name = std::str::from_utf8(&dict_record.name.data[..dict_record.name.len as usize])
+                    .expect("dict name is not valid utf-8")
+                    .to_string();
                 let dcache = DictCacheEntry::new(dict_record, index as usize, &self.aad);
                 self.dicts.insert(dict_name, dcache);
                 dict_found = true;
@@ -1800,7 +2042,7 @@ impl BasisCacheEntry {
             }
 
             match self.dict_sync(hw, &dict, cleanup) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     log::error!("Error encountered syncing dict {}: {:?}", dict, e);
                     return Err(Error::new(ErrorKind::Other, e.to_string()));
@@ -1824,7 +2066,6 @@ impl BasisCacheEntry {
         self.large_alloc_ptr = Some(self.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START)) + PageAlignedVa::from(amount));
         return alloc_ptr.as_u64()
     }*/
-
 }
 
 // ****
@@ -1855,10 +2096,5 @@ impl BasisRootName {
     }
 }
 impl Default for BasisRootName {
-    fn default() -> BasisRootName {
-        BasisRootName{
-            len: 0,
-            data: [0; BASIS_NAME_LEN - 1]
-        }
-    }
+    fn default() -> BasisRootName { BasisRootName { len: 0, data: [0; BASIS_NAME_LEN - 1] } }
 }

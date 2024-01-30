@@ -40,7 +40,7 @@ mod ed25519_benches {
         let keypair: Keypair = Keypair::generate(&mut csprng);
         let expanded: ExpandedSecretKey = (&keypair.secret).into();
         let msg: &[u8] = b"";
-        
+
         c.bench_function("Ed25519 signing with an expanded secret key", move |b| {
                          b.iter(| | expanded.sign(msg, &keypair.public))
         });
@@ -51,7 +51,7 @@ mod ed25519_benches {
         let keypair: Keypair = Keypair::generate(&mut csprng);
         let msg: &[u8] = b"";
         let sig: Signature = keypair.sign(msg);
-        
+
         c.bench_function("Ed25519 signature verification", move |b| {
                          b.iter(| | keypair.verify(msg, &sig))
         });

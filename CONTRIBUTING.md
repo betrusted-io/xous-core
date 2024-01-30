@@ -80,7 +80,7 @@ Using GPG is a complex subject. Here are some pointers for further information:
  * [Debian Keysigning HOWTO](https://wiki.debian.org/Keysigning)
  * If you create a new key please ensure that the RSA key length is at least
    4096 bits and configured for [SHA-2](https://www.debian-administration.org/users/dkg/weblog/48)
- * If you use **caff** (from [signing-party](https://packages.debian.org/sid/signing-party)) to sign and distrubute signatures please verify that the *separate* [caff configuration is accurate](https://github.com/tmarble/kspsig).
+ * If you use **caff** (from [signing-party](https://packages.debian.org/sid/signing-party)) to sign and distribute signatures please verify that the *separate* [caff configuration is accurate](https://github.com/tmarble/kspsig).
 
 You can export your GPG public key to a file for use with Github as follows
 (assuming your GPG key id is 0xCAFED00D):

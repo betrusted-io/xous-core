@@ -6,7 +6,7 @@ mod rtc_api;
 pub use rtc_api::*;
 
 // ///////////////////// UART TYPE
-#[allow(dead_code)]  // we use this constant, but only in the `bin` view (not `lib`), so clippy complains, but this seems more discoverable here.
+#[allow(dead_code)] // we use this constant, but only in the `bin` view (not `lib`), so clippy complains, but this seems more discoverable here.
 pub(crate) const BOOT_UART: u32 = UartType::Log as u32;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, PartialEq, Eq)]
@@ -58,18 +58,19 @@ pub(crate) enum Opcode {
     /// not tested -- set GPIO
     GpioDataOut, //(u32),
     GpioDataIn,
-    GpioDataDrive, //(u32),
-    GpioIntMask, //(u32),
+    GpioDataDrive,    //(u32),
+    GpioIntMask,      //(u32),
     GpioIntAsFalling, //(u32),
     GpioIntPending,
-    GpioIntEna, //(u32),
+    GpioIntEna,       //(u32),
     GpioIntSubscribe, //(String<64>), //
     GpioIntHappened,
 
     /// set UART mux
     UartMux, //(UartType),
 
-    // InfoLitexId, //(String<64>), // TODO: returns the ASCII string baked into the FPGA that describes the FPGA build, inside Registration
+    // InfoLitexId, //(String<64>), // TODO: returns the ASCII string baked into the FPGA that describes the
+    // FPGA build, inside Registration
     InfoDna,
     InfoGit,
     InfoPlatform,
@@ -77,7 +78,7 @@ pub(crate) enum Opcode {
 
     /// partially tested -- power
     PowerAudio, //(bool),
-    PowerSelf, //(bool), // setting this to false allows the EC to turn off our power
+    PowerSelf,      //(bool), // setting this to false allows the EC to turn off our power
     PowerBoostMode, //(bool),
     PowerCrypto,
     PowerCryptoStatus,
@@ -108,7 +109,7 @@ pub(crate) enum Opcode {
     EventComSubscribe, //(String<64>),
     //EventRtcSubscribe, //(String<64>),
     EventUsbAttachSubscribe, //(String<64>),
-    EventComEnable, //(bool),
+    EventComEnable,          //(bool),
     //EventRtcEnable, //(bool),
     EventUsbAttachEnable, //(bool),
     EventActivityHappened,
@@ -157,8 +158,10 @@ the LLIO server, thus protecting the local SID from disclosure.
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub(crate) struct ScalarHook {
     pub sid: (u32, u32, u32, u32),
-    pub id: u32,  // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
-    pub cid: xous::CID,   // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
+    pub id: u32, /* ID of the scalar message to send through (e.g. the discriminant of the Enum on the
+                  * caller's side API) */
+    pub cid: xous::CID, /* caller-side connection ID for the scalar message to route to. Created by the
+                         * caller before hooking. */
 }
 
 // default RTC power mode setting

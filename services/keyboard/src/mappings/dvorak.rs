@@ -1,5 +1,6 @@
 use crate::{RowCol, ScanCode};
 /// Compute the dvorak key mapping of row/col to key tuples
+#[rustfmt::skip]
 pub(crate) fn map_dvorak(code: RowCol) -> ScanCode {
     let rc = (code.r, code.c);
 

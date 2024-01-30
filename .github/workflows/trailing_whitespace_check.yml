@@ -1,0 +1,16 @@
+# From https://github.com/samblenny/autofmt-demo/blob/main/.github/workflows/trailing_whitespace_check.yml
+name: trailing_whitespace_check
+on: push
+jobs:
+  trailing_whitespace_check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch source
+        uses: actions/checkout@v4
+
+      - name: Check .rs files for trailing whitespace
+        run: >
+          find . -name '*.rs' -print0
+          | xargs -0 grep -c --with-filename -P '[ \t]$'
+          | grep -v ':0$'
+          | perl -e 'while(<>){print;$n+=1};if($n>0){exit 1;};print "PASS\n";'

@@ -1,7 +1,7 @@
 #[cfg(not(feature = "atsama5d27"))]
-use core::num::NonZeroUsize;
-#[cfg(not(feature = "atsama5d27"))]
 use core::mem;
+#[cfg(not(feature = "atsama5d27"))]
+use core::num::NonZeroUsize;
 
 use crate::*;
 
@@ -78,8 +78,7 @@ impl BootConfig {
     pub fn get_top(&self) -> *mut usize {
         let val = unsafe {
             self.sram_start.add(
-                (self.sram_size - self.init_size - self.extra_pages * PAGE_SIZE)
-                    / mem::size_of::<usize>(),
+                (self.sram_size - self.init_size - self.extra_pages * PAGE_SIZE) / mem::size_of::<usize>(),
             )
         };
         assert!((val as usize) >= (self.sram_start as usize));
@@ -103,15 +102,11 @@ impl BootConfig {
         let pg = self.get_top();
         unsafe {
             // Grab the page address and zero it out
-            bzero(
-                pg as *mut usize,
-                pg.add(PAGE_SIZE / mem::size_of::<usize>()) as *mut usize,
-            );
+            bzero(pg as *mut usize, pg.add(PAGE_SIZE / mem::size_of::<usize>()) as *mut usize);
         }
         // Mark this page as in-use by the kernel
         let extra_bytes = self.extra_pages * PAGE_SIZE;
-        self.runtime_page_tracker[(self.sram_size - (extra_bytes + self.init_size)) / PAGE_SIZE] =
-            1;
+        self.runtime_page_tracker[(self.sram_size - (extra_bytes + self.init_size)) / PAGE_SIZE] = 1;
 
         // Return the address
         pg as *mut usize
@@ -136,10 +131,7 @@ impl BootConfig {
             }
             rpt_offset += rlen / PAGE_SIZE;
         }
-        panic!(
-            "Tried to change region {:08x} that isn't in defined memory!",
-            addr
-        );
+        panic!("Tried to change region {:08x} that isn't in defined memory!", addr);
     }
 
     /// Map the given page to the specified process table.  If necessary,
@@ -148,16 +140,29 @@ impl BootConfig {
     /// # Panics
     ///
     /// * If you try to map a page twice
-    pub fn map_page(&mut self, root: &mut PageTable, phys: usize, virt: usize, flags: usize) {
-        if VDBG {println!("    map pa {:x} -> va {:x} (satp {:x})", phys, virt, root as *mut PageTable as u32);}
+    pub fn map_page(&mut self, root: &mut PageTable, phys: usize, virt: usize, flags: usize, owner: XousPid) {
+        if VDBG {
+            println!("    map pa {:x} -> va {:x} (satp {:x})", phys, virt, root as *mut PageTable as u32);
+        }
+        assert!(!(phys == 0 && flags & FLG_VALID != 0), "cannot map zero page");
+        if flags & FLG_VALID != 0 {
+            self.change_owner(owner, phys);
+        }
         match WORD_SIZE {
-            4 => self.map_page_32(root, phys, virt, flags),
+            4 => self.map_page_32(root, phys, virt, flags, owner),
             8 => panic!("map_page doesn't work on 64-bit devices"),
             _ => panic!("unrecognized word size: {}", WORD_SIZE),
         }
     }
 
-    pub fn map_page_32(&mut self, root: &mut PageTable, phys: usize, virt: usize, flags: usize) {
+    pub fn map_page_32(
+        &mut self,
+        root: &mut PageTable,
+        phys: usize,
+        virt: usize,
+        flags: usize,
+        owner: XousPid,
+    ) {
         let ppn1 = (phys >> 22) & ((1 << 12) - 1);
         let ppn0 = (phys >> 12) & ((1 << 10) - 1);
         let ppo = (phys) & ((1 << 12) - 1);
@@ -179,16 +184,21 @@ impl BootConfig {
         // Allocate a new level 1 pagetable entry if one doesn't exist.
         if l1_pt[vpn1] & FLG_VALID == 0 {
             let na = self.alloc() as usize;
-            if VDBG {println!("The Level 1 page table is invalid ({:08x}) @ {:08x} -- allocating a new one @ {:08x}",
-                unsafe { l1_pt.as_ptr().add(vpn1) } as usize, l1_pt[vpn1], na);}
+            if VDBG {
+                println!(
+                    "The Level 1 page table is invalid ({:08x}) @ {:08x} -- allocating a new one @ {:08x}",
+                    unsafe { l1_pt.as_ptr().add(vpn1) } as usize,
+                    l1_pt[vpn1],
+                    na
+                );
+            }
             // Mark this entry as a leaf node (WRX as 0), and indicate
             // it is a valid page by setting "V".
             l1_pt[vpn1] = ((na >> 12) << 10) | FLG_VALID;
             new_addr = Some(NonZeroUsize::new(na).unwrap());
         }
 
-        let l0_pt_idx =
-            unsafe { &mut (*(((l1_pt[vpn1] << 2) & !((1 << 12) - 1)) as *mut PageTable)) };
+        let l0_pt_idx = unsafe { &mut (*(((l1_pt[vpn1] << 2) & !((1 << 12) - 1)) as *mut PageTable)) };
         let l0_pt = &mut l0_pt_idx.entries;
 
         // Ensure the entry hasn't already been mapped to a different address.
@@ -201,25 +211,28 @@ impl BootConfig {
             );
         }
         let previous_flags = l0_pt[vpn0] & 0xf;
-        l0_pt[vpn0] =
-            (ppn1 << 20) | (ppn0 << 10) | flags | previous_flags | FLG_D | FLG_A;
+        l0_pt[vpn0] = (ppn1 << 20) | (ppn0 << 10) | flags | previous_flags | FLG_D | FLG_A;
 
         // If we had to allocate a level 1 pagetable entry, ensure that it's
         // mapped into our address space, owned by PID 1.
         if let Some(addr) = new_addr {
-            if VDBG {println!(
-                ">>> Mapping new address {:08x} -> {:08x}",
-                addr.get(),
-                PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE
-            );}
+            if VDBG {
+                println!(
+                    ">>> Mapping new address {:08x} -> {:08x}",
+                    addr.get(),
+                    PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE
+                );
+            }
             self.map_page(
                 root,
                 addr.get(),
                 PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE,
                 FLG_R | FLG_W | FLG_VALID,
+                owner,
             );
-            self.change_owner(1 as XousPid, addr.get());
-            if VDBG {println!("<<< Done mapping new address");}
+            if VDBG {
+                println!("<<< Done mapping new address");
+            }
         }
     }
 }

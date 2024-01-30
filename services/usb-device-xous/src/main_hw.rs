@@ -1,33 +1,33 @@
 use crate::*;
 use crate::hid::AppHIDConfig;
+use core::num::NonZeroU8;
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::collections::VecDeque;
+use std::convert::TryInto;
+use std::sync::Arc;
+
+#[cfg(not(feature = "minimal"))]
+use keyboard::KeyMap;
 use num_traits::*;
+use usb_device::class_prelude::*;
+use usb_device::prelude::*;
 use usb_device_xous::KeyboardLedsReport;
 use usb_device_xous::UsbDeviceType;
-use xous_usb_hid::device::fido::RawFidoReport;
-use xous_usb_hid::device::fido::RawFidoConfig;
-use xous_usb_hid::device::fido::RawFido;
-use xous_usb_hid::device::DeviceClass;
-use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
-#[cfg(not(feature="minimal"))]
-use xous_semver::SemVer;
-use core::num::NonZeroU8;
-use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
-use std::sync::Arc;
+use usbd_serial::SerialPort;
 use utralib::generated::*;
-
-use usb_device::prelude::*;
-use usb_device::class_prelude::*;
-use xous_usb_hid::page::Keyboard;
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
+use xous_ipc::Buffer;
+#[cfg(not(feature = "minimal"))]
+use xous_semver::SemVer;
+use xous_usb_hid::device::fido::RawFido;
+use xous_usb_hid::device::fido::RawFidoConfig;
+use xous_usb_hid::device::fido::RawFidoReport;
 use xous_usb_hid::device::keyboard::{NKROBootKeyboard, NKROBootKeyboardConfig};
+use xous_usb_hid::device::DeviceClass;
+use xous_usb_hid::page::Keyboard;
 use xous_usb_hid::prelude::*;
 
-use std::convert::TryInto;
-#[cfg(not(feature="minimal"))]
-use keyboard::KeyMap;
-use xous_ipc::Buffer;
-use std::collections::VecDeque;
-
-use usbd_serial::SerialPort;
+use crate::*;
 
 /// Time allowed for switchover between device core types. It's longer because some hosts
 /// get really confused when you have the same VID/PID show up with a different set of endpoints.
@@ -37,7 +37,7 @@ const EXTENDED_CORE_RESET_MS: usize = 4000;
 enum Views {
     FidoWithKbd = 0,
     FidoOnly = 1,
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     MassStorage = 2,
     Serial = 3,
     HIDv2 = 4,
@@ -81,22 +81,23 @@ pub(crate) fn main_hw() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     let usbdev_sid = xns.register_name(api::SERVER_NAME_USB_DEVICE, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", usbdev_sid);
-    #[cfg(not(feature="minimal"))]
+    #[cfg(not(feature = "minimal"))]
     let llio = llio::Llio::new(&xns);
     let tt = ticktimer_server::Ticktimer::new().unwrap();
-    #[cfg(not(feature="minimal"))]
+    #[cfg(not(feature = "minimal"))]
     let native_kbd = keyboard::Keyboard::new(&xns).unwrap();
-    #[cfg(not(feature="minimal"))]
+    #[cfg(not(feature = "minimal"))]
     let native_map = native_kbd.get_keymap().unwrap();
 
-    #[cfg(not(feature="minimal"))]
+    #[cfg(not(feature = "minimal"))]
     let serial_number = format!("{:x}", llio.soc_dna().unwrap());
-    #[cfg(not(feature="minimal"))]
+    #[cfg(not(feature = "minimal"))]
     {
-        let minimum_ver = SemVer {maj: 0, min: 9, rev: 8, extra: 20, commit: None};
+        let minimum_ver = SemVer { maj: 0, min: 9, rev: 8, extra: 20, commit: None };
         let soc_ver = llio.soc_gitrev().unwrap();
         if soc_ver < minimum_ver {
-            if soc_ver.min != 0 { // don't show during hosted mode, which reports 0.0.0+0
+            if soc_ver.min != 0 {
+                // don't show during hosted mode, which reports 0.0.0+0
                 tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
                 let modals = modals::Modals::new(&xns).unwrap();
                 modals.show_notification(
@@ -110,9 +111,11 @@ pub(crate) fn main_hw() -> ! {
             loop {
                 let msg = xous::receive_message(usbdev_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
-                    Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
-                        xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
-                    }),
+                    Some(Opcode::DebugUsbOp) => {
+                        msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
+                            xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
+                        })
+                    }
                     Some(Opcode::U2fRxDeferred) => {
                         // block any rx requests forever
                         fido_listener = Some(msg);
@@ -132,7 +135,8 @@ pub(crate) fn main_hw() -> ! {
                             arg2: _,
                             arg3: _,
                             arg4: _,
-                        }) = msg.body {
+                        }) = msg.body
+                        {
                             log::warn!("Returning bogus result");
                             xous::return_scalar(msg.sender, 0).unwrap();
                         }
@@ -142,9 +146,9 @@ pub(crate) fn main_hw() -> ! {
             log::info!("consuming listener: {:?}", fido_listener);
         }
     }
-    #[cfg(feature="minimal")]
+    #[cfg(feature = "minimal")]
     let serial_number = "minimalbuild";
-    #[cfg(feature="minimal")]
+    #[cfg(feature = "minimal")]
     {
         use utralib::generated::*;
         let gpio_base = xous::syscall::map_memory(
@@ -176,11 +180,11 @@ pub(crate) fn main_hw() -> ! {
     .expect("couldn't map USB CSR range");
 
     // Notes:
-    //  - Most drivers would `Box()` the hardware management structure to make sure the compiler doesn't
-    //    move its location. However, we can't do this here because we are trying to maintain compatibility
-    //    with another crate that implements the USB stack which can't handle Box'd structures.
-    //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that
-    //    tracks if the interrupt handler has been hooked, and ignores further requests to hook it.
+    //  - Most drivers would `Box()` the hardware management structure to make sure the compiler doesn't move
+    //    its location. However, we can't do this here because we are trying to maintain compatibility with
+    //    another crate that implements the USB stack which can't handle Box'd structures.
+    //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that tracks
+    //    if the interrupt handler has been hooked, and ignores further requests to hook it.
     let usb_fidokbd_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     usb_fidokbd_dev.init();
     let mut usbmgmt = usb_fidokbd_dev.get_iface();
@@ -189,36 +193,28 @@ pub(crate) fn main_hw() -> ! {
     let usb_fido_dev: SpinalUsbDevice = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     usb_fido_dev.init();
     // do the same thing for mass storage
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     let ums_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     ums_dev.init();
     let serial_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     serial_dev.init();
 
     // track which view is visible on the device core
-    #[cfg(not(feature="minimal"))]
+    #[cfg(not(feature = "minimal"))]
     let mut view = Views::FidoWithKbd;
 
     // register a suspend/resume listener
     let cid = xous::connect(usbdev_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(
-        None,
-        &xns,
-        api::Opcode::SuspendResume as u32,
-        cid
-    ).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, cid)
+        .expect("couldn't create suspend/resume object");
 
     // FIDO + keyboard
     let usb_alloc = UsbBusAllocator::new(usb_fidokbd_dev);
 
     let mut composite = UsbHidClassBuilder::new()
-        .add_device(
-            NKROBootKeyboardConfig::default(),
-        )
-        .add_device(
-            RawFidoConfig::default()
-        )
+        .add_device(NKROBootKeyboardConfig::default())
+        .add_device(RawFidoConfig::default())
         .build(&usb_alloc);
 
     let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x3613))
@@ -229,36 +225,32 @@ pub(crate) fn main_hw() -> ! {
 
     // FIDO only
     let fido_alloc = UsbBusAllocator::new(usb_fido_dev);
-    let mut fido_class = UsbHidClassBuilder::new()
-        .add_device(
-            RawFidoConfig::default()
-        )
-        .build(&fido_alloc);
+    let mut fido_class = UsbHidClassBuilder::new().add_device(RawFidoConfig::default()).build(&fido_alloc);
 
     let mut fido_dev = UsbDeviceBuilder::new(&fido_alloc, UsbVidPid(0x1209, 0x3613))
-    .manufacturer("Kosagi")
-    .product("Precursor")
-    .serial_number(&serial_number)
-    .build();
+        .manufacturer("Kosagi")
+        .product("Precursor")
+        .serial_number(&serial_number)
+        .build();
 
     // Mass storage
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     let ums_alloc = UsbBusAllocator::new(ums_dev);
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     let abd = apps_block_device::AppsBlockDevice::new();
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     let abdcid = abd.conn();
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     let mut ums = usbd_scsi::Scsi::new(
         &ums_alloc,
         64,
         abd,
         "Kosagi".as_bytes(),
         "Kosagi Precursor".as_bytes(),
-        "1".as_bytes()
+        "1".as_bytes(),
     );
 
-    #[cfg(feature="mass-storage")]
+    #[cfg(feature = "mass-storage")]
     let mut ums_device = UsbDeviceBuilder::new(&ums_alloc, UsbVidPid(0x1209, 0x3613))
         .manufacturer("Kosagi")
         .product("Precursor")
@@ -273,12 +265,12 @@ pub(crate) fn main_hw() -> ! {
     // this will create a default port with 128 bytes of backing store
     let mut serial_port = SerialPort::new(&serial_alloc);
     let mut serial_device = UsbDeviceBuilder::new(&serial_alloc, UsbVidPid(0x1209, 0x3613))
-    .manufacturer("Kosagi")
-    .product("Precursor")
-    .serial_number(&serial_number)
-    .self_powered(false)
-    .max_power(500)
-    .build();
+        .manufacturer("Kosagi")
+        .product("Precursor")
+        .serial_number(&serial_number)
+        .self_powered(false)
+        .max_power(500)
+        .build();
     let mut serial_listener: Option<xous::MessageEnvelope> = None;
     let mut serial_listen_mode: SerialListenMode = SerialListenMode::NoListener;
     let mut serial_buf = Vec::<u8>::new();
@@ -286,7 +278,7 @@ pub(crate) fn main_hw() -> ! {
     let trng = trng::Trng::new(&xns).unwrap();
     let mut serial_trng_buf = Vec::<u8>::new();
     let serial_trng_interval = Arc::new(AtomicU32::new(0));
-    let mut serial_trng_cid: Option::<xous::CID> = None;
+    let mut serial_trng_cid: Option<xous::CID> = None;
     const TRNG_PKT_SIZE: usize = 64; // size of a TRNG packet being sent. This is inferred from the spec.
     const TRNG_INITIAL_DELAY_MS: u32 = 200; // the very first poll takes longer, because we have to fill the TRNG back-end
     const TRNG_REFILL_DELAY_MS: u32 = 1; // we re-poll very fast once we see the host taking data
@@ -295,12 +287,12 @@ pub(crate) fn main_hw() -> ! {
 
     let usb_hidv2_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     let hidv2_alloc = UsbBusAllocator::new(usb_hidv2_dev);
-    
+
     let mut hidv2 = hid::AppHID::new(
         UsbVidPid(0x1209, 0x3613),
         &serial_number,
         &hidv2_alloc,
-        AppHIDConfig::default(), 
+        AppHIDConfig::default(),
         100, // 100 * 64 bytes = 6.4kb, quite the backlog
     );
 
@@ -308,7 +300,8 @@ pub(crate) fn main_hw() -> ! {
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
     // under the theory that PIDs cannot be forged. TODO: check that PIDs cannot be forged.
-    // also if someone commandeers a process, all bets are off within that process (this is a general statement)
+    // also if someone commandeers a process, all bets are off within that process (this is a general
+    // statement)
     let mut fido_listener_pid: Option<NonZeroU8> = None;
     let mut fido_rx_queue = VecDeque::<[u8; 64]>::new();
 
@@ -316,18 +309,23 @@ pub(crate) fn main_hw() -> ! {
     let mut was_suspend = true;
     let mut autotype_delay_ms = 30;
 
-    #[cfg(feature="minimal")]
+    // event observer connection
+    let mut observer_conn: Option<xous::CID> = None;
+    let mut observer_op: Option<usize> = None;
+
+    #[cfg(feature = "minimal")]
     std::thread::spawn(move || {
-        // this keeps the watchdog alive in minimal mode; if there's no event, eventually the watchdog times out
+        // this keeps the watchdog alive in minimal mode; if there's no event, eventually the watchdog times
+        // out
         let tt = ticktimer_server::Ticktimer::new().unwrap();
         loop {
             tt.sleep_ms(1500).ok();
         }
     });
     // switch the core automatically on boot
-    #[cfg(feature="minimal")]
+    #[cfg(feature = "minimal")]
     let mut view = Views::MassStorage;
-    #[cfg(feature="minimal")]
+    #[cfg(feature = "minimal")]
     {
         usbmgmt.ll_reset(true);
         tt.sleep_ms(1000).ok();
@@ -338,9 +336,10 @@ pub(crate) fn main_hw() -> ! {
     // manage FIDO Rx timeouts -- not tested yet
     let to_server = xous::create_server().unwrap();
     let to_conn = xous::connect(to_server).unwrap();
-    // we don't have AtomicU64 on this platform, so we suffer from a rollover condition in timeouts once every 46 days
-    // this manifests as a timeout that happens to be scheduled on the rollover being rounded to a max limit timeout of
-    // 5 seconds, and/or an immediate timeout happening during the 5 seconds before the 46-day limit
+    // we don't have AtomicU64 on this platform, so we suffer from a rollover condition in timeouts once every
+    // 46 days this manifests as a timeout that happens to be scheduled on the rollover being rounded to a
+    // max limit timeout of 5 seconds, and/or an immediate timeout happening during the 5 seconds before
+    // the 46-day limit
     let target_time_lsb = Arc::new(AtomicU32::new(0));
     let to_run = Arc::new(AtomicBool::new(false));
     const MAX_TIMEOUT_LIMIT_MS: u32 = 5000;
@@ -356,35 +355,46 @@ pub(crate) fn main_hw() -> ! {
             let mut return_type = 0;
             let mut next_wake = tt.elapsed_ms();
             loop {
-                xous::reply_and_receive_next_legacy(to_server, &mut msg_opt, &mut return_type)
-                .unwrap();
+                xous::reply_and_receive_next_legacy(to_server, &mut msg_opt, &mut return_type).unwrap();
                 let msg = msg_opt.as_mut().unwrap();
                 // loop only consumes CPU time when a timeout is active. Once it has timed out,
                 // it will wait for a new pump call.
                 let now = tt.elapsed_ms();
-                match num_traits::FromPrimitive::from_usize(msg.body.id())
-                .unwrap_or(TimeoutOp::InvalidCall)
-                {
+                match num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(TimeoutOp::InvalidCall) {
                     TimeoutOp::Pump => {
                         if to_run.load(Ordering::SeqCst) {
                             let tt_lsb = target_time_lsb.load(Ordering::SeqCst);
-                            if tt_lsb >= (now as u32) ||
-                                (now as u32) - tt_lsb > MAX_TIMEOUT_LIMIT_MS // limits rollover case
+                            if tt_lsb >= (now as u32) || (now as u32) - tt_lsb > MAX_TIMEOUT_LIMIT_MS
+                            // limits rollover case
                             {
-                                xous::try_send_message(cid,
-                                    xous::Message::new_scalar(Opcode::U2fRxTimeout.to_usize().unwrap(),
-                                        0, 0, 0, 0)
-                                ).ok();
+                                xous::try_send_message(
+                                    cid,
+                                    xous::Message::new_scalar(
+                                        Opcode::U2fRxTimeout.to_usize().unwrap(),
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                    ),
+                                )
+                                .ok();
                                 // no need to set to_run to `false` because a Pump message isn't initiated;
                                 // the loop de-facto stops from a lack of new Pump messages
                             } else {
                                 if next_wake <= now {
                                     next_wake = now + POLL_INTERVAL_MS;
                                     tt.sleep_ms(POLL_INTERVAL_MS as usize).ok();
-                                    xous::try_send_message(to_conn,
-                                        xous::Message::new_scalar(TimeoutOp::Pump.to_usize().unwrap(),
-                                            0, 0, 0, 0)
-                                    ).ok();
+                                    xous::try_send_message(
+                                        to_conn,
+                                        xous::Message::new_scalar(
+                                            TimeoutOp::Pump.to_usize().unwrap(),
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                        ),
+                                    )
+                                    .ok();
                                 } else {
                                     // don't issue more wakeups if we already have a wakeup scheduled
                                 }
@@ -399,7 +409,10 @@ pub(crate) fn main_hw() -> ! {
                         }
                     }
                     TimeoutOp::InvalidCall => {
-                        log::error!("Unknown opcode received in FIDO Rx timeout handler: {:?}", msg.body.id());
+                        log::error!(
+                            "Unknown opcode received in FIDO Rx timeout handler: {:?}",
+                            msg.body.id()
+                        );
                     }
                 }
             }
@@ -412,32 +425,51 @@ pub(crate) fn main_hw() -> ! {
         let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("{:?}", opcode);
         match opcode {
-            #[cfg(feature="mass-storage")]
-            Some(Opcode::SetBlockDevice) => msg_blocking_scalar_unpack!(msg, read_id, write_id, max_lba_id, _, {
+            #[cfg(feature = "mass-storage")]
+            Some(Opcode::SetBlockDevice) => {
+                msg_blocking_scalar_unpack!(msg, read_id, write_id, max_lba_id, _, {
+                    xous::send_message(
+                        abdcid,
+                        xous::Message::new_blocking_scalar(
+                            apps_block_device::BlockDeviceMgmtOp::SetOps.to_usize().unwrap(),
+                            read_id,
+                            write_id,
+                            max_lba_id,
+                            0,
+                        ),
+                    )
+                    .unwrap();
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                })
+            }
+            #[cfg(feature = "mass-storage")]
+            Some(Opcode::SetBlockDeviceSID) => msg_blocking_scalar_unpack!(msg, sid1, sid2, sid3, sid4, {
                 xous::send_message(
                     abdcid,
                     xous::Message::new_blocking_scalar(
-                        apps_block_device::BlockDeviceMgmtOp::SetOps.to_usize().unwrap(), read_id, write_id, max_lba_id, 0,
-                    )
-                ).unwrap();
+                        apps_block_device::BlockDeviceMgmtOp::SetSID.to_usize().unwrap(),
+                        sid1,
+                        sid2,
+                        sid3,
+                        sid4,
+                    ),
+                )
+                .unwrap();
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
-            #[cfg(feature="mass-storage")]
-            Some(Opcode::SetBlockDeviceSID) => msg_blocking_scalar_unpack!(msg, sid1, sid2, sid3, sid4, {
-                xous::send_message(abdcid,
-                    xous::Message::new_blocking_scalar(
-                        apps_block_device::BlockDeviceMgmtOp::SetSID.to_usize().unwrap(), sid1, sid2, sid3, sid4
-                    )
-                ).unwrap();
-                xous::return_scalar(msg.sender, 0).unwrap();
-            }),
-            #[cfg(feature="mass-storage")]
+            #[cfg(feature = "mass-storage")]
             Some(Opcode::ResetBlockDevice) => msg_blocking_scalar_unpack!(msg, 0, 0, 0, 0, {
-                xous::send_message(abdcid,
+                xous::send_message(
+                    abdcid,
                     xous::Message::new_blocking_scalar(
-                        apps_block_device::BlockDeviceMgmtOp::Reset.to_usize().unwrap(), 0, 0, 0, 0,
-                    )
-                ).unwrap();
+                        apps_block_device::BlockDeviceMgmtOp::Reset.to_usize().unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .unwrap();
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
@@ -447,25 +479,33 @@ pub(crate) fn main_hw() -> ! {
                 usbmgmt.xous_resume1();
                 match view {
                     Views::FidoWithKbd => {
-                        usb_dev.force_reset()
+                        match usb_dev.force_reset() {
+                            Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                            _ => (),
+                        };
                     }
                     Views::FidoOnly => {
-                        fido_dev.force_reset()
+                        match fido_dev.force_reset() {
+                            Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                            _ => (),
+                        };
                     }
-                    #[cfg(feature="mass-storage")]
+                    #[cfg(feature = "mass-storage")]
                     Views::MassStorage => {
-                        ums_device.force_reset()
+                        // TODO: test this
+                        match ums_device.force_reset() {
+                            Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                            _ => (),
+                        };
                     }
-                    Views::Serial => {
-                        serial_device.force_reset()
-                    },
                     Views::HIDv2 => {
                         hidv2.force_reset()
                     }
-                }.unwrap_or_else(|err| {
-                    log::warn!("USB reset for view {:?} on resume failed: {:?}", view, err)
-                });
-
+                    Views::Serial => match serial_device.force_reset() {
+                        Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                        _ => (),
+                    },
+                }
                 // resume2 brings us to our last application state
                 usbmgmt.xous_resume2();
                 lockstatus_force_update = true; // notify the status bar that yes, it does need to redraw the lock status, even if the value hasn't changed since the last read
@@ -474,18 +514,36 @@ pub(crate) fn main_hw() -> ! {
                 xous::return_scalar(msg.sender, 1).expect("couldn't return compatibility status")
             }),
             Some(Opcode::U2fRxDeferred) => {
+                // notify the event listener, if any
+                if observer_conn.is_some() && observer_op.is_some() {
+                    xous::try_send_message(
+                        observer_conn.unwrap(),
+                        xous::Message::new_scalar(observer_op.unwrap(), 0, 0, 0, 0),
+                    )
+                    .ok();
+                }
+
                 if fido_listener_pid.is_none() {
                     fido_listener_pid = msg.sender.pid();
                 }
                 if fido_listener.is_some() {
-                    log::error!("Double-listener request detected. There should only ever by one registered listener at a time.");
-                    log::error!("This will cause an upstream server to misbehave, but not panicing so the problem can be debugged.");
-                    // the receiver will get a response with the `code` field still in the `RxWait` state to indicate the problem
+                    log::error!(
+                        "Double-listener request detected. There should only ever by one registered listener at a time."
+                    );
+                    log::error!(
+                        "This will cause an upstream server to misbehave, but not panicing so the problem can be debugged."
+                    );
+                    // the receiver will get a response with the `code` field still in the `RxWait` state to
+                    // indicate the problem
                 }
                 if fido_listener_pid == msg.sender.pid() {
                     // preferentially pull from the rx queue if it has elements
                     if let Some(data) = fido_rx_queue.pop_front() {
-                        log::debug!("no deferral: ret queued data: {:?} queue len: {}", &data[..8], fido_rx_queue.len() + 1);
+                        log::debug!(
+                            "no deferral: ret queued data: {:?} queue len: {}",
+                            &data[..8],
+                            fido_rx_queue.len() + 1
+                        );
                         let mut response = unsafe {
                             Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                         };
@@ -496,26 +554,40 @@ pub(crate) fn main_hw() -> ! {
                         response.replace(buf).unwrap();
                     } else {
                         log::trace!("registering deferred listener");
-                        { // not tested
+                        {
+                            // not tested
                             let spec = unsafe {
                                 Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                             };
                             if let Some(to) = spec.to_original::<U2fMsgIpc, _>().unwrap().timeout_ms {
                                 let target = tt.elapsed_ms() + to;
                                 target_time_lsb.store(target as u32, Ordering::SeqCst); // this will keep updating the target time later and later
-                                // run must always be set *after* target time is updated, because there is always a chance
-                                // we timed out and checked target time between these two steps
+                                // run must always be set *after* target time is updated, because there is
+                                // always a chance we timed out and checked
+                                // target time between these two steps
                                 to_run.store(true, Ordering::SeqCst);
-                                xous::try_send_message(to_conn,
-                                    xous::Message::new_scalar(TimeoutOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)
-                                ).ok();
+                                xous::try_send_message(
+                                    to_conn,
+                                    xous::Message::new_scalar(
+                                        TimeoutOp::Pump.to_usize().unwrap(),
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                    ),
+                                )
+                                .ok();
                             }
                         };
                         fido_listener = Some(msg);
                     }
                 } else {
-                    log::warn!("U2F interface capability is locked on first use; additional servers are ignored: {:?}", msg.sender);
-                    let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    log::warn!(
+                        "U2F interface capability is locked on first use; additional servers are ignored: {:?}",
+                        msg.sender
+                    );
+                    let mut buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                     let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
                     u2f_ipc.code = U2fCode::Denied;
                     buffer.replace(u2f_ipc).unwrap();
@@ -537,7 +609,8 @@ pub(crate) fn main_hw() -> ! {
                 if fido_listener_pid.is_none() {
                     fido_listener_pid = msg.sender.pid();
                 }
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
                 if fido_listener_pid == msg.sender.pid() {
                     let mut u2f_msg = RawFidoReport::default();
@@ -546,7 +619,7 @@ pub(crate) fn main_hw() -> ! {
                     let u2f = match view {
                         Views::FidoWithKbd => composite.device::<RawFido<'_, _>, _>(),
                         Views::FidoOnly => fido_class.device::<RawFido<'_, _>, _>(),
-                        #[cfg(feature="mass-storage")]
+                        #[cfg(feature = "mass-storage")]
                         Views::MassStorage => panic!("did not expect u2f tx when in mass storage mode!"),
                         Views::Serial => panic!("did not expect u2f tx while in serial mode!"),
                         Views::HIDv2 => panic!("did not expect u2f tx while in hidv2 mode!"),
@@ -581,52 +654,44 @@ pub(crate) fn main_hw() -> ! {
                         } else {
                             None
                         }
-                    },
-                    #[cfg(feature="mass-storage")]
+                    }
+                    #[cfg(feature = "mass-storage")]
                     Views::MassStorage => {
                         if ums_device.poll(&mut [&mut ums]) {
                             log::debug!("ums device had something to do!")
                         }
                         None
-                    },
+                    }
                     Views::Serial => {
                         if serial_device.poll(&mut [&mut serial_port]) {
                             let mut data: [u8; 1024] = [0u8; SERIAL_BUF_LEN];
                             match serial_listen_mode {
-                                SerialListenMode::NoListener => {
-                                    match serial_port.read(&mut data) {
-                                        Ok(len) => {
-                                            match std::str::from_utf8(&data[..len]) {
-                                                Ok(s) => log::debug!("No listener ascii: {}", s),
-                                                Err(_) => {
-                                                    log::debug!("No listener binary: {:x?}", &data[..len]);
-                                                }
+                                SerialListenMode::NoListener => match serial_port.read(&mut data) {
+                                    Ok(len) => match std::str::from_utf8(&data[..len]) {
+                                        Ok(s) => log::debug!("No listener ascii: {}", s),
+                                        Err(_) => {
+                                            log::debug!("No listener binary: {:x?}", &data[..len]);
+                                        }
+                                    },
+                                    Err(e) => {
+                                        log::debug!("No listener: {:?}", e);
+                                    }
+                                },
+                                SerialListenMode::ConsoleListener => match serial_port.read(&mut data) {
+                                    Ok(len) => match std::str::from_utf8(&data[..len]) {
+                                        Ok(s) => {
+                                            for c in s.chars() {
+                                                native_kbd.inject_key(c);
                                             }
                                         }
-                                        Err(e) => {
-                                            log::debug!("No listener: {:?}", e);
+                                        Err(_) => {
+                                            log::info!("Non UTF-8 received on console: {:x?}", &data[..len]);
                                         }
+                                    },
+                                    Err(e) => {
+                                        log::info!("Serial read error: {:?}", e);
                                     }
-                                }
-                                SerialListenMode::ConsoleListener => {
-                                    match serial_port.read(&mut data) {
-                                        Ok(len) => {
-                                            match std::str::from_utf8(&data[..len]) {
-                                                Ok(s) => {
-                                                    for c in s.chars() {
-                                                        native_kbd.inject_key(c);
-                                                    }
-                                                },
-                                                Err(_) => {
-                                                    log::info!("Non UTF-8 received on console: {:x?}", &data[..len]);
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            log::info!("Serial read error: {:?}", e);
-                                        }
-                                    }
-                                }
+                                },
                                 SerialListenMode::AsciiListener(maybe_delimiter) => {
                                     let readlen = serial_port.read(&mut data).unwrap_or(0);
                                     if readlen == 0 {
@@ -634,10 +699,17 @@ pub(crate) fn main_hw() -> ! {
                                     }
                                     if let Some(delimiter) = maybe_delimiter {
                                         if !delimiter.is_ascii() {
-                                            log::warn!("Chosen ASCII delimiter {} is not ASCII. Serial receive will not function properly.", delimiter);
+                                            log::warn!(
+                                                "Chosen ASCII delimiter {} is not ASCII. Serial receive will not function properly.",
+                                                delimiter
+                                            );
                                         }
-                                        if !serial_rx_trigger { // once true, sticks as true
-                                            serial_rx_trigger = data[..readlen].iter().find(|&&c| c == (delimiter as u8)).is_some();
+                                        if !serial_rx_trigger {
+                                            // once true, sticks as true
+                                            serial_rx_trigger = data[..readlen]
+                                                .iter()
+                                                .find(|&&c| c == (delimiter as u8))
+                                                .is_some();
                                         }
                                     } else {
                                         serial_rx_trigger = true;
@@ -650,11 +722,18 @@ pub(crate) fn main_hw() -> ! {
                                     if serial_rx_trigger && serial_listener.is_some() {
                                         let mut rx_msg = serial_listener.take().unwrap();
                                         let mut response = unsafe {
-                                            Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                            Buffer::from_memory_message_mut(
+                                                rx_msg.body.memory_message_mut().unwrap(),
+                                            )
                                         };
                                         let mut buf = response.to_original::<UsbSerialAscii, _>().unwrap();
                                         use std::fmt::Write; // is this really the best way to do it? probably not.
-                                        write!(buf.s, "{}", std::string::String::from_utf8_lossy(&serial_buf)).ok();
+                                        write!(
+                                            buf.s,
+                                            "{}",
+                                            std::string::String::from_utf8_lossy(&serial_buf)
+                                        )
+                                        .ok();
 
                                         response.replace(buf).unwrap();
                                         // the rx_msg will drop and respond to the listener
@@ -674,10 +753,15 @@ pub(crate) fn main_hw() -> ! {
                                         match serial_listener.take() {
                                             Some(mut rx_msg) => {
                                                 let mut response = unsafe {
-                                                    Buffer::from_memory_message_mut(rx_msg.body.memory_message_mut().unwrap())
+                                                    Buffer::from_memory_message_mut(
+                                                        rx_msg.body.memory_message_mut().unwrap(),
+                                                    )
                                                 };
-                                                let mut buf = response.to_original::<UsbSerialBinary, _>().unwrap();
-                                                buf.d.copy_from_slice(serial_buf.drain(..SERIAL_BINARY_BUFLEN).as_slice());
+                                                let mut buf =
+                                                    response.to_original::<UsbSerialBinary, _>().unwrap();
+                                                buf.d.copy_from_slice(
+                                                    serial_buf.drain(..SERIAL_BINARY_BUFLEN).as_slice(),
+                                                );
                                                 buf.len = SERIAL_BINARY_BUFLEN;
                                                 response.replace(buf).unwrap();
                                                 // the rx_msg will drop and respond to the listener
@@ -691,7 +775,7 @@ pub(crate) fn main_hw() -> ! {
                             }
                         }
                         None
-                    },
+                    }
                     Views::HIDv2 => {
                         match hidv2.poll() {
                             Ok(_) => (),
@@ -707,7 +791,9 @@ pub(crate) fn main_hw() -> ! {
                             if let Some(mut listener) = fido_listener.take() {
                                 to_run.store(false, Ordering::SeqCst); // stop the timeout process from running
                                 let mut response = unsafe {
-                                    Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                                    Buffer::from_memory_message_mut(
+                                        listener.body.memory_message_mut().unwrap(),
+                                    )
                                 };
                                 let mut buf = response.to_original::<U2fMsgIpc, _>().unwrap();
                                 assert_eq!(buf.code, U2fCode::RxWait, "Expected U2fcode::RxWait in wrapper");
@@ -719,7 +805,7 @@ pub(crate) fn main_hw() -> ! {
                                 log::debug!("Got U2F packet, but no server to respond...queuing.");
                                 fido_rx_queue.push_back(u2f_report.packet);
                             }
-                        },
+                        }
                         Err(e) => log::trace!("U2F ERR: {:?}", e),
                     }
                 }
@@ -727,7 +813,7 @@ pub(crate) fn main_hw() -> ! {
                 let is_suspend = match view {
                     Views::FidoWithKbd => usb_dev.state() == UsbDeviceState::Suspend,
                     Views::FidoOnly => fido_dev.state() == UsbDeviceState::Suspend,
-                    #[cfg(feature="mass-storage")]
+                    #[cfg(feature = "mass-storage")]
                     Views::MassStorage => ums_device.state() == UsbDeviceState::Suspend,
                     Views::Serial => serial_device.state() == UsbDeviceState::Suspend,
                     Views::HIDv2 => hidv2.state() == UsbDeviceState::Suspend,
@@ -735,7 +821,8 @@ pub(crate) fn main_hw() -> ! {
                 if is_suspend {
                     log::info!("suspend detected");
                     if was_suspend == false {
-                        // FIDO listener needs to know when USB was unplugged, so that it can reset state per FIDO2 spec
+                        // FIDO listener needs to know when USB was unplugged, so that it can reset state per
+                        // FIDO2 spec
                         if let Some(mut listener) = fido_listener.take() {
                             to_run.store(false, Ordering::SeqCst);
                             let mut response = unsafe {
@@ -751,25 +838,34 @@ pub(crate) fn main_hw() -> ! {
                 } else {
                     was_suspend = false;
                 }
-            },
+            }
             // always triggers a reset when called
             Some(Opcode::SwitchCores) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {
                 // ensure unhook the logger if it's connected to serial
                 let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
                 // it is never harmful to double-unhook this
-                xous::send_message(log_conn,
-                    xous::Message::new_blocking_scalar(log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
-                ).ok();
+                xous::send_message(
+                    log_conn,
+                    xous::Message::new_blocking_scalar(
+                        log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .ok();
                 // reset any serial listeners that may have been set
                 serial_listen_mode = SerialListenMode::NoListener;
                 serial_listener.take();
                 // shut down the TRNG sender if it's set
                 if let Some(trng_cid) = serial_trng_cid.take() {
                     serial_trng_interval.store(0, Ordering::SeqCst);
-                    xous::send_message(trng_cid,
-                        xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(),
-                            0, 0, 0, 0)
-                    ).ok();
+                    xous::send_message(
+                        trng_cid,
+                        xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .ok();
                     trng.set_test_mode(trng::api::TrngTestMode::None);
                 }
 
@@ -792,7 +888,7 @@ pub(crate) fn main_hw() -> ! {
                                 usbmgmt.ll_reset(false);
                             }
                         }
-                        let keyboard = composite.device::<NKROBootKeyboard<'_, _,>, _>();
+                        let keyboard = composite.device::<NKROBootKeyboard<'_, _>, _>();
                         keyboard.write_report([Keyboard::NoEventIndicated]).ok(); // queues an "all key-up" for the interface
                         keyboard.tick().ok();
                     }
@@ -810,7 +906,7 @@ pub(crate) fn main_hw() -> ! {
                             }
                         }
                     }
-                    #[cfg(feature="mass-storage")]
+                    #[cfg(feature = "mass-storage")]
                     UsbDeviceType::MassStorage => {
                         log::info!("Connecting device mass storage; disconnecting debug USB core");
                         match view {
@@ -861,21 +957,31 @@ pub(crate) fn main_hw() -> ! {
                 let devtype: UsbDeviceType = core.try_into().unwrap();
                 // if we are switching away from serial, unhook any possible listeners, and the logger
                 if view == Views::Serial && devtype != UsbDeviceType::Serial {
-                    let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
+                    let log_conn =
+                        xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
                     // it is never harmful to double-unhook this
-                    xous::send_message(log_conn,
-                        xous::Message::new_blocking_scalar(log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).ok();
+                    xous::send_message(
+                        log_conn,
+                        xous::Message::new_blocking_scalar(
+                            log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(),
+                            0,
+                            0,
+                            0,
+                            0,
+                        ),
+                    )
+                    .ok();
                     // reset any serial listeners that may have been set
                     serial_listen_mode = SerialListenMode::NoListener;
                     serial_listener.take();
                     // shut down the TRNG sender if it's set
                     if let Some(trng_cid) = serial_trng_cid.take() {
                         serial_trng_interval.store(0, Ordering::SeqCst);
-                        xous::send_message(trng_cid,
-                            xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(),
-                                0, 0, 0, 0)
-                        ).ok();
+                        xous::send_message(
+                            trng_cid,
+                            xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .ok();
                         trng.set_test_mode(trng::api::TrngTestMode::None);
                     }
                 }
@@ -904,7 +1010,7 @@ pub(crate) fn main_hw() -> ! {
                                 // type matches, do nothing
                             }
                         }
-                        let keyboard = composite.device::<NKROBootKeyboard<'_, _,>, _>();
+                        let keyboard = composite.device::<NKROBootKeyboard<'_, _>, _>();
                         keyboard.write_report([Keyboard::NoEventIndicated]).ok(); // queues an "all key-up" for the interface
                         keyboard.tick().ok();
                     }
@@ -925,8 +1031,8 @@ pub(crate) fn main_hw() -> ! {
                                 // type matches, do nothing
                             }
                         }
-                    },
-                    #[cfg(feature="mass-storage")]
+                    }
+                    #[cfg(feature = "mass-storage")]
                     UsbDeviceType::MassStorage => {
                         log::info!("Ensuring mass storage device");
                         if !usbmgmt.is_device_connected() {
@@ -983,11 +1089,19 @@ pub(crate) fn main_hw() -> ! {
             Some(Opcode::WhichCore) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if usbmgmt.is_device_connected() {
                     match view {
-                        Views::FidoWithKbd => xous::return_scalar(msg.sender, UsbDeviceType::FidoKbd as usize).unwrap(),
-                        Views::FidoOnly => xous::return_scalar(msg.sender, UsbDeviceType::Fido as usize).unwrap(),
-                        #[cfg(feature="mass-storage")]
-                        Views::MassStorage => xous::return_scalar(msg.sender, UsbDeviceType::MassStorage as usize).unwrap(),
-                        Views::Serial => xous::return_scalar(msg.sender, UsbDeviceType::Serial as usize).unwrap(),
+                        Views::FidoWithKbd => {
+                            xous::return_scalar(msg.sender, UsbDeviceType::FidoKbd as usize).unwrap()
+                        }
+                        Views::FidoOnly => {
+                            xous::return_scalar(msg.sender, UsbDeviceType::Fido as usize).unwrap()
+                        }
+                        #[cfg(feature = "mass-storage")]
+                        Views::MassStorage => {
+                            xous::return_scalar(msg.sender, UsbDeviceType::MassStorage as usize).unwrap()
+                        }
+                        Views::Serial => {
+                            xous::return_scalar(msg.sender, UsbDeviceType::Serial as usize).unwrap()
+                        }
                         Views::HIDv2 => xous::return_scalar(msg.sender, UsbDeviceType::HIDv2 as usize).unwrap(),
                     }
                 } else {
@@ -1018,23 +1132,17 @@ pub(crate) fn main_hw() -> ! {
                         usbmgmt.disable_debug(false);
                     }
                 }
-                // at this point, *read back* the new state -- don't assume it "took". The readback is always based on
-                // a real hardware value and not the requested value. for now, always false.
-                let is_locked = if usbmgmt.get_disable_debug() {
-                    1
-                } else {
-                    0
-                };
+                // at this point, *read back* the new state -- don't assume it "took". The readback is always
+                // based on a real hardware value and not the requested value. for now, always
+                // false.
+                let is_locked = if usbmgmt.get_disable_debug() { 1 } else { 0 };
 
-                // this is a performance optimization. we could always redraw the status, but, instead we only redraw when
-                // the status has changed. However, there is an edge case: on a resume from suspend, the status needs a redraw,
-                // even if nothing has changed. Thus, we have this separate boolean we send back to force an update in the
+                // this is a performance optimization. we could always redraw the status, but, instead we only
+                // redraw when the status has changed. However, there is an edge case: on a
+                // resume from suspend, the status needs a redraw, even if nothing has
+                // changed. Thus, we have this separate boolean we send back to force an update in the
                 // case that we have just come out of a suspend.
-                let force_update = if lockstatus_force_update {
-                    1
-                } else {
-                    0
-                };
+                let force_update = if lockstatus_force_update { 1 } else { 0 };
                 xous::return_scalar2(msg.sender, is_locked, force_update).expect("couldn't return status");
                 lockstatus_force_update = false;
             }),
@@ -1042,8 +1150,10 @@ pub(crate) fn main_hw() -> ! {
                 match view {
                     Views::FidoWithKbd => xous::return_scalar(msg.sender, usb_dev.state() as usize).unwrap(),
                     Views::FidoOnly => xous::return_scalar(msg.sender, fido_dev.state() as usize).unwrap(),
-                    #[cfg(feature="mass-storage")]
-                    Views::MassStorage => xous::return_scalar(msg.sender, ums_device.state() as usize).unwrap(),
+                    #[cfg(feature = "mass-storage")]
+                    Views::MassStorage => {
+                        xous::return_scalar(msg.sender, ums_device.state() as usize).unwrap()
+                    }
                     Views::Serial => xous::return_scalar(msg.sender, serial_device.state() as usize).unwrap(),
                     Views::HIDv2 => xous::return_scalar(msg.sender, hidv2.state() as usize).unwrap(),
                 }
@@ -1054,31 +1164,31 @@ pub(crate) fn main_hw() -> ! {
                         if usb_dev.state() == UsbDeviceState::Configured {
                             let mut codes = Vec::<Keyboard>::new();
                             if code0 != 0 {
-                                codes.push(
-                                    match native_map {
-                                        KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code0 as u8 as char)[0],
-                                        _ => mappings::char_to_hid_code_us101(code0 as u8 as char)[0],
+                                codes.push(match native_map {
+                                    KeyMap::Dvorak => {
+                                        mappings::char_to_hid_code_dvorak(code0 as u8 as char)[0]
                                     }
-                                );
+                                    _ => mappings::char_to_hid_code_us101(code0 as u8 as char)[0],
+                                });
                             }
                             if code1 != 0 {
-                                codes.push(
-                                    match native_map {
-                                        KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code1 as u8 as char)[0],
-                                        _ => mappings::char_to_hid_code_us101(code1 as u8 as char)[0],
+                                codes.push(match native_map {
+                                    KeyMap::Dvorak => {
+                                        mappings::char_to_hid_code_dvorak(code1 as u8 as char)[0]
                                     }
-                                );
+                                    _ => mappings::char_to_hid_code_us101(code1 as u8 as char)[0],
+                                });
                             }
                             if code2 != 0 {
-                                codes.push(
-                                    match native_map {
-                                        KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code2 as u8 as char)[0],
-                                        _ => mappings::char_to_hid_code_us101(code2 as u8 as char)[0],
+                                codes.push(match native_map {
+                                    KeyMap::Dvorak => {
+                                        mappings::char_to_hid_code_dvorak(code2 as u8 as char)[0]
                                     }
-                                );
+                                    _ => mappings::char_to_hid_code_us101(code2 as u8 as char)[0],
+                                });
                             }
-                            let auto_up = if autoup == 1 {true} else {false};
-                            let keyboard = composite.device::<NKROBootKeyboard<'_, _,>, _>();
+                            let auto_up = if autoup == 1 { true } else { false };
+                            let keyboard = composite.device::<NKROBootKeyboard<'_, _>, _>();
                             keyboard.write_report(codes).ok();
                             keyboard.tick().ok();
                             tt.sleep_ms(autotype_delay_ms).ok();
@@ -1103,9 +1213,11 @@ pub(crate) fn main_hw() -> ! {
                 // the whole subsystem stuck in some awful recursive error handling hell.
                 match view {
                     Views::Serial => {
-                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let buffer =
+                            unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
-                        // this is implemented as a "blocking write": the routine will block until the data has all been written.
+                        // this is implemented as a "blocking write": the routine will block until the data
+                        // has all been written.
                         let send_data = usb_send.s.as_bytes();
                         let to_send = usb_send.s.len();
                         let mut sent = 0;
@@ -1119,7 +1231,7 @@ pub(crate) fn main_hw() -> ! {
                                 }
                             }
                             match serial_port.flush() {
-                                Ok(_) => {},
+                                Ok(_) => {}
                                 Err(_) => {
                                     // just drop characters
                                 }
@@ -1132,21 +1244,20 @@ pub(crate) fn main_hw() -> ! {
             Some(Opcode::SetAutotypeRate) => msg_scalar_unpack!(msg, rate, _, _, _, {
                 // limit rate to 0.5s delay. Even then, this will probably cause repeated characters because
                 // it also adjusts keydown delays
-                let checked_rate = if rate > 500 {
-                    500
-                } else { rate };
+                let checked_rate = if rate > 500 { 500 } else { rate };
                 // there is no limit on the minimum rate. good luck if you set it to 0!
                 autotype_delay_ms = checked_rate;
             }),
             Some(Opcode::SendString) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
-                #[cfg(not(feature="minimal"))]
+                #[cfg(not(feature = "minimal"))]
                 let mut sent = 0;
-                #[cfg(feature="minimal")]
+                #[cfg(feature = "minimal")]
                 let sent = 0;
                 match view {
-                    #[cfg(not(feature="minimal"))]
+                    #[cfg(not(feature = "minimal"))]
                     Views::FidoWithKbd => {
                         for ch in usb_send.s.as_str().unwrap().chars() {
                             // ASSUME: user's keyboard type matches the preference on their Precursor device.
@@ -1165,7 +1276,8 @@ pub(crate) fn main_hw() -> ! {
                         }
                     }
                     Views::Serial => {
-                        // this is implemented as a "blocking write": the routine will block until the data has all been written.
+                        // this is implemented as a "blocking write": the routine will block until the data
+                        // has all been written.
                         let send_data = usb_send.s.as_bytes();
                         let to_send = usb_send.s.len();
                         // log::debug!("serial RTS: {:?}", serial_port.rts());
@@ -1181,7 +1293,7 @@ pub(crate) fn main_hw() -> ! {
                                 }
                             }
                             match serial_port.flush() {
-                                Ok(_) => {},
+                                Ok(_) => {}
                                 Err(_) => {
                                     log::warn!("Serial port reported WouldBlock on flush");
                                     tt.sleep_ms(100).ok();
@@ -1201,23 +1313,28 @@ pub(crate) fn main_hw() -> ! {
             }),
             Some(Opcode::SerialHookAscii) => {
                 let maybe_delimiter = {
-                    let buffer = unsafe {
-                        Buffer::from_memory_message(msg.body.memory_message().unwrap())
-                    };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let data = buffer.to_original::<UsbSerialAscii, _>().unwrap();
                     data.delimiter
                 };
                 serial_listen_mode = SerialListenMode::AsciiListener(maybe_delimiter);
                 serial_listener = Some(msg);
-            },
+            }
             Some(Opcode::SerialHookBinary) => {
                 serial_listen_mode = SerialListenMode::BinaryListener;
                 serial_listener = Some(msg);
-            },
+            }
             Some(Opcode::SerialHookConsole) => msg_scalar_unpack!(msg, _, _, _, _, {
                 let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
-                match xous::send_message(log_conn,
-                    xous::Message::new_blocking_scalar(log_server::api::Opcode::TryHookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
+                match xous::send_message(
+                    log_conn,
+                    xous::Message::new_blocking_scalar(
+                        log_server::api::Opcode::TryHookUsbMirror.to_usize().unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
                 ) {
                     Ok(xous::Result::Scalar1(result)) => {
                         if result == 1 {
@@ -1236,19 +1353,28 @@ pub(crate) fn main_hw() -> ! {
             Some(Opcode::SerialClearHooks) => {
                 let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
                 // it is never harmful to double-unhook this
-                xous::send_message(log_conn,
-                    xous::Message::new_blocking_scalar(log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(), 0, 0, 0, 0)
-                ).ok();
+                xous::send_message(
+                    log_conn,
+                    xous::Message::new_blocking_scalar(
+                        log_server::api::Opcode::UnhookUsbMirror.to_usize().unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .ok();
 
                 serial_listen_mode = SerialListenMode::NoListener;
                 serial_listener.take();
                 // shut down the TRNG sender if it's set
                 if let Some(trng_cid) = serial_trng_cid.take() {
                     serial_trng_interval.store(0, Ordering::SeqCst);
-                    xous::send_message(trng_cid,
-                        xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(),
-                            0, 0, 0, 0)
-                    ).ok();
+                    xous::send_message(
+                        trng_cid,
+                        xous::Message::new_blocking_scalar(TrngOp::Quit.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .ok();
                     trng.set_test_mode(trng::api::TrngTestMode::None);
                 }
             }
@@ -1302,17 +1428,23 @@ pub(crate) fn main_hw() -> ! {
                 }
                 match serial_listen_mode {
                     SerialListenMode::ConsoleListener => {
-                        log::error!("Serial is already hooked as a console. Refusing to turn on TRNG source mode");
+                        log::error!(
+                            "Serial is already hooked as a console. Refusing to turn on TRNG source mode"
+                        );
                         continue;
                     }
-                    SerialListenMode::NoListener => {},
+                    SerialListenMode::NoListener => {}
                     _ => {
-                        log::warn!("Serial already has a listener {:?} attached, hooking TRNG at your risk!", serial_listen_mode);
+                        log::warn!(
+                            "Serial already has a listener {:?} attached, hooking TRNG at your risk!",
+                            serial_listen_mode
+                        );
                     }
                 }
 
-                let trng_mode: trng::api::TrngTestMode = num_traits::FromPrimitive::from_usize(trng_mode_code)
-                    .unwrap_or(trng::api::TrngTestMode::None);
+                let trng_mode: trng::api::TrngTestMode =
+                    num_traits::FromPrimitive::from_usize(trng_mode_code)
+                        .unwrap_or(trng::api::TrngTestMode::None);
                 if trng_mode == trng::api::TrngTestMode::None {
                     // ignore the call in case of a bad parameter
                     continue;
@@ -1345,10 +1477,10 @@ pub(crate) fn main_hw() -> ! {
                             let mut debug_count = 0;
                             loop {
                                 xous::reply_and_receive_next_legacy(trng_sid, &mut msg_opt, &mut return_type)
-                                .unwrap();
+                                    .unwrap();
                                 let msg = msg_opt.as_mut().unwrap();
                                 match num_traits::FromPrimitive::from_usize(msg.body.id())
-                                .unwrap_or(TrngOp::InvalidCall)
+                                    .unwrap_or(TrngOp::InvalidCall)
                                 {
                                     TrngOp::Pump => {
                                         let next_interval = serial_trng_interval.load(Ordering::SeqCst);
@@ -1357,17 +1489,32 @@ pub(crate) fn main_hw() -> ! {
                                             debug_count += 1;
                                         }
                                         if next_interval > 0 {
-                                            xous::try_send_message(main_conn,
-                                                xous::Message::new_scalar(Opcode::SerialTrngPoll.to_usize().unwrap(),
-                                                    0, 0, 0, 0)
-                                            ).ok();
+                                            xous::try_send_message(
+                                                main_conn,
+                                                xous::Message::new_scalar(
+                                                    Opcode::SerialTrngPoll.to_usize().unwrap(),
+                                                    0,
+                                                    0,
+                                                    0,
+                                                    0,
+                                                ),
+                                            )
+                                            .ok();
                                             tt.sleep_ms(next_interval as _).ok();
-                                            xous::try_send_message(trng_cid,
-                                                xous::Message::new_scalar(TrngOp::Pump.to_usize().unwrap(),
-                                                    0, 0, 0, 0)
-                                            ).ok();
-                                            // reset debug_count so when the next trigger comes we can see the output
-                                            if next_interval > 100  {
+                                            xous::try_send_message(
+                                                trng_cid,
+                                                xous::Message::new_scalar(
+                                                    TrngOp::Pump.to_usize().unwrap(),
+                                                    0,
+                                                    0,
+                                                    0,
+                                                    0,
+                                                ),
+                                            )
+                                            .ok();
+                                            // reset debug_count so when the next trigger comes we can see the
+                                            // output
+                                            if next_interval > 100 {
                                                 debug_count = 0;
                                             }
                                         } else {
@@ -1379,15 +1526,20 @@ pub(crate) fn main_hw() -> ! {
                                             scalar.id = 0;
                                             scalar.arg1 = 1;
                                             log::info!("Quit called to Trng helper thread");
-                                            // I think there might be a bug in the kernel where quitting/disconnecting
+                                            // I think there might be a bug in the kernel where
+                                            // quitting/disconnecting
                                             // a reply_and_receive_next_legacy() loop is broken?
                                             // This results in an inexplicable kernel hang...
-                                            // for now we can work around this by keeping the thread around once the server is started.
+                                            // for now we can work around this by keeping the thread around
+                                            // once the server is started.
                                             // break;
                                         }
                                     }
                                     TrngOp::InvalidCall => {
-                                        log::error!("Unknown opcode received in TRNG source handler: {:?}", msg.body.id());
+                                        log::error!(
+                                            "Unknown opcode received in TRNG source handler: {:?}",
+                                            msg.body.id()
+                                        );
                                     }
                                 }
                             }
@@ -1402,10 +1554,11 @@ pub(crate) fn main_hw() -> ! {
                 }
                 // kick off the polling thread
                 if let Some(trng_cid) = serial_trng_cid.as_ref() {
-                    xous::try_send_message(*trng_cid,
-                        xous::Message::new_scalar(TrngOp::Pump.to_usize().unwrap(),
-                            0, 0, 0, 0)
-                    ).ok();
+                    xous::try_send_message(
+                        *trng_cid,
+                        xous::Message::new_scalar(TrngOp::Pump.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .ok();
                 }
             }),
             Some(Opcode::SerialTrngPoll) => {
@@ -1426,8 +1579,8 @@ pub(crate) fn main_hw() -> ! {
                             }
                         }
                     }
-                    // at this point, we should have data we can copy to the buffer. Pull it from the end of the buffer
-                    // so the Vec can efficiently de-allocate data.
+                    // at this point, we should have data we can copy to the buffer. Pull it from the end of
+                    // the buffer so the Vec can efficiently de-allocate data.
                     match serial_port.flush() {
                         Ok(_) => {
                             let available = serial_trng_buf.len();
@@ -1463,7 +1616,7 @@ pub(crate) fn main_hw() -> ! {
                 };
                 let data = buffer.to_original::<HIDReportDescriptorMessage, _>().unwrap();
 
-                // This branch can only error if data.descriptor is longer than the 
+                // This branch can only error if data.descriptor is longer than the
                 // expected maximum.
                 // The userland library checks this for us already.
                 match hidv2.set_device_report(Vec::from(&data.descriptor[..data.len])) {
@@ -1511,10 +1664,27 @@ pub(crate) fn main_hw() -> ! {
 
                 hidv2.write_report(data);
             },
+            Some(Opcode::RegisterUsbObserver) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let ur = buffer.as_flat::<UsbListenerRegistration, _>().unwrap();
+                if observer_conn.is_none() {
+                    match xns.request_connection_blocking(ur.server_name.as_str()) {
+                        Ok(cid) => {
+                            observer_conn = Some(cid);
+                            observer_op = Some(ur.listener_op_id as usize);
+                        }
+                        Err(e) => {
+                            log::error!("couldn't connect to observer: {:?}", e);
+                            observer_conn = None;
+                            observer_op = None;
+                        }
+                    }
+                }
+            }
             Some(Opcode::Quit) => {
                 log::warn!("Quit received, goodbye world!");
                 break;
-            },
+            }
             None => {
                 log::error!("couldn't convert opcode: {:?}", msg);
             }

@@ -15,9 +15,11 @@
 
 #![allow(clippy::unreadable_literal)]
 
-use crate::Block;
 use core::convert::TryInto;
+
 use cipher::{consts::U2, generic_array::GenericArray};
+
+use crate::Block;
 
 /// AES block batch size for this implementation
 pub(crate) type FixsliceBlocks = U2;
@@ -100,8 +102,7 @@ pub(crate) fn aes192_key_schedule(key: &[u8; 24]) -> FixsliceKeys192 {
 
     loop {
         for i in 0..8 {
-            rkeys[rk_off + i] =
-                (0x0f0f0f0f & (tmp[i] >> 4)) | (0xf0f0f0f0 & (rkeys[(rk_off - 8) + i] << 4));
+            rkeys[rk_off + i] = (0x0f0f0f0f & (tmp[i] >> 4)) | (0xf0f0f0f0 & (rkeys[(rk_off - 8) + i] << 4));
         }
 
         sub_bytes(&mut tmp);
@@ -123,8 +124,7 @@ pub(crate) fn aes192_key_schedule(key: &[u8; 24]) -> FixsliceKeys192 {
             let ui = tmp[i];
             let mut ti = (0x0f0f0f0f & (rkeys[(rk_off - 16) + i] >> 4)) | (0xf0f0f0f0 & (ui << 4));
             ti ^= 0x03030303 & (ui >> 6);
-            tmp[i] =
-                ti ^ (0xfcfcfcfc & (ti << 2)) ^ (0xf0f0f0f0 & (ti << 4)) ^ (0xc0c0c0c0 & (ti << 6));
+            tmp[i] = ti ^ (0xfcfcfcfc & (ti << 2)) ^ (0xf0f0f0f0 & (ti << 4)) ^ (0xc0c0c0c0 & (ti << 6));
         }
         rkeys[rk_off..(rk_off + 8)].copy_from_slice(&tmp);
         rk_off += 8;
@@ -961,13 +961,8 @@ fn sub_bytes_nots(state: &mut [u32]) {
 ///
 /// Based on Käsper-Schwabe, similar to https://github.com/Ko-/aes-armcortexm.
 macro_rules! define_mix_columns {
-    (
-        $name:ident,
-        $name_inv:ident,
-        $first_rotate:path,
-        $second_rotate:path
-    ) => {
-        #[rustfmt::skip]
+    ($name:ident, $name_inv:ident, $first_rotate:path, $second_rotate:path) => {
+#[rustfmt::skip]
         fn $name(state: &mut State) {
             let (a0, a1, a2, a3, a4, a5, a6, a7) = (
                 state[0], state[1], state[2], state[3], state[4], state[5], state[6], state[7]
@@ -1002,7 +997,7 @@ macro_rules! define_mix_columns {
             state[7] = b7 ^ c6      ^ $second_rotate(c7);
         }
 
-        #[rustfmt::skip]
+#[rustfmt::skip]
         fn $name_inv(state: &mut State) {
             let (a0, a1, a2, a3, a4, a5, a6, a7) = (
                 state[0], state[1], state[2], state[3], state[4], state[5], state[6], state[7]
@@ -1056,15 +1051,10 @@ macro_rules! define_mix_columns {
             state[6] = d6 ^ e6 ^ $second_rotate(e6);
             state[7] = d7 ^ e7 ^ $second_rotate(e7);
         }
-    }
+    };
 }
 
-define_mix_columns!(
-    mix_columns_0,
-    inv_mix_columns_0,
-    rotate_rows_1,
-    rotate_rows_2
-);
+define_mix_columns!(mix_columns_0, inv_mix_columns_0, rotate_rows_1, rotate_rows_2);
 
 define_mix_columns!(
     mix_columns_1,
@@ -1074,12 +1064,7 @@ define_mix_columns!(
 );
 
 #[cfg(not(aes_compact))]
-define_mix_columns!(
-    mix_columns_2,
-    inv_mix_columns_2,
-    rotate_rows_and_columns_1_2,
-    rotate_rows_2
-);
+define_mix_columns!(mix_columns_2, inv_mix_columns_2, rotate_rows_and_columns_1_2, rotate_rows_2);
 
 #[cfg(not(aes_compact))]
 define_mix_columns!(
@@ -1133,20 +1118,14 @@ fn shift_rows_3(state: &mut [u32]) {
 }
 
 #[inline(always)]
-fn inv_shift_rows_1(state: &mut [u32]) {
-    shift_rows_3(state);
-}
+fn inv_shift_rows_1(state: &mut [u32]) { shift_rows_3(state); }
 
 #[inline(always)]
-fn inv_shift_rows_2(state: &mut [u32]) {
-    shift_rows_2(state);
-}
+fn inv_shift_rows_2(state: &mut [u32]) { shift_rows_2(state); }
 
 #[cfg(not(aes_compact))]
 #[inline(always)]
-fn inv_shift_rows_3(state: &mut [u32]) {
-    shift_rows_1(state);
-}
+fn inv_shift_rows_3(state: &mut [u32]) { shift_rows_1(state); }
 
 /// XOR the columns after the S-box during the key schedule round function.
 ///
@@ -1160,8 +1139,7 @@ fn xor_columns(rkeys: &mut [u32], offset: usize, idx_xor: usize, idx_ror: u32) {
     for i in 0..8 {
         let off_i = offset + i;
         let rk = rkeys[off_i - idx_xor] ^ (0x03030303 & ror(rkeys[off_i], idx_ror));
-        rkeys[off_i] =
-            rk ^ (0xfcfcfcfc & (rk << 2)) ^ (0xf0f0f0f0 & (rk << 4)) ^ (0xc0c0c0c0 & (rk << 6));
+        rkeys[off_i] = rk ^ (0xfcfcfcfc & (rk << 2)) ^ (0xf0f0f0f0 & (rk << 4)) ^ (0xc0c0c0c0 & (rk << 6));
     }
 }
 
@@ -1313,29 +1291,19 @@ fn add_round_key(state: &mut State, rkey: &[u32]) {
 }
 
 #[inline(always)]
-fn add_round_constant_bit(state: &mut [u32], bit: usize) {
-    state[bit] ^= 0x0000c000;
-}
+fn add_round_constant_bit(state: &mut [u32], bit: usize) { state[bit] ^= 0x0000c000; }
 
 #[inline(always)]
-fn ror(x: u32, y: u32) -> u32 {
-    x.rotate_right(y)
-}
+fn ror(x: u32, y: u32) -> u32 { x.rotate_right(y) }
 
 #[inline(always)]
-fn ror_distance(rows: u32, cols: u32) -> u32 {
-    (rows << 3) + (cols << 1)
-}
+fn ror_distance(rows: u32, cols: u32) -> u32 { (rows << 3) + (cols << 1) }
 
 #[inline(always)]
-fn rotate_rows_1(x: u32) -> u32 {
-    ror(x, ror_distance(1, 0))
-}
+fn rotate_rows_1(x: u32) -> u32 { ror(x, ror_distance(1, 0)) }
 
 #[inline(always)]
-fn rotate_rows_2(x: u32) -> u32 {
-    ror(x, ror_distance(2, 0))
-}
+fn rotate_rows_2(x: u32) -> u32 { ror(x, ror_distance(2, 0)) }
 
 #[inline(always)]
 #[rustfmt::skip]

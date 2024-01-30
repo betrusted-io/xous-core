@@ -1,14 +1,13 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-use ime_plugin_api::*;
-
-use log::{error, info};
-
-use xous_ipc::{String, Buffer};
-use num_traits::FromPrimitive;
 use std::collections::HashMap;
+
+use ime_plugin_api::*;
+use log::{error, info};
+use num_traits::FromPrimitive;
 use xous::msg_scalar_unpack;
+use xous_ipc::{Buffer, String};
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
@@ -17,10 +16,12 @@ fn main() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     // one connection only, should be the GAM
-    let ime_sh_sid = xns.register_name(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL, None).expect("can't register server");
+    let ime_sh_sid = xns
+        .register_name(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL, None)
+        .expect("can't register server");
     log::trace!("registered with NS -- {:?}", ime_sh_sid);
 
-    let mut history_store: HashMap::<[u32;4], Vec<String<64>>> = HashMap::new();
+    let mut history_store: HashMap<[u32; 4], Vec<String<64>>> = HashMap::new();
     let mut active_history: Option<([u32; 4], Vec<String<64>>)> = None;
     let history_max = 4;
 
@@ -37,20 +38,15 @@ fn main() -> ! {
         history.push(test3);
     */
 
-    let mytriggers = PredictionTriggers {
-        newline: true,
-        punctuation: false,
-        whitespace: false,
-    };
+    let mytriggers = PredictionTriggers { newline: true, punctuation: false, whitespace: false };
 
     loop {
         let mut msg = xous::receive_message(ime_sh_sid).unwrap();
         log::trace!("received message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::Acquire) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut ret = buffer.to_original::<AcquirePredictor, _>().unwrap();
                 if active_history.is_none() {
                     if let Some(token) = ret.token {
@@ -91,8 +87,9 @@ fn main() -> ! {
             Some(Opcode::Picked) => {
                 if let Some((_token, history)) = &mut active_history {
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let s = buffer.as_flat::<String::<4000>, _>().unwrap();
-                    // the API allows for large picked feedback, but this implementation only keeps the first 64 characters
+                    let s = buffer.as_flat::<String<4000>, _>().unwrap();
+                    // the API allows for large picked feedback, but this implementation only keeps the first
+                    // 64 characters
                     let mut local_s: String<64> = String::new();
                     use core::fmt::Write;
                     write!(local_s, "{}", s.as_str()).expect("overflowed history variable");
@@ -107,7 +104,8 @@ fn main() -> ! {
                 }
             }
             Some(Opcode::Prediction) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut prediction: Prediction = buffer.to_original::<Prediction, _>().unwrap();
                 if let Some((token, history)) = &mut active_history {
                     if *token == prediction.api_token {
@@ -120,8 +118,9 @@ fn main() -> ! {
                             }
                             let mut i = 1;
                             for &s in history.iter() {
-                                // iterator is from oldest to newest, so do some math to go from newest to oldest
-                                // TIL: there is a .rev() feature in iterators. Next time maybe use that instead.
+                                // iterator is from oldest to newest, so do some math to go from newest to
+                                // oldest TIL: there is a .rev() feature in
+                                // iterators. Next time maybe use that instead.
                                 if (history.len() as u32 - i) == index {
                                     // decompose the string into a character-by-character sequence
                                     // and then stuff byte-by-byte, as fits, into the return array
@@ -139,7 +138,8 @@ fn main() -> ! {
                                 }
                                 i = i + 1;
                             }
-                        } else { // there is no history
+                        } else {
+                            // there is no history
                             prediction.valid = false;
                             log::trace!("no prediction found");
                         }
@@ -168,14 +168,18 @@ fn main() -> ! {
                 }
             }
             Some(Opcode::GetPredictionTriggers) => {
-                xous::return_scalar(msg.sender, mytriggers.into()).expect("couldn't return GetPredictionTriggers");
+                xous::return_scalar(msg.sender, mytriggers.into())
+                    .expect("couldn't return GetPredictionTriggers");
             }
             Some(Opcode::Quit) => {
                 if active_history.is_some() {
-                    error!("received quit, goodbye!"); break;
+                    error!("received quit, goodbye!");
+                    break;
                 }
             }
-            None => {error!("unknown Opcode");}
+            None => {
+                error!("unknown Opcode");
+            }
         }
     }
     log::trace!("main loop exit, destroying servers");

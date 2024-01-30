@@ -3,10 +3,13 @@
 //! Runs migrations up to the current version
 
 use std::io::Error;
-use crate::cmds::{CommonEnv,VERSION_KEY};
+
 use locales::t;
 
-mod v0_9_11_0120;  use v0_9_11_0120::*;
+use crate::cmds::{CommonEnv, VERSION_KEY};
+
+mod v0_9_11_0120;
+use v0_9_11_0120::*;
 
 const DEFAULT_VERSION: &str = "0";
 
@@ -23,18 +26,11 @@ pub trait MigrationApi<'a> {
 // the argument to this macro is the command verb
 #[macro_export]
 macro_rules! migration_api {
-    ($version:expr) => { // NOTE the expr will have literal quotes
-        fn version(&self) -> &'static str {
-            $version
-        }
+    ($version:expr) => {
+        // NOTE the expr will have literal quotes
+        fn version(&self) -> &'static str { $version }
 
-        fn applies(&self, version: &str) -> bool {
-            if version < self.version() {
-                true
-            } else {
-                false
-            }
-        }
+        fn applies(&self, version: &str) -> bool { if version < self.version() { true } else { false } }
     };
 }
 
@@ -43,8 +39,7 @@ pub fn run_migrations(common: &mut CommonEnv) {
     let version = common.get_default(VERSION_KEY, DEFAULT_VERSION);
     if version.ne(&common.version) {
         let running_migrations = t!("mtxcli.running.migrations", locales::LANG);
-        let msg = format!("{} {} .. {}",
-                          running_migrations, version, common.version);
+        let msg = format!("{} {} .. {}", running_migrations, version, common.version);
         log::info!("{}", msg);
         common.send_async_msg(&msg);
         let mut migrations: Vec<Box<dyn MigrationApi>> = Vec::new();
@@ -54,23 +49,19 @@ pub fn run_migrations(common: &mut CommonEnv) {
                 match migration.process(common) {
                     Ok(boolean) => {
                         let migration_completed = t!("mtxcli.migration.completed", locales::LANG);
-                        let msg = format!("{}: {}: {}",
-                                          migration_completed, migration.version(), boolean);
+                        let msg = format!("{}: {}: {}", migration_completed, migration.version(), boolean);
                         common.send_async_msg(&msg);
                         if boolean {
-                            common.set(VERSION_KEY, migration.version())
-                                .expect("cannot set _version");
+                            common.set(VERSION_KEY, migration.version()).expect("cannot set _version");
                         }
-                    },
+                    }
                     Err(e) => {
-                        log::error!("error running migration: {}: {:?}",
-                                    migration.version(), e);
+                        log::error!("error running migration: {}: {:?}", migration.version(), e);
                     }
                 }
             }
         }
-        common.set(VERSION_KEY, &common.version.clone())
-            .expect("cannot set _version");
+        common.set(VERSION_KEY, &common.version.clone()).expect("cannot set _version");
         let migrations_complete = t!("mtxcli.migrations.complete", locales::LANG);
         log::info!("{}", migrations_complete);
         common.send_async_msg(&migrations_complete);

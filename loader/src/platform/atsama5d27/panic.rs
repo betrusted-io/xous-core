@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use core::panic::PanicInfo;
+
 use armv7;
 
 #[cfg(feature = "atsama5d27")]

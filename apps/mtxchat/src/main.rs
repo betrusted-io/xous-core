@@ -13,12 +13,7 @@ use xous_ipc::Buffer;
 
 fn main() -> ! {
     let stack_size = 1024 * 1024;
-    std::thread::Builder::new()
-        .stack_size(stack_size)
-        .spawn(wrapped_main)
-        .unwrap()
-        .join()
-        .unwrap()
+    std::thread::Builder::new().stack_size(stack_size).spawn(wrapped_main).unwrap().join().unwrap()
 }
 
 fn wrapped_main() -> ! {
@@ -28,11 +23,8 @@ fn wrapped_main() -> ! {
 
     const HEAP_LARGER_LIMIT: usize = 2048 * 1024;
     let new_limit = HEAP_LARGER_LIMIT;
-    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
-        xous::Limits::HeapMaximum as usize,
-        0,
-        new_limit,
-    ));
+    let result =
+        xous::rsyscall(xous::SysCall::AdjustProcessLimit(xous::Limits::HeapMaximum as usize, 0, new_limit));
 
     if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
         xous::rsyscall(xous::SysCall::AdjustProcessLimit(
@@ -47,9 +39,7 @@ fn wrapped_main() -> ! {
     }
 
     let xns = xous_names::XousNames::new().unwrap();
-    let sid = xns
-        .register_name(SERVER_NAME_MTXCHAT, None)
-        .expect("can't register server");
+    let sid = xns.register_name(SERVER_NAME_MTXCHAT, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", sid);
 
     let chat = Chat::new(
@@ -141,13 +131,11 @@ fn wrapped_main() -> ! {
                 });
             }
             Some(MtxchatOp::Post) => {
-                let buffer =
-                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer
-                    .to_original::<xous_ipc::String<{ POST_TEXT_MAX }>, _>()
-                    .unwrap();
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let s = buffer.to_original::<xous_ipc::String<{ POST_TEXT_MAX }>, _>().unwrap();
                 if s.len() > 0 {
-                    // capture input instead of calling here, so message can drop and calling server is released
+                    // capture input instead of calling here, so message can drop and calling server is
+                    // released
                     user_post = Some(s.to_string());
                 }
             }

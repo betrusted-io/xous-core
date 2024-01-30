@@ -1,19 +1,21 @@
-use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
 
+use crate::{CommonEnv, ShellCmdApi};
+
 #[derive(Debug)]
-pub struct TrngCmd {
-}
+pub struct TrngCmd {}
 impl TrngCmd {
-    pub fn new() -> Self {
-        TrngCmd {}
-    }
+    pub fn new() -> Self { TrngCmd {} }
 }
 
 impl<'a> ShellCmdApi<'a> for TrngCmd {
     cmd_api!(trng);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
         let helpstring = "trng [avnist] [ronist] [runs] [excur] [errs] [pump]";
@@ -42,20 +44,32 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
                 }
                 "excur" => {
                     let ht = env.trng.get_health_tests().unwrap();
-                    write!(ret, "AV0: {}/{} mV\n"
-                        ,((ht.av_excursion[0].min as u32 * 1000) / 4096)
-                        ,((ht.av_excursion[0].max as u32 * 1000) / 4096)
-                    ).unwrap();
-                    write!(ret, "AV0 delta: {} mV\n"
-                        ,(((ht.av_excursion[0].max as u32 - ht.av_excursion[0].min as u32) * 1000) / 4096)
-                    ).unwrap();
-                    write!(ret, "AV1: {}/{} mV\n"
-                        ,((ht.av_excursion[1].min as u32 * 1000) / 4096)
-                        ,((ht.av_excursion[1].max as u32 * 1000) / 4096)
-                    ).unwrap();
-                    write!(ret, "AV1 delta: {} mV\n"
-                        ,(((ht.av_excursion[1].max as u32 - ht.av_excursion[1].min as u32) * 1000 ) / 4096)
-                    ).unwrap();
+                    write!(
+                        ret,
+                        "AV0: {}/{} mV\n",
+                        ((ht.av_excursion[0].min as u32 * 1000) / 4096),
+                        ((ht.av_excursion[0].max as u32 * 1000) / 4096)
+                    )
+                    .unwrap();
+                    write!(
+                        ret,
+                        "AV0 delta: {} mV\n",
+                        (((ht.av_excursion[0].max as u32 - ht.av_excursion[0].min as u32) * 1000) / 4096)
+                    )
+                    .unwrap();
+                    write!(
+                        ret,
+                        "AV1: {}/{} mV\n",
+                        ((ht.av_excursion[1].min as u32 * 1000) / 4096),
+                        ((ht.av_excursion[1].max as u32 * 1000) / 4096)
+                    )
+                    .unwrap();
+                    write!(
+                        ret,
+                        "AV1 delta: {} mV\n",
+                        (((ht.av_excursion[1].max as u32 - ht.av_excursion[1].min as u32) * 1000) / 4096)
+                    )
+                    .unwrap();
                 }
                 "pump" => {
                     const ROUNDS: usize = 16;
@@ -137,7 +151,6 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
                     write!(ret, "{}", helpstring).unwrap();
                 }
             }
-
         } else {
             write!(ret, "{}", helpstring).unwrap();
         }

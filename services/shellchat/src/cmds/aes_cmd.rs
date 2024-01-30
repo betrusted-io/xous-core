@@ -1,4 +1,3 @@
-
 use core::fmt::Write;
 
 mod aes128tests;
@@ -7,11 +6,9 @@ mod aes256tests;
 /// Define block cipher test
 macro_rules! block_cipher_test {
     ($name:ident, $test_name:expr, $test_case_name:ident, $cipher:ty) => {
-        fn $name() -> String::<1024> {
+        fn $name() -> String<1024> {
             use aes::cipher::{
-                generic_array::GenericArray,
-                BlockDecryptMut, BlockEncryptMut, KeyInit,
-                consts::U16,
+                consts::U16, generic_array::GenericArray, BlockDecryptMut, BlockEncryptMut, KeyInit,
             };
 
             fn run_test(key: &[u8], pt: &[u8], ct: &[u8]) -> (bool, GenericArray<u8, U16>) {
@@ -73,7 +70,8 @@ macro_rules! block_cipher_test {
                 let (pass, block) = run_test(&test.key, &test.pt, &test.ct);
                 if !pass {
                     ret.clear();
-                    write!(ret,
+                    write!(
+                        ret,
                         "\n\
                          Failed test №{}\n\
                          key:\t{:x?}\n\
@@ -81,21 +79,24 @@ macro_rules! block_cipher_test {
                          ciphertext:\t{:x?}\n\
                          block:\t{:x?}\n",
                         i, test.key, test.pt, test.ct, block
-                    ).unwrap();
+                    )
+                    .unwrap();
                     return ret;
                 }
 
                 // test parallel blocks encryption/decryption
                 if !run_par_test(&test.key, &test.pt) {
                     ret.clear();
-                    write!(ret,
+                    write!(
+                        ret,
                         "\n\
                          Failed parallel test №{}\n\
                          key:\t{:x?}\n\
                          plaintext:\t{:x?}\n\
                          ciphertext:\t{:x?}\n",
                         i, test.key, test.pt, test.ct,
-                    ).unwrap();
+                    )
+                    .unwrap();
                     return ret;
                 }
             }
@@ -108,15 +109,14 @@ macro_rules! block_cipher_test {
     };
 }
 
-use crate::{ShellCmdApi, CommonEnv};
+use core::sync::atomic::{AtomicU32, Ordering};
+
+use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+use aes::{Aes128, Aes128Soft, Aes256, Aes256Soft};
+use num_traits::*;
 use xous_ipc::String;
 
-use aes::{Aes256, Aes128, Aes256Soft, Aes128Soft};
-use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
-
-use num_traits::*;
-
-use core::sync::atomic::{AtomicU32, Ordering};
+use crate::{CommonEnv, ShellCmdApi};
 static CB_ID: AtomicU32 = AtomicU32::new(0);
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -232,16 +232,22 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                         pass = false;
                     }
                 }
-                xous::send_message(callback_conn,
-                    xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
-                    if pass {1} else {0},
-                    if hw_mode {1} else {0}, cipher_hw.key_size(), 0)
-                ).unwrap();
-            },
+                xous::send_message(
+                    callback_conn,
+                    xous::Message::new_scalar(
+                        CB_ID.load(Ordering::Relaxed) as usize,
+                        if pass { 1 } else { 0 },
+                        if hw_mode { 1 } else { 0 },
+                        cipher_hw.key_size(),
+                        0,
+                    ),
+                )
+                .unwrap();
+            }
             Some(BenchOp::Quit) => {
                 log::info!("quitting benchmark thread");
                 break;
-            },
+            }
             None => {
                 log::error!("received unknown opcode");
             }
@@ -264,7 +270,14 @@ impl Aes {
         let cb_id = env.register_handler(String::<256>::from_str("aes"));
         CB_ID.store(cb_id, Ordering::Relaxed);
 
-        xous::create_thread_4(benchmark_thread, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+        xous::create_thread_4(
+            benchmark_thread,
+            sid_tuple.0 as usize,
+            sid_tuple.1 as usize,
+            sid_tuple.2 as usize,
+            sid_tuple.3 as usize,
+        )
+        .unwrap();
         Aes {
             susres: susres::Susres::new_without_hook(&xns).unwrap(),
             benchmark_cid: xous::connect(sid).unwrap(),
@@ -281,9 +294,15 @@ block_cipher_test!(aes256_test, "aes256", AES256_TESTS, Aes256);
 block_cipher_test!(aes256soft_test, "aes256", AES256_TESTS, Aes256);
 
 impl<'a> ShellCmdApi<'a> for Aes {
-    cmd_api!(aes); // inserts boilerplate for command API
+    cmd_api!(aes);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    // inserts boilerplate for command API
+
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         let helpstring = "Aes [check128] [check128sw] [check256] [check256sw] [hwbench] [swbench] [susres]";
 
@@ -306,25 +325,43 @@ impl<'a> ShellCmdApi<'a> for Aes {
                 "hwbench" => {
                     let start = env.ticktimer.elapsed_ms();
                     self.start_time = Some(start);
-                    xous::send_message(self.benchmark_cid,
-                        xous::Message::new_scalar(BenchOp::StartAesHw.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).unwrap();
-                    write!(ret, "Starting Aes hardware benchmark with {} iters of {} blocks", TEST_ITERS, TEST_MAX_LEN / aes::BLOCK_SIZE).unwrap();
+                    xous::send_message(
+                        self.benchmark_cid,
+                        xous::Message::new_scalar(BenchOp::StartAesHw.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .unwrap();
+                    write!(
+                        ret,
+                        "Starting Aes hardware benchmark with {} iters of {} blocks",
+                        TEST_ITERS,
+                        TEST_MAX_LEN / aes::BLOCK_SIZE
+                    )
+                    .unwrap();
                 }
                 "swbench" => {
                     let start = env.ticktimer.elapsed_ms();
                     self.start_time = Some(start);
-                    xous::send_message(self.benchmark_cid,
-                        xous::Message::new_scalar(BenchOp::StartAesSw.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).unwrap();
-                    write!(ret, "Starting Aes software benchmark with {} iters of {} blocks", TEST_ITERS, TEST_MAX_LEN / aes::BLOCK_SIZE).unwrap();
+                    xous::send_message(
+                        self.benchmark_cid,
+                        xous::Message::new_scalar(BenchOp::StartAesSw.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .unwrap();
+                    write!(
+                        ret,
+                        "Starting Aes software benchmark with {} iters of {} blocks",
+                        TEST_ITERS,
+                        TEST_MAX_LEN / aes::BLOCK_SIZE
+                    )
+                    .unwrap();
                 }
                 "susres" => {
                     let start = env.ticktimer.elapsed_ms();
                     self.start_time = Some(start);
-                    xous::send_message(self.benchmark_cid,
-                        xous::Message::new_scalar(BenchOp::StartAesHw.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).unwrap();
+                    xous::send_message(
+                        self.benchmark_cid,
+                        xous::Message::new_scalar(BenchOp::StartAesHw.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .unwrap();
                     let wait_time = (env.trng.get_u32().unwrap() % 2000) + 500; // at least half a second wait, up to 2 seconds
                     env.ticktimer.sleep_ms(wait_time as _).unwrap();
                     self.susres.initiate_suspend().unwrap();
@@ -334,28 +371,44 @@ impl<'a> ShellCmdApi<'a> for Aes {
                     write!(ret, "{}", helpstring).unwrap();
                 }
             }
-
         } else {
             write!(ret, "{}", helpstring).unwrap();
         }
         Ok(Some(ret))
     }
 
-    fn callback(&mut self, msg: &xous::MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(
+        &mut self,
+        msg: &xous::MessageEnvelope,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         log::debug!("benchmark callback");
         let mut ret = String::<1024>::new();
 
         xous::msg_scalar_unpack!(msg, pass, hw_mode, keybits, _, {
             let end = env.ticktimer.elapsed_ms();
-            let elapsed: f32= ((end - self.start_time.unwrap()) as f32) / (TEST_ITERS as f32 * (TEST_MAX_LEN / aes::BLOCK_SIZE) as f32);
+            let elapsed: f32 = ((end - self.start_time.unwrap()) as f32)
+                / (TEST_ITERS as f32 * (TEST_MAX_LEN / aes::BLOCK_SIZE) as f32);
             let modestr = if hw_mode != 0 { &"hw" } else { &"sw" };
             if pass != 0 {
-                write!(ret, "[{}] passed: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits).unwrap();
-                log::info!("{}BENCH,AES,PASS,{}us/block,{}", xous::BOOKEND_START, elapsed * 1000.0, xous::BOOKEND_END);
+                write!(ret, "[{}] passed: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits)
+                    .unwrap();
+                log::info!(
+                    "{}BENCH,AES,PASS,{}us/block,{}",
+                    xous::BOOKEND_START,
+                    elapsed * 1000.0,
+                    xous::BOOKEND_END
+                );
             } else {
                 // pass was 0, we failed
-                write!(ret, "[{}] FAILED: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits).unwrap();
-                log::info!("{}BENCH,AES,FAIL,{}us/block,{}", xous::BOOKEND_START, elapsed * 1000.0, xous::BOOKEND_END);
+                write!(ret, "[{}] FAILED: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits)
+                    .unwrap();
+                log::info!(
+                    "{}BENCH,AES,FAIL,{}us/block,{}",
+                    xous::BOOKEND_START,
+                    elapsed * 1000.0,
+                    xous::BOOKEND_END
+                );
             }
         });
         Ok(Some(ret))

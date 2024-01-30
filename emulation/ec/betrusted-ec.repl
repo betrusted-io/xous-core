@@ -1,5 +1,5 @@
 cpu: CPU.VexRiscv @ sysbus
-    cpuType: "rv32i"
+    cpuType: "rv32i_zicsr_zifencei"
     PerformanceInMips: 6
 
 uart: UART.LiteX_UART @ {

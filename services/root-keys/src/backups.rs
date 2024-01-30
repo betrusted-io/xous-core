@@ -1,27 +1,27 @@
-use zeroize::Zeroize;
 use core::mem::size_of;
 use core::ops::{Deref, DerefMut};
+
 use aes_gcm_siv::{
-    aead::{KeyInit, Aead, Payload},
-    Aes256GcmSiv, Tag, Nonce
+    aead::{Aead, KeyInit, Payload},
+    Aes256GcmSiv, Nonce, Tag,
 };
-use subtle::ConstantTimeEq;
-use crate::{BackupHeader, BackupOp};
 use rand_core::RngCore;
+use subtle::ConstantTimeEq;
+use zeroize::Zeroize;
+
+use crate::{BackupHeader, BackupOp};
 
 const BACKUP_AAD: &'static str = "PDDB backup v0.1.0";
 
 #[derive(Zeroize, Default)]
 #[zeroize(drop)]
-pub(crate) struct BackupKey(pub [u8;32]);
+pub(crate) struct BackupKey(pub [u8; 32]);
 
 #[derive(Zeroize)]
 #[zeroize(drop)]
 pub(crate) struct KeyRomExport(pub [u32; 256]);
 impl Default for KeyRomExport {
-    fn default() -> Self {
-        KeyRomExport([0u32; 256])
-    }
+    fn default() -> Self { KeyRomExport([0u32; 256]) }
 }
 
 /// This is the plaintext portion of the backup header
@@ -39,15 +39,12 @@ pub(crate) struct BackupDataPt {
 }
 impl Default for BackupDataPt {
     fn default() -> Self {
-        BackupDataPt {
-            header: BackupHeader::default(),
-            keyrom: [0u32; 256],
-            _reserved: [0u8; 64],
-        }
+        BackupDataPt { header: BackupHeader::default(), keyrom: [0u32; 256], _reserved: [0u8; 64] }
     }
 }
 impl Deref for BackupDataPt {
     type Target = [u8];
+
     fn deref(&self) -> &[u8] {
         unsafe {
             core::slice::from_raw_parts(self as *const BackupDataPt as *const u8, size_of::<BackupDataPt>())
@@ -86,6 +83,7 @@ impl Default for BackupDataCt {
 }
 impl Deref for BackupDataCt {
     type Target = [u8];
+
     fn deref(&self) -> &[u8] {
         unsafe {
             core::slice::from_raw_parts(self as *const BackupDataCt as *const u8, size_of::<BackupDataCt>())
@@ -106,12 +104,9 @@ impl DerefMut for BackupDataCt {
 /// a `nonce` which is the 96-bit nonce used in the AES-GCM-SIV for a given block;
 /// and `nonce_com` which is the commitment nonce, set at 256 bits.
 /// The result is two tuples, (kenc, kcom).
-fn kcom_func(
-    key: &[u8; 32],
-    nonce_com: &[u8; 32]
-) -> (BackupKey, BackupKey) {
-    use sha2::{FallbackStrategy, Sha512Trunc256};
+fn kcom_func(key: &[u8; 32], nonce_com: &[u8; 32]) -> (BackupKey, BackupKey) {
     use digest::Digest;
+    use sha2::{FallbackStrategy, Sha512Trunc256};
 
     let mut h_enc = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
     h_enc.update(key);
@@ -133,11 +128,7 @@ fn kcom_func(
     (kenc, kcom)
 }
 
-pub(crate) fn create_backup(
-    key: BackupKey,
-    header: BackupHeader,
-    keyrom: KeyRomExport,
-) -> BackupDataCt {
+pub(crate) fn create_backup(key: BackupKey, header: BackupHeader, keyrom: KeyRomExport) -> BackupDataCt {
     let xns = xous_names::XousNames::new().unwrap();
     let mut trng = trng::Trng::new(&xns).unwrap();
 
@@ -160,19 +151,20 @@ pub(crate) fn create_backup(
     backup_data_pt.keyrom.copy_from_slice(&keyrom.0);
 
     // encrypt the backup data
-    let ciphertext = cipher.encrypt(
-        &nonce.into(),
-        Payload {
-            aad: BACKUP_AAD.as_bytes(),
-            msg: backup_data_pt.deref(),
-        }
-    ).expect("couldn't encrypt data");
+    let ciphertext = cipher
+        .encrypt(&nonce.into(), Payload { aad: BACKUP_AAD.as_bytes(), msg: backup_data_pt.deref() })
+        .expect("couldn't encrypt data");
 
     log::debug!("commit_nonce: {:?}", &kcom_nonce);
     log::debug!("commit_nonce: {:x?}", &kcom_nonce);
     log::debug!("commit_key: {:?}", &kcom.0);
     log::debug!("commit_key: {:x?}", &kcom.0);
-    log::debug!("header {}, ptlen {}, ctlen {}", size_of::<BackupHeader>(), size_of::<BackupDataPt>(), size_of::<BackupDataCt>());
+    log::debug!(
+        "header {}, ptlen {}, ctlen {}",
+        size_of::<BackupHeader>(),
+        size_of::<BackupDataPt>(),
+        size_of::<BackupDataCt>()
+    );
 
     // copy to a ciphertext record
     let mut backup_ct = BackupDataCt::default();
@@ -187,21 +179,17 @@ pub(crate) fn create_backup(
 /// Returns `None` if the MAC or key commitment fail.
 /// It is up to the caller to validate if the plaintext header matches the decrypted
 /// version embedded in the return data.
-pub(crate) fn restore_backup(
-    key: &BackupKey,
-    backup: &BackupDataCt
-) -> Option<BackupDataPt> {
+pub(crate) fn restore_backup(key: &BackupKey, backup: &BackupDataCt) -> Option<BackupDataPt> {
     let (kenc, kcom) = kcom_func(&key.0, &backup.commit_nonce);
     let cipher = Aes256GcmSiv::new(&kenc.0.into());
 
     // Attempt decryption. This is None on failure
-    let plaintext = cipher.decrypt(
-        Nonce::from_slice(&backup.nonce),
-        Payload {
-            aad: BACKUP_AAD.as_bytes(),
-            msg: &backup.ct_plus_mac,
-        }
-    ).ok();
+    let plaintext = cipher
+        .decrypt(
+            Nonce::from_slice(&backup.nonce),
+            Payload { aad: BACKUP_AAD.as_bytes(), msg: &backup.ct_plus_mac },
+        )
+        .ok();
 
     if kcom.0.ct_eq(&backup.commitment).into() {
         if let Some(p) = plaintext {

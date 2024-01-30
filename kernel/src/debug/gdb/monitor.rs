@@ -17,13 +17,10 @@ impl MonitorCmd for XousTarget {
         if cmd.starts_with("pr") {
             if let Some(pid_str) = cmd.split_ascii_whitespace().nth(1) {
                 // Parse the new PID. If it isn't a valid string, then this will be None
-                let new_pid =
-                    xous_kernel::PID::new(u8::from_str_radix(pid_str, 10).unwrap_or_default());
+                let new_pid = xous_kernel::PID::new(u8::from_str_radix(pid_str, 10).unwrap_or_default());
                 if let Some(previous_pid) = self.pid {
                     crate::services::SystemServices::with_mut(|system_services| {
-                        system_services
-                            .resume_process_from_debug(previous_pid)
-                            .unwrap()
+                        system_services.resume_process_from_debug(previous_pid).unwrap()
                     });
                 }
                 // Disallow debugging the kernel. Sad times.
@@ -53,11 +50,7 @@ impl MonitorCmd for XousTarget {
                             out,
                             "  {:2} {} {}",
                             process.pid,
-                            if self.pid.map(|p| p == process.pid).unwrap_or(false) {
-                                '*'
-                            } else {
-                                ' '
-                            },
+                            if self.pid.map(|p| p == process.pid).unwrap_or(false) { '*' } else { ' ' },
                             system_services.process_name(process.pid).unwrap_or("")
                         );
                     }

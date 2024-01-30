@@ -7,66 +7,71 @@ description = "Xous root keys server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.55"
-log-server = { package = "xous-api-log", version = "0.1.51" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.51" }
-xous-names = { package = "xous-api-names", version = "0.9.53" }
+xous = "0.9.57"
+log-server = { package = "xous-api-log", version = "0.1.53" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
+xous-names = { package = "xous-api-names", version = "0.9.55" }
 log = "0.4.14"
-susres = {package = "xous-api-susres", version = "0.9.51"}
-trng = {path= "../trng"}
-spinor = {path="../spinor"}
-llio = {path="../llio"}
-com = {path="../com"}
+susres = { package = "xous-api-susres", version = "0.9.53" }
+trng = { path = "../trng" }
+spinor = { path = "../spinor" }
+llio = { path = "../llio" }
+com = { path = "../com" }
 xous-semver = "0.1.2"
-utralib = { version = "0.1.23", optional = true, default-features = false }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 
-xous-ipc = "0.9.55"
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+xous-ipc = "0.9.57"
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+] }
 zeroize = "1.3.0"
 rand_core = "0.5.1"
 
-aes-kw = {version = "0.2.1", features = ["alloc"]}
+aes-kw = { version = "0.2.1", features = ["alloc"] }
 
 # bcrypt
 cipher = "0.4.3"
 blowfish = { version = "0.8.0", features = ["bcrypt"] }
 
 # password modals - keep them in this crate to minimize plaintext password manipulations
-gam = {path = "../gam"}
-locales = {path = "../../locales"}
+gam = { path = "../gam" }
+locales = { path = "../../locales" }
 # non-password modals are outsourced to a common crate
-modals = {path = "../modals"}
+modals = { path = "../modals" }
 
 # to access font maps for signing verification
-graphics-server = {path = "../graphics-server"}
+graphics-server = { path = "../graphics-server" }
 
 # for reboots and fuse operations
-jtag = {path = "../jtag"}
+jtag = { path = "../jtag" }
 
 # for text to speech support
-tts-frontend = {path="../tts"}
+tts-frontend = { path = "../tts" }
 
 # backups
-aes-gcm-siv = {version = "0.11.1", default-features = false, features = ["alloc", "aes"]}
+aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
+    "alloc",
+    "aes",
+] }
 #aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
-subtle = {version = "2.4.1", default-features = false}
-usb-device-xous = {path="../usb-device-xous"}
-keyboard = {path="../keyboard"}
+subtle = { version = "2.4.1", default-features = false }
+usb-device-xous = { path = "../usb-device-xous" }
+keyboard = { path = "../keyboard" }
 
 # private keys
 #sha2 = {version = "0.9.5", default-features = false, features = []}
-sha2 = {path = "../engine-sha512"}
+sha2 = { path = "../engine-sha512" }
 digest = "0.9.0"
-aes={path="../aes"}
-engine-25519 = {path="../engine-25519"}
-byteorder = "1.4.3" # used by keywrap
+aes = { path = "../aes" }
+engine-25519 = { path = "../engine-25519" }
+byteorder = "1.4.3"                         # used by keywrap
 # hardware acceleration adaptations are inserted into a fork of the main branch.
-hex = {version = "0.4.3", default-features = false, features = []}
+hex = { version = "0.4.3", default-features = false, features = [] }
 
 [dependencies.curve25519-dalek]
-version = "3.1.0" # note this is patched to our fork in ./Cargo.toml
+version = "3.1.0"                       # note this is patched to our fork in ./Cargo.toml
 default-features = false
 features = ["u32_backend", "betrusted"]
 
@@ -80,8 +85,10 @@ features = ["u32_backend", "rand"]
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
-policy-menu = [] # provisions for users to set their password retention policies (on the block for deprecation) (note: to re-enable you need to add "rootkeys menu" to the tokens.rs in the GAM)
-hazardous-debug = []  # this feature enables the printing of secret materials for debug purposes
+policy-menu = [
+] # provisions for users to set their password retention policies (on the block for deprecation) (note: to re-enable you need to add "rootkeys menu" to the tokens.rs in the GAM)
+hazardous-debug = [
+] # this feature enables the printing of secret materials for debug purposes
 tts = []
 efuse = []
 default = []

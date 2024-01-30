@@ -1,4 +1,5 @@
 use core::fmt::{Error, Write};
+
 use crate::platform::console::ConsoleSingleton;
 
 pub struct Output {}
@@ -17,9 +18,7 @@ pub fn init() -> Output {
 }
 
 impl Output {
-    pub fn get_writer(&self) -> OutputWriter {
-        OutputWriter {}
-    }
+    pub fn get_writer(&self) -> OutputWriter { OutputWriter {} }
 
     pub fn run(&mut self) {
         loop {
@@ -32,8 +31,8 @@ impl Output {
 fn handle_console_irq(_irq_no: usize, _arg: *mut usize) {
     if cfg!(feature = "logging") {
         // let mut inject_csr = CSR::new(arg as *mut u32);
-        //let mut uart_csr = crate::platform::debug::UartType::with_alt_base_addr(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as u32 });
-        // TODO:
+        //let mut uart_csr = crate::platform::debug::UartType::with_alt_base_addr(unsafe {
+        // crate::platform::debug::DEFAULT_UART_ADDR as u32 }); TODO:
     }
 }
 
@@ -56,14 +55,9 @@ impl OutputWriter {
         buf.len()
     }
 
-    pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> {
-        Ok(self.write(buf))
-    }
+    pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> { Ok(self.write(buf)) }
 }
 
 impl Write for OutputWriter {
-    fn write_str(&mut self, s: &str) -> Result<(), Error> {
-        ConsoleSingleton {}.write_str(s)
-    }
+    fn write_str(&mut self, s: &str) -> Result<(), Error> { ConsoleSingleton {}.write_str(s) }
 }
-

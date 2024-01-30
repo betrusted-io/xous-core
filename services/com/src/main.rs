@@ -2,19 +2,15 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::*;
-
-use num_traits::{ToPrimitive, FromPrimitive};
-
-use log::{error, info, trace};
-
-use com_rs::*;
-use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, StringSer, Ipv4Conf};
-
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
-use xous_ipc::{Buffer, String};
-
 use core::convert::TryInto;
+
+use api::*;
+use com_rs::serdes::{Ipv4Conf, StringSer, STR_32_WORDS, STR_64_WORDS};
+use com_rs::*;
+use log::{error, info, trace};
+use num_traits::{FromPrimitive, ToPrimitive};
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, CID};
+use xous_ipc::{Buffer, String};
 
 const LEGACY_REV: u32 = 0x8b5b_8e50; // this is the git rev shipped before we went to version tagging
 const LEGACY_TAG: u32 = 0x00_09_05_00; // this is corresponding tag
@@ -28,27 +24,35 @@ pub struct WorkRequest {
 
 fn return_battstats(cid: CID, stats: api::BattStats) -> Result<(), xous::Error> {
     let rawstats: [usize; 2] = stats.into();
-    xous::send_message(cid,
-        xous::Message::new_scalar(api::Callback::BattStats.to_usize().unwrap(),
-        rawstats[0], rawstats[1], 0, 0)
-    ).map(|_| ())
+    xous::send_message(
+        cid,
+        xous::Message::new_scalar(
+            api::Callback::BattStats.to_usize().unwrap(),
+            rawstats[0],
+            rawstats[1],
+            0,
+            0,
+        ),
+    )
+    .map(|_| ())
 }
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation {
+    use com_rs::*;
+    use log::error;
+    use susres::{RegManager, RegOrField, SuspendResume};
+    use utralib::generated::*;
+
     use crate::api::BattStats;
     use crate::return_battstats;
     use crate::WorkRequest;
-    use com_rs::*;
-    use log::error;
-    use utralib::generated::*;
-    use susres::{RegManager, RegOrField, SuspendResume};
 
     const STD_TIMEOUT: u32 = 100;
 
     pub struct XousCom {
         csr: utralib::CSR<u32>,
-        susres: RegManager::<{utra::com::COM_NUMREGS}>,
+        susres: RegManager<{ utra::com::COM_NUMREGS }>,
         ticktimer: ticktimer_server::Ticktimer,
         pub workqueue: Vec<WorkRequest>,
         busy: bool,
@@ -58,8 +62,7 @@ mod implementation {
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
         let xc = unsafe { &mut *(arg as *mut XousCom) };
         // just clear the pending request, as this is used as a "wait" until request function
-        xc.csr
-            .wo(utra::com::EV_PENDING, xc.csr.r(utra::com::EV_PENDING));
+        xc.csr.wo(utra::com::EV_PENDING, xc.csr.r(utra::com::EV_PENDING));
     }
 
     impl XousCom {
@@ -85,12 +88,8 @@ mod implementation {
         }
 
         pub fn init(&mut self) {
-            xous::claim_interrupt(
-                utra::com::COM_IRQ,
-                handle_irq,
-                self as *mut XousCom as *mut usize,
-            )
-            .expect("couldn't claim irq");
+            xous::claim_interrupt(utra::com::COM_IRQ, handle_irq, self as *mut XousCom as *mut usize)
+                .expect("couldn't claim irq");
 
             self.susres.push(RegOrField::Reg(utra::com::CONTROL), None);
             self.susres.push_fixed_value(RegOrField::Reg(utra::com::EV_PENDING), 0xFFFF_FFFF);
@@ -102,9 +101,11 @@ mod implementation {
             self.csr.wo(utra::com::EV_ENABLE, 0);
             self.csr.wo(utra::com::EV_PENDING, 0xFFFF_FFFF);
         }
+
         pub fn resume(&mut self) {
             self.susres.resume();
-            // issue a "link sync" command because the COM had continued running, and we may have sent garbage during suspend
+            // issue a "link sync" command because the COM had continued running, and we may have sent garbage
+            // during suspend
             self.txrx(ComState::LINK_SYNC.verb);
             // wait a moment for the link to stabilize, before allowing any other commands to issue
             self.ticktimer.sleep_ms(5).unwrap();
@@ -113,12 +114,12 @@ mod implementation {
         pub fn txrx(&mut self, tx: u16) -> u16 {
             self.csr.wfo(utra::com::TX_TX, tx as u32);
             /* transaction is automatically initiated on write
-               wait while transaction is in progress. A transaction takes about 80-100 CPU cycles;
-               not quite enough to be worth the overhead of an interrupt, so we just yield our time slice */
+            wait while transaction is in progress. A transaction takes about 80-100 CPU cycles;
+            not quite enough to be worth the overhead of an interrupt, so we just yield our time slice */
             while self.csr.rf(utra::com::STATUS_TIP) == 1 {
                 // xous::yield_slice();
                 /* ... and it turns out yielding the slice is a bad idea, because you may not get re-scheduled
-                 for a very long time, which causes the COM responder to timeout. Just waste the cycles. */
+                for a very long time, which causes the COM responder to timeout. Just waste the cycles. */
             }
 
             // grab the RX value and return it
@@ -131,8 +132,7 @@ mod implementation {
                 let mut timed_out = false;
                 let to = timeout.unwrap() as u64;
                 while self.csr.rf(utra::com::STATUS_HOLD) == 1 && !timed_out {
-                    if (self.ticktimer.elapsed_ms() - curtime) > to
-                    {
+                    if (self.ticktimer.elapsed_ms() - curtime) > to {
                         log::warn!("COM timeout");
                         timed_out = true;
                     }
@@ -154,8 +154,7 @@ mod implementation {
             let mut timed_out = false;
             let to = timeout as u64;
             while self.csr.rf(utra::com::STATUS_HOLD) == 1 && !timed_out {
-                if (self.ticktimer.elapsed_ms() - curtime) > to
-                {
+                if (self.ticktimer.elapsed_ms() - curtime) > to {
                     log::warn!("COM timeout");
                     timed_out = true;
                 }
@@ -179,15 +178,12 @@ mod implementation {
                         Err(xous::Error::ServerNotFound) => {
                             // the callback target has quit, so de-allocate it from our list
                             Some(work_descriptor.sender)
-                        },
+                        }
                         Ok(()) => None,
                         _ => panic!("unhandled error in callback process_queue"),
                     }
                 } else {
-                    error!(
-                        "unimplemented work queue responder 0x{:x}",
-                        work_descriptor.work.verb
-                    );
+                    error!("unimplemented work queue responder 0x{:x}", work_descriptor.work.verb);
                     None
                 };
                 self.busy = false;
@@ -240,7 +236,7 @@ mod implementation {
             // pack into a format that can be returned as a scalar2
             [
                 ((rev & 0xff) as u32) << 24 | (((event & 0xff) as u32) << 16) | ret[0] as u32,
-                ret[1] as u32 | ((ret[2] as u32) << 16)
+                ret[1] as u32 | ((ret[2] as u32) << 16),
             ]
         }
     }
@@ -249,11 +245,12 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "xous"))]
 mod implementation {
+    use com_rs::*;
+    use log::error;
+
     use crate::api::BattStats;
     use crate::return_battstats;
     use crate::WorkRequest;
-    use com_rs::*;
-    use log::error;
 
     pub struct XousCom {
         pub workqueue: Vec<WorkRequest>,
@@ -261,35 +258,24 @@ mod implementation {
     }
 
     impl XousCom {
-        pub fn new() -> XousCom {
-            XousCom {
-                workqueue: Vec::new(),
-                busy: false,
-            }
-        }
+        pub fn new() -> XousCom { XousCom { workqueue: Vec::new(), busy: false } }
+
         pub fn init(&mut self) {}
+
         pub fn suspend(&self) {}
+
         pub fn resume(&self) {}
 
-        pub fn txrx(&mut self, _tx: u16) -> u16 {
-            0xDEAD as u16
-        }
+        pub fn txrx(&mut self, _tx: u16) -> u16 { 0xDEAD as u16 }
 
-        pub fn wait_txrx(&mut self, _tx: u16, _timeout: Option<u32>) -> u16 {
-            0xDEAD as u16
-        }
-        pub fn try_wait_txrx(&mut self, _tx: u16, _timeout: u32) -> Option<u16> {
-            None
-        }
+        pub fn wait_txrx(&mut self, _tx: u16, _timeout: Option<u32>) -> u16 { 0xDEAD as u16 }
+
+        pub fn try_wait_txrx(&mut self, _tx: u16, _timeout: u32) -> Option<u16> { None }
 
         pub fn get_battstats(&mut self) -> BattStats {
-            BattStats {
-                voltage: 3950,
-                current: -110,
-                soc: 85,
-                remaining_capacity: 850,
-            }
+            BattStats { voltage: 3950, current: -110, soc: 85, remaining_capacity: 850 }
         }
+
         pub fn stby_current(&self) -> Option<i16> { None }
 
         pub fn process_queue(&mut self) -> Option<xous::CID> {
@@ -302,15 +288,12 @@ mod implementation {
                         Err(xous::Error::ServerNotFound) => {
                             // the callback target has quit, so de-allocate it from our list
                             Some(work_descriptor.sender)
-                        },
+                        }
                         Ok(()) => None,
                         _ => panic!("unhandled error in callback process_queue"),
                     }
                 } else {
-                    error!(
-                        "unimplemented work queue responder 0x{:x}",
-                        work_descriptor.work.verb
-                    );
+                    error!("unimplemented work queue responder 0x{:x}", work_descriptor.work.verb);
                     None
                 };
                 self.busy = false;
@@ -319,15 +302,14 @@ mod implementation {
                 None
             }
         }
+
         pub fn get_more_stats(&mut self) -> [u16; 15] {
             let mut ret = [0u16; 15];
             ret[12] = 3950; // make the oqc test happy
             ret
         }
 
-        pub fn poll_usb_cc(&mut self) -> [u32; 2] {
-            [0; 2]
-        }
+        pub fn poll_usb_cc(&mut self) -> [u32; 2] { [0; 2] }
     }
 }
 
@@ -343,7 +325,8 @@ fn main() -> ! {
     let llio = llio::Llio::new(&xns);
     llio.ec_reset().unwrap();
 
-    // unlimited connections allowed -- any server is currently allowed to talk to COM. This might need to be revisited.
+    // unlimited connections allowed -- any server is currently allowed to talk to COM. This might need to be
+    // revisited.
     let com_sid = xns.register_name(api::SERVER_NAME_COM, None).expect("can't register server");
     trace!("registered with NS -- {:?}", com_sid);
 
@@ -362,12 +345,18 @@ fn main() -> ! {
             com.txrx(ping_value);
             let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(150)); // this should "stall" until the EC comes out of reset
             let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(150));
-            if pong == !ping_value &&
-            phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+            if pong == !ping_value && phase == 0x600d {
+                // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just
+                // sending one value back at us
                 log::info!("EC rebooting: link established");
                 break;
             } else {
-                log::info!("EC rebooting: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
+                log::info!(
+                    "EC rebooting: establishing link sync, attempt {} [{:04x}/{:04x}]",
+                    attempts,
+                    pong,
+                    phase
+                );
                 com.txrx(ComState::LINK_SYNC.verb);
                 ticktimer.sleep_ms(200).unwrap();
                 attempts += 1;
@@ -381,16 +370,19 @@ fn main() -> ! {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(com_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Late), &xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres =
+        susres::Susres::new(Some(susres::SuspendOrder::Late), &xns, Opcode::SuspendResume as u32, sr_cid)
+            .expect("couldn't create suspend/resume object");
 
-    // create an array to track return connections for battery stats TODO: refactor this to use a Vec instead of static allocations
+    // create an array to track return connections for battery stats TODO: refactor this to use a Vec instead
+    // of static allocations
     let mut battstats_conns: [Option<xous::CID>; 32] = [None; 32];
     // other future notification vectors shall go here
 
     let mut bl_main = 0;
     let mut bl_sec = 0;
 
-    let mut flash_id: Option<[u32;4]> = None; // only one process can acquire this, and its ID is stored here.
+    let mut flash_id: Option<[u32; 4]> = None; // only one process can acquire this, and its ID is stored here.
     const FLASH_LEN: u32 = 0x10_0000;
     const FLASH_TIMEOUT: u32 = 250;
 
@@ -415,13 +407,7 @@ fn main() -> ! {
         let _dirty = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT * 2)) as u8;
         ((rev_msb as u32) << 16) | (rev_lsb as u32)
     };
-    let mut ec_tag = {
-        if ec_git_rev == LEGACY_REV {
-            LEGACY_TAG
-        } else {
-            parse_version(&mut com)
-        }
-    };
+    let mut ec_tag = { if ec_git_rev == LEGACY_REV { LEGACY_TAG } else { parse_version(&mut com) } };
     let mut desired_int_mask = 0;
 
     trace!("starting main loop");
@@ -444,8 +430,11 @@ fn main() -> ! {
                 com.txrx(ComState::LINK_SET_INTMASK.verb);
                 com.txrx(desired_int_mask); // restore interrupts on resume
 
-                if bl_main != 0 || bl_sec != 0 { // restore the backlight settings, if they are not 0
-                    com.txrx(ComState::BL_START.verb | (bl_main as u16) & 0x1f | (((bl_sec as u16) & 0x1f) << 5));
+                if bl_main != 0 || bl_sec != 0 {
+                    // restore the backlight settings, if they are not 0
+                    com.txrx(
+                        ComState::BL_START.verb | (bl_main as u16) & 0x1f | (((bl_sec as u16) & 0x1f) << 5),
+                    );
                 }
             }),
             Some(Opcode::Ping) => xous::msg_blocking_scalar_unpack!(msg, ping, _, _, _, {
@@ -462,11 +451,17 @@ fn main() -> ! {
                         com.txrx(ping_value);
                         let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
                         let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
-                        if pong == !ping_value &&
-                        phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+                        if pong == !ping_value && phase == 0x600d {
+                            // 0x600d is a hard-coded constant. It's included to confirm that we aren't
+                            // "wedged" just sending one value back at us
                             break;
                         } else {
-                            log::warn!("Link reset: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
+                            log::warn!(
+                                "Link reset: establishing link sync, attempt {} [{:04x}/{:04x}]",
+                                attempts,
+                                pong,
+                                phase
+                            );
                             com.txrx(ComState::LINK_SYNC.verb);
                             ticktimer.sleep_ms(200).unwrap();
                             attempts += 1;
@@ -501,7 +496,8 @@ fn main() -> ! {
                     uptime >>= 16;
                     uptime |= (com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u64) << 48;
                 }
-                xous::return_scalar2(msg.sender, uptime as usize, (uptime >> 32) as usize).expect("couldn't return uptime");
+                xous::return_scalar2(msg.sender, uptime as usize, (uptime >> 32) as usize)
+                    .expect("couldn't return uptime");
             }),
             Some(Opcode::FlashAcquire) => msg_blocking_scalar_unpack!(msg, id0, id1, id2, id3, {
                 let acquired = if flash_id.is_none() {
@@ -510,10 +506,12 @@ fn main() -> ! {
                 } else {
                     0
                 };
-                xous::return_scalar(msg.sender, acquired as usize).expect("couldn't acknowledge acquire message");
+                xous::return_scalar(msg.sender, acquired as usize)
+                    .expect("couldn't acknowledge acquire message");
             }),
             Some(Opcode::FlashOp) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut flash_op = buffer.to_original::<api::FlashRecord, _>().unwrap();
                 let mut pass = false;
                 if let Some(id) = flash_id {
@@ -521,24 +519,31 @@ fn main() -> ! {
                         match &mut flash_op.op {
                             api::FlashOp::Erase(addr, len) => {
                                 if *addr < FLASH_LEN && *len + *addr < FLASH_LEN {
-                                    log::debug!("Erasing EC region starting at 0x{:x}, lenth 0x{:x}", *addr, *len);
+                                    log::debug!(
+                                        "Erasing EC region starting at 0x{:x}, lenth 0x{:x}",
+                                        *addr,
+                                        *len
+                                    );
                                     com.txrx(ComState::FLASH_ERASE.verb);
                                     com.txrx((*addr >> 16) as u16);
                                     com.txrx(*addr as u16);
                                     com.txrx((*len >> 16) as u16);
                                     com.txrx(*len as u16);
-                                    while ComState::FLASH_ACK.verb != com.wait_txrx(ComState::FLASH_WAITACK.verb, Some(FLASH_TIMEOUT)) {
+                                    while ComState::FLASH_ACK.verb
+                                        != com.wait_txrx(ComState::FLASH_WAITACK.verb, Some(FLASH_TIMEOUT))
+                                    {
                                         xous::yield_slice();
                                     }
                                     pass = true;
                                 } else {
                                     pass = false;
                                 }
-                            },
+                            }
                             api::FlashOp::Program(addr, some_pages) => {
                                 com.txrx(ComState::FLASH_LOCK.verb);
                                 let mut prog_ptr = *addr;
-                                // this will fill the 1280-deep FIFO with up to 4 pages of data for programming
+                                // this will fill the 1280-deep FIFO with up to 4 pages of data for
+                                // programming
                                 pass = true;
                                 for &maybe_page in some_pages.iter() {
                                     if prog_ptr < FLASH_LEN - 256 {
@@ -548,7 +553,9 @@ fn main() -> ! {
                                             com.txrx((prog_ptr >> 16) as u16);
                                             com.txrx(prog_ptr as u16);
                                             for i in 0..128 {
-                                                com.txrx(page[i*2] as u16 | ((page[i*2+1] as u16) << 8));
+                                                com.txrx(
+                                                    page[i * 2] as u16 | ((page[i * 2 + 1] as u16) << 8),
+                                                );
                                             }
                                         }
                                         prog_ptr += 256;
@@ -557,11 +564,13 @@ fn main() -> ! {
                                     }
                                 }
                                 // wait for completion only after all 4 pages are sent
-                                while ComState::FLASH_ACK.verb != com.wait_txrx(ComState::FLASH_WAITACK.verb, Some(FLASH_TIMEOUT)) {
+                                while ComState::FLASH_ACK.verb
+                                    != com.wait_txrx(ComState::FLASH_WAITACK.verb, Some(FLASH_TIMEOUT))
+                                {
                                     xous::yield_slice();
                                 }
                                 com.txrx(ComState::FLASH_UNLOCK.verb);
-                            },
+                            }
                             api::FlashOp::Verify(addr, data) => {
                                 if ec_tag >= u32::from_be_bytes(ComState::FLASH_VERIFY.apilevel) {
                                     com.txrx(ComState::FLASH_VERIFY.verb);
@@ -569,7 +578,9 @@ fn main() -> ! {
                                     com.txrx(*addr as u16);
 
                                     for word in data.chunks_mut(2) {
-                                        let read = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)).to_le_bytes();
+                                        let read = com
+                                            .wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT))
+                                            .to_le_bytes();
                                         word[0] = read[0];
                                         word[1] = read[1];
                                     }
@@ -592,31 +603,26 @@ fn main() -> ! {
                         buffer.replace(flash_op).expect("couldn't return result on FlashOp");
                     }
                     _ => {
-                        let response = if pass {
-                            api::FlashResult::Pass
-                        } else {
-                            api::FlashResult::Fail
-                        };
+                        let response = if pass { api::FlashResult::Pass } else { api::FlashResult::Fail };
                         buffer.replace(response).expect("couldn't return result on FlashOp");
                     }
                 }
             }
             Some(Opcode::RegisterBattStatsListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
-                    let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
-                    let cid = Some(xous::connect(sid).unwrap());
-                    let mut found = false;
-                    for entry in battstats_conns.iter_mut() {
-                        if *entry == None {
-                            *entry = cid;
-                            found = true;
-                            break;
-                        }
-                    }
-                    if !found {
-                        error!("RegisterBattStatsListener ran out of space registering callback");
+                let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+                let cid = Some(xous::connect(sid).unwrap());
+                let mut found = false;
+                for entry in battstats_conns.iter_mut() {
+                    if *entry == None {
+                        *entry = cid;
+                        found = true;
+                        break;
                     }
                 }
-            ),
+                if !found {
+                    error!("RegisterBattStatsListener ran out of space registering callback");
+                }
+            }),
             Some(Opcode::IsCharging) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 com.txrx(ComState::POWER_CHARGER_STATE.verb);
                 let result = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
@@ -634,7 +640,7 @@ fn main() -> ! {
             }),
             Some(Opcode::Wf200PdsLine) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let l = buffer.to_original::<String::<512>, _>().unwrap();
+                let l = buffer.to_original::<String<512>, _>().unwrap();
                 info!("Wf200PdsLine got line {}", l);
                 let line = l.as_bytes();
                 let length = (l.len() + 0) as u16;
@@ -645,10 +651,11 @@ fn main() -> ! {
                 //for i in 0..(ComState::WFX_PDS_LINE_SET.w_words as usize - 1) {
                 for i in 0..128 {
                     let word: u16;
-                    if (i * 2 + 1) == length as usize { // odd last element
+                    if (i * 2 + 1) == length as usize {
+                        // odd last element
                         word = line[i * 2] as u16;
                     } else if i * 2 < length as usize {
-                        word = (line[i*2] as u16) | ((line[i*2+1] as u16) << 8);
+                        word = (line[i * 2] as u16) | ((line[i * 2 + 1] as u16) << 8);
                     } else {
                         word = 0;
                     }
@@ -656,7 +663,10 @@ fn main() -> ! {
                     //info!("0x{:04x}", word);
                 }
             }
-            Some(Opcode::PowerOffSoc) => { // NOTE: this is deprecated, use susres.immediate_poweroff() instead. Power sequencing requirements have changed since this was created, this routine does not actually cut power anymore.
+            Some(Opcode::PowerOffSoc) => {
+                // NOTE: this is deprecated, use susres.immediate_poweroff() instead. Power sequencing
+                // requirements have changed since this was created, this routine does not actually cut power
+                // anymore.
                 com.txrx(ComState::CHG_BOOST_OFF.verb);
                 com.txrx(ComState::LINK_SET_INTMASK.verb);
                 com.txrx(0); // suppress interrupts on suspend
@@ -688,10 +698,12 @@ fn main() -> ! {
                 let y = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                 let z = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                 let id = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                xous::return_scalar2(msg.sender,
+                xous::return_scalar2(
+                    msg.sender,
                     ((x as usize) << 16) | y as usize,
-                    ((z as usize) << 16) | id as usize
-                ).expect("coludn't return accelerometer read data");
+                    ((z as usize) << 16) | id as usize,
+                )
+                .expect("coludn't return accelerometer read data");
             }),
             Some(Opcode::BattStats) => {
                 let stats = com.get_battstats();
@@ -700,7 +712,8 @@ fn main() -> ! {
                     .expect("couldn't return batt stats request");
             }
             Some(Opcode::MoreStats) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let stats = com.get_more_stats();
                 buffer.replace(stats).unwrap();
             }
@@ -712,19 +725,14 @@ fn main() -> ! {
             Some(Opcode::BattStatsNb) => {
                 for &maybe_conn in battstats_conns.iter() {
                     if let Some(conn) = maybe_conn {
-                        com.workqueue
-                            .push(WorkRequest {
-                                work: ComState::STAT,
-                                sender: conn,
-                            });
-                            //.unwrap();
+                        com.workqueue.push(WorkRequest { work: ComState::STAT, sender: conn });
+                        //.unwrap();
                     }
                 }
             }
             Some(Opcode::ShipMode) => {
                 com.txrx(ComState::POWER_SHIPMODE.verb);
-                xous::return_scalar(msg.sender, 1)
-                    .expect("couldn't ack ship mode");
+                xous::return_scalar(msg.sender, 1).expect("couldn't ack ship mode");
             }
             Some(Opcode::Wf200Rev) => {
                 com.txrx(ComState::WFX_FW_REV_GET.verb);
@@ -733,7 +741,7 @@ fn main() -> ! {
                 let build = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
                 xous::return_scalar(
                     msg.sender,
-                    ((major as usize) << 16) | ((minor as usize) << 8) | (build as usize)
+                    ((major as usize) << 16) | ((minor as usize) << 8) | (build as usize),
                 )
                 .expect("couldn't return WF200 firmware rev");
             }
@@ -743,25 +751,18 @@ fn main() -> ! {
                 let rev_lsb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
                 let dirty = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
                 ec_git_rev = ((rev_msb as u32) << 16) | (rev_lsb as u32);
-                xous::return_scalar2(
-                    msg.sender,
-                    ec_git_rev as usize,
-                    dirty as usize
-                )
-                .expect("couldn't return WF200 firmware rev");
+                xous::return_scalar2(msg.sender, ec_git_rev as usize, dirty as usize)
+                    .expect("couldn't return WF200 firmware rev");
             }
             Some(Opcode::EcSwTag) => {
-                if ec_git_rev == LEGACY_REV { // this corresponds to a 0.9.5 tag -- the last tag shipped that lacked detailed versioning
-                    xous::return_scalar(
-                        msg.sender,
-                        0x00_09_05_00
-                    ).expect("couldn't return WF200 revision tag");
+                if ec_git_rev == LEGACY_REV {
+                    // this corresponds to a 0.9.5 tag -- the last tag shipped that lacked detailed versioning
+                    xous::return_scalar(msg.sender, 0x00_09_05_00)
+                        .expect("couldn't return WF200 revision tag");
                 } else {
                     ec_tag = parse_version(&mut com);
-                    xous::return_scalar(
-                        msg.sender,
-                        ec_tag as usize,
-                    ).expect("couldn't return WF200 revision tag");
+                    xous::return_scalar(msg.sender, ec_tag as usize)
+                        .expect("couldn't return WF200 revision tag");
                 }
             }
             Some(Opcode::Wf200Reset) => {
@@ -776,11 +777,17 @@ fn main() -> ! {
                         com.txrx(ping_value);
                         let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(5000)); // should finish with 5 seconds
                         let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
-                        if pong == !ping_value &&
-                        phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+                        if pong == !ping_value && phase == 0x600d {
+                            // 0x600d is a hard-coded constant. It's included to confirm that we aren't
+                            // "wedged" just sending one value back at us
                             break;
                         } else {
-                            log::warn!("Wf200 reset: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
+                            log::warn!(
+                                "Wf200 reset: establishing link sync, attempt {} [{:04x}/{:04x}]",
+                                attempts,
+                                pong,
+                                phase
+                            );
                             com.txrx(ComState::LINK_SYNC.verb);
                             ticktimer.sleep_ms(200).unwrap();
                             attempts += 1;
@@ -820,32 +827,35 @@ fn main() -> ! {
             Some(Opcode::SsidCheckUpdate) => {
                 com.txrx(ComState::SSID_CHECK.verb);
                 let available = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
-                xous::return_scalar(
-                    msg.sender, available as usize
-                ).expect("couldn't return SsidCheckUpdate");
-            },
+                xous::return_scalar(msg.sender, available as usize).expect("couldn't return SsidCheckUpdate");
+            }
             Some(Opcode::SsidFetchAsString) => {
                 if ec_tag == LEGACY_TAG {
-                    // this is kept around because the original firmware shipped with units don't support software tagging
-                    // and the SSID API was modified. This allows the SOC to interop with older versions of the EC for SSID scanning.
-                    // If it's 2023 and you're looking at this comment and thinking about removing this code, it might actually be
-                    // ok to do that. Just check that the factory test infrastructure is fully updated to match a modern EC rev.
+                    // this is kept around because the original firmware shipped with units don't support
+                    // software tagging and the SSID API was modified. This allows the SOC
+                    // to interop with older versions of the EC for SSID scanning. If it's
+                    // 2023 and you're looking at this comment and thinking about removing this code, it might
+                    // actually be ok to do that. Just check that the factory test
+                    // infrastructure is fully updated to match a modern EC rev.
                     use core::fmt::Write;
-                    let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    let mut buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
 
                     com.txrx(ComState::SSID_FETCH.verb);
                     let mut ssid_list: [[u8; 32]; 6] = [[0; 32]; 6]; // index as ssid_list[6][32]
                     for i in 0..16 * 6 {
                         let data = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
-                        let lsb : u8 = (data & 0xff) as u8;
-                        let msb : u8 = ((data >> 8) & 0xff) as u8;
+                        let lsb: u8 = (data & 0xff) as u8;
+                        let msb: u8 = ((data >> 8) & 0xff) as u8;
                         //if lsb == 0 { lsb = 0x20; }
                         //if msb == 0 { msb = 0x20; }
                         ssid_list[i / 16][(i % 16) * 2] = lsb;
                         ssid_list[i / 16][(i % 16) * 2 + 1] = msb;
                     }
-                    // this is a questionably useful return format -- maybe it's actually more useful to return the raw characters??
-                    // for now, this is good enough for human eyes, but a scrollable list of SSIDs might be more useful with the raw u8 representation
+                    // this is a questionably useful return format -- maybe it's actually more useful to
+                    // return the raw characters?? for now, this is good enough for human
+                    // eyes, but a scrollable list of SSIDs might be more useful with the raw u8
+                    // representation
                     let mut ssid_str = xous_ipc::String::<256>::from_str("Top 6 SSIDs:\n");
                     let mut itemized = xous_ipc::String::<256>::new();
                     for i in 0..6 {
@@ -861,12 +871,12 @@ fn main() -> ! {
                         match ssid {
                             Ok(textid) => {
                                 itemized.clear();
-                                write!(itemized, "{}. {}\n", i+1, textid).unwrap();
+                                write!(itemized, "{}. {}\n", i + 1, textid).unwrap();
                                 ssid_str.append(itemized.as_str().unwrap()).unwrap();
-                            },
+                            }
                             _ => {
                                 ssid_str.append("-Parse Error-\n").unwrap();
-                            },
+                            }
                         }
                     }
                     buffer.replace(ssid_str).unwrap();
@@ -880,8 +890,8 @@ fn main() -> ! {
                     continue;
                 }
                 com.txrx(ComState::SSID_FETCH_STR.verb);
-                // these sizes are hard-coded constants from the EC firmware. We don't have a good cross-code base method for
-                // sharing these yet, so they are just magic numbers.
+                // these sizes are hard-coded constants from the EC firmware. We don't have a good cross-code
+                // base method for sharing these yet, so they are just magic numbers.
                 let mut ssid_list: [[u8; 34]; 8] = [[0; 34]; 8];
                 for record in ssid_list.iter_mut() {
                     for word in record.chunks_mut(2) {
@@ -890,12 +900,15 @@ fn main() -> ! {
                         word[1] = ((data >> 8) & 0xff) as u8;
                     }
                 }
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut ssid_ret = buffer.to_original::<SsidReturn, _>().expect("couldn't convert incoming storage");
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut ssid_ret =
+                    buffer.to_original::<SsidReturn, _>().expect("couldn't convert incoming storage");
                 for (raw, ssid_rec) in ssid_list.iter().zip(ssid_ret.list.iter_mut()) {
                     ssid_rec.rssi = raw[0];
-                    let len = if raw[1] < 32 {raw[1] as usize} else {32};
-                    let ssid_str = core::str::from_utf8(&raw[2..2 + len as usize]).unwrap_or("UTF-8 parse error");
+                    let len = if raw[1] < 32 { raw[1] as usize } else { 32 };
+                    let ssid_str =
+                        core::str::from_utf8(&raw[2..2 + len as usize]).unwrap_or("UTF-8 parse error");
                     ssid_rec.name.clear(); // should be pre-cleared, but let's just be safe about it
                     ssid_rec.name.append(ssid_str).ok(); // don't panic if we truncate
                 }
@@ -914,18 +927,26 @@ fn main() -> ! {
                         com.txrx(ping_value);
                         let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(150)); // this should "stall" until the EC comes out of reset
                         let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(150));
-                        if pong == !ping_value &&
-                        phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+                        if pong == !ping_value && phase == 0x600d {
+                            // 0x600d is a hard-coded constant. It's included to confirm that we aren't
+                            // "wedged" just sending one value back at us
                             log::info!("Wifi on: link established");
                             break;
                         } else {
-                            log::info!("Wifi on: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
+                            log::info!(
+                                "Wifi on: establishing link sync, attempt {} [{:04x}/{:04x}]",
+                                attempts,
+                                pong,
+                                phase
+                            );
                             com.txrx(ComState::LINK_SYNC.verb);
                             ticktimer.sleep_ms(200).unwrap();
                             attempts += 1;
                         }
                         if attempts > 50 {
-                            log::error!("EC didn't sync after wifi on...continuing and praying for the best.");
+                            log::error!(
+                                "EC didn't sync after wifi on...continuing and praying for the best."
+                            );
                             break;
                         }
                     }
@@ -950,7 +971,7 @@ fn main() -> ! {
             Some(Opcode::WlanSetSSID) => {
                 const WF200_SSID_LEN: usize = 32;
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let ssid = buffer.to_original::<String::<WF200_SSID_LEN>, _>().unwrap();
+                let ssid = buffer.to_original::<String<WF200_SSID_LEN>, _>().unwrap();
                 info!("WlanSetSSID: {}", ssid);
                 let mut str_ser = StringSer::<STR_32_WORDS>::new();
                 match str_ser.encode(&ssid.to_str()) {
@@ -966,7 +987,7 @@ fn main() -> ! {
             Some(Opcode::WlanSetPass) => {
                 const WF200_PASS_LEN: usize = 64;
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let pass = buffer.to_original::<String::<WF200_PASS_LEN>, _>().unwrap();
+                let pass = buffer.to_original::<String<WF200_PASS_LEN>, _>().unwrap();
                 info!("WlanSetPass *ssssh!*");
                 let mut str_ser = StringSer::<STR_64_WORDS>::new();
                 match str_ser.encode(&pass.to_str()) {
@@ -991,9 +1012,8 @@ fn main() -> ! {
                 if ec_tag <= LEGACY_TAG {
                     log::warn!("Legacy EC detected. Ignoring status request update");
                 } else {
-                    let mut buffer = unsafe {
-                        Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                    };
+                    let mut buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                     com.txrx(ComState::WLAN_BIN_STATUS.verb);
                     let maybe_rssi = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                     let rssi = if (maybe_rssi >> 8) & 0xff != 0 {
@@ -1001,9 +1021,10 @@ fn main() -> ! {
                     } else {
                         // rssi as reported is a number from 0-110, where 110 is 0 dbm.
                         // a perhaps dubious decision was made to shift the reported value over by one before
-                        // returning to the host, so we lost a 0.5dBm step. But...not a big deal, and not worth
-                        // putting every user through an EC update to gain some resolution they never see.
-                        // note there is also a function in lib.rs/wlan_get_rssi() that has to be patched if
+                        // returning to the host, so we lost a 0.5dBm step. But...not a big deal, and not
+                        // worth putting every user through an EC update to gain some
+                        // resolution they never see. note there is also a function in
+                        // lib.rs/wlan_get_rssi() that has to be patched if
                         // this is fixed.
                         Some((110 - maybe_rssi) & 0xff)
                     };
@@ -1019,14 +1040,15 @@ fn main() -> ! {
                         w[1] = word[1];
                     }
                     let ssid_len = u16::from_le_bytes(ssid_buf[0..2].try_into().unwrap()) as usize;
-                    let ssid_checked_len = if ssid_len < 32 {ssid_len} else {32};
-                    let ssid_str = core::str::from_utf8(&ssid_buf[2..2+ssid_checked_len]).unwrap_or("Disconnected");
+                    let ssid_checked_len = if ssid_len < 32 { ssid_len } else { 32 };
+                    let ssid_str =
+                        core::str::from_utf8(&ssid_buf[2..2 + ssid_checked_len]).unwrap_or("Disconnected");
                     let status = WlanStatusIpc {
                         ssid: if let Some(rssi) = rssi {
                             log::debug!("RSSI: -{}dBm", rssi);
                             Some(SsidRecord {
                                 rssi: rssi as u8,
-                                name: xous_ipc::String::<32>::from_str(ssid_str)
+                                name: xous_ipc::String::<32>::from_str(ssid_str),
                             })
                         } else {
                             None
@@ -1038,7 +1060,8 @@ fn main() -> ! {
                 }
             }
             Some(Opcode::WlanGetConfig) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
 
                 com.txrx(ComState::WLAN_GET_IPV4_CONF.verb);
                 let mut prealloc = Ipv4Conf::default().encode_u16();
@@ -1046,7 +1069,8 @@ fn main() -> ! {
                     *dest = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                 }
                 #[cfg(not(target_os = "xous"))]
-                { // assign a fake MAC address in hosted mode so we don't crash smoltcp
+                {
+                    // assign a fake MAC address in hosted mode so we don't crash smoltcp
                     for i in 1..4 {
                         prealloc[i] = i as u16 - 1;
                     }
@@ -1058,20 +1082,18 @@ fn main() -> ! {
                     multicast is self.mac[0] & 0x1 == 1 -> this gets set when 0xDDDD or 0xDEAD is transmitted as EC is in reset
                     broadcast is 0xFF's -> this is unlikely to be sent, it only is sent if the EC won't configure at all
                 */
-                // punting this to the lib side of things, so we can return an error and not just a bogus value.
-                // prealloc[1] &= 0xFF_FE; // this ensures the "safety" of a reported MAC, even if the EC is broken and avoiding system panic (issue #152)
+                // punting this to the lib side of things, so we can return an error and not just a bogus
+                // value. prealloc[1] &= 0xFF_FE; // this ensures the "safety" of a reported
+                // MAC, even if the EC is broken and avoiding system panic (issue #152)
                 buffer.replace(prealloc).expect("couldn't return result on FlashOp");
             }
             Some(Opcode::WlanFetchPacket) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut retbuf = buffer.to_original::<[u8; NET_MTU], _>().unwrap();
                 let be_bytes: [u8; 2] = [retbuf[0], retbuf[1]];
                 let len_bytes = u16::from_be_bytes(be_bytes);
-                let len_words = if len_bytes % 2 == 0 {
-                    len_bytes / 2
-                } else {
-                    len_bytes / 2 + 1
-                };
+                let len_words = if len_bytes % 2 == 0 { len_bytes / 2 } else { len_bytes / 2 + 1 };
                 if len_bytes > NET_MTU as u16 {
                     log::error!("invalid packet fetch length: {}, aborting without fetch", len_bytes);
                     continue;
@@ -1087,15 +1109,12 @@ fn main() -> ! {
                 buffer.replace(retbuf).expect("couldn't return packet");
             }
             Some(Opcode::WlanSendPacket) => {
-                let buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let txbuf = buffer.as_flat::<[u8; NET_MTU + 2], _>().unwrap();
                 let be_bytes: [u8; 2] = [txbuf[0], txbuf[1]];
                 let len_bytes = u16::from_be_bytes(be_bytes);
-                let len_words = if len_bytes % 2 == 0 {
-                    len_bytes / 2
-                } else {
-                    len_bytes / 2 + 1
-                };
+                let len_words = if len_bytes % 2 == 0 { len_bytes / 2 } else { len_bytes / 2 + 1 };
                 if len_bytes > NET_MTU as u16 {
                     log::error!("invalid packet send length: {}, aborting without send", len_bytes);
                     continue;
@@ -1111,20 +1130,17 @@ fn main() -> ! {
                 desired_int_mask = mask_val as u16;
                 com.txrx(ComState::LINK_SET_INTMASK.verb);
                 com.txrx(mask_val as u16);
-                xous::return_scalar(msg.sender, 1)
-                    .expect("couldn't ack IntSetMask");
+                xous::return_scalar(msg.sender, 1).expect("couldn't ack IntSetMask");
             }),
             Some(Opcode::IntAck) => msg_blocking_scalar_unpack!(msg, ack_val, _, _, _, {
                 com.txrx(ComState::LINK_ACK_INTERRUPT.verb);
                 com.txrx(ack_val as u16);
-                xous::return_scalar(msg.sender, 1)
-                    .expect("couldn't ack IntAck");
+                xous::return_scalar(msg.sender, 1).expect("couldn't ack IntAck");
             }),
             Some(Opcode::IntGetMask) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 com.txrx(ComState::LINK_GET_INTMASK.verb);
                 let mask = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                xous::return_scalar(msg.sender, mask as usize)
-                    .expect("couldn't return mask value");
+                xous::return_scalar(msg.sender, mask as usize).expect("couldn't return mask value");
             }),
             Some(Opcode::IntFetchVector) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 com.txrx(ComState::LINK_GET_INTERRUPT.verb);
@@ -1135,7 +1151,9 @@ fn main() -> ! {
                     xous::return_scalar2(msg.sender, vector as _, rxlen as _)
                         .expect("couldn't return IntFetchVector");
                 } else {
-                    log::error!("Timeout during interrupt vector fetch. EC may not be responsive. Returning error vector....");
+                    log::error!(
+                        "Timeout during interrupt vector fetch. EC may not be responsive. Returning error vector...."
+                    );
                     xous::return_scalar2(msg.sender, com_rs::INT_INVALID as usize, 0)
                         .expect("couldn't return IntFetchVector");
                 }
@@ -1166,7 +1184,8 @@ fn main() -> ! {
                     alloc_free_count = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                 }
 
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let debug = WlanDebug {
                     tx_errs: from_le_words(tx_errs_16),
                     drops: from_le_words(drops_16),
@@ -1177,8 +1196,11 @@ fn main() -> ! {
                     alloc_free_count,
                 };
                 buffer.replace(debug).unwrap();
-            },
-            None => {error!("unknown opcode"); break},
+            }
+            None => {
+                error!("unknown opcode");
+                break;
+            }
         }
 
         if let Some(dropped_cid) = com.process_queue() {
@@ -1216,15 +1238,18 @@ fn parse_version(com: &mut crate::implementation::XousCom) -> u32 {
         dst[1] = src.to_le_bytes()[1];
     }
     // translate u8 array into &str
-    let len_checked = if rev_ret[0] as usize <= rev_bytes.len() { rev_ret[0] as usize} else {rev_bytes.len()};
-    if len_checked < 2 { // something is very wrong if our length is too short
+    let len_checked =
+        if rev_ret[0] as usize <= rev_bytes.len() { rev_ret[0] as usize } else { rev_bytes.len() };
+    if len_checked < 2 {
+        // something is very wrong if our length is too short
         return 0;
     }
     let revstr = core::str::from_utf8(&rev_bytes[..len_checked]).unwrap_or("v0.9.5-0"); // fake version number for hosted mode, equal to a very old version of the EC
     let ver = SemVer::from_str(revstr).unwrap_or(SemVer::from_str("v0.9.5-1").unwrap());
-    (ver.extra & 0xff) as u32 | ((ver.rev & 0xff) as u32) << 8 | (((ver.min & 0xff) as u32) << 16) | (((ver.maj & 0xff) as u32) << 24)
+    (ver.extra & 0xff) as u32
+        | ((ver.rev & 0xff) as u32) << 8
+        | (((ver.min & 0xff) as u32) << 16)
+        | (((ver.maj & 0xff) as u32) << 24)
 }
 
-fn from_le_words(words: [u16; 2]) -> u32 {
-    words[0] as u32 | (words[1] as u32) << 16
-}
+fn from_le_words(words: [u16; 2]) -> u32 { words[0] as u32 | (words[1] as u32) << 16 }

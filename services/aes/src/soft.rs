@@ -12,15 +12,17 @@
 #[cfg_attr(target_pointer_width = "64", path = "soft/fixslice32.rs")]
 pub(crate) mod fixslice;
 
-use crate::Block;
+use core::fmt;
+
 use cipher::{
     consts::{U16, U24, U32},
     inout::InOut,
-    AlgorithmName, BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt,
-    BlockSizeUser, Key, KeyInit, KeySizeUser, ParBlocksSizeUser,
+    AlgorithmName, BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt, BlockSizeUser, Key,
+    KeyInit, KeySizeUser, ParBlocksSizeUser,
 };
-use core::fmt;
 use fixslice::{BatchBlocks, FixsliceBlocks, FixsliceKeys128, FixsliceKeys192, FixsliceKeys256};
+
+use crate::Block;
 
 macro_rules! define_aes_impl {
     (
@@ -38,26 +40,20 @@ macro_rules! define_aes_impl {
         $doc:expr $(,)?
     ) => {
         #[doc=$doc]
-        #[doc = "block cipher"]
+        ///block cipher
         #[derive(Clone)]
         pub struct $name {
             keys: $fixslice_keys,
         }
 
         impl $name {
-            pub fn key_size(&self) -> usize {
-                $key_bits as usize
-            }
+            pub fn key_size(&self) -> usize { $key_bits as usize }
 
             #[inline(always)]
-            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> {
-                $name_back_enc(self)
-            }
+            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> { $name_back_enc(self) }
 
             #[inline(always)]
-            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> {
-                $name_back_dec(self)
-            }
+            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> { $name_back_dec(self) }
         }
 
         impl KeySizeUser for $name {
@@ -66,11 +62,7 @@ macro_rules! define_aes_impl {
 
         impl KeyInit for $name {
             #[inline]
-            fn new(key: &Key<Self>) -> Self {
-                Self {
-                    keys: $fixslice_key_schedule(key.as_ref()),
-                }
-            }
+            fn new(key: &Key<Self>) -> Self { Self { keys: $fixslice_key_schedule(key.as_ref()) } }
         }
 
         impl BlockSizeUser for $name {
@@ -97,16 +89,12 @@ macro_rules! define_aes_impl {
 
         impl From<$name_enc> for $name {
             #[inline]
-            fn from(enc: $name_enc) -> $name {
-                enc.inner
-            }
+            fn from(enc: $name_enc) -> $name { enc.inner }
         }
 
         impl From<&$name_enc> for $name {
             #[inline]
-            fn from(enc: &$name_enc) -> $name {
-                enc.inner.clone()
-            }
+            fn from(enc: &$name_enc) -> $name { enc.inner.clone() }
         }
 
         impl fmt::Debug for $name {
@@ -116,13 +104,11 @@ macro_rules! define_aes_impl {
         }
 
         impl AlgorithmName for $name {
-            fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str(stringify!($name))
-            }
+            fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(stringify!($name)) }
         }
 
         #[doc=$doc]
-        #[doc = "block cipher (encrypt-only)"]
+        ///block cipher (encrypt-only)
         #[derive(Clone)]
         pub struct $name_enc {
             inner: $name,
@@ -130,9 +116,7 @@ macro_rules! define_aes_impl {
 
         impl $name_enc {
             #[inline(always)]
-            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> {
-                self.inner.get_enc_backend()
-            }
+            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> { self.inner.get_enc_backend() }
         }
 
         impl BlockCipher for $name_enc {}
@@ -172,7 +156,7 @@ macro_rules! define_aes_impl {
         }
 
         #[doc=$doc]
-        #[doc = "block cipher (decrypt-only)"]
+        ///block cipher (decrypt-only)
         #[derive(Clone)]
         pub struct $name_dec {
             inner: $name,
@@ -180,9 +164,7 @@ macro_rules! define_aes_impl {
 
         impl $name_dec {
             #[inline(always)]
-            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> {
-                self.inner.get_dec_backend()
-            }
+            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> { self.inner.get_dec_backend() }
         }
 
         impl BlockCipher for $name_dec {}
@@ -201,18 +183,12 @@ macro_rules! define_aes_impl {
 
         impl From<$name_enc> for $name_dec {
             #[inline]
-            fn from(enc: $name_enc) -> $name_dec {
-                Self { inner: enc.inner }
-            }
+            fn from(enc: $name_enc) -> $name_dec { Self { inner: enc.inner } }
         }
 
         impl From<&$name_enc> for $name_dec {
             #[inline]
-            fn from(enc: &$name_enc) -> $name_dec {
-                Self {
-                    inner: enc.inner.clone(),
-                }
-            }
+            fn from(enc: &$name_enc) -> $name_dec { Self { inner: enc.inner.clone() } }
         }
 
         impl BlockSizeUser for $name_dec {

@@ -1,4 +1,5 @@
-pub(crate) const SERVER_NAME_SHA512: &str = "_Sha512 hardware accelerator server_";
+#[allow(dead_code)]
+pub(crate) const SERVER_NAME_SHA512: &str = "_Sha512 hardware accelerator server_"; // not used in hosted config
 mod rkyv_enum;
 pub use rkyv_enum::*;
 
@@ -18,8 +19,9 @@ pub(crate) enum Sha2Config {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct Sha2Update {
     pub id: [u32; 3], // our unique identifier so the server knows who the request is coming from
-    pub buffer: [u8; 3968], // leave one SHA chunk-sized space for overhead, so the whole message fits in one page of memory
-    pub len: u16,           // length of just this buffer, fits in 16 bits
+    pub buffer: [u8; 3968], /* leave one SHA chunk-sized space for overhead, so the whole message fits in one
+                       * page of memory */
+    pub len: u16, // length of just this buffer, fits in 16 bits
 }
 
 #[allow(dead_code)]

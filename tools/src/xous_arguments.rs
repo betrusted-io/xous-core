@@ -1,5 +1,5 @@
 use std::fmt;
-use std::io::{Cursor, Result, Write, Seek};
+use std::io::{Cursor, Result, Seek, Write};
 pub type XousArgumentCode = u32;
 pub type XousSize = u32;
 use crc::{crc16, Hasher16};
@@ -27,22 +27,16 @@ pub trait XousArgument: fmt::Display {
 
     /// Called immediately before serializing.  Returns the amount of data
     /// to reserve.
-    fn finalize(&mut self, _offset: usize) -> usize {
-        0
-    }
+    fn finalize(&mut self, _offset: usize) -> usize { 0 }
 
     /// Write the contents of this argument to the specified writer.
     /// Return the number of bytes written.
     fn serialize(&self, output: &mut dyn Write) -> Result<usize>;
 
     /// Any last data that needs to be written.
-    fn last_data(&self) -> &[u8] {
-        &[]
-    }
+    fn last_data(&self) -> &[u8] { &[] }
 
-    fn alignment_offset(&self) -> usize {
-        0
-    }
+    fn alignment_offset(&self) -> usize { 0 }
 }
 
 pub struct XousArguments {
@@ -68,7 +62,7 @@ impl fmt::Display for XousArguments {
         )?;
 
         for (index, arg) in self.arguments.iter().enumerate() {
-            write!(f, "{:2}{}", index+1, arg)?;
+            write!(f, "{:2}{}", index + 1, arg)?;
         }
         Ok(())
     }
@@ -76,12 +70,7 @@ impl fmt::Display for XousArguments {
 
 impl XousArguments {
     pub fn new(ram_start: XousSize, ram_length: XousSize, ram_name: u32) -> XousArguments {
-        XousArguments {
-            ram_start,
-            ram_length,
-            ram_name,
-            arguments: vec![],
-        }
+        XousArguments { ram_start, ram_length, ram_name, arguments: vec![] }
     }
 
     pub fn finalize(&mut self) {
@@ -119,10 +108,7 @@ impl XousArguments {
         tag_data.write_all(&(self.ram_length as u32).to_le_bytes())?;
         tag_data.write_all(&(self.ram_name as u32).to_le_bytes())?;
 
-        assert!(
-            tag_data.get_ref().len().trailing_zeros() >= 2,
-            "tag data was not a multiple of 4 bytes!"
-        );
+        assert!(tag_data.get_ref().len().trailing_zeros() >= 2, "tag data was not a multiple of 4 bytes!");
 
         let mut digest = crc16::Digest::new(crc16::X25);
         // XArg tag header
@@ -172,8 +158,7 @@ impl XousArguments {
             w.write_all(&pad)?;
 
             // println!("position: {:x}", w.stream_position()?);
-            w.write_all(arg.last_data())
-                .expect("couldn't write extra arg data");
+            w.write_all(arg.last_data()).expect("couldn't write extra arg data");
         }
 
         Ok(())
@@ -187,11 +172,7 @@ impl XousArguments {
         total_length
     }
 
-    pub fn is_empty(&self) -> bool {
-        false
-    }
+    pub fn is_empty(&self) -> bool { false }
 
-    pub fn header_len(&self) -> usize {
-        8
-    }
+    pub fn header_len(&self) -> usize { 8 }
 }

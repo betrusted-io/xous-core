@@ -20,7 +20,7 @@ pub struct ModeSelectXCommand {
 pub struct ModeSelect6Command {
     #[pkd(7, 0, 0, 0)]
     pub op_code: u8,
-    
+
     #[pkd(4, 4, 1, 1)]
     pub page_format: bool,
 
@@ -46,7 +46,7 @@ impl From<ModeSelect6Command> for ModeSelectXCommand {
 pub struct ModeSelect10Command {
     #[pkd(7, 0, 0, 0)]
     pub op_code: u8,
-    
+
     #[pkd(4, 4, 1, 1)]
     pub page_format: bool,
 

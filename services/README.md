@@ -80,7 +80,7 @@ Here are a list of application servers, implemented and projected, and their fun
 - `net` -- manages connections to the Internet
 - `wifi` -- manages wifi configuration
 - `power` -- intermediates requests to the backlight, battery status, charging, RTC, etc.
-- `accel` -- intermedates requests to the accelerometer
+- `accel` -- intermediates requests to the accelerometer
 - `audio` -- intermediates requests to the audio hardware. Does stream mixing, etc.
 - `usb` -- handles USB connections
 - `credentials` -- trusted PIN/password entry mechanism, manages currently activated credentials

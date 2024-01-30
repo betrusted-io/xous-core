@@ -69,6 +69,7 @@ pub use backend::serial::u32::field::*;
 pub type FieldElement = backend::serial::u32::field::FieldElement2625;
 
 #[cfg(feature = "u32e_backend")]
+#[allow(unused_imports)] // this may be used by some other configs, so don't un-export it.
 pub use backend::serial::u32e::field::*;
 /// A `FieldElement` represents an element of the field
 /// \\( \mathbb Z / (2\^{255} - 19)\\).

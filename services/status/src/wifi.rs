@@ -1,9 +1,11 @@
-use crate::preferences::PrefHandler;
 use core::fmt::Display;
+use std::io::Write;
+
 use locales::t;
 use net::ScanState;
 use num_traits::*;
-use std::io::Write;
+
+use crate::preferences::PrefHandler;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, PartialOrd)]
 pub enum WlanManOp {
@@ -40,11 +42,7 @@ impl Display for WLANError {
                 write!(f, "Underlying Xous error: {:?}", inner_error)
             }
             WLANError::PDDBWriteError(written, total) => {
-                write!(
-                    f,
-                    "PDDB write error, written {} of {} total",
-                    written, total
-                )
+                write!(f, "PDDB write error, written {} of {} total", written, total)
             }
             WLANError::PDDBIoError(err) => {
                 write!(f, "PDDB IO error, {}", err)
@@ -54,15 +52,11 @@ impl Display for WLANError {
 }
 
 impl From<xous::Error> for WLANError {
-    fn from(v: xous::Error) -> Self {
-        Self::UnderlyingError(v)
-    }
+    fn from(v: xous::Error) -> Self { Self::UnderlyingError(v) }
 }
 
 impl From<std::io::Error> for WLANError {
-    fn from(v: std::io::Error) -> Self {
-        Self::PDDBIoError(v)
-    }
+    fn from(v: std::io::Error) -> Self { Self::PDDBIoError(v) }
 }
 
 pub struct WLANMan {
@@ -125,14 +119,9 @@ impl WLANMan {
     pub fn actions(&self) -> Vec<WlanManOp> {
         use WlanManOp::*;
 
-        vec![
-            ScanForNetworks,
-            Status,
-            AddNetworkManually,
-            KnownNetworks,
-            DeleteNetwork,
-        ]
+        vec![ScanForNetworks, Status, AddNetworkManually, KnownNetworks, DeleteNetwork]
     }
+
     #[allow(dead_code)] // just in case we need this later
     fn set_wlan_state(&mut self, state: bool) -> Result<(), WLANError> {
         match state {
@@ -163,10 +152,7 @@ impl WLANMan {
                     None
                 }),
             )
-            .field(
-                Some(t!("wlan.password", locales::LANG).to_string()),
-                None,
-            )
+            .field(Some(t!("wlan.password", locales::LANG).to_string()), None)
             .build()
             .unwrap();
 
@@ -210,13 +196,7 @@ impl WLANMan {
     fn scan_networks(&self) -> Result<(Vec<String>, ScanState), WLANError> {
         let (scan_result, state) = self.netmgr.wifi_get_ssid_list()?;
 
-        Ok((scan_result
-            .iter()
-            .map(|ssid| ssid.name.to_string())
-            .collect(),
-            state
-            )
-        )
+        Ok((scan_result.iter().map(|ssid| ssid.name.to_string()).collect(), state))
     }
 
     fn show_available_networks(&mut self) -> Result<(), WLANError> {
@@ -245,7 +225,7 @@ impl WLANMan {
                         self.modals.dynamic_notification_update(Some(&progress), None).unwrap();
                     };
                     tt.sleep_ms(1000).ok();
-                },
+                }
                 ScanState::Idle => break,
                 ScanState::Off => {
                     if showing_wait {
@@ -271,9 +251,7 @@ impl WLANMan {
         networks.truncate(max_entries);
 
         if networks.is_empty() {
-            self.modals
-                .show_notification(t!("wlan.no_networks", locales::LANG), None)
-                .unwrap();
+            self.modals.show_notification(t!("wlan.no_networks", locales::LANG), None).unwrap();
             return Ok(());
         }
 
@@ -281,10 +259,7 @@ impl WLANMan {
 
         self.modals.add_list(networks).unwrap();
 
-        let ssid = self
-            .modals
-            .get_radiobutton(t!("wlan.ssid_choose", locales::LANG))
-            .unwrap();
+        let ssid = self.modals.get_radiobutton(t!("wlan.ssid_choose", locales::LANG)).unwrap();
 
         if ssid == t!("wlan.cancel", locales::LANG) {
             return Ok(());
@@ -297,10 +272,7 @@ impl WLANMan {
         let connection_data = self
             .modals
             .alert_builder(&t!("wlan.ssid_password", locales::LANG).replace("{ssid}", ssid))
-            .field(
-                Some(t!("wlan.password", locales::LANG).to_string()),
-                None,
-            )
+            .field(Some(t!("wlan.password", locales::LANG).to_string()), None)
             .build()
             .unwrap();
 
@@ -347,23 +319,15 @@ impl WLANMan {
         let mut networks_string = String::from(t!("wlan.no_known_networks", locales::LANG));
 
         if networks.is_empty() {
-            self.modals
-                .show_notification(&networks_string, None)
-                .unwrap();
+            self.modals.show_notification(&networks_string, None).unwrap();
             return Ok(());
         }
 
         networks_string = String::from(t!("wlan.known_networks", locales::LANG));
 
-        networks_string += &networks
-            .iter()
-            .map(|s| format!(" ▪ {}", s))
-            .collect::<Vec<String>>()
-            .join("\n");
+        networks_string += &networks.iter().map(|s| format!(" ▪ {}", s)).collect::<Vec<String>>().join("\n");
 
-        self.modals
-            .show_notification(&networks_string, None)
-            .unwrap();
+        self.modals.show_notification(&networks_string, None).unwrap();
 
         Ok(())
     }
@@ -375,22 +339,16 @@ impl WLANMan {
         };
 
         if networks.is_empty() {
-            self.modals
-                .show_notification(t!("wlan.no_known_networks", locales::LANG), None)
-                .unwrap();
+            self.modals.show_notification(t!("wlan.no_known_networks", locales::LANG), None).unwrap();
             return Ok(());
         }
 
         let cancel_item = t!("wlan.cancel", locales::LANG);
-        self.modals
-            .add_list(networks.iter().map(|s| s.as_str()).collect())
-            .unwrap();
+        self.modals.add_list(networks.iter().map(|s| s.as_str()).collect()).unwrap();
         self.modals.add_list_item(cancel_item).unwrap();
 
-        let ssid_to_be_deleted = self
-            .modals
-            .get_radiobutton(t!("wlan.choose_delete", locales::LANG))
-            .unwrap();
+        let ssid_to_be_deleted =
+            self.modals.get_radiobutton(t!("wlan.choose_delete", locales::LANG)).unwrap();
 
         if ssid_to_be_deleted.eq(cancel_item) {
             return Ok(());
@@ -417,17 +375,11 @@ impl WLANMan {
 
     fn show_error_modal(&self, e: WLANError) {
         self.modals
-            .show_notification(
-                format!("{}: {}", t!("wlan.error", locales::LANG), e).as_str(),
-                None,
-            )
+            .show_notification(format!("{}: {}", t!("wlan.error", locales::LANG), e).as_str(), None)
             .unwrap()
     }
 }
 
 fn format_ip(src: [u8; 4]) -> String {
-    src.iter()
-        .map(|&id| id.to_string())
-        .collect::<Vec<String>>()
-        .join(".")
+    src.iter().map(|&id| id.to_string()).collect::<Vec<String>>().join(".")
 }

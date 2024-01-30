@@ -1,30 +1,31 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+extern crate bitfield;
 /// # PDDB - Plausibly Deniable DataBase
 ///
 /// ## Glossary:
 /// * Basis - a unionizeable dictionary that can be unlocked with a password-protected key.
-/// * Dictionary - similar to a "volume" on a typical filesystem. Contains a group of k/v pairs
-///   that share attributes such as access permissions
+/// * Dictionary - similar to a "volume" on a typical filesystem. Contains a group of k/v pairs that share
+///   attributes such as access permissions
 /// * Key - a unique string that identifies a piece of data in the PDDB
-/// * Path - Rust's notion of how to locate a file, except we interpret it as a PDDB key, where
-///   the "root" directory is the dictionary, and the remainder is the "key"
+/// * Path - Rust's notion of how to locate a file, except we interpret it as a PDDB key, where the "root"
+///   directory is the dictionary, and the remainder is the "key"
 /// * Value - the value associated with a key, isomorphic ot a "file" in Rust
 /// * Open Basis - A Basis that is decryptable and known to the system.
 /// * Closed Basis - A Basis that is not decryptable. It's unknown to the system and potentially treated
 ///   identically to free disk space, e.g., it could be partially overwritten.
-/// * FSCB - Free Space Commit Buffer. A few pages allocated to tracking a subset of free space,
-///   meant to accelerate PDDB operations. Creates a side-channel that can reveal that some activity
-///   has happened, but without disclosing what and why. Contains FastSpace and SpaceUpdate records.
-///   Frequently updated, so the buffer is slightly oversized, and which sector is "hot" is randomized
-///   for wear-levelling.
-/// * MBBB - Make Before Break Buffer. A set of randomly allocated pages that are a shadow copy
-///   of a page table page. If any data exists, its contents override those of a corrupted page table.
-/// * FastSpace - a collection of random pages that are known to be empty. The number of pages in FastSpace
-///   is reduced from the absolute amount of free space available by at least a factor of FSCB_FILL_COEFFICIENT.
+/// * FSCB - Free Space Commit Buffer. A few pages allocated to tracking a subset of free space, meant to
+///   accelerate PDDB operations. Creates a side-channel that can reveal that some activity has happened, but
+///   without disclosing what and why. Contains FastSpace and SpaceUpdate records. Frequently updated, so the
+///   buffer is slightly oversized, and which sector is "hot" is randomized for wear-levelling.
+/// * MBBB - Make Before Break Buffer. A set of randomly allocated pages that are a shadow copy of a page
+///   table page. If any data exists, its contents override those of a corrupted page table.
+/// * FastSpace - a collection of random pages that are known to be empty. The number of pages in FastSpace is
+///   reduced from the absolute amount of free space available by at least a factor of FSCB_FILL_COEFFICIENT.
 /// * SpaceUpdate - encrypted patches to the FastSpace table. The FastSpace table is "heavyweight", and would
-///   be too expensive to update on every page allocation, so SpaceUpdate is used to patch the FastSpace table.
+///   be too expensive to update on every page allocation, so SpaceUpdate is used to patch the FastSpace
+///   table.
 ///
 /// A `Path` like the following is deconstructed as follows by the PDDB:
 ///
@@ -108,25 +109,24 @@
 /// ## Auditor Notices:
 /// There's probably a lot of things the PDDB does wrong. Here's a list of some things
 /// to worry about:
-///  - The device RootKeys shares one salt across all of its keys, instead of a per-key salt.
-///    Currently there are only two keys in the RootKey store sharing the one salt. The concern
-///    is that a migration to an ASIC base design would make eFuse bits scarce, so, the initial
-///    draft of the RootKeys shares one salt to maximize key capacity. The per-key salt is slightly
-///    modified by adding the key index to the salt. This isn't meant to be a robust mitigation:
-///    it just prevents a naive rainbow attack from re-using its table.
+///  - The device RootKeys shares one salt across all of its keys, instead of a per-key salt. Currently there
+///    are only two keys in the RootKey store sharing the one salt. The concern is that a migration to an ASIC
+///    base design would make eFuse bits scarce, so, the initial draft of the RootKeys shares one salt to
+///    maximize key capacity. The per-key salt is slightly modified by adding the key index to the salt. This
+///    isn't meant to be a robust mitigation: it just prevents a naive rainbow attack from re-using its table.
 ///  - The bcrypt() implementation is vendored in from a Rust bcrypt crate. It hasn't been audited.
-///  - The COST of 7 for bcrypt is relatively low by today's standards (should be 10). However,
-///    we can't raise the cost to 10 because our CPU is slower than most modern x86 devices. There is
-///    an open issue to try to improve this with hardware acceleration. The mitigation is to use
-///    a longer passphrase instead of a 12 or 14-character password.
-///  - The RootKey is used to decrypt a locally stored System Basis key. The key is encrypted using
-///    straight AES-256 with no authentication.
-///  - Secret basis keys are not stored anywhere on the device. They are all derived from a password
-///    using bcrypt. The salt for the password is drawn from a "salt pool", whose index is derived from
-///    a weak hash of the password itself. This means there is a chance that a salt gets re-used. However,
-///    we do not store per-password salts because the existence of the salt would betray the existence of
-///    a password.
-///  - Disk blocks are encrypted & authenticated on a page-by-page basis using AES-GCM-SIV, with a 256-bit key.
+///  - The COST of 7 for bcrypt is relatively low by today's standards (should be 10). However, we can't raise
+///    the cost to 10 because our CPU is slower than most modern x86 devices. There is an open issue to try to
+///    improve this with hardware acceleration. The mitigation is to use a longer passphrase instead of a 12
+///    or 14-character password.
+///  - The RootKey is used to decrypt a locally stored System Basis key. The key is encrypted using straight
+///    AES-256 with no authentication.
+///  - Secret basis keys are not stored anywhere on the device. They are all derived from a password using
+///    bcrypt. The salt for the password is drawn from a "salt pool", whose index is derived from a weak hash
+///    of the password itself. This means there is a chance that a salt gets re-used. However, we do not store
+///    per-password salts because the existence of the salt would betray the existence of a password.
+///  - Disk blocks are encrypted & authenticated on a page-by-page basis using AES-GCM-SIV, with a 256-bit
+///    key.
 ///  - Page table entries and space update entries are salted & hinted using a 64-bit nonce + weak checksum.
 ///    There is a fairly high chance of a checksum collision, thus PTE decrypts are regarded as advisory and
 ///    not final; the PTE is not accepted as authentic until the AES-GCM-SIV behind it checks out. Free space
@@ -154,10 +154,10 @@
 ///
 /// Furthermore, it is possible for a Basis to be closed on a "File" that is currently open.
 /// In this case, two things happen:
-///  - If a notification callback is registered, it's pinged by the PDDB. The notification
-///    of closure callback is an additional feature to the typical Rust File interface.
-///  - If the client attempts to read or write to any keys that span a Basis modification,
-///    the now-ambiguous key operation will return a `BrokenPipe` error to the caller.
+///  - If a notification callback is registered, it's pinged by the PDDB. The notification of closure callback
+///    is an additional feature to the typical Rust File interface.
+///  - If the client attempts to read or write to any keys that span a Basis modification, the now-ambiguous
+///    key operation will return a `BrokenPipe` error to the caller.
 ///
 /// ## General flash->key structure
 ///
@@ -178,7 +178,8 @@
 /// When a Basis is created, it starts with 64k of space allocated to it. Most of this is blank (but encrypted
 /// in flash), but it is important in a PD filesystem to claim some freespace for day-to-day operations. This
 /// is because when you need to allocate more data, you have to make a guess as to what is free, and what
-/// previously allocated but currently denied to exist (locked Basis look identical to free space when locked).
+/// previously allocated but currently denied to exist (locked Basis look identical to free space when
+/// locked).
 ///
 /// Each Dictionary within a Basis starts with a 4k allocation as well, although most of it is free space.
 /// Keys are then populated into dictionaries, with additional pages allocated to dictionaries as the keys
@@ -235,8 +236,9 @@
 ///    salt/encrypted password combos. In the case of a rubber-hose attack, the attacker cannot know precisely
 ///    when to stop the beatings, as the few remaining entries could be dummies with absolutely no meaning.
 /// 2. A single salt entry. In this approach, a single shared salt is used by /all/ passwords, and there is no
-///    encrypted password list stored; instead, the the password as presented is directly used to decrypt
-///    the Basis page table and if no valid entries are found we may conclude that the password provided has a typo.
+///    encrypted password list stored; instead, the the password as presented is directly used to decrypt the
+///    Basis page table and if no valid entries are found we may conclude that the password provided has a
+///    typo.
 ///
 /// The advantage of (1) is that the usage of salt falls precisely within the traditional cryptographic
 /// specification of bcrypt(). The disadvantages of (1) include: one still has to have a method to match
@@ -259,16 +261,17 @@
 /// once, and then we can immediately start checking the Basis page table for valid entries. The disadvantage
 /// of (2) is that we are re-using a salt across all of a given user's passwords. Note that the salt itself
 /// is from a TRNG, so between user devices, the salt performs its role. However, it means that an attacker
-/// can generate a single rainbow table specific to a given user to reverse all of their passwords; and furthermore,
-/// re-used passwords are trivially discoverable with the rainbow table.
+/// can generate a single rainbow table specific to a given user to reverse all of their passwords; and
+/// furthermore, re-used passwords are trivially discoverable with the rainbow table.
 ///
 /// Approach (1) is probably what most crypto purists would adopt: you, dear user, /should/ understand that
-/// cryptography is worth the wait. However, a second principle states that "users always pick convenience over
-/// security". A 15-second wait is an eternity in the UX world, and would act as an effective deterrent to any
-/// user ever using the PD function because it is too slow. Thus for v1 of the PDDB, we're going to try approach
-/// (2), where a common salt is used across all the PDDB passwords, but the salt is /not/ re-used between devices.
-/// This choice diminishes the overall security of the system in the case that a user chooses weak passwords, or re-uses
-/// passwords, but in exchange for a great improvement in responsiveness of the implementation.
+/// cryptography is worth the wait. However, a second principle states that "users always pick convenience
+/// over security". A 15-second wait is an eternity in the UX world, and would act as an effective deterrent
+/// to any user ever using the PD function because it is too slow. Thus for v1 of the PDDB, we're going to try
+/// approach (2), where a common salt is used across all the PDDB passwords, but the salt is /not/ re-used
+/// between devices. This choice diminishes the overall security of the system in the case that a user chooses
+/// weak passwords, or re-uses passwords, but in exchange for a great improvement in responsiveness of the
+/// implementation.
 ///
 /// The final implementation uses a slight mod on (2), where the 128-bit common salt stored on disk is XOR'd
 /// with the user-provided "basis name". Users are of course allowed to pick crappy names for their basis, and
@@ -314,9 +317,9 @@
 ///
 /// When writing to disk, a write-then-erase method is used:
 ///   1. Required blocks for the update are taken out of the .FastSpace pool
-///   2. Detached data sections of structural records are written first (only database structural records can have detached data;
-///      all stored data have individual journal revision fields associated with them), and into blocks
-///      taken out of the .FastSpace pool.
+///   2. Detached data sections of structural records are written first (only database structural records can
+///      have detached data; all stored data have individual journal revision fields associated with them),
+///      and into blocks taken out of the .FastSpace pool.
 ///   3. The head of the updated structural record is written, with the new latest journal rev noted.
 ///   4. The page table is updated using the procedure outlined below.
 ///   5. The old blocks are erased and overwritten with random data.
@@ -324,18 +327,18 @@
 ///
 /// When updating the page table, it's important not to lose an entire page's worth of entries in case
 /// power is lost when updating it. The following process is used to update a page table entry:
-///   0. At the end of the page table there is a circular buffer of blank pages (they are truly blank,
-///      but this will not leak metadata about the contents of the PDDB, as it only does bookkeeping
-///      on page table updates as a whole). This is known as the make-before-break buffer (mbbb).
+///   0. At the end of the page table there is a circular buffer of blank pages (they are truly blank, but
+///      this will not leak metadata about the contents of the PDDB, as it only does bookkeeping on page table
+///      updates as a whole). This is known as the make-before-break buffer (mbbb).
 ///   1. The previous mbbb entry is erased, if there is any, and the next entry is noted.
 ///   2. The new page table entry is written into the mbbb
 ///   3. The old page table entry in the page table itself is erased.
 ///   4. The old page table entry is populated with the updated page table records.
 ///
 /// Detecting and Repairing a broken page table:
-///   The special case of long run's of 1's (more than 32 bits in a row) is checked during the page table scan.
-///   If a long run of 1's is detected, then a suspected corrupted page table update is flagged, and for that page the data
-///   is pulled from the mbbb record.
+///   The special case of long run's of 1's (more than 32 bits in a row) is checked during the page table
+/// scan.   If a long run of 1's is detected, then a suspected corrupted page table update is flagged, and for
+/// that page the data   is pulled from the mbbb record.
 ///
 /// ## Precursor's Implementation-Specific Flash Memory Organization:
 ///
@@ -358,11 +361,9 @@
 ///    ...
 ///   0x0008_5000 |  data_phys_base - start of basis + dictionary + key data region
 /// ```
-
-// historical note: 389 hours, 11 mins elapsed since the start of the PDDB coding, and the first attempt at a hardware test -- as evidenced by the uptime of the hardware validation unit.
-
+// historical note: 389 hours, 11 mins elapsed since the start of the PDDB coding, and the first attempt at a
+// hardware test -- as evidenced by the uptime of the hardware validation unit.
 extern crate bitflags;
-extern crate bitfield;
 
 mod api;
 use api::*;
@@ -381,40 +382,39 @@ mod tests;
 #[allow(unused_imports)]
 use tests::*;
 
-#[cfg(feature="pddb-flamegraph")]
+#[cfg(feature = "pddb-flamegraph")]
 mod profiling;
 
-use num_traits::*;
-use xous::{send_message, Message, msg_blocking_scalar_unpack};
-use xous_ipc::Buffer;
 use core::cell::RefCell;
-use std::rc::Rc;
-use std::thread;
-use std::collections::{HashMap, BTreeSet};
-use std::io::ErrorKind;
 use core::fmt::Write;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-
-use locales::t;
-
-use rkyv::{
-    de::deserializers::AllocDeserializer,
-    ser::{Serializer, serializers::BufferSerializer},
-    Deserialize,
-};
 use core::mem::size_of;
 use core::ops::Deref;
+use std::collections::{BTreeSet, HashMap};
+use std::io::ErrorKind;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread;
 
-#[cfg(feature="perfcounter")]
+use locales::t;
+use num_traits::*;
+use rkyv::{
+    de::deserializers::AllocDeserializer,
+    ser::{serializers::BufferSerializer, Serializer},
+    Deserialize,
+};
+use xous::{msg_blocking_scalar_unpack, send_message, Message};
+use xous_ipc::Buffer;
+
+#[cfg(feature = "perfcounter")]
 const FILE_ID_SERVICES_PDDB_SRC_MAIN: u32 = 0;
-#[cfg(feature="perfcounter")]
+#[cfg(feature = "perfcounter")]
 const FILE_ID_SERVICES_PDDB_SRC_DICTIONARY: u32 = 1;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct BasisRequestPassword {
-    db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>,
-    plaintext_pw: Option<xous_ipc::String::<{crate::api::PASSWORD_LEN}>>,
+    db_name: xous_ipc::String<{ crate::api::BASIS_NAME_LEN }>,
+    plaintext_pw: Option<xous_ipc::String<{ crate::api::PASSWORD_LEN }>>,
 }
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PasswordState {
@@ -452,14 +452,9 @@ struct FileHandle {
     pub deleted: bool,
 }
 
-fn main () -> ! {
+fn main() -> ! {
     let stack_size = 1024 * 1024;
-    std::thread::Builder::new()
-        .stack_size(stack_size)
-        .spawn(wrapped_main)
-        .unwrap()
-        .join()
-        .unwrap()
+    std::thread::Builder::new().stack_size(stack_size).spawn(wrapped_main).unwrap().join().unwrap()
 }
 
 fn wrapped_main() -> ! {
@@ -471,7 +466,8 @@ fn wrapped_main() -> ! {
     let pddb_sid = xns.register_name(api::SERVER_NAME_PDDB, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", pddb_sid);
 
-    // shared entropy cache across all process-local services (it's more efficient to request entropy in blocks from the TRNG)
+    // shared entropy cache across all process-local services (it's more efficient to request entropy in
+    // blocks from the TRNG)
     let entropy = Rc::new(RefCell::new(TrngPool::new()));
 
     // for less-secured user prompts (everything but password entry)
@@ -482,19 +478,16 @@ fn wrapped_main() -> ! {
     let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
     let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
     let pw_handle = thread::spawn({
-        move || {
-            password_ux_manager(
-                xous::connect(pddb_sid).unwrap(),
-                pw_sid
-            )
-        }
+        // this comment keeps rustfmt from flattening this block
+        move || password_ux_manager(xous::connect(pddb_sid).unwrap(), pw_sid)
     });
 
     // OS-specific PDDB driver
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy), pw_cid);
     // storage for the basis cache
     let mut basis_cache = BasisCache::new();
-    // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or specified.
+    // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or
+    // specified.
     let mut token_dict = HashMap::<ApiToken, TokenRecord>::new();
 
     // Process-indexed map of file descriptors to token records
@@ -506,7 +499,8 @@ fn wrapped_main() -> ! {
         let is_mounted = is_mounted.clone();
         move || {
             let xns = xous_names::XousNames::new().unwrap();
-            let poller_sid = xns.register_name(api::SERVER_NAME_PDDB_POLLER, None).expect("can't register server");
+            let poller_sid =
+                xns.register_name(api::SERVER_NAME_PDDB_POLLER, None).expect("can't register server");
             loop {
                 let msg = xous::receive_message(poller_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id() & 0xffff) {
@@ -538,13 +532,12 @@ fn wrapped_main() -> ! {
     });
 
     // run the CI tests if the option has been selected
-    #[cfg(all(
-        not(target_os = "xous"),
-        feature = "ci"
-    ))]
+    #[cfg(all(not(target_os = "xous"), feature = "ci"))]
     ci_tests(&mut pddb_os).map_err(|e| log::error!("{}", e)).ok();
 
-    if false { // this will re-init the PDDB and do a simple key query. Really useful only for early shake-down testing, eliminate this reminder stub once we have some confidence in the code
+    if false {
+        // this will re-init the PDDB and do a simple key query. Really useful only for early shake-down
+        // testing, eliminate this reminder stub once we have some confidence in the code
         hw_testcase(&mut pddb_os);
     }
 
@@ -565,21 +558,31 @@ fn wrapped_main() -> ! {
                     if flush_interval > PERIODIC_FLUSH_MS {
                         // this runs once a day, and skips the scrub request when it runs
                         flush_interval = 0;
-                        send_message(my_cid,
-                            Message::new_blocking_scalar(Opcode::FlushSpaceUpdate.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).expect("couldn't send flush request");
+                        send_message(
+                            my_cid,
+                            Message::new_blocking_scalar(
+                                Opcode::FlushSpaceUpdate.to_usize().unwrap(),
+                                0,
+                                0,
+                                0,
+                                0,
+                            ),
+                        )
+                        .expect("couldn't send flush request");
                     } else {
                         // this is what actually runs every interval, to a first order
-                        send_message(my_cid,
-                            Message::new_scalar(Opcode::PeriodicScrub.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).expect("couldn't send scrub request");
+                        send_message(
+                            my_cid,
+                            Message::new_scalar(Opcode::PeriodicScrub.to_usize().unwrap(), 0, 0, 0, 0),
+                        )
+                        .expect("couldn't send scrub request");
                     }
                 }
             }
         }
     });
     // main server loop
-    let mut key_list: Option::<BTreeSet::<String>> = None; // storage for key lists
+    let mut key_list: Option<BTreeSet<String>> = None; // storage for key lists
     let mut key_token: Option<[u32; 4]> = None;
     let mut dict_list = Vec::<String>::new(); // storage for dict lists
     let mut dict_token: Option<[u32; 4]> = None;
@@ -604,11 +607,8 @@ fn wrapped_main() -> ! {
     const HEAP_GC_THRESH: usize = 1800 * 1024; // the larger limit is at 2048kiB, set this smaller
     const HEAP_GC_TARGET: usize = 1500 * 1024; // how much to try cleaning out in any one go.
     let new_limit = HEAP_LARGER_LIMIT;
-    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
-        xous::Limits::HeapMaximum as usize,
-        0,
-        new_limit,
-    ));
+    let result =
+        xous::rsyscall(xous::SysCall::AdjustProcessLimit(xous::Limits::HeapMaximum as usize, 0, new_limit));
 
     if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
         xous::rsyscall(xous::SysCall::AdjustProcessLimit(
@@ -624,12 +624,13 @@ fn wrapped_main() -> ! {
 
     let tt = ticktimer_server::Ticktimer::new().unwrap();
     // turn on (or off) performance profiling, if the feature is enabled
-    #[cfg(feature="perfcounter")]
+    #[cfg(feature = "perfcounter")]
     pddb_os.set_use_perf(true);
 
     // register a suspend/resume listener
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns,
-        Opcode::SuspendResume as u32, my_cid).expect("couldn't create suspend/resume object");
+    let mut susres =
+        susres::Susres::new(Some(susres::SuspendOrder::Early), &xns, Opcode::SuspendResume as u32, my_cid)
+            .expect("couldn't create suspend/resume object");
     loop {
         let mut msg = xous::receive_message(pddb_sid).unwrap();
         let op: Opcode = FromPrimitive::from_usize(msg.body.id() & 0xffff).unwrap_or(Opcode::InvalidOpcode);
@@ -649,7 +650,8 @@ fn wrapped_main() -> ! {
             // IsMounted follows the same return code pattern as TryMount, because the return value
             // is stuck into the TryMount notification queue
             Opcode::IsMounted => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                if basis_cache.basis_count() > 0 { // if there's anything in the cache, we're mounted.
+                if basis_cache.basis_count() > 0 {
+                    // if there's anything in the cache, we're mounted.
                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                 } else {
                     mount_notifications.push(msg.sender); // defer response until later
@@ -660,7 +662,8 @@ fn wrapped_main() -> ! {
                 xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
 
                 #[cfg(target_os = "xous")]
-                if basis_cache.basis_count() > 0 { // if there's anything in the cache, we're mounted; by definition it was attempted
+                if basis_cache.basis_count() > 0 {
+                    // if there's anything in the cache, we're mounted; by definition it was attempted
                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                 } else {
                     attempt_notifications.push(msg.sender); // defer response until later
@@ -669,14 +672,18 @@ fn wrapped_main() -> ! {
             // The return code from this is a scalar2 with the following meanings:
             // (code, count):
             //    - code = 0 -> successful mount
-            //    - code = 1 -> mount failed, for any reason other than too many retried PINs. `count` is the number of retries, if any.
-            //    - code = 2 -> mount failed, because too many PINs were retried. `count` is the number of retries.
-            // If we need more nuance out of this routine, consider creating a custom public enum type to help marshall this.
+            //    - code = 1 -> mount failed, for any reason other than too many retried PINs. `count` is the
+            //      number of retries, if any.
+            //    - code = 2 -> mount failed, because too many PINs were retried. `count` is the number of
+            //      retries.
+            // If we need more nuance out of this routine, consider creating a custom public enum type to help
+            // marshall this.
             Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let llio = llio::Llio::new(&xns);
                 while !llio.is_ec_ready() {
                     // spin-wait while the EC is not ready -- so that a PDDB mount does not interfere with
-                    // on-going EC updates. Also causes the mount dialog to delay until the EC status has been checked.
+                    // on-going EC updates. Also causes the mount dialog to delay until the EC status has been
+                    // checked.
                     tt.sleep_ms(1000).ok();
                 }
                 if basis_cache.basis_count() > 0 {
@@ -692,51 +699,83 @@ fn wrapped_main() -> ! {
                     } else {
                         match ensure_password(&modals, &mut pddb_os, pw_cid) {
                             PasswordState::Correct => {
-                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct, time_resetter, &mut basis_monitor_notifications) {
+                                if try_mount_or_format(
+                                    &modals,
+                                    &mut pddb_os,
+                                    &mut basis_cache,
+                                    PasswordState::Correct,
+                                    time_resetter,
+                                    &mut basis_monitor_notifications,
+                                ) {
                                     is_mounted.store(true, Ordering::SeqCst);
                                     for requester in mount_notifications.drain(..) {
-                                        xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
+                                        xous::return_scalar2(requester, 0, 0)
+                                            .expect("couldn't return scalar");
                                     }
-                                    assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
+                                    assert!(
+                                        mount_notifications.len() == 0,
+                                        "apparently I don't understand what drain() does"
+                                    );
                                     log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
                                 }
-                            },
-                            PasswordState::Uninit => {
-                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit, time_resetter, &mut basis_monitor_notifications) {
-                                    for requester in mount_notifications.drain(..) {
-                                        xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
-                                    }
-                                    assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
-                                    log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                                    xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
-                                    is_mounted.store(true, Ordering::SeqCst);
-                                } else {
-                                    xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
-                                }
-                            },
-                            PasswordState::ForcedAbort(failcount) => {
-                                xous::return_scalar2(msg.sender, 2,
-                                    // failcount is a u64, but on u32-archs, this gets truncated going to usize. clip to u32::MAX.
-                                    failcount.min(u32::MAX as u64) as usize
-                                ).expect("couldn't return scalar");
                             }
-                            PasswordState::Incorrect(failcount) => xous::return_scalar2(msg.sender, 1,
-                                    failcount.min(u32::MAX as u64) as usize
-                                ).expect("couldn't return scalar"),
+                            PasswordState::Uninit => {
+                                if try_mount_or_format(
+                                    &modals,
+                                    &mut pddb_os,
+                                    &mut basis_cache,
+                                    PasswordState::Uninit,
+                                    time_resetter,
+                                    &mut basis_monitor_notifications,
+                                ) {
+                                    for requester in mount_notifications.drain(..) {
+                                        xous::return_scalar2(requester, 0, 0)
+                                            .expect("couldn't return scalar");
+                                    }
+                                    assert!(
+                                        mount_notifications.len() == 0,
+                                        "apparently I don't understand what drain() does"
+                                    );
+                                    log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
+                                    is_mounted.store(true, Ordering::SeqCst);
+                                } else {
+                                    xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
+                                }
+                            }
+                            PasswordState::ForcedAbort(failcount) => {
+                                xous::return_scalar2(
+                                    msg.sender,
+                                    2,
+                                    // failcount is a u64, but on u32-archs, this gets truncated going to
+                                    // usize. clip to u32::MAX.
+                                    failcount.min(u32::MAX as u64) as usize,
+                                )
+                                .expect("couldn't return scalar");
+                            }
+                            PasswordState::Incorrect(failcount) => {
+                                xous::return_scalar2(msg.sender, 1, failcount.min(u32::MAX as u64) as usize)
+                                    .expect("couldn't return scalar")
+                            }
                         }
-                        // get a handle to the GAM and inform it that main menu should be allowed. The handle is dropped when this routine finishes.
+                        // get a handle to the GAM and inform it that main menu should be allowed. The handle
+                        // is dropped when this routine finishes.
                         let gam = gam::Gam::new(&xns).unwrap();
                         gam.allow_mainmenu().expect("couldn't allow main menu activation");
                         // setup the heap
                         initial_heap = heap_usage();
                         latest_heap = initial_heap;
                         latest_cache = basis_cache.cache_size();
-                        log::info!("PDDB post-mount caching stats: {} heap, {} cache", latest_heap, latest_cache);
+                        log::info!(
+                            "PDDB post-mount caching stats: {} heap, {} cache",
+                            latest_heap,
+                            latest_cache
+                        );
                         scrub_run.store(true, Ordering::SeqCst);
-                        #[cfg(feature="pddb-flamegraph")]
+                        #[cfg(feature = "pddb-flamegraph")]
                         profiling::do_query_work();
                     }
                 }
@@ -758,15 +797,26 @@ fn wrapped_main() -> ! {
                 && ((latest_heap - initial_heap) > HEAP_GC_THRESH))
                 // this line is mostly so this triggers occasionally in hosted mode where heap usage is faked;
                 // in practice heap threshold will always hit before cache threshold
-                || (current_cache > HEAP_GC_THRESH) {
-                    log::info!("PDDB trim threshold reached: {} heap, {} cache", latest_heap, basis_cache.cache_size());
+                || (current_cache > HEAP_GC_THRESH)
+                {
+                    log::info!(
+                        "PDDB trim threshold reached: {} heap, {} cache",
+                        latest_heap,
+                        basis_cache.cache_size()
+                    );
                     let pruned = basis_cache.cache_prune(&mut pddb_os, HEAP_GC_TARGET);
                     latest_heap = heap_usage();
-                    log::info!("{} pruned, now: {} heap, {} cache", pruned, latest_heap, basis_cache.cache_size())
+                    log::info!(
+                        "{} pruned, now: {} heap, {} cache",
+                        pruned,
+                        latest_heap,
+                        basis_cache.cache_size()
+                    )
                 }
             }
             Opcode::ListBasis => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut list_ipc = buffer.to_original::<PddbBasisList, _>().unwrap();
                 let basis_list = basis_cache.basis_list();
                 for (src, dst) in basis_list.iter().zip(list_ipc.list.iter_mut()) {
@@ -804,7 +854,8 @@ fn wrapped_main() -> ! {
                 }
             }
             Opcode::LatestBasis => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 if let Some(name) = basis_cache.basis_latest() {
                     mgmt.name.clear();
@@ -820,7 +871,9 @@ fn wrapped_main() -> ! {
                     mem.offset = None;
                     if let Some(name) = basis_cache.basis_latest() {
                         // Safety: `u8` contains no undefined values
-                        for (src, dest) in unsafe { name.as_bytes().iter().zip(mem.buf.as_slice_mut().iter_mut()) } {
+                        for (src, dest) in
+                            unsafe { name.as_bytes().iter().zip(mem.buf.as_slice_mut().iter_mut()) }
+                        {
                             *dest = *src;
                         }
                         mem.offset = xous::MemorySize::new(name.len().min(mem.buf.len()));
@@ -831,29 +884,36 @@ fn wrapped_main() -> ! {
                 unimplemented!()
             }
             Opcode::CreateBasis => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
                     PddbRequestCode::Create => {
-                        let request = BasisRequestPassword {
-                            db_name: mgmt.name,
-                            plaintext_pw: None,
-                        };
+                        let request = BasisRequestPassword { db_name: mgmt.name, plaintext_pw: None };
                         let mut buf = Buffer::into_buf(request).unwrap();
                         buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
                         let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
                         if let Some(pw) = ret.plaintext_pw {
-                            match basis_cache.basis_create(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"), pw.as_str().expect("password was not valid utf-8")) {
+                            match basis_cache.basis_create(
+                                &mut pddb_os,
+                                mgmt.name.as_str().expect("name is not valid utf-8"),
+                                pw.as_str().expect("password was not valid utf-8"),
+                            ) {
                                 Ok(_) => {
-                                    log::info!("{}PDDB.CREATEOK,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
+                                    log::info!(
+                                        "{}PDDB.CREATEOK,{},{}",
+                                        xous::BOOKEND_START,
+                                        mgmt.name.as_str().unwrap(),
+                                        xous::BOOKEND_END
+                                    );
                                     mgmt.code = PddbRequestCode::NoErr
-                                },
+                                }
                                 Err(e) => match e.kind() {
                                     ErrorKind::AlreadyExists => {
                                         mgmt.code = PddbRequestCode::DuplicateEntry;
                                     }
                                     _ => mgmt.code = PddbRequestCode::InternalError,
-                                }
+                                },
                             }
                         } else {
                             mgmt.code = PddbRequestCode::InternalError;
@@ -866,39 +926,63 @@ fn wrapped_main() -> ! {
                 buffer.replace(mgmt).unwrap();
             }
             Opcode::OpenBasis => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
                     PddbRequestCode::Open => {
                         let mut finished = false;
                         while !finished {
-                            let request = BasisRequestPassword {
-                                db_name: mgmt.name,
-                                plaintext_pw: None,
-                            };
+                            let request = BasisRequestPassword { db_name: mgmt.name, plaintext_pw: None };
                             let mut buf = Buffer::into_buf(request).unwrap();
                             buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
                             let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
                             if let Some(pw) = ret.plaintext_pw {
                                 if let Some(basis) = basis_cache.basis_unlock(
-                                    &mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"), pw.as_str().expect("password was not valid utf-8"),
-                                    mgmt.policy.unwrap_or(BasisRetentionPolicy::Persist)
+                                    &mut pddb_os,
+                                    mgmt.name.as_str().expect("name is not valid utf-8"),
+                                    pw.as_str().expect("password was not valid utf-8"),
+                                    mgmt.policy.unwrap_or(BasisRetentionPolicy::Persist),
                                 ) {
                                     if basis_cache.basis_contains(&basis.name) {
-                                        basis_cache.basis_unmount(&mut pddb_os, &basis.name).expect("couldn't unmount previously mounted basis of same name");
-                                        modals.show_notification(t!("pddb.unmount_previous", locales::LANG), None).expect("notification failed");
+                                        basis_cache
+                                            .basis_unmount(&mut pddb_os, &basis.name)
+                                            .expect("couldn't unmount previously mounted basis of same name");
+                                        modals
+                                            .show_notification(
+                                                t!("pddb.unmount_previous", locales::LANG),
+                                                None,
+                                            )
+                                            .expect("notification failed");
                                     }
                                     basis_cache.basis_add(basis);
                                     finished = true;
-                                    log::info!("{}PDDB.UNLOCKOK,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
+                                    log::info!(
+                                        "{}PDDB.UNLOCKOK,{},{}",
+                                        xous::BOOKEND_START,
+                                        mgmt.name.as_str().unwrap(),
+                                        xous::BOOKEND_END
+                                    );
                                     if basis_monitor_notifications.len() > 0 {
-                                        notify_basis_change(&mut basis_monitor_notifications, basis_cache.basis_list());
+                                        notify_basis_change(
+                                            &mut basis_monitor_notifications,
+                                            basis_cache.basis_list(),
+                                        );
                                     }
                                     mgmt.code = PddbRequestCode::NoErr;
                                 } else {
-                                    log::info!("{}PDDB.BADPASS,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
-                                    modals.add_list_item(t!("pddb.yes", locales::LANG)).expect("couldn't build radio item list");
-                                    modals.add_list_item(t!("pddb.no", locales::LANG)).expect("couldn't build radio item list");
+                                    log::info!(
+                                        "{}PDDB.BADPASS,{},{}",
+                                        xous::BOOKEND_START,
+                                        mgmt.name.as_str().unwrap(),
+                                        xous::BOOKEND_END
+                                    );
+                                    modals
+                                        .add_list_item(t!("pddb.yes", locales::LANG))
+                                        .expect("couldn't build radio item list");
+                                    modals
+                                        .add_list_item(t!("pddb.no", locales::LANG))
+                                        .expect("couldn't build radio item list");
                                     match modals.get_radiobutton(t!("pddb.badpass", locales::LANG)) {
                                         Ok(response) => {
                                             if response.as_str() == t!("pddb.yes", locales::LANG) {
@@ -928,22 +1012,28 @@ fn wrapped_main() -> ! {
                 buffer.replace(mgmt).unwrap();
             }
             Opcode::CloseBasis => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 notify_of_disconnect(&mut pddb_os, &token_dict, &mut basis_cache);
                 match mgmt.code {
                     PddbRequestCode::Close => {
-                        match basis_cache.basis_unmount(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8")) {
+                        match basis_cache
+                            .basis_unmount(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"))
+                        {
                             Ok(_) => {
                                 mgmt.code = PddbRequestCode::NoErr;
                                 if basis_monitor_notifications.len() > 0 {
-                                    notify_basis_change(&mut basis_monitor_notifications, basis_cache.basis_list());
+                                    notify_basis_change(
+                                        &mut basis_monitor_notifications,
+                                        basis_cache.basis_list(),
+                                    );
                                 }
                             }
                             Err(e) => match e.kind() {
                                 ErrorKind::NotFound => mgmt.code = PddbRequestCode::NotFound,
                                 _ => mgmt.code = PddbRequestCode::InternalError,
-                            }
+                            },
                         }
                     }
                     _ => {
@@ -953,17 +1043,20 @@ fn wrapped_main() -> ! {
                 buffer.replace(mgmt).unwrap();
             }
             Opcode::DeleteBasis => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 notify_of_disconnect(&mut pddb_os, &token_dict, &mut basis_cache);
                 match mgmt.code {
                     PddbRequestCode::Delete => {
-                        match basis_cache.basis_delete(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8")) {
+                        match basis_cache
+                            .basis_delete(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"))
+                        {
                             Ok(_) => mgmt.code = PddbRequestCode::NoErr,
                             Err(e) => match e.kind() {
                                 ErrorKind::NotFound => mgmt.code = PddbRequestCode::NotFound,
                                 _ => mgmt.code = PddbRequestCode::InternalError,
-                            }
+                            },
                         }
                     }
                     _ => {
@@ -973,10 +1066,16 @@ fn wrapped_main() -> ! {
                 buffer.replace(mgmt).unwrap();
             }
             Opcode::KeyRequest => {
-                #[cfg(feature="perfcounter")]
-                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 3, std::line!());
+                #[cfg(feature = "perfcounter")]
+                pddb_os.perf_entry(
+                    FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                    perflib::PERFMETA_STARTBLOCK,
+                    3,
+                    std::line!(),
+                );
                 for basis in basis_cache.access_list().iter() {
-                    let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    let mut buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                     let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
                     let bname = if req.basis_specified {
                         Some(req.basis.as_str().unwrap())
@@ -986,66 +1085,107 @@ fn wrapped_main() -> ! {
                     let dict = req.dict.as_str().expect("dict utf-8 decode error");
                     let key = req.key.as_str().expect("key utf-8 decode error");
                     log::debug!("get: {:?} {}", bname, key);
-                    #[cfg(feature="perfcounter")]
-                    pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 3, std::line!());
+                    #[cfg(feature = "perfcounter")]
+                    pddb_os.perf_entry(
+                        FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                        perflib::PERFMETA_NONE,
+                        3,
+                        std::line!(),
+                    );
                     if basis_cache.dict_attributes(&mut pddb_os, dict, bname).is_err() {
                         if req.create_dict {
                             match basis_cache.dict_add(&mut pddb_os, dict, bname) {
                                 Ok(_) => (),
-                                Err(e) => {
-                                    match e.kind() {
-                                        std::io::ErrorKind::OutOfMemory => {req.result = PddbRequestCode::NoFreeSpace; buffer.replace(req).unwrap(); continue}
-                                        std::io::ErrorKind::NotFound => {req.result = PddbRequestCode::NotMounted; buffer.replace(req).unwrap(); continue}
-                                        _ => {req.result = PddbRequestCode::InternalError; buffer.replace(req).unwrap(); continue}
+                                Err(e) => match e.kind() {
+                                    std::io::ErrorKind::OutOfMemory => {
+                                        req.result = PddbRequestCode::NoFreeSpace;
+                                        buffer.replace(req).unwrap();
+                                        continue;
                                     }
-                                }
+                                    std::io::ErrorKind::NotFound => {
+                                        req.result = PddbRequestCode::NotMounted;
+                                        buffer.replace(req).unwrap();
+                                        continue;
+                                    }
+                                    _ => {
+                                        req.result = PddbRequestCode::InternalError;
+                                        buffer.replace(req).unwrap();
+                                        continue;
+                                    }
+                                },
                             }
                         } else {
                             req.result = PddbRequestCode::NotFound;
-                            buffer.replace(req).unwrap(); continue
+                            buffer.replace(req).unwrap();
+                            continue;
                         }
                     }
-                    let alloc_hint = if let Some(hint) = req.alloc_hint {Some(hint as usize)} else {None};
-                    #[cfg(feature="perfcounter")]
-                    pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 3, std::line!());
+                    let alloc_hint = if let Some(hint) = req.alloc_hint { Some(hint as usize) } else { None };
+                    #[cfg(feature = "perfcounter")]
+                    pddb_os.perf_entry(
+                        FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                        perflib::PERFMETA_NONE,
+                        3,
+                        std::line!(),
+                    );
                     if basis_cache.key_attributes(&mut pddb_os, dict, key, bname).is_err() {
                         if !req.create_key {
                             req.result = PddbRequestCode::NotFound;
-                            buffer.replace(req).unwrap(); continue
+                            buffer.replace(req).unwrap();
+                            continue;
                         } else {
                             // create an empty key placeholder
                             let empty: [u8; 0] = [];
-                            match basis_cache.key_update(&mut pddb_os,
-                                dict, key, &empty, None, alloc_hint, bname,
+                            match basis_cache.key_update(
+                                &mut pddb_os,
+                                dict,
+                                key,
+                                &empty,
+                                None,
+                                alloc_hint,
+                                bname,
                                 // don't truncate if we've been given an explicit size hint.
-                                alloc_hint.is_none()
+                                alloc_hint.is_none(),
                             ) {
-                                Ok(_) => {},
+                                Ok(_) => {}
                                 Err(e) => {
                                     log::error!("Couldn't allocate key: {:?}", e);
                                     match e.kind() {
-                                        std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotMounted,
-                                        std::io::ErrorKind::OutOfMemory => req.result = PddbRequestCode::NoFreeSpace,
+                                        std::io::ErrorKind::NotFound => {
+                                            req.result = PddbRequestCode::NotMounted
+                                        }
+                                        std::io::ErrorKind::OutOfMemory => {
+                                            req.result = PddbRequestCode::NoFreeSpace
+                                        }
                                         _ => req.result = PddbRequestCode::InternalError,
                                     }
-                                    buffer.replace(req).unwrap(); continue
+                                    buffer.replace(req).unwrap();
+                                    continue;
                                 }
                             }
                         }
                     }
-                    #[cfg(feature="perfcounter")]
-                    pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 3, std::line!());
+                    #[cfg(feature = "perfcounter")]
+                    pddb_os.perf_entry(
+                        FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                        perflib::PERFMETA_NONE,
+                        3,
+                        std::line!(),
+                    );
                     // at this point, we have established a basis/dict/key tuple.
                     let token: ApiToken = [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()];
                     let cid = if let Some(cb_sid) = req.cb_sid {
-                        Some(xous::connect(xous::SID::from_array(cb_sid)).expect("couldn't connect for callback"))
+                        Some(
+                            xous::connect(xous::SID::from_array(cb_sid))
+                                .expect("couldn't connect for callback"),
+                        )
                     } else {
                         None
                     };
                     let token_record = TokenRecord {
                         dict: String::from(dict),
                         key: String::from(key),
-                        basis: if let Some(name) = bname {Some(String::from(name))} else {None},
+                        basis: if let Some(name) = bname { Some(String::from(name)) } else { None },
                         conn: cid,
                         alloc_hint,
                     };
@@ -1055,13 +1195,23 @@ fn wrapped_main() -> ! {
                     buffer.replace(req).unwrap();
                     break; // if we got here, entry was found, stop searching
                 }
-                #[cfg(feature="perfcounter")]
-                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 3, std::line!());
+                #[cfg(feature = "perfcounter")]
+                pddb_os.perf_entry(
+                    FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                    perflib::PERFMETA_ENDBLOCK,
+                    3,
+                    std::line!(),
+                );
             }
             Opcode::OpenKeyStd => {
                 if let Some(mem) = msg.body.memory_message_mut() {
                     mem.offset = None;
-                    if let Err(e) = libstd::open_key(mem, &mut pddb_os, &mut basis_cache, fd_mapping.entry(msg.sender.pid()).or_default()) {
+                    if let Err(e) = libstd::open_key(
+                        mem,
+                        &mut pddb_os,
+                        &mut basis_cache,
+                        fd_mapping.entry(msg.sender.pid()).or_default(),
+                    ) {
                         mem.offset = xous::MemoryAddress::new(e as usize);
                     }
                 }
@@ -1075,7 +1225,8 @@ fn wrapped_main() -> ! {
                     if let Some(conn_to_remove) = rec.conn {
                         let mut still_needs_cid = false;
                         for r in token_dict.values() {
-                            // check through the remaining dictionary values to see if they have a connection that is the same as our number
+                            // check through the remaining dictionary values to see if they have a connection
+                            // that is the same as our number
                             if let Some(existing_conn) = r.conn {
                                 if existing_conn == conn_to_remove {
                                     still_needs_cid = true;
@@ -1085,14 +1236,19 @@ fn wrapped_main() -> ! {
                         }
                         // if nobody else had my connection number, disconnect it.
                         if !still_needs_cid {
-                            unsafe{xous::disconnect(conn_to_remove).expect("couldn't disconnect from callback server")};
+                            unsafe {
+                                xous::disconnect(conn_to_remove)
+                                    .expect("couldn't disconnect from callback server")
+                            };
                         }
                     } else {
-                        // if there was no/never a connection allocated, there's no connection to remove. do nothing.
+                        // if there was no/never a connection allocated, there's no connection to remove. do
+                        // nothing.
                     }
                     xous::return_scalar(msg.sender, PddbRetcode::Ok as usize).expect("couldn't ack KeyDrop");
                 } else {
-                    xous::return_scalar(msg.sender, PddbRetcode::BasisLost as usize).expect("couldn't ack KeyDrop");
+                    xous::return_scalar(msg.sender, PddbRetcode::BasisLost as usize)
+                        .expect("couldn't ack KeyDrop");
                 }
             }),
 
@@ -1106,19 +1262,17 @@ fn wrapped_main() -> ! {
                         } else {
                             fd_mapping.remove(&msg.sender.pid());
                             xous::return_scalar2(msg.sender, 0, 0)
-                        }.ok();
+                        }
+                        .ok();
                     }
                 }
             }
 
             Opcode::DeleteKey => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
-                let bname = if req.basis_specified {
-                    Some(req.basis.as_str().unwrap())
-                } else {
-                    None
-                };
+                let bname = if req.basis_specified { Some(req.basis.as_str().unwrap()) } else { None };
                 let dict = req.dict.as_str().expect("dict utf-8 decode error");
                 let key = req.key.as_str().expect("key utf-8 decode error");
                 match basis_cache.key_remove(&mut pddb_os, dict, key, bname, false) {
@@ -1152,17 +1306,16 @@ fn wrapped_main() -> ! {
                         }
                         req.result = PddbRequestCode::NoErr;
                     }
-                    Err(e) => {
-                        match e.kind() {
-                            std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotFound,
-                            _ => req.result = PddbRequestCode::InternalError,
-                        }
-                    }
+                    Err(e) => match e.kind() {
+                        std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotFound,
+                        _ => req.result = PddbRequestCode::InternalError,
+                    },
                 }
                 buffer.replace(req).unwrap();
             }
             Opcode::DictBulkDelete => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDeleteList, _>().unwrap();
                 let mut key_list = Vec::<String>::new();
                 // the [u8] data is structured as a packed list of u8-len + u8 data slice. The max length of
@@ -1177,7 +1330,9 @@ fn wrapped_main() -> ! {
                         req.retcode = PddbRetcode::InternalError;
                         break;
                     }
-                    let key = String::from(std::str::from_utf8(&req.data[index..index+strlen]).unwrap_or("UTF8 error"));
+                    let key = String::from(
+                        std::str::from_utf8(&req.data[index..index + strlen]).unwrap_or("UTF8 error"),
+                    );
                     key_list.push(key);
                     index += strlen;
                 }
@@ -1187,18 +1342,14 @@ fn wrapped_main() -> ! {
                 }
                 log::info!("Deleting key list: {:?}", key_list);
                 let start = tt.elapsed_ms();
-                let bname = if req.basis_specified {
-                    Some(req.basis.as_str().unwrap())
-                } else {
-                    None
-                };
+                let bname = if req.basis_specified { Some(req.basis.as_str().unwrap()) } else { None };
                 let dict = req.dict.as_str().expect("dict utf-8 decode error");
                 match basis_cache.key_list_remove(&mut pddb_os, dict, key_list, bname) {
                     Ok(_) => req.retcode = PddbRetcode::Ok,
                     Err(e) => match e.kind() {
                         std::io::ErrorKind::NotFound => req.retcode = PddbRetcode::AccessDenied,
                         _ => req.retcode = PddbRetcode::InternalError,
-                    }
+                    },
                 }
                 log::info!("Bulk delete finished in {}ms", tt.elapsed_ms() - start);
                 buffer.replace(req).ok();
@@ -1206,19 +1357,17 @@ fn wrapped_main() -> ! {
             Opcode::DeleteKeyStd => {
                 if let Some(mem) = msg.body.memory_message_mut() {
                     mem.offset = None;
-                    if let Err(err) = libstd::delete_key(mem, &mut pddb_os, &mut basis_cache, &mut fd_mapping) {
+                    if let Err(err) = libstd::delete_key(mem, &mut pddb_os, &mut basis_cache, &mut fd_mapping)
+                    {
                         mem.offset = xous::MemoryAddress::new(err as usize);
                     }
                 }
             }
             Opcode::DeleteDict => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
-                let bname = if req.basis_specified {
-                    Some(req.basis.as_str().unwrap())
-                } else {
-                    None
-                };
+                let bname = if req.basis_specified { Some(req.basis.as_str().unwrap()) } else { None };
                 let dict = req.dict.as_str().expect("dict utf-8 decode error");
                 log::debug!("attempting to remove dict {} basis {:?}", dict, bname);
                 match basis_cache.dict_remove(&mut pddb_os, dict, bname, false) {
@@ -1252,12 +1401,10 @@ fn wrapped_main() -> ! {
                         }
                         req.result = PddbRequestCode::NoErr;
                     }
-                    Err(e) => {
-                        match e.kind() {
-                            std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotFound,
-                            _ => req.result = PddbRequestCode::InternalError,
-                        }
-                    }
+                    Err(e) => match e.kind() {
+                        std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotFound,
+                        _ => req.result = PddbRequestCode::InternalError,
+                    },
                 }
                 buffer.replace(req).unwrap();
             }
@@ -1278,15 +1425,17 @@ fn wrapped_main() -> ! {
                 }
             }
             Opcode::KeyAttributes => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbKeyAttrIpc, _>().unwrap();
                 if let Some(token_record) = token_dict.get(&req.token) {
-                    let bname = if let Some(name) = &token_record.basis {
-                        Some(name.as_str())
-                    } else {
-                        None
-                    };
-                    match basis_cache.key_attributes(&mut pddb_os, &token_record.dict, &token_record.key, bname) {
+                    let bname = if let Some(name) = &token_record.basis { Some(name.as_str()) } else { None };
+                    match basis_cache.key_attributes(
+                        &mut pddb_os,
+                        &token_record.dict,
+                        &token_record.key,
+                        bname,
+                    ) {
                         Ok(attr) => {
                             buffer.replace(PddbKeyAttrIpc::from_attributes(attr, req.token)).unwrap();
                         }
@@ -1298,9 +1447,15 @@ fn wrapped_main() -> ! {
                 }
             }
             Opcode::KeyCountInDict => {
-                #[cfg(feature="perfcounter")]
-                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 0, std::line!());
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                #[cfg(feature = "perfcounter")]
+                pddb_os.perf_entry(
+                    FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                    perflib::PERFMETA_STARTBLOCK,
+                    0,
+                    std::line!(),
+                );
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
                 if key_token.is_some() {
                     log::debug!("key list already in progress");
@@ -1309,14 +1464,10 @@ fn wrapped_main() -> ! {
                     continue;
                 }
                 key_token = Some(req.token);
-                let bname = if req.basis_specified {
-                    Some(req.basis.as_str().unwrap())
-                } else {
-                    None
-                };
+                let bname = if req.basis_specified { Some(req.basis.as_str().unwrap()) } else { None };
                 let dict = req.dict.as_str().expect("dict utf-8 decode error");
                 log::debug!("counting keys in dict {} basis {:?}", dict, bname);
-                #[cfg(feature="perfcounter")]
+                #[cfg(feature = "perfcounter")]
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 0, std::line!());
                 key_list = match basis_cache.key_list(&mut pddb_os, dict, bname) {
                     Ok((list, key_count, found_key_count)) => {
@@ -1336,13 +1487,24 @@ fn wrapped_main() -> ! {
                     }
                 };
                 buffer.replace(req).unwrap();
-                #[cfg(feature="perfcounter")]
-                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 0, std::line!());
+                #[cfg(feature = "perfcounter")]
+                pddb_os.perf_entry(
+                    FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                    perflib::PERFMETA_ENDBLOCK,
+                    0,
+                    std::line!(),
+                );
             }
             Opcode::ListKeyV2 => {
-                #[cfg(feature="perfcounter")]
-                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 1, std::line!());
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                #[cfg(feature = "perfcounter")]
+                pddb_os.perf_entry(
+                    FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                    perflib::PERFMETA_STARTBLOCK,
+                    1,
+                    std::line!(),
+                );
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbKeyList, _>().unwrap();
                 if let Some(token) = key_token {
                     if req.token != token {
@@ -1351,20 +1513,20 @@ fn wrapped_main() -> ! {
                         if let Some(klist) = &mut key_list {
                             let mut index = 0;
                             loop {
-                                let keyname =
-                                    if let Some(keyname) = klist.iter().next() {
-                                        keyname.to_string()
-                                    } else {
-                                        key_token = None;
-                                        req.end = true;
-                                        req.retcode = PddbRetcode::Ok;
-                                        break;
-                                    };
+                                let keyname = if let Some(keyname) = klist.iter().next() {
+                                    keyname.to_string()
+                                } else {
+                                    key_token = None;
+                                    req.end = true;
+                                    req.retcode = PddbRetcode::Ok;
+                                    break;
+                                };
                                 if keyname.len() + 1 + index < MAX_PDDBKLISTLEN {
                                     assert!(keyname.len() < u8::MAX as usize); // this should always be true due to other limits in the PDDB
                                     req.data[index] = keyname.len() as u8;
                                     index += 1;
-                                    req.data[index..index + keyname.len()].copy_from_slice(keyname.as_bytes());
+                                    req.data[index..index + keyname.len()]
+                                        .copy_from_slice(keyname.as_bytes());
                                     index += keyname.len();
                                     klist.remove(&keyname);
                                 } else {
@@ -1385,8 +1547,13 @@ fn wrapped_main() -> ! {
                     req.retcode = PddbRetcode::AccessDenied;
                 }
                 buffer.replace(req).unwrap();
-                #[cfg(feature="perfcounter")]
-                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 1, std::line!());
+                #[cfg(feature = "perfcounter")]
+                pddb_os.perf_entry(
+                    FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                    perflib::PERFMETA_ENDBLOCK,
+                    1,
+                    std::line!(),
+                );
             }
             Opcode::ListKeyStd => {
                 if let Some(mem) = msg.body.memory_message_mut() {
@@ -1397,7 +1564,8 @@ fn wrapped_main() -> ! {
                 }
             }
             Opcode::DictCountInBasis => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
                 if dict_token.is_some() {
                     req.code = PddbRequestCode::AccessDenied;
@@ -1406,18 +1574,15 @@ fn wrapped_main() -> ! {
                 }
                 dict_token = Some(req.token);
                 dict_list.clear();
-                let bname = if req.basis_specified {
-                    Some(req.basis.as_str().unwrap())
-                } else {
-                    None
-                };
+                let bname = if req.basis_specified { Some(req.basis.as_str().unwrap()) } else { None };
                 let list = basis_cache.dict_list(&mut pddb_os, bname);
                 if list.len() > 0 {
                     req.index = list.len() as u32;
                     for dict in list {
                         dict_list.push(dict);
                     }
-                } else { // no dicts to list, reset the state
+                } else {
+                    // no dicts to list, reset the state
                     dict_token = None;
                     dict_list.clear();
                 }
@@ -1425,7 +1590,8 @@ fn wrapped_main() -> ! {
                 buffer.replace(req).unwrap();
             }
             Opcode::GetDictNameAtIndex => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
                 if let Some(token) = dict_token {
                     if req.token != token {
@@ -1434,7 +1600,8 @@ fn wrapped_main() -> ! {
                         if req.index >= dict_list.len() as u32 {
                             req.code = PddbRequestCode::InternalError;
                         } else {
-                            req.dict = xous_ipc::String::<DICT_NAME_LEN>::from_str(&dict_list[req.index as usize]);
+                            req.dict =
+                                xous_ipc::String::<DICT_NAME_LEN>::from_str(&dict_list[req.index as usize]);
                             req.code = PddbRequestCode::NoErr;
                             // the last index requested must be the highest one!
                             if req.index == dict_list.len() as u32 - 1 {
@@ -1457,66 +1624,97 @@ fn wrapped_main() -> ! {
                 }
             }
             Opcode::ReadKey => {
-                #[cfg(feature="perfcounter")]
-                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 4, std::line!());
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                #[cfg(feature = "perfcounter")]
+                pddb_os.perf_entry(
+                    FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                    perflib::PERFMETA_STARTBLOCK,
+                    4,
+                    std::line!(),
+                );
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
                 let token = pbuf.token;
                 if let Some(rec) = token_dict.get(&token) {
                     for basis in basis_cache.access_list().iter() {
                         // let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
-                        // log::debug!("read (spec: {:?}){:?} {} len {} pos {}", rec.basis, temp, rec.key, pbuf.len, pbuf.position);
-                        #[cfg(feature="perfcounter")]
-                        pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 4, std::line!());
-                        match basis_cache.key_read(&mut pddb_os,
-                            &rec.dict, &rec.key,
-                            &mut pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
-                            // this is a bit inefficient because if a specific basis is specified *and* the key does not exist,
-                            // it'll retry the same basis for a number of times equal to the number of bases open.
-                            // However, usually, there's only 1-2 bases open, and usually, if you specify a basis,
-                            // the key will be a hit, so, we let it stand.
-                            if let Some (name) = &rec.basis {Some(&name)} else {Some(basis)}) {
+                        // log::debug!("read (spec: {:?}){:?} {} len {} pos {}", rec.basis, temp, rec.key,
+                        // pbuf.len, pbuf.position);
+                        #[cfg(feature = "perfcounter")]
+                        pddb_os.perf_entry(
+                            FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                            perflib::PERFMETA_NONE,
+                            4,
+                            std::line!(),
+                        );
+                        match basis_cache.key_read(
+                            &mut pddb_os,
+                            &rec.dict,
+                            &rec.key,
+                            &mut pbuf.data[..pbuf.len as usize],
+                            Some(pbuf.position as usize),
+                            // this is a bit inefficient because if a specific basis is specified *and* the
+                            // key does not exist, it'll retry the same basis for
+                            // a number of times equal to the number of bases open.
+                            // However, usually, there's only 1-2 bases open, and usually, if you specify a
+                            // basis, the key will be a hit, so, we let it stand.
+                            if let Some(name) = &rec.basis { Some(&name) } else { Some(basis) },
+                        ) {
                             Ok(readlen) => {
-                                #[cfg(feature="perfcounter")]
-                                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 4, std::line!());
+                                #[cfg(feature = "perfcounter")]
+                                pddb_os.perf_entry(
+                                    FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                                    perflib::PERFMETA_NONE,
+                                    4,
+                                    std::line!(),
+                                );
                                 pbuf.len = readlen as u16;
                                 pbuf.retcode = PddbRetcode::Ok;
                                 break;
                             }
                             Err(e) => match e.kind() {
                                 std::io::ErrorKind::NotFound => pbuf.retcode = PddbRetcode::BasisLost,
-                                std::io::ErrorKind::UnexpectedEof => pbuf.retcode = PddbRetcode::UnexpectedEof,
+                                std::io::ErrorKind::UnexpectedEof => {
+                                    pbuf.retcode = PddbRetcode::UnexpectedEof
+                                }
                                 std::io::ErrorKind::OutOfMemory => pbuf.retcode = PddbRetcode::DiskFull,
                                 _ => pbuf.retcode = PddbRetcode::InternalError,
-                            }
+                            },
                         }
                     }
                 } else {
                     pbuf.retcode = PddbRetcode::BasisLost;
                 }
                 // we don't need a "replace" operation because all ops happen in-place
-                #[cfg(feature="perfcounter")]
-                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 4, std::line!());
+                #[cfg(feature = "perfcounter")]
+                pddb_os.perf_entry(
+                    FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                    perflib::PERFMETA_ENDBLOCK,
+                    4,
+                    std::line!(),
+                );
             }
 
             // Optimized bulk data read handler. See lib.rs for documentation.
             Opcode::DictBulkRead => {
                 const BULKREAD_TIMEOUT_MS: u64 = 5000;
-                #[cfg(feature="perfcounter")]
-                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 5, std::line!());
+                #[cfg(feature = "perfcounter")]
+                pddb_os.perf_entry(
+                    FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                    perflib::PERFMETA_STARTBLOCK,
+                    5,
+                    std::line!(),
+                );
                 let range = msg.body.memory_message_mut().unwrap();
-                let buf = unsafe { core::slice::from_raw_parts_mut(
-                    range.buf.as_mut_ptr(),
-                    range.buf.len(),
-                )};
+                let buf = unsafe { core::slice::from_raw_parts_mut(range.buf.as_mut_ptr(), range.buf.len()) };
                 // unpack the descriptor
-                #[cfg(feature="perfcounter")]
+                #[cfg(feature = "perfcounter")]
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
                 let pos = range.offset.map(|o| o.get()).unwrap_or_default();
                 let r = unsafe { rkyv::archived_value::<PddbDictRequest>(buf, pos) };
                 let bulk_descriptor = r.deserialize(&mut AllocDeserializer).unwrap();
                 // check for a timeout; retire state if we did timeout
-                #[cfg(feature="perfcounter")]
+                #[cfg(feature = "perfcounter")]
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
                 let mut timed_out = false;
                 if let Some(state) = &bulkread_state {
@@ -1528,7 +1726,7 @@ fn wrapped_main() -> ! {
                     bulkread_state = None;
                 }
                 // handle state initialization, if no call was previously initiated
-                #[cfg(feature="perfcounter")]
+                #[cfg(feature = "perfcounter")]
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
                 let mut first_call = false;
                 if bulkread_state.is_none() {
@@ -1541,32 +1739,44 @@ fn wrapped_main() -> ! {
                             Some(bulk_descriptor.basis.as_str().unwrap())
                         } else {
                             None
-                        }
+                        },
                     ) {
-                        Ok((list, _, _)) => list.into_iter().rev().collect(), // reverse order so Vec can just pop and get "first" item
+                        Ok((list, _, _)) => list.into_iter().rev().collect(), /* reverse order so Vec can */
+                        // just pop and get "first"
+                        // item
                         Err(e) => {
                             match e.kind() {
-                                std::io::ErrorKind::NotFound => {
-                                    buf[..4].copy_from_slice(&(PddbBulkReadCode::NotFound as u32).to_le_bytes())
-                                }
-                                _ => {
-                                    buf[..4].copy_from_slice(&(PddbBulkReadCode::InternalError as u32).to_le_bytes())
-                                }
+                                std::io::ErrorKind::NotFound => buf[..4]
+                                    .copy_from_slice(&(PddbBulkReadCode::NotFound as u32).to_le_bytes()),
+                                _ => buf[..4]
+                                    .copy_from_slice(&(PddbBulkReadCode::InternalError as u32).to_le_bytes()),
                             }
-                            // this will cause the return record to just have the error code copied to it. The rest is invalid.
+                            // this will cause the return record to just have the error code copied to it. The
+                            // rest is invalid.
                             continue;
                         }
                     };
                     let state = BulkReadState {
-                        token: [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()],
+                        token: [
+                            pddb_os.trng_u32(),
+                            pddb_os.trng_u32(),
+                            pddb_os.trng_u32(),
+                            pddb_os.trng_u32(),
+                        ],
                         is_basis_specified: bulk_descriptor.basis_specified,
-                        basis: if bulk_descriptor.basis_specified{ bulk_descriptor.basis.to_string() } else { String::new() },
+                        basis: if bulk_descriptor.basis_specified {
+                            bulk_descriptor.basis.to_string()
+                        } else {
+                            String::new()
+                        },
                         dict: bulk_descriptor.dict.to_string(),
                         total_keys: key_list.len(),
                         key_list,
                         buf_starting_key_index: 0,
                         last_time: tt.elapsed_ms(),
-                        read_limit: bulk_descriptor.bulk_limit.expect("bulk limit must be specified for bulk read calls"),
+                        read_limit: bulk_descriptor
+                            .bulk_limit
+                            .expect("bulk limit must be specified for bulk read calls"),
                         read_total: 0,
                     };
                     bulkread_state = Some(state);
@@ -1574,8 +1784,13 @@ fn wrapped_main() -> ! {
                 let mut finished = false;
                 // handle data packing into the structure
                 if let Some(state) = &mut bulkread_state {
-                    #[cfg(feature="perfcounter")]
-                    pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
+                    #[cfg(feature = "perfcounter")]
+                    pddb_os.perf_entry(
+                        FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                        perflib::PERFMETA_NONE,
+                        5,
+                        std::line!(),
+                    );
                     // check that the token matches, if this isn't a first call to the function
                     if !first_call {
                         if state.token != bulk_descriptor.token {
@@ -1593,143 +1808,200 @@ fn wrapped_main() -> ! {
                     let (header_buf, mut buf) = buf.split_at_mut(size_of::<BulkReadHeader>());
                     enum SerializeResult<'a> {
                         Success(usize, usize, &'a mut [u8], String, &'a mut [u8]),
-                        Failure(String)
+                        Failure(String),
                     }
                     loop {
                         if buf.len() < size_of::<u32>() * 2 {
                             // not enough space to hold our header records, break and get a new buf
                             break;
                         }
-                        #[cfg(feature="perfcounter")]
-                        pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 6, std::line!());
-                        let ser_result: SerializeResult =
-                            if let Some(key_name) = state.key_list.pop() {
-                                let attr = match basis_cache.key_attributes(&mut pddb_os,
-                                    &state.dict,
-                                    &key_name,
-                                    if state.is_basis_specified{Some(&state.basis)} else {None}
-                                ) {
-                                    Ok(attr) => attr,
-                                    Err(e) => {
-                                        modals.show_notification(
-                                            &format!("Error: key not found during bulk read:\n{:?}\n{:?}:{}:{}",
+                        #[cfg(feature = "perfcounter")]
+                        pddb_os.perf_entry(
+                            FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                            perflib::PERFMETA_STARTBLOCK,
+                            6,
+                            std::line!(),
+                        );
+                        let ser_result: SerializeResult = if let Some(key_name) = state.key_list.pop() {
+                            let attr = match basis_cache.key_attributes(
+                                &mut pddb_os,
+                                &state.dict,
+                                &key_name,
+                                if state.is_basis_specified { Some(&state.basis) } else { None },
+                            ) {
+                                Ok(attr) => attr,
+                                Err(e) => {
+                                    modals
+                                        .show_notification(
+                                            &format!(
+                                                "Error: key not found during bulk read:\n{:?}\n{:?}:{}:{}",
                                                 e,
-                                                if state.is_basis_specified{Some(&state.basis)} else {None},
+                                                if state.is_basis_specified {
+                                                    Some(&state.basis)
+                                                } else {
+                                                    None
+                                                },
                                                 &state.dict,
                                                 &key_name,
-                                                ),
-                                            None).ok();
-                                        continue;
-                                    }
-                                };
-                                if attr.len < state.read_limit - state.read_total {
-                                    let mut d = vec![0u8; attr.len];
-                                    match basis_cache.key_read(
-                                        &mut pddb_os,
-                                        &state.dict,
-                                        &key_name,
-                                        &mut d,
-                                        None,
-                                        Some(&attr.basis),
-                                    ) {
-                                        Ok(readlen) => {
-                                            #[cfg(feature="perfcounter")]
-                                            pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 6, std::line!());
-                                            assert!(readlen == attr.len, "Bulk read key length did not match expected length");
-                                            let rec = PddbKeyRecord {
-                                                name: key_name.to_string(),
-                                                len: attr.len,
-                                                reserved: attr.reserved,
-                                                age: attr.age,
-                                                index: attr.index,
-                                                basis: attr.basis,
-                                                data: if d.len() > 0 { Some(d) } else { None }
-                                            };
-                                            state.read_total += attr.len; // commit the read length early
-                                            let (prebuf, sbuf) = buf.split_at_mut(size_of::<u32>()*2);
-                                            let mut serializer = BufferSerializer::new(sbuf);
-                                            let len = size_of::<ArchivedPddbKeyRecord>();
-                                            match serializer.serialize_value(&rec) {
-                                                Ok(pos) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, prebuf),
-                                                Err(_) => SerializeResult::Failure(key_name)
-                                            }
+                                            ),
+                                            None,
+                                        )
+                                        .ok();
+                                    continue;
+                                }
+                            };
+                            if attr.len < state.read_limit - state.read_total {
+                                let mut d = vec![0u8; attr.len];
+                                match basis_cache.key_read(
+                                    &mut pddb_os,
+                                    &state.dict,
+                                    &key_name,
+                                    &mut d,
+                                    None,
+                                    Some(&attr.basis),
+                                ) {
+                                    Ok(readlen) => {
+                                        #[cfg(feature = "perfcounter")]
+                                        pddb_os.perf_entry(
+                                            FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                                            perflib::PERFMETA_NONE,
+                                            6,
+                                            std::line!(),
+                                        );
+                                        assert!(
+                                            readlen == attr.len,
+                                            "Bulk read key length did not match expected length"
+                                        );
+                                        let rec = PddbKeyRecord {
+                                            name: key_name.to_string(),
+                                            len: attr.len,
+                                            reserved: attr.reserved,
+                                            age: attr.age,
+                                            index: attr.index,
+                                            basis: attr.basis,
+                                            data: if d.len() > 0 { Some(d) } else { None },
+                                        };
+                                        state.read_total += attr.len; // commit the read length early
+                                        let (prebuf, sbuf) = buf.split_at_mut(size_of::<u32>() * 2);
+                                        let mut serializer = BufferSerializer::new(sbuf);
+                                        let len = size_of::<ArchivedPddbKeyRecord>();
+                                        match serializer.serialize_value(&rec) {
+                                            Ok(pos) => SerializeResult::Success(
+                                                pos,
+                                                len,
+                                                serializer.into_inner(),
+                                                key_name,
+                                                prebuf,
+                                            ),
+                                            Err(_) => SerializeResult::Failure(key_name),
                                         }
-                                        Err(e) => {
-                                            panic!("Error reading previously attributed key {}: {:?}", &key_name, e);
-                                        }
                                     }
-                                } else {
-                                    log::info!("hit size limit: limit {} total {}", state.read_limit, state.read_total);
-                                    // report the key, but with no data
-                                    let rec = PddbKeyRecord {
-                                        name: key_name.to_string(),
-                                        len: attr.len,
-                                        reserved: attr.reserved,
-                                        age: attr.age,
-                                        index: attr.index,
-                                        basis: attr.basis,
-                                        data: None,
-                                    };
-                                    let (pre_buf, buf) = buf.split_at_mut(size_of::<u32>()*2);
-                                    let mut serializer = BufferSerializer::new(buf);
-                                    let len = size_of::<ArchivedPddbKeyRecord>();
-                                    match serializer.serialize_value(&rec) {
-                                        Ok(pos) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, pre_buf),
-                                        Err(_) => SerializeResult::Failure(key_name)
+                                    Err(e) => {
+                                        panic!(
+                                            "Error reading previously attributed key {}: {:?}",
+                                            &key_name, e
+                                        );
                                     }
                                 }
                             } else {
-                                // no more keys; we're done.
-                                finished = true;
-                                break;
-                            };
+                                log::info!(
+                                    "hit size limit: limit {} total {}",
+                                    state.read_limit,
+                                    state.read_total
+                                );
+                                // report the key, but with no data
+                                let rec = PddbKeyRecord {
+                                    name: key_name.to_string(),
+                                    len: attr.len,
+                                    reserved: attr.reserved,
+                                    age: attr.age,
+                                    index: attr.index,
+                                    basis: attr.basis,
+                                    data: None,
+                                };
+                                let (pre_buf, buf) = buf.split_at_mut(size_of::<u32>() * 2);
+                                let mut serializer = BufferSerializer::new(buf);
+                                let len = size_of::<ArchivedPddbKeyRecord>();
+                                match serializer.serialize_value(&rec) {
+                                    Ok(pos) => SerializeResult::Success(
+                                        pos,
+                                        len,
+                                        serializer.into_inner(),
+                                        key_name,
+                                        pre_buf,
+                                    ),
+                                    Err(_) => SerializeResult::Failure(key_name),
+                                }
+                            }
+                        } else {
+                            // no more keys; we're done.
+                            finished = true;
+                            break;
+                        };
 
-                        #[cfg(feature="perfcounter")]
-                        pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 6, std::line!());
+                        #[cfg(feature = "perfcounter")]
+                        pddb_os.perf_entry(
+                            FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                            perflib::PERFMETA_NONE,
+                            6,
+                            std::line!(),
+                        );
                         match ser_result {
                             SerializeResult::Success(pos, len, sbuf, _key_name, pre_buf) => {
                                 log::debug!("packing message of {}({})", len + pos, pos);
                                 // data can fit, copy it into the buffer.
                                 state.buf_starting_key_index += 1;
                                 header.len += 1;
-                                // read length increment was handled when the data was copied into the serialization buffer.
+                                // read length increment was handled when the data was copied into the
+                                // serialization buffer.
                                 pre_buf[..4].copy_from_slice(
                                     //&(sbuf.len() as u32).to_le_bytes()
-                                    &((len + pos) as u32).to_le_bytes()
+                                    &((len + pos) as u32).to_le_bytes(),
                                 );
-                                pre_buf[4..8].copy_from_slice(
-                                    &(pos as u32).to_le_bytes()
-                                );
+                                pre_buf[4..8].copy_from_slice(&(pos as u32).to_le_bytes());
                                 (_, buf) = sbuf.split_at_mut(len + pos);
                             }
                             SerializeResult::Failure(key_name) => {
-                                log::debug!("ran out of space filling buffer, pushing {} back into the queue", key_name);
+                                log::debug!(
+                                    "ran out of space filling buffer, pushing {} back into the queue",
+                                    key_name
+                                );
                                 // data didn't fit, quit with finished = false;
                                 state.key_list.push(key_name);
                                 break;
                             }
                         }
-                        #[cfg(feature="perfcounter")]
-                        pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 6, std::line!());
+                        #[cfg(feature = "perfcounter")]
+                        pddb_os.perf_entry(
+                            FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                            perflib::PERFMETA_ENDBLOCK,
+                            6,
+                            std::line!(),
+                        );
                     }
                     if finished {
                         header.code = PddbBulkReadCode::Last as u32;
                     } else {
                         header.code = PddbBulkReadCode::Streaming as u32;
                     }
-                    header_buf.copy_from_slice(
-                        header.deref()
-                    );
+                    header_buf.copy_from_slice(header.deref());
                     // update the last access time
                     state.last_time = tt.elapsed_ms();
                 } else {
-                    log::warn!("This should be unreachable, the state should always be initialized by this point");
+                    log::warn!(
+                        "This should be unreachable, the state should always be initialized by this point"
+                    );
                 }
                 if finished {
                     bulkread_state = None;
                 }
-                #[cfg(feature="perfcounter")]
-                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 5, std::line!());
+                #[cfg(feature = "perfcounter")]
+                pddb_os.perf_entry(
+                    FILE_ID_SERVICES_PDDB_SRC_MAIN,
+                    perflib::PERFMETA_ENDBLOCK,
+                    5,
+                    std::line!(),
+                );
             }
 
             Opcode::SeekKeyStd => {
@@ -1737,11 +2009,19 @@ fn wrapped_main() -> ! {
                 if let Some(scalar) = msg.body.scalar_message() {
                     // NOTE: endian swap for compatibility with `std`
                     let seek_by = (((scalar.arg3 as u32) as u64) << 32) | ((scalar.arg2 as u32) as u64);
-                    let result = libstd::seek_key(scalar.arg1, seek_by, fd_mapping.entry(msg.sender.pid()).or_default(), fd);
+                    let result = libstd::seek_key(
+                        scalar.arg1,
+                        seek_by,
+                        fd_mapping.entry(msg.sender.pid()).or_default(),
+                        fd,
+                    );
                     if msg.body.is_blocking() {
                         match result {
-                            Ok(offset) => xous::return_scalar2(msg.sender, offset as usize, (offset >> 32) as usize).ok(),
-                            Err(e) =>xous::return_scalar(msg.sender, e as usize).ok(),
+                            Ok(offset) => {
+                                xous::return_scalar2(msg.sender, offset as usize, (offset >> 32) as usize)
+                                    .ok()
+                            }
+                            Err(e) => xous::return_scalar(msg.sender, e as usize).ok(),
                         };
                     }
                 }
@@ -1751,25 +2031,36 @@ fn wrapped_main() -> ! {
                 let fd = (msg.body.id() >> 16) & 0xffff;
                 if let Some(mem) = msg.body.memory_message_mut() {
                     mem.offset = None;
-                    if let Err(e) = libstd::read_key(mem, &mut pddb_os, &mut basis_cache, fd_mapping.entry(msg.sender.pid()).or_default(), fd) {
+                    if let Err(e) = libstd::read_key(
+                        mem,
+                        &mut pddb_os,
+                        &mut basis_cache,
+                        fd_mapping.entry(msg.sender.pid()).or_default(),
+                        fd,
+                    ) {
                         mem.offset = xous::MemoryAddress::new(e as usize);
                     }
                 }
             }
 
             Opcode::WriteKey => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
                 let token = pbuf.token;
                 if let Some(rec) = token_dict.get(&token) {
                     for basis in basis_cache.access_list().iter() {
-                        let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
+                        let temp = if let Some(name) = &rec.basis { Some(name) } else { Some(basis) };
                         log::debug!("write (spec: {:?}){:?} {}", rec.basis, temp, rec.key);
-                        match basis_cache.key_update(&mut pddb_os,
-                            &rec.dict, &rec.key,
-                            &pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
-                            rec.alloc_hint, if let Some (name) = &rec.basis {Some(&name)} else {Some(basis)},
-                            false
+                        match basis_cache.key_update(
+                            &mut pddb_os,
+                            &rec.dict,
+                            &rec.key,
+                            &pbuf.data[..pbuf.len as usize],
+                            Some(pbuf.position as usize),
+                            rec.alloc_hint,
+                            if let Some(name) = &rec.basis { Some(&name) } else { Some(basis) },
+                            false,
                         ) {
                             Ok(_) => {
                                 pbuf.retcode = PddbRetcode::Ok;
@@ -1777,10 +2068,12 @@ fn wrapped_main() -> ! {
                             }
                             Err(e) => match e.kind() {
                                 std::io::ErrorKind::NotFound => pbuf.retcode = PddbRetcode::BasisLost,
-                                std::io::ErrorKind::UnexpectedEof => pbuf.retcode = PddbRetcode::UnexpectedEof,
+                                std::io::ErrorKind::UnexpectedEof => {
+                                    pbuf.retcode = PddbRetcode::UnexpectedEof
+                                }
                                 std::io::ErrorKind::OutOfMemory => pbuf.retcode = PddbRetcode::DiskFull,
                                 _ => pbuf.retcode = PddbRetcode::InternalError,
-                            }
+                            },
                         }
                     }
                 } else {
@@ -1796,7 +2089,13 @@ fn wrapped_main() -> ! {
                 let fd = (msg.body.id() >> 16) & 0xffff;
                 if let Some(mem) = msg.body.memory_message_mut() {
                     mem.offset = None;
-                    if let Err(e) = libstd::write_key(mem, &mut pddb_os, &mut basis_cache, fd_mapping.entry(msg.sender.pid()).or_default(), fd) {
+                    if let Err(e) = libstd::write_key(
+                        mem,
+                        &mut pddb_os,
+                        &mut basis_cache,
+                        fd_mapping.entry(msg.sender.pid()).or_default(),
+                        fd,
+                    ) {
                         mem.offset = xous::MemoryAddress::new(e as usize);
                     }
                 }
@@ -1806,10 +2105,17 @@ fn wrapped_main() -> ! {
                 match basis_cache.sync(&mut pddb_os, None, if cleanup == 1 { true } else { false }) {
                     Ok(_) => xous::return_scalar(msg.sender, PddbRetcode::Ok.to_usize().unwrap()).unwrap(),
                     Err(e) => match e.kind() {
-                        std::io::ErrorKind::OutOfMemory => xous::return_scalar(msg.sender, PddbRetcode::DiskFull.to_usize().unwrap()).unwrap(),
-                        std::io::ErrorKind::NotFound => xous::return_scalar(msg.sender, PddbRetcode::BasisLost.to_usize().unwrap()).unwrap(),
-                        _ => xous::return_scalar(msg.sender, PddbRetcode::InternalError.to_usize().unwrap()).unwrap(),
-                    }
+                        std::io::ErrorKind::OutOfMemory => {
+                            xous::return_scalar(msg.sender, PddbRetcode::DiskFull.to_usize().unwrap())
+                                .unwrap()
+                        }
+                        std::io::ErrorKind::NotFound => {
+                            xous::return_scalar(msg.sender, PddbRetcode::BasisLost.to_usize().unwrap())
+                                .unwrap()
+                        }
+                        _ => xous::return_scalar(msg.sender, PddbRetcode::InternalError.to_usize().unwrap())
+                            .unwrap(),
+                    },
                 };
             }),
 
@@ -1821,25 +2127,29 @@ fn wrapped_main() -> ! {
                     note.push_str("\n");
                 }
                 modals.show_notification(&note, None).expect("couldn't show basis list");
-            },
+            }
             Opcode::MenuChangePin => {
                 if basis_cache.basis_count() == 0 {
-                    modals.show_notification(t!("pddb.changepin.mountfirst", locales::LANG), None)
+                    modals
+                        .show_notification(t!("pddb.changepin.mountfirst", locales::LANG), None)
                         .expect("couldn't show notification");
                     continue;
                 }
                 match pddb_os.pddb_change_pin(&modals) {
-                    Ok(_) => modals.show_notification(t!("pddb.changepin.success", locales::LANG), None)
-                                .expect("couldn't show notification"),
+                    Ok(_) => modals
+                        .show_notification(t!("pddb.changepin.success", locales::LANG), None)
+                        .expect("couldn't show notification"),
                     Err(e) => {
                         log::error!("Error changing PIN: {:?}", e);
-                        modals.show_notification(t!("pddb.changepin.nochange", locales::LANG), None)
-                        .expect("couldn't show notification");
+                        modals
+                            .show_notification(t!("pddb.changepin.nochange", locales::LANG), None)
+                            .expect("couldn't show notification");
                     }
                 }
-            },
+            }
             Opcode::RekeyPddb => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let rekey_op = buffer.to_original::<PddbRekeyOp, _>().unwrap();
                 let result = basis_cache.rekey(&mut pddb_os, rekey_op);
                 buffer.replace(result).unwrap();
@@ -1853,10 +2163,19 @@ fn wrapped_main() -> ! {
                 xous::return_scalar(msg.sender, 1).ok();
             }
             Opcode::Prune => {
-                log::info!("PDDB prune manual request: {} heap, {} cache", latest_heap, basis_cache.cache_size());
+                log::info!(
+                    "PDDB prune manual request: {} heap, {} cache",
+                    latest_heap,
+                    basis_cache.cache_size()
+                );
                 let pruned = basis_cache.cache_prune(&mut pddb_os, HEAP_GC_TARGET);
                 latest_heap = heap_usage();
-                log::info!("{} pruned, now: {} heap, {} cache", pruned, latest_heap, basis_cache.cache_size());
+                log::info!(
+                    "{} pruned, now: {} heap, {} cache",
+                    pruned,
+                    latest_heap,
+                    basis_cache.cache_size()
+                );
                 xous::return_scalar(msg.sender, 1).ok();
             }
             #[cfg(not(target_os = "xous"))]
@@ -1866,14 +2185,17 @@ fn wrapped_main() -> ! {
                 match dbg.request {
                     DebugRequest::Dump => {
                         log::info!("dumping pddb to {}", dbg.dump_name.as_str().unwrap());
-                        #[cfg(not(feature="autobasis"))]
+                        #[cfg(not(feature = "autobasis"))]
                         pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), None);
-                        #[cfg(feature="autobasis")]
+                        #[cfg(feature = "autobasis")]
                         {
                             let export_extra = pddb_os.dbg_extra();
-                            pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), Some(&export_extra));
+                            pddb_os.dbg_dump(
+                                Some(dbg.dump_name.as_str().unwrap().to_string()),
+                                Some(&export_extra),
+                            );
                         }
-                    },
+                    }
                     DebugRequest::Remount => {
                         log::info!("attempting remount");
                         basis_cache = BasisCache::new(); // this effectively erases the PDDB from memory
@@ -1883,7 +2205,7 @@ fn wrapped_main() -> ! {
                         } else {
                             log::info!("remount failed");
                         }
-                    },
+                    }
                     DebugRequest::Prune => {
                         log::info!("initiating prune");
                         basis_cache.cache_prune(&mut pddb_os, 262144);
@@ -1894,26 +2216,24 @@ fn wrapped_main() -> ! {
                     }
                 }
             }
-            #[cfg(all(feature="pddbtest", feature="autobasis"))]
+            #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
             Opcode::BasisTesting => xous::msg_scalar_unpack!(msg, op, valid, _, _, {
                 let mut config: [Option<bool>; 32] = [None::<bool>; 32];
                 for i in 0..32 {
                     if ((1 << i) & valid) != 0 {
-                        config[i] = Some(
-                            ((1 << i) & op) != 0
-                        )
+                        config[i] = Some(((1 << i) & op) != 0)
                     }
                 }
                 pddb_os.basis_testing(&mut basis_cache, &config);
             }),
             #[allow(unused_variables)]
             Opcode::InternalTest => xous::msg_blocking_scalar_unpack!(msg, a0, a1, a2, a3, {
-                #[cfg(feature="hwtest")]
+                #[cfg(feature = "hwtest")]
                 {
                     let errs = pddb_os.stresstest_read(a0 as u32, a1 as u32);
                     xous::return_scalar2(msg.sender, errs as usize, 0).ok();
                 }
-                #[cfg(not(feature="hwtest"))]
+                #[cfg(not(feature = "hwtest"))]
                 xous::return_scalar2(msg.sender, 0, 0).ok();
             }),
             Opcode::TryUnmount => {
@@ -1930,11 +2250,15 @@ fn wrapped_main() -> ! {
                     basis_cache.basis_unmount(&mut pddb_os, &basis).expect("can't unmount extra bases");
                 }
                 if basis_cache.basis_list().len() != 1 {
-                    log::warn!("Couldn't unmount extra bases before unmounting the system basis. Failing unmount operation!");
+                    log::warn!(
+                        "Couldn't unmount extra bases before unmounting the system basis. Failing unmount operation!"
+                    );
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
                 // finally, unmount the system basis
-                basis_cache.basis_unmount(&mut pddb_os, PDDB_DEFAULT_SYSTEM_BASIS).expect("can't unmount system basis");
+                basis_cache
+                    .basis_unmount(&mut pddb_os, PDDB_DEFAULT_SYSTEM_BASIS)
+                    .expect("can't unmount system basis");
                 if basis_monitor_notifications.len() > 0 {
                     notify_basis_change(&mut basis_monitor_notifications, basis_cache.basis_list());
                 }
@@ -1947,14 +2271,13 @@ fn wrapped_main() -> ! {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }
-            Opcode::PddbHalt => {
-                loop {
-                    log::info!("PDDB operation halted. No new PDDB requests will be honored!");
-                    tt.sleep_ms(10_000).unwrap();
-                }
-            }
+            Opcode::PddbHalt => loop {
+                log::info!("PDDB operation halted. No new PDDB requests will be honored!");
+                tt.sleep_ms(10_000).unwrap();
+            },
             Opcode::ComputeBackupHashes => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let result = pddb_os.checksums(Some(&modals));
                 buffer.replace(result).unwrap();
             }
@@ -1962,10 +2285,11 @@ fn wrapped_main() -> ! {
                 log::warn!("quitting the PDDB server");
                 send_message(
                     pw_cid,
-                    Message::new_blocking_scalar(PwManagerOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0)
-                ).unwrap();
+                    Message::new_blocking_scalar(PwManagerOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .unwrap();
                 xous::return_scalar(msg.sender, 0).unwrap();
-                break
+                break;
             }
             Opcode::UncacheAndAskPassword => {
                 // lock_and_ensure_password(&modals, &mut pddb_os, pw_cid);
@@ -1989,9 +2313,7 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
     log::info!("Requesting login password");
     loop {
         match pddb_os.try_login() {
-            PasswordState::Correct => {
-                return PasswordState::Correct
-            }
+            PasswordState::Correct => return PasswordState::Correct,
             PasswordState::Incorrect(failcount) => {
                 pddb_os.clear_password(); // clear the bad password entry
                 log::info!("{}PDDB.BADPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
@@ -2000,19 +2322,19 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
                     return PasswordState::ForcedAbort(failcount);
                 } else {
                     // check if the user wants to re-try or not.
-                    modals.add_list_item(t!("pddb.yes", locales::LANG)).expect("couldn't build radio item list");
-                    modals.add_list_item(t!("pddb.no", locales::LANG)).expect("couldn't build radio item list");
+                    modals
+                        .add_list_item(t!("pddb.yes", locales::LANG))
+                        .expect("couldn't build radio item list");
+                    modals
+                        .add_list_item(t!("pddb.no", locales::LANG))
+                        .expect("couldn't build radio item list");
                     let fail_string = format!(
                         "{}\n{}",
                         t!("pddb.badpass", locales::LANG),
-                        t!("pddb.failed_attempts", locales::LANG)
-                        .replace("{fails}", &failcount.to_string())
+                        t!("pddb.failed_attempts", locales::LANG).replace("{fails}", &failcount.to_string())
                     );
-                    let prompt = if failcount == 0 {
-                        t!("pddb.badpass", locales::LANG)
-                    } else {
-                        &fail_string
-                    };
+                    let prompt =
+                        if failcount == 0 { t!("pddb.badpass", locales::LANG) } else { &fail_string };
                     match modals.get_radiobutton(prompt) {
                         Ok(response) => {
                             if response.as_str() == t!("pddb.yes", locales::LANG) {
@@ -2029,12 +2351,12 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
             }
             PasswordState::Uninit => {
                 // check for a migration event
-                #[cfg(feature="migration1")]
+                #[cfg(feature = "migration1")]
                 {
                     if pddb_os.migration_v1_to_v2(_pw_cid) == PasswordState::Correct {
                         if pddb_os.try_login() == PasswordState::Correct {
                             log::info!("Migration v1->v2 successful");
-                            return PasswordState::Correct
+                            return PasswordState::Correct;
                         } else {
                             log::warn!("Migration v1->v2 succeeded, but somehow the v2 remount failed.");
                         }
@@ -2052,7 +2374,7 @@ fn try_mount_or_format(
     basis_cache: &mut BasisCache,
     pw_state: PasswordState,
     time_resetter: xous::CID,
-    basis_monitor_notifications: &mut Vec::<xous::MessageEnvelope>
+    basis_monitor_notifications: &mut Vec<xous::MessageEnvelope>,
 ) -> bool {
     log::info!("Attempting to mount the PDDB");
     if pw_state == PasswordState::Correct {
@@ -2064,13 +2386,13 @@ fn try_mount_or_format(
                 notify_basis_change(basis_monitor_notifications, basis_cache.basis_list());
             }
             modals.dynamic_notification_close().unwrap();
-            return true
+            return true;
         }
         modals.dynamic_notification_close().unwrap();
     }
     // correct password but no mount -> offer to format; uninit -> offer to format
     if pw_state == PasswordState::Correct || pw_state == PasswordState::Uninit {
-        #[cfg(any(feature = "precursor", feature = "renode", feature="test-rekey"))]
+        #[cfg(any(feature = "precursor", feature = "renode", feature = "test-rekey"))]
         {
             log::debug!("PDDB did not mount; requesting format");
             modals.add_list_item(t!("pddb.okay", locales::LANG)).expect("couldn't build radio item list");
@@ -2093,8 +2415,12 @@ fn try_mount_or_format(
             if do_format {
                 let fast: bool;
                 if false {
-                    modals.add_list_item(t!("pddb.no", locales::LANG)).expect("couldn't build radio item list");
-                    modals.add_list_item(t!("pddb.yes", locales::LANG)).expect("couldn't build radio item list");
+                    modals
+                        .add_list_item(t!("pddb.no", locales::LANG))
+                        .expect("couldn't build radio item list");
+                    modals
+                        .add_list_item(t!("pddb.yes", locales::LANG))
+                        .expect("couldn't build radio item list");
                     match modals.get_radiobutton(t!("pddb.devbypass", locales::LANG)) {
                         Ok(response) => {
                             if response.as_str() == t!("pddb.yes", locales::LANG) {
@@ -2113,16 +2439,19 @@ fn try_mount_or_format(
 
                 pddb_os.pddb_format(fast, Some(&modals)).expect("couldn't format PDDB");
 
-                // reset the RTC at the point of PDDB format. It is done now because at this point we know that
-                // no time offset keys can exist in the PDDB, and as a measure of good hygiene we want to restart
-                // our RTC counter from a random duration between epoch and 10 years to give some deniability about
-                // how long the device has been in use.
-                let _ = xous::send_message(time_resetter,
+                // reset the RTC at the point of PDDB format. It is done now because at this point we know
+                // that no time offset keys can exist in the PDDB, and as a measure of good
+                // hygiene we want to restart our RTC counter from a random duration between
+                // epoch and 10 years to give some deniability about how long the device has
+                // been in use.
+                let _ = xous::send_message(
+                    time_resetter,
                     xous::Message::new_blocking_scalar(
                         0, // the ID is "hard coded" using enumerated discriminants
-                        0, 0, 0, 0
-                    )
-                ).expect("couldn't reset time");
+                        0, 0, 0, 0,
+                    ),
+                )
+                .expect("couldn't reset time");
                 modals.dynamic_notification(Some(t!("pddb.waitmount", locales::LANG)), None).unwrap();
                 if let Some(sys_basis) = pddb_os.pddb_mount() {
                     log::info!("PDDB mount operation finished successfully");
@@ -2144,15 +2473,17 @@ fn try_mount_or_format(
                 false
             }
         }
-        #[cfg(not(any(feature = "precursor", feature = "renode", feature="test-rekey")))]
+        #[cfg(not(any(feature = "precursor", feature = "renode", feature = "test-rekey")))]
         {
             pddb_os.pddb_format(false, Some(&modals)).expect("couldn't format PDDB");
-            let _ = xous::send_message(time_resetter,
+            let _ = xous::send_message(
+                time_resetter,
                 xous::Message::new_blocking_scalar(
                     0, // the ID is "hard coded" using enumerated discriminants
-                    0, 0, 0, 0
-                )
-            ).expect("couldn't reset time");
+                    0, 0, 0, 0,
+                ),
+            )
+            .expect("couldn't reset time");
             pddb_os.dbg_dump(Some("full".to_string()), None);
             if let Some(sys_basis) = pddb_os.pddb_mount() {
                 log::info!("PDDB mount operation finished successfully");
@@ -2172,14 +2503,16 @@ fn try_mount_or_format(
     }
 }
 
-// Test cases that have been coded to run directly on hardware (that is, they do not require host-OS debug features)
+// Test cases that have been coded to run directly on hardware (that is, they do not require host-OS debug
+// features)
 #[allow(dead_code)]
 pub(crate) fn manual_testcase(hw: &mut PddbOs) {
     log::info!("Initializing disk...");
     hw.pddb_format(true, None).unwrap();
     log::info!("Done initializing disk");
 
-    // it's a vector because order is important: by default access to keys/dicts go into the latest entry first, and then recurse to the earliest
+    // it's a vector because order is important: by default access to keys/dicts go into the latest entry
+    // first, and then recurse to the earliest
     let mut basis_cache = BasisCache::new();
 
     log::info!("Attempting to mount the PDDB");
@@ -2194,37 +2527,83 @@ pub(crate) fn manual_testcase(hw: &mut PddbOs) {
     // add a "system settings" dictionary to the default basis
     log::info!("adding 'system settings' dictionary");
     basis_cache.dict_add(hw, "system settings", None).expect("couldn't add system settings dictionary");
-    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/Kosagi", "my_wpa_key_here".as_bytes(), None, None, None, false).expect("couldn't add a key");
+    basis_cache
+        .key_update(
+            hw,
+            "system settings",
+            "wifi/wpa_keys/Kosagi",
+            "my_wpa_key_here".as_bytes(),
+            None,
+            None,
+            None,
+            false,
+        )
+        .expect("couldn't add a key");
     let mut readback = [0u8; 15];
     match basis_cache.key_read(hw, "system settings", "wifi/wpa_keys/Kosagi", &mut readback, None, None) {
         Ok(readsize) => {
             log::info!("read back {} bytes", readsize);
             log::info!("read data: {}", String::from_utf8_lossy(&readback));
-        },
+        }
         Err(e) => {
             log::info!("couldn't read data: {:?}", e);
         }
     }
-    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/e4200", "12345678".as_bytes(), None, None, None, false).expect("couldn't add a key");
+    basis_cache
+        .key_update(
+            hw,
+            "system settings",
+            "wifi/wpa_keys/e4200",
+            "12345678".as_bytes(),
+            None,
+            None,
+            None,
+            false,
+        )
+        .expect("couldn't add a key");
 
     // add a "big" key
     let mut bigdata = [0u8; 5000];
     for (i, d) in bigdata.iter_mut().enumerate() {
         *d = i as u8;
     }
-    basis_cache.key_update(hw, "system settings", "big_pool1", &bigdata, None, None, None, false).expect("couldn't add a key");
+    basis_cache
+        .key_update(hw, "system settings", "big_pool1", &bigdata, None, None, None, false)
+        .expect("couldn't add a key");
 
     basis_cache.dict_add(hw, "test_dict_2", None).expect("couldn't add test dictionary 2");
-    basis_cache.key_update(hw, "test_dict_2", "test key in dict 2", "some data".as_bytes(), None, Some(128), None, false).expect("couldn't add a key to second dict");
+    basis_cache
+        .key_update(
+            hw,
+            "test_dict_2",
+            "test key in dict 2",
+            "some data".as_bytes(),
+            None,
+            Some(128),
+            None,
+            false,
+        )
+        .expect("couldn't add a key to second dict");
 
-    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/e4200", "ABC".as_bytes(), Some(2), None, None, false).expect("couldn't update e4200 key");
+    basis_cache
+        .key_update(
+            hw,
+            "system settings",
+            "wifi/wpa_keys/e4200",
+            "ABC".as_bytes(),
+            Some(2),
+            None,
+            None,
+            false,
+        )
+        .expect("couldn't update e4200 key");
 
     log::info!("test readback of wifi/wpa_keys/e4200");
     match basis_cache.key_read(hw, "system settings", "wifi/wpa_keys/e4200", &mut readback, None, None) {
         Ok(readsize) => {
             log::info!("read back {} bytes", readsize);
             log::info!("read data: {}", String::from_utf8_lossy(&readback));
-        },
+        }
         Err(e) => {
             log::info!("couldn't read data: {:?}", e);
         }
@@ -2253,7 +2632,7 @@ pub(crate) fn hw_testcase(pddb_os: &mut PddbOs) {
         Ok(readsize) => {
             log::info!("read back {} bytes", readsize);
             log::info!("read data: {}", String::from_utf8_lossy(&readback));
-        },
+        }
         Err(e) => {
             log::info!("couldn't read data: {:?}", e);
         }
@@ -2263,7 +2642,11 @@ pub(crate) fn hw_testcase(pddb_os: &mut PddbOs) {
     pddb_os.dbg_dump(Some("manual".to_string()), None);
 }
 
-fn notify_of_disconnect(pddb_os: &mut PddbOs, token_dict: &HashMap::<ApiToken, TokenRecord>, basis_cache: &mut BasisCache) {
+fn notify_of_disconnect(
+    pddb_os: &mut PddbOs,
+    token_dict: &HashMap<ApiToken, TokenRecord>,
+    basis_cache: &mut BasisCache,
+) {
     // 1. search to see if any of the active tokens are are in our token_dict
     // 2. notify them of the disconnect, if there is a callback set.
     for (api_key, entry) in token_dict.iter() {
@@ -2271,35 +2654,54 @@ fn notify_of_disconnect(pddb_os: &mut PddbOs, token_dict: &HashMap::<ApiToken, T
         if let Some(cb) = entry.conn {
             match basis_cache.key_attributes(pddb_os, &entry.dict, &entry.key, entry.basis.as_deref()) {
                 Ok(_) => {
-                    match send_message(cb, Message::new_scalar(
-                        pddb::CbOp::Change.to_usize().unwrap(),
-                        api_key[0] as _,
-                        api_key[1] as _,
-                        api_key[2] as _,
-                        0,
-                    )) {
+                    match send_message(
+                        cb,
+                        Message::new_scalar(
+                            pddb::CbOp::Change.to_usize().unwrap(),
+                            api_key[0] as _,
+                            api_key[1] as _,
+                            api_key[2] as _,
+                            0,
+                        ),
+                    ) {
                         Err(e) => {
-                            log::warn!("Callback on {}:{} for basis removal failed: {:?}", &entry.dict, &entry.key, e);
-                        },
+                            log::warn!(
+                                "Callback on {}:{} for basis removal failed: {:?}",
+                                &entry.dict,
+                                &entry.key,
+                                e
+                            );
+                        }
                         _ => {
-                            log::debug!("Callback on {}:{} for basis removal success", &entry.dict, &entry.key);
+                            log::debug!(
+                                "Callback on {}:{} for basis removal success",
+                                &entry.dict,
+                                &entry.key
+                            );
                         }
                     }
-                },
+                }
                 Err(_) => {
-                    // do nothing. It's probably not right that a key doesn't exist that we don't have in our records, but don't crash the system.
-                    log::warn!("Disconnect basis inconsistent state, {}:{} not found", &entry.dict, &entry.key);
+                    // do nothing. It's probably not right that a key doesn't exist that we don't have in our
+                    // records, but don't crash the system.
+                    log::warn!(
+                        "Disconnect basis inconsistent state, {}:{} not found",
+                        &entry.dict,
+                        &entry.key
+                    );
                 }
             }
         }
     }
 }
 
-fn notify_basis_change(basis_monitor_notifications: &mut Vec::<xous::MessageEnvelope>, basis_list: Vec::<String>) {
+fn notify_basis_change(
+    basis_monitor_notifications: &mut Vec<xous::MessageEnvelope>,
+    basis_list: Vec<String>,
+) {
     for mut sender in basis_monitor_notifications.drain(..) {
-        let mut response = unsafe {
-            Buffer::from_memory_message_mut(sender.body.memory_message_mut().unwrap())
-        };
+        let mut response =
+            unsafe { Buffer::from_memory_message_mut(sender.body.memory_message_mut().unwrap()) };
         let mut list_ipc = response.to_original::<PddbBasisList, _>().unwrap();
         for (src, dst) in basis_list.iter().zip(list_ipc.list.iter_mut()) {
             dst.clear();
@@ -2311,7 +2713,9 @@ fn notify_basis_change(basis_monitor_notifications: &mut Vec::<xous::MessageEnve
 }
 
 pub(crate) fn heap_usage() -> usize {
-    match xous::rsyscall(xous::SysCall::IncreaseHeap(0, xous::MemoryFlags::R)).expect("couldn't get heap size") {
+    match xous::rsyscall(xous::SysCall::IncreaseHeap(0, xous::MemoryFlags::R))
+        .expect("couldn't get heap size")
+    {
         xous::Result::MemoryRange(m) => {
             let usage = m.len();
             usage
@@ -2319,7 +2723,7 @@ pub(crate) fn heap_usage() -> usize {
         _ => {
             log::error!("Couldn't measure heap usage");
             0
-         },
+        }
     }
 }
 
@@ -2333,7 +2737,7 @@ struct BulkReadState {
     /// the dictionary to read
     dict: String,
     /// list of keys in the dictionary. Entries are removed as they are serialized.
-    key_list: Vec::<String>,
+    key_list: Vec<String>,
     /// total number of keys to send (e.g. initial key_list.len())
     total_keys: usize,
     /// Each buffer can hold multiple keys; a single buffer may be re-used several

@@ -1,13 +1,14 @@
 #![cfg_attr(not(target_os = "none"), allow(dead_code))]
 
-use crate::Block;
 use cipher::{
     consts::{U1, U16, U32},
+    generic_array::GenericArray,
     inout::InOut,
-    AlgorithmName, BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt,
-    BlockSizeUser, Key, KeyInit, KeySizeUser, ParBlocksSizeUser,
-    generic_array::GenericArray
+    AlgorithmName, BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt, BlockSizeUser, Key,
+    KeyInit, KeySizeUser, ParBlocksSizeUser,
 };
+
+use crate::Block;
 pub(crate) type BatchBlocks = GenericArray<Block, U1>;
 
 use core::{arch::global_asm, convert::TryInto, fmt};
@@ -306,8 +307,7 @@ pub(crate) const TD3: [u32; 256] = [
 
 pub(crate) const RCON: [u32; 10] = [
     0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000, 0x80000000,
-    0x1B000000,
-    0x36000000, /* for 128-bit blocks, Rijndael never uses more than 10 rcon values */
+    0x1B000000, 0x36000000, /* for 128-bit blocks, Rijndael never uses more than 10 rcon values */
 ];
 
 global_asm!(
@@ -315,77 +315,62 @@ global_asm!(
     "vex_aes_enc_id_0:",
     "    .word 0x00b5050b", // vex_aes_enc_id a0, a1, a0, #0
     "    ret",
-
     ".global vex_aes_enc_id_1",
     "vex_aes_enc_id_1:",
     "    .word 0x10b5050b", // vex_aes_enc_id a0, a1, a0, #1
     "    ret",
-
     ".global vex_aes_enc_id_2",
     "vex_aes_enc_id_2:",
     "    .word 0x20b5050b", // vex_aes_enc_id a0, a1, a0, #2
     "    ret",
-
     ".global vex_aes_enc_id_3",
     "vex_aes_enc_id_3:",
     "    .word 0x30b5050b", // vex_aes_enc_id a0, a1, a0, #3
     "    ret",
-
     ".global vex_aes_enc_id_last_0",
     "vex_aes_enc_id_last_0:",
     "    .word 0x04b5050b", // vex_aes_enc_id_last a0, a1, a0, #0
     "    ret",
-
     ".global vex_aes_enc_id_last_1",
     "vex_aes_enc_id_last_1:",
     "    .word 0x14b5050b", // vex_aes_enc_id_last a0, a1, a0, #1
     "    ret",
-
     ".global vex_aes_enc_id_last_2",
     "vex_aes_enc_id_last_2:",
     "    .word 0x24b5050b", // vex_aes_enc_id_last a0, a1, a0, #2
     "    ret",
-
     ".global vex_aes_enc_id_last_3",
     "vex_aes_enc_id_last_3:",
     "    .word 0x34b5050b", // vex_aes_enc_id_last a0, a1, a0, #3
     "    ret",
-
     ".global vex_aes_dec_id_0",
     "vex_aes_dec_id_0:",
     "    .word 0x02b5050b", // vex_aes_dec_id a0, a1, a0, #0
     "    ret",
-
     ".global vex_aes_dec_id_1",
     "vex_aes_dec_id_1:",
     "    .word 0x12b5050b", // vex_aes_dec_id a0, a1, a0, #1
     "    ret",
-
     ".global vex_aes_dec_id_2",
     "vex_aes_dec_id_2:",
     "    .word 0x22b5050b", // vex_aes_dec_id a0, a1, a0, #2
     "    ret",
-
     ".global vex_aes_dec_id_3",
     "vex_aes_dec_id_3:",
     "    .word 0x32b5050b", // vex_aes_dec_id a0, a1, a0, #3
     "    ret",
-
     ".global vex_aes_dec_id_last_0",
     "vex_aes_dec_id_last_0:",
     "    .word 0x06b5050b", // vex_aes_dec_id_last a0, a1, a0, #0
     "    ret",
-
     ".global vex_aes_dec_id_last_1",
     "vex_aes_dec_id_last_1:",
     "    .word 0x16b5050b", // vex_aes_dec_id_last a0, a1, a0, #1
     "    ret",
-
     ".global vex_aes_dec_id_last_2",
     "vex_aes_dec_id_last_2:",
     "    .word 0x26b5050b", // vex_aes_dec_id_last a0, a1, a0, #2
     "    ret",
-
     ".global vex_aes_dec_id_last_3",
     "vex_aes_dec_id_last_3:",
     "    .word 0x36b5050b", // vex_aes_dec_id_last a0, a1, a0, #3
@@ -486,7 +471,7 @@ macro_rules! define_aes_impl {
         $doc:expr $(,)?
     ) => {
         #[doc=$doc]
-        #[doc = "block cipher"]
+        ///block cipher
         #[derive(Clone)]
         pub struct $name {
             enc_key: $vex_keys,
@@ -494,30 +479,25 @@ macro_rules! define_aes_impl {
         }
 
         impl $name {
-            pub fn key_size(&self) -> usize {
-                $key_bits as usize
-            }
+            pub fn key_size(&self) -> usize { $key_bits as usize }
+
             pub fn clear(&mut self) {
                 let nuke = self.enc_key.as_mut_ptr();
                 for i in 0..self.enc_key.len() {
-                    unsafe{nuke.add(i).write_volatile(0)};
+                    unsafe { nuke.add(i).write_volatile(0) };
                 }
                 let nuke = self.dec_key.as_mut_ptr();
                 for i in 0..self.dec_key.len() {
-                    unsafe{nuke.add(i).write_volatile(0)};
+                    unsafe { nuke.add(i).write_volatile(0) };
                 }
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
             }
 
             #[inline(always)]
-            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> {
-                $name_back_enc(self)
-            }
+            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> { $name_back_enc(self) }
 
             #[inline(always)]
-            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> {
-                $name_back_dec(self)
-            }
+            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> { $name_back_dec(self) }
         }
 
         impl KeySizeUser for $name {
@@ -527,10 +507,7 @@ macro_rules! define_aes_impl {
         impl KeyInit for $name {
             #[inline]
             fn new(key: &Key<Self>) -> Self {
-                Self {
-                    enc_key: $vex_enc_key_schedule(key),
-                    dec_key: $vex_dec_key_schedule(key),
-                }
+                Self { enc_key: $vex_enc_key_schedule(key), dec_key: $vex_dec_key_schedule(key) }
             }
         }
 
@@ -558,16 +535,12 @@ macro_rules! define_aes_impl {
 
         impl From<$name_enc> for $name {
             #[inline]
-            fn from(enc: $name_enc) -> $name {
-                enc.inner
-            }
+            fn from(enc: $name_enc) -> $name { enc.inner }
         }
 
         impl From<&$name_enc> for $name {
             #[inline]
-            fn from(enc: &$name_enc) -> $name {
-                enc.inner.clone()
-            }
+            fn from(enc: &$name_enc) -> $name { enc.inner.clone() }
         }
 
         impl fmt::Debug for $name {
@@ -577,13 +550,11 @@ macro_rules! define_aes_impl {
         }
 
         impl AlgorithmName for $name {
-            fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str(stringify!($name))
-            }
+            fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(stringify!($name)) }
         }
 
         #[doc=$doc]
-        #[doc = "block cipher (encrypt-only)"]
+        ///block cipher (encrypt-only)
         #[derive(Clone)]
         pub struct $name_enc {
             inner: $name,
@@ -591,9 +562,7 @@ macro_rules! define_aes_impl {
 
         impl $name_enc {
             #[inline(always)]
-            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> {
-                self.inner.get_enc_backend()
-            }
+            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> { self.inner.get_enc_backend() }
         }
 
         impl BlockCipher for $name_enc {}
@@ -633,7 +602,7 @@ macro_rules! define_aes_impl {
         }
 
         #[doc=$doc]
-        #[doc = "block cipher (decrypt-only)"]
+        ///block cipher (decrypt-only)
         #[derive(Clone)]
         pub struct $name_dec {
             inner: $name,
@@ -641,9 +610,7 @@ macro_rules! define_aes_impl {
 
         impl $name_dec {
             #[inline(always)]
-            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> {
-                self.inner.get_dec_backend()
-            }
+            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> { self.inner.get_dec_backend() }
         }
 
         impl BlockCipher for $name_dec {}
@@ -662,18 +629,12 @@ macro_rules! define_aes_impl {
 
         impl From<$name_enc> for $name_dec {
             #[inline]
-            fn from(enc: $name_enc) -> $name_dec {
-                Self { inner: enc.inner }
-            }
+            fn from(enc: $name_enc) -> $name_dec { Self { inner: enc.inner } }
         }
 
         impl From<&$name_enc> for $name_dec {
             #[inline]
-            fn from(enc: &$name_enc) -> $name_dec {
-                Self {
-                    inner: enc.inner.clone(),
-                }
-            }
+            fn from(enc: &$name_enc) -> $name_dec { Self { inner: enc.inner.clone() } }
         }
 
         impl BlockSizeUser for $name_dec {
@@ -711,7 +672,7 @@ macro_rules! define_aes_impl {
         impl<'a> BlockBackend for $name_back_enc<'a> {
             #[inline(always)]
             fn proc_block(&mut self, mut block: InOut<'_, '_, Block>) {
-                let res =  $vex_encrypt(&self.0.enc_key, block.clone_in().as_slice(), $rounds);
+                let res = $vex_encrypt(&self.0.enc_key, block.clone_in().as_slice(), $rounds);
                 *block.get_out() = *Block::from_slice(&res);
             }
 
@@ -735,7 +696,7 @@ macro_rules! define_aes_impl {
         impl<'a> BlockBackend for $name_back_dec<'a> {
             #[inline(always)]
             fn proc_block(&mut self, mut block: InOut<'_, '_, Block>) {
-                let res =  $vex_decrypt(&self.0.dec_key, block.clone_in().as_slice(), $rounds);
+                let res = $vex_decrypt(&self.0.dec_key, block.clone_in().as_slice(), $rounds);
                 *block.get_out() = *Block::from_slice(&res);
             }
 

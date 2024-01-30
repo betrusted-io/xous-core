@@ -1,7 +1,8 @@
+use std::sync::Mutex;
+
 use lazy_static::lazy_static;
 
 use crate::BootConfig;
-use std::sync::Mutex;
 
 fn get_args_bin(idx: usize) -> &'static [u8] {
     match idx {
@@ -12,8 +13,7 @@ fn get_args_bin(idx: usize) -> &'static [u8] {
 }
 
 const REGION_COUNT: usize = 8;
-static mut MEMORY_REGIONS: [[usize; 1024 * 1024]; REGION_COUNT] =
-    [[0usize; 1024 * 1024]; REGION_COUNT];
+static mut MEMORY_REGIONS: [[usize; 1024 * 1024]; REGION_COUNT] = [[0usize; 1024 * 1024]; REGION_COUNT];
 lazy_static! {
     static ref REGIONS_CHECKED_OUT: Mutex<[bool; REGION_COUNT]> = Mutex::new([false; REGION_COUNT]);
 }
@@ -37,10 +37,7 @@ impl FakeMemory {
             let found_idx = found_idx.expect("no available memory regions found");
             println!("Checking out region {}", found_idx);
             store[found_idx] = true;
-            FakeMemory {
-                region: &mut MEMORY_REGIONS[found_idx],
-                index: found_idx,
-            }
+            FakeMemory { region: &mut MEMORY_REGIONS[found_idx], index: found_idx }
         }
     }
 }
@@ -75,11 +72,7 @@ impl TestEnvironment {
         #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
         let ka = KernelArguments::new(args.as_ptr() as *const usize);
         #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
-        let mut cfg = BootConfig {
-            args: ka,
-            base_addr: ka.base as *const usize,
-            ..Default::default()
-        };
+        let mut cfg = BootConfig { args: ka, base_addr: ka.base as *const usize, ..Default::default() };
         crate::read_initial_config(&mut cfg);
 
         // Patch up the config memory address.  Ensure the range is on a "page" boundary.
@@ -95,10 +88,7 @@ impl TestEnvironment {
             fake_memory.region.len() * core::mem::size_of::<usize>()
         );
 
-        TestEnvironment {
-            cfg,
-            _mem: fake_memory,
-        }
+        TestEnvironment { cfg, _mem: fake_memory }
     }
 }
 
@@ -163,11 +153,7 @@ fn read_initial_config() {
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
     let ka = KernelArguments::new(args.as_ptr() as *const usize);
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
-    let mut cfg = BootConfig {
-        args: ka,
-        base_addr: ka.base as *const usize,
-        ..Default::default()
-    };
+    let mut cfg = BootConfig { args: ka, base_addr: ka.base as *const usize, ..Default::default() };
     crate::read_initial_config(&mut cfg);
 }
 
@@ -212,19 +198,13 @@ fn verify_kernel(cfg: &BootConfig, pid: usize, arg: &crate::args::KernelArgument
     let mut src_data = vec![];
     {
         for i in 0..(prog.text_size as usize) {
-            let word = unsafe {
-                (cfg.base_addr as *mut u32)
-                    .add((program_offset + i) / 4)
-                    .read()
-            };
+            let word = unsafe { (cfg.base_addr as *mut u32).add((program_offset + i) / 4).read() };
             src_text.push(word);
         }
 
         for i in 0..(prog.data_size as usize) {
             let word = unsafe {
-                (cfg.base_addr as *mut u32)
-                    .add((program_offset + prog.text_size as usize + i) / 4)
-                    .read()
+                (cfg.base_addr as *mut u32).add((program_offset + prog.text_size as usize + i) / 4).read()
             };
             src_data.push(word);
         }
@@ -240,11 +220,7 @@ fn verify_kernel(cfg: &BootConfig, pid: usize, arg: &crate::args::KernelArgument
     for addr in (0..(prog.text_size as usize)).step_by(4) {
         assert_eq!(
             src_text[addr],
-            read_word(
-                cfg.processes[pid].satp as usize,
-                addr + prog.text_offset as usize
-            )
-            .unwrap(),
+            read_word(cfg.processes[pid].satp as usize, addr + prog.text_offset as usize).unwrap(),
             "program text doesn't match @ offset {:08x}",
             addr + prog.text_offset as usize
         );
@@ -253,29 +229,17 @@ fn verify_kernel(cfg: &BootConfig, pid: usize, arg: &crate::args::KernelArgument
     for addr in (0..(prog.data_size as usize)).step_by(4) {
         assert_eq!(
             src_data[addr],
-            read_word(
-                cfg.processes[pid].satp as usize,
-                addr + prog.data_offset as usize
-            )
-            .unwrap(),
+            read_word(cfg.processes[pid].satp as usize, addr + prog.data_offset as usize).unwrap(),
             "program data doesn't match @ offset {:08x}",
             addr + prog.data_offset as usize
         );
     }
 
-    for addr in ((prog.data_size as usize)..((prog.data_size + prog.bss_size) as usize)).step_by(4)
-    {
-        println!(
-            "Verifying BSS @ {:08x} is 0",
-            addr + prog.data_offset as usize
-        );
+    for addr in ((prog.data_size as usize)..((prog.data_size + prog.bss_size) as usize)).step_by(4) {
+        println!("Verifying BSS @ {:08x} is 0", addr + prog.data_offset as usize);
         assert_eq!(
             0,
-            read_word(
-                cfg.processes[pid].satp as usize,
-                addr + prog.data_offset as usize
-            )
-            .unwrap(),
+            read_word(cfg.processes[pid].satp as usize, addr + prog.data_offset as usize).unwrap(),
             "bss is not zero @ offset {:08x}",
             addr + prog.data_offset as usize
         );
@@ -293,11 +257,7 @@ fn verify_program(cfg: &BootConfig, pid: usize, arg: &crate::args::KernelArgumen
             if section.no_copy() {
                 assert!(word == 0, "bss is {:08x}, not 0 @ {:08x}", word, addr);
             } else {
-                let check_word = unsafe {
-                    (cfg.base_addr as *mut u8)
-                        .add(program_offset)
-                        .read()
-                };
+                let check_word = unsafe { (cfg.base_addr as *mut u8).add(program_offset).read() };
                 program_offset += 1;
                 assert!(
                     word == check_word,

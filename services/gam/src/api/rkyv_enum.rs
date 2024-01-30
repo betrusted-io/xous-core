@@ -12,7 +12,8 @@
 // As of now, the current version is 0.7.x and there isn't a timeline yet for 0.8.
 #![allow(dead_code)]
 
-use graphics_server::api::{Rectangle, TextView, Line, RoundedRectangle, Circle};
+use graphics_server::api::{Circle, Line, Rectangle, RoundedRectangle, TextView};
+
 use crate::*;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
@@ -52,6 +53,7 @@ pub enum MenuPayload {
     /// memorized scalar payload
     Scalar([u32; 4]),
     /// this a nebulous-but-TBD maybe way of bodging in a more complicated record, which would involve
-    /// casting this memorized, static payload into a Buffer and passing it on. Let's not worry too much about it for now, it's mostly apirational...
+    /// casting this memorized, static payload into a Buffer and passing it on. Let's not worry too much
+    /// about it for now, it's mostly apirational...
     Memory(([u8; 256], usize)),
 }

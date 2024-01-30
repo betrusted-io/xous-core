@@ -40,7 +40,7 @@ _start:
        handler to set up the remainder of the resume tasks.
     */
     // Restore a default stack pointer - used by interrupt handlers and considered temporary/smashable
-    li          sp, 0xfffefffc
+    li          sp, 0xfffefff0
 
     // setup sie [ssoft, sext]. This corresponds to bits 1 and 9, or 0b10_0000_0010
     li          t0, 0x202
@@ -137,7 +137,7 @@ _start_trap:
     STORE       t0, 1*REGBYTES(sp)
 
     // Restore a default stack pointer
-    li          sp, 0xfffefffc
+    li          sp, 0xfffefff0
 
     // Note that registers $a0-$a7 still contain the arguments
     j           _start_trap_rust
@@ -154,11 +154,11 @@ _xous_resume_context:
     move        sp, a0
 
     LOAD        x1, 0*REGBYTES(sp)
-
     // Clear any reservations, invalidating any atomic operations
-#ifndef SKIP_MULTICORE
-    sc.w	    zero, x1, 0*REGBYTES(sp)
+#ifdef __riscv_atomic
+    sc.w.rl	    zero, x1, (sp)
 #endif
+
     // Skip SP for now
     LOAD        x3, 2*REGBYTES(sp)
     LOAD        x4, 3*REGBYTES(sp)
@@ -211,7 +211,6 @@ _xous_syscall_return_result:
     csrw        sepc, t0
 
     LOAD        x1, 0*REGBYTES(sp)
-
     // An atomic operation is broken up into multiple instructions.
     // A program first issues a `lr` instruction, which basically
     // raises a flag saying that an atomic operation is now live. It
@@ -223,8 +222,8 @@ _xous_syscall_return_result:
     // one bit, and we can clear the bit by performing a dummy `sc`
     // here. This will cause a failure in any atomic operation in the
     // program we're switching to.
-#ifndef SKIP_MULTICORE
-    sc.w	    zero, x1, 0*REGBYTES(sp)
+#ifdef __riscv_atomic
+    sc.w.rl	    zero, x1, (sp)
 #endif
 
     // Skip SP for now
@@ -262,8 +261,10 @@ _xous_syscall_return_result:
     LOAD        x30, 29*REGBYTES(sp)
     LOAD        x31, 30*REGBYTES(sp)
 
+    fence
+
     // Restore SP
-    //csrr        t0, sscratch
+    //csrr      t0, sscratch
     LOAD        x2, 1*REGBYTES(sp)
     sret
 

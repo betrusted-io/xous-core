@@ -38,7 +38,7 @@ This server, `keys`, has the following responsibilities:
    - Boot PIN code: secures the root application keys
    - Update passphrase: secures updates
    - The passwords are prompted automatically by `keys` as a result of third-party API calls requesting services of `keys` that would require their entry.
-   - Passwords are hashed with `bcrypt` prior to use. In line with [OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) reccommendations, we opt to use the older, battle-tested `bcrypt` algorithm because the limited memory of Precursor does not allow us to use other algorithms with parameters that impart substial security advantages.
+   - Passwords are hashed with `bcrypt` prior to use. In line with [OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) reccommendations, we opt to use the older, battle-tested `bcrypt` algorithm because the limited memory of Precursor does not allow us to use other algorithms with parameters that impart substantial security advantages.
    - The passwords are entered via simple pop-up modal dialog boxes that plug directly into the `keys` memory space
  - Listens to the susres server to enforce password retirement policies
    - Plaintext copies of the password are mapped into a deliberate page of memory that is zero-ized on `Drop`, `suspend`, or other system states depending upon user policy.
@@ -58,6 +58,6 @@ This server, `keys`, has the following responsibilities:
 
 Shortcomings:
  - Anyone can attempt to initiate an update by calling the library API on `keys`. However, the update can not proceed without user consent via password.
- - Fonts are mapped into the `gfx-server` memory space, which complicates loader.bin verification and validation. It also creates a potential for exploits that swap out fonts to create false messagse to users.
+ - Fonts are mapped into the `gfx-server` memory space, which complicates loader.bin verification and validation. It also creates a potential for exploits that swap out fonts to create false messages to users.
  - There's a lot of complexity in this server, which makes it harder to analyze; see "Background" section above, for a discussion of the trade-offs that lead to this decision.
 

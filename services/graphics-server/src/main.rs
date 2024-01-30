@@ -19,7 +19,6 @@ mod wordwrap;
 #[macro_use]
 mod style_macros;
 
-
 use num_traits::FromPrimitive;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, MemoryRange};
 use xous_ipc::Buffer;
@@ -27,33 +26,28 @@ use xous_ipc::Buffer;
 mod fontmap;
 use api::BulkRead;
 
-#[cfg(any(feature="precursor", feature="renode"))] // only install for hardware targets; hosted mode uses host's panic handler
+#[cfg(any(feature = "precursor", feature = "renode"))]
+// only install for hardware targets; hosted mode uses host's panic handler
 mod panic;
 
+use core::ops::Add;
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::wordwrap::*;
-use core::ops::Add;
 
 #[cfg(feature = "gfx-testing")]
 mod testing;
 
-fn draw_boot_logo(display: &mut XousDisplay) {
-    display.blit_screen(&poweron::LOGO_MAP);
-}
+fn draw_boot_logo(display: &mut XousDisplay) { display.blit_screen(&poweron::LOGO_MAP); }
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 fn map_fonts() -> MemoryRange {
     log::trace!("mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
     // because the reserved area is much larger
     let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
-    log::trace!(
-        "requesting map of length 0x{:08x} at 0x{:08x}",
-        fontlen,
-        fontmap::FONT_BASE
-    );
+    log::trace!("requesting map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
     let fontregion = xous::syscall::map_memory(
         xous::MemoryAddress::new(fontmap::FONT_BASE),
         None,
@@ -71,15 +65,60 @@ fn map_fonts() -> MemoryRange {
         "mapping regular font to 0x{:08x}",
         fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET as usize
     );
-    blitstr2::fonts::bold::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::emoji::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::EMOJI_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::ja::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::JA_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::kr::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::KR_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::mono::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::MONO_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::regular::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::small::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::SMALL_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::zh::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::ZH_OFFSET as usize) as u32, Ordering::SeqCst);
-    blitstr2::fonts::tall::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::TALL_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::bold::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::emoji::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::EMOJI_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::ja::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::JA_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::kr::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::KR_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::mono::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::MONO_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::regular::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::small::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::SMALL_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::zh::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::ZH_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::tall::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::TALL_OFFSET as usize) as u32, Ordering::SeqCst);
+
+    fontregion
+}
+
+#[cfg(any(feature = "cramium-soc"))]
+fn map_fonts() -> MemoryRange {
+    log::trace!("mapping fonts");
+    // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
+    // because the reserved area is much larger
+    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
+    log::trace!("requesting map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
+    let fontregion = xous::syscall::map_memory(
+        xous::MemoryAddress::new(fontmap::FONT_BASE),
+        None,
+        fontlen as usize,
+        xous::MemoryFlags::R,
+    )
+    .expect("couldn't map fonts");
+    log::info!(
+        "font base at virtual 0x{:08x}, len of 0x{:08x}",
+        fontregion.as_ptr() as usize,
+        usize::from(fontregion.len())
+    );
+
+    log::trace!(
+        "mapping tall font to 0x{:08x}",
+        fontregion.as_ptr() as usize + fontmap::TALL_OFFSET as usize
+    );
+    blitstr2::fonts::bold::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::emoji::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::EMOJI_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::mono::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::MONO_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::tall::GLYPH_LOCATION
+        .store((fontregion.as_ptr() as usize + fontmap::TALL_OFFSET as usize) as u32, Ordering::SeqCst);
 
     fontregion
 }
@@ -93,7 +132,7 @@ fn map_fonts() -> MemoryRange {
 
     fontregion
 }
-fn main () -> ! {
+fn main() -> ! {
     // Some operating systems and GUI frameworks don't allow creating an event
     // loop from a thread other than TID 1. Let the backend claim this thread
     // if this may be the case.
@@ -101,9 +140,9 @@ fn main () -> ! {
         #[cfg(not(feature = "ditherpunk"))]
         wrapped_main(main_thread_token);
 
-        #[cfg(feature="ditherpunk")]
+        #[cfg(feature = "ditherpunk")]
         let stack_size = 1024 * 1024;
-        #[cfg(feature="ditherpunk")]
+        #[cfg(feature = "ditherpunk")]
         std::thread::Builder::new()
             .stack_size(stack_size)
             .spawn(move || wrapped_main(main_thread_token))
@@ -124,9 +163,10 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
     // install the graphical panic handler. It won't catch really early panics, or panics in this crate,
     // but it'll do the job 90% of the time and it's way better than having none at all.
     let is_panic = Arc::new(AtomicBool::new(false));
-    #[cfg(any(feature="precursor", feature="renode"))] // only install for hardware targets; hosted mode uses host's panic handler
+    #[cfg(any(feature = "precursor", feature = "renode"))]
+    // only install for hardware targets; hosted mode uses host's panic handler
     {
-        let (hwfb, control) = unsafe{
+        let (hwfb, control) = unsafe {
             // this is safe because we are extracting these for use in a Mutex-protected panic handler
             display.hw_regs()
         };
@@ -137,23 +177,24 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
     // these connections should be established:
     // - GAM
     // - keyrom (for verifying font maps)
-    #[cfg(any(feature="precursor", feature="renode"))]
-    let sid = xns
-        .register_name(api::SERVER_NAME_GFX, Some(2))
-        .expect("can't register server");
+    #[cfg(any(feature = "precursor", feature = "renode"))]
+    let sid = xns.register_name(api::SERVER_NAME_GFX, Some(2)).expect("can't register server");
     #[cfg(not(target_os = "xous"))]
-    let sid = xns
-        .register_name(api::SERVER_NAME_GFX, Some(1))
-        .expect("can't register server");
+    let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
+    #[cfg(feature = "cramium-soc")]
+    let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
 
     let screen_clip = Rectangle::new(Point::new(0, 0), display.screen_size());
 
     display.redraw();
 
     // register a suspend/resume listener
+    #[cfg(not(feature = "cramium-soc"))]
     let sr_cid = xous::connect(sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, Opcode::SuspendResume as u32, sr_cid)
-        .expect("couldn't create suspend/resume object");
+    #[cfg(not(feature = "cramium-soc"))]
+    let mut susres =
+        susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, Opcode::SuspendResume as u32, sr_cid)
+            .expect("couldn't create suspend/resume object");
 
     let mut bulkread = BulkRead::default(); // holding buffer for bulk reads; wastes ~8k when not in use, but saves a lot of copy/init for each iteration of the read
 
@@ -162,20 +203,20 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
     #[cfg(feature = "gfx-testing")]
     testing::tests();
     loop {
-        if !is_panic.load(Ordering::Relaxed) { // non-panic graphics operations if we are in a panic situation
+        if !is_panic.load(Ordering::Relaxed) {
+            // non-panic graphics operations if we are in a panic situation
             let mut msg = xous::receive_message(sid).unwrap();
-            log::trace!("Message: {:?}", msg);
-            match FromPrimitive::from_usize(msg.body.id()) {
+            let op = FromPrimitive::from_usize(msg.body.id());
+            log::trace!("{:?}", op);
+            match op {
+                #[cfg(not(feature = "cramium-soc"))]
                 Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                     display.suspend();
-                    susres
-                        .suspend_until_resume(token)
-                        .expect("couldn't execute suspend/resume");
+                    susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                     display.resume();
                 }),
                 Some(Opcode::DrawClipObject) => {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let obj = buffer.to_original::<ClipObject, _>().unwrap();
                     log::trace!("DrawClipObject {:?}", obj);
                     match obj.obj {
@@ -194,15 +235,14 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         ClipObjectType::RoundRect(rr) => {
                             op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
                         }
-                        #[cfg(feature="ditherpunk")]
+                        #[cfg(feature = "ditherpunk")]
                         ClipObjectType::Tile(tile) => {
                             op::tile(display.native_buffer(), tile, Some(obj.clip));
                         }
                     }
                 }
                 Some(Opcode::DrawClipObjectList) => {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let list_ipc = buffer.to_original::<ClipObjectList, _>().unwrap();
                     for maybe_item in list_ipc.list.iter() {
                         if let Some(obj) = maybe_item {
@@ -222,21 +262,21 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                                 ClipObjectType::RoundRect(rr) => {
                                     op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
                                 }
-                                #[cfg(feature="ditherpunk")]
+                                #[cfg(feature = "ditherpunk")]
                                 ClipObjectType::Tile(tile) => {
                                     op::tile(display.native_buffer(), tile, Some(obj.clip));
                                 }
                             }
                         } else {
-                            // stop at the first None entry -- if the sender packed the list with a hole in it, that's their bad
+                            // stop at the first None entry -- if the sender packed the list with a hole in
+                            // it, that's their bad
                             break;
                         }
                     }
                 }
                 Some(Opcode::DrawTextView) => {
-                    let mut buffer = unsafe {
-                        Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                    };
+                    let mut buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                     let mut tv = buffer.to_original::<TextView, _>().unwrap();
 
                     if tv.clip_rect.is_none() {
@@ -249,65 +289,76 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     let screen_offset: Point = tv.clip_rect.unwrap().tl;
 
                     let typeset_extent = match tv.bounds_hint {
-                        TextBounds::BoundingBox(r) =>
-                            Pt::new(r.br().x - r.tl().x - tv.margin.x * 2, r.br().y - r.tl().y - tv.margin.y * 2),
-                        TextBounds::GrowableFromBr(br, width) =>
-                            Pt::new(width as i16 - tv.margin.x * 2, br.y - tv.margin.y * 2),
-                        TextBounds::GrowableFromBl(bl, width) =>
-                            Pt::new(width as i16 - tv.margin.x * 2, bl.y - tv.margin.y * 2),
-                        TextBounds::GrowableFromTl(tl, width) =>
-                            Pt::new(width as i16 - tv.margin.x * 2, (clip_rect.br().y - clip_rect.tl().y - tl.y) - tv.margin.y * 2),
-                        TextBounds::GrowableFromTr(tr, width) =>
-                            Pt::new(width as i16 - tv.margin.x * 2, (clip_rect.br().y - clip_rect.tl().y - tr.y) - tv.margin.y * 2),
-                        TextBounds::CenteredTop(r) =>
-                            Pt::new(r.br().x - r.tl().x - tv.margin.x * 2, r.br().y - r.tl().y - tv.margin.y * 2),
-                        TextBounds::CenteredBot(r) =>
-                            Pt::new(r.br().x - r.tl().x - tv.margin.x * 2, r.br().y - r.tl().y - tv.margin.y * 2),
+                        TextBounds::BoundingBox(r) => Pt::new(
+                            r.br().x - r.tl().x - tv.margin.x * 2,
+                            r.br().y - r.tl().y - tv.margin.y * 2,
+                        ),
+                        TextBounds::GrowableFromBr(br, width) => {
+                            Pt::new(width as i16 - tv.margin.x * 2, br.y - tv.margin.y * 2)
+                        }
+                        TextBounds::GrowableFromBl(bl, width) => {
+                            Pt::new(width as i16 - tv.margin.x * 2, bl.y - tv.margin.y * 2)
+                        }
+                        TextBounds::GrowableFromTl(tl, width) => Pt::new(
+                            width as i16 - tv.margin.x * 2,
+                            (clip_rect.br().y - clip_rect.tl().y - tl.y) - tv.margin.y * 2,
+                        ),
+                        TextBounds::GrowableFromTr(tr, width) => Pt::new(
+                            width as i16 - tv.margin.x * 2,
+                            (clip_rect.br().y - clip_rect.tl().y - tr.y) - tv.margin.y * 2,
+                        ),
+                        TextBounds::CenteredTop(r) => Pt::new(
+                            r.br().x - r.tl().x - tv.margin.x * 2,
+                            r.br().y - r.tl().y - tv.margin.y * 2,
+                        ),
+                        TextBounds::CenteredBot(r) => Pt::new(
+                            r.br().x - r.tl().x - tv.margin.x * 2,
+                            r.br().y - r.tl().y - tv.margin.y * 2,
+                        ),
                     };
                     let mut typesetter = Typesetter::setup(
                         tv.to_str(),
                         &typeset_extent,
                         &tv.style,
-                        if let Some(i) = tv.insertion { Some(i as usize) } else { None }
+                        if let Some(i) = tv.insertion { Some(i as usize) } else { None },
                     );
-                    let composition = typesetter.typeset(
-                        if tv.ellipsis {
-                            OverflowStrategy::Ellipsis
-                        } else {
-                            OverflowStrategy::Abort
-                        }
-                    );
+                    let composition = typesetter.typeset(if tv.ellipsis {
+                        OverflowStrategy::Ellipsis
+                    } else {
+                        OverflowStrategy::Abort
+                    });
 
                     let composition_top_left = match tv.bounds_hint {
-                        TextBounds::BoundingBox(r) =>
-                            r.tl().add(tv.margin),
-                        TextBounds::GrowableFromBr(br, _width) =>
-                            Point::new(br.x - (composition.bb_width() as i16 + tv.margin.x),
-                            br.y - (composition.bb_height() as i16 + tv.margin.y)),
-                        TextBounds::GrowableFromBl(bl, _width) =>
-                            Point::new(bl.x + tv.margin.x, bl.y - (composition.bb_height() as i16 + tv.margin.y)),
-                        TextBounds::GrowableFromTl(tl, _width) =>
-                            tl.add(tv.margin),
-                        TextBounds::GrowableFromTr(tr, _width) =>
-                            Point::new(tr.x - (composition.bb_width() as i16 + tv.margin.x), tr.y + tv.margin.y),
+                        TextBounds::BoundingBox(r) => r.tl().add(tv.margin),
+                        TextBounds::GrowableFromBr(br, _width) => Point::new(
+                            br.x - (composition.bb_width() as i16 + tv.margin.x),
+                            br.y - (composition.bb_height() as i16 + tv.margin.y),
+                        ),
+                        TextBounds::GrowableFromBl(bl, _width) => Point::new(
+                            bl.x + tv.margin.x,
+                            bl.y - (composition.bb_height() as i16 + tv.margin.y),
+                        ),
+                        TextBounds::GrowableFromTl(tl, _width) => tl.add(tv.margin),
+                        TextBounds::GrowableFromTr(tr, _width) => Point::new(
+                            tr.x - (composition.bb_width() as i16 + tv.margin.x),
+                            tr.y + tv.margin.y,
+                        ),
                         TextBounds::CenteredTop(r) => {
                             if r.width() as i16 > composition.bb_width() {
-                                r.tl().add(Point::new(
-                                        (r.width() as i16 - composition.bb_width()) / 2, 0
-                                ))
+                                r.tl().add(Point::new((r.width() as i16 - composition.bb_width()) / 2, 0))
                             } else {
                                 r.tl().add(tv.margin)
                             }
-                        },
+                        }
                         TextBounds::CenteredBot(r) => {
                             if r.width() as i16 > composition.bb_width() {
                                 r.tl().add(Point::new(
-                                        (r.width() as i16 - composition.bb_width()) / 2,
-                                        if (r.height() as i16) > (composition.bb_height() + tv.margin.y) {
-                                            (r.height() as i16) - (composition.bb_height() + tv.margin.y)
-                                        } else {
-                                            0
-                                        }
+                                    (r.width() as i16 - composition.bb_width()) / 2,
+                                    if (r.height() as i16) > (composition.bb_height() + tv.margin.y) {
+                                        (r.height() as i16) - (composition.bb_height() + tv.margin.y)
+                                    } else {
+                                        0
+                                    },
                                 ))
                             } else {
                                 r.tl().add(tv.margin)
@@ -316,28 +367,32 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     }
                     .add(screen_offset);
 
-                    // compute the clear rectangle -- the border is already in screen coordinates, just add the margin around it
+                    // compute the clear rectangle -- the border is already in screen coordinates, just add
+                    // the margin around it
                     let mut clear_rect = match tv.bounds_hint {
-                    TextBounds::BoundingBox(mut r)  => {
+                        TextBounds::BoundingBox(mut r) => {
                             r.translate(screen_offset);
                             r
-                    }
-                    _ => {
+                        }
+                        _ => {
                             if tv.busy_animation_state.is_some() {
-                                // we want to clear the entire potentially drawable region, not just the dirty box if we're
-                                // doing a busy animation.
+                                // we want to clear the entire potentially drawable region, not just the dirty
+                                // box if we're doing a busy animation.
                                 let r = Rectangle::new(
                                     Point::new(screen_offset.x, composition_top_left.y),
-                                    Point::new(screen_offset.x, composition_top_left.y).add(
-                                        Point::new(typeset_extent.x, composition.bb_height())
-                                    )
+                                    Point::new(screen_offset.x, composition_top_left.y)
+                                        .add(Point::new(typeset_extent.x, composition.bb_height())),
                                 );
                                 r
                             } else {
-                                // composition_top_left already had a screen_offset added when it was computed. just margin it out
+                                // composition_top_left already had a screen_offset added when it was
+                                // computed. just margin it out
                                 let mut r = Rectangle::new(
                                     composition_top_left,
-                                    composition_top_left.add(Point::new(composition.bb_width() as _, composition.bb_height() as _))
+                                    composition_top_left.add(Point::new(
+                                        composition.bb_width() as _,
+                                        composition.bb_height() as _,
+                                    )),
                                 );
                                 r.margin_out(tv.margin);
                                 r
@@ -349,22 +404,10 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     log::trace!("composition_top_left: {:?}", composition_top_left);
                     log::trace!("clear_rect: {:?}", clear_rect);
                     // draw the bubble/border and/or clear the background area
-                    let bordercolor = if tv.draw_border {
-                        Some(PixelColor::Dark)
-                    } else {
-                        None
-                    };
-                    let borderwidth: i16 = if tv.draw_border {
-                        tv.border_width as i16
-                    } else {
-                        0
-                    };
+                    let bordercolor = if tv.draw_border { Some(PixelColor::Dark) } else { None };
+                    let borderwidth: i16 = if tv.draw_border { tv.border_width as i16 } else { 0 };
                     let fillcolor = if tv.clear_area || tv.invert {
-                        if tv.invert {
-                            Some(PixelColor::Dark)
-                        } else {
-                            Some(PixelColor::Light)
-                        }
+                        if tv.invert { Some(PixelColor::Dark) } else { Some(PixelColor::Light) }
                     } else {
                         None
                     };
@@ -391,10 +434,17 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     //}
 
                     if !tv.dry_run() {
-                        // note: make the clip rect `tv.clip_rect.unwrap()` if you want to debug wordwrapping artifacts; otherwise smallest_rect masks some problems
-                        let smallest_rect = clear_rect.clip_with(tv.clip_rect.unwrap())
-                            .unwrap_or(Rectangle::new(Point::new(0, 0), Point::new(0, 0,)));
-                        composition.render(display.native_buffer(), composition_top_left, tv.invert, smallest_rect);
+                        // note: make the clip rect `tv.clip_rect.unwrap()` if you want to debug wordwrapping
+                        // artifacts; otherwise smallest_rect masks some problems
+                        let smallest_rect = clear_rect
+                            .clip_with(tv.clip_rect.unwrap())
+                            .unwrap_or(Rectangle::new(Point::new(0, 0), Point::new(0, 0)));
+                        composition.render(
+                            display.native_buffer(),
+                            composition_top_left,
+                            tv.invert,
+                            smallest_rect,
+                        );
                     }
 
                     // run the busy animation
@@ -403,41 +453,42 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         if total_width > op::BUSY_ANIMATION_RECT_WIDTH * 2 {
                             let step = state as i16 % (op::BUSY_ANIMATION_RECT_WIDTH * 2);
                             for offset in (0..(total_width + op::BUSY_ANIMATION_RECT_WIDTH * 2))
-                            .step_by((op::BUSY_ANIMATION_RECT_WIDTH * 2) as usize) {
+                                .step_by((op::BUSY_ANIMATION_RECT_WIDTH * 2) as usize)
+                            {
                                 let left_x = offset + step + composition_top_left.x;
-                                if offset == 0 && (step >= op::BUSY_ANIMATION_RECT_WIDTH) && (step < op::BUSY_ANIMATION_RECT_WIDTH * 2) {
+                                if offset == 0
+                                    && (step >= op::BUSY_ANIMATION_RECT_WIDTH)
+                                    && (step < op::BUSY_ANIMATION_RECT_WIDTH * 2)
+                                {
                                     // handle the truncated "left" rectangle
                                     let mut trunc_rect = Rectangle::new(
                                         Point::new(composition_top_left.x as i16, clear_rect.tl().y),
-                                        Point::new((step + composition_top_left.x - op::BUSY_ANIMATION_RECT_WIDTH) as i16, clear_rect.br().y)
+                                        Point::new(
+                                            (step + composition_top_left.x - op::BUSY_ANIMATION_RECT_WIDTH)
+                                                as i16,
+                                            clear_rect.br().y,
+                                        ),
                                     );
                                     trunc_rect.style = DrawStyle {
                                         fill_color: Some(PixelColor::Light),
                                         stroke_color: None,
                                         stroke_width: 0,
                                     };
-                                    op::rectangle(
-                                        display.native_buffer(),
-                                        trunc_rect,
-                                        tv.clip_rect,
-                                        true
-                                    );
+                                    op::rectangle(display.native_buffer(), trunc_rect, tv.clip_rect, true);
                                 } // the "right" rectangle is handled by the clipping mask
                                 let mut xor_rect = Rectangle::new(
                                     Point::new(left_x as i16, clear_rect.tl().y),
-                                    Point::new((left_x + op::BUSY_ANIMATION_RECT_WIDTH) as i16, clear_rect.br().y)
+                                    Point::new(
+                                        (left_x + op::BUSY_ANIMATION_RECT_WIDTH) as i16,
+                                        clear_rect.br().y,
+                                    ),
                                 );
                                 xor_rect.style = DrawStyle {
                                     fill_color: Some(PixelColor::Light),
                                     stroke_color: None,
                                     stroke_width: 0,
                                 };
-                                op::rectangle(
-                                    display.native_buffer(),
-                                    xor_rect,
-                                    tv.clip_rect,
-                                    true
-                                );
+                                op::rectangle(display.native_buffer(), xor_rect, tv.clip_rect, true);
                             }
                         } else {
                             // don't do the animation, this could be abused to create inverted text
@@ -451,9 +502,7 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     tv.cursor.line_height = composition.final_cursor().line_height;
                     tv.overflow = Some(composition.final_overflow());
 
-                    tv.bounds_computed = Some(
-                        clear_rect
-                    );
+                    tv.bounds_computed = Some(clear_rect);
                     log::trace!("cursor ret {:?}, bounds ret {:?}", tv.cursor, tv.bounds_computed);
                     // pack our data back into the buffer to return
                     buffer.replace(tv).unwrap();
@@ -468,42 +517,29 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     op::rectangle(display.native_buffer(), r, screen_clip.into(), false)
                 }
                 Some(Opcode::Line) => msg_scalar_unpack!(msg, p1, p2, style, _, {
-                    let l =
-                        Line::new_with_style(Point::from(p1), Point::from(p2), DrawStyle::from(style));
+                    let l = Line::new_with_style(Point::from(p1), Point::from(p2), DrawStyle::from(style));
                     op::line(display.native_buffer(), l, screen_clip.into(), false);
                 }),
                 Some(Opcode::Rectangle) => msg_scalar_unpack!(msg, tl, br, style, _, {
-                    let r = Rectangle::new_with_style(
-                        Point::from(tl),
-                        Point::from(br),
-                        DrawStyle::from(style),
-                    );
+                    let r =
+                        Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style));
                     op::rectangle(display.native_buffer(), r, screen_clip.into(), false);
                 }),
                 Some(Opcode::RoundedRectangle) => msg_scalar_unpack!(msg, tl, br, style, r, {
                     let rr = RoundedRectangle::new(
-                        Rectangle::new_with_style(
-                            Point::from(tl),
-                            Point::from(br),
-                            DrawStyle::from(style),
-                        ),
+                        Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style)),
                         r as _,
                     );
                     op::rounded_rectangle(display.native_buffer(), rr, screen_clip.into());
                 }),
-                #[cfg(feature="ditherpunk")]
+                #[cfg(feature = "ditherpunk")]
                 Some(Opcode::Tile) => {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let bm = buffer.to_original::<Tile, _>().unwrap();
                     op::tile(display.native_buffer(), bm, screen_clip.into());
-                },
+                }
                 Some(Opcode::Circle) => msg_scalar_unpack!(msg, center, radius, style, _, {
-                    let c = Circle::new_with_style(
-                        Point::from(center),
-                        radius as _,
-                        DrawStyle::from(style),
-                    );
+                    let c = Circle::new_with_style(Point::from(center), radius as _, DrawStyle::from(style));
                     op::circle(display.native_buffer(), c, screen_clip.into());
                 }),
                 Some(Opcode::ScreenSize) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
@@ -513,12 +549,8 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                 }),
                 Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {
                     let glyph = GlyphStyle::from(style);
-                    xous::return_scalar2(
-                        msg.sender,
-                        glyph.into(),
-                        glyph_to_height_hint(glyph),
-                    )
-                    .expect("could not return QueryGlyphProps request");
+                    xous::return_scalar2(msg.sender, glyph.into(), glyph_to_height_hint(glyph))
+                        .expect("could not return QueryGlyphProps request");
                 }),
                 Some(Opcode::DrawSleepScreen) => msg_scalar_unpack!(msg, _, _, _, _, {
                     display.blit_screen(&logo::LOGO_MAP);
@@ -545,22 +577,21 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                     let fontlen = fontmap::FONT_TOTAL_LEN as u32
                         + 16  // minver
                         + 16  // current ver
-                        + 8;  // sig ver + len
-                    let mut buf = unsafe {
-                        Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                    };
-                    //let mut bulkread = buf.as_flat::<BulkRead, _>().unwrap(); // try to skip the copy/init step by using a persistent structure
-                    // Safety: `u8` contains no undefined values
+                        + 8; // sig ver + len
+                    let mut buf =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    //let mut bulkread = buf.as_flat::<BulkRead, _>().unwrap(); // try to skip the copy/init
+                    // step by using a persistent structure Safety: `u8` contains no
+                    // undefined values
                     let fontslice = unsafe { fontregion.as_slice::<u8>() };
                     assert!(fontlen <= fontslice.len() as u32);
                     if bulkread.from_offset >= fontlen {
-                        log::error!(
-                            "BulkReadFonts attempt to read out of bound on the font area; ignoring!"
-                        );
+                        log::error!("BulkReadFonts attempt to read out of bound on the font area; ignoring!");
                         continue;
                     }
                     let readlen = if bulkread.from_offset + bulkread.buf.len() as u32 > fontlen {
-                        // returns what is readable of the last bit; anything longer than the fontlen is undefined/invalid
+                        // returns what is readable of the last bit; anything longer than the fontlen is
+                        // undefined/invalid
                         fontlen as usize - bulkread.from_offset as usize
                     } else {
                         bulkread.buf.len()
@@ -582,13 +613,15 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         None,
                         ((backend::FB_SIZE * 4) + 4096) & !4095,
                         xous::MemoryFlags::R | xous::MemoryFlags::W,
-                    ).expect("couldn't map stash frame buffer");
+                    )
+                    .expect("couldn't map stash frame buffer");
                     // Safety: `u8` contains no undefined values
                     let stash = unsafe { &mut stashmem.as_slice_mut()[..backend::FB_SIZE] };
                     for (&src, dst) in display.as_slice().iter().zip(stash.iter_mut()) {
                         *dst = src;
                     }
-                    for lines in 0..backend::FB_LINES { // mark all lines dirty
+                    for lines in 0..backend::FB_LINES {
+                        // mark all lines dirty
                         stash[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                     }
 
@@ -598,17 +631,20 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                         None,
                         ((backend::FB_SIZE * 4) + 4096) & !4095,
                         xous::MemoryFlags::R | xous::MemoryFlags::W,
-                    ).expect("couldn't map stash frame buffer");
+                    )
+                    .expect("couldn't map stash frame buffer");
                     // Safety: `u8` contains no undefined values
-                    let testpat = unsafe { &mut testmem.as_slice_mut()[..backend::FB_SIZE] }; 
+                    let testpat = unsafe { &mut testmem.as_slice_mut()[..backend::FB_SIZE] };
                     const DWELL: usize = 1000;
                     while ticktimer.elapsed_ms() - start_time < duration as u64 {
                         // all black
                         for w in testpat.iter_mut() {
                             *w = 0;
                         }
-                        for lines in 0..backend::FB_LINES { // mark dirty bits
-                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                        for lines in 0..backend::FB_LINES {
+                            // mark dirty bits
+                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |=
+                                0x1_0000;
                         }
                         display.blit_screen(testpat);
                         display.redraw();
@@ -651,7 +687,8 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                                     testpat[lines * backend::FB_WIDTH_WORDS + words] = 0xffff_ffff;
                                 }
                             }
-                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |=
+                                0x1_0000;
                         }
                         display.blit_screen(testpat);
                         display.redraw();
@@ -665,12 +702,12 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                                     testpat[lines * backend::FB_WIDTH_WORDS + words] = 0xffff_ffff;
                                 }
                             }
-                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                            testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |=
+                                0x1_0000;
                         }
                         display.blit_screen(testpat);
                         display.redraw();
                         ticktimer.sleep_ms(DWELL).unwrap();
-
                     }
                     display.blit_screen(stash);
 
@@ -678,16 +715,18 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                 }),
                 Some(Opcode::Stash) => {
                     display.stash();
-                    match msg.body { // ack the message if it's a blocking scalar
+                    match msg.body {
+                        // ack the message if it's a blocking scalar
                         xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
-                        _ => ()
+                        _ => (),
                     }
                 }
                 Some(Opcode::Pop) => {
                     display.pop();
-                    match msg.body { // ack the message if it's a blocking scalar
+                    match msg.body {
+                        // ack the message if it's a blocking scalar
                         xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
-                        _ => ()
+                        _ => (),
                     }
                 }
                 Some(Opcode::Quit) => break,
@@ -696,7 +735,8 @@ fn wrapped_main(main_thread_token: backend::MainThreadToken) -> ! {
                 }
             }
         } else {
-            // this is effectively an abort, because this is long enough for the WDT to fire and reboot the system
+            // this is effectively an abort, because this is long enough for the WDT to fire and reboot the
+            // system
             ticktimer.sleep_ms(10_000).unwrap();
         }
     }

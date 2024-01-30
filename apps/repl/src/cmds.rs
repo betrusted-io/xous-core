@@ -1,15 +1,23 @@
-use xous::{MessageEnvelope};
-use xous_ipc::String;
 use core::fmt::Write;
-
 use std::collections::HashMap;
+
+use xous::MessageEnvelope;
+use xous_ipc::String;
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
     // called to process the command with the remainder of the string attached
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error>;
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error>;
     // called to process incoming messages that may have been origniated by the most recently issued command
-    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(
+        &mut self,
+        msg: &MessageEnvelope,
+        _env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         log::info!("received unhandled message {:?}", msg);
         Ok(None)
     }
@@ -23,16 +31,8 @@ pub trait ShellCmdApi<'a> {
 // the argument to this macro is the command verb
 macro_rules! cmd_api {
     ($verb:expr) => {
-        fn verb(&self) -> &'static str {
-            stringify!($verb)
-        }
-        fn matches(&self, verb: &str) -> bool {
-            if verb == stringify!($verb) {
-                true
-            } else {
-                false
-            }
-        }
+        fn verb(&self) -> &'static str { stringify!($verb) }
+        fn matches(&self, verb: &str) -> bool { if verb == stringify!($verb) { true } else { false } }
     };
 }
 
@@ -46,12 +46,12 @@ pub struct CommonEnv {
     codec: codec::Codec,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
-    cb_registrations: HashMap::<u32, String::<256>>,
+    cb_registrations: HashMap<u32, String<256>>,
     trng: Trng,
     xns: xous_names::XousNames,
 }
 impl CommonEnv {
-    pub fn register_handler(&mut self, verb: String::<256>) -> u32 {
+    pub fn register_handler(&mut self, verb: String<256>) -> u32 {
         let mut key: u32;
         loop {
             key = self.trng.get_u32().unwrap();
@@ -78,11 +78,12 @@ impl CommonEnv {
 */
 
 ///// 1. add your module here, and pull its namespace into the local crate
-mod audio;     use audio::*;
+mod audio;
+use audio::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
-    lastverb: String::<256>,
+    lastverb: String<256>,
     ///// 2. declare storage for your command here.
     audio_cmd: Audio,
 }
@@ -109,10 +110,14 @@ impl CmdEnv {
         }
     }
 
-    pub fn dispatch(&mut self, maybe_cmdline: Option<&mut String::<1024>>, maybe_callback: Option<&MessageEnvelope>) -> Result<Option<String::<1024>>, xous::Error> {
+    pub fn dispatch(
+        &mut self,
+        maybe_cmdline: Option<&mut String<1024>>,
+        maybe_callback: Option<&MessageEnvelope>,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
 
-        let commands: &mut [& mut dyn ShellCmdApi] = &mut [
+        let commands: &mut [&mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut self.audio_cmd,
         ];
@@ -120,7 +125,7 @@ impl CmdEnv {
         if let Some(cmdline) = maybe_cmdline {
             let maybe_verb = tokenize(cmdline);
 
-            let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<String<1024>>, xous::Error> = Ok(None);
             if let Some(verb_string) = maybe_verb {
                 let verb = verb_string.to_str();
 
@@ -155,15 +160,11 @@ impl CmdEnv {
                 Ok(None)
             }
         } else if let Some(callback) = maybe_callback {
-            let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<String<1024>>, xous::Error> = Ok(None);
             // first check and see if we have a callback registration; if not, just map to the last verb
             let verb = match self.common_env.cb_registrations.get(&(callback.body.id() as u32)) {
-                Some(verb) => {
-                    verb.to_str()
-                },
-                None => {
-                    self.lastverb.to_str()
-                }
+                Some(verb) => verb.to_str(),
+                None => self.lastverb.to_str(),
             };
             // now dispatch
             let mut verbfound = false;
@@ -174,11 +175,7 @@ impl CmdEnv {
                     break;
                 };
             }
-            if verbfound {
-                cmd_ret
-            } else {
-                Ok(None)
-            }
+            if verbfound { cmd_ret } else { Ok(None) }
         } else {
             Ok(None)
         }
@@ -188,7 +185,7 @@ impl CmdEnv {
 /// extract the first token, as delimited by spaces
 /// modifies the incoming line by removing the token and returning the remainder
 /// returns the found token
-pub fn tokenize(line: &mut String::<1024>) -> Option<String::<1024>> {
+pub fn tokenize(line: &mut String<1024>) -> Option<String<1024>> {
     let mut token = String::<1024>::new();
     let mut retline = String::<1024>::new();
 
@@ -211,9 +208,5 @@ pub fn tokenize(line: &mut String::<1024>) -> Option<String::<1024>> {
     }
     line.clear();
     write!(line, "{}", retline.as_str().unwrap()).unwrap();
-    if token.len() > 0 {
-        Some(token)
-    } else {
-        None
-    }
+    if token.len() > 0 { Some(token) } else { None }
 }

@@ -37,7 +37,7 @@ impl Endian for BigEndian {
         // Case 2: More than 1 byte but the LSB at the end of the input
         // is already in position 0 so no shifting is required
         } else if E::USIZE == 0 {
-            // Since we aren't shrinking the data down by aligning the fields, the output 
+            // Since we aren't shrinking the data down by aligning the fields, the output
             // buffer must be at least as long as the input
             assert!(output_bytes.len() >= input_bytes.len());
 
@@ -52,13 +52,13 @@ impl Endian for BigEndian {
                 output_bytes[o_start] &= S::HEAD_MASK;
             }
 
-        // Note: Case 3 and 4 could be merged with some minor tweaks around the input start 
+        // Note: Case 3 and 4 could be merged with some minor tweaks around the input start
         //       and an extra negative offset to output index for case 4 but I've left them
         //       split up for ease of debugging while testing edge cases for now.
         // Case 3: More than 1 byte and LSB at the end ISN'T at position 0 and we aren't
         // shrinking the data down by aligning the fields. We need to shift every byte
         } else if S::USIZE >= E::USIZE {
-            // Since we aren't shrinking the data down by aligning the fields, the output 
+            // Since we aren't shrinking the data down by aligning the fields, the output
             // buffer must be at least as long as the input
             assert!(output_bytes.len() >= input_bytes.len());
 
@@ -66,7 +66,7 @@ impl Endian for BigEndian {
             let o_start = o_len - i_len;
 
             for i in 0..i_len {
-                output_bytes[o_start + i] = 
+                output_bytes[o_start + i] =
                     match i {
                         // No prior byte, just masked and shifted left by the number of bits
                         // we need to fill the space in the last byte
@@ -80,12 +80,12 @@ impl Endian for BigEndian {
                         _ => (input_bytes[i-1] << (8-E::USIZE))
                             | (input_bytes[i] >> E::USIZE),
                     };
-            }         
+            }
 
-        // Case 4: More than 1 byte and LSB at the end ISN'T at position 0 and we ARE 
+        // Case 4: More than 1 byte and LSB at the end ISN'T at position 0 and we ARE
         // shrinking the data down by 1 byte by aligning the fields. We need to shift every byte
         } else {
-            // Since we are shrinking the data down by aligning the fields, the output 
+            // Since we are shrinking the data down by aligning the fields, the output
             // buffer can be 1 smaller than the input
             assert!(output_bytes.len() >= input_bytes.len() - 1);
 
@@ -93,7 +93,7 @@ impl Endian for BigEndian {
             let o_start = o_len - (i_len - 1);
 
             for i in 1..i_len {
-                output_bytes[o_start + i - 1] = 
+                output_bytes[o_start + i - 1] =
                     match i {
                         // No prior byte, just masked and shifted left by the number of bits
                         // we need to fill the space in the last byte

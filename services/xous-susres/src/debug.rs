@@ -1,6 +1,7 @@
-use utralib::generated::*;
-use core::fmt::Write;
 use core::fmt::Error;
+use core::fmt::Write;
+
+use utralib::generated::*;
 pub struct Uart {}
 
 // this is a hack to bypass an explicit initialization/allocation step for the debug structure
@@ -56,12 +57,8 @@ impl Uart {
         println!("Mapped UART @ {:x?}", uart.as_ptr());
 
         println!("Allocating IRQ...");
-        xous::claim_interrupt(
-            utra::app_uart::APP_UART_IRQ,
-            handle_irq,
-            core::ptr::null_mut::<usize>(),
-        )
-        .expect("unable to allocate IRQ");
+        xous::claim_interrupt(utra::app_uart::APP_UART_IRQ, handle_irq, core::ptr::null_mut::<usize>())
+            .expect("unable to allocate IRQ");
         self.enable_rx();
     }
 
@@ -79,7 +76,7 @@ impl Uart {
     pub fn enable_rx(&mut self) {
         let mut uart_csr = CSR::new(unsafe { DEFAULT_UART_ADDR as *mut u32 });
 
-        uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1 );
+        uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
     }
 
     pub fn getc(&mut self) -> Option<u8> {

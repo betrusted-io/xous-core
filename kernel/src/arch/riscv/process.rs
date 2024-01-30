@@ -8,9 +8,10 @@ pub const EXCEPTION_TID: TID = 1;
 pub const INITIAL_TID: TID = 2;
 pub const IRQ_TID: TID = 0;
 
+use xous_kernel::{ProcessInit, ProcessStartup, ThreadInit, PID, TID};
+
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
-use xous_kernel::{ProcessInit, ProcessStartup, ThreadInit, PID, TID};
 
 // use crate::args::KernelArguments;
 pub const DEFAULT_STACK_SIZE: usize = 128 * 1024;
@@ -81,6 +82,21 @@ struct ProcessImpl {
     threads: [Thread; MAX_THREAD],
 }
 
+/// Compile-time assertion that the procesor-specific Process implementation
+/// is a multiple of the page size.
+fn _assert_processimpl_is_page_sized() {
+    unsafe {
+        mem::transmute::<ProcessImpl, [u8; crate::mem::PAGE_SIZE]>(ProcessImpl {
+            scratch: 0,
+            hardware_thread: 0,
+            inner: Default::default(),
+            last_tid_allocated: 0,
+            _padding: [0; 13],
+            threads: [Default::default(); MAX_THREAD],
+        });
+    }
+}
+
 /// Singleton process table. Each process in the system gets allocated from this table.
 struct ProcessTable {
     /// The process upon which the current syscall is operating
@@ -91,10 +107,8 @@ struct ProcessTable {
     table: [bool; MAX_PROCESS_COUNT],
 }
 
-static mut PROCESS_TABLE: ProcessTable = ProcessTable {
-    current: unsafe { PID::new_unchecked(1) },
-    table: [false; MAX_PROCESS_COUNT],
-};
+static mut PROCESS_TABLE: ProcessTable =
+    ProcessTable { current: unsafe { PID::new_unchecked(1) }, table: [false; MAX_PROCESS_COUNT] };
 
 #[repr(C)]
 #[cfg(baremetal)]
@@ -112,6 +126,9 @@ pub struct InitialProcess {
 
     /// Address of the top of the stack
     pub sp: usize,
+
+    /// Address of the environment block
+    pub env: usize,
 }
 
 impl InitialProcess {
@@ -127,13 +144,7 @@ pub struct Process {
     pid: PID,
 }
 
-fn fixup_irq(tid: TID) -> TID {
-    if tid == IRQ_TID_SENTINAL {
-        0
-    } else {
-        tid
-    }
-}
+fn fixup_irq(tid: TID) -> TID { if tid == IRQ_TID_SENTINAL { 0 } else { tid } }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
@@ -158,9 +169,7 @@ impl Process {
     }
 
     /// Mark this process as running on the current core
-    pub fn activate(&mut self) -> Result<(), xous_kernel::Error> {
-        Ok(())
-    }
+    pub fn activate(&mut self) -> Result<(), xous_kernel::Error> { Ok(()) }
 
     /// Calls the provided function with the current inner process state.
     pub fn with_inner<F, R>(f: F) -> R
@@ -224,11 +233,7 @@ impl Process {
         let process = unsafe { &mut *PROCESS };
         let tid = fixup_irq(tid);
         klog!("Switching to thread {}", tid);
-        assert!(
-            tid <= process.threads.len(),
-            "attempt to switch to an invalid thread {}",
-            tid
-        );
+        assert!(tid <= process.threads.len(), "attempt to switch to an invalid thread {}", tid);
         process.hardware_thread = tid + 1;
         Ok(())
     }
@@ -236,22 +241,14 @@ impl Process {
     pub fn thread_mut(&mut self, tid: TID) -> &mut Thread {
         let process = unsafe { &mut *PROCESS };
         let tid = fixup_irq(tid);
-        assert!(
-            tid <= process.threads.len(),
-            "attempt to retrieve an invalid thread {}",
-            tid
-        );
+        assert!(tid <= process.threads.len(), "attempt to retrieve an invalid thread {}", tid);
         &mut process.threads[tid]
     }
 
     pub fn thread(&self, tid: TID) -> &Thread {
         let process = unsafe { &mut *PROCESS };
         let tid = fixup_irq(tid);
-        assert!(
-            tid <= process.threads.len(),
-            "attempt to retrieve an invalid thread {}",
-            tid
-        );
+        assert!(tid <= process.threads.len(), "attempt to retrieve an invalid thread {}", tid);
         &process.threads[tid]
     }
 
@@ -294,10 +291,10 @@ impl Process {
     }
 
     pub fn set_thread_result(&mut self, thread_nr: TID, result: xous_kernel::Result) {
-        let vals = unsafe { mem::transmute::<_, [usize; 8]>(result) };
+        let vals = result.to_args();
         let thread = self.thread_mut(thread_nr);
-        for (idx, reg) in vals.iter().enumerate() {
-            thread.registers[9 + idx] = *reg;
+        for (src, dest) in vals.iter().zip(thread.registers[9..].iter_mut()) {
+            *dest = *src;
         }
     }
 
@@ -316,11 +313,7 @@ impl Process {
         let process = unsafe { &mut *PROCESS };
         let tid = INITIAL_TID;
 
-        assert_eq!(
-            pid,
-            crate::arch::current_pid(),
-            "hardware pid does not match setup pid"
-        );
+        assert_eq!(pid, crate::arch::current_pid(), "hardware pid does not match setup pid");
         assert!(tid != IRQ_TID, "tried to init using the irq thread");
         assert!(
             mem::size_of::<ProcessImpl>() == PAGE_SIZE,
@@ -331,10 +324,7 @@ impl Process {
             mem::size_of::<[Thread; MAX_THREAD + 1]>(),
             mem::size_of::<ProcessInner>(),
         );
-        assert!(
-            tid - 1 < process.threads.len(),
-            "tried to init a thread that's out of range"
-        );
+        assert!(tid - 1 < process.threads.len(), "tried to init a thread that's out of range");
         assert!(
             tid == INITIAL_TID,
             "tried to init using a thread {} that wasn't {}. This probably isn't what you want.",
@@ -345,11 +335,7 @@ impl Process {
         klog!("Setting up new process {}", pid.get());
         unsafe {
             let pid_idx = (pid.get() as usize) - 1;
-            assert!(
-                !PROCESS_TABLE.table[pid_idx],
-                "process {} is already allocated",
-                pid
-            );
+            assert!(!PROCESS_TABLE.table[pid_idx], "process {} is already allocated", pid);
             PROCESS_TABLE.table[pid_idx] = true;
         }
 
@@ -365,7 +351,7 @@ impl Process {
 
         let thread = &mut process.threads[tid];
 
-        thread.sepc = unsafe { core::mem::transmute::<_, usize>(thread_init.call) };
+        thread.sepc = thread_init.call as usize;
         thread.registers[1] = thread_init.stack.as_ptr() as usize + thread_init.stack.len();
         thread.registers[9] = thread_init.arg1;
         thread.registers[10] = thread_init.arg2;
@@ -380,13 +366,17 @@ impl Process {
             if pid != 1 {
                 klog!(
                     "initializing PID {} thread {} with entrypoint {:08x}, stack @ {:08x}, arg {:08x}",
-                    pid, tid, thread.sepc, thread.registers[1], thread.registers[9],
+                    pid,
+                    tid,
+                    thread.sepc,
+                    thread.registers[1],
+                    thread.registers[9],
                 );
             }
         }
 
         process.inner = Default::default();
-	process.inner.pid = pid;
+        process.inner.pid = pid;
 
         // Mark the stack as "unallocated-but-free"
         let init_sp = (thread_init.stack.as_ptr() as usize) & !0xfff;
@@ -405,20 +395,22 @@ impl Process {
         Ok(())
     }
 
-    pub fn setup_thread(
-        &mut self,
-        new_tid: TID,
-        setup: ThreadInit,
-    ) -> Result<(), xous_kernel::Error> {
-        let entrypoint = unsafe { core::mem::transmute::<_, usize>(setup.call) };
+    pub fn setup_thread(&mut self, new_tid: TID, setup: ThreadInit) -> Result<(), xous_kernel::Error> {
+        let entrypoint = setup.call as usize;
         // Create the new context and set it to run in the new address space.
         let pid = self.pid.get();
         let thread = self.thread_mut(new_tid);
-        // println!("Setting up thread {}, pid {}", new_tid, pid);
         let sp = setup.stack.as_ptr() as usize + setup.stack.len();
         if sp <= 16 {
             return Err(xous_kernel::Error::BadAddress);
         }
+        // Zero out the thread registers, including special ones like `$tp`.
+        // This should already have been done by the destructor, but do it
+        // again anyway.
+        for val in &mut thread.registers {
+            *val = 0;
+        }
+        thread.sepc = 0;
         crate::arch::syscall::invoke(
             thread,
             pid == 1,
@@ -552,31 +544,17 @@ impl Process {
 
 impl Thread {
     /// The current stack pointer for this thread
-    pub fn stack_pointer(&self) -> usize {
-        self.registers[1]
-    }
+    pub fn stack_pointer(&self) -> usize { self.registers[1] }
 
-    pub fn a0(&self) -> usize {
-        self.registers[9]
-    }
+    pub fn a0(&self) -> usize { self.registers[9] }
 
-    pub fn a1(&self) -> usize {
-        self.registers[10]
-    }
+    pub fn a1(&self) -> usize { self.registers[10] }
 }
 
 impl core::fmt::Display for Thread {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(
-            f,
-            "PC:{:08x}   SP:{:08x}   RA:{:08x}",
-            self.sepc, self.registers[1], self.registers[0]
-        )?;
-        writeln!(
-            f,
-            "GP:{:08x}   TP:{:08x}",
-            self.registers[2], self.registers[3]
-        )?;
+        writeln!(f, "PC:{:08x}   SP:{:08x}   RA:{:08x}", self.sepc, self.registers[1], self.registers[0])?;
+        writeln!(f, "GP:{:08x}   TP:{:08x}", self.registers[2], self.registers[3])?;
         writeln!(
             f,
             "T0:{:08x}   T1:{:08x}   T2:{:08x}",
@@ -629,10 +607,6 @@ pub fn set_current_pid(pid: PID) {
     }
 }
 
-pub fn current_pid() -> PID {
-    unsafe { PROCESS_TABLE.current }
-}
+pub fn current_pid() -> PID { unsafe { PROCESS_TABLE.current } }
 
-pub fn current_tid() -> TID {
-    unsafe { ((*PROCESS).hardware_thread) - 1 }
-}
+pub fn current_tid() -> TID { unsafe { ((*PROCESS).hardware_thread) - 1 } }

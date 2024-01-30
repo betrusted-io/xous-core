@@ -1,18 +1,20 @@
 use core::num::NonZeroU64;
 use core::ops::Add;
+use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
+
+use bitfield::bitfield;
+
 use super::{PAGE_SIZE, VPAGE_SIZE};
 use crate::SpaceState;
-use bitfield::bitfield;
-use std::hash::{Hash, Hasher};
-use std::cmp::Ordering;
 
 /// for the life of me, I can't figure out how to query the AES crate to give me the length of a 256-bit key.
 /// I mean, we know what it is, it's well-defined and never changes. But it'd just be nice to you know,
 /// derive it from a const or something with symbolic meaning, but the KeySize Trait is buried in some sort
 /// of a NewBlock trait and I can't figure out how to access it. Looking at the example code on the AES crate
 /// on docs.rs, they just pull the number 16 out of their ass instead of referring to a trait.
-/// So, maybe that's just what you're supposed to do. ¯\_(ツ)_/¯ Oddly enough, a BLOCK_SIZE constant /is/ defined,
-/// but maybe that's because it's constant regardless of the key size so it's easy to do.
+/// So, maybe that's just what you're supposed to do. ¯\_(ツ)_/¯ Oddly enough, a BLOCK_SIZE constant /is/
+/// defined, but maybe that's because it's constant regardless of the key size so it's easy to do.
 pub(crate) const AES_KEYSIZE: usize = 32;
 
 /// This has to be manually synchronized with the bit range of the `journal` field below. It doesn't look like
@@ -44,24 +46,16 @@ bitfield! {
 }
 // hashes should only key off of the page number, not the metadata
 impl Hash for PhysPage {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.page_number().hash(state);
-    }
+    fn hash<H: Hasher>(&self, state: &mut H) { self.page_number().hash(state); }
 }
 impl PartialEq for PhysPage {
-    fn eq(&self, other: &Self) -> bool {
-        self.page_number() == other.page_number()
-    }
+    fn eq(&self, other: &Self) -> bool { self.page_number() == other.page_number() }
 }
 impl Ord for PhysPage {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.page_number().cmp(&other.page_number())
-    }
+    fn cmp(&self, other: &Self) -> Ordering { self.page_number().cmp(&other.page_number()) }
 }
 impl PartialOrd for PhysPage {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
 }
 
 /// Storage for journal revisions.
@@ -90,10 +84,13 @@ impl PageAlignedVa {
             panic!("PageAlignedVa would not fit into a u32");
         }
     }
+
     #[allow(dead_code)]
-    pub(crate) fn as_u64(&self) -> u64 {self.0.get()}
+    pub(crate) fn as_u64(&self) -> u64 { self.0.get() }
+
     #[allow(dead_code)]
-    pub(crate) fn as_usize(&self) -> usize {self.0.get() as usize}
+    pub(crate) fn as_usize(&self) -> usize { self.0.get() as usize }
+
     /// This will turn a PageAlignedVa into a page number
     #[allow(dead_code)]
     pub(crate) fn as_vpage_num(&self) -> usize {
@@ -102,8 +99,9 @@ impl PageAlignedVa {
     }
 }
 impl Default for PageAlignedVa {
-    // 0 is not a valid address; the offset at VPAGE_SIZE is the location of BasisRoot, and that is the default value.
-    fn default() -> Self {PageAlignedVa(VirtAddr::new(VPAGE_SIZE as u64).unwrap())}
+    // 0 is not a valid address; the offset at VPAGE_SIZE is the location of BasisRoot, and that is the
+    // default value.
+    fn default() -> Self { PageAlignedVa(VirtAddr::new(VPAGE_SIZE as u64).unwrap()) }
 }
 impl From<u64> for PageAlignedVa {
     fn from(arg: u64) -> Self {
@@ -138,6 +136,7 @@ impl From<usize> for PageAlignedVa {
 }
 impl Add for PageAlignedVa {
     type Output = PageAlignedVa;
+
     fn add(self, other: PageAlignedVa) -> PageAlignedVa {
         let a = self.0.get();
         let b = other.0.get();
@@ -150,42 +149,42 @@ impl Add for PageAlignedVa {
 pub(crate) struct PageAlignedPa(PhysAddr);
 impl PageAlignedPa {
     #[allow(dead_code)]
-    pub(crate) fn as_u32(&self) -> u32 {self.0 as u32}
+    pub(crate) fn as_u32(&self) -> u32 { self.0 as u32 }
+
     #[allow(dead_code)]
-    pub(crate) fn as_u64(&self) -> u64 {self.0 as u64}
+    pub(crate) fn as_u64(&self) -> u64 { self.0 as u64 }
+
     #[allow(dead_code)]
-    pub(crate) fn as_usize(&self) -> usize {self.0 as usize}
+    pub(crate) fn as_usize(&self) -> usize { self.0 as usize }
+
     #[allow(dead_code)]
-    pub(crate) fn as_phys_addr(&self) -> PhysAddr {self.0}
+    pub(crate) fn as_phys_addr(&self) -> PhysAddr { self.0 }
 }
 impl From<u32> for PageAlignedPa {
     fn from(arg: u32) -> Self {
         if arg & (PAGE_SIZE as u32 - 1) == 0 {
-            PageAlignedPa( (arg & !(PAGE_SIZE as u32 - 1)) as PhysAddr )
+            PageAlignedPa((arg & !(PAGE_SIZE as u32 - 1)) as PhysAddr)
         } else {
-            PageAlignedPa( ((arg & !(PAGE_SIZE as u32 - 1)) + PAGE_SIZE as u32) as PhysAddr )
+            PageAlignedPa(((arg & !(PAGE_SIZE as u32 - 1)) + PAGE_SIZE as u32) as PhysAddr)
         }
     }
 }
 impl From<usize> for PageAlignedPa {
     fn from(arg: usize) -> Self {
         if arg & (PAGE_SIZE as usize - 1) == 0 {
-            PageAlignedPa( (arg as u32 & !(PAGE_SIZE as u32 - 1)) as PhysAddr )
+            PageAlignedPa((arg as u32 & !(PAGE_SIZE as u32 - 1)) as PhysAddr)
         } else {
-            PageAlignedPa( ((arg as u32 & !(PAGE_SIZE as u32 - 1)) + PAGE_SIZE as u32) as PhysAddr )
+            PageAlignedPa(((arg as u32 & !(PAGE_SIZE as u32 - 1)) + PAGE_SIZE as u32) as PhysAddr)
         }
     }
 }
 impl From<PageAlignedPa> for u32 {
-    fn from(arg: PageAlignedPa) -> Self {
-        arg.0 as u32
-    }
+    fn from(arg: PageAlignedPa) -> Self { arg.0 as u32 }
 }
 impl Add for PageAlignedPa {
     type Output = PageAlignedPa;
-    fn add(self, other: PageAlignedPa) -> PageAlignedPa {
-        PageAlignedPa(self.0 + other.0 as PhysAddr)
-    }
+
+    fn add(self, other: PageAlignedPa) -> PageAlignedPa { PageAlignedPa(self.0 + other.0 as PhysAddr) }
 }
 
 #[cfg(test)]
@@ -197,10 +196,10 @@ mod tests {
         assert!(PAGE_SIZE & (PAGE_SIZE - 1) == 0, "PAGE_SIZE is not a power of two!");
     }
     /// This test exists because nothing in the bitfield spec explicitly requires that a true maps to a 1.
-    /// In fact a lot of code would work just fine if you mapped true to 0 and false to 1: if you're just using
-    /// the generated getter and setter, it woudln't matter.
-    /// However, in our application, we fully expect a true to be a 1. This test exists to ensure this seemingly
-    /// obvious but not explicitly stated fact always remains true.
+    /// In fact a lot of code would work just fine if you mapped true to 0 and false to 1: if you're just
+    /// using the generated getter and setter, it wouldn't matter.
+    /// However, in our application, we fully expect a true to be a 1. This test exists to ensure this
+    /// seemingly obvious but not explicitly stated fact always remains true.
     #[test]
     fn test_bitfield_bool() {
         bitfield! {

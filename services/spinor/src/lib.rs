@@ -14,9 +14,8 @@ lazy_static! {
 
 pub mod api;
 pub use api::*;
-
-use xous::{CID, send_message, Message};
 use num_traits::*;
+use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
 
 #[derive(Debug)]
@@ -26,14 +25,13 @@ pub struct Spinor {
 }
 impl Spinor {
     #[cfg(test)]
-    pub fn new(_: &xous_names::XousNames) -> Self {
-        Spinor { conn: 0, token: [0, 0, 0, 0] }
-    }
+    pub fn new(_: &xous_names::XousNames) -> Self { Spinor { conn: 0, token: [0, 0, 0, 0] } }
 
     #[cfg(not(test))]
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
-        let conn = xns.request_connection_blocking(api::SERVER_NAME_SPINOR).expect("Can't connect to Spinor server");
+        let conn =
+            xns.request_connection_blocking(api::SERVER_NAME_SPINOR).expect("Can't connect to Spinor server");
 
         let trng = trng::Trng::new(&xns).expect("Can't connect to TRNG servere");
         Ok(Spinor {
@@ -49,43 +47,55 @@ impl Spinor {
 
     /// this returns the minimum alignment for an erase block. `write` and `erase` operations
     /// benefit in performance if the requests are aligned to this number.
-    pub fn erase_alignment(&self) -> u32 {
-        SPINOR_ERASE_SIZE
-    }
+    pub fn erase_alignment(&self) -> u32 { SPINOR_ERASE_SIZE }
 
     /// this function needs to be called by the "one true" authorized updater for the SOC gateware region
     /// it must be called very early in the boot process, while we are still in the fully trusted code zone
-    /// This registers that server as the only server which is authorized to request a patch to the SOC gateware region.
-    /// later on, anyone is welcome to try to call it; it will have no effect.
+    /// This registers that server as the only server which is authorized to request a patch to the SOC
+    /// gateware region. later on, anyone is welcome to try to call it; it will have no effect.
     ///
-    /// Note to self: because we don't have the SOC updater written, this token is curretnly occupied by keys.rs in
-    /// the shellchat command. Later on, we will want to move this to the final server, once it is written.
+    /// Note to self: because we don't have the SOC updater written, this token is curretnly occupied by
+    /// keys.rs in the shellchat command. Later on, we will want to move this to the final server, once it
+    /// is written.
     pub fn register_soc_token(&self) -> Result<(), xous::Error> {
-        send_message(self.conn,
-            Message::new_scalar(Opcode::RegisterSocToken.to_usize().unwrap(),
-            self.token[0] as usize,
-            self.token[1] as usize,
-            self.token[2] as usize,
-            self.token[3] as usize,
-        )).map(|_| ())
+        send_message(
+            self.conn,
+            Message::new_scalar(
+                Opcode::RegisterSocToken.to_usize().unwrap(),
+                self.token[0] as usize,
+                self.token[1] as usize,
+                self.token[2] as usize,
+                self.token[3] as usize,
+            ),
+        )
+        .map(|_| ())
     }
+
     pub fn set_staging_write_protect(&self, protect: bool) -> Result<(), xous::Error> {
         if protect {
-            send_message(self.conn,
-                Message::new_scalar(Opcode::SetStagingWriteProtect.to_usize().unwrap(),
-                self.token[0] as usize,
-                self.token[1] as usize,
-                self.token[2] as usize,
-                self.token[3] as usize,
-            )).map(|_| ())
+            send_message(
+                self.conn,
+                Message::new_scalar(
+                    Opcode::SetStagingWriteProtect.to_usize().unwrap(),
+                    self.token[0] as usize,
+                    self.token[1] as usize,
+                    self.token[2] as usize,
+                    self.token[3] as usize,
+                ),
+            )
+            .map(|_| ())
         } else {
-            send_message(self.conn,
-                Message::new_scalar(Opcode::ClearStagingWriteProtect.to_usize().unwrap(),
-                self.token[0] as usize,
-                self.token[1] as usize,
-                self.token[2] as usize,
-                self.token[3] as usize,
-            )).map(|_| ())
+            send_message(
+                self.conn,
+                Message::new_scalar(
+                    Opcode::ClearStagingWriteProtect.to_usize().unwrap(),
+                    self.token[0] as usize,
+                    self.token[1] as usize,
+                    self.token[2] as usize,
+                    self.token[3] as usize,
+                ),
+            )
+            .map(|_| ())
         }
     }
 
@@ -99,13 +109,13 @@ impl Spinor {
                 if let Some(res) = wr.result {
                     match res {
                         SpinorError::NoError => Ok(()),
-                        _ => Err(res)
+                        _ => Err(res),
                     }
                 } else {
                     Err(SpinorError::ImplementationError)
                 }
             }
-            _ => Err(SpinorError::ImplementationError)
+            _ => Err(SpinorError::ImplementationError),
         }
     }
 
@@ -113,13 +123,19 @@ impl Spinor {
     fn send_write_region(&self, wr: &WriteRegion) -> Result<(), SpinorError> {
         let mut i = 0;
         if !wr.clean_patch {
-            assert!((wr.start & 0xFFF) == 0, "erasing is required, but start address is not erase-sector aligned");
+            assert!(
+                (wr.start & 0xFFF) == 0,
+                "erasing is required, but start address is not erase-sector aligned"
+            );
             for addr in wr.start..wr.start + 4096 {
                 EMU_FLASH.lock().unwrap()[addr as usize] = 0xFF;
             }
         }
         for addr in wr.start..wr.start + wr.len {
-            assert!(EMU_FLASH.lock().unwrap()[addr as usize] == 0xFF, "attempt to write memory that's not erased");
+            assert!(
+                EMU_FLASH.lock().unwrap()[addr as usize] == 0xFF,
+                "attempt to write memory that's not erased"
+            );
             EMU_FLASH.lock().unwrap()[addr as usize] = wr.data[i];
             i += 1;
         }
@@ -136,13 +152,13 @@ impl Spinor {
                 if let Some(res) = wr.result {
                     match res {
                         SpinorError::NoError => Ok(()),
-                        _ => Err(res)
+                        _ => Err(res),
                     }
                 } else {
                     Err(SpinorError::ImplementationError)
                 }
             }
-            _ => Err(SpinorError::ImplementationError)
+            _ => Err(SpinorError::ImplementationError),
         }
     }
 
@@ -156,14 +172,16 @@ impl Spinor {
         Ok(())
     }
 
-    /// `bulk_erase` is a function to be used fairly rarely, as it will erase just about anything and everything and it
-    /// requires a 64k-alignment for the start and len arguments. It's a bit too coarse a hammer to be used in many
-    /// functions, and confers little performance benefit when erasing fewer than a couple megabytes of data. The main
-    /// intended use of this is for PDDB-region bulk erase, which is about 100MiB and this should reduce the erase time
-    /// by about 20-30% instead of using the `patch` function to patch a blank sector. The current implementation enforces
-    /// the bounds of `bulk_erase` to be within the PDDB region with a check on the server side.
+    /// `bulk_erase` is a function to be used fairly rarely, as it will erase just about anything and
+    /// everything and it requires a 64k-alignment for the start and len arguments. It's a bit too coarse
+    /// a hammer to be used in many functions, and confers little performance benefit when erasing fewer
+    /// than a couple megabytes of data. The main intended use of this is for PDDB-region bulk erase,
+    /// which is about 100MiB and this should reduce the erase time by about 20-30% instead of using the
+    /// `patch` function to patch a blank sector. The current implementation enforces the bounds of
+    /// `bulk_erase` to be within the PDDB region with a check on the server side.
     ///
-    /// Also note that the `start` address is given as an offset from the start of FLASH, and not as an absolute memory address.
+    /// Also note that the `start` address is given as an offset from the start of FLASH, and not as an
+    /// absolute memory address.
     pub fn bulk_erase(&self, start: u32, len: u32) -> Result<(), SpinorError> {
         if (start & (SPINOR_BULK_ERASE_SIZE - 1)) != 0 {
             return Err(SpinorError::AlignmentError);
@@ -176,18 +194,21 @@ impl Spinor {
         {
             const RETRY_LIMIT: usize = 5;
             for i in 0..RETRY_LIMIT {
-                let response = send_message(self.conn,
-                    Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
+                let response = send_message(
+                    self.conn,
+                    Message::new_blocking_scalar(
+                        Opcode::AcquireExclusive.to_usize().unwrap(),
                         self.token[0] as usize,
                         self.token[1] as usize,
                         self.token[2] as usize,
                         self.token[3] as usize,
-                    )
-                ).expect("couldn't send AcquireExclusive message to Spinor hardware!");
+                    ),
+                )
+                .expect("couldn't send AcquireExclusive message to Spinor hardware!");
                 if let xous::Result::Scalar1(result) = response {
                     if result == 0 {
                         if i == RETRY_LIMIT - 1 {
-                            return Err(SpinorError::BusyTryAgain)
+                            return Err(SpinorError::BusyTryAgain);
                         }
                         xous::yield_slice();
                     } else {
@@ -196,40 +217,46 @@ impl Spinor {
                 }
             }
         }
-        let be = BulkErase {
-            id: self.token,
-            start,
-            len,
-            result: None
-        };
+        let be = BulkErase { id: self.token, start, len, result: None };
         let ret = self.send_bulk_erase(&be);
         // release the write lock before exiting
         #[cfg(not(test))]
-        let _ = send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::ReleaseExclusive.to_usize().unwrap(), 0, 0, 0, 0)
-        ).expect("couldn't send ReleaseExclusive message");
+        let _ = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::ReleaseExclusive.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .expect("couldn't send ReleaseExclusive message");
         ret
     }
 
-    /// `patch` is an extremely low-level function that can patch data on FLASH. Access control must be enforced by higher level
-    ///     abstractions. However, there is a single sanity check on the server side that prevents rogue writes to the SoC gateware area.
-    ///     Aside from that, it's the wild west! Think of this as `dd` into a raw disk device node, and not a filesystem-abstracted `write`
-    /// `region` is a slice that points to the target region that we wish to patch -- ostensibly we should have access to it, so this should
-    ///     just be the MemoryRange turned into a slice.
-    /// `region_base` is the physical base address of `region`, given as an offset from base of FLASH (that is, physical address minus 0x2000_0000)
-    ///     this *must* be aligned to an erase sector.
-    /// `patch_data` is a slice that contains exactly the data we want to have patched into FLASH. If you're lazy and you just send a large
-    ///     amount of unchanged data with a couple small changes scattered about, this will not be "smart" about it and do a diff and
-    ///     optimally patch sub-regions. It will erase and re-write the entire region included in the patch. It must also be a multiple
-    ///     of two u8s in length, because the DDR interface can only tranfer even multiples of bytes.
-    /// `patch_index` is the offset relative to the base address of `region` to patch. It is *not* relative to the base of FLASH,
-    ///   it is relative to the base of `region`. You can think of it as the index into the `region` slice where the patch data should go.
-    ///   patch_index /can/ have an odd byte offset, but it will still need to write at a minimum two bytes of data starting at the odd
-    ///   byte offset.
+    /// `patch` is an extremely low-level function that can patch data on FLASH. Access control must be
+    /// enforced by higher level     abstractions. However, there is a single sanity check on the server
+    /// side that prevents rogue writes to the SoC gateware area.     Aside from that, it's the wild west!
+    /// Think of this as `dd` into a raw disk device node, and not a filesystem-abstracted `write`
+    /// `region` is a slice that points to the target region that we wish to patch -- ostensibly we should
+    /// have access to it, so this should     just be the MemoryRange turned into a slice.
+    /// `region_base` is the physical base address of `region`, given as an offset from base of FLASH (that
+    /// is, physical address minus 0x2000_0000)     this *must* be aligned to an erase sector.
+    /// `patch_data` is a slice that contains exactly the data we want to have patched into FLASH. If you're
+    /// lazy and you just send a large     amount of unchanged data with a couple small changes scattered
+    /// about, this will not be "smart" about it and do a diff and     optimally patch sub-regions. It
+    /// will erase and re-write the entire region included in the patch. It must also be a multiple     of
+    /// two u8s in length, because the DDR interface can only tranfer even multiples of bytes.
+    /// `patch_index` is the offset relative to the base address of `region` to patch. It is *not* relative to
+    /// the base of FLASH,   it is relative to the base of `region`. You can think of it as the index into
+    /// the `region` slice where the patch data should go.   patch_index /can/ have an odd byte offset,
+    /// but it will still need to write at a minimum two bytes of data starting at the odd   byte offset.
     ///  Notes:
-    ///    - the server will entirely skip writing over 256-byte pages that are blank. So, if the goal is to erase a region,
-    ///      call patch with data of all 0xFF - this will effectively only do an erase, but no subsequent writes.
-    pub fn patch(&self, region: &[u8], region_base: u32, patch_data: &[u8], patch_index: u32) -> Result<(), SpinorError> {
+    ///    - the server will entirely skip writing over 256-byte pages that are blank. So, if the goal is to
+    ///      erase a region, call patch with data of all 0xFF - this will effectively only do an erase, but no
+    ///      subsequent writes.
+    pub fn patch(
+        &self,
+        region: &[u8],
+        region_base: u32,
+        patch_data: &[u8],
+        patch_index: u32,
+    ) -> Result<(), SpinorError> {
         let align_mask = self.erase_alignment() - 1;
         if (region_base & align_mask) != 0 {
             return Err(SpinorError::AlignmentError);
@@ -237,7 +264,8 @@ impl Spinor {
         if patch_data.len() % 2 != 0 {
             return Err(SpinorError::AlignmentError);
         }
-        if patch_index % 2 != 0 { // seems in DDR mode, the alignment must be to 16-bit boundaries
+        if patch_index % 2 != 0 {
+            // seems in DDR mode, the alignment must be to 16-bit boundaries
             return Err(SpinorError::AlignmentError);
         }
         // acquire a write lock on the unit
@@ -245,18 +273,21 @@ impl Spinor {
         {
             const RETRY_LIMIT: usize = 5;
             for i in 0..RETRY_LIMIT {
-                let response = send_message(self.conn,
-                    Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
+                let response = send_message(
+                    self.conn,
+                    Message::new_blocking_scalar(
+                        Opcode::AcquireExclusive.to_usize().unwrap(),
                         self.token[0] as usize,
                         self.token[1] as usize,
                         self.token[2] as usize,
                         self.token[3] as usize,
-                    )
-                ).expect("couldn't send AcquireExclusive message to Spinor hardware!");
+                    ),
+                )
+                .expect("couldn't send AcquireExclusive message to Spinor hardware!");
                 if let xous::Result::Scalar1(result) = response {
                     if result == 0 {
                         if i == RETRY_LIMIT - 1 {
-                            return Err(SpinorError::BusyTryAgain)
+                            return Err(SpinorError::BusyTryAgain);
                         }
                         xous::yield_slice();
                     } else {
@@ -289,13 +320,19 @@ impl Spinor {
         let mut cur_index = patch_index_aligned;
         let mut cur_patch_index = 0;
         let mut ret: Result<(), SpinorError> = Ok(());
-        for sector in region[patch_index_aligned as usize ..(patch_index_aligned + patch_len_aligned) as usize].chunks_exact(self.erase_alignment() as usize).into_iter() {
+        for sector in region[patch_index_aligned as usize..(patch_index_aligned + patch_len_aligned) as usize]
+            .chunks_exact(self.erase_alignment() as usize)
+            .into_iter()
+        {
             // we get chunks instead of chunks_exact() as we /want/ to catch errors in computing alignments
             assert!(sector.len() as u32 == self.erase_alignment(), "alignment masks not computed correctly");
 
             // check to see if we can just write, without having to erase:
-            //   - visit every value in the region to be patched, and if it's not already 0xFF, short-circuit and move to the erase-then-write implementation
-            //   - as we check every value, copy them to the write buffer; we may end up discarding that, though, if we come across an unerased value. that's ok, still faster than always doing an erase then write on average
+            //   - visit every value in the region to be patched, and if it's not already 0xFF, short-circuit
+            //     and move to the erase-then-write implementation
+            //   - as we check every value, copy them to the write buffer; we may end up discarding that,
+            //     though, if we come across an unerased value. that's ok, still faster than always doing an
+            //     erase then write on average
             let mut check_index = cur_index; // copy the writing index to a temporary checking index
             let mut check_patch_index = cur_patch_index; // copy the patching index to a temporary patch checking index
             let mut data_index = 0;
@@ -303,7 +340,8 @@ impl Spinor {
             let mut patch_start: Option<u32> = None;
             let mut patch_dirty = false;
             for &rom_byte in sector.iter() {
-                if !((check_index < patch_index) || (check_index >= (patch_index + patch_data.len() as u32))) {
+                if !((check_index < patch_index) || (check_index >= (patch_index + patch_data.len() as u32)))
+                {
                     if rom_byte != patch_data[check_patch_index as usize] {
                         patch_dirty = true;
                     }
@@ -324,7 +362,8 @@ impl Spinor {
 
             if erased && patch_dirty {
                 wr.clean_patch = true;
-                wr.start = patch_start.expect("check region did not intersect patch region; this shouldn't be possible.");
+                wr.start = patch_start
+                    .expect("check region did not intersect patch region; this shouldn't be possible.");
                 wr.len = data_index as u32;
                 ret = self.send_write_region(&wr);
                 if ret.is_err() {
@@ -361,8 +400,8 @@ impl Spinor {
                 wr.clean_patch = false;
                 assert!(wr.start & align_mask == 0, "write became misaligned");
 
-                // if the requested patch data happens to be identical to the existing data already, don't even send
-                // the request.
+                // if the requested patch data happens to be identical to the existing data already, don't
+                // even send the request.
                 if dirty {
                     ret = self.send_write_region(&wr);
                     if ret.is_err() {
@@ -374,49 +413,61 @@ impl Spinor {
 
         // release the write lock before exiting
         #[cfg(not(test))]
-        let _ = send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::ReleaseExclusive.to_usize().unwrap(), 0, 0, 0, 0)
-        ).expect("couldn't send ReleaseExclusive message");
+        let _ = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::ReleaseExclusive.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .expect("couldn't send ReleaseExclusive message");
 
         ret
     }
 
-    /// these functions are intended for use by the suspend/resume manager. most functions wouldn't have a need to call this.
+    /// these functions are intended for use by the suspend/resume manager. most functions wouldn't have a
+    /// need to call this.
     pub fn acquire_suspend_lock(&self) -> Result<bool, xous::Error> {
-        let response = send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::AcquireSuspendLock.to_usize().unwrap(), 0, 0, 0, 0)
-        ).expect("Couldn't issue AcquireSuspendLock message");
+        let response = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::AcquireSuspendLock.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .expect("Couldn't issue AcquireSuspendLock message");
         if let xous::Result::Scalar1(result) = response {
-            if result != 0 {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
+            if result != 0 { Ok(true) } else { Ok(false) }
         } else {
             Err(xous::Error::InternalError)
         }
     }
+
     pub fn release_suspend_lock(&self) -> Result<(), xous::Error> {
-        // we ignore the result and just turn it into () once we get anything back, as release_suspend "can't fail"
-        send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::ReleaseSuspendLock.to_usize().unwrap(), 0, 0, 0, 0)
-        ).map(|_| ())
+        // we ignore the result and just turn it into () once we get anything back, as release_suspend "can't
+        // fail"
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::ReleaseSuspendLock.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .map(|_| ())
     }
 }
 
-use core::{sync::atomic::{AtomicU32, Ordering}, u8};
+use core::{
+    sync::atomic::{AtomicU32, Ordering},
+    u8,
+};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 #[cfg(not(test))]
 impl Drop for Spinor {
     fn drop(&mut self) {
-        // the connection to the server side must be reference counted, so that multiple instances of this object within
-        // a single process do not end up de-allocating the CID on other threads before they go out of scope.
-        // Note to future me: you want this. Don't get rid of it because you think, "nah, nobody will ever make more than one copy of this object".
+        // the connection to the server side must be reference counted, so that multiple instances of this
+        // object within a single process do not end up de-allocating the CID on other threads before
+        // they go out of scope. Note to future me: you want this. Don't get rid of it because you
+        // think, "nah, nobody will ever make more than one copy of this object".
         if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
-            unsafe{xous::disconnect(self.conn).unwrap();}
+            unsafe {
+                xous::disconnect(self.conn).unwrap();
+            }
         }
-        // if there was object-specific state (such as a one-time use server for async callbacks, specific to the object instance),
-        // de-allocate those items here. They don't need a reference count because they are object-specific
+        // if there was object-specific state (such as a one-time use server for async callbacks, specific to
+        // the object instance), de-allocate those items here. They don't need a reference count
+        // because they are object-specific
     }
 }
 
@@ -451,7 +502,7 @@ mod tests {
             clean_patch: true,
             data: [0; 4096],
             len: 4,
-            result: None
+            result: None,
         };
         wr.data[0] = 0xAA;
         wr.data[1] = 0xBB;
@@ -515,7 +566,10 @@ mod tests {
     fn flash_fill_rand() {
         use rand::prelude::*;
         use rand_chacha::ChaCha8Rng;
-        let mut rng = ChaCha8Rng::seed_from_u64(TEST_RNG_STATE.load(Ordering::SeqCst) + xous::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst));
+        let mut rng = ChaCha8Rng::seed_from_u64(
+            TEST_RNG_STATE.load(Ordering::SeqCst)
+                + xous::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst),
+        );
         for byte in EMU_FLASH.lock().unwrap().iter_mut() {
             *byte = rng.gen::<u8>();
         }
@@ -535,7 +589,8 @@ mod tests {
        - patch of data into a mostly pre-erased sector with existing data, but into the already-erased section
        - the above, but where the patch length goes beyond the length of a single sector
      */
-    //     pub fn patch(&mut self, region: &[u8], region_base: u32, patch_data: &[u8], patch_index: u32) -> Result<(), SpinorError> {
+    //     pub fn patch(&mut self, region: &[u8], region_base: u32, patch_data: &[u8], patch_index: u32) ->
+    // Result<(), SpinorError> {
 
     #[test]
     fn test_aligned_start_aligned_end() {
@@ -543,14 +598,14 @@ mod tests {
         init_emu_flash(8);
         flash_fill_rand();
 
-        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
-        // here we bodge it out of the emulated flash space with some rough parameter
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our
+        // calling function here we bodge it out of the emulated flash space with some rough parameter
         let mut flash_orig = Vec::<u8>::new();
         flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
 
         let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
         let region_len = 0x1000 * 4; // four sectors long, one sector up
-        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+        let region = &flash_orig[region_base as usize..(region_base + region_len) as usize];
 
         // exactly one sector of patch data
         let mut patch: [u8; 4096] = [0; 4096];
@@ -567,7 +622,13 @@ mod tests {
             if addr < 0x2000 || addr >= 0x3000 {
                 assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched); // e = expected, a = actual
             } else {
-                assert!(patched == addr as u8, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, addr as u8, patched);
+                assert!(
+                    patched == addr as u8,
+                    "data was not patched: {:08x} : e.{:02x} a.{:02x}",
+                    addr,
+                    addr as u8,
+                    patched
+                );
             }
         }
     }
@@ -578,14 +639,14 @@ mod tests {
         init_emu_flash(8);
         // flash_fill_rand();
 
-        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
-        // here we bodge it out of the emulated flash space with some rough parameter
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our
+        // calling function here we bodge it out of the emulated flash space with some rough parameter
         let mut flash_orig = Vec::<u8>::new();
         flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
 
         let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
         let region_len = 0x1000 * 4; // four sectors long, one sector up
-        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+        let region = &flash_orig[region_base as usize..(region_base + region_len) as usize];
 
         // patch two words, the minimum allowed amount
         let patch: [u8; 2] = [0x33, 0xCC];
@@ -597,9 +658,27 @@ mod tests {
 
         for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
             match addr {
-                0x2704 => assert!(patched == 0x33, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0x33, patched),
-                0x2705 => assert!(patched == 0xCC, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0xCC, patched),
-                _ => assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched),
+                0x2704 => assert!(
+                    patched == 0x33,
+                    "data was not patched: {:08x} : e.{:02x} a.{:02x}",
+                    addr,
+                    0x33,
+                    patched
+                ),
+                0x2705 => assert!(
+                    patched == 0xCC,
+                    "data was not patched: {:08x} : e.{:02x} a.{:02x}",
+                    addr,
+                    0xCC,
+                    patched
+                ),
+                _ => assert!(
+                    patched == orig,
+                    "data disturbed: {:08x} : e.{:02x} a.{:02x}",
+                    addr,
+                    orig,
+                    patched
+                ),
             }
         }
         print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x2700..0x2708]);
@@ -611,14 +690,14 @@ mod tests {
         init_emu_flash(8);
         flash_fill_rand();
 
-        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
-        // here we bodge it out of the emulated flash space with some rough parameter
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our
+        // calling function here we bodge it out of the emulated flash space with some rough parameter
         let mut flash_orig = Vec::<u8>::new();
         flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
 
         let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
         let region_len = 0x1000 * 4; // four sectors long, one sector up
-        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+        let region = &flash_orig[region_base as usize..(region_base + region_len) as usize];
 
         // patch one full page
         let mut patch: [u8; 4096] = [0; 4096];
@@ -636,7 +715,13 @@ mod tests {
             if addr < 0x2704 || addr >= 0x3704 {
                 assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched);
             } else {
-                assert!(patched == i as u8, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, i as u8, patched);
+                assert!(
+                    patched == i as u8,
+                    "data was not patched: {:08x} : e.{:02x} a.{:02x}",
+                    addr,
+                    i as u8,
+                    patched
+                );
                 i += 1;
             }
         }
@@ -649,14 +734,14 @@ mod tests {
         init_emu_flash(8);
         flash_fill_rand();
 
-        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
-        // here we bodge it out of the emulated flash space with some rough parameter
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our
+        // calling function here we bodge it out of the emulated flash space with some rough parameter
         let mut flash_orig = Vec::<u8>::new();
         flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
 
         let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
         let region_len = 0x1000 * 4; // four sectors long, one sector up
-        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+        let region = &flash_orig[region_base as usize..(region_base + region_len) as usize];
 
         // patch over a page boundary, but not a full page
         let mut patch: [u8; 2304] = [0; 2304];
@@ -671,8 +756,23 @@ mod tests {
         let mut i = 0;
         for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
             match addr {
-                0x2704..=0x3003 => {assert!(patched == i as u8, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0x33, patched); i+= 1;},
-                _ => assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched),
+                0x2704..=0x3003 => {
+                    assert!(
+                        patched == i as u8,
+                        "data was not patched: {:08x} : e.{:02x} a.{:02x}",
+                        addr,
+                        0x33,
+                        patched
+                    );
+                    i += 1;
+                }
+                _ => assert!(
+                    patched == orig,
+                    "data disturbed: {:08x} : e.{:02x} a.{:02x}",
+                    addr,
+                    orig,
+                    patched
+                ),
             }
         }
     }
@@ -683,14 +783,14 @@ mod tests {
         init_emu_flash(8);
         flash_fill_rand();
 
-        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
-        // here we bodge it out of the emulated flash space with some rough parameter
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our
+        // calling function here we bodge it out of the emulated flash space with some rough parameter
         let mut flash_orig = Vec::<u8>::new();
         flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
 
         let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
         let region_len = 0x1000 * 4; // four sectors long, one sector up
-        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+        let region = &flash_orig[region_base as usize..(region_base + region_len) as usize];
 
         // patch over a page boundary, but not a full page
         let mut patch: [u8; 578] = [0; 578];
@@ -705,8 +805,23 @@ mod tests {
         let mut i = 0;
         for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
             match addr {
-                0x2000..=0x2241 => {assert!(patched == i as u8, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0x33, patched); i+= 1;},
-                _ => assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched),
+                0x2000..=0x2241 => {
+                    assert!(
+                        patched == i as u8,
+                        "data was not patched: {:08x} : e.{:02x} a.{:02x}",
+                        addr,
+                        0x33,
+                        patched
+                    );
+                    i += 1;
+                }
+                _ => assert!(
+                    patched == orig,
+                    "data disturbed: {:08x} : e.{:02x} a.{:02x}",
+                    addr,
+                    orig,
+                    patched
+                ),
             }
         }
     }
@@ -716,19 +831,20 @@ mod tests {
         let mut spinor = Spinor::new();
         init_emu_flash(8);
         flash_fill_rand();
-        // poke a small "erased" region for patching in this test: exactly the right size for the anticipated patch of 384 bytes
+        // poke a small "erased" region for patching in this test: exactly the right size for the anticipated
+        // patch of 384 bytes
         for byte in EMU_FLASH.lock().unwrap()[0x1F00..0x2080].iter_mut() {
             *byte = 0xFF;
         }
 
-        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
-        // here we bodge it out of the emulated flash space with some rough parameter
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our
+        // calling function here we bodge it out of the emulated flash space with some rough parameter
         let mut flash_orig = Vec::<u8>::new();
         flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
 
         let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
         let region_len = 0x1000 * 4; // four sectors long, one sector up
-        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+        let region = &flash_orig[region_base as usize..(region_base + region_len) as usize];
 
         // patch over a page boundary, but not a full page
         let mut patch: [u8; 384] = [0; 384];
@@ -762,14 +878,28 @@ mod tests {
         let mut i = 0;
         for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
             match addr {
-                0x1F00..=0x207F => {assert!(patched == i as u8, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0x33, patched); i+= 1;},
-                _ => assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched),
+                0x1F00..=0x207F => {
+                    assert!(
+                        patched == i as u8,
+                        "data was not patched: {:08x} : e.{:02x} a.{:02x}",
+                        addr,
+                        0x33,
+                        patched
+                    );
+                    i += 1;
+                }
+                _ => assert!(
+                    patched == orig,
+                    "data disturbed: {:08x} : e.{:02x} a.{:02x}",
+                    addr,
+                    orig,
+                    patched
+                ),
             }
         }
         print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x1EFC..0x1F04]);
         print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x207C..0x2084]);
     }
-
 
     #[test]
     fn test_patch_csr_area() {
@@ -781,8 +911,8 @@ mod tests {
             *byte = 0xFF;
         }
 
-        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
-        // here we bodge it out of the emulated flash space with some rough parameter
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our
+        // calling function here we bodge it out of the emulated flash space with some rough parameter
         let mut flash_orig = Vec::<u8>::new();
         flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
 
@@ -804,5 +934,4 @@ mod tests {
         print!("target {:x?}\n", &EMU_FLASH.lock().unwrap()[0x27efc0..0x27f000]);
         print!("wrong  {:x?}\n", &EMU_FLASH.lock().unwrap()[0x27e000..0x27e100]);
     }
-
 }

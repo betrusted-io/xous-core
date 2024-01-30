@@ -137,15 +137,9 @@ impl Iterator for CircleIterator {
                 let is_fill = len <= outer_radius_sq + 1;
 
                 item = if is_border && self.style.stroke_color.is_some() {
-                    Some(Pixel(
-                        self.center + t,
-                        self.style.stroke_color.expect("Border color not defined"),
-                    ))
+                    Some(Pixel(self.center + t, self.style.stroke_color.expect("Border color not defined")))
                 } else if is_fill && self.style.fill_color.is_some() {
-                    Some(Pixel(
-                        self.center + t,
-                        self.style.fill_color.expect("Fill color not defined"),
-                    ))
+                    Some(Pixel(self.center + t, self.style.fill_color.expect("Fill color not defined")))
                 } else {
                     None
                 };
@@ -231,10 +225,7 @@ impl Iterator for RectangleIterator {
                 || (self.p.x <= br.x && self.p.x > br.x - border_width)
                 ) && self.style.stroke_color.is_some()
                 {
-                    out = Some(Pixel(
-                        self.p,
-                        self.style.stroke_color.expect("Expected stroke"),
-                    ));
+                    out = Some(Pixel(self.p, self.style.stroke_color.expect("Expected stroke")));
                 }
                 // Fill
                 else if let Some(fill) = self.style.fill_color {
@@ -258,13 +249,8 @@ impl Iterator for RectangleIterator {
 }
 
 pub fn rectangle(fb: &mut LcdFB, rect: Rectangle, clip: Option<Rectangle>, xor: bool) {
-    let r = RectangleIterator {
-        top_left: rect.tl,
-        bottom_right: rect.br,
-        style: rect.style,
-        p: rect.tl,
-        clip: clip,
-    };
+    let r =
+        RectangleIterator { top_left: rect.tl, bottom_right: rect.br, style: rect.style, p: rect.tl, clip };
 
     for pixel in r {
         if !xor {
@@ -278,7 +264,8 @@ pub fn rectangle(fb: &mut LcdFB, rect: Rectangle, clip: Option<Rectangle>, xor: 
                 if pixel.0.y % 25 != 5 {
                     xor_pixel(fb, pixel.0.x, pixel.0.y);
                 } else {
-                    // don't allow XOR on some pixels to avoid this being used as a primitive to synthesize secure boxes
+                    // don't allow XOR on some pixels to avoid this being used as a primitive to synthesize
+                    // secure boxes
                 }
             } else {
                 log::warn!("invalid xor rect width");
@@ -324,7 +311,8 @@ impl Iterator for QuadrantIterator {
         let inner_radius_sq = inner_radius * inner_radius;
         let outer_radius_sq = outer_radius * outer_radius;
 
-        //log::info!("GFX|OP: quaditerator {}, {:?}, {:?}, {:?}, {:?}, {:?}", self.radius, self.center, self.p, self.quad, self.clip, self.style);
+        //log::info!("GFX|OP: quaditerator {}, {:?}, {:?}, {:?}, {:?}, {:?}", self.radius, self.center,
+        // self.p, self.quad, self.clip, self.style);
         loop {
             let mut item = None;
             if self.clip.is_none() || // short-circuit evaluation makes this safe
@@ -333,21 +321,15 @@ impl Iterator for QuadrantIterator {
                 let t = self.p;
                 let len = t.x * t.x + t.y * t.y;
 
-                let is_border = len > (inner_radius_sq - inner_radius)
-                    && len < (outer_radius_sq + inner_radius);
+                let is_border =
+                    len > (inner_radius_sq - inner_radius) && len < (outer_radius_sq + inner_radius);
 
                 let is_fill = len <= outer_radius_sq + 1;
 
                 item = if is_border && self.style.stroke_color.is_some() {
-                    Some(Pixel(
-                        self.center + t,
-                        self.style.stroke_color.expect("Border color not defined"),
-                    ))
+                    Some(Pixel(self.center + t, self.style.stroke_color.expect("Border color not defined")))
                 } else if is_fill && self.style.fill_color.is_some() {
-                    Some(Pixel(
-                        self.center + t,
-                        self.style.fill_color.expect("Fill color not defined"),
-                    ))
+                    Some(Pixel(self.center + t, self.style.fill_color.expect("Fill color not defined")))
                 } else {
                     None
                 };
@@ -421,8 +403,8 @@ pub fn quadrant(fb: &mut LcdFB, circle: Circle, quad: Quadrant, clip: Option<Rec
         radius: circle.radius as _,
         style: circle.style,
         p: starting_pixel,
-        quad: quad,
-        clip: clip,
+        quad,
+        clip,
     };
 
     for pixel in q {
@@ -489,10 +471,7 @@ impl Iterator for RoundedRectangleIterator {
                             || (self.p.x <= br.x && self.p.x > br.x - border_width)
                     ) && self.style.stroke_color.is_some()
                     {
-                        out = Some(Pixel(
-                            self.p,
-                            self.style.stroke_color.expect("Expected stroke"),
-                        ));
+                        out = Some(Pixel(self.p, self.style.stroke_color.expect("Expected stroke")));
                     }
                     // Fill
                     else if let Some(fill) = self.style.fill_color {
@@ -528,10 +507,7 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
         style: rr.border.style,
         p: rr.border.tl,
         clip,
-        tlq: Rectangle::new(
-            rr.border.tl,
-            Point::new(rr.border.tl.x + rr.radius, rr.border.tl.y + rr.radius),
-        ),
+        tlq: Rectangle::new(rr.border.tl, Point::new(rr.border.tl.x + rr.radius, rr.border.tl.y + rr.radius)),
         trq: Rectangle::new(
             Point::new(rr.border.br.x - rr.radius, rr.border.tl.y),
             Point::new(rr.border.br.x, rr.border.tl.y + rr.radius),
@@ -540,10 +516,7 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
             Point::new(rr.border.tl.x, rr.border.br.y - rr.radius),
             Point::new(rr.border.tl.x + rr.radius, rr.border.br.y),
         ),
-        brq: Rectangle::new(
-            Point::new(rr.border.br.x - rr.radius, rr.border.br.y - rr.radius),
-            rr.border.br,
-        ),
+        brq: Rectangle::new(Point::new(rr.border.br.x - rr.radius, rr.border.br.y - rr.radius), rr.border.br),
     };
     // draw the body
     for pixel in rri {
@@ -551,38 +524,20 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
     }
     //log::info!("GFX|OP: topleft {:?}, {:?}, {:?}, {:?}", rri.tlq.br, rr.radius, rr.border.style, clip);
     // now draw the corners
+    quadrant(fb, Circle::new_with_style(rri.tlq.br, rr.radius, rr.border.style), Quadrant::TopLeft, clip);
     quadrant(
         fb,
-        Circle::new_with_style(rri.tlq.br, rr.radius, rr.border.style),
-        Quadrant::TopLeft,
-        clip,
-    );
-    quadrant(
-        fb,
-        Circle::new_with_style(
-            Point::new(rri.trq.tl.x, rri.trq.br.y),
-            rr.radius,
-            rr.border.style,
-        ),
+        Circle::new_with_style(Point::new(rri.trq.tl.x, rri.trq.br.y), rr.radius, rr.border.style),
         Quadrant::TopRight,
         clip,
     );
     quadrant(
         fb,
-        Circle::new_with_style(
-            Point::new(rri.blq.br.x, rri.blq.tl.y),
-            rr.radius,
-            rr.border.style,
-        ),
+        Circle::new_with_style(Point::new(rri.blq.br.x, rri.blq.tl.y), rr.radius, rr.border.style),
         Quadrant::BottomLeft,
         clip,
     );
-    quadrant(
-        fb,
-        Circle::new_with_style(rri.brq.tl, rr.radius, rr.border.style),
-        Quadrant::BottomRight,
-        clip,
-    );
+    quadrant(fb, Circle::new_with_style(rri.brq.tl, rr.radius, rr.border.style), Quadrant::BottomRight, clip);
 }
 
 /*

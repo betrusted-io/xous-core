@@ -1,4 +1,4 @@
-pub(crate) const SERVER_NAME_JTAG: &str     = "_JTAG Server_";
+pub(crate) const SERVER_NAME_JTAG: &str = "_JTAG Server_";
 
 #[allow(dead_code)]
 pub const XCS750_IDCODE: u32 = 0x362F093;

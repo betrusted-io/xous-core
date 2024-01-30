@@ -12,13 +12,12 @@
 */
 
 mod soft;
-pub use soft::{Aes128Soft, Aes192, Aes256Soft};
-
 pub use cipher;
 use cipher::{
     consts::{U16, U8},
     generic_array::GenericArray,
 };
+pub use soft::{Aes128Soft, Aes192, Aes256Soft};
 
 /// 128-bit AES block
 pub type Block = GenericArray<u8, U16>;
@@ -32,23 +31,12 @@ mod vex;
 // library is patched into functions that are oblivious to these features.
 // so this library has to fall back on the legacy method of determining which build target
 // is being specified.
-#[cfg(all(
-    target_arch = "riscv32",
-    any(target_os = "none", target_os = "xous"),
-))]
-pub use vex::{Aes128, Aes256};
-#[cfg(all(
-    not(target_arch = "riscv32"),
-    not(target_os = "none"),
-    not(target_os = "xous"),
-))]
+#[cfg(all(not(target_arch = "riscv32"), not(target_os = "none"), not(target_os = "xous"),))]
 pub use soft::Aes128Soft as Aes128;
-#[cfg(all(
-    not(target_arch = "riscv32"),
-    not(target_os = "none"),
-    not(target_os = "xous"),
-))]
+#[cfg(all(not(target_arch = "riscv32"), not(target_os = "none"), not(target_os = "xous"),))]
 pub use soft::Aes256Soft as Aes256;
+#[cfg(all(target_arch = "riscv32", any(target_os = "none", target_os = "xous"),))]
+pub use vex::{Aes128, Aes256};
 
 /// Size of an AES block (128-bits; 16-bytes)
 pub const BLOCK_SIZE: usize = 16;

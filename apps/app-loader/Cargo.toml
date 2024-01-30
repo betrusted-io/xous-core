@@ -7,21 +7,23 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-xous = "0.9.55"
-xous-ipc = "0.9.55"
-log-server = { package = "xous-api-log", version = "0.1.51" }
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+log-server = { package = "xous-api-log", version = "0.1.53" }
 log = "0.4.14"
-xous-names = { package = "xous-api-names", version = "0.9.53" }
+xous-names = { package = "xous-api-names", version = "0.9.55" }
 gam = { path = "../../services/gam" }
 graphics-server = { path = "../../services/graphics-server" }
 modals = { path = "../../services/modals" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.51" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53" }
 locales = { path = "../../locales" }
 
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
 
-rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
+rkyv = { version = "0.4.3", features = [
+    "const_generics",
+], default-features = false }
 
 ureq = { version = "2.5.0", features = ["json"] }
 url = "2.4"

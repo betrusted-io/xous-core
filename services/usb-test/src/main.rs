@@ -4,47 +4,45 @@
 mod api;
 
 use api::*;
-#[cfg(any(feature="precursor", feature="renode"))]
-mod kbd;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod hw;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
+mod kbd;
+#[cfg(any(feature = "precursor", feature = "renode"))]
 use hw::*;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod spinal_udc;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 use spinal_udc::*;
 
 #[cfg(not(target_os = "xous"))]
 mod hosted;
+use std::collections::BTreeMap;
+use std::convert::TryInto;
+
+use embedded_time::Clock;
 #[cfg(not(target_os = "xous"))]
 use hosted::*;
-
-
 use num_traits::*;
-use xous::{CID, msg_scalar_unpack, Message, send_message};
-use std::collections::BTreeMap;
-
-use usb_device::prelude::*;
 use usb_device::class_prelude::*;
-use xous_usb_hid::page::Keyboard;
+use usb_device::prelude::*;
+use xous::{msg_scalar_unpack, send_message, Message, CID};
 use xous_usb_hid::device::keyboard::NKROBootKeyboard;
+use xous_usb_hid::page::Keyboard;
 use xous_usb_hid::prelude::*;
-use embedded_time::Clock;
-use std::convert::TryInto;
 
 pub struct EmbeddedClock {
     start: std::time::Instant,
 }
 impl EmbeddedClock {
-    pub fn new() -> EmbeddedClock {
-        EmbeddedClock { start: std::time::Instant::now() }
-    }
+    pub fn new() -> EmbeddedClock { EmbeddedClock { start: std::time::Instant::now() } }
 }
 
 impl Clock for EmbeddedClock {
     type T = u64;
-    const SCALING_FACTOR: embedded_time::fraction::Fraction = <embedded_time::fraction::Fraction>::new(1, 1_000);
+
+    const SCALING_FACTOR: embedded_time::fraction::Fraction =
+        <embedded_time::fraction::Fraction>::new(1, 1_000);
 
     fn try_now(&self) -> Result<embedded_time::Instant<Self>, embedded_time::clock::Error> {
         Ok(embedded_time::Instant::new(self.start.elapsed().as_millis().try_into().unwrap()))
@@ -85,20 +83,13 @@ fn main() -> ! {
 
     // register a suspend/resume listener
     let cid = xous::connect(usbdev_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(
-        None,
-        &xns,
-        api::Opcode::SuspendResume as u32,
-        cid
-    ).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, cid)
+        .expect("couldn't create suspend/resume object");
 
     let usb_alloc = UsbBusAllocator::new(usbdev);
     let clock = EmbeddedClock::new();
-    let mut keyboard = UsbHidClassBuilder::new()
-        .add_device(
-            NKROBootKeyboard::default(&clock),
-        )
-        .build(&usb_alloc);
+    let mut keyboard =
+        UsbHidClassBuilder::new().add_device(NKROBootKeyboard::default(&clock)).build(&usb_alloc);
     let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x3613))
         .manufacturer("xous-usb-hid")
         .product("NKRO Keyboard")
@@ -139,11 +130,11 @@ fn main() -> ! {
                                 "1" => {
                                     usbmgmt.connect_device_core(true);
                                     log::info!("device core connected");
-                                },
+                                }
                                 "0" => {
                                     usbmgmt.connect_device_core(false);
                                     log::info!("debug core connected");
-                                },
+                                }
                                 _ => log::info!("usage: conn [1,0]; got: 'conn {}'", args),
                             }
                             usbmgmt.print_regs();
@@ -176,20 +167,15 @@ fn main() -> ! {
             // this is via UART
             Some(Opcode::KeyboardChar) => msg_scalar_unpack!(msg, k, _, _, _, {
                 let key = {
-                    let bs_del_fix = if k == 0x7f {
-                        0x08
-                    } else {
-                        k
-                    };
+                    let bs_del_fix = if k == 0x7f { 0x08 } else { k };
                     core::char::from_u32(bs_del_fix as u32).unwrap_or('\u{0000}')
                 };
                 if key != '\u{0000}' {
                     if key != '\u{000d}' {
                         cmdline.push(key);
                     } else {
-                        send_message(cid, Message::new_scalar(
-                            Opcode::DoCmd.to_usize().unwrap(), 0, 0, 0, 0
-                        )).unwrap();
+                        send_message(cid, Message::new_scalar(Opcode::DoCmd.to_usize().unwrap(), 0, 0, 0, 0))
+                            .unwrap();
                     }
                 }
             }),
@@ -211,16 +197,15 @@ fn main() -> ! {
                     if key != '\u{000d}' {
                         cmdline.push(key);
                     } else {
-                        send_message(cid, Message::new_scalar(
-                            Opcode::DoCmd.to_usize().unwrap(), 0, 0, 0, 0
-                        )).unwrap();
+                        send_message(cid, Message::new_scalar(Opcode::DoCmd.to_usize().unwrap(), 0, 0, 0, 0))
+                            .unwrap();
                     }
                 }
-            },
+            }
             Some(Opcode::Quit) => {
                 log::warn!("Quit received, goodbye world!");
                 break;
-            },
+            }
             None => {
                 log::error!("couldn't convert opcode: {:?}", msg);
             }
@@ -282,9 +267,9 @@ mod tests {
     use super::*;
     #[test]
     fn test_alloc() {
-        use rand_chacha::ChaCha8Rng;
-        use rand_chacha::rand_core::SeedableRng;
         use rand_chacha::rand_core::RngCore;
+        use rand_chacha::rand_core::SeedableRng;
+        use rand_chacha::ChaCha8Rng;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut allocs = BTreeMap::<u32, u32>::new();
@@ -302,7 +287,7 @@ mod tests {
         // consistency check and print out
         for (&offset, &len) in allocs.iter() {
             assert!(offset >= last_alloc, "new offset is inside last allocation!");
-            println!("{}-{}", offset, offset+len);
+            println!("{}-{}", offset, offset + len);
             last_alloc = offset + len;
         }
 
@@ -324,7 +309,7 @@ mod tests {
         // consistency check and print out
         for (&offset, &len) in allocs.iter() {
             assert!(offset >= last_alloc, "new offset is inside last allocation!");
-            println!("{}-{}({})", offset, offset+len, len);
+            println!("{}-{}({})", offset, offset + len, len);
             last_alloc = offset + len;
         }
 
@@ -354,12 +339,13 @@ mod tests {
         for (&offset, &len) in allocs.iter() {
             assert!(offset >= last_alloc, "new offset is inside last allocation!");
             assert!(offset & 0xF == 0, "misaligned allocation detected");
-            println!("{}-{}({})", offset, offset+len, len);
+            println!("{}-{}({})", offset, offset + len, len);
             last_alloc = offset + len;
         }
     }
 }
 
+#[rustfmt::skip]
 fn hid_convert(key: char) -> Vec<Keyboard> {
     let mut code = vec![];
     match key {

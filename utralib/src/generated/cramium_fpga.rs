@@ -1,4 +1,5 @@
 
+#![cfg_attr(rustfmt, rustfmt_skip)] // don't format generated files
 #![allow(dead_code)]
 use core::convert::TryInto;
 #[cfg(feature="std")]
@@ -405,8 +406,6 @@ pub const HW_MDMA_BASE :   usize = 0x40012000;
 pub const HW_QFC_BASE :   usize = 0x40010000;
 pub const HW_MBOX_APB_BASE :   usize = 0x40013000;
 pub const HW_GLUECHAIN_BASE :   usize = 0x40054000;
-pub const HW_MESH_BASE :   usize = 0x40052000;
-pub const HW_SENSORC_BASE :   usize = 0x40053000;
 
 
 pub mod utra {
@@ -2909,9 +2908,10 @@ pub mod utra {
         pub const REG_TX_CFG_R_TX_EN: crate::Field = crate::Field::new(1, 4, REG_TX_CFG);
         pub const REG_TX_CFG_R_TX_CLR: crate::Field = crate::Field::new(1, 5, REG_TX_CFG);
 
-        pub const REG_CMD_OP: crate::Register = crate::Register::new(8, 0x3f07);
+        pub const REG_CMD_OP: crate::Register = crate::Register::new(8, 0x33f07);
         pub const REG_CMD_OP_R_CMD_RSP_TYPE: crate::Field = crate::Field::new(3, 0, REG_CMD_OP);
         pub const REG_CMD_OP_R_CMD_OP: crate::Field = crate::Field::new(6, 8, REG_CMD_OP);
+        pub const REG_CMD_OP_R_CMD_STOPOPT: crate::Field = crate::Field::new(2, 16, REG_CMD_OP);
 
         pub const REG_DATA_SETUP: crate::Register = crate::Register::new(10, 0x3ffff07);
         pub const REG_DATA_SETUP_R_DATA_EN: crate::Field = crate::Field::new(1, 0, REG_DATA_SETUP);
@@ -3287,7 +3287,7 @@ pub mod utra {
     }
 
     pub mod aes {
-        pub const AES_NUMREGS: usize = 11;
+        pub const AES_NUMREGS: usize = 13;
 
         pub const SFR_CRFUNC: crate::Register = crate::Register::new(0, 0xff);
         pub const SFR_CRFUNC_SFR_CRFUNC: crate::Field = crate::Field::new(8, 0, SFR_CRFUNC);
@@ -3312,8 +3312,14 @@ pub mod utra {
         pub const SFR_OPT1: crate::Register = crate::Register::new(5, 0xffff);
         pub const SFR_OPT1_SFR_OPT1: crate::Field = crate::Field::new(16, 0, SFR_OPT1);
 
-        pub const SFR_OPTLTX: crate::Register = crate::Register::new(6, 0xf);
-        pub const SFR_OPTLTX_SFR_OPTLTX: crate::Field = crate::Field::new(4, 0, SFR_OPTLTX);
+        pub const SFR_OPTLTX: crate::Register = crate::Register::new(6, 0x3f);
+        pub const SFR_OPTLTX_SFR_OPTLTX: crate::Field = crate::Field::new(6, 0, SFR_OPTLTX);
+
+        pub const SFR_MASKSEED: crate::Register = crate::Register::new(8, 0xffffffff);
+        pub const SFR_MASKSEED_SFR_MASKSEED: crate::Field = crate::Field::new(32, 0, SFR_MASKSEED);
+
+        pub const SFR_MASKSEEDAR: crate::Register = crate::Register::new(9, 0xffffffff);
+        pub const SFR_MASKSEEDAR_SFR_MASKSEEDAR: crate::Field = crate::Field::new(32, 0, SFR_MASKSEEDAR);
 
         pub const SFR_SEGPTR_PTRID_IV: crate::Register = crate::Register::new(12, 0xfff);
         pub const SFR_SEGPTR_PTRID_IV_PTRID_IV: crate::Field = crate::Field::new(12, 0, SFR_SEGPTR_PTRID_IV);
@@ -3560,7 +3566,7 @@ pub mod utra {
     }
 
     pub mod trng {
-        pub const TRNG_NUMREGS: usize = 9;
+        pub const TRNG_NUMREGS: usize = 13;
 
         pub const SFR_CRSRC: crate::Register = crate::Register::new(0, 0xfff);
         pub const SFR_CRSRC_SFR_CRSRC: crate::Field = crate::Field::new(12, 0, SFR_CRSRC);
@@ -3582,6 +3588,18 @@ pub mod utra {
 
         pub const SFR_FR: crate::Register = crate::Register::new(6, 0x3);
         pub const SFR_FR_SFR_FR: crate::Field = crate::Field::new(2, 0, SFR_FR);
+
+        pub const SFR_DRPSZ: crate::Register = crate::Register::new(8, 0xffffffff);
+        pub const SFR_DRPSZ_SFR_DRPSZ: crate::Field = crate::Field::new(32, 0, SFR_DRPSZ);
+
+        pub const SFR_DRGEN: crate::Register = crate::Register::new(9, 0xffffffff);
+        pub const SFR_DRGEN_SFR_DRGEN: crate::Field = crate::Field::new(32, 0, SFR_DRGEN);
+
+        pub const SFR_DRRESEED: crate::Register = crate::Register::new(10, 0xffffffff);
+        pub const SFR_DRRESEED_SFR_DRRESEED: crate::Field = crate::Field::new(32, 0, SFR_DRRESEED);
+
+        pub const SFR_BUF: crate::Register = crate::Register::new(12, 0xffffffff);
+        pub const SFR_BUF_SFR_BUF: crate::Field = crate::Field::new(32, 0, SFR_BUF);
 
         pub const SFR_CHAIN_RNGCHAINEN0: crate::Register = crate::Register::new(16, 0xffffffff);
         pub const SFR_CHAIN_RNGCHAINEN0_RNGCHAINEN0: crate::Field = crate::Field::new(32, 0, SFR_CHAIN_RNGCHAINEN0);
@@ -3701,13 +3719,19 @@ pub mod utra {
     }
 
     pub mod sysctrl {
-        pub const SYSCTRL_NUMREGS: usize = 33;
+        pub const SYSCTRL_NUMREGS: usize = 35;
 
         pub const SFR_CGUSEC: crate::Register = crate::Register::new(0, 0xffff);
         pub const SFR_CGUSEC_SFR_CGUSEC: crate::Field = crate::Field::new(16, 0, SFR_CGUSEC);
 
         pub const SFR_CGULP: crate::Register = crate::Register::new(1, 0xffff);
         pub const SFR_CGULP_SFR_CGULP: crate::Field = crate::Field::new(16, 0, SFR_CGULP);
+
+        pub const SFR_SEED: crate::Register = crate::Register::new(2, 0xffffffff);
+        pub const SFR_SEED_SFR_SEED: crate::Field = crate::Field::new(32, 0, SFR_SEED);
+
+        pub const SFR_SEEDAR: crate::Register = crate::Register::new(3, 0xffffffff);
+        pub const SFR_SEEDAR_SFR_SEEDAR: crate::Field = crate::Field::new(32, 0, SFR_SEEDAR);
 
         pub const SFR_CGUSEL0: crate::Register = crate::Register::new(4, 0x3);
         pub const SFR_CGUSEL0_SFR_CGUSEL0: crate::Field = crate::Field::new(2, 0, SFR_CGUSEL0);
@@ -3812,7 +3836,7 @@ pub mod utra {
     }
 
     pub mod iox {
-        pub const IOX_NUMREGS: usize = 46;
+        pub const IOX_NUMREGS: usize = 64;
 
         pub const SFR_AFSEL_CRAFSEL0: crate::Register = crate::Register::new(0, 0xffff);
         pub const SFR_AFSEL_CRAFSEL0_CRAFSEL0: crate::Field = crate::Field::new(16, 0, SFR_AFSEL_CRAFSEL0);
@@ -3837,6 +3861,18 @@ pub mod utra {
 
         pub const SFR_AFSEL_CRAFSEL7: crate::Register = crate::Register::new(7, 0xffff);
         pub const SFR_AFSEL_CRAFSEL7_CRAFSEL7: crate::Field = crate::Field::new(16, 0, SFR_AFSEL_CRAFSEL7);
+
+        pub const SFR_AFSEL_CRAFSEL8: crate::Register = crate::Register::new(8, 0xffff);
+        pub const SFR_AFSEL_CRAFSEL8_CRAFSEL8: crate::Field = crate::Field::new(16, 0, SFR_AFSEL_CRAFSEL8);
+
+        pub const SFR_AFSEL_CRAFSEL9: crate::Register = crate::Register::new(9, 0xffff);
+        pub const SFR_AFSEL_CRAFSEL9_CRAFSEL9: crate::Field = crate::Field::new(16, 0, SFR_AFSEL_CRAFSEL9);
+
+        pub const SFR_AFSEL_CRAFSEL10: crate::Register = crate::Register::new(10, 0xffff);
+        pub const SFR_AFSEL_CRAFSEL10_CRAFSEL10: crate::Field = crate::Field::new(16, 0, SFR_AFSEL_CRAFSEL10);
+
+        pub const SFR_AFSEL_CRAFSEL11: crate::Register = crate::Register::new(11, 0xffff);
+        pub const SFR_AFSEL_CRAFSEL11_CRAFSEL11: crate::Field = crate::Field::new(16, 0, SFR_AFSEL_CRAFSEL11);
 
         pub const SFR_INTCR_CRINT0: crate::Register = crate::Register::new(64, 0x3ff);
         pub const SFR_INTCR_CRINT0_CRINT0: crate::Field = crate::Field::new(10, 0, SFR_INTCR_CRINT0);
@@ -3877,41 +3913,65 @@ pub mod utra {
         pub const SFR_GPIOOUT_CRGO3: crate::Register = crate::Register::new(79, 0xffff);
         pub const SFR_GPIOOUT_CRGO3_CRGO3: crate::Field = crate::Field::new(16, 0, SFR_GPIOOUT_CRGO3);
 
-        pub const SFR_GPIOOE_CRGOE0: crate::Register = crate::Register::new(80, 0xffff);
+        pub const SFR_GPIOOUT_CRGO4: crate::Register = crate::Register::new(80, 0xffff);
+        pub const SFR_GPIOOUT_CRGO4_CRGO4: crate::Field = crate::Field::new(16, 0, SFR_GPIOOUT_CRGO4);
+
+        pub const SFR_GPIOOUT_CRGO5: crate::Register = crate::Register::new(81, 0xffff);
+        pub const SFR_GPIOOUT_CRGO5_CRGO5: crate::Field = crate::Field::new(16, 0, SFR_GPIOOUT_CRGO5);
+
+        pub const SFR_GPIOOE_CRGOE0: crate::Register = crate::Register::new(82, 0xffff);
         pub const SFR_GPIOOE_CRGOE0_CRGOE0: crate::Field = crate::Field::new(16, 0, SFR_GPIOOE_CRGOE0);
 
-        pub const SFR_GPIOOE_CRGOE1: crate::Register = crate::Register::new(81, 0xffff);
+        pub const SFR_GPIOOE_CRGOE1: crate::Register = crate::Register::new(83, 0xffff);
         pub const SFR_GPIOOE_CRGOE1_CRGOE1: crate::Field = crate::Field::new(16, 0, SFR_GPIOOE_CRGOE1);
 
-        pub const SFR_GPIOOE_CRGOE2: crate::Register = crate::Register::new(82, 0xffff);
+        pub const SFR_GPIOOE_CRGOE2: crate::Register = crate::Register::new(84, 0xffff);
         pub const SFR_GPIOOE_CRGOE2_CRGOE2: crate::Field = crate::Field::new(16, 0, SFR_GPIOOE_CRGOE2);
 
-        pub const SFR_GPIOOE_CRGOE3: crate::Register = crate::Register::new(83, 0xffff);
+        pub const SFR_GPIOOE_CRGOE3: crate::Register = crate::Register::new(85, 0xffff);
         pub const SFR_GPIOOE_CRGOE3_CRGOE3: crate::Field = crate::Field::new(16, 0, SFR_GPIOOE_CRGOE3);
 
-        pub const SFR_GPIOPU_CRGPU0: crate::Register = crate::Register::new(84, 0xffff);
+        pub const SFR_GPIOOE_CRGOE4: crate::Register = crate::Register::new(86, 0xffff);
+        pub const SFR_GPIOOE_CRGOE4_CRGOE4: crate::Field = crate::Field::new(16, 0, SFR_GPIOOE_CRGOE4);
+
+        pub const SFR_GPIOOE_CRGOE5: crate::Register = crate::Register::new(87, 0xffff);
+        pub const SFR_GPIOOE_CRGOE5_CRGOE5: crate::Field = crate::Field::new(16, 0, SFR_GPIOOE_CRGOE5);
+
+        pub const SFR_GPIOPU_CRGPU0: crate::Register = crate::Register::new(88, 0xffff);
         pub const SFR_GPIOPU_CRGPU0_CRGPU0: crate::Field = crate::Field::new(16, 0, SFR_GPIOPU_CRGPU0);
 
-        pub const SFR_GPIOPU_CRGPU1: crate::Register = crate::Register::new(85, 0xffff);
+        pub const SFR_GPIOPU_CRGPU1: crate::Register = crate::Register::new(89, 0xffff);
         pub const SFR_GPIOPU_CRGPU1_CRGPU1: crate::Field = crate::Field::new(16, 0, SFR_GPIOPU_CRGPU1);
 
-        pub const SFR_GPIOPU_CRGPU2: crate::Register = crate::Register::new(86, 0xffff);
+        pub const SFR_GPIOPU_CRGPU2: crate::Register = crate::Register::new(90, 0xffff);
         pub const SFR_GPIOPU_CRGPU2_CRGPU2: crate::Field = crate::Field::new(16, 0, SFR_GPIOPU_CRGPU2);
 
-        pub const SFR_GPIOPU_CRGPU3: crate::Register = crate::Register::new(87, 0xffff);
+        pub const SFR_GPIOPU_CRGPU3: crate::Register = crate::Register::new(91, 0xffff);
         pub const SFR_GPIOPU_CRGPU3_CRGPU3: crate::Field = crate::Field::new(16, 0, SFR_GPIOPU_CRGPU3);
 
-        pub const SFR_GPIOIN_SRGI0: crate::Register = crate::Register::new(88, 0xffff);
+        pub const SFR_GPIOPU_CRGPU4: crate::Register = crate::Register::new(92, 0xffff);
+        pub const SFR_GPIOPU_CRGPU4_CRGPU4: crate::Field = crate::Field::new(16, 0, SFR_GPIOPU_CRGPU4);
+
+        pub const SFR_GPIOPU_CRGPU5: crate::Register = crate::Register::new(93, 0xffff);
+        pub const SFR_GPIOPU_CRGPU5_CRGPU5: crate::Field = crate::Field::new(16, 0, SFR_GPIOPU_CRGPU5);
+
+        pub const SFR_GPIOIN_SRGI0: crate::Register = crate::Register::new(94, 0xffff);
         pub const SFR_GPIOIN_SRGI0_SRGI0: crate::Field = crate::Field::new(16, 0, SFR_GPIOIN_SRGI0);
 
-        pub const SFR_GPIOIN_SRGI1: crate::Register = crate::Register::new(89, 0xffff);
+        pub const SFR_GPIOIN_SRGI1: crate::Register = crate::Register::new(95, 0xffff);
         pub const SFR_GPIOIN_SRGI1_SRGI1: crate::Field = crate::Field::new(16, 0, SFR_GPIOIN_SRGI1);
 
-        pub const SFR_GPIOIN_SRGI2: crate::Register = crate::Register::new(90, 0xffff);
+        pub const SFR_GPIOIN_SRGI2: crate::Register = crate::Register::new(96, 0xffff);
         pub const SFR_GPIOIN_SRGI2_SRGI2: crate::Field = crate::Field::new(16, 0, SFR_GPIOIN_SRGI2);
 
-        pub const SFR_GPIOIN_SRGI3: crate::Register = crate::Register::new(91, 0xffff);
+        pub const SFR_GPIOIN_SRGI3: crate::Register = crate::Register::new(97, 0xffff);
         pub const SFR_GPIOIN_SRGI3_SRGI3: crate::Field = crate::Field::new(16, 0, SFR_GPIOIN_SRGI3);
+
+        pub const SFR_GPIOIN_SRGI4: crate::Register = crate::Register::new(98, 0xffff);
+        pub const SFR_GPIOIN_SRGI4_SRGI4: crate::Field = crate::Field::new(16, 0, SFR_GPIOIN_SRGI4);
+
+        pub const SFR_GPIOIN_SRGI5: crate::Register = crate::Register::new(99, 0xffff);
+        pub const SFR_GPIOIN_SRGI5_SRGI5: crate::Field = crate::Field::new(16, 0, SFR_GPIOIN_SRGI5);
 
         pub const SFR_PIOSEL: crate::Register = crate::Register::new(128, 0xffffffff);
         pub const SFR_PIOSEL_PIOSEL: crate::Field = crate::Field::new(32, 0, SFR_PIOSEL);
@@ -3928,29 +3988,47 @@ pub mod utra {
         pub const SFR_CFG_SCHM_CR_CFG_SCHMSEL3: crate::Register = crate::Register::new(143, 0xffff);
         pub const SFR_CFG_SCHM_CR_CFG_SCHMSEL3_CR_CFG_SCHMSEL3: crate::Field = crate::Field::new(16, 0, SFR_CFG_SCHM_CR_CFG_SCHMSEL3);
 
-        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW0: crate::Register = crate::Register::new(144, 0xffff);
+        pub const SFR_CFG_SCHM_CR_CFG_SCHMSEL4: crate::Register = crate::Register::new(144, 0xffff);
+        pub const SFR_CFG_SCHM_CR_CFG_SCHMSEL4_CR_CFG_SCHMSEL4: crate::Field = crate::Field::new(16, 0, SFR_CFG_SCHM_CR_CFG_SCHMSEL4);
+
+        pub const SFR_CFG_SCHM_CR_CFG_SCHMSEL5: crate::Register = crate::Register::new(145, 0xffff);
+        pub const SFR_CFG_SCHM_CR_CFG_SCHMSEL5_CR_CFG_SCHMSEL5: crate::Field = crate::Field::new(16, 0, SFR_CFG_SCHM_CR_CFG_SCHMSEL5);
+
+        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW0: crate::Register = crate::Register::new(146, 0xffff);
         pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW0_CR_CFG_SLEWSLOW0: crate::Field = crate::Field::new(16, 0, SFR_CFG_SLEW_CR_CFG_SLEWSLOW0);
 
-        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW1: crate::Register = crate::Register::new(145, 0xffff);
+        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW1: crate::Register = crate::Register::new(147, 0xffff);
         pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW1_CR_CFG_SLEWSLOW1: crate::Field = crate::Field::new(16, 0, SFR_CFG_SLEW_CR_CFG_SLEWSLOW1);
 
-        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW2: crate::Register = crate::Register::new(146, 0xffff);
+        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW2: crate::Register = crate::Register::new(148, 0xffff);
         pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW2_CR_CFG_SLEWSLOW2: crate::Field = crate::Field::new(16, 0, SFR_CFG_SLEW_CR_CFG_SLEWSLOW2);
 
-        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW3: crate::Register = crate::Register::new(147, 0xffff);
+        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW3: crate::Register = crate::Register::new(149, 0xffff);
         pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW3_CR_CFG_SLEWSLOW3: crate::Field = crate::Field::new(16, 0, SFR_CFG_SLEW_CR_CFG_SLEWSLOW3);
 
-        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL0: crate::Register = crate::Register::new(148, 0xffffffff);
+        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW4: crate::Register = crate::Register::new(150, 0xffff);
+        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW4_CR_CFG_SLEWSLOW4: crate::Field = crate::Field::new(16, 0, SFR_CFG_SLEW_CR_CFG_SLEWSLOW4);
+
+        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW5: crate::Register = crate::Register::new(151, 0xffff);
+        pub const SFR_CFG_SLEW_CR_CFG_SLEWSLOW5_CR_CFG_SLEWSLOW5: crate::Field = crate::Field::new(16, 0, SFR_CFG_SLEW_CR_CFG_SLEWSLOW5);
+
+        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL0: crate::Register = crate::Register::new(152, 0xffffffff);
         pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL0_CR_CFG_DRVSEL0: crate::Field = crate::Field::new(32, 0, SFR_CFG_DRVSEL_CR_CFG_DRVSEL0);
 
-        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL1: crate::Register = crate::Register::new(149, 0xffffffff);
+        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL1: crate::Register = crate::Register::new(153, 0xffffffff);
         pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL1_CR_CFG_DRVSEL1: crate::Field = crate::Field::new(32, 0, SFR_CFG_DRVSEL_CR_CFG_DRVSEL1);
 
-        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL2: crate::Register = crate::Register::new(150, 0xffffffff);
+        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL2: crate::Register = crate::Register::new(154, 0xffffffff);
         pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL2_CR_CFG_DRVSEL2: crate::Field = crate::Field::new(32, 0, SFR_CFG_DRVSEL_CR_CFG_DRVSEL2);
 
-        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL3: crate::Register = crate::Register::new(151, 0xffffffff);
+        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL3: crate::Register = crate::Register::new(155, 0xffffffff);
         pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL3_CR_CFG_DRVSEL3: crate::Field = crate::Field::new(32, 0, SFR_CFG_DRVSEL_CR_CFG_DRVSEL3);
+
+        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL4: crate::Register = crate::Register::new(156, 0xffffffff);
+        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL4_CR_CFG_DRVSEL4: crate::Field = crate::Field::new(32, 0, SFR_CFG_DRVSEL_CR_CFG_DRVSEL4);
+
+        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL5: crate::Register = crate::Register::new(157, 0xffffffff);
+        pub const SFR_CFG_DRVSEL_CR_CFG_DRVSEL5_CR_CFG_DRVSEL5: crate::Field = crate::Field::new(32, 0, SFR_CFG_DRVSEL_CR_CFG_DRVSEL5);
 
         pub const HW_IOX_BASE: usize = 0x5012f000;
     }
@@ -4742,7 +4820,7 @@ pub mod utra {
     }
 
     pub mod coresub_sramtrm {
-        pub const CORESUB_SRAMTRM_NUMREGS: usize = 6;
+        pub const CORESUB_SRAMTRM_NUMREGS: usize = 7;
 
         pub const SFR_CACHE: crate::Register = crate::Register::new(0, 0x7);
         pub const SFR_CACHE_SFR_CACHE: crate::Field = crate::Field::new(3, 0, SFR_CACHE);
@@ -4761,6 +4839,9 @@ pub mod utra {
 
         pub const SFR_VEXRAM: crate::Register = crate::Register::new(5, 0x7);
         pub const SFR_VEXRAM_SFR_VEXRAM: crate::Field = crate::Field::new(3, 0, SFR_VEXRAM);
+
+        pub const SFR_SRAMERR: crate::Register = crate::Register::new(8, 0xf);
+        pub const SFR_SRAMERR_SRAMBANKERR: crate::Field = crate::Field::new(4, 0, SFR_SRAMERR);
 
         pub const HW_CORESUB_SRAMTRM_BASE: usize = 0x40014000;
     }
@@ -4933,105 +5014,6 @@ pub mod utra {
         pub const SFR_GCTEST_GLUETEST: crate::Field = crate::Field::new(32, 0, SFR_GCTEST);
 
         pub const HW_GLUECHAIN_BASE: usize = 0x40054000;
-    }
-
-    pub mod mesh {
-        pub const MESH_NUMREGS: usize = 10;
-
-        pub const SFR_MLDRV_CR_MLDRV0: crate::Register = crate::Register::new(0, 0xffffffff);
-        pub const SFR_MLDRV_CR_MLDRV0_CR_MLDRV0: crate::Field = crate::Field::new(32, 0, SFR_MLDRV_CR_MLDRV0);
-
-        pub const SFR_MLIE_CR_MLIE0: crate::Register = crate::Register::new(1, 0xffffffff);
-        pub const SFR_MLIE_CR_MLIE0_CR_MLIE0: crate::Field = crate::Field::new(32, 0, SFR_MLIE_CR_MLIE0);
-
-        pub const SFR_MLSR_SR_MLSR0: crate::Register = crate::Register::new(2, 0xffffffff);
-        pub const SFR_MLSR_SR_MLSR0_SR_MLSR0: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR0);
-
-        pub const SFR_MLSR_SR_MLSR1: crate::Register = crate::Register::new(3, 0xffffffff);
-        pub const SFR_MLSR_SR_MLSR1_SR_MLSR1: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR1);
-
-        pub const SFR_MLSR_SR_MLSR2: crate::Register = crate::Register::new(4, 0xffffffff);
-        pub const SFR_MLSR_SR_MLSR2_SR_MLSR2: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR2);
-
-        pub const SFR_MLSR_SR_MLSR3: crate::Register = crate::Register::new(5, 0xffffffff);
-        pub const SFR_MLSR_SR_MLSR3_SR_MLSR3: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR3);
-
-        pub const SFR_MLSR_SR_MLSR4: crate::Register = crate::Register::new(6, 0xffffffff);
-        pub const SFR_MLSR_SR_MLSR4_SR_MLSR4: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR4);
-
-        pub const SFR_MLSR_SR_MLSR5: crate::Register = crate::Register::new(7, 0xffffffff);
-        pub const SFR_MLSR_SR_MLSR5_SR_MLSR5: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR5);
-
-        pub const SFR_MLSR_SR_MLSR6: crate::Register = crate::Register::new(8, 0xffffffff);
-        pub const SFR_MLSR_SR_MLSR6_SR_MLSR6: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR6);
-
-        pub const SFR_MLSR_SR_MLSR7: crate::Register = crate::Register::new(9, 0xffffffff);
-        pub const SFR_MLSR_SR_MLSR7_SR_MLSR7: crate::Field = crate::Field::new(32, 0, SFR_MLSR_SR_MLSR7);
-
-        pub const HW_MESH_BASE: usize = 0x40052000;
-    }
-
-    pub mod sensorc {
-        pub const SENSORC_NUMREGS: usize = 19;
-
-        pub const SFR_VDMASK0: crate::Register = crate::Register::new(0, 0xff);
-        pub const SFR_VDMASK0_CR_VDMASK0: crate::Field = crate::Field::new(8, 0, SFR_VDMASK0);
-
-        pub const SFR_VDMASK1: crate::Register = crate::Register::new(1, 0xff);
-        pub const SFR_VDMASK1_CR_VDMASK1: crate::Field = crate::Field::new(8, 0, SFR_VDMASK1);
-
-        pub const SFR_VDSR: crate::Register = crate::Register::new(2, 0xff);
-        pub const SFR_VDSR_VDFLAG: crate::Field = crate::Field::new(8, 0, SFR_VDSR);
-
-        pub const SFR_VDFR: crate::Register = crate::Register::new(3, 0xff);
-        pub const SFR_VDFR_VDFLAG: crate::Field = crate::Field::new(8, 0, SFR_VDFR);
-
-        pub const SFR_LDMASK: crate::Register = crate::Register::new(4, 0xf);
-        pub const SFR_LDMASK_CR_LDMASK: crate::Field = crate::Field::new(4, 0, SFR_LDMASK);
-
-        pub const SFR_LDSR: crate::Register = crate::Register::new(5, 0xf);
-        pub const SFR_LDSR_SR_LDSR: crate::Field = crate::Field::new(4, 0, SFR_LDSR);
-
-        pub const SFR_LDCFG: crate::Register = crate::Register::new(6, 0xf);
-        pub const SFR_LDCFG_SFR_LDCFG: crate::Field = crate::Field::new(4, 0, SFR_LDCFG);
-
-        pub const SFR_VDCFG_CR_VDCFG0: crate::Register = crate::Register::new(8, 0xf);
-        pub const SFR_VDCFG_CR_VDCFG0_CR_VDCFG0: crate::Field = crate::Field::new(4, 0, SFR_VDCFG_CR_VDCFG0);
-
-        pub const SFR_VDCFG_CR_VDCFG1: crate::Register = crate::Register::new(9, 0xf);
-        pub const SFR_VDCFG_CR_VDCFG1_CR_VDCFG1: crate::Field = crate::Field::new(4, 0, SFR_VDCFG_CR_VDCFG1);
-
-        pub const SFR_VDCFG_CR_VDCFG2: crate::Register = crate::Register::new(10, 0xf);
-        pub const SFR_VDCFG_CR_VDCFG2_CR_VDCFG2: crate::Field = crate::Field::new(4, 0, SFR_VDCFG_CR_VDCFG2);
-
-        pub const SFR_VDCFG_CR_VDCFG3: crate::Register = crate::Register::new(11, 0xf);
-        pub const SFR_VDCFG_CR_VDCFG3_CR_VDCFG3: crate::Field = crate::Field::new(4, 0, SFR_VDCFG_CR_VDCFG3);
-
-        pub const SFR_VDCFG_CR_VDCFG4: crate::Register = crate::Register::new(12, 0xf);
-        pub const SFR_VDCFG_CR_VDCFG4_CR_VDCFG4: crate::Field = crate::Field::new(4, 0, SFR_VDCFG_CR_VDCFG4);
-
-        pub const SFR_VDCFG_CR_VDCFG5: crate::Register = crate::Register::new(13, 0xf);
-        pub const SFR_VDCFG_CR_VDCFG5_CR_VDCFG5: crate::Field = crate::Field::new(4, 0, SFR_VDCFG_CR_VDCFG5);
-
-        pub const SFR_VDCFG_CR_VDCFG6: crate::Register = crate::Register::new(14, 0xf);
-        pub const SFR_VDCFG_CR_VDCFG6_CR_VDCFG6: crate::Field = crate::Field::new(4, 0, SFR_VDCFG_CR_VDCFG6);
-
-        pub const SFR_VDCFG_CR_VDCFG7: crate::Register = crate::Register::new(15, 0xf);
-        pub const SFR_VDCFG_CR_VDCFG7_CR_VDCFG7: crate::Field = crate::Field::new(4, 0, SFR_VDCFG_CR_VDCFG7);
-
-        pub const SFR_VDIP_ENA: crate::Register = crate::Register::new(16, 0xf);
-        pub const SFR_VDIP_ENA_VDENA: crate::Field = crate::Field::new(4, 0, SFR_VDIP_ENA);
-
-        pub const SFR_VDIP_TEST: crate::Register = crate::Register::new(17, 0xff);
-        pub const SFR_VDIP_TEST_VDTST: crate::Field = crate::Field::new(8, 0, SFR_VDIP_TEST);
-
-        pub const SFR_LDIP_TEST: crate::Register = crate::Register::new(18, 0xf);
-        pub const SFR_LDIP_TEST_LDTST: crate::Field = crate::Field::new(4, 0, SFR_LDIP_TEST);
-
-        pub const SFR_LDIP_FD: crate::Register = crate::Register::new(19, 0xffff);
-        pub const SFR_LDIP_FD_SFR_LDIP_FD: crate::Field = crate::Field::new(16, 0, SFR_LDIP_FD);
-
-        pub const HW_SENSORC_BASE: usize = 0x40053000;
     }
 }
 
@@ -13758,6 +13740,11 @@ mod tests {
         let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_CMD_OP_R_CMD_OP, bar);
         baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_CMD_OP_R_CMD_OP, 1);
         udma_sdio_csr.wfo(utra::udma_sdio::REG_CMD_OP_R_CMD_OP, baz);
+        let bar = udma_sdio_csr.rf(utra::udma_sdio::REG_CMD_OP_R_CMD_STOPOPT);
+        udma_sdio_csr.rmwf(utra::udma_sdio::REG_CMD_OP_R_CMD_STOPOPT, bar);
+        let mut baz = udma_sdio_csr.zf(utra::udma_sdio::REG_CMD_OP_R_CMD_STOPOPT, bar);
+        baz |= udma_sdio_csr.ms(utra::udma_sdio::REG_CMD_OP_R_CMD_STOPOPT, 1);
+        udma_sdio_csr.wfo(utra::udma_sdio::REG_CMD_OP_R_CMD_STOPOPT, baz);
 
         let foo = udma_sdio_csr.r(utra::udma_sdio::REG_DATA_SETUP);
         udma_sdio_csr.wo(utra::udma_sdio::REG_DATA_SETUP, foo);
@@ -14920,6 +14907,22 @@ mod tests {
         baz |= aes_csr.ms(utra::aes::SFR_OPTLTX_SFR_OPTLTX, 1);
         aes_csr.wfo(utra::aes::SFR_OPTLTX_SFR_OPTLTX, baz);
 
+        let foo = aes_csr.r(utra::aes::SFR_MASKSEED);
+        aes_csr.wo(utra::aes::SFR_MASKSEED, foo);
+        let bar = aes_csr.rf(utra::aes::SFR_MASKSEED_SFR_MASKSEED);
+        aes_csr.rmwf(utra::aes::SFR_MASKSEED_SFR_MASKSEED, bar);
+        let mut baz = aes_csr.zf(utra::aes::SFR_MASKSEED_SFR_MASKSEED, bar);
+        baz |= aes_csr.ms(utra::aes::SFR_MASKSEED_SFR_MASKSEED, 1);
+        aes_csr.wfo(utra::aes::SFR_MASKSEED_SFR_MASKSEED, baz);
+
+        let foo = aes_csr.r(utra::aes::SFR_MASKSEEDAR);
+        aes_csr.wo(utra::aes::SFR_MASKSEEDAR, foo);
+        let bar = aes_csr.rf(utra::aes::SFR_MASKSEEDAR_SFR_MASKSEEDAR);
+        aes_csr.rmwf(utra::aes::SFR_MASKSEEDAR_SFR_MASKSEEDAR, bar);
+        let mut baz = aes_csr.zf(utra::aes::SFR_MASKSEEDAR_SFR_MASKSEEDAR, bar);
+        baz |= aes_csr.ms(utra::aes::SFR_MASKSEEDAR_SFR_MASKSEEDAR, 1);
+        aes_csr.wfo(utra::aes::SFR_MASKSEEDAR_SFR_MASKSEEDAR, baz);
+
         let foo = aes_csr.r(utra::aes::SFR_SEGPTR_PTRID_IV);
         aes_csr.wo(utra::aes::SFR_SEGPTR_PTRID_IV, foo);
         let bar = aes_csr.rf(utra::aes::SFR_SEGPTR_PTRID_IV_PTRID_IV);
@@ -15620,6 +15623,38 @@ mod tests {
         baz |= trng_csr.ms(utra::trng::SFR_FR_SFR_FR, 1);
         trng_csr.wfo(utra::trng::SFR_FR_SFR_FR, baz);
 
+        let foo = trng_csr.r(utra::trng::SFR_DRPSZ);
+        trng_csr.wo(utra::trng::SFR_DRPSZ, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_DRPSZ_SFR_DRPSZ);
+        trng_csr.rmwf(utra::trng::SFR_DRPSZ_SFR_DRPSZ, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_DRPSZ_SFR_DRPSZ, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_DRPSZ_SFR_DRPSZ, 1);
+        trng_csr.wfo(utra::trng::SFR_DRPSZ_SFR_DRPSZ, baz);
+
+        let foo = trng_csr.r(utra::trng::SFR_DRGEN);
+        trng_csr.wo(utra::trng::SFR_DRGEN, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_DRGEN_SFR_DRGEN);
+        trng_csr.rmwf(utra::trng::SFR_DRGEN_SFR_DRGEN, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_DRGEN_SFR_DRGEN, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_DRGEN_SFR_DRGEN, 1);
+        trng_csr.wfo(utra::trng::SFR_DRGEN_SFR_DRGEN, baz);
+
+        let foo = trng_csr.r(utra::trng::SFR_DRRESEED);
+        trng_csr.wo(utra::trng::SFR_DRRESEED, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_DRRESEED_SFR_DRRESEED);
+        trng_csr.rmwf(utra::trng::SFR_DRRESEED_SFR_DRRESEED, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_DRRESEED_SFR_DRRESEED, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_DRRESEED_SFR_DRRESEED, 1);
+        trng_csr.wfo(utra::trng::SFR_DRRESEED_SFR_DRRESEED, baz);
+
+        let foo = trng_csr.r(utra::trng::SFR_BUF);
+        trng_csr.wo(utra::trng::SFR_BUF, foo);
+        let bar = trng_csr.rf(utra::trng::SFR_BUF_SFR_BUF);
+        trng_csr.rmwf(utra::trng::SFR_BUF_SFR_BUF, bar);
+        let mut baz = trng_csr.zf(utra::trng::SFR_BUF_SFR_BUF, bar);
+        baz |= trng_csr.ms(utra::trng::SFR_BUF_SFR_BUF, 1);
+        trng_csr.wfo(utra::trng::SFR_BUF_SFR_BUF, baz);
+
         let foo = trng_csr.r(utra::trng::SFR_CHAIN_RNGCHAINEN0);
         trng_csr.wo(utra::trng::SFR_CHAIN_RNGCHAINEN0, foo);
         let bar = trng_csr.rf(utra::trng::SFR_CHAIN_RNGCHAINEN0_RNGCHAINEN0);
@@ -15901,6 +15936,22 @@ mod tests {
         let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_CGULP_SFR_CGULP, bar);
         baz |= sysctrl_csr.ms(utra::sysctrl::SFR_CGULP_SFR_CGULP, 1);
         sysctrl_csr.wfo(utra::sysctrl::SFR_CGULP_SFR_CGULP, baz);
+
+        let foo = sysctrl_csr.r(utra::sysctrl::SFR_SEED);
+        sysctrl_csr.wo(utra::sysctrl::SFR_SEED, foo);
+        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_SEED_SFR_SEED);
+        sysctrl_csr.rmwf(utra::sysctrl::SFR_SEED_SFR_SEED, bar);
+        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_SEED_SFR_SEED, bar);
+        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_SEED_SFR_SEED, 1);
+        sysctrl_csr.wfo(utra::sysctrl::SFR_SEED_SFR_SEED, baz);
+
+        let foo = sysctrl_csr.r(utra::sysctrl::SFR_SEEDAR);
+        sysctrl_csr.wo(utra::sysctrl::SFR_SEEDAR, foo);
+        let bar = sysctrl_csr.rf(utra::sysctrl::SFR_SEEDAR_SFR_SEEDAR);
+        sysctrl_csr.rmwf(utra::sysctrl::SFR_SEEDAR_SFR_SEEDAR, bar);
+        let mut baz = sysctrl_csr.zf(utra::sysctrl::SFR_SEEDAR_SFR_SEEDAR, bar);
+        baz |= sysctrl_csr.ms(utra::sysctrl::SFR_SEEDAR_SFR_SEEDAR, 1);
+        sysctrl_csr.wfo(utra::sysctrl::SFR_SEEDAR_SFR_SEEDAR, baz);
 
         let foo = sysctrl_csr.r(utra::sysctrl::SFR_CGUSEL0);
         sysctrl_csr.wo(utra::sysctrl::SFR_CGUSEL0, foo);
@@ -16228,6 +16279,38 @@ mod tests {
         baz |= iox_csr.ms(utra::iox::SFR_AFSEL_CRAFSEL7_CRAFSEL7, 1);
         iox_csr.wfo(utra::iox::SFR_AFSEL_CRAFSEL7_CRAFSEL7, baz);
 
+        let foo = iox_csr.r(utra::iox::SFR_AFSEL_CRAFSEL8);
+        iox_csr.wo(utra::iox::SFR_AFSEL_CRAFSEL8, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_AFSEL_CRAFSEL8_CRAFSEL8);
+        iox_csr.rmwf(utra::iox::SFR_AFSEL_CRAFSEL8_CRAFSEL8, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_AFSEL_CRAFSEL8_CRAFSEL8, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_AFSEL_CRAFSEL8_CRAFSEL8, 1);
+        iox_csr.wfo(utra::iox::SFR_AFSEL_CRAFSEL8_CRAFSEL8, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_AFSEL_CRAFSEL9);
+        iox_csr.wo(utra::iox::SFR_AFSEL_CRAFSEL9, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_AFSEL_CRAFSEL9_CRAFSEL9);
+        iox_csr.rmwf(utra::iox::SFR_AFSEL_CRAFSEL9_CRAFSEL9, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_AFSEL_CRAFSEL9_CRAFSEL9, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_AFSEL_CRAFSEL9_CRAFSEL9, 1);
+        iox_csr.wfo(utra::iox::SFR_AFSEL_CRAFSEL9_CRAFSEL9, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_AFSEL_CRAFSEL10);
+        iox_csr.wo(utra::iox::SFR_AFSEL_CRAFSEL10, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_AFSEL_CRAFSEL10_CRAFSEL10);
+        iox_csr.rmwf(utra::iox::SFR_AFSEL_CRAFSEL10_CRAFSEL10, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_AFSEL_CRAFSEL10_CRAFSEL10, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_AFSEL_CRAFSEL10_CRAFSEL10, 1);
+        iox_csr.wfo(utra::iox::SFR_AFSEL_CRAFSEL10_CRAFSEL10, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_AFSEL_CRAFSEL11);
+        iox_csr.wo(utra::iox::SFR_AFSEL_CRAFSEL11, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_AFSEL_CRAFSEL11_CRAFSEL11);
+        iox_csr.rmwf(utra::iox::SFR_AFSEL_CRAFSEL11_CRAFSEL11, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_AFSEL_CRAFSEL11_CRAFSEL11, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_AFSEL_CRAFSEL11_CRAFSEL11, 1);
+        iox_csr.wfo(utra::iox::SFR_AFSEL_CRAFSEL11_CRAFSEL11, baz);
+
         let foo = iox_csr.r(utra::iox::SFR_INTCR_CRINT0);
         iox_csr.wo(utra::iox::SFR_INTCR_CRINT0, foo);
         let bar = iox_csr.rf(utra::iox::SFR_INTCR_CRINT0_CRINT0);
@@ -16332,6 +16415,22 @@ mod tests {
         baz |= iox_csr.ms(utra::iox::SFR_GPIOOUT_CRGO3_CRGO3, 1);
         iox_csr.wfo(utra::iox::SFR_GPIOOUT_CRGO3_CRGO3, baz);
 
+        let foo = iox_csr.r(utra::iox::SFR_GPIOOUT_CRGO4);
+        iox_csr.wo(utra::iox::SFR_GPIOOUT_CRGO4, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_GPIOOUT_CRGO4_CRGO4);
+        iox_csr.rmwf(utra::iox::SFR_GPIOOUT_CRGO4_CRGO4, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_GPIOOUT_CRGO4_CRGO4, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_GPIOOUT_CRGO4_CRGO4, 1);
+        iox_csr.wfo(utra::iox::SFR_GPIOOUT_CRGO4_CRGO4, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_GPIOOUT_CRGO5);
+        iox_csr.wo(utra::iox::SFR_GPIOOUT_CRGO5, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_GPIOOUT_CRGO5_CRGO5);
+        iox_csr.rmwf(utra::iox::SFR_GPIOOUT_CRGO5_CRGO5, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_GPIOOUT_CRGO5_CRGO5, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_GPIOOUT_CRGO5_CRGO5, 1);
+        iox_csr.wfo(utra::iox::SFR_GPIOOUT_CRGO5_CRGO5, baz);
+
         let foo = iox_csr.r(utra::iox::SFR_GPIOOE_CRGOE0);
         iox_csr.wo(utra::iox::SFR_GPIOOE_CRGOE0, foo);
         let bar = iox_csr.rf(utra::iox::SFR_GPIOOE_CRGOE0_CRGOE0);
@@ -16363,6 +16462,22 @@ mod tests {
         let mut baz = iox_csr.zf(utra::iox::SFR_GPIOOE_CRGOE3_CRGOE3, bar);
         baz |= iox_csr.ms(utra::iox::SFR_GPIOOE_CRGOE3_CRGOE3, 1);
         iox_csr.wfo(utra::iox::SFR_GPIOOE_CRGOE3_CRGOE3, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_GPIOOE_CRGOE4);
+        iox_csr.wo(utra::iox::SFR_GPIOOE_CRGOE4, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_GPIOOE_CRGOE4_CRGOE4);
+        iox_csr.rmwf(utra::iox::SFR_GPIOOE_CRGOE4_CRGOE4, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_GPIOOE_CRGOE4_CRGOE4, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_GPIOOE_CRGOE4_CRGOE4, 1);
+        iox_csr.wfo(utra::iox::SFR_GPIOOE_CRGOE4_CRGOE4, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_GPIOOE_CRGOE5);
+        iox_csr.wo(utra::iox::SFR_GPIOOE_CRGOE5, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_GPIOOE_CRGOE5_CRGOE5);
+        iox_csr.rmwf(utra::iox::SFR_GPIOOE_CRGOE5_CRGOE5, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_GPIOOE_CRGOE5_CRGOE5, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_GPIOOE_CRGOE5_CRGOE5, 1);
+        iox_csr.wfo(utra::iox::SFR_GPIOOE_CRGOE5_CRGOE5, baz);
 
         let foo = iox_csr.r(utra::iox::SFR_GPIOPU_CRGPU0);
         iox_csr.wo(utra::iox::SFR_GPIOPU_CRGPU0, foo);
@@ -16396,6 +16511,22 @@ mod tests {
         baz |= iox_csr.ms(utra::iox::SFR_GPIOPU_CRGPU3_CRGPU3, 1);
         iox_csr.wfo(utra::iox::SFR_GPIOPU_CRGPU3_CRGPU3, baz);
 
+        let foo = iox_csr.r(utra::iox::SFR_GPIOPU_CRGPU4);
+        iox_csr.wo(utra::iox::SFR_GPIOPU_CRGPU4, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_GPIOPU_CRGPU4_CRGPU4);
+        iox_csr.rmwf(utra::iox::SFR_GPIOPU_CRGPU4_CRGPU4, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_GPIOPU_CRGPU4_CRGPU4, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_GPIOPU_CRGPU4_CRGPU4, 1);
+        iox_csr.wfo(utra::iox::SFR_GPIOPU_CRGPU4_CRGPU4, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_GPIOPU_CRGPU5);
+        iox_csr.wo(utra::iox::SFR_GPIOPU_CRGPU5, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_GPIOPU_CRGPU5_CRGPU5);
+        iox_csr.rmwf(utra::iox::SFR_GPIOPU_CRGPU5_CRGPU5, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_GPIOPU_CRGPU5_CRGPU5, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_GPIOPU_CRGPU5_CRGPU5, 1);
+        iox_csr.wfo(utra::iox::SFR_GPIOPU_CRGPU5_CRGPU5, baz);
+
         let foo = iox_csr.r(utra::iox::SFR_GPIOIN_SRGI0);
         iox_csr.wo(utra::iox::SFR_GPIOIN_SRGI0, foo);
         let bar = iox_csr.rf(utra::iox::SFR_GPIOIN_SRGI0_SRGI0);
@@ -16427,6 +16558,22 @@ mod tests {
         let mut baz = iox_csr.zf(utra::iox::SFR_GPIOIN_SRGI3_SRGI3, bar);
         baz |= iox_csr.ms(utra::iox::SFR_GPIOIN_SRGI3_SRGI3, 1);
         iox_csr.wfo(utra::iox::SFR_GPIOIN_SRGI3_SRGI3, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_GPIOIN_SRGI4);
+        iox_csr.wo(utra::iox::SFR_GPIOIN_SRGI4, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_GPIOIN_SRGI4_SRGI4);
+        iox_csr.rmwf(utra::iox::SFR_GPIOIN_SRGI4_SRGI4, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_GPIOIN_SRGI4_SRGI4, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_GPIOIN_SRGI4_SRGI4, 1);
+        iox_csr.wfo(utra::iox::SFR_GPIOIN_SRGI4_SRGI4, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_GPIOIN_SRGI5);
+        iox_csr.wo(utra::iox::SFR_GPIOIN_SRGI5, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_GPIOIN_SRGI5_SRGI5);
+        iox_csr.rmwf(utra::iox::SFR_GPIOIN_SRGI5_SRGI5, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_GPIOIN_SRGI5_SRGI5, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_GPIOIN_SRGI5_SRGI5, 1);
+        iox_csr.wfo(utra::iox::SFR_GPIOIN_SRGI5_SRGI5, baz);
 
         let foo = iox_csr.r(utra::iox::SFR_PIOSEL);
         iox_csr.wo(utra::iox::SFR_PIOSEL, foo);
@@ -16468,6 +16615,22 @@ mod tests {
         baz |= iox_csr.ms(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL3_CR_CFG_SCHMSEL3, 1);
         iox_csr.wfo(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL3_CR_CFG_SCHMSEL3, baz);
 
+        let foo = iox_csr.r(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL4);
+        iox_csr.wo(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL4, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL4_CR_CFG_SCHMSEL4);
+        iox_csr.rmwf(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL4_CR_CFG_SCHMSEL4, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL4_CR_CFG_SCHMSEL4, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL4_CR_CFG_SCHMSEL4, 1);
+        iox_csr.wfo(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL4_CR_CFG_SCHMSEL4, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL5);
+        iox_csr.wo(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL5, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL5_CR_CFG_SCHMSEL5);
+        iox_csr.rmwf(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL5_CR_CFG_SCHMSEL5, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL5_CR_CFG_SCHMSEL5, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL5_CR_CFG_SCHMSEL5, 1);
+        iox_csr.wfo(utra::iox::SFR_CFG_SCHM_CR_CFG_SCHMSEL5_CR_CFG_SCHMSEL5, baz);
+
         let foo = iox_csr.r(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW0);
         iox_csr.wo(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW0, foo);
         let bar = iox_csr.rf(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW0_CR_CFG_SLEWSLOW0);
@@ -16500,6 +16663,22 @@ mod tests {
         baz |= iox_csr.ms(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW3_CR_CFG_SLEWSLOW3, 1);
         iox_csr.wfo(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW3_CR_CFG_SLEWSLOW3, baz);
 
+        let foo = iox_csr.r(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW4);
+        iox_csr.wo(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW4, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW4_CR_CFG_SLEWSLOW4);
+        iox_csr.rmwf(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW4_CR_CFG_SLEWSLOW4, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW4_CR_CFG_SLEWSLOW4, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW4_CR_CFG_SLEWSLOW4, 1);
+        iox_csr.wfo(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW4_CR_CFG_SLEWSLOW4, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW5);
+        iox_csr.wo(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW5, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW5_CR_CFG_SLEWSLOW5);
+        iox_csr.rmwf(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW5_CR_CFG_SLEWSLOW5, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW5_CR_CFG_SLEWSLOW5, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW5_CR_CFG_SLEWSLOW5, 1);
+        iox_csr.wfo(utra::iox::SFR_CFG_SLEW_CR_CFG_SLEWSLOW5_CR_CFG_SLEWSLOW5, baz);
+
         let foo = iox_csr.r(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL0);
         iox_csr.wo(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL0, foo);
         let bar = iox_csr.rf(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL0_CR_CFG_DRVSEL0);
@@ -16531,6 +16710,22 @@ mod tests {
         let mut baz = iox_csr.zf(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL3_CR_CFG_DRVSEL3, bar);
         baz |= iox_csr.ms(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL3_CR_CFG_DRVSEL3, 1);
         iox_csr.wfo(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL3_CR_CFG_DRVSEL3, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL4);
+        iox_csr.wo(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL4, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL4_CR_CFG_DRVSEL4);
+        iox_csr.rmwf(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL4_CR_CFG_DRVSEL4, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL4_CR_CFG_DRVSEL4, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL4_CR_CFG_DRVSEL4, 1);
+        iox_csr.wfo(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL4_CR_CFG_DRVSEL4, baz);
+
+        let foo = iox_csr.r(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL5);
+        iox_csr.wo(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL5, foo);
+        let bar = iox_csr.rf(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL5_CR_CFG_DRVSEL5);
+        iox_csr.rmwf(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL5_CR_CFG_DRVSEL5, bar);
+        let mut baz = iox_csr.zf(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL5_CR_CFG_DRVSEL5, bar);
+        baz |= iox_csr.ms(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL5_CR_CFG_DRVSEL5, 1);
+        iox_csr.wfo(utra::iox::SFR_CFG_DRVSEL_CR_CFG_DRVSEL5_CR_CFG_DRVSEL5, baz);
   }
 
     #[test]
@@ -19040,6 +19235,14 @@ mod tests {
         let mut baz = coresub_sramtrm_csr.zf(utra::coresub_sramtrm::SFR_VEXRAM_SFR_VEXRAM, bar);
         baz |= coresub_sramtrm_csr.ms(utra::coresub_sramtrm::SFR_VEXRAM_SFR_VEXRAM, 1);
         coresub_sramtrm_csr.wfo(utra::coresub_sramtrm::SFR_VEXRAM_SFR_VEXRAM, baz);
+
+        let foo = coresub_sramtrm_csr.r(utra::coresub_sramtrm::SFR_SRAMERR);
+        coresub_sramtrm_csr.wo(utra::coresub_sramtrm::SFR_SRAMERR, foo);
+        let bar = coresub_sramtrm_csr.rf(utra::coresub_sramtrm::SFR_SRAMERR_SRAMBANKERR);
+        coresub_sramtrm_csr.rmwf(utra::coresub_sramtrm::SFR_SRAMERR_SRAMBANKERR, bar);
+        let mut baz = coresub_sramtrm_csr.zf(utra::coresub_sramtrm::SFR_SRAMERR_SRAMBANKERR, bar);
+        baz |= coresub_sramtrm_csr.ms(utra::coresub_sramtrm::SFR_SRAMERR_SRAMBANKERR, 1);
+        coresub_sramtrm_csr.wfo(utra::coresub_sramtrm::SFR_SRAMERR_SRAMBANKERR, baz);
   }
 
     #[test]
@@ -19469,251 +19672,5 @@ mod tests {
         let mut baz = gluechain_csr.zf(utra::gluechain::SFR_GCTEST_GLUETEST, bar);
         baz |= gluechain_csr.ms(utra::gluechain::SFR_GCTEST_GLUETEST, 1);
         gluechain_csr.wfo(utra::gluechain::SFR_GCTEST_GLUETEST, baz);
-  }
-
-    #[test]
-    #[ignore]
-    fn compile_check_mesh_csr() {
-        use super::*;
-        let mut mesh_csr = CSR::new(HW_MESH_BASE as *mut u32);
-
-        let foo = mesh_csr.r(utra::mesh::SFR_MLDRV_CR_MLDRV0);
-        mesh_csr.wo(utra::mesh::SFR_MLDRV_CR_MLDRV0, foo);
-        let bar = mesh_csr.rf(utra::mesh::SFR_MLDRV_CR_MLDRV0_CR_MLDRV0);
-        mesh_csr.rmwf(utra::mesh::SFR_MLDRV_CR_MLDRV0_CR_MLDRV0, bar);
-        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLDRV_CR_MLDRV0_CR_MLDRV0, bar);
-        baz |= mesh_csr.ms(utra::mesh::SFR_MLDRV_CR_MLDRV0_CR_MLDRV0, 1);
-        mesh_csr.wfo(utra::mesh::SFR_MLDRV_CR_MLDRV0_CR_MLDRV0, baz);
-
-        let foo = mesh_csr.r(utra::mesh::SFR_MLIE_CR_MLIE0);
-        mesh_csr.wo(utra::mesh::SFR_MLIE_CR_MLIE0, foo);
-        let bar = mesh_csr.rf(utra::mesh::SFR_MLIE_CR_MLIE0_CR_MLIE0);
-        mesh_csr.rmwf(utra::mesh::SFR_MLIE_CR_MLIE0_CR_MLIE0, bar);
-        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLIE_CR_MLIE0_CR_MLIE0, bar);
-        baz |= mesh_csr.ms(utra::mesh::SFR_MLIE_CR_MLIE0_CR_MLIE0, 1);
-        mesh_csr.wfo(utra::mesh::SFR_MLIE_CR_MLIE0_CR_MLIE0, baz);
-
-        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR0);
-        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR0, foo);
-        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR0_SR_MLSR0);
-        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR0_SR_MLSR0, bar);
-        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR0_SR_MLSR0, bar);
-        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR0_SR_MLSR0, 1);
-        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR0_SR_MLSR0, baz);
-
-        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR1);
-        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR1, foo);
-        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR1_SR_MLSR1);
-        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR1_SR_MLSR1, bar);
-        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR1_SR_MLSR1, bar);
-        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR1_SR_MLSR1, 1);
-        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR1_SR_MLSR1, baz);
-
-        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR2);
-        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR2, foo);
-        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR2_SR_MLSR2);
-        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR2_SR_MLSR2, bar);
-        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR2_SR_MLSR2, bar);
-        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR2_SR_MLSR2, 1);
-        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR2_SR_MLSR2, baz);
-
-        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR3);
-        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR3, foo);
-        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR3_SR_MLSR3);
-        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR3_SR_MLSR3, bar);
-        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR3_SR_MLSR3, bar);
-        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR3_SR_MLSR3, 1);
-        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR3_SR_MLSR3, baz);
-
-        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR4);
-        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR4, foo);
-        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR4_SR_MLSR4);
-        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR4_SR_MLSR4, bar);
-        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR4_SR_MLSR4, bar);
-        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR4_SR_MLSR4, 1);
-        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR4_SR_MLSR4, baz);
-
-        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR5);
-        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR5, foo);
-        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR5_SR_MLSR5);
-        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR5_SR_MLSR5, bar);
-        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR5_SR_MLSR5, bar);
-        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR5_SR_MLSR5, 1);
-        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR5_SR_MLSR5, baz);
-
-        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR6);
-        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR6, foo);
-        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR6_SR_MLSR6);
-        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR6_SR_MLSR6, bar);
-        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR6_SR_MLSR6, bar);
-        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR6_SR_MLSR6, 1);
-        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR6_SR_MLSR6, baz);
-
-        let foo = mesh_csr.r(utra::mesh::SFR_MLSR_SR_MLSR7);
-        mesh_csr.wo(utra::mesh::SFR_MLSR_SR_MLSR7, foo);
-        let bar = mesh_csr.rf(utra::mesh::SFR_MLSR_SR_MLSR7_SR_MLSR7);
-        mesh_csr.rmwf(utra::mesh::SFR_MLSR_SR_MLSR7_SR_MLSR7, bar);
-        let mut baz = mesh_csr.zf(utra::mesh::SFR_MLSR_SR_MLSR7_SR_MLSR7, bar);
-        baz |= mesh_csr.ms(utra::mesh::SFR_MLSR_SR_MLSR7_SR_MLSR7, 1);
-        mesh_csr.wfo(utra::mesh::SFR_MLSR_SR_MLSR7_SR_MLSR7, baz);
-  }
-
-    #[test]
-    #[ignore]
-    fn compile_check_sensorc_csr() {
-        use super::*;
-        let mut sensorc_csr = CSR::new(HW_SENSORC_BASE as *mut u32);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDMASK0);
-        sensorc_csr.wo(utra::sensorc::SFR_VDMASK0, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDMASK0_CR_VDMASK0);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDMASK0_CR_VDMASK0, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDMASK0_CR_VDMASK0, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDMASK0_CR_VDMASK0, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDMASK0_CR_VDMASK0, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDMASK1);
-        sensorc_csr.wo(utra::sensorc::SFR_VDMASK1, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDMASK1_CR_VDMASK1);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDMASK1_CR_VDMASK1, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDMASK1_CR_VDMASK1, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDMASK1_CR_VDMASK1, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDMASK1_CR_VDMASK1, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDSR);
-        sensorc_csr.wo(utra::sensorc::SFR_VDSR, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDSR_VDFLAG);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDSR_VDFLAG, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDSR_VDFLAG, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDSR_VDFLAG, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDSR_VDFLAG, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDFR);
-        sensorc_csr.wo(utra::sensorc::SFR_VDFR, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDFR_VDFLAG);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDFR_VDFLAG, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDFR_VDFLAG, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDFR_VDFLAG, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDFR_VDFLAG, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_LDMASK);
-        sensorc_csr.wo(utra::sensorc::SFR_LDMASK, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_LDMASK_CR_LDMASK);
-        sensorc_csr.rmwf(utra::sensorc::SFR_LDMASK_CR_LDMASK, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_LDMASK_CR_LDMASK, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_LDMASK_CR_LDMASK, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_LDMASK_CR_LDMASK, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_LDSR);
-        sensorc_csr.wo(utra::sensorc::SFR_LDSR, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_LDSR_SR_LDSR);
-        sensorc_csr.rmwf(utra::sensorc::SFR_LDSR_SR_LDSR, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_LDSR_SR_LDSR, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_LDSR_SR_LDSR, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_LDSR_SR_LDSR, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_LDCFG);
-        sensorc_csr.wo(utra::sensorc::SFR_LDCFG, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_LDCFG_SFR_LDCFG);
-        sensorc_csr.rmwf(utra::sensorc::SFR_LDCFG_SFR_LDCFG, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_LDCFG_SFR_LDCFG, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_LDCFG_SFR_LDCFG, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_LDCFG_SFR_LDCFG, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDCFG_CR_VDCFG0);
-        sensorc_csr.wo(utra::sensorc::SFR_VDCFG_CR_VDCFG0, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDCFG_CR_VDCFG0_CR_VDCFG0);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDCFG_CR_VDCFG0_CR_VDCFG0, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDCFG_CR_VDCFG0_CR_VDCFG0, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDCFG_CR_VDCFG0_CR_VDCFG0, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDCFG_CR_VDCFG0_CR_VDCFG0, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDCFG_CR_VDCFG1);
-        sensorc_csr.wo(utra::sensorc::SFR_VDCFG_CR_VDCFG1, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDCFG_CR_VDCFG1_CR_VDCFG1);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDCFG_CR_VDCFG1_CR_VDCFG1, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDCFG_CR_VDCFG1_CR_VDCFG1, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDCFG_CR_VDCFG1_CR_VDCFG1, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDCFG_CR_VDCFG1_CR_VDCFG1, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDCFG_CR_VDCFG2);
-        sensorc_csr.wo(utra::sensorc::SFR_VDCFG_CR_VDCFG2, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDCFG_CR_VDCFG2_CR_VDCFG2);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDCFG_CR_VDCFG2_CR_VDCFG2, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDCFG_CR_VDCFG2_CR_VDCFG2, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDCFG_CR_VDCFG2_CR_VDCFG2, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDCFG_CR_VDCFG2_CR_VDCFG2, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDCFG_CR_VDCFG3);
-        sensorc_csr.wo(utra::sensorc::SFR_VDCFG_CR_VDCFG3, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDCFG_CR_VDCFG3_CR_VDCFG3);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDCFG_CR_VDCFG3_CR_VDCFG3, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDCFG_CR_VDCFG3_CR_VDCFG3, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDCFG_CR_VDCFG3_CR_VDCFG3, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDCFG_CR_VDCFG3_CR_VDCFG3, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDCFG_CR_VDCFG4);
-        sensorc_csr.wo(utra::sensorc::SFR_VDCFG_CR_VDCFG4, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDCFG_CR_VDCFG4_CR_VDCFG4);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDCFG_CR_VDCFG4_CR_VDCFG4, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDCFG_CR_VDCFG4_CR_VDCFG4, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDCFG_CR_VDCFG4_CR_VDCFG4, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDCFG_CR_VDCFG4_CR_VDCFG4, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDCFG_CR_VDCFG5);
-        sensorc_csr.wo(utra::sensorc::SFR_VDCFG_CR_VDCFG5, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDCFG_CR_VDCFG5_CR_VDCFG5);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDCFG_CR_VDCFG5_CR_VDCFG5, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDCFG_CR_VDCFG5_CR_VDCFG5, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDCFG_CR_VDCFG5_CR_VDCFG5, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDCFG_CR_VDCFG5_CR_VDCFG5, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDCFG_CR_VDCFG6);
-        sensorc_csr.wo(utra::sensorc::SFR_VDCFG_CR_VDCFG6, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDCFG_CR_VDCFG6_CR_VDCFG6);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDCFG_CR_VDCFG6_CR_VDCFG6, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDCFG_CR_VDCFG6_CR_VDCFG6, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDCFG_CR_VDCFG6_CR_VDCFG6, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDCFG_CR_VDCFG6_CR_VDCFG6, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDCFG_CR_VDCFG7);
-        sensorc_csr.wo(utra::sensorc::SFR_VDCFG_CR_VDCFG7, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDCFG_CR_VDCFG7_CR_VDCFG7);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDCFG_CR_VDCFG7_CR_VDCFG7, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDCFG_CR_VDCFG7_CR_VDCFG7, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDCFG_CR_VDCFG7_CR_VDCFG7, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDCFG_CR_VDCFG7_CR_VDCFG7, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDIP_ENA);
-        sensorc_csr.wo(utra::sensorc::SFR_VDIP_ENA, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDIP_ENA_VDENA);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDIP_ENA_VDENA, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDIP_ENA_VDENA, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDIP_ENA_VDENA, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDIP_ENA_VDENA, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_VDIP_TEST);
-        sensorc_csr.wo(utra::sensorc::SFR_VDIP_TEST, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_VDIP_TEST_VDTST);
-        sensorc_csr.rmwf(utra::sensorc::SFR_VDIP_TEST_VDTST, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_VDIP_TEST_VDTST, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_VDIP_TEST_VDTST, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_VDIP_TEST_VDTST, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_LDIP_TEST);
-        sensorc_csr.wo(utra::sensorc::SFR_LDIP_TEST, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_LDIP_TEST_LDTST);
-        sensorc_csr.rmwf(utra::sensorc::SFR_LDIP_TEST_LDTST, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_LDIP_TEST_LDTST, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_LDIP_TEST_LDTST, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_LDIP_TEST_LDTST, baz);
-
-        let foo = sensorc_csr.r(utra::sensorc::SFR_LDIP_FD);
-        sensorc_csr.wo(utra::sensorc::SFR_LDIP_FD, foo);
-        let bar = sensorc_csr.rf(utra::sensorc::SFR_LDIP_FD_SFR_LDIP_FD);
-        sensorc_csr.rmwf(utra::sensorc::SFR_LDIP_FD_SFR_LDIP_FD, bar);
-        let mut baz = sensorc_csr.zf(utra::sensorc::SFR_LDIP_FD_SFR_LDIP_FD, bar);
-        baz |= sensorc_csr.ms(utra::sensorc::SFR_LDIP_FD_SFR_LDIP_FD, 1);
-        sensorc_csr.wfo(utra::sensorc::SFR_LDIP_FD_SFR_LDIP_FD, baz);
   }
 }

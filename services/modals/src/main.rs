@@ -18,8 +18,10 @@
 /// 3. unpack the `memory_message` inside the `dr` record into a Buffer
 /// 4. `replace()` the return data into the `Buffer`
 /// 5. Set the op to `RenderState::None`
-/// 6. (implicit) the memory_message previously held in the `dr` record is dropped, trigging the caller to unblock
-/// 7. once you are sure you're finished, call `token_lock = next_lock(&mut work_queue);` to pull any waiting work from the work queue
+/// 6. (implicit) the memory_message previously held in the `dr` record is dropped, trigging the caller to
+///    unblock
+/// 7. once you are sure you're finished, call `token_lock = next_lock(&mut work_queue);` to pull any waiting
+///    work from the work queue
 ///
 /// Between 5 & 7 is where the TextEntry is weird: because you can "fail" on the return,
 /// it doesn't automatically do step 7. It's an extra step that the library implementation
@@ -27,22 +29,21 @@
 /// a `TextResponseValid` message which pumps the work queue.
 mod api;
 use api::*;
-#[cfg(feature="ditherpunk")]
-use gam::Bitmap;
-
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
-use xous_ipc::Buffer;
-use locales::t;
-
 use gam::modal::*;
+#[cfg(feature = "ditherpunk")]
+use gam::Bitmap;
+use locales::t;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
+use xous_ipc::Buffer;
 #[cfg(feature = "tts")]
 const TICK_INTERVAL: u64 = 2500;
 
+use std::collections::HashMap;
+
 use bit_field::BitField;
 use num_traits::*;
-use std::collections::HashMap;
 
 #[derive(Debug)]
 enum RendererState {
@@ -57,25 +58,20 @@ enum RendererState {
     RunBip39(ManagedBip39),
     RunBip39Input(ManagedBip39),
     RunDynamicNotification(DynamicNotification),
-    #[cfg(feature="ditherpunk")]
+    #[cfg(feature = "ditherpunk")]
     RunImage(ManagedImage),
 }
 
 const DEFAULT_STYLE: GlyphStyle = gam::SYSTEM_STYLE;
 
-fn main () -> ! {
-    #[cfg(not(feature="ditherpunk"))]
+fn main() -> ! {
+    #[cfg(not(feature = "ditherpunk"))]
     wrapped_main();
 
-    #[cfg(feature="ditherpunk")]
+    #[cfg(feature = "ditherpunk")]
     let stack_size = 1024 * 1024;
-    #[cfg(feature="ditherpunk")]
-    std::thread::Builder::new()
-        .stack_size(stack_size)
-        .spawn(wrapped_main)
-        .unwrap()
-        .join()
-        .unwrap()
+    #[cfg(feature = "ditherpunk")]
+    std::thread::Builder::new().stack_size(stack_size).spawn(wrapped_main).unwrap().join().unwrap()
 }
 fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
@@ -83,17 +79,14 @@ fn wrapped_main() -> ! {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let modals_sid = xns
-        .register_name(api::SERVER_NAME_MODALS, None)
-        .expect("can't register server");
+    let modals_sid = xns.register_name(api::SERVER_NAME_MODALS, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", modals_sid);
 
     #[cfg(feature = "tts")]
     let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     // we are our own renderer now that we implement deferred responses
-    let renderer_cid =
-        xous::connect(modals_sid).expect("couldn't connect to the modal UX renderer");
+    let renderer_cid = xous::connect(modals_sid).expect("couldn't connect to the modal UX renderer");
 
     #[cfg(feature = "tts")]
     let tts = TtsFrontend::new(&xns).unwrap();
@@ -147,12 +140,8 @@ fn wrapped_main() -> ! {
     let mut token_lock: Option<[u32; 4]> = None;
     let trng = trng::Trng::new(&xns).unwrap();
     // this is a random number that serves as a "default" that cannot be guessed
-    let default_nonce = [
-        trng.get_u32().unwrap(),
-        trng.get_u32().unwrap(),
-        trng.get_u32().unwrap(),
-        trng.get_u32().unwrap(),
-    ];
+    let default_nonce =
+        [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap()];
     let mut work_queue = Vec::<(xous::MessageSender, [u32; 4])>::new();
 
     let mut dynamic_notification_listener: Option<xous::MessageSender> = None;
@@ -175,12 +164,9 @@ fn wrapped_main() -> ! {
             }),
             Some(Opcode::PromptWithFixedResponse) => {
                 let spec = {
-                    let mut buffer = unsafe {
-                        Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                    };
-                    let spec = buffer
-                        .to_original::<ManagedPromptWithFixedResponse, _>()
-                        .unwrap();
+                    let mut buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    let spec = buffer.to_original::<ManagedPromptWithFixedResponse, _>().unwrap();
                     if spec.token != token_lock.unwrap_or(default_nonce) {
                         log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
                         buffer.replace(ItemName::new("internal error")).unwrap();
@@ -198,12 +184,9 @@ fn wrapped_main() -> ! {
             }
             Some(Opcode::PromptWithMultiResponse) => {
                 let spec = {
-                    let mut buffer = unsafe {
-                        Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                    };
-                    let spec = buffer
-                        .to_original::<ManagedPromptWithFixedResponse, _>()
-                        .unwrap();
+                    let mut buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    let spec = buffer.to_original::<ManagedPromptWithFixedResponse, _>().unwrap();
                     if spec.token != token_lock.unwrap_or(default_nonce) {
                         log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
                         buffer.replace(CheckBoxPayload::new()).unwrap();
@@ -221,12 +204,9 @@ fn wrapped_main() -> ! {
             }
             Some(Opcode::PromptWithTextResponse) => {
                 let spec = {
-                    let mut buffer = unsafe {
-                        Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                    };
-                    let spec = buffer
-                        .to_original::<ManagedPromptWithTextResponse, _>()
-                        .unwrap();
+                    let mut buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    let spec = buffer.to_original::<ManagedPromptWithTextResponse, _>().unwrap();
                     if spec.token != token_lock.unwrap_or(default_nonce) {
                         log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
                         buffer.replace(TextEntryPayload::new()).unwrap();
@@ -244,8 +224,7 @@ fn wrapped_main() -> ! {
             }
             Some(Opcode::Notification) => {
                 let spec = {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     buffer.to_original::<ManagedNotification, _>().unwrap()
                 };
                 if spec.token != token_lock.unwrap_or(default_nonce) {
@@ -262,8 +241,7 @@ fn wrapped_main() -> ! {
             }
             Some(Opcode::Bip39) => {
                 let spec = {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     buffer.to_original::<ManagedBip39, _>().unwrap()
                 };
                 if spec.token != token_lock.unwrap_or(default_nonce) {
@@ -280,8 +258,7 @@ fn wrapped_main() -> ! {
             }
             Some(Opcode::Bip39Input) => {
                 let spec = {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     buffer.to_original::<ManagedBip39, _>().unwrap()
                 };
                 if spec.token != token_lock.unwrap_or(default_nonce) {
@@ -296,11 +273,10 @@ fn wrapped_main() -> ! {
                 )
                 .expect("couldn't initiate UX op");
             }
-            #[cfg(feature="ditherpunk")]
+            #[cfg(feature = "ditherpunk")]
             Some(Opcode::Image) => {
                 let spec = {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     buffer.to_original::<ManagedImage, _>().unwrap()
                 };
                 if spec.token != token_lock.unwrap_or(default_nonce) {
@@ -317,8 +293,7 @@ fn wrapped_main() -> ! {
             }
             Some(Opcode::StartProgress) => {
                 let spec = {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     buffer.to_original::<ManagedProgress, _>().unwrap()
                 };
                 if spec.token != token_lock.unwrap_or(default_nonce) {
@@ -358,16 +333,25 @@ fn wrapped_main() -> ! {
                 }
                 send_message(
                     renderer_cid,
-                    Message::new_scalar(Opcode::FinishProgress.to_usize().unwrap(), msg.sender.to_usize(), 0, 0, 0),
+                    Message::new_scalar(
+                        Opcode::FinishProgress.to_usize().unwrap(),
+                        msg.sender.to_usize(),
+                        0,
+                        0,
+                        0,
+                    ),
                 )
                 .expect("couldn't update progress bar");
             }),
             Some(Opcode::AddModalItem) => {
-                let buffer =
-                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let manageditem = buffer.to_original::<ManagedListItem, _>().unwrap();
                 if manageditem.token != token_lock.unwrap_or(default_nonce) {
-                    log::warn!("Attempt to access modals without a mutex lock. Ignoring. got: {:x?} have: {:x?}", manageditem.token, token_lock);
+                    log::warn!(
+                        "Attempt to access modals without a mutex lock. Ignoring. got: {:x?} have: {:x?}",
+                        manageditem.token,
+                        token_lock
+                    );
                     continue;
                 }
                 fixed_items.push(manageditem.item);
@@ -378,8 +362,7 @@ fn wrapped_main() -> ! {
             }
             Some(Opcode::DynamicNotification) => {
                 let spec = {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     buffer.to_original::<DynamicNotification, _>().unwrap()
                 };
                 if spec.token != token_lock.unwrap_or(default_nonce) {
@@ -394,8 +377,7 @@ fn wrapped_main() -> ! {
                 .expect("couldn't initiate UX op");
             }
             Some(Opcode::UpdateDynamicNotification) => {
-                let buffer =
-                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let spec = buffer.to_original::<DynamicNotification, _>().unwrap();
                 if spec.token != token_lock.unwrap_or(default_nonce) {
                     log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
@@ -404,13 +386,7 @@ fn wrapped_main() -> ! {
                 op = RendererState::RunDynamicNotification(spec);
                 send_message(
                     renderer_cid,
-                    Message::new_scalar(
-                        Opcode::DoUpdateDynamicNotification.to_usize().unwrap(),
-                        0,
-                        0,
-                        0,
-                        0,
-                    ),
+                    Message::new_scalar(Opcode::DoUpdateDynamicNotification.to_usize().unwrap(), 0, 0, 0, 0),
                 )
                 .expect("couldn't initiate UX op");
             }
@@ -422,20 +398,14 @@ fn wrapped_main() -> ! {
                 }
                 send_message(
                     renderer_cid,
-                    Message::new_scalar(
-                        Opcode::DoCloseDynamicNotification.to_usize().unwrap(),
-                        0,
-                        0,
-                        0,
-                        0,
-                    ),
+                    Message::new_scalar(Opcode::DoCloseDynamicNotification.to_usize().unwrap(), 0, 0, 0, 0),
                 )
                 .expect("couldn't close dynamic notification");
             }),
-            // this got promoted to an external API during the deferred response refactor to eliminate an intermediate state
+            // this got promoted to an external API during the deferred response refactor to eliminate an
+            // intermediate state
             Some(Opcode::DoUpdateProgress) => msg_scalar_unpack!(msg, current, _, _, _, {
-                let new_percentage =
-                    compute_checked_percentage(current as u32, start_work, end_work);
+                let new_percentage = compute_checked_percentage(current as u32, start_work, end_work);
                 log::trace!(
                     "percentage: {}, current: {}, start: {}, end: {}",
                     new_percentage,
@@ -449,8 +419,7 @@ fn wrapped_main() -> ! {
                     #[cfg(feature = "tts")]
                     {
                         if tt.elapsed_ms() - last_tick > TICK_INTERVAL {
-                            tts.tts_blocking(t!("progress.increment", locales::LANG))
-                                .unwrap();
+                            tts.tts_blocking(t!("progress.increment", locales::LANG)).unwrap();
                             last_tick = tt.elapsed_ms();
                         }
                     }
@@ -539,8 +508,10 @@ fn wrapped_main() -> ! {
                             text.push_str("\n\n");
                         }
 
-                        let phrase = renderer_modal.gam.bytes_to_bip39(&config.bip39_data[..config.bip39_len as usize].to_vec())
-                        .unwrap_or(vec![t!("bip39.invalid_bytes", locales::LANG).to_string()]);
+                        let phrase = renderer_modal
+                            .gam
+                            .bytes_to_bip39(&config.bip39_data[..config.bip39_len as usize].to_vec())
+                            .unwrap_or(vec![t!("bip39.invalid_bytes", locales::LANG).to_string()]);
                         #[cfg(feature = "hazardous-debug")]
                         log::info!("BIP-39 phrase: {:?}", phrase);
 
@@ -584,12 +555,10 @@ fn wrapped_main() -> ! {
                         );
                         renderer_modal.activate();
                     }
-                    #[cfg(feature="ditherpunk")]
+                    #[cfg(feature = "ditherpunk")]
                     RendererState::RunImage(config) => {
-                        let mut image = gam::modal::Image::new(
-                            renderer_cid,
-                            Opcode::ImageReturn.to_u32().unwrap(),
-                        );
+                        let mut image =
+                            gam::modal::Image::new(renderer_cid, Opcode::ImageReturn.to_u32().unwrap());
                         image.set_bitmap(Some(Bitmap::from(config.tiles)));
                         log::debug!("image: {:x?}", image);
                         renderer_modal.modify(
@@ -644,8 +613,7 @@ fn wrapped_main() -> ! {
                         fixed_items.clear();
                         #[cfg(feature = "tts")]
                         {
-                            tts.tts_blocking(t!("modals.radiobutton", locales::LANG))
-                                .unwrap();
+                            tts.tts_blocking(t!("modals.radiobutton", locales::LANG)).unwrap();
                             tts.tts_blocking(config.prompt.as_str().unwrap()).unwrap();
                         }
                         renderer_modal.modify(
@@ -687,7 +655,9 @@ fn wrapped_main() -> ! {
                     }
                     RendererState::RunDynamicNotification(config) => {
                         if dynamic_notification_active {
-                            log::error!("Dynamic notification already active! Double-calls lead to unpredictable results");
+                            log::error!(
+                                "Dynamic notification already active! Double-calls lead to unpredictable results"
+                            );
                         }
                         dynamic_notification_active = true;
                         let mut top_text = String::new();
@@ -720,9 +690,7 @@ fn wrapped_main() -> ! {
                         xous::yield_slice();
                     }
                     RendererState::None => {
-                        log::error!(
-                            "Operation initiated with no argument specified. Ignoring request."
-                        );
+                        log::error!("Operation initiated with no argument specified. Ignoring request.");
                         continue;
                     }
                 }
@@ -769,8 +737,12 @@ fn wrapped_main() -> ! {
                     //renderer_modal.gam.set_debug_level(log::LevelFilter::Info);
                 }
                 _ => {
-                    log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
-                    panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                    log::error!(
+                        "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                    );
+                    panic!(
+                        "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                    );
                 }
             },
             Some(Opcode::DoCloseDynamicNotification) => {
@@ -779,10 +751,10 @@ fn wrapped_main() -> ! {
                 op = RendererState::None;
                 if let Some(sender) = dynamic_notification_listener.take() {
                     // unblock the listener with no key hit response
-                    xous::return_scalar2(sender, 0, 0,).unwrap();
+                    xous::return_scalar2(sender, 0, 0).unwrap();
                 }
                 token_lock = next_lock(&mut work_queue);
-            },
+            }
             Some(Opcode::HandleDynamicNotificationKeyhit) => msg_scalar_unpack!(msg, k, _, _, _, {
                 log::debug!("Dynamic kbd hit: {}({})", k, char::from_u32(k as u32).unwrap_or(' '));
                 if let Some(sender) = dynamic_notification_listener.take() {
@@ -791,15 +763,12 @@ fn wrapped_main() -> ! {
             }),
             Some(Opcode::SliderReturn) => match op {
                 RendererState::RunProgress(_) => {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let item = buffer.to_original::<SliderPayload, _>().unwrap();
 
                     if let Some(mut origin) = dr.take() {
                         let mut response = unsafe {
-                            Buffer::from_memory_message_mut(
-                                origin.body.memory_message_mut().unwrap(),
-                            )
+                            Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap())
                         };
 
                         response.replace(item).unwrap();
@@ -810,7 +779,7 @@ fn wrapped_main() -> ! {
                         log::error!("Ux routine returned but no origin was recorded");
                         panic!("Ux routine returned but no origin was recorded");
                     }
-                },
+                }
                 _ => {
                     log::warn!("got weird stuff on slider return, ignoring");
                 }
@@ -819,16 +788,11 @@ fn wrapped_main() -> ! {
                 RendererState::RunText(_config) => {
                     renderer_modal.set_growable(false); // reset the growable state, it's assumed to be default false
                     log::trace!("validating text entry modal");
-                    let buf =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let text = buf
-                        .to_original::<gam::modal::TextEntryPayloads, _>()
-                        .unwrap();
+                    let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let text = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
                     if let Some(mut origin) = dr.take() {
                         let mut response = unsafe {
-                            Buffer::from_memory_message_mut(
-                                origin.body.memory_message_mut().unwrap(),
-                            )
+                            Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap())
                         };
                         response.replace(text).unwrap();
                         op = RendererState::None;
@@ -841,8 +805,12 @@ fn wrapped_main() -> ! {
                     log::warn!("Text entry detected a fat finger event, ignoring.")
                 }
                 _ => {
-                    log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
-                    panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                    log::error!(
+                        "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                    );
+                    panic!(
+                        "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                    );
                 }
             },
             Some(Opcode::TextResponseValid) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
@@ -869,22 +837,19 @@ fn wrapped_main() -> ! {
                             "UX return opcode does not match our current operation in flight: {:?}",
                             op
                         );
-                        panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                        panic!(
+                            "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                        );
                     }
                 }
-            },
+            }
             Some(Opcode::Bip39Return) => match op {
                 RendererState::RunBip39Input(_config) => {
-                    let buf =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let b39 = buf
-                        .to_original::<gam::modal::Bip39EntryPayload, _>()
-                        .unwrap();
+                    let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let b39 = buf.to_original::<gam::modal::Bip39EntryPayload, _>().unwrap();
                     if let Some(mut origin) = dr.take() {
                         let mut response = unsafe {
-                            Buffer::from_memory_message_mut(
-                                origin.body.memory_message_mut().unwrap(),
-                            )
+                            Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap())
                         };
                         let mut spec = response.to_original::<ManagedBip39, _>().unwrap();
                         spec.bip39_data[..b39.len as usize].copy_from_slice(&b39.data[..b39.len as usize]);
@@ -902,11 +867,15 @@ fn wrapped_main() -> ! {
                     log::warn!("Text entry detected a fat finger event, ignoring.")
                 }
                 _ => {
-                    log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
-                    panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                    log::error!(
+                        "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                    );
+                    panic!(
+                        "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                    );
                 }
             },
-            #[cfg(feature="ditherpunk")]
+            #[cfg(feature = "ditherpunk")]
             Some(Opcode::ImageReturn) => {
                 match op {
                     RendererState::RunImage(_) => {
@@ -922,7 +891,9 @@ fn wrapped_main() -> ! {
                             "UX return opcode does not match our current operation in flight: {:?}",
                             op
                         );
-                        panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                        panic!(
+                            "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                        );
                     }
                 }
             }
@@ -931,14 +902,11 @@ fn wrapped_main() -> ! {
             }
             Some(Opcode::RadioReturn) => match op {
                 RendererState::RunRadio(_config) => {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let item = buffer.to_original::<RadioButtonPayload, _>().unwrap();
                     if let Some(mut origin) = dr.take() {
                         let mut response = unsafe {
-                            Buffer::from_memory_message_mut(
-                                origin.body.memory_message_mut().unwrap(),
-                            )
+                            Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap())
                         };
                         response.replace(item).unwrap();
                         op = RendererState::None;
@@ -961,20 +929,21 @@ fn wrapped_main() -> ! {
                     log::warn!("Radio buttons detected a fat finger event, ignoring.")
                 }
                 _ => {
-                    log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
-                    panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                    log::error!(
+                        "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                    );
+                    panic!(
+                        "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                    );
                 }
             },
             Some(Opcode::CheckBoxReturn) => match op {
                 RendererState::RunCheckBox(_config) => {
-                    let buffer =
-                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let item = buffer.to_original::<CheckBoxPayload, _>().unwrap();
                     if let Some(mut origin) = dr.take() {
                         let mut response = unsafe {
-                            Buffer::from_memory_message_mut(
-                                origin.body.memory_message_mut().unwrap(),
-                            )
+                            Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap())
                         };
                         response.replace(item).unwrap();
                         op = RendererState::None;
@@ -1002,8 +971,12 @@ fn wrapped_main() -> ! {
                     log::warn!("Check boxes detected a fat finger event, ignoring.")
                 }
                 _ => {
-                    log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
-                    panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                    log::error!(
+                        "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                    );
+                    panic!(
+                        "UX return opcode does not match our current operation in flight. This is a serious internal error."
+                    );
                 }
             },
             Some(Opcode::ModalRedraw) => {

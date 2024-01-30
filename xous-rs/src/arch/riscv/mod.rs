@@ -105,10 +105,7 @@ where
     todo!()
 }
 
-pub fn create_thread_post<F, T>(
-    _f: F,
-    _thread_id: TID,
-) -> core::result::Result<WaitHandle<T>, crate::Error>
+pub fn create_thread_post<F, T>(_f: F, _thread_id: TID) -> core::result::Result<WaitHandle<T>, crate::Error>
 where
     F: FnOnce() -> T,
     F: Send + 'static,
@@ -253,13 +250,7 @@ where
     T: Send + 'static,
     U: Send + 'static,
 {
-    create_thread_n_pre(
-        *f as usize,
-        unsafe { core::mem::transmute(arg) },
-        &0,
-        &0,
-        &0,
-    )
+    create_thread_n_pre(*f as usize, unsafe { core::mem::transmute(arg) }, &0, &0, &0)
 }
 
 pub fn create_thread_simple_post<T, U>(
@@ -310,16 +301,7 @@ pub fn create_thread_n_post<U>(
 where
     U: Send + 'static,
 {
-    Ok(WaitHandle {
-        tid: thread_id,
-        data: core::marker::PhantomData,
-    })
+    Ok(WaitHandle { tid: thread_id, data: core::marker::PhantomData })
 }
 
-pub fn cache_flush() {
-    unsafe { 
-        core::arch::asm!(
-            "fence"
-        )
-     };
-}
+pub fn cache_flush() { unsafe { core::arch::asm!("fence") }; }

@@ -1,17 +1,25 @@
-use xous::{MessageEnvelope};
-use xous_ipc::String;
 use core::fmt::Write;
-#[cfg(feature="shellperf")]
-use utralib::generated::*;
-
 use std::collections::HashMap;
+
+#[cfg(feature = "shellperf")]
+use utralib::generated::*;
+use xous::MessageEnvelope;
+use xous_ipc::String;
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
     // called to process the command with the remainder of the string attached
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error>;
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error>;
     // called to process incoming messages that may have been origniated by the most recently issued command
-    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(
+        &mut self,
+        msg: &MessageEnvelope,
+        _env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         log::info!("received unhandled message {:?}", msg);
         Ok(None)
     }
@@ -25,16 +33,8 @@ pub trait ShellCmdApi<'a> {
 // the argument to this macro is the command verb
 macro_rules! cmd_api {
     ($verb:expr) => {
-        fn verb(&self) -> &'static str {
-            stringify!($verb)
-        }
-        fn matches(&self, verb: &str) -> bool {
-            if verb == stringify!($verb) {
-                true
-            } else {
-                false
-            }
-        }
+        fn verb(&self) -> &'static str { stringify!($verb) }
+        fn matches(&self, verb: &str) -> bool { if verb == stringify!($verb) { true } else { false } }
     };
 }
 
@@ -45,20 +45,21 @@ pub struct CommonEnv {
     com: com::Com,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
-    cb_registrations: HashMap::<u32, String::<256>>,
+    cb_registrations: HashMap<u32, String<256>>,
     trng: Trng,
     netmgr: net::NetManager,
     #[allow(dead_code)]
     xns: xous_names::XousNames,
     boot_instant: std::time::Instant,
-    /// make this communal so any number of commands can trigger or reset the performance counter, and/or perform logging
-    #[cfg(feature="shellperf")]
+    /// make this communal so any number of commands can trigger or reset the performance counter, and/or
+    /// perform logging
+    #[cfg(feature = "shellperf")]
     perf_csr: AtomicCsr<u32>,
-    #[cfg(feature="shellperf")]
-    event_csr: AtomicCsr::<u32>,
+    #[cfg(feature = "shellperf")]
+    event_csr: AtomicCsr<u32>,
 }
 impl CommonEnv {
-    pub fn register_handler(&mut self, verb: String::<256>) -> u32 {
+    pub fn register_handler(&mut self, verb: String<256>) -> u32 {
         let mut key: u32;
         loop {
             key = self.trng.get_u32().unwrap();
@@ -86,59 +87,77 @@ impl CommonEnv {
 */
 
 ///// 1. add your module here, and pull its namespace into the local crate
-mod echo;     use echo::*;
-mod sleep;    use sleep::*;
-mod sensors;  use sensors::*;
+mod echo;
+use echo::*;
+mod sleep;
+use sleep::*;
+mod sensors;
+use sensors::*;
 // mod callback; use callback::*;
-mod rtc_cmd;  use rtc_cmd::*;
-mod vibe;     use vibe::*;
-mod ssid;     use ssid::*;
-mod ver;      use ver::*;
-//mod audio;    use audio::*; // this command is currently contra-indicated with PDDB, as the test audio currently overlaps the PDDB space. We'll fix this eventually, but for now, let's switch to PDDB mode.
-mod backlight; use backlight::*;
-mod accel;    use accel::*;
-#[cfg(feature="dbg-ecupdate")]
+mod rtc_cmd;
+use rtc_cmd::*;
+mod vibe;
+use vibe::*;
+mod ssid;
+use ssid::*;
+mod ver;
+use ver::*;
+//mod audio;    use audio::*; // this command is currently contra-indicated with PDDB, as the test audio
+// currently overlaps the PDDB space. We'll fix this eventually, but for now, let's switch to PDDB mode.
+mod backlight;
+use backlight::*;
+mod accel;
+use accel::*;
+#[cfg(feature = "dbg-ecupdate")]
 mod ecup;
-#[cfg(feature="dbg-ecupdate")]
+#[cfg(feature = "dbg-ecupdate")]
 use ecup::*;
-mod trng_cmd; use trng_cmd::*;
-mod console;  use console::*;
+mod trng_cmd;
+use trng_cmd::*;
+mod console;
+use console::*;
 //mod memtest;  use memtest::*;
-mod keys;     use keys::*;
-mod wlan;     use wlan::*;
-mod jtag_cmd; use jtag_cmd::*;
-mod net_cmd;  use net_cmd::*;
-mod pddb_cmd; use pddb_cmd::*;
-mod usb; use usb::*;
+mod keys;
+use keys::*;
+mod wlan;
+use wlan::*;
+mod jtag_cmd;
+use jtag_cmd::*;
+mod net_cmd;
+use net_cmd::*;
+mod pddb_cmd;
+use pddb_cmd::*;
+mod usb;
+use usb::*;
 
-#[cfg(not(feature="no-codec"))]
+#[cfg(not(feature = "no-codec"))]
 mod test;
-#[cfg(not(feature="no-codec"))]
+#[cfg(not(feature = "no-codec"))]
 use test::*;
 
-#[cfg(feature="tts")]
+#[cfg(feature = "tts")]
 mod tts;
-#[cfg(feature="tts")]
+#[cfg(feature = "tts")]
 use tts::*;
 
-#[cfg(feature="benchmarks")]
+#[cfg(feature = "benchmarks")]
 mod engine;
-#[cfg(feature="benchmarks")]
+#[cfg(feature = "benchmarks")]
 use engine::*;
-#[cfg(feature="benchmarks")]
+#[cfg(feature = "benchmarks")]
 mod sha;
-#[cfg(feature="benchmarks")]
+#[cfg(feature = "benchmarks")]
 use sha::*;
-#[cfg(feature="aestests")]
+#[cfg(feature = "aestests")]
 mod aes_cmd;
-#[cfg(feature="aestests")]
+#[cfg(feature = "aestests")]
 use aes_cmd::*;
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
 
 pub struct CmdEnv {
     common_env: CommonEnv,
-    lastverb: String::<256>,
+    lastverb: String<256>,
     ///// 2. declare storage for your command here.
     sleep_cmd: Sleep,
     sensors_cmd: Sensors,
@@ -147,7 +166,7 @@ pub struct CmdEnv {
     vibe_cmd: Vibe,
     ssid_cmd: Ssid,
     //audio_cmd: Audio,
-    #[cfg(feature="dbg-ecupdate")]
+    #[cfg(feature = "dbg-ecupdate")]
     ecup_cmd: EcUpdate,
     trng_cmd: TrngCmd,
     //memtest_cmd: Memtest,
@@ -158,24 +177,24 @@ pub struct CmdEnv {
     wlan_cmd: Wlan,
     usb_cmd: Usb,
 
-    #[cfg(not(feature="no-codec"))]
+    #[cfg(not(feature = "no-codec"))]
     test_cmd: Test,
 
-    #[cfg(feature="tts")]
+    #[cfg(feature = "tts")]
     tts_cmd: Tts,
 
-    #[cfg(feature="benchmarks")]
+    #[cfg(feature = "benchmarks")]
     sha_cmd: Sha,
-    #[cfg(feature="aestests")]
+    #[cfg(feature = "aestests")]
     aes_cmd: Aes,
-    #[cfg(feature="benchmarks")]
+    #[cfg(feature = "benchmarks")]
     engine_cmd: Engine,
     //fcc_cmd: Fcc,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
-        #[cfg(feature="shellperf")]
+        #[cfg(feature = "shellperf")]
         let perf_csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::perfcounter::HW_PERFCOUNTER_BASE),
             None,
@@ -183,7 +202,7 @@ impl CmdEnv {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map perfcounter CSR range");
-        #[cfg(feature="shellperf")]
+        #[cfg(feature = "shellperf")]
         let event1_csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::event_source1::HW_EVENT_SOURCE1_BASE),
             None,
@@ -204,24 +223,29 @@ impl CmdEnv {
             xns: xous_names::XousNames::new().unwrap(),
             netmgr: net::NetManager::new(),
             boot_instant: std::time::Instant::now(),
-            #[cfg(feature="shellperf")]
+            #[cfg(feature = "shellperf")]
             perf_csr: AtomicCsr::new(perf_csr.as_mut_ptr() as *mut u32),
-            #[cfg(feature="shellperf")]
+            #[cfg(feature = "shellperf")]
             event_csr: AtomicCsr::new(event1_csr.as_mut_ptr() as *mut u32),
         };
         //let fcc = Fcc::new(&mut common);
-        #[cfg(feature="benchmarks")]
+        #[cfg(feature = "benchmarks")]
         let sha = Sha::new(&xns, &mut _common);
-        #[cfg(feature="aestests")]
+        #[cfg(feature = "aestests")]
         let aes = Aes::new(&xns, &mut _common);
-        #[cfg(feature="benchmarks")]
+        #[cfg(feature = "benchmarks")]
         let engine = Engine::new(&xns, &mut _common);
         //let memtest = Memtest::new(&xns, &mut common);
 
         // print our version info
         let soc_ver = _common.llio.soc_gitrev().unwrap();
         log::info!("SoC git rev {}", soc_ver.to_string());
-        log::info!("{}PDDB.DNA,{:x},{}", xous::BOOKEND_START, _common.llio.soc_dna().unwrap(), xous::BOOKEND_END);
+        log::info!(
+            "{}PDDB.DNA,{:x},{}",
+            xous::BOOKEND_START,
+            _common.llio.soc_dna().unwrap(),
+            xous::BOOKEND_END
+        );
         let (rev, dirty) = _common.com.get_ec_git_rev().unwrap();
         let dirtystr = if dirty { "dirty" } else { "clean" };
         log::info!("EC gateware git commit: {:x}, {}", rev, dirtystr);
@@ -230,54 +254,96 @@ impl CmdEnv {
         let wf_ver = _common.com.get_wf200_fw_rev().unwrap();
         log::info!("WF200 fw rev {}.{}.{}", wf_ver.maj, wf_ver.min, wf_ver.rev);
 
-
         CmdEnv {
             common_env: _common,
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
-            sleep_cmd: {log::debug!("sleep"); Sleep::new(&xns)},
-            sensors_cmd: {log::debug!("sensors"); Sensors::new()},
+            sleep_cmd: {
+                log::debug!("sleep");
+                Sleep::new(&xns)
+            },
+            sensors_cmd: {
+                log::debug!("sensors");
+                Sensors::new()
+            },
             //callback_cmd: CallBack::new(),
-            rtc_cmd: {log::debug!("rtc"); RtcCmd::new(&xns)},
-            vibe_cmd: {log::debug!("vibe"); Vibe::new()},
-            ssid_cmd: {log::debug!("ssid"); Ssid::new()},
+            rtc_cmd: {
+                log::debug!("rtc");
+                RtcCmd::new(&xns)
+            },
+            vibe_cmd: {
+                log::debug!("vibe");
+                Vibe::new()
+            },
+            ssid_cmd: {
+                log::debug!("ssid");
+                Ssid::new()
+            },
             //audio_cmd: Audio::new(&xns),
-            #[cfg(feature="dbg-ecupdate")]
+            #[cfg(feature = "dbg-ecupdate")]
             ecup_cmd: EcUpdate::new(),
-            trng_cmd: {log::debug!("trng"); TrngCmd::new()},
+            trng_cmd: {
+                log::debug!("trng");
+                TrngCmd::new()
+            },
             //memtest_cmd: memtest,
-            keys_cmd: {log::debug!("keys"); Keys::new(&xns)},
-            jtag_cmd: {log::debug!("jtag"); JtagCmd::new(&xns)},
-            net_cmd: {log::debug!("net"); NetCmd::new(&xns)},
-            pddb_cmd: {log::debug!("pddb"); PddbCmd::new(&xns)},
-            wlan_cmd: {log::debug!("wlan"); Wlan::new()},
-            usb_cmd: {log::debug!("usb"); Usb::new()},
+            keys_cmd: {
+                log::debug!("keys");
+                Keys::new(&xns)
+            },
+            jtag_cmd: {
+                log::debug!("jtag");
+                JtagCmd::new(&xns)
+            },
+            net_cmd: {
+                log::debug!("net");
+                NetCmd::new(&xns)
+            },
+            pddb_cmd: {
+                log::debug!("pddb");
+                PddbCmd::new(&xns)
+            },
+            wlan_cmd: {
+                log::debug!("wlan");
+                Wlan::new()
+            },
+            usb_cmd: {
+                log::debug!("usb");
+                Usb::new()
+            },
 
-            #[cfg(not(feature="no-codec"))]
-            test_cmd: {log::debug!("test"); Test::new(&xns)},
+            #[cfg(not(feature = "no-codec"))]
+            test_cmd: {
+                log::debug!("test");
+                Test::new(&xns)
+            },
 
-            #[cfg(feature="tts")]
+            #[cfg(feature = "tts")]
             tts_cmd: Tts::new(&xns),
 
-            #[cfg(feature="benchmarks")]
+            #[cfg(feature = "benchmarks")]
             sha_cmd: sha,
-            #[cfg(feature="aestests")]
+            #[cfg(feature = "aestests")]
             aes_cmd: aes,
-            #[cfg(feature="benchmarks")]
+            #[cfg(feature = "benchmarks")]
             engine_cmd: engine,
             //fcc_cmd: fcc,
         }
     }
 
-    pub fn dispatch(&mut self, maybe_cmdline: Option<&mut String::<1024>>, maybe_callback: Option<&MessageEnvelope>) -> Result<Option<String::<1024>>, xous::Error> {
+    pub fn dispatch(
+        &mut self,
+        maybe_cmdline: Option<&mut String<1024>>,
+        maybe_callback: Option<&MessageEnvelope>,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
 
         let mut echo_cmd = Echo {}; // this command has no persistent storage, so we can "create" it every time we call dispatch (but it's a zero-cost absraction so this doesn't actually create any instructions)
-        let mut ver_cmd = Ver{};
-        let mut backlight_cmd = Backlight{};
-        let mut accel_cmd = Accel{};
-        let mut console_cmd = Console{};
-        let commands: &mut [& mut dyn ShellCmdApi] = &mut [
+        let mut ver_cmd = Ver {};
+        let mut backlight_cmd = Backlight {};
+        let mut accel_cmd = Accel {};
+        let mut console_cmd = Console {};
+        let commands: &mut [&mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut echo_cmd,
             &mut self.sleep_cmd,
@@ -290,7 +356,7 @@ impl CmdEnv {
             //&mut self.audio_cmd,
             &mut backlight_cmd,
             &mut accel_cmd,
-            #[cfg(feature="dbg-ecupdate")]
+            #[cfg(feature = "dbg-ecupdate")]
             &mut self.ecup_cmd,
             &mut self.trng_cmd,
             &mut console_cmd,
@@ -301,18 +367,15 @@ impl CmdEnv {
             &mut self.net_cmd,
             &mut self.pddb_cmd,
             &mut self.usb_cmd,
-
-            #[cfg(not(feature="no-codec"))]
+            #[cfg(not(feature = "no-codec"))]
             &mut self.test_cmd,
-
-            #[cfg(feature="tts")]
+            #[cfg(feature = "tts")]
             &mut self.tts_cmd,
-
-            #[cfg(feature="benchmarks")]
+            #[cfg(feature = "benchmarks")]
             &mut self.sha_cmd,
-            #[cfg(feature="aestests")]
+            #[cfg(feature = "aestests")]
             &mut self.aes_cmd,
-            #[cfg(feature="benchmarks")]
+            #[cfg(feature = "benchmarks")]
             &mut self.engine_cmd,
             //&mut self.fcc_cmd,
         ];
@@ -320,7 +383,7 @@ impl CmdEnv {
         if let Some(cmdline) = maybe_cmdline {
             let maybe_verb = tokenize(cmdline);
 
-            let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<String<1024>>, xous::Error> = Ok(None);
             if let Some(verb_string) = maybe_verb {
                 let verb = verb_string.to_str();
 
@@ -355,15 +418,11 @@ impl CmdEnv {
                 Ok(None)
             }
         } else if let Some(callback) = maybe_callback {
-            let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<String<1024>>, xous::Error> = Ok(None);
             // first check and see if we have a callback registration; if not, just map to the last verb
             let verb = match self.common_env.cb_registrations.get(&(callback.body.id() as u32)) {
-                Some(verb) => {
-                    verb.to_str()
-                },
-                None => {
-                    self.lastverb.to_str()
-                }
+                Some(verb) => verb.to_str(),
+                None => self.lastverb.to_str(),
             };
             // now dispatch
             let mut verbfound = false;
@@ -374,11 +433,7 @@ impl CmdEnv {
                     break;
                 };
             }
-            if verbfound {
-                cmd_ret
-            } else {
-                Ok(None)
-            }
+            if verbfound { cmd_ret } else { Ok(None) }
         } else {
             Ok(None)
         }
@@ -389,7 +444,7 @@ impl CmdEnv {
 /// modifies the incoming line by removing the token and returning the remainder
 /// returns the found token
 /// note: we don't have split() because of nostd
-pub fn tokenize(line: &mut String::<1024>) -> Option<String::<1024>> {
+pub fn tokenize(line: &mut String<1024>) -> Option<String<1024>> {
     let mut token = String::<1024>::new();
     let mut retline = String::<1024>::new();
 
@@ -412,9 +467,5 @@ pub fn tokenize(line: &mut String::<1024>) -> Option<String::<1024>> {
     }
     line.clear();
     write!(line, "{}", retline.as_str().unwrap()).unwrap();
-    if token.len() > 0 {
-        Some(token)
-    } else {
-        None
-    }
+    if token.len() > 0 { Some(token) } else { None }
 }

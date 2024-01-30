@@ -31,19 +31,18 @@ impl ClipRect {
         }
         ClipRect { min, max }
     }
+
     pub fn to_rect(&self) -> crate::api::Rectangle {
         crate::api::Rectangle::new_coords(
             self.min.x as i16,
             self.min.y as i16,
             self.max.x as i16,
-            self.max.y as i16
+            self.max.y as i16,
         )
     }
 
     /// Make a rectangle of the full screen size (0,0)..(WIDTH,LINES)
-    pub fn full_screen() -> ClipRect {
-        ClipRect::new(0, 0, WIDTH, LINES)
-    }
+    pub fn full_screen() -> ClipRect { ClipRect::new(0, 0, WIDTH, LINES) }
 
     /// Make a rectangle of the screen size minus padding (6,6)..(WIDTH-6,LINES-6)
     pub fn padded_screen() -> ClipRect {
@@ -57,39 +56,26 @@ impl ClipRect {
             || self.max.y < other.min.y
             || self.min.x > other.max.x)
     }
+
     pub fn intersects_point(&self, point: Pt) -> bool {
         ((point.x >= self.min.x) && (point.x <= self.max.x))
             && ((point.y >= self.min.y) && (point.y <= self.max.y))
     }
-    /// takes the current Rectangle, and clips it with a clipping Rectangle; returns a new rectangle as the result
+
+    /// takes the current Rectangle, and clips it with a clipping Rectangle; returns a new rectangle as the
+    /// result
     pub fn clip_with(&self, clip: ClipRect) -> Option<ClipRect> {
         // check to see if we even overlap; if not, don't do any computation
         if !self.intersects(clip) {
             return None;
         }
         let tl: Pt = Pt::new(
-            if self.min.x < clip.min.x {
-                clip.min.x
-            } else {
-                self.min.x
-            },
-            if self.min.y < clip.min.y {
-                clip.min.y
-            } else {
-                self.min.y
-            },
+            if self.min.x < clip.min.x { clip.min.x } else { self.min.x },
+            if self.min.y < clip.min.y { clip.min.y } else { self.min.y },
         );
         let br: Pt = Pt::new(
-            if self.max.x > clip.max.x {
-                clip.max.x
-            } else {
-                self.max.x
-            },
-            if self.max.y > clip.max.y {
-                clip.max.y
-            } else {
-                self.max.y
-            },
+            if self.max.x > clip.max.x { clip.max.x } else { self.max.x },
+            if self.max.y > clip.max.y { clip.max.y } else { self.max.y },
         );
         Some(ClipRect::new(tl.x, tl.y, br.x, br.y))
     }
@@ -101,10 +87,7 @@ mod tests {
 
     #[test]
     fn test_cliprect_equivalence() {
-        let cr1 = ClipRect {
-            min: Pt { x: 1, y: 2 },
-            max: Pt { x: 8, y: 9 },
-        };
+        let cr1 = ClipRect { min: Pt { x: 1, y: 2 }, max: Pt { x: 8, y: 9 } };
         // Called properly:
         let cr2 = ClipRect::new(1, 2, 8, 9);
         // Called with mixed up corners that should get auto-corrected

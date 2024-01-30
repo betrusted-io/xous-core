@@ -7,12 +7,14 @@ version = "0.1.0"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-graphics-server = {path = "../graphics-server"}# this is used by the IMEF portion of the API
+graphics-server = { path = "../graphics-server" }               # this is used by the IMEF portion of the API
 log = "0.4.14"
-xous = "0.9.55"
-xous-ipc = "0.9.55"
-xous-names = {package = "xous-api-names", version = "0.9.53"}# used by the IMEF for registering listeners
+xous = "0.9.57"
+xous-ipc = "0.9.57"
+xous-names = { package = "xous-api-names", version = "0.9.55" } # used by the IMEF for registering listeners
 
-num-derive = {version = "0.3.3", default-features = false}
-num-traits = {version = "0.2.14", default-features = false}
-rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+num-derive = { version = "0.3.3", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+] }

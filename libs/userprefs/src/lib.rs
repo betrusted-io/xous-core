@@ -1,7 +1,8 @@
-use bincode::error::{DecodeError, EncodeError};
-use pddb::Pddb;
 use std::io::Read;
 use std::io::Write;
+
+use bincode::error::{DecodeError, EncodeError};
+use pddb::Pddb;
 
 static PREFS_DICT: &str = "UserPrefsDict";
 
@@ -20,21 +21,15 @@ pub enum Error {
 }
 
 impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Self::IoError(err)
-    }
+    fn from(err: std::io::Error) -> Self { Self::IoError(err) }
 }
 
 impl From<EncodeError> for Error {
-    fn from(err: EncodeError) -> Self {
-        Self::EncodeError(err)
-    }
+    fn from(err: EncodeError) -> Self { Self::EncodeError(err) }
 }
 
 impl From<DecodeError> for Error {
-    fn from(err: DecodeError) -> Self {
-        Self::DecodeError(err)
-    }
+    fn from(err: DecodeError) -> Self { Self::DecodeError(err) }
 }
 
 /// UserPrefs defines the set of all the user preference toggles available for Precursor.
@@ -62,11 +57,7 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn new() -> Self {
-        Self {
-            pddb_handle: Pddb::new(),
-        }
-    }
+    pub fn new() -> Self { Self { pddb_handle: Pddb::new() } }
 
     fn pddb_store_key(&self, key: &str, value: &[u8]) -> Result<(), Error> {
         match self.pddb_handle.get(
@@ -151,7 +142,5 @@ impl Manager {
 }
 
 impl Default for Manager {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }

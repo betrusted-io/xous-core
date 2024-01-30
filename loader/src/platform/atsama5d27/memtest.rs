@@ -3,6 +3,4 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #[allow(dead_code)]
-pub fn memtest() {
-    todo!()
-}
+pub fn memtest() { todo!() }

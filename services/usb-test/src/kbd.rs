@@ -1,11 +1,13 @@
-use utralib::generated::*;
-use keyboard::{RowCol, KeyRawStates, ScanCode};
-use crate::api::*;
-use ticktimer_server::Ticktimer;
-use xous::CID;
+use std::collections::HashSet;
+
+use keyboard::{KeyRawStates, RowCol, ScanCode};
 use num_traits::ToPrimitive;
 use susres::{RegManager, RegOrField, SuspendResume};
-use std::collections::HashSet;
+use ticktimer_server::Ticktimer;
+use utralib::generated::*;
+use xous::CID;
+
+use crate::api::*;
 
 /// note: the code is structured to use at most 16 rows or 16 cols
 const KBD_ROWS: usize = 9;
@@ -15,9 +17,9 @@ pub(crate) struct Keyboard {
     conn: CID,
     csr: utralib::CSR<u32>,
     /// where the interrupt handler copies the new state
-    new_state: HashSet::<RowCol>,
+    new_state: HashSet<RowCol>,
     /// remember the last key states
-    last_state: HashSet::<RowCol>,
+    last_state: HashSet<RowCol>,
     /// connection to the timer for real-time events
     ticktimer: Ticktimer,
     /// delay in ms before a key is considered to be repeating
@@ -36,7 +38,7 @@ pub(crate) struct Keyboard {
     rate_timestamp: u64,
     /// track the last key held down, which lacks a hold alternate meaning, for repeating
     repeating_key: Option<char>,
-    susres: RegManager::<{utra::keyboard::KEYBOARD_NUMREGS}>,
+    susres: RegManager<{ utra::keyboard::KEYBOARD_NUMREGS }>,
 }
 
 fn handle_kbd(_irq_no: usize, arg: *mut usize) {
@@ -51,23 +53,32 @@ fn handle_kbd(_irq_no: usize, arg: *mut usize) {
             if cols != 0 {
                 for c in 0..KBD_COLS {
                     if (cols & (1 << c)) != 0 {
-                        kbd.new_state.insert(
-                            RowCol{r: r as _, c: c as _}
-                        );
+                        kbd.new_state.insert(RowCol { r: r as _, c: c as _ });
                     }
                 }
             }
         }
-        xous::try_send_message(kbd.conn,
-            xous::Message::new_scalar(Opcode::HandlerTrigger.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+        xous::try_send_message(
+            kbd.conn,
+            xous::Message::new_scalar(Opcode::HandlerTrigger.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .ok();
     }
     if kbd.csr.rf(utra::keyboard::EV_PENDING_INJECT) != 0 {
         loop {
             let char_reg = kbd.csr.r(utra::keyboard::UART_CHAR);
             if char_reg & kbd.csr.ms(utra::keyboard::UART_CHAR_STB, 1) != 0 {
-                xous::try_send_message(kbd.conn,
-                    xous::Message::new_scalar(Opcode::KeyboardChar.to_usize().unwrap(), (char_reg & 0xff) as _, 0, 0, 0)
-                ).ok();
+                xous::try_send_message(
+                    kbd.conn,
+                    xous::Message::new_scalar(
+                        Opcode::KeyboardChar.to_usize().unwrap(),
+                        (char_reg & 0xff) as _,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .ok();
             } else {
                 break;
             }
@@ -89,7 +100,7 @@ fn kbd_getrow(kbd: &Keyboard, row: u8) -> u16 {
         6 => kbd.csr.rf(utra::keyboard::ROW6DAT_ROW6DAT) as u16,
         7 => kbd.csr.rf(utra::keyboard::ROW7DAT_ROW7DAT) as u16,
         8 => kbd.csr.rf(utra::keyboard::ROW8DAT_ROW8DAT) as u16,
-        _ => 0
+        _ => 0,
     }
 }
 
@@ -109,7 +120,8 @@ impl Keyboard {
         let mut kbd = Keyboard {
             conn: xous::connect(sid).unwrap(),
             csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-            new_state: HashSet::with_capacity(16), // pre-allocate space since this has to work in an interrupt context
+            new_state: HashSet::with_capacity(16), /* pre-allocate space since this has to work in an
+                                                    * interrupt context */
             last_state: HashSet::with_capacity(16),
             ticktimer,
             delay: 500,
@@ -131,9 +143,10 @@ impl Keyboard {
         )
         .expect("couldn't claim irq");
         kbd.csr.wo(utra::keyboard::EV_PENDING, kbd.csr.r(utra::keyboard::EV_PENDING)); // clear in case it's pending for some reason
-        kbd.csr.wo(utra::keyboard::EV_ENABLE,
-            kbd.csr.ms(utra::keyboard::EV_ENABLE_KEYPRESSED, 1) |
-            kbd.csr.ms(utra::keyboard::EV_ENABLE_INJECT, 1)
+        kbd.csr.wo(
+            utra::keyboard::EV_ENABLE,
+            kbd.csr.ms(utra::keyboard::EV_ENABLE_KEYPRESSED, 1)
+                | kbd.csr.ms(utra::keyboard::EV_ENABLE_INJECT, 1),
         );
 
         kbd.susres.push_fixed_value(RegOrField::Reg(utra::keyboard::EV_PENDING), 0xFFFF_FFFF);
@@ -146,6 +159,7 @@ impl Keyboard {
         self.susres.suspend();
         self.csr.wo(utra::keyboard::EV_ENABLE, 0);
     }
+
     pub(crate) fn resume(&mut self) {
         self.susres.resume();
 
@@ -162,9 +176,10 @@ impl Keyboard {
         // ensure interrupts are re-enabled -- this could /shouldn't/ be necessary but we're having
         // some strange resume behavior, trying to see if this resolves it.
         self.csr.wo(utra::keyboard::EV_PENDING, self.csr.r(utra::keyboard::EV_PENDING));
-        self.csr.wo(utra::keyboard::EV_ENABLE,
-            self.csr.ms(utra::keyboard::EV_ENABLE_KEYPRESSED, 1) |
-            self.csr.ms(utra::keyboard::EV_ENABLE_INJECT, 1)
+        self.csr.wo(
+            utra::keyboard::EV_ENABLE,
+            self.csr.ms(utra::keyboard::EV_ENABLE_KEYPRESSED, 1)
+                | self.csr.ms(utra::keyboard::EV_ENABLE_INJECT, 1),
         );
     }
 
@@ -199,15 +214,15 @@ impl Keyboard {
 
     pub(crate) fn track_keys(&mut self, krs: &KeyRawStates) -> Vec<char> {
         /*
-          "conventional" keyboard algorithm. The goals of this are to differentiate
-          the cases of "shift", "alt", and "hold".
+         "conventional" keyboard algorithm. The goals of this are to differentiate
+         the cases of "shift", "alt", and "hold".
 
-          thus, we check for the special-case of shift/alt in the keydowns/keyups vectors, and
-          track them as separate modifiers
+         thus, we check for the special-case of shift/alt in the keydowns/keyups vectors, and
+         track them as separate modifiers
 
-          then for all others, we note the down time, and compare it to the current time
-          to determine if a "hold" modifier applies
-         */
+         then for all others, we note the down time, and compare it to the current time
+         to determine if a "hold" modifier applies
+        */
         let mut ks: Vec<char> = Vec::new();
 
         // first check for shift and alt keys
@@ -223,7 +238,7 @@ impl Keyboard {
                 }
             }
         }
-        let mut keyups_noshift: Vec::<RowCol> = Vec::new();
+        let mut keyups_noshift: Vec<RowCol> = Vec::new();
         for &rc in krs.keyups.iter() {
             if ((rc.r == 8) && (rc.c == 5)) || ((rc.r == 8) && (rc.c == 9)) {
                 // only set the shift-up if we didn't previously clear it with a double-tap of shift
@@ -235,7 +250,7 @@ impl Keyboard {
                 self.shift_down = false;
             } else {
                 //info!("adding non-shift entry {:?}", rc);
-                keyups_noshift.push(RowCol{r: rc.r as _, c: rc.c as _});
+                keyups_noshift.push(RowCol { r: rc.r as _, c: rc.c as _ });
             }
         }
 
@@ -245,9 +260,11 @@ impl Keyboard {
         }
         for &rc in krs.keydowns.iter() {
             let code = map_qwerty(rc);
-            if code.hold == None
-            && !((rc.r == 5) && (rc.c == 2)) // scan code for the menu key
-             { // if there isn't a pre-defined meaning if the key is held *and* it's not the menu key: it's a repeating key
+            if code.hold == None && !((rc.r == 5) && (rc.c == 2))
+            // scan code for the menu key
+            {
+                // if there isn't a pre-defined meaning if the key is held *and* it's not the menu key: it's a
+                // repeating key
                 if let Some(key) = code.key {
                     self.repeating_key = Some(key);
                 }
@@ -301,7 +318,8 @@ impl Keyboard {
             }
         }
 
-        // if we're in a key hold state, we've passed the rate timestamp point, and there's a repeating key defined
+        // if we're in a key hold state, we've passed the rate timestamp point, and there's a repeating key
+        // defined
         if hold && ((now - self.rate_timestamp) >= self.rate as u64) && self.repeating_key.is_some() {
             self.rate_timestamp = now;
             if let Some(repeatkey) = self.repeating_key {
@@ -315,6 +333,7 @@ impl Keyboard {
 
 /// Compute the dvorak key mapping of row/col to key tuples
 #[allow(dead_code)]
+#[rustfmt::skip]
 pub(crate) fn map_dvorak(code: RowCol) -> ScanCode {
     let rc = (code.r, code.c);
 
@@ -387,6 +406,7 @@ pub(crate) fn map_dvorak(code: RowCol) -> ScanCode {
 }
 
 /// Compute the qwerty key mapping of row/col to key tuples
+#[rustfmt::skip]
 pub(crate) fn map_qwerty(code: RowCol) -> ScanCode {
     let rc = (code.r, code.c);
 

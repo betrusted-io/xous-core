@@ -1,22 +1,23 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::arch;
-use crate::arch::mem::MemoryMapping;
-pub use crate::arch::process::Process as ArchProcess;
-pub use crate::arch::process::Thread;
-use crate::platform;
-use xous_kernel::arch::ProcessStartup;
-use xous_kernel::MemoryRange;
-
 use core::num::NonZeroU8;
 
-use crate::filled_array;
-use crate::server::Server;
+use xous_kernel::arch::ProcessStartup;
+use xous_kernel::MemoryRange;
 // use core::mem;
 use xous_kernel::{
     pid_from_usize, Error, MemoryAddress, Message, ProcessInit, ThreadInit, CID, PID, SID, TID,
 };
+
+use crate::arch;
+use crate::arch::mem::MemoryMapping;
+pub use crate::arch::process::Process as ArchProcess;
+#[cfg(not(any(windows, unix)))]
+pub use crate::arch::process::Thread;
+use crate::filled_array;
+use crate::platform;
+use crate::server::Server;
 
 const MAX_SERVER_COUNT: usize = 128;
 
@@ -30,8 +31,6 @@ const MINIELF_FLG_NC: u8 = 2;
 const MINIELF_FLG_X: u8 = 4;
 #[cfg(baremetal)]
 const MINIELF_FLG_EHF: u8 = 8;
-#[cfg(baremetal)]
-const MINIELF_FLG_EHH: u8 = 0x10;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ExceptionHandler {
@@ -44,8 +43,8 @@ pub struct ExceptionHandler {
 
 // fn log_process_update(f: &str, l: u32, process: &Process, old_state: ProcessState) {
 //     if process.pid.get() == 3 {
-//         println!("[{}:{}] Updated PID {:?} state: {:?} -> {:?}", f, l, process.pid, old_state, process.state);
-//     }
+//         println!("[{}:{}] Updated PID {:?} state: {:?} -> {:?}", f, l, process.pid, old_state,
+// process.state);     }
 // }
 
 /// A big unifying struct containing all of the system state.
@@ -125,9 +124,7 @@ impl core::fmt::Debug for ProcessState {
 }
 
 impl Default for ProcessState {
-    fn default() -> ProcessState {
-        ProcessState::Free
-    }
+    fn default() -> ProcessState { ProcessState::Free }
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -219,7 +216,7 @@ impl Default for ProcessInner {
             mem_message_last: arch::mem::DEFAULT_MESSAGE_BASE,
             mem_heap_base: arch::mem::DEFAULT_HEAP_BASE,
             mem_heap_size: 0,
-            mem_heap_max: 524_288,
+            mem_heap_max: if cfg!(feature = "big-heap") { 1024 * 1024 * 12 } else { 1024 * 512 },
             connection_map: [None; 32],
             pid: unsafe { PID::new_unchecked(1) },
             _reserved: [0; 1],
@@ -230,16 +227,11 @@ impl Default for ProcessInner {
 impl Process {
     /// This process has at least one context that may be run
     pub fn runnable(&self) -> bool {
-        matches!(
-            self.state,
-            ProcessState::Setup(_) | ProcessState::Ready(_) | ProcessState::Exception(_)
-        )
+        matches!(self.state, ProcessState::Setup(_) | ProcessState::Ready(_) | ProcessState::Exception(_))
     }
 
     /// This process slot is unallocated and may be turn into a process
-    pub fn free(&self) -> bool {
-        matches!(self.state, ProcessState::Free)
-    }
+    pub fn free(&self) -> bool { matches!(self.state, ProcessState::Free) }
 
     pub fn activate(&self) -> Result<(), xous_kernel::Error> {
         crate::arch::process::set_current_pid(self.pid);
@@ -256,9 +248,7 @@ impl Process {
         println!("[!] Terminating process with PID {}", self.pid);
 
         // Free all associated memory pages
-        unsafe {
-            crate::mem::MemoryManager::with_mut(|mm| mm.release_all_memory_for_process(self.pid))
-        };
+        unsafe { crate::mem::MemoryManager::with_mut(|mm| mm.release_all_memory_for_process(self.pid)) };
 
         // Free all claimed IRQs
         crate::irq::release_interrupts_for_pid(self.pid);
@@ -352,17 +342,12 @@ impl SystemServices {
         let init_offsets = {
             let mut init_count = 1;
             for arg in args.iter() {
-                if arg.name == u32::from_le_bytes(*b"IniE")
-                    || arg.name == u32::from_le_bytes(*b"IniF")
-                {
+                if arg.name == u32::from_le_bytes(*b"IniE") || arg.name == u32::from_le_bytes(*b"IniF") {
                     init_count += 1;
                 }
             }
             unsafe {
-                core::slice::from_raw_parts(
-                    base as *const crate::arch::process::InitialProcess,
-                    init_count,
-                )
+                core::slice::from_raw_parts(base as *const crate::arch::process::InitialProcess, init_count)
             }
         };
 
@@ -370,9 +355,7 @@ impl SystemServices {
         let mut arg_iter = args.iter().peekable();
         loop {
             if let Some(arg) = arg_iter.peek() {
-                if arg.name == u32::from_le_bytes(*b"IniE")
-                    || arg.name == u32::from_le_bytes(*b"IniF")
-                {
+                if arg.name == u32::from_le_bytes(*b"IniE") || arg.name == u32::from_le_bytes(*b"IniF") {
                     break;
                 }
             } else {
@@ -409,25 +392,26 @@ impl SystemServices {
                 //   - Process #1 is the kernel
                 // Any changes to this will break this code!
                 let mut eh_frame = 0;
-                let mut eh_frame_size = 0;
-                let mut eh_frame_header = 0;
-                let mut eh_frame_header_size = 0;
                 if let Some(arg) = arg_iter.next() {
                     for section in arg.data.chunks_exact(2) {
                         let flags = (section[1] >> 24) as u8;
                         if flags & MINIELF_FLG_EHF != 0 {
                             eh_frame = section[0];
-                            eh_frame_size = section[1] & 0xFF_FFFF;
-                        } else if flags & MINIELF_FLG_EHH != 0 {
-                            eh_frame_header = section[0];
-                            eh_frame_header_size = section[1] & 0xFF_FFFF;
                         }
                     }
                 }
 
+                let arg0 = eh_frame as _;
+                #[cfg(target_arch = "riscv32")]
+                let arg1 = init.env as _;
+                #[cfg(not(target_arch = "riscv32"))]
+                let arg1 = 0;
+                let arg2 = 0;
+                let arg3 = 0;
+
                 // end of assumption area
                 process.state = ProcessState::Setup(ThreadInit::new(
-                    unsafe { core::mem::transmute::<usize, _>(init.entrypoint) },
+                    init.entrypoint as _,
                     unsafe {
                         MemoryRange::new(
                             init.sp - crate::arch::process::DEFAULT_STACK_SIZE,
@@ -435,10 +419,10 @@ impl SystemServices {
                         )
                         .unwrap()
                     },
-                    eh_frame as _,
-                    eh_frame_size as _,
-                    eh_frame_header as _,
-                    eh_frame_header_size as _,
+                    arg0,
+                    arg1,
+                    arg2,
+                    arg3,
                 ));
             }
             // log_process_update(file!(), line!(), process, old_state);
@@ -470,12 +454,7 @@ impl SystemServices {
             entry.pid = new_pid.unwrap();
             entry.ppid = PID::new(1).unwrap();
             entry.state = ProcessState::Allocated;
-            unsafe {
-                entry
-                    .mapping
-                    .allocate(new_pid.unwrap())
-                    .or(Err(xous_kernel::Error::InternalError))?
-            };
+            unsafe { entry.mapping.allocate(new_pid.unwrap()).or(Err(xous_kernel::Error::InternalError))? };
             break;
         }
         if entry_idx.is_none() {
@@ -494,77 +473,47 @@ impl SystemServices {
             entry.state = ProcessState::Ready(1 << INITIAL_TID);
         }
         // entry.ppid = _ppid;
-        klog!(
-            "created new process for PID {} with PPID {}",
-            new_pid,
-            _ppid
-        );
+        klog!("created new process for PID {} with PPID {}", new_pid, _ppid);
         return Ok(startup);
     }
 
     pub fn get_process(&self, pid: PID) -> Result<&Process, xous_kernel::Error> {
         // PID0 doesn't exist -- process IDs are offset by 1.
         let pid_idx = pid.get() as usize - 1;
-        if cfg!(baremetal) && self.processes[pid_idx].mapping.get_pid() != pid {
-            klog!(
-                "Process doesn't match ({} vs {})",
-                self.processes[pid_idx].mapping.get_pid(),
-                pid
-            );
-            return Err(xous_kernel::Error::ProcessNotFound);
+        if cfg!(baremetal) && self.processes[pid_idx].mapping.get_pid() != Some(pid) {
+            Err(xous_kernel::Error::ProcessNotFound)
+        } else if self.processes[pid_idx].state == ProcessState::Free {
+            Err(xous_kernel::Error::ProcessNotFound)
+        } else {
+            Ok(&self.processes[pid_idx])
         }
-        Ok(&self.processes[pid_idx])
     }
 
     pub fn get_process_mut(&mut self, pid: PID) -> Result<&mut Process, xous_kernel::Error> {
         // PID0 doesn't exist -- process IDs are offset by 1.
         let pid_idx = pid.get() as usize - 1;
-
-        // if self.processes[pid_idx].mapping.get_pid() != pid {
-        //     println!(
-        //         "Process doesn't match ({} vs {})",
-        //         self.processes[pid_idx].mapping.get_pid(),
-        //         pid
-        //     );
-        //     return Err(xous_kernel::Error::ProcessNotFound);
-        // }
-        Ok(&mut self.processes[pid_idx])
+        if cfg!(baremetal) && self.processes[pid_idx].mapping.get_pid() != Some(pid) {
+            Err(xous_kernel::Error::ProcessNotFound)
+        } else if self.processes[pid_idx].state == ProcessState::Free {
+            Err(xous_kernel::Error::ProcessNotFound)
+        } else {
+            Ok(&mut self.processes[pid_idx])
+        }
     }
 
-    pub fn current_pid(&self) -> PID {
-        arch::process::current_pid()
-        // PID0 doesn't exist -- process IDs are offset by 1.
-        // assert_eq!(
-        //     self.processes[pid as usize - 1].mapping,
-        //     MemoryMapping::current(),
-        //     "process memory map doesn't match -- current_pid: {}",
-        //     pid
-        // );
-        // assert_eq!(
-        //     pid, self.pid,
-        //     "current pid {} doesn't match arch pid: {}",
-        //     self.pid, pid
-        // );
-        // pid
-    }
+    pub fn current_pid(&self) -> PID { arch::process::current_pid() }
 
     /// Create a stack frame in the specified process and jump to it.
     /// 1. Pause the current process and switch to the new one
     /// 2. Save the process state, if it hasn't already been saved
     /// 3. Run the new process, returning to an illegal instruction
     #[cfg(baremetal)]
-    pub fn finish_callback_and_resume(
-        &mut self,
-        pid: PID,
-        tid: TID,
-    ) -> Result<(), xous_kernel::Error> {
+    pub fn finish_callback_and_resume(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
         // Get the current process (which was the interrupt handler) and mark it
         // as Ready.  Note that the new PID may very well be the same PID.
         {
             let current_pid = self.current_pid();
-            let current = self
-                .get_process_mut(current_pid)
-                .expect("couldn't get current PID");
+            let current = self.get_process_mut(current_pid).expect("couldn't get current PID");
             klog!("Finishing callback in PID {}", current_pid);
             // let old_state = current.state;
             current.state = match current.state {
@@ -648,9 +597,7 @@ impl SystemServices {
         // state.
         {
             let current_pid = self.current_pid();
-            let current = self
-                .get_process_mut(current_pid)
-                .expect("couldn't get current PID");
+            let current = self.get_process_mut(current_pid).expect("couldn't get current PID");
             // The current thread should never be 0, but for some reason it ends up
             // as 0 after resuming from suspend. It's unclear how this happens.
             if current.current_thread == 0 {
@@ -682,7 +629,10 @@ impl SystemServices {
             };
             #[cfg(feature = "gdb-stub")]
             if let ProcessState::Debug(_) = process.state {
-                println!("Making a callback for IRQ {} to process {:?} which is currently in a debug state!", irq_no, pid);
+                println!(
+                    "Making a callback for IRQ {} to process {:?} which is currently in a debug state!",
+                    irq_no, pid
+                );
                 process.state = ProcessState::DebugIrq(available_threads);
             } else {
                 process.state = ProcessState::Running(available_threads);
@@ -759,25 +709,17 @@ impl SystemServices {
             ProcessState::Free => {
                 panic!("PID {} was not running, so cannot wake thread {}", pid, tid)
             }
-            ProcessState::Running(x) if x & (1 << tid) == 0 => {
-                ProcessState::Running(x | (1 << tid))
-            }
+            ProcessState::Running(x) if x & (1 << tid) == 0 => ProcessState::Running(x | (1 << tid)),
             ProcessState::Ready(x) if x & (1 << tid) == 0 => ProcessState::Ready(x | (1 << tid)),
             ProcessState::Sleeping => ProcessState::Ready(1 << tid),
             #[cfg(feature = "gdb-stub")]
             ProcessState::Debug(x) if x & (1 << tid) == 0 => ProcessState::Debug(x | (1 << tid)),
             #[cfg(feature = "gdb-stub")]
-            ProcessState::DebugIrq(x) if x & (1 << tid) == 0 => {
-                ProcessState::DebugIrq(x | (1 << tid))
-            }
-            ProcessState::Exception(ready_threads)
-            | ProcessState::BlockedException(ready_threads) => {
+            ProcessState::DebugIrq(x) if x & (1 << tid) == 0 => ProcessState::DebugIrq(x | (1 << tid)),
+            ProcessState::Exception(ready_threads) | ProcessState::BlockedException(ready_threads) => {
                 ProcessState::Exception(ready_threads)
             }
-            other => panic!(
-                "PID {} was not in a state to wake thread {}: {:?}",
-                pid, tid, other
-            ),
+            other => panic!("PID {} was not in a state to wake thread {}: {:?}", pid, tid, other),
         };
         // log_process_update(file!(), line!(), process, old_state);
         klog!("Readying ({}:{}) -> {:?}", pid, tid, process.state);
@@ -790,8 +732,8 @@ impl SystemServices {
         // This platform has a multiplier, so this is fast
         fn trailing_zeros(v: usize) -> usize {
             const MULTIPLY_DEBRUIJN_BIT_POSITION: [usize; 32] = [
-                0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 31, 27, 13, 23, 21, 19,
-                16, 7, 26, 12, 18, 6, 11, 5, 10, 9,
+                0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 31, 27, 13, 23, 21, 19, 16, 7, 26,
+                12, 18, 6, 11, 5, 10, 9,
             ];
 
             MULTIPLY_DEBRUIJN_BIT_POSITION[((!v.wrapping_sub(1) & v) * 0x077CB531) >> 27]
@@ -806,11 +748,7 @@ impl SystemServices {
             trailing_zeros(thread_mask)
         } else {
             let upper_bits = thread_mask & !((2usize << current_thread) - 1);
-            if upper_bits != 0 {
-                trailing_zeros(upper_bits)
-            } else {
-                trailing_zeros(thread_mask)
-            }
+            if upper_bits != 0 { trailing_zeros(upper_bits) } else { trailing_zeros(thread_mask) }
         }
     }
 
@@ -847,9 +785,7 @@ impl SystemServices {
                 process.current_thread = tid;
                 Ok(())
             }
-            ProcessState::Ready(_) | ProcessState::Sleeping => {
-                Err(xous_kernel::Error::ThreadNotAvailable)
-            }
+            ProcessState::Ready(_) | ProcessState::Sleeping => Err(xous_kernel::Error::ThreadNotAvailable),
             ProcessState::Running(_) => panic!("thread was still running"),
             _ => Err(xous_kernel::Error::ProcessNotFound),
         }
@@ -860,11 +796,7 @@ impl SystemServices {
     /// # Panics
     ///
     /// If the current process is not running, or if it's "Running" but has no free contexts
-    pub fn switch_to_thread(
-        &mut self,
-        pid: PID,
-        tid: Option<TID>,
-    ) -> Result<(), xous_kernel::Error> {
+    pub fn switch_to_thread(&mut self, pid: PID, tid: Option<TID>) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
         // klog!(
         //     "switch_to_thread({}:{:?}): Old state was {:?}",
@@ -882,7 +814,7 @@ impl SystemServices {
             }
             #[cfg(feature = "gdb-stub")]
             ProcessState::Debug(_) | ProcessState::DebugIrq(_) => {
-                return Err(xous_kernel::Error::DebugInProgress)
+                return Err(xous_kernel::Error::DebugInProgress);
             }
             ProcessState::Exception(x) => {
                 process.activate()?;
@@ -917,9 +849,8 @@ impl SystemServices {
                 panic!("ProcessState was `Ready(0)`, which is invalid!");
             }
             ProcessState::Ready(ready_threads) => {
-                let new_thread = tid.unwrap_or_else(|| {
-                    Self::find_next_thread(ready_threads, process.current_thread)
-                });
+                let new_thread =
+                    tid.unwrap_or_else(|| Self::find_next_thread(ready_threads, process.current_thread));
 
                 if ready_threads & (1 << new_thread) == 0 {
                     panic!("invalid thread ID");
@@ -935,9 +866,8 @@ impl SystemServices {
                 // Ensure we can switch back to this thread, if necessary
                 let ready_threads = ready_threads | (1 << process.current_thread);
 
-                let new_thread = tid.unwrap_or_else(|| {
-                    Self::find_next_thread(ready_threads, process.current_thread)
-                });
+                let new_thread =
+                    tid.unwrap_or_else(|| Self::find_next_thread(ready_threads, process.current_thread));
 
                 // Ensure the specified context is ready to run, or is
                 // currently running.
@@ -1001,11 +931,8 @@ impl SystemServices {
                 }
             }
             other => {
-                panic!(
-                    "PID {} TID {} was not in a state to be switched from: {:?}",
-                    pid, tid, other
-                );
-            },
+                panic!("PID {} TID {} was not in a state to be switched from: {:?}", pid, tid, other);
+            }
         };
         // log_process_update(file!(), line!(), process, old_state);
         // klog!(
@@ -1055,9 +982,8 @@ impl SystemServices {
         }
 
         // Return to the original memory space.
-        let current_process = self
-            .get_process(current_pid)
-            .expect("couldn't switch back after setting context result");
+        let current_process =
+            self.get_process(current_pid).expect("couldn't switch back after setting context result");
         current_process.activate()?;
         Ok(())
     }
@@ -1101,11 +1027,7 @@ impl SystemServices {
                     // If no new context is specified, take the previous
                     // context.  If that is not runnable, do a round-robin
                     // search for the next available context.
-                    assert!(
-                        x != 0,
-                        "process was {:?} but had no runnable threads",
-                        new.state
-                    );
+                    assert!(x != 0, "process was {:?} but had no runnable threads", new.state);
                     if new_tid == 0 {
                         new_tid = Self::find_next_thread(x, new.current_thread);
                     }
@@ -1123,7 +1045,7 @@ impl SystemServices {
                 }
                 #[cfg(feature = "gdb-stub")]
                 ProcessState::Debug(_) | ProcessState::DebugIrq(_) => {
-                    return Err(xous_kernel::Error::ProcessNotFound)
+                    return Err(xous_kernel::Error::ProcessNotFound);
                 }
                 ProcessState::Sleeping | ProcessState::BlockedException(_) => {
                     // println!("PID {} was sleeping or being debugged", new_pid);
@@ -1142,8 +1064,7 @@ impl SystemServices {
             new.state = match new.state {
                 ProcessState::Setup(thread_init) => {
                     // klog!("Setting up new process...");
-                    ArchProcess::setup_process(new_pid, thread_init)
-                        .expect("couldn't set up new process");
+                    ArchProcess::setup_process(new_pid, thread_init).expect("couldn't set up new process");
                     ArchProcess::with_inner_mut(|process_inner| process_inner.pid = new_pid);
 
                     ProcessState::Running(0)
@@ -1171,9 +1092,7 @@ impl SystemServices {
 
             // Mark the previous process as ready to run, since we just switched
             // away
-            let previous = self
-                .get_process_mut(previous_pid)
-                .expect("couldn't get previous pid");
+            let previous = self.get_process_mut(previous_pid).expect("couldn't get previous pid");
             let _oldstate = previous.state; // for tracking state in the debug print after the following closure
             if previous.current_thread != previous_tid {
                 println!(
@@ -1217,12 +1136,7 @@ impl SystemServices {
                 ),
             };
             // log_process_update(file!(), line!(), previous, _oldstate);
-            klog!(
-                "PID {:?} state change from {:?} -> {:?}",
-                previous_pid,
-                _oldstate,
-                previous.state
-            );
+            klog!("PID {:?} state change from {:?} -> {:?}", previous_pid, _oldstate, previous.state);
             // klog!(
             //     "Set previous process PID {} state to {:?} (with can_resume = {})",
             //     previous_pid,
@@ -1236,8 +1150,10 @@ impl SystemServices {
             // as the one we just switched from, do nothing.
             if previous_tid == new_tid {
                 if !can_resume {
-                    panic!("tried to switch to our own thread without resume (current_thread: {}  previous_tid: {}  new_tid: {})",
-                            new.current_thread, previous_tid, new_tid);
+                    panic!(
+                        "tried to switch to our own thread without resume (current_thread: {}  previous_tid: {}  new_tid: {})",
+                        new.current_thread, previous_tid, new_tid
+                    );
                 }
                 let mut process = ArchProcess::current();
                 process.set_tid(new_tid).unwrap();
@@ -1252,11 +1168,7 @@ impl SystemServices {
 
                 // If the current process can be resumed, add it to the list
                 // of potential threads
-                let x = x | if can_resume {
-                    1 << new.current_thread
-                } else {
-                    0
-                };
+                let x = x | if can_resume { 1 << new.current_thread } else { 0 };
 
                 // If no new thread is specified, take the previous
                 // thread.  If that is not runnable, do a round-robin
@@ -1274,10 +1186,7 @@ impl SystemServices {
                 // Remove the new TID from the list of threads that can be run.
                 ProcessState::Running(x & !(1 << new_tid))
             } else {
-                panic!(
-                    "PID {} invalid process state (not Running): {:?}",
-                    previous_pid, new.state
-                )
+                panic!("PID {} invalid process state (not Running): {:?}", previous_pid, new.state)
             };
             // log_process_update(file!(), line!(), new, old_state);
         }
@@ -1315,8 +1224,7 @@ impl SystemServices {
     ///
     /// # Errors
     ///
-    /// * **ShareViolation**: Tried to mutably share a region that was already
-    ///   shared
+    /// * **ShareViolation**: Tried to mutably share a region that was already shared
     /// * **BadAddress**: The provided address was not valid
     /// * **BadAlignment**: The provided address or length was not page-aligned
     ///
@@ -1377,9 +1285,7 @@ impl SystemServices {
                     src_mapping.activate().expect("couldn't undo mapping");
                     e
                 })? as *mut usize;
-            src_mapping
-                .activate()
-                .expect("Couldn't switch back to source mapping");
+            src_mapping.activate().expect("Couldn't switch back to source mapping");
 
             let mut error = None;
 
@@ -1435,8 +1341,7 @@ impl SystemServices {
     ///
     /// # Errors
     ///
-    /// * **ShareViolation**: Tried to mutably share a region that was already
-    ///   shared
+    /// * **ShareViolation**: Tried to mutably share a region that was already shared
     /// * **BadAddress**: The provided address was not valid
     /// * **BadAlignment**: The provided address or length was not page-aligned
     #[cfg(baremetal)]
@@ -1668,20 +1573,13 @@ impl SystemServices {
     ///
     /// # Errors
     ///
-    /// * **ThreadNotAvailable**: The process has used all of its context
-    ///   slots.
-    pub fn create_thread(
-        &mut self,
-        pid: PID,
-        thread_init: ThreadInit,
-    ) -> Result<TID, xous_kernel::Error> {
+    /// * **ThreadNotAvailable**: The process has used all of its context slots.
+    pub fn create_thread(&mut self, pid: PID, thread_init: ThreadInit) -> Result<TID, xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
         process.activate()?;
 
         let mut arch_process = ArchProcess::current();
-        let new_tid = arch_process
-            .find_free_thread()
-            .ok_or(xous_kernel::Error::ThreadNotAvailable)?;
+        let new_tid = arch_process.find_free_thread().ok_or(xous_kernel::Error::ThreadNotAvailable)?;
 
         arch_process.setup_thread(new_tid, thread_init)?;
 
@@ -1697,10 +1595,7 @@ impl SystemServices {
                 ProcessState::Ready(1 << new_tid)
             }
 
-            other => panic!(
-                "error spawning thread: process was in an invalid state {:?}",
-                other
-            ),
+            other => panic!("error spawning thread: process was in an invalid state {:?}", other),
         };
 
         Ok(new_tid)
@@ -1794,10 +1689,8 @@ impl SystemServices {
     ///
     /// # Errors
     ///
-    /// * **OutOfMemory**: A new page could not be assigned to store the server
-    ///   queue.
-    /// * **ServerNotFound**: The server queue was full and a free slot could not
-    ///   be found.
+    /// * **OutOfMemory**: A new page could not be assigned to store the server queue.
+    /// * **ServerNotFound**: The server queue was full and a free slot could not be found.
     pub fn create_server_with_address(
         &mut self,
         pid: PID,
@@ -1812,10 +1705,7 @@ impl SystemServices {
         // TODO: Come up with a way to randomize the server ID
         let ppid = self.get_process(pid)?.ppid.get();
         if ppid != 1 {
-            panic!(
-                "KERNEL({}): Non-PID1 processes cannot start servers yet",
-                pid.get()
-            );
+            panic!("KERNEL({}): Non-PID1 processes cannot start servers yet", pid.get());
         }
 
         for entry in self.servers.iter_mut() {
@@ -1823,24 +1713,18 @@ impl SystemServices {
                 #[cfg(baremetal)]
                 // Allocate a single page for the server queue
                 let backing = crate::mem::MemoryManager::with_mut(|mm| unsafe {
-                    MemoryRange::new(
-                        mm.map_zeroed_page(pid, false)? as _,
-                        crate::arch::mem::PAGE_SIZE,
-                    )
+                    MemoryRange::new(mm.map_zeroed_page(pid, false)? as _, crate::arch::mem::PAGE_SIZE)
                 })?;
 
                 #[cfg(not(baremetal))]
                 let backing = unsafe { MemoryRange::new(4096, 4096).unwrap() };
 
-                // klog!("initializing new server with backing at {:x?} -- entry is {:?} (connect? {:?})", backing, *entry, connect);
-                // Initialize the server with the given memory page.
+                // klog!("initializing new server with backing at {:x?} -- entry is {:?} (connect? {:?})",
+                // backing, *entry, connect); Initialize the server with the given memory
+                // page.
                 Server::init(entry, pid, sid, backing).unwrap();
 
-                let cid = if connect {
-                    self.connect_to_server(sid)?
-                } else {
-                    0
-                };
+                let cid = if connect { self.connect_to_server(sid)? } else { 0 };
                 return Ok((sid, cid));
             }
         }
@@ -1854,15 +1738,9 @@ impl SystemServices {
     ///
     /// # Errors
     ///
-    /// * **OutOfMemory**: A new page could not be assigned to store the server
-    ///   queue.
-    /// * **ServerNotFound**: The server queue was full and a free slot could not
-    ///   be found.
-    pub fn create_server(
-        &mut self,
-        pid: PID,
-        connect: bool,
-    ) -> Result<(SID, CID), xous_kernel::Error> {
+    /// * **OutOfMemory**: A new page could not be assigned to store the server queue.
+    /// * **ServerNotFound**: The server queue was full and a free slot could not be found.
+    pub fn create_server(&mut self, pid: PID, connect: bool) -> Result<(SID, CID), xous_kernel::Error> {
         let sid = self.create_server_id()?;
         self.create_server_with_address(pid, sid, connect)
     }
@@ -1947,6 +1825,7 @@ impl SystemServices {
 
         result
     }
+
     /// Allocate a new server ID for this process and return the address. If the
     /// server table is full, return an error.
     pub fn connect_to_server(&mut self, sid: SID) -> Result<CID, xous_kernel::Error> {
@@ -1979,8 +1858,8 @@ impl SystemServices {
                 let server_idx = server_idx - 2;
                 if let Some(allocated_server) = &self.servers[server_idx] {
                     if allocated_server.sid == sid {
-                        // println!("KERNEL({}): Existing connection to SID {:?} found in this process @ {}, process connection map is: {:?}",
-                        //     _pid.get(),
+                        // println!("KERNEL({}): Existing connection to SID {:?} found in this process @ {},
+                        // process connection map is: {:?}",     _pid.get(),
                         //     sid,
                         //     (connection_idx as CID) + 2,
                         //     process_inner.connection_map,
@@ -1998,8 +1877,8 @@ impl SystemServices {
                         process_inner.connection_map[slot_idx] =
                             Some(NonZeroU8::new((server_idx as u8) + 2).unwrap());
                         // println!(
-                        //     "KERNEL({}): New connection to {:?}. After connection, cid is {} and process connection map is: {:?}",
-                        //     pid.get(),
+                        //     "KERNEL({}): New connection to {:?}. After connection, cid is {} and process
+                        // connection map is: {:?}",     pid.get(),
                         //     sid,
                         //     slot_idx + 2,
                         //     process_inner.connection_map
@@ -2065,26 +1944,19 @@ impl SystemServices {
 
     /// Return a server based on the connection id and the current process
     pub fn server_from_sidx(&self, sidx: usize) -> Option<&Server> {
-        if sidx > self.servers.len() {
-            None
-        } else {
-            self.servers[sidx].as_ref()
-        }
+        if sidx > self.servers.len() { None } else { self.servers[sidx].as_ref() }
     }
 
     /// Return a server based on the connection id and the current process
     pub fn server_from_sidx_mut(&mut self, sidx: usize) -> Option<&mut Server> {
-        if sidx > self.servers.len() {
-            None
-        } else {
-            self.servers[sidx].as_mut()
-        }
+        if sidx > self.servers.len() { None } else { self.servers[sidx].as_mut() }
     }
 
     /// Retrieve a Server ID (Extended) value from the given Connection ID
     /// within the current process.
     pub fn sidx_from_cid(&self, cid: CID) -> Option<usize> {
-        // println!("KERNEL({}): Attempting to get SIDX from CID {}", crate::arch::process::current_pid(), cid);
+        // println!("KERNEL({}): Attempting to get SIDX from CID {}", crate::arch::process::current_pid(),
+        // cid);
         if cid < 2 {
             return None;
         }
@@ -2094,25 +1966,29 @@ impl SystemServices {
         ArchProcess::with_inner(|process_inner| {
             assert_eq!(crate::arch::process::current_pid(), process_inner.pid);
             if (cid as usize) >= process_inner.connection_map.len() {
-                // println!("KERNEL({}): CID {} > connection map len", crate::arch::process::current_pid(), cid);
+                // println!("KERNEL({}): CID {} > connection map len", crate::arch::process::current_pid(),
+                // cid);
                 return None;
             }
             // if process_inner.connection_map[cid].is_none() {
-            //     println!("KERNEL({}): CID {} doesn't exist in the connection map", crate::arch::process::current_pid(), cid + 2);
-            //     println!("KERNEL({}): Process inner is: {:?}", crate::arch::process::current_pid(), process_inner);
-            // }
+            //     println!("KERNEL({}): CID {} doesn't exist in the connection map",
+            // crate::arch::process::current_pid(), cid + 2);     println!("KERNEL({}): Process
+            // inner is: {:?}", crate::arch::process::current_pid(), process_inner); }
             let connection_value = *process_inner.connection_map.get(cid as usize)?;
             let mut server_idx = connection_value?.get() as usize;
             if server_idx < 2 {
-                // println!("KERNEL({}): CID {} is no longer valid", crate::arch::process::current_pid(), cid + 2);
+                // println!("KERNEL({}): CID {} is no longer valid", crate::arch::process::current_pid(), cid
+                // + 2);
                 return None;
             }
             server_idx -= 2;
             if server_idx >= self.servers.len() {
-                // println!("KERNEL({}): CID {} and server_idx >= {}", crate::arch::process::current_pid(), cid + 2, server_idx);
+                // println!("KERNEL({}): CID {} and server_idx >= {}", crate::arch::process::current_pid(),
+                // cid + 2, server_idx);
                 None
             } else {
-                // println!("KERNEL({}): SIDX for CID {} found at index {}", crate::arch::process::current_pid(), cid + 2, server_idx);
+                // println!("KERNEL({}): SIDX for CID {} found at index {}",
+                // crate::arch::process::current_pid(), cid + 2, server_idx);
                 Some(server_idx)
             }
         })
@@ -2130,22 +2006,15 @@ impl SystemServices {
     ) -> Result<usize, xous_kernel::Error> {
         let current_pid = self.current_pid();
         let result = {
-            let server_pid = self
-                .server_from_sidx(sidx)
-                .ok_or(xous_kernel::Error::ServerNotFound)?
-                .pid;
+            let server_pid = self.server_from_sidx(sidx).ok_or(xous_kernel::Error::ServerNotFound)?.pid;
             {
                 let server_process = self.get_process(server_pid)?;
                 server_process.mapping.activate().unwrap();
             }
-            let server = self
-                .server_from_sidx_mut(sidx)
-                .expect("couldn't re-discover server index");
+            let server = self.server_from_sidx_mut(sidx).expect("couldn't re-discover server index");
             server.queue_message(pid, thread, message, original_address)
         };
-        let current_process = self
-            .get_process(current_pid)
-            .expect("couldn't restore previous process");
+        let current_process = self.get_process(current_pid).expect("couldn't restore previous process");
         current_process.mapping.activate()?;
         result
     }
@@ -2160,25 +2029,15 @@ impl SystemServices {
         message: &Message,
         client_address: Option<MemoryAddress>,
     ) -> Result<usize, xous_kernel::Error> {
-        let server_pid = self
-            .server_from_sidx(sidx)
-            .ok_or(xous_kernel::Error::ServerNotFound)?
-            .pid;
+        let server_pid = self.server_from_sidx(sidx).ok_or(xous_kernel::Error::ServerNotFound)?.pid;
         {
             let server_process = self.get_process(server_pid)?;
             server_process.mapping.activate()?;
         }
-        let server = self
-            .server_from_sidx_mut(sidx)
-            .expect("couldn't re-discover server index");
+        let server = self.server_from_sidx_mut(sidx).expect("couldn't re-discover server index");
         let result = server.queue_response(current_pid, current_thread, message, client_address);
-        let current_process = self
-            .get_process(current_pid)
-            .expect("couldn't find old process");
-        current_process
-            .mapping
-            .activate()
-            .expect("couldn't switch back to previous address space");
+        let current_process = self.get_process(current_pid).expect("couldn't find old process");
+        current_process.mapping.activate().expect("couldn't switch back to previous address space");
         result
     }
 
@@ -2201,8 +2060,8 @@ impl SystemServices {
         // 1. If we have any client connections, remove them.
         // 2. If there are any clients connected to our server, insert a tombstone so writes fail
         // 3. If there are any incoming server requests queued, dequeue them and return an error
-        // 4. Mark all "Borrowed" memory as "Free-when-returned". That way, if we've shared
-        //    memory to a Server, it will be reclaimed by the system when it comes back
+        // 4. Mark all "Borrowed" memory as "Free-when-returned". That way, if we've shared memory to a
+        //    Server, it will be reclaimed by the system when it comes back
 
         // 1. Find all servers associated with this PID and remove them.
         for (idx, server) in self.servers.iter_mut().enumerate() {
@@ -2272,7 +2131,7 @@ impl SystemServices {
         });
         let new_process_state = match process_state {
             ProcessState::Allocated | ProcessState::Free | ProcessState::Setup(_) => {
-                return Err(xous_kernel::Error::ProcessNotFound)
+                return Err(xous_kernel::Error::ProcessNotFound);
             }
             ProcessState::Ready(tids) => ProcessState::Debug(tids),
             ProcessState::Exception(tids) => ProcessState::Exception(tids),
@@ -2298,10 +2157,7 @@ impl SystemServices {
                         ProcessState::Running(x & !(1 << parent_process.previous_thread))
                     }
                     ProcessState::Sleeping => ProcessState::Running(0),
-                    _ => panic!(
-                        "parent process was not ready to be resumed: {:?}",
-                        parent_process.state
-                    ),
+                    _ => panic!("parent process was not ready to be resumed: {:?}", parent_process.state),
                 };
 
                 // Ensure we don't switch back to the same process.
@@ -2363,6 +2219,7 @@ impl SystemServices {
         }
         Ok(())
     }
+
     /* https://github.com/betrusted-io/xous-core/issues/90
     /// Sets the exception handler for the given process ID. If an exception handler
     /// exists, it will be silently overridden.
@@ -2400,19 +2257,14 @@ impl SystemServices {
         process.current_thread = crate::arch::process::EXCEPTION_TID;
         // Activate the current context
         let mut arch_process = ArchProcess::current();
-        arch_process
-            .set_tid(crate::arch::process::EXCEPTION_TID)
-            .ok()?;
+        arch_process.set_tid(crate::arch::process::EXCEPTION_TID).ok()?;
         Some(handler)
     }
 
     /// Move the current process from an `Exception` state back into a `Running` state
     /// with the current thread being marked as the given tid.
     #[cfg(baremetal)]
-    pub fn finish_exception_handler_and_resume(
-        &mut self,
-        pid: PID,
-    ) -> Result<(), xous_kernel::Result> {
+    pub fn finish_exception_handler_and_resume(&mut self, pid: PID) -> Result<(), xous_kernel::Result> {
         let process = self.get_process_mut(pid)?;
         if let ProcessState::Exception(threads) = process.state {
             assert!(threads & (1 << process.previous_thread) != 0);
@@ -2440,12 +2292,8 @@ impl SystemServices {
             };
             let mut offset = 0;
             while offset <= arg.size {
-                let check_pid = u32::from_le_bytes([
-                    data[offset],
-                    data[offset + 1],
-                    data[offset + 2],
-                    data[offset + 3],
-                ]);
+                let check_pid =
+                    u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
                 let str_len = u32::from_le_bytes([
                     data[offset + 4],
                     data[offset + 5],

@@ -1,9 +1,11 @@
 #![cfg_attr(not(target_os = "none"), allow(dead_code))]
 
-use crate::api::Point;
+use std::sync::{mpsc, Arc, Mutex};
+
 use minifb::{Key, Window, WindowOptions};
+
+use crate::api::Point;
 use crate::api::{LINES, WIDTH};
-use std::sync::{Arc, Mutex, mpsc};
 
 const HEIGHT: i16 = LINES;
 
@@ -85,39 +87,31 @@ impl XousDisplay {
         let native_buffer = Arc::new(Mutex::new(native_buffer));
 
         // Start a GUI event loop on the main thread
-        let thread_params = MinifbThread {
-            native_buffer: Arc::clone(&native_buffer),
-        };
+        let thread_params = MinifbThread { native_buffer: Arc::clone(&native_buffer) };
         main_thread_token.0.send(thread_params).unwrap();
 
-        XousDisplay {
-            native_buffer,
-            emulated_buffer: [0u32; FB_SIZE],
-            srfb: [0u32; FB_SIZE],
-            devboot: true,
-        }
+        XousDisplay { native_buffer, emulated_buffer: [0u32; FB_SIZE], srfb: [0u32; FB_SIZE], devboot: true }
     }
+
     pub fn set_devboot(&mut self, ena: bool) {
         if ena {
             self.devboot = true;
         }
         // ignore attempts to turn off devboot
     }
+
     pub fn suspend(&self) {}
+
     pub fn resume(&self) {}
 
-    pub fn stash(&mut self) {
-        self.srfb.copy_from_slice(&self.emulated_buffer);
-    }
+    pub fn stash(&mut self) { self.srfb.copy_from_slice(&self.emulated_buffer); }
+
     pub fn pop(&mut self) {
-        self.emulated_buffer[FB_WIDTH_WORDS * 32..]
-            .copy_from_slice(&self.srfb[FB_WIDTH_WORDS * 32..]);
+        self.emulated_buffer[FB_WIDTH_WORDS * 32..].copy_from_slice(&self.srfb[FB_WIDTH_WORDS * 32..]);
         self.redraw();
     }
 
-    pub fn screen_size(&self) -> Point {
-        Point::new(WIDTH as i16, HEIGHT as i16)
-    }
+    pub fn screen_size(&self) -> Point { Point::new(WIDTH as i16, HEIGHT as i16) }
 
     pub fn blit_screen(&mut self, bmp: &[u32]) {
         for (dest, src) in self.emulated_buffer.iter_mut().zip(bmp.iter()) {
@@ -125,25 +119,19 @@ impl XousDisplay {
         }
         self.emulated_to_native();
     }
-    pub fn as_slice(&self) -> &[u32] {
-        &self.emulated_buffer
-    }
 
-    pub fn native_buffer(&mut self) -> &mut [u32; FB_SIZE] {
-        &mut self.emulated_buffer
-    }
+    pub fn as_slice(&self) -> &[u32] { &self.emulated_buffer }
 
-    pub fn redraw(&mut self) {
-        self.emulated_to_native();
-    }
+    pub fn native_buffer(&mut self) -> &mut [u32; FB_SIZE] { &mut self.emulated_buffer }
+
+    pub fn redraw(&mut self) { self.emulated_to_native(); }
 
     fn emulated_to_native(&mut self) {
         const DEVBOOT_LINE: usize = 7;
         let mut native_buffer = self.native_buffer.lock().unwrap();
         let mut row = 0;
-        for (dest_row, src_row) in native_buffer
-            .chunks_mut(WIDTH as _)
-            .zip(self.emulated_buffer.chunks(WIDTH_WORDS as _))
+        for (dest_row, src_row) in
+            native_buffer.chunks_mut(WIDTH as _).zip(self.emulated_buffer.chunks(WIDTH_WORDS as _))
         {
             for (dest_cell, src_cell) in dest_row.chunks_mut(32).zip(src_row) {
                 for (bit, dest) in dest_cell.iter_mut().enumerate() {
@@ -151,11 +139,7 @@ impl XousDisplay {
                         // try to render the devboot defile somewhat accurately
                         *dest = LIGHT_COLOUR
                     } else {
-                        *dest = if src_cell & (1 << bit) != 0 {
-                            DARK_COLOUR
-                        } else {
-                            LIGHT_COLOUR
-                        };
+                        *dest = if src_cell & (1 << bit) != 0 { DARK_COLOUR } else { LIGHT_COLOUR };
                     }
                 }
             }
@@ -182,18 +166,11 @@ impl MinifbThread {
         });
 
         // Limit the maximum update rate
-        window.limit_update_rate(Some(std::time::Duration::from_micros(
-            1000 * 1000 / MAX_FPS,
-        )));
+        window.limit_update_rate(Some(std::time::Duration::from_micros(1000 * 1000 / MAX_FPS)));
 
         let xns = xous_names::XousNames::new().unwrap();
-        let kbd =
-            keyboard::Keyboard::new(&xns).expect("GFX|hosted can't connect to KBD for emulation");
-        let keyboard_handler = Box::new(XousKeyboardHandler {
-            kbd,
-            left_shift: false,
-            right_shift: false,
-        });
+        let kbd = keyboard::Keyboard::new(&xns).expect("GFX|hosted can't connect to KBD for emulation");
+        let keyboard_handler = Box::new(XousKeyboardHandler { kbd, left_shift: false, right_shift: false });
         window.set_input_callback(keyboard_handler);
 
         let mut native_buffer = Vec::new();
@@ -206,9 +183,7 @@ impl MinifbThread {
 
             // Render the contents of the minifb window and handle input events.
             // This may block to regulate the update rate.
-            window
-                .update_with_buffer(&native_buffer, WIDTH as usize, HEIGHT as usize)
-                .unwrap();
+            window.update_with_buffer(&native_buffer, WIDTH as usize, HEIGHT as usize).unwrap();
             if !window.is_open() || window.is_key_down(Key::Escape) {
                 std::process::exit(0);
             }
@@ -221,8 +196,9 @@ impl XousKeyboardHandler {
         let shift = self.left_shift || self.right_shift;
         let base: char = if shift == false {
             match k {
-                // key maps are commented out so we can use the add_char routine for all the characters natively handled by mini_fb
-                // this allows us to apply the native keyboard map to all the typed characters, while still passing through the special
+                // key maps are commented out so we can use the add_char routine for all the characters
+                // natively handled by mini_fb this allows us to apply the native keyboard map
+                // to all the typed characters, while still passing through the special
                 // keys needed to emulate the special buttons on the device.
                 /* Key::A => 'a',
                 Key::B => 'b',
@@ -337,9 +313,7 @@ impl XousKeyboardHandler {
 impl minifb::InputCallback for XousKeyboardHandler {
     fn add_char(&mut self, uni_char: u32) {
         let c = char::from_u32(uni_char).unwrap_or('\u{0000}');
-        if c != '\u{0008}'
-        && c != '\u{000d}'
-        && c != '\u{007f}' {
+        if c != '\u{0008}' && c != '\u{000d}' && c != '\u{007f}' {
             self.kbd.hostmode_inject_key(c);
         }
     }

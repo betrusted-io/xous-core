@@ -12,11 +12,12 @@
 // As of now, the current version is 0.7.x and there isn't a timeline yet for 0.8.
 
 #![allow(dead_code)]
-use rkyv::{Archive, Deserialize, Serialize};
-use smoltcp::wire::IpAddress;
+use std::convert::TryInto;
 use std::fmt::Debug;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::convert::TryInto;
+
+use rkyv::{Archive, Deserialize, Serialize};
+use smoltcp::wire::IpAddress;
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
 pub enum XousServerId {
@@ -81,9 +82,7 @@ impl From<NetIpAddr> for IpAddr {
 impl From<NetIpAddr> for IpAddress {
     fn from(other: NetIpAddr) -> IpAddress {
         match other {
-            NetIpAddr::Ipv4([a, b, c, d]) => {
-                IpAddress::Ipv4(smoltcp::wire::Ipv4Address::new(a, b, c, d))
-            }
+            NetIpAddr::Ipv4([a, b, c, d]) => IpAddress::Ipv4(smoltcp::wire::Ipv4Address::new(a, b, c, d)),
             NetIpAddr::Ipv6(ipv6) => IpAddress::Ipv6(smoltcp::wire::Ipv6Address::new(
                 u16::from_be_bytes(ipv6[0..1].try_into().unwrap()),
                 u16::from_be_bytes(ipv6[2..3].try_into().unwrap()),

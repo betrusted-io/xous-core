@@ -1,18 +1,17 @@
-use crate::{
-    pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
-    MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit,
-    Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID, TID,
-};
 use core::convert::{TryFrom, TryInto};
+
 /* https://github.com/betrusted-io/xous-core/issues/90
 use crate::Exception
 */
-
 // use num_derive::FromPrimitive;
 // use num_traits::FromPrimitive;
-
 #[cfg(feature = "processes-as-threads")]
 pub use crate::arch::ProcessArgsAsThread;
+use crate::{
+    pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize,
+    MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit, Result, ScalarMessage,
+    SysCallResult, ThreadInit, CID, PID, SID, TID,
+};
 
 #[derive(Debug, PartialEq)]
 pub enum SysCall {
@@ -29,11 +28,10 @@ pub enum SysCall {
     ///
     /// # Errors
     ///
-    /// * **BadAlignment**: Either the physical or virtual addresses aren't
-    ///                     page-aligned, or the size isn't a multiple of the
-    ///                     page width.
-    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or
-    ///                    the system's memory size has been exceeded.
+    /// * **BadAlignment**: Either the physical or virtual addresses aren't page-aligned, or the size isn't a
+    ///   multiple of the page width.
+    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or the system's memory size has
+    ///   been exceeded.
     MapMemory(
         Option<MemoryAddress>, /* phys */
         Option<MemoryAddress>, /* virt */
@@ -47,7 +45,6 @@ pub enum SysCall {
     ///
     /// * **BadAlignment**: The memory range was not page-aligned
     /// * **BadAddress**: A page in the range was not mapped
-    ///
     UnmapMemory(MemoryRange),
 
     /// Sets the offset and size of a given memory region.  This call may only
@@ -58,9 +55,8 @@ pub enum SysCall {
     ///
     /// # Errors
     ///
-    /// * **BadAlignment**: Either the physical or virtual addresses aren't
-    ///                     page-aligned, or the size isn't a multiple of the
-    ///                     page width.
+    /// * **BadAlignment**: Either the physical or virtual addresses aren't page-aligned, or the size isn't a
+    ///   multiple of the page width.
     /// * **BadAddress**: The address conflicts with the kernel
     SetMemRegion(
         PID,           /* pid */
@@ -76,34 +72,29 @@ pub enum SysCall {
     ///
     /// # Returns
     ///
-    /// * **MemoryRange(
-    ///         *mut usize, /* The newly-allocated offset */
-    ///         usize,      /* The amount of data added */
-    ///     )**
+    /// * **MemoryRange( *mut usize, /* The newly-allocated offset */ usize,      /* The amount of data added
+    ///   */ )**
     ///
     /// # Errors
     ///
-    /// * **BadAlignment**: Either the physical or virtual addresses aren't
-    ///                     page-aligned, or the size isn't a multiple of the
-    ///                     page width.
-    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or
-    ///                    the system's memory size has been exceeded.
+    /// * **BadAlignment**: Either the physical or virtual addresses aren't page-aligned, or the size isn't a
+    ///   multiple of the page width.
+    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or the system's memory size has
+    ///   been exceeded.
     IncreaseHeap(usize /* number of bytes to add */, MemoryFlags),
 
     /// Remove the given number of bytes from the heap.
     ///
     /// # Returns
     ///
-    /// * **MemoryRange(*mut usize /* The base of the heap */, usize /* the new
-    ///   size of the heap */)
+    /// * **MemoryRange(*mut usize /* The base of the heap */, usize /* the new size of the heap */)
     ///
     /// # Errors
     ///
-    /// * **BadAlignment**: Either the physical or virtual addresses aren't
-    ///                     page-aligned, or the size isn't a multiple of the
-    ///                     page width.
-    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or
-    ///                    the system's memory size has been exceeded.
+    /// * **BadAlignment**: Either the physical or virtual addresses aren't page-aligned, or the size isn't a
+    ///   multiple of the page width.
+    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or the system's memory size has
+    ///   been exceeded.
     DecreaseHeap(usize /* desired heap size */),
 
     /// Set the specified flags on the virtual address range. This can be used
@@ -119,10 +110,9 @@ pub enum SysCall {
     ///
     /// # Errors
     ///
-    /// * **ProcessNotChild**: The given PID is not a child of the current
-    ///                        process.
-    /// * **MemoryInUse**: The given PID has already been started, and it is not
-    ///                    legal to modify memory flags anymore.
+    /// * **ProcessNotChild**: The given PID is not a child of the current process.
+    /// * **MemoryInUse**: The given PID has already been started, and it is not legal to modify memory flags
+    ///   anymore.
     UpdateMemoryFlags(
         MemoryRange, /* range of memory to update flags for */
         MemoryFlags, /* new flags */
@@ -163,10 +153,9 @@ pub enum SysCall {
     /// # Errors
     ///
     /// * **ServerNotFound**: The given SID is not active or has terminated
-    /// * **ProcessNotFound**: The parent process terminated when we were getting ready
-    ///                        to block. This is an internal error.
-    /// * **BlockedProcess**: When running in Hosted mode, this indicates that this
-    ///                       thread is blocking.
+    /// * **ProcessNotFound**: The parent process terminated when we were getting ready to block. This is an
+    ///   internal error.
+    /// * **BlockedProcess**: When running in Hosted mode, this indicates that this thread is blocking.
     ReceiveMessage(SID),
 
     /// If a message is available for the specified server, return that message
@@ -181,8 +170,8 @@ pub enum SysCall {
     /// # Errors
     ///
     /// * **ServerNotFound**: The given SID is not active or has terminated
-    /// * **ProcessNotFound**: The parent process terminated when we were getting ready
-    ///                        to block. This is an internal error.
+    /// * **ProcessNotFound**: The parent process terminated when we were getting ready to block. This is an
+    ///   internal error.
     TryReceiveMessage(SID),
 
     /// Stop running the given process and return control to the parent. This
@@ -191,8 +180,7 @@ pub enum SysCall {
     ///
     /// # Errors
     ///
-    /// * **ProcessNotChild**: The given PID is not a child of the current
-    ///   process
+    /// * **ProcessNotChild**: The given PID is not a child of the current process
     ReturnToParent(PID, CpuID),
 
     /// Claims an interrupt and unmasks it immediately.  The provided function
@@ -205,8 +193,7 @@ pub enum SysCall {
     ///
     /// # Errors
     ///
-    /// * **InterruptNotFound**: The specified interrupt isn't valid on this
-    ///   system
+    /// * **InterruptNotFound**: The specified interrupt isn't valid on this system
     /// * **InterruptInUse**: The specified interrupt has already been claimed
     ClaimInterrupt(
         usize,                 /* IRQ number */
@@ -219,8 +206,7 @@ pub enum SysCall {
     ///
     /// # Errors
     ///
-    /// * **InterruptNotFound**: The specified interrupt doesn't exist, or isn't
-    ///                          assigned to this process.
+    /// * **InterruptNotFound**: The specified interrupt doesn't exist, or isn't assigned to this process.
     FreeInterrupt(usize /* IRQ number */),
 
     /// Resumes a process using the given context.  A parent could use this
@@ -266,8 +252,7 @@ pub enum SysCall {
     /// # Errors
     ///
     /// * **ProcessNotFound**: The requested process does not exist
-    /// * **ProcessNotChild**: The given process was not a child process, and
-    ///                        therefore couldn't be resumed.
+    /// * **ProcessNotChild**: The given process was not a child process, and therefore couldn't be resumed.
     /// * **ProcessTerminated**: The process has crashed.
     SwitchTo(PID, usize /* context ID */),
 
@@ -286,13 +271,12 @@ pub enum SysCall {
     ///
     /// # Returns
     ///
-    /// * **NewServerID(sid, cid)**: The specified SID, along with the connection ID
-    ///                              for this process to talk to the server.
+    /// * **NewServerID(sid, cid)**: The specified SID, along with the connection ID for this process to talk
+    ///   to the server.
     ///
     /// # Errors
     ///
-    /// * **OutOfMemory**: The server table was full and a new server couldn't
-    ///                    be created.
+    /// * **OutOfMemory**: The server table was full and a new server couldn't be created.
     /// * **ServerExists**: The server hash is already in use.
     CreateServerWithAddress(SID /* server hash */),
 
@@ -329,9 +313,8 @@ pub enum SysCall {
     /// * **Scalar2**: The Server returned a `Scalar2` value
     /// * **Scalar5**: The Server returned a `Scalar5` value
     /// * **BlockedProcess**: In Hosted mode, the target process is now blocked
-    /// * **Message**: For Scalar messages, this includes the args as returned
-    ///                 by the server. For MemoryMessages, this will include
-    ///                 the Opcode, Offset, and Valid fields.
+    /// * **Message**: For Scalar messages, this includes the args as returned by the server. For
+    ///   MemoryMessages, this will include the Opcode, Offset, and Valid fields.
     ///
     /// # Errors
     ///
@@ -395,8 +378,7 @@ pub enum SysCall {
     ///
     /// # Errors
     ///
-    /// * **OutOfMemory**: The server table was full and a new server couldn't
-    ///                    be created.
+    /// * **OutOfMemory**: The server table was full and a new server couldn't be created.
     CreateServer,
 
     /// Returns a 128-bit server ID, but does not create the server itself.
@@ -427,10 +409,7 @@ pub enum SysCall {
 
     /// A function to call when there is an exception such as a memory fault
     /// or illegal instruction.
-    SetExceptionHandler(
-        usize, /* function pointer */
-        usize, /* stack pointer */
-    ),
+    SetExceptionHandler(usize /* function pointer */, usize /* stack pointer */),
 
     /// Adjust one of the limits within this process. Note that you must pass
     /// the current limit value in order to set the new limit. The current limit
@@ -439,14 +418,11 @@ pub enum SysCall {
     ///
     /// ## Arguments
     ///
-    /// * **Index**: The item to adjust. Currently the following limits
-    ///              are supported:
-    ///                     1: Maximum heap size
-    ///                     2: Current heap size
-    /// * **Current Limit**: Pass the current limit value here. The current
-    ///             limit must match in order for the new limit to take
-    ///             effect. This is used to avoid a race condition if two
-    ///             threads try to set the same limit.
+    /// * **Index**: The item to adjust. Currently the following limits are supported: 1: Maximum heap size
+    ///   2: Current heap size
+    /// * **Current Limit**: Pass the current limit value here. The current limit must match in order for the
+    ///   new limit to take effect. This is used to avoid a race condition if two threads try to set the same
+    ///   limit.
     /// * **Proposed Limit**: The new value that you would like to use.
     ///
     /// ## Returns
@@ -488,9 +464,8 @@ pub enum SysCall {
     ///
     /// ## Arguments
     ///
-    /// * **MessageSender**: This is the `sender` from the message envelope.
-    ///                      It is a unique ID that identifies this message,
-    ///                      as well as the server it came from.
+    /// * **MessageSender**: This is the `sender` from the message envelope. It is a unique ID that
+    ///   identifies this message, as well as the server it came from.
     ///
     /// The remaining arguments depend on whether the message was a `BlockingScalar`
     /// message or a `MemoryMessage`. Note that this function should NOT be called
@@ -503,10 +478,9 @@ pub enum SysCall {
     /// # Errors
     ///
     /// * **ServerNotFound**: The given SID is not active or has terminated
-    /// * **ProcessNotFound**: The parent process terminated when we were getting ready
-    ///                        to block. This is an internal error.
-    /// * **BlockedProcess**: When running in Hosted mode, this indicates that this
-    ///                       thread is blocking.
+    /// * **ProcessNotFound**: The parent process terminated when we were getting ready to block. This is an
+    ///   internal error.
+    /// * **BlockedProcess**: When running in Hosted mode, this indicates that this thread is blocking.
     ReplyAndReceiveNext(
         MessageSender, /* ID if the sender that sent this message */
         usize,         /* Return code to the caller */
@@ -517,7 +491,8 @@ pub enum SysCall {
         usize,         /* how many args are valid (BlockingScalar) or usize::MAX (MemoryMessge) */
     ),
 
-    /// Returns the physical address corresponding to a virtual address for a given process, if such a mapping exists.
+    /// Returns the physical address corresponding to a virtual address for a given process, if such a
+    /// mapping exists.
     ///
     /// ## Arguments
     ///     * **pid**: The PID
@@ -638,16 +613,7 @@ impl SysCallNumber {
 
 impl SysCall {
     fn add_opcode(opcode: SysCallNumber, args: [usize; 7]) -> [usize; 8] {
-        [
-            opcode as usize,
-            args[0],
-            args[1],
-            args[2],
-            args[3],
-            args[4],
-            args[5],
-            args[6],
-        ]
+        [opcode as usize, args[0], args[1], args[2], args[3], args[4], args[5], args[6]]
     }
 
     /// Convert the SysCall into an array of eight `usize` elements,
@@ -671,43 +637,18 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::UnmapMemory(range) => [
-                SysCallNumber::UnmapMemory as usize,
-                range.as_ptr() as usize,
-                range.len(),
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
+            SysCall::UnmapMemory(range) => {
+                [SysCallNumber::UnmapMemory as usize, range.as_ptr() as usize, range.len(), 0, 0, 0, 0, 0]
+            }
             SysCall::Yield => [SysCallNumber::Yield as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::WaitEvent => [SysCallNumber::WaitEvent as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::ReceiveMessage(sid) => {
                 let s = sid.to_u32();
-                [
-                    SysCallNumber::ReceiveMessage as usize,
-                    s.0 as _,
-                    s.1 as _,
-                    s.2 as _,
-                    s.3 as _,
-                    0,
-                    0,
-                    0,
-                ]
+                [SysCallNumber::ReceiveMessage as usize, s.0 as _, s.1 as _, s.2 as _, s.3 as _, 0, 0, 0]
             }
             SysCall::TryReceiveMessage(sid) => {
                 let s = sid.to_u32();
-                [
-                    SysCallNumber::TryReceiveMessage as usize,
-                    s.0 as _,
-                    s.1 as _,
-                    s.2 as _,
-                    s.3 as _,
-                    0,
-                    0,
-                    0,
-                ]
+                [SysCallNumber::TryReceiveMessage as usize, s.0 as _, s.1 as _, s.2 as _, s.3 as _, 0, 0, 0]
             }
             SysCall::ConnectForProcess(pid, sid) => {
                 let s = sid.to_u32();
@@ -722,19 +663,10 @@ impl SysCall {
                     0,
                 ]
             }
-            SysCall::CreateServerId => {
-                [SysCallNumber::CreateServerId as usize, 0, 0, 0, 0, 0, 0, 0]
+            SysCall::CreateServerId => [SysCallNumber::CreateServerId as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::ReturnToParent(a1, a2) => {
+                [SysCallNumber::ReturnToParent as usize, a1.get() as usize, *a2, 0, 0, 0, 0, 0]
             }
-            SysCall::ReturnToParent(a1, a2) => [
-                SysCallNumber::ReturnToParent as usize,
-                a1.get() as usize,
-                *a2,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
             SysCall::ClaimInterrupt(a1, a2, a3) => [
                 SysCallNumber::ClaimInterrupt as usize,
                 *a1,
@@ -745,49 +677,17 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::FreeInterrupt(a1) => {
-                [SysCallNumber::FreeInterrupt as usize, *a1, 0, 0, 0, 0, 0, 0]
+            SysCall::FreeInterrupt(a1) => [SysCallNumber::FreeInterrupt as usize, *a1, 0, 0, 0, 0, 0, 0],
+            SysCall::SwitchTo(a1, a2) => {
+                [SysCallNumber::SwitchTo as usize, a1.get() as usize, *a2, 0, 0, 0, 0, 0]
             }
-            SysCall::SwitchTo(a1, a2) => [
-                SysCallNumber::SwitchTo as usize,
-                a1.get() as usize,
-                *a2,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
-            SysCall::ReadyThreads(a1) => [
-                SysCallNumber::ReadyThreads as usize,
-                a1.get() as usize,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
-            SysCall::IncreaseHeap(a1, a2) => [
-                SysCallNumber::IncreaseHeap as usize,
-                *a1,
-                a2.bits(),
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
-            SysCall::DecreaseHeap(a1) => [
-                SysCallNumber::DecreaseHeap as usize,
-                *a1,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
+            SysCall::ReadyThreads(a1) => {
+                [SysCallNumber::ReadyThreads as usize, a1.get() as usize, 0, 0, 0, 0, 0, 0]
+            }
+            SysCall::IncreaseHeap(a1, a2) => {
+                [SysCallNumber::IncreaseHeap as usize, *a1, a2.bits(), 0, 0, 0, 0, 0]
+            }
+            SysCall::DecreaseHeap(a1) => [SysCallNumber::DecreaseHeap as usize, *a1, 0, 0, 0, 0, 0, 0],
             SysCall::UpdateMemoryFlags(a1, a2, a3) => [
                 SysCallNumber::UpdateMemoryFlags as usize,
                 a1.as_mut_ptr() as usize,
@@ -825,16 +725,7 @@ impl SysCall {
             SysCall::CreateServer => [SysCallNumber::CreateServer as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::Connect(sid) => {
                 let s = sid.to_u32();
-                [
-                    SysCallNumber::Connect as usize,
-                    s.0 as _,
-                    s.1 as _,
-                    s.2 as _,
-                    s.3 as _,
-                    0,
-                    0,
-                    0,
-                ]
+                [SysCallNumber::Connect as usize, s.0 as _, s.1 as _, s.2 as _, s.3 as _, 0, 0, 0]
             }
             SysCall::SendMessage(a1, ref a2) => match a2 {
                 Message::MutableBorrow(mm) | Message::Borrow(mm) | Message::Move(mm) => [
@@ -882,32 +773,14 @@ impl SysCall {
             SysCall::CreateThread(init) => {
                 crate::arch::thread_to_args(SysCallNumber::CreateThread as usize, init)
             }
-            SysCall::CreateProcess(init) => {
-                Self::add_opcode(SysCallNumber::CreateProcess, init.into())
+            SysCall::CreateProcess(init) => Self::add_opcode(SysCallNumber::CreateProcess, init.into()),
+            SysCall::TerminateProcess(exit_code) => {
+                [SysCallNumber::TerminateProcess as usize, *exit_code as usize, 0, 0, 0, 0, 0, 0]
             }
-            SysCall::TerminateProcess(exit_code) => [
-                SysCallNumber::TerminateProcess as usize,
-                *exit_code as usize,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
             SysCall::Shutdown => [SysCallNumber::Shutdown as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::TryConnect(sid) => {
                 let s = sid.to_u32();
-                [
-                    SysCallNumber::TryConnect as usize,
-                    s.0 as _,
-                    s.1 as _,
-                    s.2 as _,
-                    s.3 as _,
-                    0,
-                    0,
-                    0,
-                ]
+                [SysCallNumber::TryConnect as usize, s.0 as _, s.1 as _, s.2 as _, s.3 as _, 0, 0, 0]
             }
             SysCall::TrySendMessage(a1, ref a2) => match a2 {
                 Message::MutableBorrow(mm) | Message::Borrow(mm) | Message::Move(mm) => [
@@ -931,85 +804,28 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
-            SysCall::ReturnScalar1(sender, arg1) => [
-                SysCallNumber::ReturnScalar1 as usize,
-                sender.to_usize(),
-                *arg1,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
-            SysCall::ReturnScalar2(sender, arg1, arg2) => [
-                SysCallNumber::ReturnScalar2 as usize,
-                sender.to_usize(),
-                *arg1,
-                *arg2,
-                0,
-                0,
-                0,
-                0,
-            ],
+            SysCall::ReturnScalar1(sender, arg1) => {
+                [SysCallNumber::ReturnScalar1 as usize, sender.to_usize(), *arg1, 0, 0, 0, 0, 0]
+            }
+            SysCall::ReturnScalar2(sender, arg1, arg2) => {
+                [SysCallNumber::ReturnScalar2 as usize, sender.to_usize(), *arg1, *arg2, 0, 0, 0, 0]
+            }
             SysCall::GetThreadId => [SysCallNumber::GetThreadId as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::GetProcessId => [SysCallNumber::GetProcessId as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::DestroyServer(sid) => {
                 let s = sid.to_u32();
-                [
-                    SysCallNumber::DestroyServer as usize,
-                    s.0 as _,
-                    s.1 as _,
-                    s.2 as _,
-                    s.3 as _,
-                    0,
-                    0,
-                    0,
-                ]
+                [SysCallNumber::DestroyServer as usize, s.0 as _, s.1 as _, s.2 as _, s.3 as _, 0, 0, 0]
             }
-            SysCall::Disconnect(cid) => [
-                SysCallNumber::Disconnect as usize,
-                *cid as usize,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
-            SysCall::JoinThread(tid) => [
-                SysCallNumber::JoinThread as usize,
-                *tid,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
-            SysCall::SetExceptionHandler(pc, sp) => [
-                SysCallNumber::SetExceptionHandler as usize,
-                *pc,
-                *sp,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
-            SysCall::AdjustProcessLimit(index, current, new) => [
-                SysCallNumber::AdjustProcessLimit as usize,
-                *index,
-                *current,
-                *new,
-                0,
-                0,
-                0,
-                0,
-            ],
+            SysCall::Disconnect(cid) => [SysCallNumber::Disconnect as usize, *cid as usize, 0, 0, 0, 0, 0, 0],
+            SysCall::JoinThread(tid) => [SysCallNumber::JoinThread as usize, *tid, 0, 0, 0, 0, 0, 0],
+            SysCall::SetExceptionHandler(pc, sp) => {
+                [SysCallNumber::SetExceptionHandler as usize, *pc, *sp, 0, 0, 0, 0, 0]
+            }
+            SysCall::AdjustProcessLimit(index, current, new) => {
+                [SysCallNumber::AdjustProcessLimit as usize, *index, *current, *new, 0, 0, 0, 0]
+            }
             #[cfg(feature = "v2p")]
-            SysCall::VirtToPhys(vaddr) => {
-                [SysCallNumber::VirtToPhys as usize, *vaddr, 0, 0, 0, 0, 0, 0]
-            }
+            SysCall::VirtToPhys(vaddr) => [SysCallNumber::VirtToPhys as usize, *vaddr, 0, 0, 0, 0, 0, 0],
             SysCall::ReturnScalar5(sender, arg1, arg2, arg3, arg4, arg5) => [
                 SysCallNumber::ReturnScalar5 as usize,
                 sender.to_usize(),
@@ -1024,16 +840,9 @@ impl SysCall {
             SysCall::VirtToPhysPid(pid, vaddr) => {
                 [SysCallNumber::VirtToPhysPid as usize, pid.get() as usize, *vaddr, 0, 0, 0, 0, 0]
             }
-            SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
-                SysCallNumber::Invalid as usize,
-                *a1,
-                *a2,
-                *a3,
-                *a4,
-                *a5,
-                *a6,
-                *a7,
-            ],
+            SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
+                [SysCallNumber::Invalid as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
+            }
         }
     }
 
@@ -1055,9 +864,9 @@ impl SysCall {
                 MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
                 crate::MemoryFlags::from_bits(a4).ok_or(Error::InvalidSyscall)?,
             ),
-            SysCallNumber::UnmapMemory => SysCall::UnmapMemory(unsafe {
-                MemoryRange::new(a1, a2).or(Err(Error::InvalidSyscall))
-            }?),
+            SysCallNumber::UnmapMemory => {
+                SysCall::UnmapMemory(unsafe { MemoryRange::new(a1, a2).or(Err(Error::InvalidSyscall)) }?)
+            }
             SysCallNumber::Yield => SysCall::Yield,
             SysCallNumber::WaitEvent => SysCall::WaitEvent,
             SysCallNumber::ReceiveMessage => {
@@ -1075,10 +884,9 @@ impl SysCall {
             SysCallNumber::FreeInterrupt => SysCall::FreeInterrupt(a1),
             SysCallNumber::SwitchTo => SysCall::SwitchTo(pid_from_usize(a1)?, a2),
             SysCallNumber::ReadyThreads => SysCall::ReadyThreads(pid_from_usize(a1)?),
-            SysCallNumber::IncreaseHeap => SysCall::IncreaseHeap(
-                a1,
-                crate::MemoryFlags::from_bits(a2).ok_or(Error::InvalidSyscall)?,
-            ),
+            SysCallNumber::IncreaseHeap => {
+                SysCall::IncreaseHeap(a1, crate::MemoryFlags::from_bits(a2).ok_or(Error::InvalidSyscall)?)
+            }
             SysCallNumber::DecreaseHeap => SysCall::DecreaseHeap(a1),
             SysCallNumber::UpdateMemoryFlags => SysCall::UpdateMemoryFlags(
                 unsafe { MemoryRange::new(a1, a2) }?,
@@ -1095,9 +903,7 @@ impl SysCall {
                 SysCall::CreateServerWithAddress(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
             SysCallNumber::CreateServer => SysCall::CreateServer,
-            SysCallNumber::Connect => {
-                SysCall::Connect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
-            }
+            SysCallNumber::Connect => SysCall::Connect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _)),
             SysCallNumber::SendMessage => Message::try_from((a2, a3, a4, a5, a6, a7))
                 .map(|m| SysCall::SendMessage(a1.try_into().unwrap(), m))
                 .unwrap_or_else(|_| SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7)),
@@ -1113,9 +919,7 @@ impl SysCall {
             SysCallNumber::CreateThread => {
                 SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
             }
-            SysCallNumber::CreateProcess => {
-                SysCall::CreateProcess([a1, a2, a3, a4, a5, a6, a7].try_into()?)
-            }
+            SysCallNumber::CreateProcess => SysCall::CreateProcess([a1, a2, a3, a4, a5, a6, a7].try_into()?),
             SysCallNumber::TerminateProcess => SysCall::TerminateProcess(a1 as u32),
             SysCallNumber::Shutdown => SysCall::Shutdown,
             SysCallNumber::TryConnect => {
@@ -1151,32 +955,16 @@ impl SysCall {
                 ),
                 4 => SysCall::TrySendMessage(
                     a1 as u32,
-                    Message::Scalar(ScalarMessage {
-                        id: a3,
-                        arg1: a4,
-                        arg2: a5,
-                        arg3: a6,
-                        arg4: a7,
-                    }),
+                    Message::Scalar(ScalarMessage { id: a3, arg1: a4, arg2: a5, arg3: a6, arg4: a7 }),
                 ),
                 5 => SysCall::TrySendMessage(
                     a1.try_into().unwrap(),
-                    Message::BlockingScalar(ScalarMessage {
-                        id: a3,
-                        arg1: a4,
-                        arg2: a5,
-                        arg3: a6,
-                        arg4: a7,
-                    }),
+                    Message::BlockingScalar(ScalarMessage { id: a3, arg1: a4, arg2: a5, arg3: a6, arg4: a7 }),
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            SysCallNumber::ReturnScalar1 => {
-                SysCall::ReturnScalar1(MessageSender::from_usize(a1), a2)
-            }
-            SysCallNumber::ReturnScalar2 => {
-                SysCall::ReturnScalar2(MessageSender::from_usize(a1), a2, a3)
-            }
+            SysCallNumber::ReturnScalar1 => SysCall::ReturnScalar1(MessageSender::from_usize(a1), a2),
+            SysCallNumber::ReturnScalar2 => SysCall::ReturnScalar2(MessageSender::from_usize(a1), a2, a3),
             SysCallNumber::ConnectForProcess => SysCall::ConnectForProcess(
                 PID::new(a1 as _).ok_or(Error::InvalidSyscall)?,
                 SID::from_u32(a2 as _, a3 as _, a4 as _, a5 as _),
@@ -1206,10 +994,7 @@ impl SysCall {
     pub fn has_memory(&self) -> bool {
         match self {
             SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => {
-                matches!(
-                    msg,
-                    Message::Move(_) | Message::Borrow(_) | Message::MutableBorrow(_)
-                )
+                matches!(msg, Message::Move(_) | Message::Borrow(_) | Message::MutableBorrow(_))
             }
             SysCall::ReturnMemory(_, _, _, _) => true,
             SysCall::ReplyAndReceiveNext(_, _, _, _, _, _, usize::MAX) => true,
@@ -1249,10 +1034,7 @@ impl SysCall {
 
     /// Returns `true` if the associated syscall is returning memory
     pub fn is_return_memory(&self) -> bool {
-        matches!(
-            self,
-            SysCall::ReturnMemory(..) | SysCall::ReplyAndReceiveNext(_, _, _, _, _, _, usize::MAX)
-        )
+        matches!(self, SysCall::ReturnMemory(..) | SysCall::ReplyAndReceiveNext(_, _, _, _, _, _, usize::MAX))
     }
 
     /// If the syscall has memory attached to it, return the memory
@@ -1324,16 +1106,10 @@ pub fn map_memory(
     flags: MemoryFlags,
 ) -> core::result::Result<MemoryRange, Error> {
     crate::arch::map_memory_pre(&phys, &virt, size, flags)?;
-    let result = rsyscall(SysCall::MapMemory(
-        phys,
-        virt,
-        MemorySize::new(size).ok_or(Error::InvalidSyscall)?,
-        flags,
-    ))?;
+    let result =
+        rsyscall(SysCall::MapMemory(phys, virt, MemorySize::new(size).ok_or(Error::InvalidSyscall)?, flags))?;
     if let Result::MemoryRange(range) = result {
-        Ok(crate::arch::map_memory_post(
-            phys, virt, size, flags, range,
-        )?)
+        Ok(crate::arch::map_memory_post(phys, virt, size, flags, range)?)
     } else if let Result::Error(e) = result {
         Err(e)
     } else {
@@ -1358,10 +1134,7 @@ pub fn unmap_memory(range: MemoryRange) -> core::result::Result<(), Error> {
 
 /// Update the permissions on the given memory range. Note that permissions may
 /// only be stripped here -- they may never be added.
-pub fn update_memory_flags(
-    range: MemoryRange,
-    flags: MemoryFlags,
-) -> core::result::Result<Result, Error> {
+pub fn update_memory_flags(range: MemoryRange, flags: MemoryFlags) -> core::result::Result<Result, Error> {
     let result = rsyscall(SysCall::UpdateMemoryFlags(range, flags, None))?;
     if let Result::Ok = result {
         Ok(Result::Ok)
@@ -1435,11 +1208,7 @@ pub fn return_scalar(sender: MessageSender, val: usize) -> core::result::Result<
 
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
-pub fn return_scalar2(
-    sender: MessageSender,
-    val1: usize,
-    val2: usize,
-) -> core::result::Result<(), Error> {
+pub fn return_scalar2(sender: MessageSender, val1: usize, val2: usize) -> core::result::Result<(), Error> {
     let result = rsyscall(SysCall::ReturnScalar2(sender, val1, val2))?;
     if let crate::Result::Ok = result {
         Ok(())
@@ -1497,9 +1266,8 @@ pub fn claim_interrupt(
 ///
 /// # Errors
 ///
-/// * **OutOfMemory**: No more servers may be created because the server
-///                    count limit has been reached, or the system does not
-///                    have enough memory for the backing store.
+/// * **OutOfMemory**: No more servers may be created because the server count limit has been reached, or the
+///   system does not have enough memory for the backing store.
 /// * **ServerExists**: A server has already registered with that name
 /// * **InvalidString**: The name was not a valid UTF-8 string
 pub fn create_server_with_address(name_bytes: &[u8; 16]) -> core::result::Result<SID, Error> {
@@ -1522,9 +1290,8 @@ pub fn create_server_with_address(name_bytes: &[u8; 16]) -> core::result::Result
 ///
 /// # Errors
 ///
-/// * **OutOfMemory**: No more servers may be created because the server
-///                    count limit has been reached, or the system does not
-///                    have enough memory for the backing store.
+/// * **OutOfMemory**: No more servers may be created because the server count limit has been reached, or the
+///   system does not have enough memory for the backing store.
 /// * **ServerExists**: A server has already registered with that name
 /// * **InvalidString**: The name was not a valid UTF-8 string
 pub fn create_server_with_sid(sid: SID) -> core::result::Result<SID, Error> {
@@ -1546,9 +1313,8 @@ pub fn create_server_with_sid(sid: SID) -> core::result::Result<SID, Error> {
 /// # Errors
 ///
 /// * **ServerNotFound**: No more servers may be created
-/// * **OutOfMemory**: No more servers may be created because the server
-///                    count limit has been reached, or the system does not
-///                    have enough memory for the backing store.
+/// * **OutOfMemory**: No more servers may be created because the server count limit has been reached, or the
+///   system does not have enough memory for the backing store.
 pub fn create_server() -> core::result::Result<SID, Error> {
     let result = rsyscall(SysCall::CreateServer)?;
     if let Result::NewServerID(sid, _cid) = result {
@@ -1568,7 +1334,6 @@ pub fn create_server() -> core::result::Result<SID, Error> {
 /// The implementation is just a call to the kernel-exclusive TRNG to fetch random numbers.
 ///
 /// # Errors
-///
 pub fn create_server_id() -> core::result::Result<SID, Error> {
     let result = rsyscall(SysCall::CreateServerId)?;
     if let Result::ServerID(sid) = result {
@@ -1608,7 +1373,6 @@ pub fn try_connect(server: SID) -> core::result::Result<CID, Error> {
 /// block until a message is received.
 ///
 /// # Errors
-///
 pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Error> {
     let result = rsyscall(SysCall::ReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
     if let Result::MessageEnvelope(envelope) = result {
@@ -1624,10 +1388,8 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 /// is available, returns `Ok(None)` without blocking
 ///
 /// # Errors
-///
 pub fn try_receive_message(server: SID) -> core::result::Result<Option<MessageEnvelope>, Error> {
-    let result =
-        rsyscall(SysCall::TryReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
+    let result = rsyscall(SysCall::TryReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
     if let Result::MessageEnvelope(envelope) = result {
         Ok(Some(envelope))
     } else if result == Result::None {
@@ -1714,19 +1476,12 @@ pub fn terminate_process(exit_code: u32) -> ! {
 
 /// Return execution to the kernel. This function may return at any time,
 /// including immediately
-pub fn yield_slice() {
-    rsyscall(SysCall::Yield).ok();
-}
+pub fn yield_slice() { rsyscall(SysCall::Yield).ok(); }
 
 /// Return execution to the kernel and wait for a message or an interrupt.
-pub fn wait_event() {
-    rsyscall(SysCall::WaitEvent).ok();
-}
+pub fn wait_event() { rsyscall(SysCall::WaitEvent).ok(); }
 
-#[deprecated(
-    since = "0.2.0",
-    note = "Please use create_thread_n() or create_thread()"
-)]
+#[deprecated(since = "0.2.0", note = "Please use create_thread_n() or create_thread()")]
 pub fn create_thread_simple<T, U>(
     f: fn(T) -> U,
     arg: T,
@@ -1879,9 +1634,7 @@ pub fn wait_process_as_thread(joiner: crate::arch::ProcessHandleAsThread) -> Sys
     crate::arch::wait_process_as_thread(joiner)
 }
 
-pub fn create_process(
-    args: ProcessArgs,
-) -> core::result::Result<crate::arch::ProcessHandle, Error> {
+pub fn create_process(args: ProcessArgs) -> core::result::Result<crate::arch::ProcessHandle, Error> {
     let process_init = crate::arch::create_process_pre(&args)?;
     rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
         if let Result::NewProcess(startup) = result {
@@ -1893,40 +1646,25 @@ pub fn create_process(
 }
 
 /// Wait for a thread to finish
-pub fn wait_process(joiner: crate::arch::ProcessHandle) -> SysCallResult {
-    crate::arch::wait_process(joiner)
-}
+pub fn wait_process(joiner: crate::arch::ProcessHandle) -> SysCallResult { crate::arch::wait_process(joiner) }
 
 /// Get the current process ID
 pub fn current_pid() -> core::result::Result<PID, Error> {
     rsyscall(SysCall::GetProcessId).and_then(|result| {
-        if let Result::ProcessID(pid) = result {
-            Ok(pid)
-        } else {
-            Err(Error::InternalError)
-        }
+        if let Result::ProcessID(pid) = result { Ok(pid) } else { Err(Error::InternalError) }
     })
 }
 
 /// Get the current thread ID
 pub fn current_tid() -> core::result::Result<TID, Error> {
     rsyscall(SysCall::GetThreadId).and_then(|result| {
-        if let Result::ThreadID(tid) = result {
-            Ok(tid)
-        } else {
-            Err(Error::InternalError)
-        }
+        if let Result::ThreadID(tid) = result { Ok(tid) } else { Err(Error::InternalError) }
     })
 }
 
 pub fn destroy_server(sid: SID) -> core::result::Result<(), Error> {
-    rsyscall(SysCall::DestroyServer(sid)).and_then(|result| {
-        if let Result::Ok = result {
-            Ok(())
-        } else {
-            Err(Error::InternalError)
-        }
-    })
+    rsyscall(SysCall::DestroyServer(sid))
+        .and_then(|result| if let Result::Ok = result { Ok(()) } else { Err(Error::InternalError) })
 }
 
 /// Disconnect the specified connection ID and mark it as free. This
@@ -1940,13 +1678,8 @@ pub fn destroy_server(sid: SID) -> core::result::Result<(), Error> {
 /// in kernel errors or, if the CID is reused, silent failures due to
 /// messages going to the wrong server.
 pub unsafe fn disconnect(cid: CID) -> core::result::Result<(), Error> {
-    rsyscall(SysCall::Disconnect(cid)).and_then(|result| {
-        if let Result::Ok = result {
-            Ok(())
-        } else {
-            Err(Error::InternalError)
-        }
-    })
+    rsyscall(SysCall::Disconnect(cid))
+        .and_then(|result| if let Result::Ok = result { Ok(()) } else { Err(Error::InternalError) })
 }
 
 /// Block the current thread and wait for the specified thread to
@@ -1987,9 +1720,8 @@ pub fn reply_and_receive_next(
 ///
 ///  * **server**: The SID of the server to receive messages from
 ///  * **msg**: An `Option<MessageEnvelope>` specifying the message to return.
-///  * **return_type**: If 1 or 2, responds to a BlockingScalarMessage
-///                 with a Scalar1 or a Scalar2. Otherwise, will respond
-///                 as normal.
+///  * **return_type**: If 1 or 2, responds to a BlockingScalarMessage with a Scalar1 or a Scalar2. Otherwise,
+///    will respond as normal.
 pub fn reply_and_receive_next_legacy(
     server: SID,
     msg: &mut Option<MessageEnvelope>,
@@ -2016,8 +1748,7 @@ pub fn reply_and_receive_next_legacy(
         };
         let sender = envelope.sender;
         core::mem::forget(envelope);
-        let call =
-            SysCall::ReplyAndReceiveNext(sender, args[0], args[1], args[2], args[3], args[4], rt);
+        let call = SysCall::ReplyAndReceiveNext(sender, args[0], args[1], args[2], args[3], args[4], rt);
         match rsyscall(call) {
             Ok(crate::Result::MessageEnvelope(envelope)) => {
                 *msg = Some(envelope);
@@ -2070,31 +1801,20 @@ pub fn set_exception_handler(
 /// Translate a virtual address to a physical address
 #[cfg(feature = "v2p")]
 pub fn virt_to_phys(va: usize) -> core::result::Result<usize, Error> {
-    rsyscall(SysCall::VirtToPhys(va)).and_then(|result| {
-        if let Result::Scalar1(pa) = result {
-            Ok(pa)
-        } else {
-            Err(Error::BadAddress)
-        }
-    })
+    rsyscall(SysCall::VirtToPhys(va))
+        .and_then(|result| if let Result::Scalar1(pa) = result { Ok(pa) } else { Err(Error::BadAddress) })
 }
 
 /// Translate a virtual address to a physical address for a given process
 #[cfg(feature = "v2p")]
 pub fn virt_to_phys_pid(pid: PID, va: usize) -> core::result::Result<usize, Error> {
-    rsyscall(SysCall::VirtToPhysPid(pid, va)).and_then(|result| {
-        if let Result::Scalar1(pa) = result {
-            Ok(pa)
-        } else {
-            Err(Error::BadAddress)
-        }
-    })
+    rsyscall(SysCall::VirtToPhysPid(pid, va))
+        .and_then(|result| if let Result::Scalar1(pa) = result { Ok(pa) } else { Err(Error::BadAddress) })
 }
 
 pub fn increase_heap(bytes: usize, flags: MemoryFlags) -> core::result::Result<MemoryRange, ()> {
     let res = crate::arch::syscall(SysCall::IncreaseHeap(bytes, flags));
-    if let Ok(Result::MemoryRange(range)) = res
-    {
+    if let Ok(Result::MemoryRange(range)) = res {
         return Ok(range);
     }
 
@@ -2103,9 +1823,7 @@ pub fn increase_heap(bytes: usize, flags: MemoryFlags) -> core::result::Result<M
 
 /// Perform a raw syscall and return the result. This will transform
 /// `xous::Result::Error(e)` into an `Err(e)`.
-pub fn rsyscall(call: SysCall) -> SysCallResult {
-    crate::arch::syscall(call)
-}
+pub fn rsyscall(call: SysCall) -> SysCallResult { crate::arch::syscall(call) }
 
 // /// This is dangerous, but fast.
 // pub unsafe fn dangerous_syscall(call: SysCall) -> SyscallResult {

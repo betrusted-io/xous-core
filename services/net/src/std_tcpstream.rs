@@ -1,10 +1,10 @@
-use ticktimer_server::Ticktimer;
-
+use core::num::NonZeroU64;
 use std::convert::TryInto;
 
-use core::num::NonZeroU64;
 use smoltcp::iface::{Interface, SocketHandle};
 use smoltcp::socket::tcp;
+use ticktimer_server::Ticktimer;
+
 use crate::*;
 
 pub(crate) fn std_tcp_connect(
@@ -48,13 +48,10 @@ pub(crate) fn std_tcp_connect(
     let tcp_socket = sockets.get_mut::<tcp::Socket>(handle);
 
     // Attempt to connect, returning the error if there is one
-    if let Err(e) = tcp_socket
-        .connect(cx, (address, remote_port), local_port)
-        .map_err(|e| match e {
-            smoltcp::socket::tcp::ConnectError::InvalidState => NetError::SocketInUse,
-            smoltcp::socket::tcp::ConnectError::Unaddressable => NetError::Unaddressable,
-        })
-    {
+    if let Err(e) = tcp_socket.connect(cx, (address, remote_port), local_port).map_err(|e| match e {
+        smoltcp::socket::tcp::ConnectError::InvalidState => NetError::SocketInUse,
+        smoltcp::socket::tcp::ConnectError::Unaddressable => NetError::Unaddressable,
+    }) {
         log::debug!("couldn't connect: {:?}", e);
         respond_with_error(msg, e);
         return;
@@ -65,10 +62,7 @@ pub(crate) fn std_tcp_connect(
     // Add the socket onto the list of sockets waiting to connect, since the connection will
     // take time.
     let idx = insert_or_append(our_sockets, handle) as u16;
-    insert_or_append(
-        tcp_connect_waiting,
-        (msg, handle, idx, local_port, remote_port),
-    );
+    insert_or_append(tcp_connect_waiting, (msg, handle, idx, local_port, remote_port));
     log::debug!("connect waiting now: {}, {:?} {:?} {:?}", idx, handle, local_port, remote_port);
 }
 
@@ -101,19 +95,11 @@ pub(crate) fn std_tcp_tx(
     // handle the case that the connection closed due to the receiver quitting
     if !socket.can_send() {
         log::trace!("tx can't send, will retry");
-        let expiry = body
-            .offset
-            .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
+        let expiry =
+            body.offset.map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
         // Add the message to the TcpRxWaiting list, which will prevent it from getting
         // responded to right away.
-        insert_or_append(
-            tcp_tx_waiting,
-            WaitingSocket {
-                env: msg,
-                handle: *handle,
-                expiry,
-            },
-        );
+        insert_or_append(tcp_tx_waiting, WaitingSocket { env: msg, handle: *handle, expiry });
         return;
     }
 
@@ -122,13 +108,7 @@ pub(crate) fn std_tcp_tx(
         let data = unsafe { body.buf.as_slice::<u8>() };
         let length = body
             .valid
-            .map(|v| {
-                if v.get() > data.len() {
-                    data.len()
-                } else {
-                    v.get()
-                }
-            })
+            .map(|v| if v.get() > data.len() { data.len() } else { v.get() })
             .unwrap_or_else(|| data.len());
 
         match socket.send_slice(&data[..length]) {
@@ -163,9 +143,8 @@ pub(crate) fn std_tcp_rx(
             return;
         }
     };
-    let expiry = body
-        .offset
-        .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
+    let expiry =
+        body.offset.map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
 
     // Offset is used as a flag to indicate an error. `None` means an error occured. `Some` means no error.
     body.offset = None;
@@ -181,16 +160,12 @@ pub(crate) fn std_tcp_rx(
     let socket = sockets.get_mut::<tcp::Socket>(*handle);
     if socket.can_recv() {
         log::debug!("receiving data right away");
-        let buflen = if let Some(valid) = body.valid {
-            valid.get()
-        } else {
-            0
-        };
+        let buflen = if let Some(valid) = body.valid { valid.get() } else { 0 };
         match socket.recv_slice(unsafe { &mut body.buf.as_slice_mut()[..buflen] }) {
             Ok(bytes) => {
                 // it's actually valid to receive 0 bytes, but the encoding of this field doesn't allow it.
-                // so, `None` is abused to represent the value of "0" bytes, which is what is naturally returned
-                // as the "error" when you try to create a NonZeroUsize with 0.
+                // so, `None` is abused to represent the value of "0" bytes, which is what is naturally
+                // returned as the "error" when you try to create a NonZeroUsize with 0.
                 body.valid = xous::MemorySize::new(bytes);
                 body.offset = xous::MemoryAddress::new(1);
                 log::debug!("set body.valid = {:?}", body.valid);
@@ -214,14 +189,7 @@ pub(crate) fn std_tcp_rx(
     if expiry.is_some() {
         log::debug!("read with timeout set: {:?}", expiry);
     }
-    insert_or_append(
-        tcp_rx_waiting,
-        WaitingSocket {
-            env: msg,
-            handle: *handle,
-            expiry,
-        },
-    );
+    insert_or_append(tcp_rx_waiting, WaitingSocket { env: msg, handle: *handle, expiry });
 }
 
 pub(crate) fn std_tcp_peek(
@@ -241,9 +209,8 @@ pub(crate) fn std_tcp_peek(
             return;
         }
     };
-    let expiry = body
-    .offset
-    .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
+    let expiry =
+        body.offset.map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
 
     // Offset is used to indicate an error. None=>Error, Some=>no error
     body.offset = None;
@@ -259,16 +226,12 @@ pub(crate) fn std_tcp_peek(
     let socket = sockets.get_mut::<tcp::Socket>(*handle);
     if socket.can_recv() {
         log::debug!("peeking data right away");
-        let buflen = if let Some(valid) = body.valid {
-            valid.get()
-        } else {
-            0
-        };
+        let buflen = if let Some(valid) = body.valid { valid.get() } else { 0 };
         match socket.peek_slice(unsafe { &mut body.buf.as_slice_mut()[..buflen] }) {
             Ok(bytes) => {
                 // it's actually valid to receive 0 bytes, but the encoding of this field doesn't allow it.
-                // so, `None` is abused to represent the value of "0" bytes, which is what is naturally returned
-                // as the "error" when you try to create a NonZeroUsize with 0.
+                // so, `None` is abused to represent the value of "0" bytes, which is what is naturally
+                // returned as the "error" when you try to create a NonZeroUsize with 0.
                 body.valid = xous::MemorySize::new(bytes);
                 body.offset = xous::MemoryAddress::new(1);
                 log::trace!("set body.valid = {:?}", body.valid);
@@ -284,14 +247,7 @@ pub(crate) fn std_tcp_peek(
         } else {
             // Add the message to the TcpRxWaiting list, which will prevent it from getting
             // responded to right away.
-            insert_or_append(
-                tcp_peek_waiting,
-                WaitingSocket {
-                    env: msg,
-                    handle: *handle,
-                    expiry,
-                },
-            );
+            insert_or_append(tcp_peek_waiting, WaitingSocket { env: msg, handle: *handle, expiry });
         }
     }
 }
@@ -300,7 +256,7 @@ pub(crate) fn std_tcp_can_close(tx_waiting: &Vec<Option<WaitingSocket>>, handle:
     for maybe_socket in tx_waiting.iter() {
         if let Some(socket) = maybe_socket {
             if socket.handle == handle {
-                return false
+                return false;
             }
         }
     }

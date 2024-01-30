@@ -1,13 +1,13 @@
-#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(feature = "baremetal", no_std)]
 
-#[cfg(not(any(target_os="xous")))]
+#[cfg(feature = "baremetal")]
 mod debug;
 
-#[cfg(feature="tests")]
+#[cfg(feature = "tests")]
 pub mod pl230_tests;
 
-use utralib::*;
 use bitfield::bitfield;
+use utralib::*;
 
 #[repr(C, align(16))]
 #[derive(Default)]
@@ -24,21 +24,21 @@ struct ControlChannels {
     pub channels: [ChannelControl; 8],
 }
 
-
 pub struct Pl230 {
     pub csr: CSR<u32>,
     pub mdma: CSR<u32>,
 }
 
 impl Pl230 {
-    #[cfg(not(any(target_os="xous")))]
+    #[cfg(feature = "baremetal")]
     pub fn new() -> Self {
         Pl230 {
             csr: CSR::new(utralib::HW_PL230_BASE as *mut u32),
             mdma: CSR::new(utralib::HW_MDMA_BASE as *mut u32),
         }
     }
-    #[cfg(target_os="xous")]
+
+    #[cfg(not(feature = "baremetal"))]
     pub fn new() -> Self {
         let csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utralib::HW_PL230_BASE),
@@ -47,18 +47,15 @@ impl Pl230 {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .unwrap();
-    let mdma = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utralib::HW_MDMA_BASE),
-        None,
-        4096,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .unwrap();
+        let mdma = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utralib::HW_MDMA_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .unwrap();
 
-        Pl230 {
-            csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-            mdma: CSR::new(mdma.as_mut_ptr() as *mut u32),
-        }
+        Pl230 { csr: CSR::new(csr.as_mut_ptr() as *mut u32), mdma: CSR::new(mdma.as_mut_ptr() as *mut u32) }
     }
 }
 
@@ -70,6 +67,7 @@ pub enum DmaWidth {
     NoInc = 0b11,
 }
 #[repr(u32)]
+#[rustfmt::skip]
 pub enum ArbitrateAfter {
     XferEach = 0b0000,
     Xfer2    = 0b0001,
@@ -88,11 +86,11 @@ pub enum DmaCycleControl {
     Stop = 0b000,
     Basic = 0b001,
     AutoRequest = 0b010,
-    PingPong    = 0b011,
+    PingPong = 0b011,
     MemoryScatterGatherPrimary = 0b100,
-    MemoryScatterGatherAlt     = 0b101,
+    MemoryScatterGatherAlt = 0b101,
     PeripheralScatterGatherPrimary = 0b110,
-    PeripheralScatterGatherAlt     = 0b111,
+    PeripheralScatterGatherAlt = 0b111,
 }
 
 bitfield! {

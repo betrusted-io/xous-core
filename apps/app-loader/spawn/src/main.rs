@@ -63,7 +63,7 @@ pub extern "C" fn init(server1: u32, server2: u32, server3: u32, server4: u32) -
                 StartupCommand::LoadElf => {
                     let entry_point = read_elf(envelope.body.memory_message_mut());
                     drop(envelope); // we have to get rid of all messages to destroy the server
-                                    // destroy the server
+                    // destroy the server
                     xous::destroy_server(server).expect("Couldn't destroy spawn server");
                     jump(entry_point);
                 }
@@ -90,7 +90,7 @@ fn read_elf(memory: Option<&mut xous::MemoryMessage>) -> usize {
 
     // get the elf binary from the message
     // safety: buf should be aligned and correctly sized inside the MemoryMessage
-    let mut bin = unsafe {memory.buf.as_slice::<u8>()};
+    let mut bin = unsafe { memory.buf.as_slice::<u8>() };
 
     // go to the beginning of the ELF file using the provided offset
     bin = &bin[memory.offset.and_then(|n| Some(n.get())).unwrap_or(0)..];
@@ -132,12 +132,7 @@ fn read_elf(memory: Option<&mut xous::MemoryMessage>) -> usize {
             let file_size = to_usize(start + 0x10, 4);
             let mem_size = to_usize(start + 0x14, 4);
             let mem_size = mem_size + padding;
-            let mem_size = mem_size
-                + if mem_size & 0xFFF == 0 {
-                    0
-                } else {
-                    0x1000 - (mem_size & 0xFFF)
-                };
+            let mem_size = mem_size + if mem_size & 0xFFF == 0 { 0 } else { 0x1000 - (mem_size & 0xFFF) };
 
             assert_eq!(0, mem_size & 0xFFF);
             assert_eq!(0, (vaddr - padding) & 0xFFF);

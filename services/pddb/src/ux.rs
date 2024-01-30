@@ -1,13 +1,10 @@
-use xous::{SID, CID};
-
+use gam::modal::*;
+use locales::t;
+use num_traits::*;
 use xous::msg_scalar_unpack;
+use xous::{CID, SID};
 use xous_ipc::Buffer;
 
-use num_traits::*;
-
-use gam::modal::*;
-
-use locales::t;
 use crate::BasisRequestPassword;
 /*
 Conclusions:
@@ -59,8 +56,8 @@ pub(crate) fn password_ux_manager(
     // the CID of the main loop, as a backchannel for async callbacks.
     _main_cid: CID,
     // the SID we're to use for our loop handler, for getting requests
-    ux_sid: SID) {
-
+    ux_sid: SID,
+) {
     let ux_cid = xous::connect(ux_sid).unwrap();
     // create a thread that just handles the redrawing requests
     // build the core data structure here
@@ -74,16 +71,17 @@ pub(crate) fn password_ux_manager(
     );
     password_action.reset_action_payloads(1, None);
 
-    let mut pddb_modal =
-        Modal::new(
-            gam::PDDB_MODAL_NAME,
-            ActionType::TextEntry(password_action.clone()),
-            Some(t!("pddb.password", locales::LANG)),
-            None,
-            gam::SYSTEM_STYLE,
-            8
-        );
-    pddb_modal.spawn_helper(ux_sid, pddb_modal.sid,
+    let mut pddb_modal = Modal::new(
+        gam::PDDB_MODAL_NAME,
+        ActionType::TextEntry(password_action.clone()),
+        Some(t!("pddb.password", locales::LANG)),
+        None,
+        gam::SYSTEM_STYLE,
+        8,
+    );
+    pddb_modal.spawn_helper(
+        ux_sid,
+        pddb_modal.sid,
         PwManagerOpcode::ModalRedraw.to_u32().unwrap(),
         PwManagerOpcode::ModalKeypress.to_u32().unwrap(),
         PwManagerOpcode::ModalDrop.to_u32().unwrap(),
@@ -104,20 +102,32 @@ pub(crate) fn password_ux_manager(
                 };
                 pddb_modal.modify(
                     Some(ActionType::TextEntry(password_action.clone())),
-                    Some(t!("pddb.password", locales::LANG)), false,
-                    Some(format!("{}'{}'", t!("pddb.password_for", locales::LANG), db_name.as_str().unwrap()).as_str()), false, None
+                    Some(t!("pddb.password", locales::LANG)),
+                    false,
+                    Some(
+                        format!("{}'{}'", t!("pddb.password_for", locales::LANG), db_name.as_str().unwrap())
+                            .as_str(),
+                    ),
+                    false,
+                    None,
                 );
-                log::info!("{}PDDB.REQPW,{},{}", xous::BOOKEND_START, db_name.as_str().unwrap(), xous::BOOKEND_END);
+                log::info!(
+                    "{}PDDB.REQPW,{},{}",
+                    xous::BOOKEND_START,
+                    db_name.as_str().unwrap(),
+                    xous::BOOKEND_END
+                );
                 pddb_modal.activate();
                 dr = Some(msg);
-
-            },
+            }
             Some(PwManagerOpcode::PwReturn) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
                 if let Some(mut response) = dr.take() {
-                    let mut buffer = unsafe { Buffer::from_memory_message_mut(response.body.memory_message_mut().unwrap()) };
+                    let mut buffer = unsafe {
+                        Buffer::from_memory_message_mut(response.body.memory_message_mut().unwrap())
+                    };
                     let mut request = buffer.to_original::<BasisRequestPassword, _>().unwrap();
                     request.plaintext_pw = Some(xous_ipc::String::from_str(pw.first().as_str()));
                     // return the password to the caller
@@ -129,10 +139,10 @@ pub(crate) fn password_ux_manager(
 
                 pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
-            },
+            }
             Some(PwManagerOpcode::ModalRedraw) => {
                 pddb_modal.redraw();
-            },
+            }
             Some(PwManagerOpcode::ModalKeypress) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
                 let keys = [
                     core::char::from_u32(k1 as u32).unwrap_or('\u{0000}'),
@@ -142,14 +152,15 @@ pub(crate) fn password_ux_manager(
                 ];
                 pddb_modal.key_event(keys);
             }),
-            Some(PwManagerOpcode::ModalDrop) => { // this guy should never quit, it's a core OS service
+            Some(PwManagerOpcode::ModalDrop) => {
+                // this guy should never quit, it's a core OS service
                 panic!("Password modal for PDDB quit unexpectedly");
-            },
+            }
             Some(PwManagerOpcode::Quit) => {
                 log::warn!("received quit on PDDB password UX renderer loop");
                 xous::return_scalar(msg.sender, 0).unwrap();
                 break;
-            },
+            }
 
             None => {
                 log::error!("couldn't convert opcode");

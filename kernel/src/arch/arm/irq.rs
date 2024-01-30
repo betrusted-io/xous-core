@@ -6,9 +6,7 @@ use core::convert::TryInto;
 
 use xous_kernel::{arch::Arguments, PID, TID};
 
-use crate::arch::process::{
-    current_pid, EXIT_THREAD, RETURN_FROM_EXCEPTION_HANDLER, RETURN_FROM_ISR,
-};
+use crate::arch::process::{current_pid, EXIT_THREAD, RETURN_FROM_EXCEPTION_HANDLER, RETURN_FROM_ISR};
 use crate::services::{ArchProcess, Thread};
 use crate::SystemServices;
 
@@ -19,14 +17,10 @@ extern "Rust" {
 
 static mut PREVIOUS_PAIR: Option<(PID, TID)> = None;
 
-pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) {
-    PREVIOUS_PAIR = Some((pid, tid));
-}
+pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) { PREVIOUS_PAIR = Some((pid, tid)); }
 
 #[cfg(feature = "gdb-stub")]
-pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
-    PREVIOUS_PAIR.take()
-}
+pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> { PREVIOUS_PAIR.take() }
 
 /// Disable external interrupts
 pub fn disable_all_irqs() {
@@ -49,9 +43,7 @@ where
         if not_in_kernel_mem_space {
             klog!("Switched to the kernel mem space to access AIC");
             let kernel_mem_space = ss.processes[0].mapping;
-            kernel_mem_space
-                .activate()
-                .expect("can't activate kernel memory mapping");
+            kernel_mem_space.activate().expect("can't activate kernel memory mapping");
         }
 
         f();
@@ -59,9 +51,7 @@ where
         if not_in_kernel_mem_space {
             klog!("Switched back from the kernel mem space after accessing AIC");
             let curr_process_mem_space = curr_process.mapping;
-            curr_process_mem_space
-                .activate()
-                .expect("can't activate memory mapping");
+            curr_process_mem_space.activate().expect("can't activate memory mapping");
         }
 
         Ok::<(), ()>(())
@@ -109,9 +99,7 @@ pub extern "C" fn swi_handler(arg_addr: usize) {
         ArchProcess::with_current_mut(|p| unsafe {
             klog!("[!] Invalid syscall");
 
-            args.set_result(&xous_kernel::Result::Error(
-                xous_kernel::Error::UnhandledSyscall,
-            ));
+            args.set_result(&xous_kernel::Result::Error(xous_kernel::Error::UnhandledSyscall));
             _xous_syscall_return_result(&p.current_thread());
         })
     });
@@ -127,23 +115,13 @@ pub extern "C" fn swi_handler(arg_addr: usize) {
         // the return values in 8 argument registers.
         if response == xous_kernel::Result::ResumeProcess {
             let thread = p.current_thread();
-            klog!(
-                "Resuming {}:{}: {:x?}",
-                current_pid(),
-                p.current_tid(),
-                thread
-            );
+            klog!("Resuming {}:{}: {:x?}", current_pid(), p.current_tid(), thread);
             crate::arch::syscall::resume(current_pid().get() == 1, thread);
         } else {
             p.set_thread_result(p.current_tid(), response);
 
             let thread = p.current_thread();
-            klog!(
-                "Resuming {}:{}: {:x?}",
-                current_pid(),
-                p.current_tid(),
-                thread
-            );
+            klog!("Resuming {}:{}: {:x?}", current_pid(), p.current_tid(), thread);
             klog!("Returning to address {:08x}", thread.resume_addr);
 
             unsafe { _xous_syscall_return_result(&thread) };
@@ -192,8 +170,7 @@ fn clear_fault() {
 /// Terminates the specified process due to a crash or violation.
 fn crash_process(pid: PID) {
     SystemServices::with_mut(|ss| {
-        ss.terminate_process(pid)
-            .expect("couldn't terminate the process");
+        ss.terminate_process(pid).expect("couldn't terminate the process");
         crate::syscall::reset_switchto_caller();
     });
 
@@ -218,8 +195,7 @@ pub extern "C" fn abort_handler() {
         || dfsr_fault_cause == 0b1101
         || dfsr_fault_cause == 0b1111;
     let ifsr_fault_cause = ifsr & 0b1111;
-    let is_null_pointer_exception =
-        dfar == 0 && (is_data_permission_fault || ifsr_fault_cause == 0b0101);
+    let is_null_pointer_exception = dfar == 0 && (is_data_permission_fault || ifsr_fault_cause == 0b0101);
     let pid = current_pid();
 
     klog!(
@@ -235,8 +211,7 @@ pub extern "C" fn abort_handler() {
         // Fault caused by returning from exception handler
         RETURN_FROM_EXCEPTION_HANDLER => {
             SystemServices::with_mut(|ss| {
-                ss.finish_exception_handler_and_resume(pid)
-                    .expect("unable to finish exception handler")
+                ss.finish_exception_handler_and_resume(pid).expect("unable to finish exception handler")
             });
 
             // Resume the new thread within the same process.
@@ -268,16 +243,9 @@ pub extern "C" fn abort_handler() {
             // If we hit this address, then an ISR has just returned.  Since
             // we're in an interrupt context, it is safe to access this
             // global variable.
-            let (previous_pid, previous_context) = unsafe {
-                PREVIOUS_PAIR
-                    .take()
-                    .expect("got RETURN_FROM_ISR with no previous PID")
-            };
-            klog!(
-                "ISR: Resuming previous pair of ({}, {})",
-                previous_pid,
-                previous_context
-            );
+            let (previous_pid, previous_context) =
+                unsafe { PREVIOUS_PAIR.take().expect("got RETURN_FROM_ISR with no previous PID") };
+            klog!("ISR: Resuming previous pair of ({}, {})", previous_pid, previous_context);
             // Switch to the previous process' address space.
             SystemServices::with_mut(|ss| {
                 ss.finish_callback_and_resume(previous_pid, previous_context)
@@ -316,10 +284,7 @@ pub extern "C" fn abort_handler() {
                     .ok(); // If this fails, fall through.
             }
             if is_null_pointer_exception {
-                println!(
-                    "[!] Process PID {} accessed 0x00000000 address (null pointer)",
-                    pid
-                );
+                println!("[!] Process PID {} accessed 0x00000000 address (null pointer)", pid);
                 crash_process(pid);
             } else if is_data_alignment_fault || is_data_permission_fault {
                 println!("[!] Data alignment or access permissions violation");

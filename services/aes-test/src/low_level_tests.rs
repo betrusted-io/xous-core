@@ -77,13 +77,7 @@ fn encrypt_test(id: AesId) {
         dut = aes_enc_round(dut, tmp as u32, id);
         reference ^= byte;
         if dut != reference {
-            log::error!(
-                "Encrypt BUG at index {}, {:?}: dut {:08x} != {:08x} ref\n",
-                idx,
-                id,
-                dut,
-                reference
-            );
+            log::error!("Encrypt BUG at index {}, {:?}: dut {:08x} != {:08x} ref\n", idx, id, dut, reference);
             return;
         }
     }
@@ -121,13 +115,7 @@ fn decrypt_test(id: AesId) {
         dut = aes_dec_round(dut, tmp as u32, id);
         reference ^= byte;
         if dut != reference {
-            log::error!(
-                "Decrypt BUG at index {}, {:?}: dut {:08x} != {:08x} ref\n",
-                idx,
-                id,
-                dut,
-                reference
-            );
+            log::error!("Decrypt BUG at index {}, {:?}: dut {:08x} != {:08x} ref\n", idx, id, dut, reference);
             return;
         }
     }

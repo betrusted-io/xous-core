@@ -1,12 +1,14 @@
 #![allow(dead_code)]
 
+use core::sync::atomic::{AtomicBool, Ordering::SeqCst};
+
+use llio::I2cStatus;
+use num_traits::*;
+use susres::{RegManager, RegOrField, SuspendResume};
 use utralib::generated::*;
 use xous::MemoryRange;
-use susres::{RegManager, RegOrField, SuspendResume};
-use llio::I2cStatus;
+
 use crate::api::*;
-use num_traits::*;
-use core::sync::atomic::{AtomicBool, Ordering::SeqCst};
 
 static INTERRUPT_HOOKED: AtomicBool = AtomicBool::new(false);
 
@@ -16,7 +18,7 @@ const I2C_TIMEOUT: u32 = 50;
 pub struct Codec {
     csr: utralib::CSR<u32>,
     fifo: MemoryRange,
-    susres_manager: RegManager<{utra::audio::AUDIO_NUMREGS}>,
+    susres_manager: RegManager<{ utra::audio::AUDIO_NUMREGS }>,
     llio: llio::Llio,
     i2c: llio::I2c,
     ticktimer: ticktimer_server::Ticktimer,
@@ -68,8 +70,12 @@ fn audio_handler(_irq_no: usize, arg: *mut usize) {
         for &stereo_sample in frame.iter() {
             if true {
                 //// TODO
-                // there is some bug which is causing the right channel to be frame shifted left by one, but not the left....could be a hardware bug.
-                unsafe { volatile_audio.write_volatile((stereo_sample & 0xFFFF_0000) | ((stereo_sample & 0xFFFF) >> 1)) };
+                // there is some bug which is causing the right channel to be frame shifted left by one, but
+                // not the left....could be a hardware bug.
+                unsafe {
+                    volatile_audio
+                        .write_volatile((stereo_sample & 0xFFFF_0000) | ((stereo_sample & 0xFFFF) >> 1))
+                };
             } else {
                 unsafe { volatile_audio.write_volatile(stereo_sample) };
             }
@@ -89,19 +95,22 @@ fn audio_handler(_irq_no: usize, arg: *mut usize) {
 
     let mut rec_buf: [u32; FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; FIFO_DEPTH];
     for stereo_sample in rec_buf.iter_mut() {
-        unsafe{ *stereo_sample = volatile_audio.read_volatile(); }
+        unsafe {
+            *stereo_sample = volatile_audio.read_volatile();
+        }
     }
     match codec.rec_buffer.nq_frame(rec_buf) {
-        Ok(()) => {},
-        Err(_buff) => {
-            codec.rec_frames_dropped += 1
-        },
+        Ok(()) => {}
+        Err(_buff) => codec.rec_frames_dropped += 1,
     }
 
     // if the buffer is low, let the audio handler know we used up another frame!
     if codec.play_buffer.readable_count() < 6 && !codec.drain {
-        xous::try_send_message(codec.conn,
-            xous::Message::new_scalar(Opcode::AnotherFrame.to_usize().unwrap(), rx_rdcount, rx_wrcount, 0, 0)).unwrap();
+        xous::try_send_message(
+            codec.conn,
+            xous::Message::new_scalar(Opcode::AnotherFrame.to_usize().unwrap(), rx_rdcount, rx_wrcount, 0, 0),
+        )
+        .unwrap();
     }
 
     codec.csr.wfo(utra::audio::EV_PENDING_RX_READY, 1);
@@ -153,13 +162,24 @@ impl Codec {
 
     fn trace(&mut self) {
         if self.tx_stat_errors > 0 || self.rx_stat_errors > 0 {
-            log::trace!("drop p:{} r:{} | staterr tx:{} rx:{}", self.play_frames_dropped, self.rec_frames_dropped, self.tx_stat_errors, self.rx_stat_errors);
+            log::trace!(
+                "drop p:{} r:{} | staterr tx:{} rx:{}",
+                self.play_frames_dropped,
+                self.rec_frames_dropped,
+                self.tx_stat_errors,
+                self.rx_stat_errors
+            );
             self.tx_stat_errors = 0;
             self.rx_stat_errors = 0;
         }
     }
+
     fn trace_rx(&self) {
-        log::trace!("T rd {} wr {}", self.csr.rf(utra::audio::RX_STAT_RDCOUNT), self.csr.rf(utra::audio::RX_STAT_WRCOUNT));
+        log::trace!(
+            "T rd {} wr {}",
+            self.csr.rf(utra::audio::RX_STAT_RDCOUNT),
+            self.csr.rf(utra::audio::RX_STAT_WRCOUNT)
+        );
     }
 
     pub fn suspend(&mut self) {
@@ -168,6 +188,7 @@ impl Codec {
             self.llio.audio_on(false).unwrap(); // force the codec into an off state for resume
         }
     }
+
     pub fn resume(&mut self) {
         self.ticktimer.sleep_ms(470).unwrap(); // audio code resume has the lowest priority, it should only resume after most other activities stabilized
         if self.powered_on {
@@ -186,12 +207,8 @@ impl Codec {
     pub fn init(&mut self) {
         // this should only be called once per reboot
         if !INTERRUPT_HOOKED.swap(true, SeqCst) {
-            xous::claim_interrupt(
-                utra::audio::AUDIO_IRQ,
-                audio_handler,
-                self as *mut Codec as *mut usize,
-            )
-            .expect("couldn't claim audio irq");
+            xous::claim_interrupt(utra::audio::AUDIO_IRQ, audio_handler, self as *mut Codec as *mut usize)
+                .expect("couldn't claim audio irq");
             self.csr.wfo(utra::audio::EV_PENDING_RX_READY, 1);
 
             self.susres_manager.push(RegOrField::Reg(utra::audio::RX_CTL), None);
@@ -217,21 +234,16 @@ impl Codec {
     pub fn nq_play_frame(&mut self, frame: [u32; FIFO_DEPTH]) -> Result<(), [u32; FIFO_DEPTH]> {
         self.play_buffer.nq_frame(frame)
     }
-    pub fn dq_rec_frame(&mut self) -> Option<[u32; FIFO_DEPTH]> {
-        self.rec_buffer.dq_frame()
-    }
-    pub fn free_play_frames(&self) -> usize {
-        self.play_buffer.writeable_count()
-    }
-    pub fn can_play(&self) -> bool {
-        !self.play_buffer.is_empty()
-    }
-    pub fn drain(&mut self) {
-        self.drain = true;
-    }
-    pub fn available_rec_frames(&self) -> usize {
-        self.rec_buffer.readable_count()
-    }
+
+    pub fn dq_rec_frame(&mut self) -> Option<[u32; FIFO_DEPTH]> { self.rec_buffer.dq_frame() }
+
+    pub fn free_play_frames(&self) -> usize { self.play_buffer.writeable_count() }
+
+    pub fn can_play(&self) -> bool { !self.play_buffer.is_empty() }
+
+    pub fn drain(&mut self) { self.drain = true; }
+
+    pub fn available_rec_frames(&self) -> usize { self.rec_buffer.readable_count() }
 
     pub fn power(&mut self, state: bool) {
         self.llio.audio_on(state).expect("couldn't set audio power state");
@@ -241,15 +253,11 @@ impl Codec {
         }
     }
 
-    pub fn is_on(&self) -> bool {
-        self.powered_on
-    }
-    pub fn is_init(&self) -> bool {
-        self.initialized
-    }
-    pub fn is_live(&self) -> bool {
-        self.live
-    }
+    pub fn is_on(&self) -> bool { self.powered_on }
+
+    pub fn is_init(&self) -> bool { self.initialized }
+
+    pub fn is_live(&self) -> bool { self.live }
 
     pub fn set_speaker_gain_db(&mut self, gain_db: f32) {
         self.i2c.i2c_mutex_acquire();
@@ -262,9 +270,7 @@ impl Codec {
             let code = analog_volume_db_to_code(gain_db);
             self.w(0, &[1]); // select page 1
             self.w(32, &[0b1_0_00011_0]); // class D amp powered on
-            self.w(38, &[
-                0b1_000_0000 | code,
-                ]);
+            self.w(38, &[0b1_000_0000 | code]);
         }
         self.i2c.i2c_mutex_release();
     }
@@ -282,14 +288,19 @@ impl Codec {
             let code_right = analog_volume_db_to_code(gain_db_right);
             self.w(0, &[1]); // select page 1
             self.w(31, &[0b1_1_00011_0]); // headphones powered up
-            self.w(36, &[
-                0b1_000_0000 | code_left, // HPL
-                0b1_000_0000 | code_right, // HPR
-                ]);
+            self.w(
+                36,
+                &[
+                    0b1_000_0000 | code_left,  // HPL
+                    0b1_000_0000 | code_right, // HPR
+                ],
+            );
         }
         self.i2c.i2c_mutex_release();
     }
-    /// Convenience wrapper for I2C transactions. Multiple I2C ops that have to be execute atomically must be manually guarded with a i2c_mutex_[acquire/release]
+
+    /// Convenience wrapper for I2C transactions. Multiple I2C ops that have to be execute atomically must be
+    /// manually guarded with a i2c_mutex_[acquire/release]
     fn w(&mut self, adr: u8, data: &[u8]) -> bool {
         // log::info!("writing to 0x{:x}, {:x?}", adr, data);
         match self.i2c.i2c_write(TLV320AIC3100_I2C_ADR, adr, data) {
@@ -298,23 +309,35 @@ impl Codec {
                 match status {
                     I2cStatus::ResponseWriteOk => true,
                     I2cStatus::ResponseBusy => false,
-                    _ => {log::error!("try_send_i2c unhandled response: {:?}", status); false},
+                    _ => {
+                        log::error!("try_send_i2c unhandled response: {:?}", status);
+                        false
+                    }
                 }
             }
-            _ => {log::error!("try_send_i2c unhandled error"); false}
+            _ => {
+                log::error!("try_send_i2c unhandled error");
+                false
+            }
         }
     }
-    /// Convenience wrapper for I2C transactions. Multiple I2C ops that have to be execute atomically must be manually guarded with a i2c_mutex_[acquire/release]
-    fn r(&mut self, adr: u8, data: &mut[u8]) -> bool {
+
+    /// Convenience wrapper for I2C transactions. Multiple I2C ops that have to be execute atomically must be
+    /// manually guarded with a i2c_mutex_[acquire/release]
+    fn r(&mut self, adr: u8, data: &mut [u8]) -> bool {
         match self.i2c.i2c_read(TLV320AIC3100_I2C_ADR, adr, data) {
-            Ok(status) => {
-                match status {
-                    I2cStatus::ResponseReadOk => true,
-                    I2cStatus::ResponseBusy => false,
-                    _ => {log::error!("try_send_i2c unhandled response: {:?}", status); false},
+            Ok(status) => match status {
+                I2cStatus::ResponseReadOk => true,
+                I2cStatus::ResponseBusy => false,
+                _ => {
+                    log::error!("try_send_i2c unhandled response: {:?}", status);
+                    false
                 }
+            },
+            _ => {
+                log::error!("try_send_i2c unhandled error");
+                false
             }
-            _ => {log::error!("try_send_i2c unhandled error"); false}
         }
     }
 
@@ -369,41 +392,50 @@ impl Codec {
     /// oversampling rate (OSR) = 128
     /// local divider = 12
     /// 8_000 * 128 * 12 = 12_288_000 Hz
-    ///
     fn audio_clocks(&mut self) {
         self.i2c.i2c_mutex_acquire();
-        self.w(0, &[0]);  // select page 0
-        self.w(1, &[1]);  // software reset
+        self.w(0, &[0]); // select page 0
+        self.w(1, &[1]); // software reset
         self.ticktimer.sleep_ms(2).unwrap(); // reset happens in 1 ms; +1 ms due to timing jitter uncertainty
 
-        self.w(0, &[0]);  // select page 0
+        self.w(0, &[0]); // select page 0
 
         // select PLL_CLKIN = MCLK; CODEC_CLKIN = PLL_CLK
         self.w(4, &[0b0000_0011]);
 
         // fs = 8kHz
         // PLL_CLKIN = 12MHz
-        // PLLP = 1, PLLR = 1, PLLJ = 7, PLLD = 1680, NDAC = *12*, MDAC = 7, DOSR = 128, MADC = 2 , NADC = *42*
-        // ^^ from page 68 of datasheet, fs=48kHz/12MHz clkin line, with *bold* items multiplied by 6 to get to 8kHz
-        self.w(5, &[
-            0b1001_0001,  // P, R = 1, 1 and pll powered up
-            7,            // PLLJ = 7
-            ((1680 >> 8) & 0xFF) as u8, // D MSB of 1680
-            (1680 & 0xFF) as u8,        // D LSB of 1680
-            ]);
+        // PLLP = 1, PLLR = 1, PLLJ = 7, PLLD = 1680, NDAC = *12*, MDAC = 7, DOSR = 128, MADC = 2 , NADC =
+        // *42* ^^ from page 68 of datasheet, fs=48kHz/12MHz clkin line, with *bold* items multiplied
+        // by 6 to get to 8kHz
+        self.w(
+            5,
+            &[
+                0b1001_0001,                // P, R = 1, 1 and pll powered up
+                7,                          // PLLJ = 7
+                ((1680 >> 8) & 0xFF) as u8, // D MSB of 1680
+                (1680 & 0xFF) as u8,        // D LSB of 1680
+            ],
+        );
 
-        self.w(11, &[
-            0x80 | 12,  // NADC = 12 (set to 2 for 48kHz)
-            0x80 | 7,   // MDAC = 7
-            0,   // DOSR = MSB of 128
-            128, // DOSR = LSB of 128
-        ]);
+        self.w(
+            11,
+            &[
+                0x80 | 12, // NADC = 12 (set to 2 for 48kHz)
+                0x80 | 7,  // MDAC = 7
+                0,         // DOSR = MSB of 128
+                128,       // DOSR = LSB of 128
+            ],
+        );
 
-        self.w(18, &[
-            0x80 | 42,  // NADC = 42 (set to 7 for 48kHz)
-            0x80 | 2,   // MADC = 2
-            128, // AOSR = 128
-        ]);
+        self.w(
+            18,
+            &[
+                0x80 | 42, // NADC = 42 (set to 7 for 48kHz)
+                0x80 | 2,  // MADC = 2
+                128,       // AOSR = 128
+            ],
+        );
         self.i2c.i2c_mutex_release();
     }
 
@@ -417,12 +449,16 @@ impl Codec {
 
         // 32 bits/word * 2 channels * 8000 samples/s = 512_000 = BCLK
         // pick off of DAC_MOD_CLK = 1.024MHz
-        self.w(27, &[
-            0b00_00_1_1_0_1, // I2S standard, 16 bits per sample, BCLK output, WCLK output, DOUT is Hi-Z when unused
-            0b0,           // no offset on left justification
-            0b0000_0_1_01, // BDIV_CLKIN = DAC_MOD_CLK, BCLK active even when powered down
-            0b1000_0010    // BCLK_N_VAL = 2, N divider is powered up
-            ]);
+        self.w(
+            27,
+            &[
+                0b00_00_1_1_0_1, /* I2S standard, 16 bits per sample, BCLK output, WCLK output, DOUT is
+                                  * Hi-Z when unused */
+                0b0,           // no offset on left justification
+                0b0000_0_1_01, // BDIV_CLKIN = DAC_MOD_CLK, BCLK active even when powered down
+                0b1000_0010,   // BCLK_N_VAL = 2, N divider is powered up
+            ],
+        );
 
         // "word width" (WCLK) timing is implied based on the DAC fs computed
         // at the end of the clock tree, and WCLK simply toggles every other sample, so there is no
@@ -431,14 +467,14 @@ impl Codec {
         // turn on headset detection
         self.w(0, &[0]); // select page 0
         // detection enabled, 64ms glitch reject, 8ms button glitch reject
-        self.w(67, &[0b1_00_010_01] );
+        self.w(67, &[0b1_00_010_01]);
 
         // use auto volume control -- DO WE WANT THIS???
         //self.w(116, &[0b1_1_01_0_001] );
         self.i2c.i2c_mutex_release();
     }
 
-    pub fn audio_loopback(&mut self, do_loop:bool) {
+    pub fn audio_loopback(&mut self, do_loop: bool) {
         self.i2c.i2c_mutex_acquire();
         self.w(0, &[1]); // select page 1
 
@@ -473,20 +509,27 @@ impl Codec {
         //self.w(35, &[0b01_0_1_01_1_0]);
 
         // internal volume control
-        self.w(36, &[
-            0b1_001_1110, // HPL channel control on, -15dB
-            0b1_001_1110, // HPR channel control on, -15dB
-            0b1_000_1100, // SPK control on, -6dB
-            ]);
+        self.w(
+            36,
+            &[
+                0b1_001_1110, // HPL channel control on, -15dB
+                0b1_001_1110, // HPR channel control on, -15dB
+                0b1_000_1100, // SPK control on, -6dB
+            ],
+        );
 
         // driver PGA control
-        self.w(40, &[
-            0b0_0011_111, // HPL driver PGA = 3dB, not muted, all gains applied
-            0b0_0011_111, // HPR driver PGA = 3dB, not muted, all gains applied
-            0b000_01_1_0_1, // SPK gain = 12 dB, driver not muted, all gains applied
-            ]);
+        self.w(
+            40,
+            &[
+                0b0_0011_111,   // HPL driver PGA = 3dB, not muted, all gains applied
+                0b0_0011_111,   // HPR driver PGA = 3dB, not muted, all gains applied
+                0b000_01_1_0_1, // SPK gain = 12 dB, driver not muted, all gains applied
+            ],
+        );
 
-            // HP driver control -- 16us short circuit debounce, best DAC performance, HPL/HPR as headphone drivers
+        // HP driver control -- 16us short circuit debounce, best DAC performance, HPL/HPR as headphone
+        // drivers
         self.w(44, &[0b010_11_0_0_0]);
 
         // MICBIAS control -- micbias always on, set to 2.5V
@@ -520,15 +563,18 @@ impl Codec {
         // ADC digital volume control coarse adjust
         self.w(83, &[0b0]); // +0.0 dB
 
-        self.w(86, &[
-            0b1_011_0000, // AGC enabled, target level = -12dB
-            0b00_10101_0, // hysteresis 1dB, noise threshold = -((value-1)*2 + 30): 21 => -70dB
-            100, // max gain = code/2 dB
-            0b_00010_000, // attack time = 0b_acode_mul = (acode*32*mul)/Fs
-            0b_01101_000, // decay time  = 0b_dcode_mul = (dcode*32*mul)/Fs
-            0x01, // noise debounce time = code*4 / fs
-            0x01, // signal debounce time = code*4 / fs
-            ]);
+        self.w(
+            86,
+            &[
+                0b1_011_0000, // AGC enabled, target level = -12dB
+                0b00_10101_0, // hysteresis 1dB, noise threshold = -((value-1)*2 + 30): 21 => -70dB
+                100,          // max gain = code/2 dB
+                0b_00010_000, // attack time = 0b_acode_mul = (acode*32*mul)/Fs
+                0b_01101_000, // decay time  = 0b_dcode_mul = (dcode*32*mul)/Fs
+                0x01,         // noise debounce time = code*4 / fs
+                0x01,         // signal debounce time = code*4 / fs
+            ],
+        );
         self.i2c.i2c_mutex_release();
     }
 
@@ -539,8 +585,10 @@ impl Codec {
         self.csr.wfo(utra::audio::TX_CTL_RESET, 1);
         */
         let volatile_audio = self.fifo.as_mut_ptr() as *mut u32;
-        for _ in 0..FIFO_DEPTH*2 {
-            unsafe { (volatile_audio).write(ZERO_PCM as u32 | (ZERO_PCM as u32) << 16); }  // prefill TX fifo with zero's
+        for _ in 0..FIFO_DEPTH * 2 {
+            unsafe {
+                (volatile_audio).write(ZERO_PCM as u32 | (ZERO_PCM as u32) << 16);
+            } // prefill TX fifo with zero's
         }
 
         // enable interrupts on the RX_READY
@@ -561,8 +609,13 @@ impl Codec {
         self.csr.wfo(utra::audio::RX_CTL_ENABLE, 0);
         self.csr.wfo(utra::audio::TX_CTL_ENABLE, 0);
 
-        log::info!("playback stopped. frames dropped: p{} r{} / errors: tx{} rx{}",
-            self.play_frames_dropped, self.rec_frames_dropped, self.tx_stat_errors, self.rx_stat_errors);
+        log::info!(
+            "playback stopped. frames dropped: p{} r{} / errors: tx{} rx{}",
+            self.play_frames_dropped,
+            self.rec_frames_dropped,
+            self.tx_stat_errors,
+            self.rx_stat_errors
+        );
         self.play_frames_dropped = 0;
         self.rec_frames_dropped = 0;
         self.tx_stat_errors = 0;
@@ -577,21 +630,37 @@ impl Codec {
     }
 
     /// this is a testing-only function which does a double-buffered audio loopback
-    pub fn audio_loopback_poll(&mut self, buf_a: &mut [u32; FIFO_DEPTH], buf_b: &mut [u32; FIFO_DEPTH], toggle: bool) -> bool {
+    pub fn audio_loopback_poll(
+        &mut self,
+        buf_a: &mut [u32; FIFO_DEPTH],
+        buf_b: &mut [u32; FIFO_DEPTH],
+        toggle: bool,
+    ) -> bool {
         let volatile_audio = self.fifo.as_mut_ptr() as *mut u32;
 
-        if (self.csr.rf(utra::audio::TX_STAT_FREE) == 1) && (self.csr.rf(utra::audio::RX_STAT_DATAREADY) == 1) {
+        if (self.csr.rf(utra::audio::TX_STAT_FREE) == 1) && (self.csr.rf(utra::audio::RX_STAT_DATAREADY) == 1)
+        {
             for i in 0..FIFO_DEPTH {
                 if toggle {
-                    unsafe{ buf_a[i] = *volatile_audio; }
-                    unsafe { *volatile_audio = buf_b[i]; }
+                    unsafe {
+                        buf_a[i] = *volatile_audio;
+                    }
+                    unsafe {
+                        *volatile_audio = buf_b[i];
+                    }
                 } else {
-                    unsafe{ buf_b[i] = *volatile_audio; }
-                    unsafe { *volatile_audio = buf_a[i]; }
+                    unsafe {
+                        buf_b[i] = *volatile_audio;
+                    }
+                    unsafe {
+                        *volatile_audio = buf_a[i];
+                    }
                 }
             }
             // wait for the done flags to clear; with an interrupt-driven system, this isn't necessary
-            while (self.csr.rf(utra::audio::TX_STAT_FREE) == 1) & (self.csr.rf(utra::audio::RX_STAT_DATAREADY) == 1) {}
+            while (self.csr.rf(utra::audio::TX_STAT_FREE) == 1)
+                & (self.csr.rf(utra::audio::RX_STAT_DATAREADY) == 1)
+            {}
             // indicate we had an audio event
             true
         } else {

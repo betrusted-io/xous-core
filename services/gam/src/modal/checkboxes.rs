@@ -1,17 +1,16 @@
-use crate::*;
+use core::fmt::Write;
 
 use graphics_server::api::*;
-
+use locales::t;
+#[cfg(feature = "tts")]
+use tts_frontend::TtsFrontend;
 use xous_ipc::Buffer;
 
-use core::fmt::Write;
-use locales::t;
-#[cfg(feature="tts")]
-use tts_frontend::TtsFrontend;
+use crate::*;
 
 #[derive(Debug)]
 pub struct CheckBoxes {
-    pub items: Vec::<ItemName>,
+    pub items: Vec<ItemName>,
     pub action_conn: xous::CID,
     pub action_opcode: u32,
     pub action_payload: CheckBoxPayload,
@@ -22,7 +21,7 @@ pub struct CheckBoxes {
 }
 impl CheckBoxes {
     pub fn new(action_conn: xous::CID, action_opcode: u32) -> Self {
-        #[cfg(feature="tts")]
+        #[cfg(feature = "tts")]
         let tts = TtsFrontend::new(&xous_names::XousNames::new().unwrap()).unwrap();
         CheckBoxes {
             items: Vec::new(),
@@ -31,41 +30,36 @@ impl CheckBoxes {
             action_payload: CheckBoxPayload::new(),
             select_index: 0,
             gam: crate::Gam::new(&xous_names::XousNames::new().unwrap()).unwrap(),
-            #[cfg(feature="tts")]
+            #[cfg(feature = "tts")]
             tts,
         }
     }
-    pub fn add_item(&mut self, new_item: ItemName) {
-        self.items.push(new_item);
-    }
-    pub fn clear_items(&mut self) {
-        self.items.clear();
-    }
+
+    pub fn add_item(&mut self, new_item: ItemName) { self.items.push(new_item); }
+
+    pub fn clear_items(&mut self) { self.items.clear(); }
 }
 impl ActionApi for CheckBoxes {
-    fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}
+    fn set_action_opcode(&mut self, op: u32) { self.action_opcode = op }
+
     fn height(&self, glyph_height: i16, margin: i16, _modal: &Modal) -> i16 {
         // account for hard line-breaks in items
-        let line_break_count = self
-            .items
-            .iter()
-            .fold(0, |acc, item| acc + item.as_str().chars().filter(|c| *c == '\n').count());
+        let line_break_count =
+            self.items.iter().fold(0, |acc, item| acc + item.as_str().chars().filter(|c| *c == '\n').count());
         // total items + line-breaks +1 blank line +1 "Okay" message
         let line_count: i16 = (self.items.len() + line_break_count + 1 + 1) as i16;
 
         line_count * glyph_height + 2 * margin
     }
+
     fn redraw(&self, at_height: i16, modal: &Modal) {
         // prime a textview with the correct general style parameters
-        let mut tv = TextView::new(
-            modal.canvas,
-            TextBounds::BoundingBox(Rectangle::new_coords(0, 0, 1, 1))
-        );
+        let mut tv = TextView::new(modal.canvas, TextBounds::BoundingBox(Rectangle::new_coords(0, 0, 1, 1)));
         tv.ellipsis = true;
         tv.style = modal.style;
         tv.invert = false;
-        tv.draw_border= false;
-        tv.margin = Point::new(0, 0,);
+        tv.draw_border = false;
+        tv.margin = Point::new(0, 0);
         tv.insertion = None;
 
         let cursor_x = modal.margin;
@@ -80,14 +74,10 @@ impl ActionApi for CheckBoxes {
         let mut do_okay = true;
         for item in self.items.iter() {
             // account for hard line-breaks
-            let item_line_count: i16 = 1 + item
-                .as_str()
-                .chars()
-                .filter(|c| *c == '\n')
-                .count() as i16;
+            let item_line_count: i16 = 1 + item.as_str().chars().filter(|c| *c == '\n').count() as i16;
             cur_line_height = modal.line_height * item_line_count + item_line_count; // extra pixel between lines
             if cur_line == self.select_index {
-                #[cfg(feature="tts")]
+                #[cfg(feature = "tts")]
                 {
                     self.tts.tts_simple(item.as_str()).unwrap();
                 }
@@ -132,11 +122,12 @@ impl ActionApi for CheckBoxes {
             tv.text.clear();
             tv.bounds_computed = None;
             tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
-                Point::new(cursor_x, cur_y - emoji_slop), Point::new(cursor_x + 36, cur_y - emoji_slop + 36)
+                Point::new(cursor_x, cur_y - emoji_slop),
+                Point::new(cursor_x + 36, cur_y - emoji_slop + 36),
             ));
             write!(tv, "\u{25B6}").unwrap(); // right arrow emoji. use unicode numbers, because text editors do funny shit with emojis
             modal.gam.post_textview(&mut tv).expect("couldn't post tv");
-            #[cfg(feature="tts")]
+            #[cfg(feature = "tts")]
             {
                 self.tts.tts_blocking(t!("checkbox.select_and_close_tts", locales::LANG)).unwrap();
                 for item in self.action_payload.payload().iter() {
@@ -150,31 +141,40 @@ impl ActionApi for CheckBoxes {
         tv.text.clear();
         tv.bounds_computed = None;
         tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
-            Point::new(text_x, cur_y), Point::new(modal.canvas_width - modal.margin, cur_y + modal.line_height)
+            Point::new(text_x, cur_y),
+            Point::new(modal.canvas_width - modal.margin, cur_y + modal.line_height),
         ));
         write!(tv, "{}", t!("radio.select_and_close", locales::LANG)).unwrap();
         modal.gam.post_textview(&mut tv).expect("couldn't post tv");
 
         // divider lines
-        modal.gam.draw_line(modal.canvas, Line::new_with_style(
-            Point::new(modal.margin, at_height),
-            Point::new(modal.canvas_width - modal.margin, at_height),
-            DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1))
-            ).expect("couldn't draw entry line");
+        modal
+            .gam
+            .draw_line(
+                modal.canvas,
+                Line::new_with_style(
+                    Point::new(modal.margin, at_height),
+                    Point::new(modal.canvas_width - modal.margin, at_height),
+                    DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1),
+                ),
+            )
+            .expect("couldn't draw entry line");
     }
+
     fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
         log::trace!("key_action: {}", k);
         match k {
             '←' | '→' => {
                 // ignore these navigation keys
-            },
+            }
             '↑' => {
                 if self.select_index > 0 {
                     self.select_index -= 1;
                 }
             }
             '↓' => {
-                if self.select_index < self.items.len() as i16 + 1 { // +1 is the "OK" button
+                if self.select_index < self.items.len() as i16 + 1 {
+                    // +1 is the "OK" button
                     self.select_index += 1;
                 }
             }
@@ -183,30 +183,37 @@ impl ActionApi for CheckBoxes {
                     let item_name = self.items[self.select_index as usize].as_str();
                     if self.action_payload.contains(item_name) {
                         self.action_payload.remove(item_name);
-                        #[cfg(feature="tts")]
+                        #[cfg(feature = "tts")]
                         {
                             self.tts.tts_blocking(t!("checkbox.uncheck", locales::LANG)).unwrap();
                             self.tts.tts_blocking(item_name).unwrap();
                         }
                     } else {
                         if !self.action_payload.add(item_name) {
-                            log::warn!("Limit of {} items that can be checked hit, consider increasing MAX_ITEMS in gam/src/modal.rs", MAX_ITEMS);
+                            log::warn!(
+                                "Limit of {} items that can be checked hit, consider increasing MAX_ITEMS in gam/src/modal.rs",
+                                MAX_ITEMS
+                            );
                             log::warn!("The attempted item '{}' was not selected.", item_name);
                         } else {
-                            #[cfg(feature="tts")]
+                            #[cfg(feature = "tts")]
                             {
                                 self.tts.tts_blocking(t!("checkbox.check", locales::LANG)).unwrap();
                                 self.tts.tts_blocking(item_name).unwrap();
                             }
                         }
                     }
-                } else {  // the OK button select
+                } else {
+                    // the OK button select
                     // relinquish focus before returning the result
                     self.gam.relinquish_focus().unwrap();
                     xous::yield_slice();
 
-                    let buf = Buffer::into_buf(self.action_payload).expect("couldn't convert message to payload");
-                    buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
+                    let buf =
+                        Buffer::into_buf(self.action_payload).expect("couldn't convert message to payload");
+                    buf.send(self.action_conn, self.action_opcode)
+                        .map(|_| ())
+                        .expect("couldn't send action message");
                     return None;
                 }
             }

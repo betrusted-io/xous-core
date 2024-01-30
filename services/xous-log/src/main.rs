@@ -7,38 +7,33 @@ use xous_api_log::api;
 mod platform;
 
 use core::fmt::Write;
-use num_traits::FromPrimitive;
 
+use num_traits::FromPrimitive;
 use platform::implementation;
 
 /// A page-aligned stack allocation for connection requests (used by USB resolver)
-#[cfg(feature="usb")]
+#[cfg(feature = "usb")]
 #[repr(C, align(4096))]
 struct ConnectRequest {
     name: [u8; 64],
     len: u32,
     _padding: [u8; 4096 - 4 - 64],
 }
-#[cfg(feature="usb")]
+#[cfg(feature = "usb")]
 impl Default for ConnectRequest {
-    fn default() -> Self {
-        ConnectRequest { name: [0u8; 64], len: 0, _padding: [0u8; 4096 - 4 - 64] }
-    }
+    fn default() -> Self { ConnectRequest { name: [0u8; 64], len: 0, _padding: [0u8; 4096 - 4 - 64] } }
 }
 
-#[cfg(feature="usb")]
+#[cfg(feature = "usb")]
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct UsbString {
-    pub s: xous_ipc::String::<4000>,
+    pub s: xous_ipc::String<4000>,
     pub sent: Option<u32>,
 }
 
-#[cfg(feature="usb")]
+#[cfg(feature = "usb")]
 fn usb_send_str(conn: xous::CID, s: &str) {
-    let serializer = UsbString {
-        s: xous_ipc::String::<4000>::from_str(s),
-        sent: None
-    };
+    let serializer = UsbString { s: xous_ipc::String::<4000>::from_str(s), sent: None };
     let buf = xous_ipc::Buffer::into_buf(serializer).expect("usb error");
     // failures to send are silent & ignored; also, this API doesn't block.
     buf.send(conn, 8192 /* LogString */).expect("usb error");
@@ -49,10 +44,10 @@ fn reader_thread(arg: usize) {
     writeln!(output, "LOG: Xous Logging Server starting up...").ok();
     let server_addr = xous::create_server_with_address(b"xous-log-server ").expect("create server");
     writeln!(output, "LOG: Server listening on address {:?}", server_addr).ok();
-    #[cfg(feature="usb")]
+    #[cfg(feature = "usb")]
     let mut usb_serial: Option<xous::CID> = None;
     // use a stack-allocated string to ensure no heap thrashing results from String manipulations
-    #[cfg(feature="usb")]
+    #[cfg(feature = "usb")]
     let mut usb_str = xous_ipc::String::<4000>::new();
 
     println!("LOG: my PID is {}", xous::process::id());
@@ -118,12 +113,15 @@ fn reader_thread(arg: usize) {
                             write!(output, ":{}", line.get()).ok();
                         }
                         writeln!(output, ")").ok();
-                        #[cfg(feature="usb")]
+                        #[cfg(feature = "usb")]
                         if let Some(conn) = usb_serial {
-                            if usb_str.len() > 0 { // test length so we aren't constantly copying 4096 bytes of 0's clearing an already cleared structure.
+                            if usb_str.len() > 0 {
+                                // test length so we aren't constantly copying 4096 bytes of 0's clearing an
+                                // already cleared structure.
                                 usb_str.clear();
                             }
-                            // duplicate the above code because doing repeated calls to the USB stack is inefficient
+                            // duplicate the above code because doing repeated calls to the USB stack is
+                            // inefficient
                             write!(usb_str, "{}:", level).ok();
                             for c in module_slice {
                                 usb_str.push_byte(*c).ok();
@@ -165,14 +163,19 @@ fn reader_thread(arg: usize) {
                                 buffer_length,
                             )
                         };
-                        output.write_all(buffer).unwrap();
+                        for c in buffer {
+                            if *c == b'\n' {
+                                output.putc(b'\r');
+                            }
+                            output.putc(*c);
+                        }
                         // TODO: If the buffer is mutable, set `length` to 0.
 
-                        #[cfg(feature="usb")]
+                        #[cfg(feature = "usb")]
                         if let Some(conn) = usb_serial {
                             // safety: this routine will just blow up if you try to pass non utf-8 to it,
-                            // so it's not very safe. On the other hand, it's fast and shame on you for sending
-                            // non-utf8 to this API.
+                            // so it's not very safe. On the other hand, it's fast and shame on you for
+                            // sending non-utf8 to this API.
                             usb_send_str(conn, unsafe { std::str::from_utf8_unchecked(buffer) });
                         }
                     }
@@ -333,11 +336,8 @@ fn main() -> ! {
     let mut writer = output.get_writer();
     println!("LOG: my PID is {}", xous::process::id());
     println!("LOG: Creating the reader thread");
-    xous::create_thread_1(
-        reader_thread,
-        &mut writer as *mut implementation::OutputWriter as usize,
-    )
-    .expect("create reader thread");
+    xous::create_thread_1(reader_thread, &mut writer as *mut implementation::OutputWriter as usize)
+        .expect("create reader thread");
     println!("LOG: Running the output");
     output.run();
     panic!("LOG: Exited");

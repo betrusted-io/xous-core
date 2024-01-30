@@ -1,10 +1,12 @@
-use super::*;
-//use crate::{ChatOp, Dialogue, Event, Post, CHAT_SERVER_NAME};
-use crate::icontray::Icontray;
+use std::cmp::min;
+use std::convert::TryFrom;
+use std::fmt::Write as TextWrite;
+use std::io::{Error, ErrorKind, Read, Write};
+
 use dialogue::{post::Post, Dialogue};
 use gam::{menu_matic, MenuMatic, UxRegistration};
 use graphics_server::api::GlyphStyle;
-use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView, Line};
+use graphics_server::{DrawStyle, Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView};
 use locales::t;
 use modals::Modals;
 use rkyv::de::deserializers::AllocDeserializer;
@@ -12,14 +14,12 @@ use rkyv::ser::serializers::WriteSerializer;
 use rkyv::ser::Serializer;
 use rkyv::Deserialize;
 use ticktimer_server::Ticktimer;
-use std::cmp::min;
-use std::convert::TryFrom;
-use std::fmt::Write as TextWrite;
-
-use std::io::{Error, ErrorKind, Read, Write};
 use xous::{MessageEnvelope, CID};
-
 use xous_names::XousNames;
+
+use super::*;
+//use crate::{ChatOp, Dialogue, Event, Post, CHAT_SERVER_NAME};
+use crate::icontray::Icontray;
 
 pub const BUSY_ANIMATION_RATE_MS: usize = 200;
 
@@ -107,10 +107,9 @@ impl Ui {
             .register_ux(UxRegistration {
                 app_name: xous_ipc::String::<128>::from_str(app_name),
                 ux_type: gam::UxType::Chat,
-                predictor: Some(xous_ipc::String::<64>::from_str(
-                    crate::icontray::SERVER_NAME_ICONTRAY,
-                )),
-                listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!
+                predictor: Some(xous_ipc::String::<64>::from_str(crate::icontray::SERVER_NAME_ICONTRAY)),
+                listener: sid.to_array(), /* note disclosure of our SID to the GAM -- the secret is now
+                                           * shared with the GAM! */
                 redraw_id: ChatOp::GamRedraw as u32,
                 gotinput_id: Some(ChatOp::GamLine as u32),
                 audioframe_id: None,
@@ -121,32 +120,24 @@ impl Ui {
             .unwrap();
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
-        let canvas = gam
-            .request_content_canvas(token)
-            .expect("couldn't get content canvas");
-        let screensize = gam
-            .get_canvas_bounds(canvas)
-            .expect("couldn't get dimensions of content canvas");
+        let canvas = gam.request_content_canvas(token).expect("couldn't get content canvas");
+        let screensize = gam.get_canvas_bounds(canvas).expect("couldn't get dimensions of content canvas");
         // TODO this is a stub - implement F1-4 actions and autocompletes
         let _icontray = Icontray::new(Some(xous::connect(sid).unwrap()), ["F1", "F2", "F3", "F4"]);
-        let menu_mgr = menu_matic(
-            Vec::<MenuItem>::new(),
-            app_menu,
-            Some(xous::create_server().unwrap()),
-        )
-        .expect("couldn't create MenuMatic manager");
+        let menu_mgr = menu_matic(Vec::<MenuItem>::new(), app_menu, Some(xous::create_server().unwrap()))
+            .expect("couldn't create MenuMatic manager");
         let pddb = pddb::Pddb::new();
         pddb.try_mount();
 
         // setup the initial status bar contents
         let margin = Point::new(4, 4);
-        let status_height = gam.glyph_height_hint(
-            GlyphStyle::Regular).unwrap() as u16;
-        let mut status_tv = TextView::new(canvas,
+        let status_height = gam.glyph_height_hint(GlyphStyle::Regular).unwrap() as u16;
+        let mut status_tv = TextView::new(
+            canvas,
             TextBounds::BoundingBox(Rectangle::new(
                 Point::new(0, 0),
                 Point::new(screensize.x, status_height as _),
-            ))
+            )),
         );
         status_tv.style = GlyphStyle::Regular;
         status_tv.margin = margin;
@@ -170,7 +161,7 @@ impl Ui {
         Ui {
             input: None,
             msg: None,
-            pddb: pddb,
+            pddb,
             pddb_dict: None,
             pddb_key: None,
             dialogue: None,
@@ -188,21 +179,17 @@ impl Ui {
             vp: bubble_properties,
             menu_mode: true,
             app_menu: app_menu.to_owned(),
-            menu_mgr: menu_mgr,
-            token: token,
+            menu_mgr,
+            token,
             status_idle_text: t!("chat.status.initial", locales::LANG).to_string(),
         }
     }
 
     /// Read the current Dialogue from pddb
-    ///
     pub fn dialogue_read(&mut self) -> Result<(), Error> {
         match (&self.pddb_dict, &self.pddb_key) {
             (Some(dict), Some(key)) => {
-                match self
-                    .pddb
-                    .get(&dict, &key, None, true, false, None, None::<fn()>)
-                {
+                match self.pddb.get(&dict, &key, None, true, false, None, None::<fn()>) {
                     Ok(mut pddb_key) => {
                         let mut bytes = [0u8; dialogue::MAX_BYTES + 2];
                         match pddb_key.read(&mut bytes) {
@@ -211,10 +198,8 @@ impl Ui {
                                 let pos: u16 = u16::from_be_bytes([bytes[0], bytes[1]]);
                                 let pos: usize = pos.into();
                                 // deserialize the Dialogue
-                                let archive =
-                                    unsafe { rkyv::archived_value::<Dialogue>(&bytes, pos) };
-                                self.dialogue = match archive.deserialize(&mut AllocDeserializer {})
-                                {
+                                let archive = unsafe { rkyv::archived_value::<Dialogue>(&bytes, pos) };
+                                self.dialogue = match archive.deserialize(&mut AllocDeserializer {}) {
                                     Ok(dialogue) => {
                                         // show most recent posts onscreen
                                         self.layout_selected = dialogue.post_last();
@@ -223,12 +208,7 @@ impl Ui {
                                         Some(dialogue)
                                     }
                                     Err(e) => {
-                                        log::warn!(
-                                            "failed to deserialize Dialogue {}:{} {}",
-                                            dict,
-                                            key,
-                                            e
-                                        );
+                                        log::warn!("failed to deserialize Dialogue {}:{} {}", dict, key, e);
                                         None
                                     }
                                 };
@@ -252,15 +232,11 @@ impl Ui {
     }
 
     /// Save the current Dialogue to pddb
-    ///
     pub fn dialogue_save(&self) -> Result<(), Error> {
         match (&self.dialogue, &self.pddb_dict, &self.pddb_key) {
             (Some(dialogue), Some(dict), Some(key)) => {
                 let hint = Some(dialogue::MAX_BYTES + 2);
-                match self
-                    .pddb
-                    .get(&dict, &key, None, true, true, hint, None::<fn()>)
-                {
+                match self.pddb.get(&dict, &key, None, true, true, hint, None::<fn()>) {
                     Ok(mut pddb_key) => {
                         let mut buf = Vec::<u8>::new();
                         // reserve 2 bytes to hold a u16 (see below)
@@ -305,7 +281,6 @@ impl Ui {
     ///
     /// * `pddb_dict` - the pddb dict holding all Dialogues for this Chat App
     /// * `pddb_key` - the pddb key holding a Dialogue
-    ///
     pub fn dialogue_set(&mut self, pddb_dict: &str, pddb_key: Option<&str>) {
         self.pddb_dict = Some(pddb_dict.to_string());
         self.pddb_key = pddb_key.map(|key| key.to_string());
@@ -337,7 +312,6 @@ impl Ui {
     /// typically called in offline mode
     ///
     /// TODO move non-dialogue keys elsewhere
-    ///
     pub fn dialogue_modal(&mut self) {
         if let Some(dict) = &self.pddb_dict {
             match self.pddb.list_keys(&dict, None) {
@@ -346,10 +320,8 @@ impl Ui {
                         self.modals
                             .add_list(keys.iter().map(|s| s.as_str()).collect())
                             .expect("failed modal add_list");
-                        self.pddb_key = self
-                            .modals
-                            .get_radiobutton(t!("chat.dialogue_title", locales::LANG))
-                            .ok();
+                        self.pddb_key =
+                            self.modals.get_radiobutton(t!("chat.dialogue_title", locales::LANG)).ok();
                         log::info!("selected dialogue {}:{:?}", dict, self.pddb_key);
                     } else {
                         self.modals
@@ -363,7 +335,6 @@ impl Ui {
     }
 
     /// Show some user help
-    ///
     pub fn help(&self) {
         self.modals
             .show_notification(t!("chat.help.navigation", locales::LANG), None)
@@ -375,10 +346,7 @@ impl Ui {
     /// # Arguments
     ///
     /// * `item` - an item action not handled by the Chat UI
-    ///
-    pub fn menu_add(&self, item: MenuItem) {
-        self.menu_mgr.add_item(item);
-    }
+    pub fn menu_add(&self, item: MenuItem) { self.menu_mgr.add_item(item); }
 
     /// Add a new Post to the current Dialogue
     ///
@@ -392,7 +360,6 @@ impl Ui {
     /// * `timestamp` - the timestamp of the Post
     /// * `text` - the text content of the Post
     /// * `attach_url` - a url of an attachment (image for example)
-    ///
     pub fn post_add(
         &mut self,
         dialogue_id: &str,
@@ -408,7 +375,11 @@ impl Ui {
                         .post_add(author, timestamp, text, attach_url, Some((&self.vp, &self.gam)))
                         .unwrap();
                 } else {
-                    log::warn!("dropping Post as dialogue_id does not match pddb_key: '{}' vs '{}'", pddb_key, dialogue_id);
+                    log::warn!(
+                        "dropping Post as dialogue_id does not match pddb_key: '{}' vs '{}'",
+                        pddb_key,
+                        dialogue_id
+                    );
                 }
             }
             (None, _) => log::warn!("no pddb_key set to match dialogue_id"),
@@ -420,7 +391,6 @@ impl Ui {
     /// Delete a Post from the current Dialogue
     ///
     /// TODO: implement post_delete()
-    ///
 
     pub fn post_del(&self, _index: usize) -> Result<(), Error> {
         log::warn!("not implemented");
@@ -433,7 +403,6 @@ impl Ui {
     ///
     /// * `timestamp` - the Post timestamp criteria
     /// * `author` - the Post Author criteria
-    ///
     pub fn post_find(&self, author: &str, timestamp: u64) -> Option<usize> {
         match &self.dialogue {
             Some(dialogue) => dialogue.post_find(author, timestamp),
@@ -446,7 +415,6 @@ impl Ui {
     /// # Arguments
     ///
     /// * `index` - index of the Post to retrieve
-    ///
     pub fn post_get(&self, index: usize) -> Option<&Post> {
         match &self.dialogue {
             Some(dialogue) => dialogue.post_get(index),
@@ -457,7 +425,6 @@ impl Ui {
     /// Set various status flags on a Post in the current Dialogue
     ///
     /// TODO: not implemented
-    ///
     pub fn post_flag(&self, _key: u32) -> Result<(), Error> {
         log::warn!("not implemented");
         Err(Error::new(ErrorKind::Other, "not implemented"))
@@ -500,13 +467,9 @@ impl Ui {
         }
     }
 
-    pub fn get_menu_mode(&self) -> bool {
-        self.menu_mode
-    }
+    pub fn get_menu_mode(&self) -> bool { self.menu_mode }
 
-    pub fn set_menu_mode(&mut self, menu_mode: bool) {
-        self.menu_mode = menu_mode;
-    }
+    pub fn set_menu_mode(&mut self, menu_mode: bool) { self.menu_mode = menu_mode; }
 
     /// Send a xous scalar message with an Event to the Chat App cid/opcode
     ///
@@ -515,7 +478,6 @@ impl Ui {
     /// * `event` - the type of event to send
     ///
     /// Error when `app_cid` == None or `opcode_event` == None
-    ///
     pub fn event(&self, event: Event) {
         log::info!("Event {:?}", event);
         match (self.app_cid, self.opcode_event) {
@@ -531,7 +493,6 @@ impl Ui {
     }
 
     /// Clear the screen area, not including the status bar
-    ///
     fn clear_area(&self) {
         self.gam
             .draw_rectangle(
@@ -539,27 +500,19 @@ impl Ui {
                 Rectangle::new_with_style(
                     Point::new(0, self.vp.status_height as i16),
                     self.vp.total_screensize,
-                    DrawStyle {
-                        fill_color: Some(PixelColor::Light),
-                        stroke_color: None,
-                        stroke_width: 0,
-                    },
+                    DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 },
                 ),
             )
             .expect("can't clear canvas area");
     }
 
     /// Show the App Menu (← key)
-    ///
     pub(crate) fn raise_app_menu(&mut self) {
-        self.gam
-            .raise_menu(&self.app_menu)
-            .expect("couldn't raise our submenu");
+        self.gam.raise_menu(&self.app_menu).expect("couldn't raise our submenu");
         log::info!("raised app menu");
     }
 
     /// Show the Msg Menu (→ key)
-    ///
     pub(crate) fn raise_msg_menu(&mut self) {
         log::warn!("msg menu not implemented - pull-requests welcome");
     }
@@ -569,7 +522,6 @@ impl Ui {
     /// Up to three attempts are made to layout the Posts:
     /// * ensuring the selected post is fully visible, and
     /// * best use of the screen is achieved
-    ///
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
         if self.dialogue.is_some() {
             self.layout().expect("layout failed to execute");
@@ -603,19 +555,16 @@ impl Ui {
     }
 
     /// Returns `true` if the status bar is currently set for the busy animation
-    pub(crate) fn is_busy(&self) -> bool {
-        self.status_tv.busy_animation_state.is_some()
-    }
+    pub(crate) fn is_busy(&self) -> bool { self.status_tv.busy_animation_state.is_some() }
 
     /// Set the status bar text
     pub(crate) fn set_status_text(&mut self, msg: &str) {
         self.status_tv.clear_str();
         write!(self.status_tv, "{}", msg).ok();
-        xous::send_message(self.self_cid,
-            xous::Message::new_scalar(
-                ChatOp::UpdateBusy as usize, 0, 0, 0, 0)
-        ).ok();
+        xous::send_message(self.self_cid, xous::Message::new_scalar(ChatOp::UpdateBusy as usize, 0, 0, 0, 0))
+            .ok();
     }
+
     /// Sets the status bar to animate the busy animation
     pub(crate) fn set_busy_state(&mut self, run: bool) {
         if run {
@@ -625,18 +574,18 @@ impl Ui {
                 self.status_tv.clear_str();
                 write!(self.status_tv, "{}", self.status_idle_text).ok();
                 // force the update, to ensure the idle state text is actually rendered
-                xous::send_message(self.self_cid,
-                    xous::Message::new_scalar(
-                        ChatOp::UpdateBusyForced as usize, 0, 0, 0, 0)
-                ).ok();
+                xous::send_message(
+                    self.self_cid,
+                    xous::Message::new_scalar(ChatOp::UpdateBusyForced as usize, 0, 0, 0, 0),
+                )
+                .ok();
             }
         }
     }
+
     /// Set the default idle text. Does *not* cause a redraw. If you need
     /// an instant re-draw, call `set_status_text()`
-    pub(crate) fn set_status_idle_text(&mut self, msg: &str) {
-        self.status_idle_text = msg.to_owned();
-    }
+    pub(crate) fn set_status_idle_text(&mut self, msg: &str) { self.status_idle_text = msg.to_owned(); }
 
     /// Layout the post bubbles on the screen.
     ///
@@ -706,14 +655,20 @@ impl Ui {
                         if self.gam.bounds_compute_textview(&mut layout_bubble).is_ok() {
                             post.bounding_box = layout_bubble.bounds_computed;
                             match layout_bubble.bounds_computed {
-                                Some(r) => r.height() + self.vp.bubble_space as u32 + self.vp.bubble_margin.y as u32,
+                                Some(r) => {
+                                    r.height() + self.vp.bubble_space as u32 + self.vp.bubble_margin.y as u32
+                                }
                                 None => {
-                                    log::warn!("Unexpected null bounds in computing textview heights, layout will be incorrect.");
+                                    log::warn!(
+                                        "Unexpected null bounds in computing textview heights, layout will be incorrect."
+                                    );
                                     0
                                 }
                             }
                         } else {
-                            log::warn!("Unexpected error in computing textview heights, layout will be incorrect.");
+                            log::warn!(
+                                "Unexpected error in computing textview heights, layout will be incorrect."
+                            );
                             0
                         }
                     };
@@ -723,7 +678,7 @@ impl Ui {
                         } else {
                             self.layout_range = (starting_at - i..=starting_at).rev().collect();
                         }
-                        break
+                        break;
                     }
                     total_height += next_height;
                 }
@@ -743,23 +698,26 @@ impl Ui {
                     }
                 }
             }
-            assert!(dialogue.posts_as_slice().len() == 0 || self.layout_range.len() > 0, "Layout range should be set at this point.");
+            assert!(
+                dialogue.posts_as_slice().len() == 0 || self.layout_range.len() > 0,
+                "Layout range should be set at this point."
+            );
 
             // 3. clear the entire area, and re-draw the status bar
             self.gam
-            .draw_rectangle(
-                self.vp.canvas,
-                Rectangle::new_with_style(
-                    Point::new(0, 0),
-                    self.vp.total_screensize,
-                    DrawStyle {
-                        fill_color: Some(PixelColor::Light),
-                        stroke_color: None,
-                        stroke_width: 0,
-                    },
-                ),
-            )
-            .expect("can't clear canvas area");
+                .draw_rectangle(
+                    self.vp.canvas,
+                    Rectangle::new_with_style(
+                        Point::new(0, 0),
+                        self.vp.total_screensize,
+                        DrawStyle {
+                            fill_color: Some(PixelColor::Light),
+                            stroke_color: None,
+                            stroke_width: 0,
+                        },
+                    ),
+                )
+                .expect("can't clear canvas area");
 
             // 4. draw the text bubbles, in the order computed in step 2.
             let mut y = if self.layout_topdown {
@@ -767,27 +725,29 @@ impl Ui {
             } else {
                 self.vp.status_height as i16 + self.vp.layout_screensize.y - self.vp.bubble_margin.y
             };
-            log::debug!("Laying out with selected {:?} in range {:?}; topdown: {:?}", self.layout_selected, self.layout_range, self.layout_topdown);
+            log::debug!(
+                "Laying out with selected {:?} in range {:?}; topdown: {:?}",
+                self.layout_selected,
+                self.layout_range,
+                self.layout_topdown
+            );
             for &post_index in &self.layout_range {
                 let post = match dialogue.post_get(post_index) {
                     Some(p) => p,
                     None => {
-                        log::warn!("Expected post at index {}, returned nothing. Range {:?}, posts {:?}",
-                            post_index, self.layout_range, dialogue.posts_as_slice()
+                        log::warn!(
+                            "Expected post at index {}, returned nothing. Range {:?}, posts {:?}",
+                            post_index,
+                            self.layout_range,
+                            dialogue.posts_as_slice()
                         );
                         continue;
                     }
                 };
-                let highlight = if let Some(selected) = self.layout_selected {
-                    selected == post_index
-                } else {
-                    false
-                };
-                let mut bubble_tv = bubble(
-                    &self.vp, self.layout_topdown, post, dialogue, highlight, y);
-                self.gam
-                    .post_textview(&mut bubble_tv)
-                    .expect("couldn't render bubble textview");
+                let highlight =
+                    if let Some(selected) = self.layout_selected { selected == post_index } else { false };
+                let mut bubble_tv = bubble(&self.vp, self.layout_topdown, post, dialogue, highlight, y);
+                self.gam.post_textview(&mut bubble_tv).expect("couldn't render bubble textview");
                 // double check the actual bounds against expected bounds
                 match bubble_tv.bounds_computed {
                     Some(actual_r) => {
@@ -807,8 +767,12 @@ impl Ui {
                         }
                         // sanity check the computations
                         if y > self.vp.layout_screensize.y + self.vp.status_height as i16
-                        || y < self.vp.status_height as i16 {
-                            log::error!("Computed range of elements sent to layout overflows at index {}", post_index);
+                            || y < self.vp.status_height as i16
+                        {
+                            log::error!(
+                                "Computed range of elements sent to layout overflows at index {}",
+                                post_index
+                            );
                             // stop laying out to avoid text artifacts
                             break;
                         }
@@ -820,21 +784,21 @@ impl Ui {
                         }
                     }
                     _ => {
-                        log::error!("No bounds computed for {}, this is a GAM or typesetter bug!", bubble_tv.to_str());
+                        log::error!(
+                            "No bounds computed for {}, this is a GAM or typesetter bug!",
+                            bubble_tv.to_str()
+                        );
                     }
                 }
             }
 
             // 5. draw status bar on top of any post that happens to flow over the top...
-            self.gam.post_textview(&mut self.status_tv)
-                .expect("couldn't render status bar");
+            self.gam.post_textview(&mut self.status_tv).expect("couldn't render status bar");
             let status_border = Line::new(
                 Point::new(0, self.vp.status_height as i16),
-                Point::new(self.vp.total_screensize.x, self.vp.status_height as i16)
+                Point::new(self.vp.total_screensize.x, self.vp.status_height as i16),
             );
-            self.gam.draw_line(self.vp.canvas,
-                status_border
-            ).expect("couldn't draw status lower border");
+            self.gam.draw_line(self.vp.canvas, status_border).expect("couldn't draw status lower border");
 
             Ok(())
         } else {

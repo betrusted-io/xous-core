@@ -36,19 +36,13 @@ impl Arguments {
     }
 
     fn as_result(&self) -> crate::Result {
-        crate::Result::from_args([
-            self.a0, self.a1, self.a2, self.a3, self.a4, self.a5, self.a6, self.a7,
-        ])
+        crate::Result::from_args([self.a0, self.a1, self.a2, self.a3, self.a4, self.a5, self.a6, self.a7])
     }
 
-    pub fn set_result(&mut self, res: &crate::Result) {
-        *self = Self::from_array(&res.to_args());
-    }
+    pub fn set_result(&mut self, res: &crate::Result) { *self = Self::from_array(&res.to_args()); }
 
     pub fn as_syscall(&self) -> core::result::Result<SysCall, crate::Error> {
-        SysCall::from_args(
-            self.a0, self.a1, self.a2, self.a3, self.a4, self.a5, self.a6, self.a7,
-        )
+        SysCall::from_args(self.a0, self.a1, self.a2, self.a3, self.a4, self.a5, self.a6, self.a7)
     }
 }
 

@@ -5,13 +5,14 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-use crate::{DynError, app_manifest::generate_app_menus};
+
+use crate::{app_manifest::generate_app_menus, DynError};
 
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum BuildStream {
     Debug,
-    Release
+    Release,
 }
 impl BuildStream {
     pub fn to_str(&self) -> &str {
@@ -22,7 +23,7 @@ impl BuildStream {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CrateSpec {
     /// name of the crate
     Local(String, bool),
@@ -30,8 +31,8 @@ pub enum CrateSpec {
     CratesIo(String, String, bool),
     /// a prebuilt package: (name of executable, URL for download)
     Prebuilt(String, String, bool),
-    /// a prebuilt binary, done using command line tools
-    BinaryFile(String, bool),
+    /// a prebuilt binary, done using command line tools: (Optional name, path)
+    BinaryFile(Option<String>, String, bool),
     /// an empty entry
     None,
 }
@@ -41,37 +42,37 @@ impl CrateSpec {
             CrateSpec::Local(_s, xip) => *xip,
             CrateSpec::CratesIo(_n, _v, xip) => *xip,
             CrateSpec::Prebuilt(_n, _u, xip) => *xip,
-            CrateSpec::BinaryFile(_path, xip) => *xip,
-            _ => false
+            CrateSpec::BinaryFile(_n, _path, xip) => *xip,
+            _ => false,
         }
     }
+
     pub fn set_xip(&mut self, xip: bool) {
         *self = match self {
+            //TODO: why do these to_strings need to be here?
             CrateSpec::Local(s, _xip) => CrateSpec::Local(s.to_string(), xip),
             CrateSpec::CratesIo(n, v, _xip) => CrateSpec::CratesIo(n.to_string(), v.to_string(), xip),
             CrateSpec::Prebuilt(n, u, _xip) => CrateSpec::Prebuilt(n.to_string(), u.to_string(), xip),
-            CrateSpec::BinaryFile(path, _xip) => CrateSpec::BinaryFile(path.to_string(), xip),
+            CrateSpec::BinaryFile(n, path, _xip) => {
+                CrateSpec::BinaryFile(n.as_ref().or(None).cloned(), path.to_string(), xip)
+            }
             CrateSpec::None => CrateSpec::None,
         }
     }
+
     pub fn name(&self) -> Option<String> {
         match self {
             CrateSpec::Local(s, _xip) => Some(s.to_string()),
             CrateSpec::CratesIo(n, _v, _xip) => Some(n.to_string()),
             CrateSpec::Prebuilt(n, _u, _xip) => Some(n.to_string()),
-            CrateSpec::BinaryFile(path, _xip) => Some(path.to_string()),
+            CrateSpec::BinaryFile(n, path, _xip) => {
+                if let Some(name) = n {
+                    Some(name.to_string())
+                } else {
+                    Some(path.to_string())
+                }
+            }
             _ => None,
-        }
-    }
-}
-impl Clone for CrateSpec {
-    fn clone(&self) -> CrateSpec {
-        match self {
-            CrateSpec::Local(s, xip) => CrateSpec::Local(s.to_string(), *xip),
-            CrateSpec::CratesIo(n, v, xip) => CrateSpec::CratesIo(n.to_string(), v.to_string(), *xip),
-            CrateSpec::Prebuilt(n, u, xip) => CrateSpec::Prebuilt(n.to_string(), u.to_string(), *xip),
-            CrateSpec::BinaryFile(path, xip) => CrateSpec::BinaryFile(path.to_string(), *xip),
-            CrateSpec::None => CrateSpec::None,
         }
     }
 }
@@ -80,26 +81,25 @@ impl From<&str> for CrateSpec {
         // remote crates are specified as "name@version", i.e. "xous-names@0.9.9"
         if spec.contains('@') {
             let (name, version) = spec.split_once('@').expect("couldn't parse crate specifier");
-            CrateSpec::CratesIo(
-                name.to_string(),
-                version.to_string(),
-                false
-            )
+            CrateSpec::CratesIo(name.to_string(), version.to_string(), false)
         // prebuilt crates are specified as "name#url"
         // i.e. "espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/"
         } else if spec.contains('#') {
             let (name, url) = spec.split_once('#').expect("couldn't parse crate specifier");
-            CrateSpec::Prebuilt(
-                name.to_string(),
-                url.to_string(),
-                false
-            )
+            CrateSpec::Prebuilt(name.to_string(), url.to_string(), false)
         // local files are specified as paths, which, at a minimum include one directory separator "/" or "\"
         // i.e. "./local_file"
         // Note that this is after a test for the '#' character, so that disambiguates URL slashes
-        // It does mean that files with a '#' character in them are mistaken for URL coded paths, and '@' as remote crates.
+        // It does mean that files with a '#' character in them are mistaken for URL coded paths, and '@' as
+        // remote crates.
         } else if spec.contains('/') || spec.contains('\\') {
-            CrateSpec::BinaryFile(spec.to_string(), false)
+            //optionally a BinaryFile can have a name associated with it as "name:path"
+            if spec.find(':').is_some() {
+                let (name, path) = spec.split_once(':').unwrap();
+                CrateSpec::BinaryFile(Some(name.to_string()), path.to_string(), false)
+            } else {
+                CrateSpec::BinaryFile(None, spec.to_string(), false)
+            }
         } else {
             CrateSpec::Local(spec.to_string(), false)
         }
@@ -108,19 +108,20 @@ impl From<&str> for CrateSpec {
 
 pub(crate) struct Builder {
     loader: CrateSpec,
-    loader_features: Vec::<String>,
+    loader_features: Vec<String>,
     loader_disable_defaults: bool,
     loader_key: String,
     kernel: CrateSpec,
-    kernel_features: Vec::<String>,
+    kernel_features: Vec<String>,
     kernel_disable_defaults: bool,
     kernel_key: String,
     /// crates that are installed in the xous.img, each one running in its own separate process space
-    services: Vec::<CrateSpec>,
-    /// Apps are different from services in that context menus are auto-generated for apps; furthermore, the apps must
-    /// exist in the app manifest JSON file. Aside from that, the Xous kernel treats apps and services identically.
-    apps: Vec::<CrateSpec>,
-    features: Vec::<String>,
+    services: Vec<CrateSpec>,
+    /// Apps are different from services in that context menus are auto-generated for apps; furthermore, the
+    /// apps must exist in the app manifest JSON file. Aside from that, the Xous kernel treats apps and
+    /// services identically.
+    apps: Vec<CrateSpec>,
+    features: Vec<String>,
     stream: BuildStream,
     min_ver: String,
     target: Option<String>,
@@ -156,9 +157,10 @@ impl Builder {
             locale_override: None,
             locale_stash: String::new(),
             dry_run: false,
-	    no_image: false,
+            no_image: false,
         }
     }
+
     /// Specify an alternate loader key, as a String that can encode a file name
     /// in the local directory, or a path + filename.
     #[allow(dead_code)]
@@ -166,6 +168,7 @@ impl Builder {
         self.loader_key = filename;
         self
     }
+
     /// Specify an alternate loader key, as a String that can encode a file name
     /// in the local directory, or a path + filename.
     #[allow(dead_code)]
@@ -173,30 +176,34 @@ impl Builder {
         self.kernel_key = filename;
         self
     }
+
     /// Set the build stream (debug or release)
     #[allow(dead_code)]
     pub fn stream<'a>(&'a mut self, stream: BuildStream) -> &'a mut Builder {
         self.stream = stream;
         self
     }
+
     /// Disable default features on the loader
     #[allow(dead_code)]
     pub fn loader_disable_defaults<'a>(&'a mut self) -> &'a mut Builder {
         self.loader_disable_defaults = true;
         self
     }
+
     /// Disable default features on the loader
     #[allow(dead_code)]
     pub fn kernel_disable_defaults<'a>(&'a mut self) -> &'a mut Builder {
         self.kernel_disable_defaults = true;
         self
     }
+
     /// Set a minimum xous version. This is the minimum Xous version necessary to read
     /// the PDDB that is generated by this build. The purpose of this is so that we can
     /// trim migration code out of the PDDB: when we have a breaking change to the PDDB,
     /// the PDDB contains code to detect the version change and migrate to the latest
     /// version. Eventually (on the order of many months or years), this code gets retired,
-    /// otherwise we accumulate rarely-used code ad nauseum.
+    /// otherwise we accumulate rarely-used code ad nauseam.
     #[allow(dead_code)]
     pub fn set_min_xous_ver<'a>(&'a mut self, min_ver_string: &str) -> &'a mut Builder {
         self.min_ver = min_ver_string.to_string();
@@ -218,6 +225,7 @@ impl Builder {
         self.run_svd2repl = false;
         self
     }
+
     /// Configure for renode targets
     pub fn target_renode<'a>(&'a mut self) -> &'a mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
@@ -228,6 +236,7 @@ impl Builder {
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), false);
         self
     }
+
     /// Configure for precursor targets. This is the default, but it's good practice
     /// to call it anyways just in case the defaults change. The `soc_version` should
     /// be just the gitrev of the soc version, not the entire feature name.
@@ -240,12 +249,13 @@ impl Builder {
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), false);
         self
     }
+
     pub fn target_precursor_no_image<'a>(&'a mut self, soc_version: &str) -> &'a mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.stream = BuildStream::Release;
         self.utra_target = format!("precursor-{}", soc_version).to_string();
         self.run_svd2repl = false;
-	self.no_image = true;
+        self.no_image = true;
         self
     }
 
@@ -270,6 +280,7 @@ impl Builder {
         self.kernel = CrateSpec::Local("xous-kernel".to_string(), false);
         self
     }
+
     pub fn target_cramium_soc<'a>(&'a mut self) -> &'a mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.stream = BuildStream::Release;
@@ -280,17 +291,37 @@ impl Builder {
         self
     }
 
-    /// Override the default kernel. For example, to use the kernel from crates.io, specify as "xous-kernel@0.9.9"
+    /// Override the default kernel. For example, to use the kernel from crates.io, specify as
+    /// "xous-kernel@0.9.9"
     #[allow(dead_code)]
     pub fn use_kernel<'a>(&'a mut self, spec: &str) -> &'a mut Builder {
         self.kernel = spec.into();
         self
     }
+
     /// Override the default loader
     #[allow(dead_code)]
     pub fn use_loader<'a>(&'a mut self, spec: &str) -> &'a mut Builder {
         self.loader = spec.into();
         self
+    }
+
+    /// Check if a file exists and is executable
+    pub fn executable_exists(&self, file: &str) -> bool {
+        if let Ok(_metadata) = std::fs::metadata(file) {
+            #[cfg(target_os = "windows")]
+            if file.to_lowercase().ends_with("exe") {
+                return true;
+            }
+            #[cfg(not(target_os = "windows"))]
+            if _metadata.is_file() {
+                use std::os::unix::fs::PermissionsExt;
+                if _metadata.permissions().mode() & 0o100 != 0 {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Add just one service
@@ -300,8 +331,9 @@ impl Builder {
         self.services.push(spec);
         self
     }
+
     /// Add a list of services
-    pub fn add_services<'a>(&'a mut self, service_list: &Vec::<String>) -> &'a mut Builder {
+    pub fn add_services<'a>(&'a mut self, service_list: &Vec<String>) -> &'a mut Builder {
         for service in service_list {
             self.services.push(service.as_str().into());
         }
@@ -316,8 +348,9 @@ impl Builder {
         self.apps.push(spec);
         self
     }
+
     /// Add a list of apps
-    pub fn add_apps<'a>(&'a mut self, app_list: &Vec::<String>) -> &'a mut Builder {
+    pub fn add_apps<'a>(&'a mut self, app_list: &Vec<String>) -> &'a mut Builder {
         for app in app_list {
             self.apps.push(app.as_str().into());
         }
@@ -329,27 +362,30 @@ impl Builder {
         self.features.push(feature.into());
         self
     }
+
     /// remove a feature previously added by a previous call
     #[allow(dead_code)]
     pub fn remove_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
         self.features.retain(|x| x != feature);
         self
     }
+
     /// test if a feature is present
-    pub fn has_feature(&self, feature: &str) -> bool {
-        self.features.contains(&feature.to_string())
-    }
+    pub fn has_feature(&self, feature: &str) -> bool { self.features.contains(&feature.to_string()) }
+
     /// add a feature to be passed on to just the loader
     pub fn add_loader_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
         self.loader_features.push(feature.into());
         self
     }
+
     /// add a feature to be passed on to just the loader
     #[allow(dead_code)]
     pub fn add_kernel_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
         self.kernel_features.push(feature.into());
         self
     }
+
     /// only build a hosted target. don't run it. Used exclusively to confirm that hosted mode builds in CI.
     pub fn hosted_build_only<'a>(&'a mut self) -> &'a mut Builder {
         self.dry_run = true;
@@ -361,14 +397,14 @@ impl Builder {
     /// method, and it gets called repeatedly to build the kernel, loader, and services.
     fn builder(
         &self,
-        packages: &Vec::<CrateSpec>,
-        features: &Vec::<String>,
+        packages: &Vec<CrateSpec>,
+        features: &Vec<String>,
         target: &Option<&str>,
         // the stream is specified separately here because the loader is special-case always release
         stream: BuildStream,
-        extra_args: &Vec::<String>,
+        extra_args: &Vec<String>,
         no_default_features: bool,
-    ) -> Result<Vec::<String>, DynError> {
+    ) -> Result<Vec<String>, DynError> {
         // list of build artifacts, as full paths specific to the host OS
         let mut artifacts = Vec::<String>::new();
         // set up the list of arguments to cargo
@@ -378,7 +414,8 @@ impl Builder {
         let mut local_args = vec!["build"];
         let mut remote_args = vec!["install", "--target-dir", "target"];
         remote_args.push("--root");
-        let output_root = format!("{}/target/{}{}/",
+        let output_root = format!(
+            "{}/target/{}{}/",
             project_root().into_os_string().into_string().unwrap(),
             match target {
                 Some(t) => format!("{}/", t),
@@ -420,7 +457,7 @@ impl Builder {
             match pkg {
                 CrateSpec::Local(name, _xip) => local_pkgs.push(&name),
                 CrateSpec::CratesIo(name, version, _xip) => remote_pkgs.push((&name, &version)),
-                _ => {},
+                _ => {}
             }
         }
 
@@ -447,10 +484,7 @@ impl Builder {
             }
             println!();
             // build
-            let status = Command::new(cargo())
-            .current_dir(project_root())
-            .args(&local_args)
-            .status()?;
+            let status = Command::new(cargo()).current_dir(project_root()).args(&local_args).status()?;
             if !status.success() {
                 return Err("Local build failed".into());
             }
@@ -476,9 +510,9 @@ impl Builder {
                 println!(" {} {}", name, version);
                 // build
                 let status = Command::new(cargo())
-                .current_dir(project_root())
-                .args([&remote_args[..], &[name, "--version", version].to_vec()[..]].concat())
-                .status()?;
+                    .current_dir(project_root())
+                    .args([&remote_args[..], &[name, "--version", version].to_vec()[..]].concat())
+                    .status()?;
                 if !status.success() {
                     return Err("Remote build failed".into());
                 }
@@ -496,8 +530,9 @@ impl Builder {
             let mut found = false;
             for app in self.apps.iter() {
                 if let Some(n) = &app.name() {
-                    if Path::new(service).file_name().unwrap_or_default().to_str().unwrap_or_default() ==
-                        Path::new(n).file_name().unwrap_or_default().to_str().unwrap_or_default() {
+                    if Path::new(service).file_name().unwrap_or_default().to_str().unwrap_or_default()
+                        == Path::new(n).file_name().unwrap_or_default().to_str().unwrap_or_default()
+                    {
                         if app.is_xip() {
                             inif.push(service.to_string());
                         } else {
@@ -513,8 +548,9 @@ impl Builder {
             }
             for serv in self.services.iter() {
                 if let Some(n) = &serv.name() {
-                    if Path::new(service).file_name().unwrap_or_default().to_str().unwrap_or_default() ==
-                        Path::new(n).file_name().unwrap_or_default().to_str().unwrap_or_default() {
+                    if Path::new(service).file_name().unwrap_or_default().to_str().unwrap_or_default()
+                        == Path::new(n).file_name().unwrap_or_default().to_str().unwrap_or_default()
+                    {
                         if serv.is_xip() {
                             inif.push(service.to_string());
                         } else {
@@ -535,12 +571,12 @@ impl Builder {
         (inie, inif)
     }
 
-    /// Consume the builder and execute the configured build task. This handles dispatching all configurations,
-    /// including renode, hosted, and hardware targets.
+    /// Consume the builder and execute the configured build task. This handles dispatching all
+    /// configurations, including renode, hosted, and hardware targets.
     pub fn build(mut self) -> Result<(), DynError> {
         if self.apps.len() == 0 && self.services.len() == 0 {
             // no services were specified - don't build anything
-            return Ok(())
+            return Ok(());
         }
 
         // ------ configure target generation feature flags ------
@@ -595,6 +631,13 @@ impl Builder {
             match app {
                 CrateSpec::Local(name, _xip) => app_names.push(name.into()),
                 CrateSpec::CratesIo(name, _version, _xip) => app_names.push(name.into()),
+                CrateSpec::BinaryFile(name, _location, _xip) => {
+                    // if binary file has a name, ensure it ends up in the app menu
+                    if let Some(n) = name {
+                        app_names.push(n.to_string())
+                    } else {
+                    }
+                }
                 _ => {}
             }
         }
@@ -605,21 +648,24 @@ impl Builder {
             &target,
             self.stream,
             &vec![],
-            false
+            false,
         )?;
 
         // ------ either stop here, create an image, or launch hosted mode ------
         if self.no_image {
-	    println!("The following apps/services were compiled:");
-	    for path in services_path {
-		println!("{}", path);
-	    }
-	} else if self.target.is_none() { // hosted mode doesn't specify a cross-compilation target!
-            // throw a warning if prebuilts are specified for hosted mode
+            println!("The following apps/services were compiled:");
+            for path in services_path {
+                println!("{}", path);
+            }
+        } else if self.target.is_none() {
+            // hosted mode doesn't specify a cross-compilation target!
+            // throw a warning if prebuilt files are specified for hosted mode
             for item in [&self.services[..], &self.apps[..]].concat() {
                 match item {
-                    CrateSpec::Prebuilt(name, _, _xip) => println!("Warning! Pre-built binaries not supported for hosted mode ({})", name),
-                    _ => {},
+                    CrateSpec::Prebuilt(name, _, _xip) => {
+                        println!("Warning! Pre-built binaries not supported for hosted mode ({})", name)
+                    }
+                    _ => {}
                 }
             }
             // fixup windows paths
@@ -639,7 +685,25 @@ impl Builder {
             }
             // jam in any pre-built local binary files that were specified
             let binary_files_string = self.enumerate_binary_files()?;
-            let mut binary_files: Vec<&str> = binary_files_string.iter().map(|s| s.as_ref()).collect();
+            let mut canonicalized_paths = Vec::new();
+            let mut binary_files_storage = Vec::<String>::new();
+            for f in binary_files_string {
+                if !self.executable_exists(&f) {
+                    panic!("FATAL ERROR: App '{}' does not exist or is not executable.", f);
+                }
+                canonicalized_paths
+                    .push(std::fs::canonicalize(f).expect("Couldn't canonicalize executable target"));
+            }
+            for f in canonicalized_paths {
+                let path_as_str = f.to_str().expect("Couldn't canonicalize executable target").to_string();
+                let windows_clean_path = if path_as_str.starts_with("\\\\?\\") {
+                    path_as_str[4..].to_owned()
+                } else {
+                    path_as_str
+                };
+                binary_files_storage.push(windows_clean_path);
+            }
+            let mut binary_files: Vec<&str> = binary_files_storage.iter().map(|s| s.as_ref()).collect();
             hosted_args.append(&mut binary_files);
 
             if !self.dry_run {
@@ -651,10 +715,7 @@ impl Builder {
                     print!(" {}", arg);
                 }
                 println!();
-                let status = Command::new(cargo())
-                    .current_dir(dir)
-                    .args(&hosted_args)
-                    .status()?;
+                let status = Command::new(cargo()).current_dir(dir).args(&hosted_args).status()?;
                 if !status.success() {
                     return Err("cargo run failed to launch hosted mode".into());
                 }
@@ -688,12 +749,9 @@ impl Builder {
             // ------ build the loader ------
             // stash any LTO settings applied to the kernel; proper layout of the loader
             // block depends on the loader being compact and highly optimized.
-            let existing_lto = std::env::var("CARGO_PROFILE_RELEASE_LTO")
-                .map(|v| Some(v))
-                .unwrap_or(None);
-            let existing_codegen_units = std::env::var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS")
-                .map(|v| Some(v))
-                .unwrap_or(None);
+            let existing_lto = std::env::var("CARGO_PROFILE_RELEASE_LTO").map(|v| Some(v)).unwrap_or(None);
+            let existing_codegen_units =
+                std::env::var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS").map(|v| Some(v)).unwrap_or(None);
             // these settings will generate the most compact code (but also the hardest to debug)
             std::env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
             std::env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
@@ -733,10 +791,12 @@ impl Builder {
             }
 
             // ---------- extract SVD file path, as computed by utralib ----------
-            let svd_spec_path = format!("target/{}/{}/build/SVD_PATH", self.target.as_ref().expect("target"), self.stream.to_str());
-            let mut svd_spec_file = OpenOptions::new()
-                .read(true)
-                .open(&svd_spec_path)?;
+            let svd_spec_path = format!(
+                "target/{}/{}/build/SVD_PATH",
+                self.target.as_ref().expect("target"),
+                self.stream.to_str()
+            );
+            let mut svd_spec_file = OpenOptions::new().read(true).open(&svd_spec_path)?;
             let mut svd_path_str = String::new();
             svd_spec_file.read_to_string(&mut svd_path_str)?;
             let mut svd_paths = Vec::new();
@@ -750,17 +810,9 @@ impl Builder {
 
             // --------- package up and sign a binary image ----------
             let (inie, inif) = self.split_xip(services_path.clone());
-            let output_bundle = self.create_image(
-                &kernel_path[0],
-                &inie,
-                &inif,
-                svd_paths,
-            )?;
+            let output_bundle = self.create_image(&kernel_path[0], &inie, &inif, svd_paths)?;
             println!();
-            println!(
-                "Kernel+Init bundle is available at {}",
-                output_bundle.display()
-            );
+            println!("Kernel+Init bundle is available at {}", output_bundle.display());
 
             let mut loader_bin = output_bundle.parent().unwrap().to_owned();
             loader_bin.push("loader.bin");
@@ -847,7 +899,7 @@ impl Builder {
         kernel: &String,
         init: &[String],
         inif: &[String],
-        memory_spec: Vec::<String>,
+        memory_spec: Vec<String>,
     ) -> Result<PathBuf, DynError> {
         let stream = self.stream.to_str();
         let mut args = vec!["run", "--package", "tools", "--bin", "create-image", "--"];
@@ -884,10 +936,7 @@ impl Builder {
             }
         }
 
-        let status = Command::new(cargo())
-            .current_dir(project_root())
-            .args(&args)
-            .status()?;
+        let status = Command::new(cargo()).current_dir(project_root()).args(&args).status()?;
 
         if !status.success() {
             return Err("cargo build failed".into());
@@ -895,12 +944,17 @@ impl Builder {
         Ok(project_root().join(output_file))
     }
 
-    fn fetch_prebuilds(&self) -> Result<Vec::<String>, DynError> {
+    fn fetch_prebuilds(&self) -> Result<Vec<String>, DynError> {
         let mut paths = Vec::<String>::new();
         for item in [&self.services[..], &self.apps[..]].concat() {
             match item {
                 CrateSpec::Prebuilt(name, url, _xip) => {
-                    let exec_name = format!("target/{}/{}/{}", self.target.as_ref().expect("target"), self.stream.to_str(), name);
+                    let exec_name = format!(
+                        "target/{}/{}/{}",
+                        self.target.as_ref().expect("target"),
+                        self.stream.to_str(),
+                        name
+                    );
                     println!("Fetching {} executable from build server...", name);
                     let mut exec_file = OpenOptions::new()
                         .read(true)
@@ -909,15 +963,9 @@ impl Builder {
                         .truncate(true)
                         .open(&exec_name)
                         .expect("Can't open our version file for writing");
-                    let mut freader = ureq::get(&url)
-                    .call()?
-                    .into_reader();
+                    let mut freader = ureq::get(&url).call()?.into_reader();
                     std::io::copy(&mut freader, &mut exec_file)?;
-                    println!(
-                        "{} pre-built exec is {} bytes",
-                        name,
-                        exec_file.metadata().unwrap().len()
-                    );
+                    println!("{} pre-built exec is {} bytes", name, exec_file.metadata().unwrap().len());
                     paths.push(exec_name);
                 }
                 _ => {}
@@ -926,11 +974,11 @@ impl Builder {
         Ok(paths)
     }
 
-    fn enumerate_binary_files(&self) -> Result<Vec::<String>, DynError> {
+    fn enumerate_binary_files(&self) -> Result<Vec<String>, DynError> {
         let mut paths = Vec::<String>::new();
         for item in [&self.services[..], &self.apps[..]].concat() {
             match item {
-                CrateSpec::BinaryFile(path, _xip) => {
+                CrateSpec::BinaryFile(_name, path, _xip) => {
                     paths.push(path);
                 }
                 _ => {}
@@ -941,7 +989,8 @@ impl Builder {
 
     fn locale_override(&mut self) {
         if let Some(locale) = &self.locale_override {
-            { // stash the existing locale
+            {
+                // stash the existing locale
                 let mut locale_file = OpenOptions::new()
                     .read(true)
                     .open("locales/src/locale.rs")
@@ -956,11 +1005,7 @@ impl Builder {
                 .truncate(true)
                 .open("locales/src/locale.rs")
                 .expect("Can't open locale for modification");
-            write!(
-                locale_override,
-                "pub const LANG: &str = \"{}\";\n",
-                locale
-            ).unwrap();
+            write!(locale_override, "pub const LANG: &str = \"{}\";\n", locale).unwrap();
         }
     }
 
@@ -973,23 +1018,13 @@ impl Builder {
                 .truncate(true)
                 .open("locales/src/locale.rs")
                 .expect("Can't open locale for modification");
-            write!(
-                locale_restore,
-                "{}",
-                self.locale_stash
-            ).unwrap();
+            write!(locale_restore, "{}", self.locale_stash).unwrap();
         }
     }
 }
 
-pub fn cargo() -> String {
-    env::var("CARGO").unwrap_or_else(|_| "cargo".to_string())
-}
+pub fn cargo() -> String { env::var("CARGO").unwrap_or_else(|_| "cargo".to_string()) }
 
 pub fn project_root() -> PathBuf {
-    Path::new(&env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(1)
-        .unwrap()
-        .to_path_buf()
+    Path::new(&env!("CARGO_MANIFEST_DIR")).ancestors().nth(1).unwrap().to_path_buf()
 }

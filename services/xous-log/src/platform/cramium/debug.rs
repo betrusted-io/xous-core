@@ -1,6 +1,6 @@
 use core::fmt::{Error, Write};
 
-use utralib::generated::*;
+use cramium_hal::udma;
 
 #[macro_export]
 macro_rules! print
@@ -29,7 +29,7 @@ pub struct Uart {}
 // this is a hack to bypass an explicit initialization/allocation step for the debug structure
 pub static mut DEFAULT_UART_ADDR: *mut usize = 0x0000_0000 as *mut usize;
 
-#[cfg(feature="cramium-fpga")]
+#[cfg(feature = "cramium-fpga")]
 impl Uart {
     pub fn putc(&self, c: u8) {
         assert!(unsafe { DEFAULT_UART_ADDR } as usize != 0);
@@ -40,24 +40,30 @@ impl Uart {
     }
 }
 
-#[cfg(feature="cramium-soc")]
+#[cfg(feature = "cramium-soc")]
 impl Uart {
     pub fn putc(&self, c: u8) {
-        let mut uart_csr = CSR::new(unsafe { crate::platform::debug::DEFAULT_UART_ADDR as *mut u32 });
-        // enqueue our character to send via DMA
-        unsafe {
-            if crate::implementation::UART_DMA_BUF as usize != 0 {
-                crate::implementation::UART_DMA_BUF.write_volatile(c); // write to the virtual memory address
-            }
+        // check that we've been initialized before attempting to send any characters...
+        if unsafe { DEFAULT_UART_ADDR } as usize == 0 {
+            return;
         }
-        // configure the DMA
-        uart_csr.wo(utra::udma_uart_0::REG_TX_SADDR, utralib::HW_IFRAM0_MEM as u32); // source is the physical address
-        uart_csr.wo(utra::udma_uart_0::REG_TX_SIZE, 1);
-        // send it
-        uart_csr.wo(utra::udma_uart_0::REG_TX_CFG, 0x10); // EN
-        // wait for it all to be done
-        while uart_csr.rf(utra::udma_uart_0::REG_TX_CFG_R_TX_EN) != 0 {   }
-        while (uart_csr.r(utra::udma_uart_0::REG_STATUS) & 1) != 0 {  }
+        if unsafe { crate::implementation::UART_DMA_TX_BUF_VIRT } as usize == 0 {
+            return;
+        }
+        // safety: safe to call as long as the raw parts are initialized and we exclusively
+        // own it; and the UART has been initialized. For this peripheral, initialization
+        // is handled by the loader and tossed to us, and exclusivity of access is something
+        // we just have to not bungle.
+        let mut uart = unsafe {
+            udma::Uart::get_handle(
+                crate::platform::debug::DEFAULT_UART_ADDR as usize,
+                crate::implementation::UART_DMA_TX_BUF_PHYS,
+                crate::implementation::UART_DMA_TX_BUF_VIRT as usize,
+            )
+        };
+
+        // enqueue our character to send via DMA
+        uart.write(&[c]);
     }
 }
 

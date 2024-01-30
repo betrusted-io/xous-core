@@ -1,10 +1,10 @@
-use crate::api::*;
-
-use utralib::*;
+use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
 
 use num_traits::ToPrimitive;
 use susres::{RegManager, RegOrField, SuspendResume};
-use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
+use utralib::*;
+
+use crate::api::*;
 
 #[derive(Eq, PartialEq, Debug)]
 enum I2cState {
@@ -22,7 +22,8 @@ enum I2cIntError {
     UnexpectedInterrupt,
 }
 
-// ASSUME: we are only ever handling txrx done interrupts. If implementing ARB interrupts, this needs to be refactored to read the source and dispatch accordingly.
+// ASSUME: we are only ever handling txrx done interrupts. If implementing ARB interrupts, this needs to be
+// refactored to read the source and dispatch accordingly.
 fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
     let i2c = unsafe { &mut *(arg as *mut I2cStateMachine) };
     let event = i2c.i2c_csr.r(utra::i2c::EV_PENDING);
@@ -30,32 +31,53 @@ fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
     if let Some(conn) = i2c.handler_conn {
         match i2c.handler_i() {
             I2cHandlerReport::WriteDone => {
-                xous::try_send_message(conn,
-                    xous::Message::new_scalar(I2cOpcode::IrqI2cTxrxWriteDone.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
-            },
+                xous::try_send_message(
+                    conn,
+                    xous::Message::new_scalar(I2cOpcode::IrqI2cTxrxWriteDone.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .map(|_| ())
+                .unwrap();
+            }
             I2cHandlerReport::ReadDone => {
-                xous::try_send_message(conn,
-                    xous::Message::new_scalar(I2cOpcode::IrqI2cTxrxReadDone.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
-            },
+                xous::try_send_message(
+                    conn,
+                    xous::Message::new_scalar(I2cOpcode::IrqI2cTxrxReadDone.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .map(|_| ())
+                .unwrap();
+            }
             I2cHandlerReport::InProgress => {
                 if i2c.trace {
-                    xous::try_send_message(conn,
-                        xous::Message::new_scalar(I2cOpcode::IrqI2cTrace.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
+                    xous::try_send_message(
+                        conn,
+                        xous::Message::new_scalar(I2cOpcode::IrqI2cTrace.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .map(|_| ())
+                    .unwrap();
                 }
-            },
+            }
         }
         if event != i2c.i2c_csr.ms(utra::i2c::EV_ENABLE_TXRX_DONE, 1) {
             i2c.error = I2cIntError::UnexpectedInterrupt;
-            xous::try_send_message(conn,
-                xous::Message::new_scalar(I2cOpcode::IrqI2cTrace.to_usize().unwrap(), event as usize, 0, 0, 0)).map(|_| ()).unwrap();
+            xous::try_send_message(
+                conn,
+                xous::Message::new_scalar(
+                    I2cOpcode::IrqI2cTrace.to_usize().unwrap(),
+                    event as usize,
+                    0,
+                    0,
+                    0,
+                ),
+            )
+            .map(|_| ())
+            .unwrap();
         }
     } else {
         panic!("|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
     }
 
     // clear all interrupts, regardless of the source
-    i2c.i2c_csr
-        .wo(utra::i2c::EV_PENDING, 0xFFFF_FFFF);
+    i2c.i2c_csr.wo(utra::i2c::EV_PENDING, 0xFFFF_FFFF);
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -67,7 +89,7 @@ pub(crate) enum I2cHandlerReport {
 pub(crate) struct I2cStateMachine {
     i2c_csr: utralib::CSR<u32>,
     power_csr: utralib::CSR<u32>,
-    i2c_susres: RegManager::<{utra::i2c::I2C_NUMREGS}>,
+    i2c_susres: RegManager<{ utra::i2c::I2C_NUMREGS }>,
     handler_conn: Option<xous::CID>,
 
     transaction: Option<I2cTransaction>,
@@ -75,17 +97,19 @@ pub(crate) struct I2cStateMachine {
     expiry: Option<u64>, // timeout of any pending transaction
 
     state: I2cState,
-    index: u32,  // index of the current buffer in the state machine
+    index: u32,                             // index of the current buffer in the state machine
     ticktimer: ticktimer_server::Ticktimer, // a connection to the ticktimer so we can measure timeouts
-    error: I2cIntError, // set if the interrupt handler encountered some kind of error
-    trace: bool, // set to true for detailed tracing of I2C irq handler state behavior; note that the trace outputs are delayed and may not reflect actual status
+    error: I2cIntError,                     // set if the interrupt handler encountered some kind of error
+    trace: bool,                            /* set to true for detailed tracing of I2C irq handler state
+                                             * behavior; note that the trace outputs are delayed and may
+                                             * not reflect actual status */
 
     workqueue: Vec<(I2cTransaction, xous::MessageEnvelope)>,
-    wfi_state: Arc::<AtomicBool>
+    wfi_state: Arc<AtomicBool>,
 }
 
 impl I2cStateMachine {
-    pub fn new(handler_conn: xous::CID, power_csr_raw: *mut u32, wfi_state: Arc::<AtomicBool>) -> Self {
+    pub fn new(handler_conn: xous::CID, power_csr_raw: *mut u32, wfi_state: Arc<AtomicBool>) -> Self {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
         let i2c_csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::i2c::HW_I2C_BASE),
@@ -121,12 +145,8 @@ impl I2cStateMachine {
     }
 
     pub fn init(&mut self) {
-        xous::claim_interrupt(
-            utra::i2c::I2C_IRQ,
-            handle_i2c_irq,
-            self as *mut I2cStateMachine as *mut usize,
-        )
-        .expect("couldn't claim I2C irq");
+        xous::claim_interrupt(utra::i2c::I2C_IRQ, handle_i2c_irq, self as *mut I2cStateMachine as *mut usize)
+            .expect("couldn't claim I2C irq");
         self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
         self.ticktimer.sleep_ms(10).ok();
 
@@ -148,28 +168,27 @@ impl I2cStateMachine {
         self.i2c_susres.push(RegOrField::Reg(utra::i2c::EV_ENABLE), None);
     }
 
-    pub fn get_expiry(&self) -> Option<u64> {
-        self.expiry
-    }
+    pub fn get_expiry(&self) -> Option<u64> { self.expiry }
+
     #[allow(dead_code)]
-    pub fn set_trace(&mut self, trace: bool) {
-        self.trace = trace;
-    }
+    pub fn set_trace(&mut self, trace: bool) { self.trace = trace; }
+
     pub fn suspend(&mut self) {
         self.i2c_susres.suspend();
 
         // disable the I2C block, so it doesn't generate spurious values
         self.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 0);
 
-        // this happens after suspend, so these disables are "lost" upon resume and replaced with the normal running values
+        // this happens after suspend, so these disables are "lost" upon resume and replaced with the normal
+        // running values
         self.i2c_csr.wo(utra::i2c::EV_ENABLE, 0);
     }
-    pub fn resume(&mut self) {
-        self.i2c_susres.resume();
-    }
+
+    pub fn resume(&mut self) { self.i2c_susres.resume(); }
 
     pub fn re_initiate(&mut self) {
-        // execution continues after here because we simply drop the response message back in the sender's queue, and then return here to do more
+        // execution continues after here because we simply drop the response message back in the sender's
+        // queue, and then return here to do more
         log::warn!("I2C timeout; resetting hardware block and re-trying");
         self.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 0);
         self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
@@ -190,7 +209,8 @@ impl I2cStateMachine {
         // re-initiate the I2C transaction
         if let Some(msg) = self.callback.take() {
             let transaction = {
-                let buffer = unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let buffer =
+                    unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 buffer.to_original::<I2cTransaction, _>().unwrap().clone()
             };
             self.checked_initiate(transaction, msg);
@@ -241,7 +261,8 @@ impl I2cStateMachine {
                 } else {
                     self.report_response(I2cStatus::ResponseTimeout, None); // this resets all state variables back to defaults
                 }
-                // execution continues after here because we simply drop the response message back in the sender's queue, and then return here to do more
+                // execution continues after here because we simply drop the response message back in the
+                // sender's queue, and then return here to do more
                 log::warn!("I2C timeout; resetting hardware block");
                 self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
                 // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
@@ -286,9 +307,9 @@ impl I2cStateMachine {
             self.i2c_csr.wfo(utra::i2c::TXR_TXR, (transaction.bus_addr << 1 | 0) as u32);
             self.transaction = Some(transaction);
             self.index = 0;
-            self.i2c_csr.wo(utra::i2c::COMMAND,
-                self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
-                self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
+            self.i2c_csr.wo(
+                utra::i2c::COMMAND,
+                self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) | self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1),
             );
             log::debug!("Initiate write");
             self.trace(0);
@@ -298,9 +319,9 @@ impl I2cStateMachine {
             self.i2c_csr.wfo(utra::i2c::TXR_TXR, (transaction.bus_addr << 1 | 1) as u32);
             self.transaction = Some(transaction);
             self.index = 0;
-            self.i2c_csr.wo(utra::i2c::COMMAND,
-                self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
-                self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
+            self.i2c_csr.wo(
+                utra::i2c::COMMAND,
+                self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) | self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1),
             );
             log::debug!("Initiate read");
             self.trace(0);
@@ -323,20 +344,15 @@ impl I2cStateMachine {
 
         // the .take() will cause the msg to go out of scope, triggering Drop which unblocks the caller
         if let Some(mut msg) = self.callback.take() {
-            let mut response = I2cResult {
-                rxbuf: [0u8; I2C_MAX_LEN],
-                rxlen: 0,
-                status,
-            };
+            let mut response = I2cResult { rxbuf: [0u8; I2C_MAX_LEN], rxlen: 0, status };
             if let Some(data) = rx {
                 for (&src, dst) in data.iter().zip(response.rxbuf.iter_mut()) {
                     *dst = src;
                 }
                 response.rxlen = data.len() as _;
             }
-            let mut buf = unsafe {
-                xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-            };
+            let mut buf =
+                unsafe { xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
             buf.replace(response).expect("couldn't serialize response to sender");
             log::debug!("transaction to None");
             self.transaction.take();
@@ -345,7 +361,10 @@ impl I2cStateMachine {
             self.index = 0;
             self.error = I2cIntError::NoErr;
         } else {
-            log::error!("Invalid state: response requested but no request pending {:?}. I2C bus state may be incoherent.", status);
+            log::error!(
+                "Invalid state: response requested but no request pending {:?}. I2C bus state may be incoherent.",
+                status
+            );
         }
         if self.workqueue.len() > 0 {
             log::debug!("workqueue has pending items: {}", self.workqueue.len());
@@ -359,6 +378,7 @@ impl I2cStateMachine {
         // report the end of a write-only transaction to all the listeners
         self.report_response(I2cStatus::ResponseWriteOk, None);
     }
+
     pub fn report_read_done(&mut self) {
         // report the result of a read transaction to all the listeners
         log::debug!("Sending read done {:?}", self.transaction);
@@ -378,24 +398,23 @@ impl I2cStateMachine {
             self.report_response(I2cStatus::ResponseFormatError, None);
         }
     }
+
     /// This will indicate the interface is busy if there is a transaction in progress or if there is
     /// work in the queue. The intention of this use case is if a caller is planning on doing a fairly
-    /// extensive set of reads/writes sequentially and they want to volunarily back-off so they aren't overflowing
-    /// the work queues or thrashing the bus by pulling it between two different peripherals.
+    /// extensive set of reads/writes sequentially and they want to volunarily back-off so they aren't
+    /// overflowing the work queues or thrashing the bus by pulling it between two different peripherals.
     pub fn is_busy(&self) -> bool {
-        if self.state == I2cState::Idle || self.workqueue.len() == 0 {
-            false
-        } else {
-            true
-        }
+        if self.state == I2cState::Idle || self.workqueue.len() == 0 { false } else { true }
     }
+
     /// This returns if a transaction is currently in progress. This differs from is_busy in that is_busy
-    /// will return false if the work queue is also empty, even though the interface is performing a transaction.
-    pub fn in_progress(&self) -> bool {
-        self.state != I2cState::Idle
-    }
+    /// will return false if the work queue is also empty, even though the interface is performing a
+    /// transaction.
+    pub fn in_progress(&self) -> bool { self.state != I2cState::Idle }
+
     pub(crate) fn trace(&self, arg: usize) {
-        log::debug!("I2C trace '{:?}/{:?}'=> PENDING: {:x}, ENABLE: {:x}, CMD: {:x}, STATUS: {:x}, CONTROL: {:x}, PRESCALE: {:x}, arg: {:x}",
+        log::debug!(
+            "I2C trace '{:?}/{:?}'=> PENDING: {:x}, ENABLE: {:x}, CMD: {:x}, STATUS: {:x}, CONTROL: {:x}, PRESCALE: {:x}, arg: {:x}",
             self.state,
             self.error,
             self.i2c_csr.r(utra::i2c::EV_PENDING),
@@ -419,11 +438,14 @@ impl I2cStateMachine {
                         // send next byte if there is one
                         if self.index < transaction.txlen {
                             self.i2c_csr.wfo(utra::i2c::TXR_TXR, txbuf[self.index as usize] as u32);
-                            if self.index == (transaction.txlen - 1) && (transaction.rxbuf.is_none() || !transaction.use_repeated_start) {
+                            if self.index == (transaction.txlen - 1)
+                                && (transaction.rxbuf.is_none() || !transaction.use_repeated_start)
+                            {
                                 // send a stop bit if this is the very last in the series
-                                self.i2c_csr.wo(utra::i2c::COMMAND,
-                                    self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
-                                    self.i2c_csr.ms(utra::i2c::COMMAND_STO, 1)
+                                self.i2c_csr.wo(
+                                    utra::i2c::COMMAND,
+                                    self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1)
+                                        | self.i2c_csr.ms(utra::i2c::COMMAND_STO, 1),
                                 );
                             } else {
                                 self.i2c_csr.wfo(utra::i2c::COMMAND_WR, 1);
@@ -435,9 +457,10 @@ impl I2cStateMachine {
                                 self.state = I2cState::Read;
                                 self.i2c_csr.wfo(utra::i2c::TXR_TXR, (transaction.bus_addr << 1 | 1) as u32);
                                 self.index = 0;
-                                self.i2c_csr.wo(utra::i2c::COMMAND,
-                                    self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
-                                    self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
+                                self.i2c_csr.wo(
+                                    utra::i2c::COMMAND,
+                                    self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1)
+                                        | self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1),
                                 );
                             } else {
                                 report = I2cHandlerReport::WriteDone;
@@ -448,19 +471,21 @@ impl I2cStateMachine {
                         // we should never get here, because txbuf was checked as Some() by the setup routine
                         self.error = I2cIntError::MissingTx;
                     }
-                },
+                }
                 I2cState::Read => {
                     if let Some(rxbuf) = &mut transaction.rxbuf {
                         if self.index > 0 {
-                            // we are re-entering from a previous call, store the read value from the previous call
+                            // we are re-entering from a previous call, store the read value from the previous
+                            // call
                             rxbuf[self.index as usize - 1] = self.i2c_csr.rf(utra::i2c::RXR_RXR) as u8;
                         }
                         if self.index < transaction.rxlen {
                             if self.index == (transaction.rxlen - 1) {
-                                self.i2c_csr.wo(utra::i2c::COMMAND,
-                                    self.i2c_csr.ms(utra::i2c::COMMAND_RD, 1) |
-                                    self.i2c_csr.ms(utra::i2c::COMMAND_STO, 1) |
-                                    self.i2c_csr.ms(utra::i2c::COMMAND_ACK, 1)
+                                self.i2c_csr.wo(
+                                    utra::i2c::COMMAND,
+                                    self.i2c_csr.ms(utra::i2c::COMMAND_RD, 1)
+                                        | self.i2c_csr.ms(utra::i2c::COMMAND_STO, 1)
+                                        | self.i2c_csr.ms(utra::i2c::COMMAND_ACK, 1),
                                 );
                             } else {
                                 self.i2c_csr.wfo(utra::i2c::COMMAND_RD, 1);
@@ -474,7 +499,7 @@ impl I2cStateMachine {
                         // we should never get here, because rxbuf was checked as Some() by the setup routine
                         self.error = I2cIntError::MissingRx;
                     }
-                },
+                }
                 I2cState::Idle => {
                     // this shouldn't happen, all we can do is flag an error
                     self.error = I2cIntError::UnexpectedState;

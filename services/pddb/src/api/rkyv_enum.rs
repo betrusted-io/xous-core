@@ -12,8 +12,7 @@
 // As of now, the current version is 0.7.x and there isn't a timeline yet for 0.8.
 
 #![allow(dead_code)]
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum BasisRetentionPolicy {
     Persist,
     ClearAfterSleeps(u32),
@@ -51,7 +50,6 @@ pub enum PddbRekeyOp {
     /// at this current time).
     ChangePass(xous_ipc::String<BASIS_NAME_LEN>),
     */
-
     /// Return codes
     Success,
     AuthFail,

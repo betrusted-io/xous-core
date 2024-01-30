@@ -46,13 +46,13 @@ impl From<Write6Command> for WriteXCommand {
 pub struct Write10Command {
     #[pkd(7, 0, 0, 0)]
     pub op_code: u8,
-    
+
     #[pkd(7, 5, 1, 1)]
     pub wr_protect: u8,
 
     #[pkd(4, 4, 1, 1)]
     pub dpo: bool,
-    
+
     #[pkd(3, 3, 1, 1)]
     pub fua: bool,
 
@@ -86,13 +86,13 @@ impl From<Write10Command> for WriteXCommand {
 pub struct Write12Command {
     #[pkd(7, 0, 0, 0)]
     pub op_code: u8,
-    
+
     #[pkd(7, 5, 1, 1)]
     pub wr_protect: u8,
 
     #[pkd(4, 4, 1, 1)]
     pub dpo: bool,
-    
+
     #[pkd(3, 3, 1, 1)]
     pub fua: bool,
 

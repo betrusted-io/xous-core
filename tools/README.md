@@ -10,7 +10,7 @@ can use.
 
 It contains a number of programs:
 
-* **copy-object**: A reimplementation of `objcopy`
+* **copy-object**: A re-implementation of `objcopy`
 * **create-image**: Tool used to create a boot args struct for Xous
 * **make-tags**: Test program used to create raw boot arg tags
 * **read-tags**: Test program to verify the tags were created

@@ -1,59 +1,60 @@
-use crate::{CommonEnv, ShellCmdApi};
-use com::api::NET_MTU;
-use net::NetPingCallback;
-use num_traits::*;
-use std::io::Read;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::{IpAddr, TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use xous::MessageEnvelope;
-use xous_ipc::String;
 
-#[cfg(feature = "ditherpunk")]
-use {gam::DecodePng, std::str::FromStr};
-
+use com::api::NET_MTU;
+use net::NetPingCallback;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 use net::XousServerId;
-
+use num_traits::*;
 #[cfg(feature = "shellperf")]
 use perflib::*;
-
+use xous::MessageEnvelope;
+use xous_ipc::String;
+#[cfg(feature = "ditherpunk")]
+use {gam::DecodePng, std::str::FromStr};
 #[cfg(feature = "websocket")]
-use tungstenite::{stream::MaybeTlsStream, WebSocket};
+use {
+    tls::Tls,
+    tungstenite::{stream::MaybeTlsStream, WebSocket},
+};
+
+use crate::{CommonEnv, ShellCmdApi};
 
 pub struct NetCmd {
     callback_id: Option<u32>,
     callback_conn: u32,
     dns: dns::Dns,
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     ping: Option<net::protocols::Ping>,
     #[cfg(feature = "websocket")]
     ws: Option<WebSocket<MaybeTlsStream<TcpStream>>>,
-    #[cfg(feature="shellperf")]
+    #[cfg(feature = "shellperf")]
     perfbuf: xous::MemoryRange,
 }
 impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        #[cfg(feature="shellperf")]
+        #[cfg(feature = "shellperf")]
         let perfbuf = xous::syscall::map_memory(
             None,
             None,
             BUFLEN,
             xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
-        ).expect("couldn't map in the performance buffer");
+        )
+        .expect("couldn't map in the performance buffer");
 
         NetCmd {
             callback_id: None,
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
             dns: dns::Dns::new(&xns).unwrap(),
-            #[cfg(any(feature="precursor", feature="renode"))]
+            #[cfg(any(feature = "precursor", feature = "renode"))]
             ping: None,
             #[cfg(feature = "websocket")]
             ws: None,
-            #[cfg(feature="shellperf")]
+            #[cfg(feature = "shellperf")]
             perfbuf,
         }
     }
@@ -61,14 +62,20 @@ impl NetCmd {
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum NetCmdDispatch {
-    UdpTest1 =  0x1_0000, // we're muxing our own dispatch + ping dispatch, so we need a custom discriminant
-    UdpTest2 =  0x1_0001,
+    UdpTest1 = 0x1_0000, // we're muxing our own dispatch + ping dispatch, so we need a custom discriminant
+    UdpTest2 = 0x1_0001,
 }
 
 impl<'a> ShellCmdApi<'a> for NetCmd {
-    cmd_api!(net); // inserts boilerplate for command API
+    cmd_api!(net);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    // inserts boilerplate for command API
+
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         if self.callback_id.is_none() {
             let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
             log::trace!("hooking net callback with ID {}", cb_id);
@@ -77,7 +84,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        #[cfg(any(feature="precursor", feature="renode"))]
+        #[cfg(any(feature = "precursor", feature = "renode"))]
         let helpstring = "net [udp [rx socket] [tx dest socket]] [ping [host] [count]] [tcpget host/path]";
         // no ping in hosted mode -- why would you need it? we're using the host's network connection.
         #[cfg(not(target_os = "xous"))]
@@ -88,15 +95,17 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "unsub" => {
-                    // this is just for testing the unsub call itself. It should result in the connection manager itself breaking.
+                    // this is just for testing the unsub call itself. It should result in the connection
+                    // manager itself breaking.
                     match env.netmgr.wifi_state_unsubscribe() {
                         Ok(_) => write!(ret, "wifi unsub successful"),
                         Err(e) => write!(ret, "wifi unsub error: {:?}", e),
-                    }.ok();
+                    }
+                    .ok();
                 }
                 "tcpget" => {
-                    // note: to keep shellchat lightweight, we do a very minimal parsing of the URL. We assume it always has
-                    // a form such as:
+                    // note: to keep shellchat lightweight, we do a very minimal parsing of the URL. We assume
+                    // it always has a form such as:
                     // bunniefoo.com./bunnie/test.txt
                     // It will break on everything else. The `url` crate is nice but "large" for a demo.
                     // There is no https support, obvs.
@@ -107,9 +116,17 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                     Ok(mut stream) => {
                                         log::trace!("stream open, setting timeouts");
                                         stream.set_read_timeout(Some(Duration::from_millis(10_000))).unwrap();
-                                        stream.set_write_timeout(Some(Duration::from_millis(10_000))).unwrap();
-                                        log::debug!("read timeout: {:?}", stream.read_timeout().unwrap().unwrap().as_millis());
-                                        log::debug!("write timeout: {:?}", stream.write_timeout().unwrap().unwrap().as_millis());
+                                        stream
+                                            .set_write_timeout(Some(Duration::from_millis(10_000)))
+                                            .unwrap();
+                                        log::debug!(
+                                            "read timeout: {:?}",
+                                            stream.read_timeout().unwrap().unwrap().as_millis()
+                                        );
+                                        log::debug!(
+                                            "write timeout: {:?}",
+                                            stream.write_timeout().unwrap().unwrap().as_millis()
+                                        );
                                         log::info!("my socket: {:?}", stream.local_addr());
                                         log::info!("peer addr: {:?}", stream.peer_addr());
                                         log::info!("sending GET request");
@@ -120,7 +137,12 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                 write!(ret, "Error sending GET: {:?}", e).unwrap();
                                             }
                                         }
-                                        write!(stream, "Host: {}\r\nAccept: */*\r\nUser-Agent: Precursor/0.9.6\r\n", host).expect("stream error");
+                                        write!(
+                                            stream,
+                                            "Host: {}\r\nAccept: */*\r\nUser-Agent: Precursor/0.9.6\r\n",
+                                            host
+                                        )
+                                        .expect("stream error");
                                         write!(stream, "Connection: close\r\n").expect("stream error");
                                         write!(stream, "\r\n").expect("stream error");
                                         log::info!("fetching response....");
@@ -128,16 +150,31 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         match stream.read(&mut buf) {
                                             Ok(len) => {
                                                 log::trace!("raw response ({}): {:?}", len, &buf[..len]);
-                                                write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len.min(buf.len())])).ok(); // let it run off the end
-                                                log::info!("{}NET.TCPGET,{},{}",
+                                                write!(
+                                                    ret,
+                                                    "{}",
+                                                    std::string::String::from_utf8_lossy(
+                                                        &buf[..len.min(buf.len())]
+                                                    )
+                                                )
+                                                .ok(); // let it run off the end
+                                                log::info!(
+                                                    "{}NET.TCPGET,{},{}",
                                                     xous::BOOKEND_START,
-                                                    std::string::String::from_utf8_lossy(&buf[..len.min(buf.len())]),
-                                                    xous::BOOKEND_END);
+                                                    std::string::String::from_utf8_lossy(
+                                                        &buf[..len.min(buf.len())]
+                                                    ),
+                                                    xous::BOOKEND_END
+                                                );
                                             }
-                                            Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
+                                            Err(e) => {
+                                                write!(ret, "Didn't get response from host: {:?}", e).unwrap()
+                                            }
                                         }
                                     }
-                                    Err(e) => write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap(),
+                                    Err(e) => {
+                                        write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap()
+                                    }
                                 }
                             }
                             _ => write!(ret, "Usage: tcpget bunniefoo.com/bunnie/test.txt").unwrap(),
@@ -152,7 +189,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         let boot_instant = env.boot_instant.clone();
                         move || {
                             let listener = TcpListener::bind("0.0.0.0:80").unwrap();
-                            // limit to 4 because we're a bit shy on space in shellchat right now; there is a 32-thread limit per process, and shellchat has the kitchen sink.
+                            // limit to 4 because we're a bit shy on space in shellchat right now; there is a
+                            // 32-thread limit per process, and shellchat has the kitchen sink.
                             let pool = ThreadPool::new(4);
 
                             for stream in listener.incoming() {
@@ -192,21 +230,27 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                     Err(_) => {
                                         std::thread::sleep(std::time::Duration::from_millis(1000));
                                         continue;
-                                    },
+                                    }
                                 };
 
                                 for i in listener.incoming() {
                                     match i {
                                         Err(error) => {
                                             log::error!("error caught in listener.incoming(): {}", error);
-                                        },
+                                        }
                                         Ok(mut stream) => {
                                             tp.execute(move || {
                                                 let mut count = 0;
                                                 loop {
-                                                    match std::io::Write::write(&mut stream, format!("hello! {}\n", count).as_bytes()) {
+                                                    match std::io::Write::write(
+                                                        &mut stream,
+                                                        format!("hello! {}\n", count).as_bytes(),
+                                                    ) {
                                                         Err(e) => {
-                                                            log::info!("fountain write failed with error {:?}", e);
+                                                            log::info!(
+                                                                "fountain write failed with error {:?}",
+                                                                e
+                                                            );
                                                             break;
                                                         }
                                                         _ => {}
@@ -227,8 +271,9 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     write!(ret, "Fountain started on port 3333").ok();
                 }
                 // Testing of udp is done with netcat:
-                // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
-                // to receive packets, use `netcat -u -l 6502`, on the same remote host, and it should show a packet of counts received
+                // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type
+                // some data to receive packets, use `netcat -u -l 6502`, on the same remote
+                // host, and it should show a packet of counts received
                 "udp" => {
                     let socket = if let Some(tok_str) = tokens.next() {
                         tok_str
@@ -250,7 +295,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             return Ok(Some(ret));
                         }
                     };
-                    udp.set_write_timeout(Some(Duration::from_millis(500))).expect("couldn't set write timeout");
+                    udp.set_write_timeout(Some(Duration::from_millis(500)))
+                        .expect("couldn't set write timeout");
                     for index in 0..2 {
                         let _ = std::thread::spawn({
                             let self_cid = self.callback_conn;
@@ -267,15 +313,30 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                     let mut buf = [0u8; NET_MTU];
                                     match udp.recv_from(&mut buf) {
                                         Ok((bytes, addr)) => {
-                                            write!(s, "UDP server {} rx {} bytes: {:?}: {}", index, bytes, addr, std::str::from_utf8(&buf[..bytes]).unwrap()).unwrap();
+                                            write!(
+                                                s,
+                                                "UDP server {} rx {} bytes: {:?}: {}",
+                                                index,
+                                                bytes,
+                                                addr,
+                                                std::str::from_utf8(&buf[..bytes]).unwrap()
+                                            )
+                                            .unwrap();
                                             s.send(self_cid).unwrap();
                                             if do_response {
                                                 match udp.send_to(
-                                                    format!("Server {} received {} bytes\r\n", index, bytes).as_bytes(),
+                                                    format!("Server {} received {} bytes\r\n", index, bytes)
+                                                        .as_bytes(),
                                                     &response,
                                                 ) {
-                                                    Ok(len) => log::info!("server {} sent response of {} bytes", index, len),
-                                                    Err(e) => log::info!("server {} UDP tx err: {:?}", index, e),
+                                                    Ok(len) => log::info!(
+                                                        "server {} sent response of {} bytes",
+                                                        index,
+                                                        len
+                                                    ),
+                                                    Err(e) => {
+                                                        log::info!("server {} UDP tx err: {:?}", index, e)
+                                                    }
                                                 }
                                             }
                                         }
@@ -308,12 +369,12 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     }
                 }
-                #[cfg(feature="nettest")]
+                #[cfg(feature = "nettest")]
                 "test" => {
                     crate::nettests::start_batch_tests();
                     write!(ret, "Net batch tests started...").ok();
                 }
-                #[cfg(feature="ditherpunk")]
+                #[cfg(feature = "ditherpunk")]
                 "image" => {
                     if let Some(url) = tokens.next() {
                         match url.split_once('/') {
@@ -329,7 +390,12 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                 write!(ret, "Error sending GET: {:?}", e).unwrap();
                                             }
                                         }
-                                        write!(stream, "Host: {}\r\nAccept: */*\r\nUser-Agent: Precursor/0.9.6\r\n", host).expect("stream error");
+                                        write!(
+                                            stream,
+                                            "Host: {}\r\nAccept: */*\r\nUser-Agent: Precursor/0.9.6\r\n",
+                                            host
+                                        )
+                                        .expect("stream error");
                                         write!(stream, "Connection: close\r\n").expect("stream error");
                                         write!(stream, "\r\n").expect("stream error");
                                         log::info!("fetching response....");
@@ -344,22 +410,27 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                             line_count += 1;
                                             let mut len = buf.len();
                                             // read a line terminated by /r/n
-                                            while (len < 2 || buf.as_slice()[(len-2)..] != [0x0d, 0x0a]) && len <= 1024 {
+                                            while (len < 2 || buf.as_slice()[(len - 2)..] != [0x0d, 0x0a])
+                                                && len <= 1024
+                                            {
                                                 reader.read(&mut byte).expect("png stream read error");
                                                 buf.push(byte[0]);
                                                 len = buf.len();
                                             }
                                             match len {
                                                 2 => {
-                                                   log::info!("found end of header after {} lines.", line_count);
-                                                   break;
-                                                },
+                                                    log::info!(
+                                                        "found end of header after {} lines.",
+                                                        line_count
+                                                    );
+                                                    break;
+                                                }
                                                 1024.. => {
                                                     let line = std::string::String::from_utf8_lossy(&buf);
                                                     log::warn!("header contained line > 4k {:?}", line);
                                                     break;
                                                 }
-                                                _ => {},
+                                                _ => {}
                                             }
                                             let line = std::string::String::from_utf8_lossy(&buf);
                                             log::info!("{:?}", line);
@@ -369,8 +440,12 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                 log::info!("attr: {}, {}", l_line[0], l_line[1]);
                                                 match l_line[0] {
                                                     "content-length" => {
-                                                        content_length = usize::from_str(l_line[1].trim()).unwrap_or(0);
-                                                        log::info!("found content-length of {}", content_length);
+                                                        content_length =
+                                                            usize::from_str(l_line[1].trim()).unwrap_or(0);
+                                                        log::info!(
+                                                            "found content-length of {}",
+                                                            content_length
+                                                        );
                                                     }
                                                     _ => {}
                                                 }
@@ -383,20 +458,21 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                             let mut png = DecodePng::new(reader).expect("png decode failed");
                                             const BORDER: u32 = 3;
                                             let modal_size = gam::Point::new(
-                                                 (gam::IMG_MODAL_WIDTH - 2 * BORDER) as i16,
-                                                 (gam::IMG_MODAL_HEIGHT - 2 * BORDER) as i16
+                                                (gam::IMG_MODAL_WIDTH - 2 * BORDER) as i16,
+                                                (gam::IMG_MODAL_HEIGHT - 2 * BORDER) as i16,
                                             );
                                             let bm = gam::Bitmap::from_png(&mut png, Some(modal_size));
 
                                             log::info!("heap size: {}", heap_usage());
                                             let modals = modals::Modals::new(&env.xns).unwrap();
                                             modals.show_image(bm).expect("show image modal failed");
-
                                         } else {
                                             write!(ret, "content-length was 0, no image read").unwrap();
                                         }
                                     }
-                                    Err(e) => write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap(),
+                                    Err(e) => {
+                                        write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap()
+                                    }
                                 }
                             }
                             _ => write!(ret, "Usage: image bunniefoo.com/bunnie/bunny.png").unwrap(),
@@ -406,7 +482,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                 }
                 // only valid for hardware configs with TLS enabled
-                #[cfg(all(any(feature="precursor", feature="renode"),feature="tls"))]
+                #[cfg(all(any(feature = "precursor", feature = "renode"), feature = "tls"))]
                 "rt" => {
                     log::set_max_level(log::LevelFilter::Trace);
                     ring::xous_test::p256_elem_add_test();
@@ -415,21 +491,35 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 #[cfg(feature = "websocket")]
                 "ws" => {
                     if self.ws.is_none() {
-                        let url = url::Url::parse("wss://awake.noskills.club/ws").expect("Can't parse");
-                        match tungstenite::connect(url) {
-                            Ok((socket, response)) => {
-                                log::info!("Connected to the server");
-                                log::info!("Response HTTP code: {}", response.status());
-                                log::info!("Response contains the following headers:");
-                                for (ref header, _value) in response.headers() {
-                                    log::info!("* {}", header);
+                        let server = "wss://awake.noskills.club/ws";
+                        let url = url::Url::parse(server).expect("Can't parse");
+                        log::info!("attempting websocket connection to {}", url.as_str());
+                        let host = url.host_str().expect("failed to extract host from url");
+                        match TcpStream::connect((host, 443)) {
+                            Ok(sock) => {
+                                log::info!("tcp connected to {host}");
+                                let xtls = Tls::new();
+                                match xtls.stream_owned(host, sock) {
+                                    Ok(tls_stream) => {
+                                        log::info!("tls configured");
+                                        match tungstenite::client(url, tls_stream) {
+                                            Ok((_socket, response)) => {
+                                                log::info!("Websocket connected to: {}", server);
+                                                log::info!("Response HTTP code: {}", response.status());
+                                                log::info!("Response contains the following headers:");
+                                                for (ref header, _value) in response.headers() {
+                                                    log::info!("* {}", header);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                log::info!("failed to connect websocket: {}", e)
+                                            }
+                                        }
+                                    }
+                                    Err(e) => log::warn!("failed to configure tls: {e}"),
                                 }
-                                self.ws = Some(socket);
                             }
-                            Err(e) => {
-                                log::warn!("failed to connect to ws server: {e}");
-                                write!(ret, "failed to connect to ws server: {e}").ok();
-                            }
+                            Err(e) => log::warn!("failed to connect tcp: {e}"),
                         }
                     }
                     let mut err = false;
@@ -445,7 +535,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             Ok(msg) => {
                                 log::info!("Received: {:?}", msg);
                                 write!(ret, "Rx: {:?}", msg).ok();
-                            },
+                            }
                             Err(e) => {
                                 log::info!("got ws error: {:?}, quitting", e);
                                 err = true;
@@ -471,47 +561,50 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         write!(ret, "{r}").unwrap();
                     }
                 }
-                // note: to use the `shellperf` option, you need to load a version of the SOC that has the performance counters built in.
-                // this can be generated using the command `python3 .\betrusted_soc.py -e .\dummy.nky --perfcounter` in the betrusted-soc repo.
+                // note: to use the `shellperf` option, you need to load a version of the SOC that has the
+                // performance counters built in. this can be generated using the command
+                // `python3 .\betrusted_soc.py -e .\dummy.nky --perfcounter` in the betrusted-soc repo.
                 //
                 // to read out performance monitoring data, use the `usb_update.py` script as follows:
                 // ` python3 .\..\usb_update.py --dump v2p.txt --dump-file .\ring_aes_8.bin`
-                // where the `v2p.txt` file contains a virtual to physical mapping that is generated by the `perflib` framework and
-                // formatted in a fashion that can be automatically extracted by the usb_update script.
-                // the command below can generate this page table; it must be manually copy/pasted from the console
-                // into the `v2p.txt` file. Note that it will change on every boot, but it is stable throughout each boot,
+                // where the `v2p.txt` file contains a virtual to physical mapping that is generated by the
+                // `perflib` framework and formatted in a fashion that can be automatically
+                // extracted by the usb_update script. the command below can generate this
+                // page table; it must be manually copy/pasted from the console into the `v2p.
+                // txt` file. Note that it will change on every boot, but it is stable throughout each boot,
                 // even across multiple runs of the command.
-                #[cfg(feature="shellperf")]
+                #[cfg(feature = "shellperf")]
                 "v2p" => {
                     // don't generate a new object since it clears the data, just do a raw dump
                     log::info!("Buf vmem loc: {:x}", self.perfbuf.as_ptr() as u32);
-                    log::info!("Buf pmem loc: {:x}", xous::syscall::virt_to_phys(self.perfbuf.as_ptr() as usize).unwrap_or(0));
+                    log::info!(
+                        "Buf pmem loc: {:x}",
+                        xous::syscall::virt_to_phys(self.perfbuf.as_ptr() as usize).unwrap_or(0)
+                    );
                     log::info!("PerfLogEntry size: {}", core::mem::size_of::<PerfLogEntry>());
                     log::info!("Now printing the page table mapping for the performance buffer:");
                     for page in (0..BUFLEN).step_by(4096) {
-                        log::info!("V|P {:x} {:x}",
+                        log::info!(
+                            "V|P {:x} {:x}",
                             self.perfbuf.as_ptr() as usize + page,
                             xous::syscall::virt_to_phys(self.perfbuf.as_ptr() as usize + page).unwrap_or(0),
                         );
                     }
                 }
-                #[cfg(feature="shellperf")]
+                #[cfg(feature = "shellperf")]
                 "cta1" => {
                     log::info!("constant time RISC-V HW AES test");
 
-                    let pm = PerfMgr::new(
-                        self.perfbuf.as_mut_ptr(),
-                        env.perf_csr.clone(),
-                        env.event_csr.clone()
-                    );
+                    let pm =
+                        PerfMgr::new(self.perfbuf.as_mut_ptr(), env.perf_csr.clone(), env.event_csr.clone());
                     pm.stop_and_reset();
 
                     // this starts the performance counter
                     pm.start();
 
-                    use aes::Aes256;
-                    use aes::cipher::{BlockEncrypt, KeyInit};
                     use aes::cipher::generic_array::GenericArray;
+                    use aes::cipher::{BlockEncrypt, KeyInit};
+                    use aes::Aes256;
 
                     let mut key_array: [u8; 32];
                     let mut data_array: [u8; 16];
@@ -543,13 +636,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                     // pm.print_page_table();
                 }
-                #[cfg(feature="shellperf")]
+                #[cfg(feature = "shellperf")]
                 "cta2" => {
-                    let pm = PerfMgr::new(
-                        self.perfbuf.as_mut_ptr(),
-                        env.perf_csr.clone(),
-                        env.event_csr.clone()
-                    );
+                    let pm =
+                        PerfMgr::new(self.perfbuf.as_mut_ptr(), env.perf_csr.clone(), env.event_csr.clone());
                     pm.stop_and_reset();
 
                     // this starts the performance counter
@@ -566,10 +656,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         for keybit in 0..256 {
                             key_array = [0; 32];
                             key_array[keybit / 8] = 1 << keybit % 8;
-                            let mut schedule = aes_key_st {
-                                rd_key: [0u32; 60],
-                                rounds: 0
-                            };
+                            let mut schedule = aes_key_st { rd_key: [0u32; 60], rounds: 0 };
                             ring::xous_test::expand_aes_key(&key_array, &mut schedule);
                             // demarcate the encryption operation performance counter events
                             pm.log_event_unchecked(((databit as u32) << 8) | keybit as u32);
@@ -589,7 +676,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     }
                 }
-                #[cfg(any(feature="precursor", feature="renode"))]
+                #[cfg(any(feature = "precursor", feature = "renode"))]
                 "ping" => {
                     if let Some(name) = tokens.next() {
                         match self.dns.lookup(name) {
@@ -597,21 +684,21 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 log::debug!("sending ping to {:?}", ipaddr);
                                 if self.ping.is_none() {
                                     self.ping = Some(net::protocols::Ping::non_blocking_handle(
-                                        XousServerId::ServerName(xous_ipc::String::from_str(crate::SERVER_NAME_SHELLCHAT)),
+                                        XousServerId::ServerName(xous_ipc::String::from_str(
+                                            crate::SERVER_NAME_SHELLCHAT,
+                                        )),
                                         self.callback_id.unwrap() as usize,
                                     ));
                                 }
                                 if let Some(count_str) = tokens.next() {
                                     let count = count_str.parse::<u32>().unwrap();
                                     if let Some(pinger) = &self.ping {
-                                        pinger.ping_spawn_thread(
-                                            IpAddr::from(ipaddr),
-                                            count as usize,
-                                            1000
-                                        );
-                                        write!(ret, "Sending {} pings to {} ({:?})", count, name, ipaddr).unwrap();
+                                        pinger.ping_spawn_thread(IpAddr::from(ipaddr), count as usize, 1000);
+                                        write!(ret, "Sending {} pings to {} ({:?})", count, name, ipaddr)
+                                            .unwrap();
                                     } else {
-                                        // this just shouldn't happen based on the structure of the code above.
+                                        // this just shouldn't happen based on the structure of the code
+                                        // above.
                                         write!(ret, "Can't ping, internal error.").unwrap();
                                     }
                                 } else {
@@ -619,7 +706,12 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         if pinger.ping(IpAddr::from(ipaddr)) {
                                             write!(ret, "Sending a ping to {} ({:?})", name, ipaddr).unwrap();
                                         } else {
-                                            write!(ret, "Couldn't send a ping to {}, maybe socket is busy?", name).unwrap();
+                                            write!(
+                                                ret,
+                                                "Couldn't send a ping to {}, maybe socket is busy?",
+                                                name
+                                            )
+                                            .unwrap();
                                         }
                                     } else {
                                         write!(ret, "Can't ping, internal error.").unwrap();
@@ -638,29 +730,31 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     write!(ret, "{}", helpstring).unwrap();
                 }
             }
-
         } else {
             write!(ret, "{}", helpstring).unwrap();
         }
         Ok(Some(ret))
     }
 
-
-    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(
+        &mut self,
+        msg: &MessageEnvelope,
+        _env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         use core::fmt::Write;
 
         log::debug!("net callback");
         let mut ret = String::<1024>::new();
         match &msg.body {
-            xous::Message::Scalar(xous::ScalarMessage {id: _, arg1, arg2, arg3, arg4}) => {
+            xous::Message::Scalar(xous::ScalarMessage { id: _, arg1, arg2, arg3, arg4 }) => {
                 let dispatch = *arg1;
                 match FromPrimitive::from_usize(dispatch) {
                     Some(NetCmdDispatch::UdpTest1) => {
                         // Not used after udp to libstd, but left in case we want to repurpose
-                    },
+                    }
                     Some(NetCmdDispatch::UdpTest2) => {
                         // Not used after udp to libstd
-                    },
+                    }
                     None => {
                         // rebind the scalar args to the Ping convention
                         let op = arg1;
@@ -673,26 +767,27 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 // ignore the message, just creates visual noise
                                 return Ok(None);
                             }
-                            Some(NetPingCallback::NoErr) => {
-                                match addr {
-                                    IpAddr::V4(_) => {
-                                        write!(ret, "Pong from {:?} seq {} received: {} ms",
+                            Some(NetPingCallback::NoErr) => match addr {
+                                IpAddr::V4(_) => {
+                                    write!(
+                                        ret,
+                                        "Pong from {:?} seq {} received: {} ms",
+                                        addr, seq_or_addr, timestamp
+                                    )
+                                    .unwrap();
+                                    log::info!(
+                                        "{}NET.PONG,{:?},{},{},{}",
+                                        xous::BOOKEND_START,
                                         addr,
                                         seq_or_addr,
-                                        timestamp).unwrap();
-                                        log::info!("{}NET.PONG,{:?},{},{},{}",
-                                            xous::BOOKEND_START,
-                                            addr,
-                                            seq_or_addr,
-                                            timestamp,
-                                            xous::BOOKEND_END
-                                        );
-                                    },
-                                    IpAddr::V6(_) => {
-                                        write!(ret, "Ipv6 pong received: {} ms", timestamp).unwrap();
-                                    },
+                                        timestamp,
+                                        xous::BOOKEND_END
+                                    );
                                 }
-                            }
+                                IpAddr::V6(_) => {
+                                    write!(ret, "Ipv6 pong received: {} ms", timestamp).unwrap();
+                                }
+                            },
                             Some(NetPingCallback::Timeout) => {
                                 write!(ret, "Ping to {:?} timed out", addr).unwrap();
                             }
@@ -705,9 +800,9 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 write!(ret, "Unknown opcode received in NetCmd callback: {:?}", op).unwrap();
                             }
                         }
-                    },
+                    }
                 }
-            },
+            }
             xous::Message::Move(m) => {
                 let s = xous_ipc::String::<512>::from_message(m).unwrap();
                 write!(ret, "{}", s.as_str().unwrap()).unwrap();
@@ -727,9 +822,11 @@ enum Responses {
 }
 
 fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
-    // the result is implementation dependent, on Xous hardware, this is effectively the same as ticktimer.elapsed_ms()
+    // the result is implementation dependent, on Xous hardware, this is effectively the same as
+    // ticktimer.elapsed_ms()
     let elapsed_time = Instant::now().duration_since(boot_instant);
-    let uptime = std::format!("Hello from Precursor!\n\rI have been up for {}:{:02}:{:02}.\n\r",
+    let uptime = std::format!(
+        "Hello from Precursor!\n\rI have been up for {}:{:02}:{:02}.\n\r",
         (elapsed_time.as_millis() / 3_600_000),
         (elapsed_time.as_millis() / 60_000) % 60,
         (elapsed_time.as_millis() / 1000) % 60,
@@ -737,7 +834,7 @@ fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
 
     let mut buffer = [0; 1024];
     match stream.read(&mut buffer) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             log::warn!("Server connection error; closing connection {:?}", e);
             return;
@@ -760,25 +857,16 @@ fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
     };
 
     let contents = match response_index {
-        Responses::Uptime => {
-            uptime.as_str()
-        },
+        Responses::Uptime => uptime.as_str(),
         Responses::Buzz => {
             let xns = xous_names::XousNames::new().unwrap();
             llio::Llio::new(&xns).vibe(llio::VibePattern::Double).ok();
             "The motor on the Precursor goes bzz bzz"
         }
-        Responses::NotFound => {
-            "Ceci n'est pas une page vide"
-        },
+        Responses::NotFound => "Ceci n'est pas une page vide",
     };
 
-    let response = format!(
-        "{}\r\nContent-Length: {}\r\n\r\n{}",
-        status_line,
-        contents.len(),
-        contents
-    );
+    let response = format!("{}\r\nContent-Length: {}\r\n\r\n{}", status_line, contents.len(), contents);
 
     stream.write(response.as_bytes()).ok();
     stream.flush().ok();
@@ -856,33 +944,34 @@ struct Worker {
 
 impl Worker {
     fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Message>>>) -> Worker {
-        let thread = thread::spawn(move || loop {
-            let message = receiver.lock().unwrap().recv().unwrap();
+        let thread = thread::spawn(move || {
+            loop {
+                let message = receiver.lock().unwrap().recv().unwrap();
 
-            match message {
-                Message::NewJob(job) => {
-                    log::debug!("Worker {} got a job; executing.", id);
+                match message {
+                    Message::NewJob(job) => {
+                        log::debug!("Worker {} got a job; executing.", id);
 
-                    job();
-                }
-                Message::Terminate => {
-                    log::info!("Worker {} was told to terminate.", id);
+                        job();
+                    }
+                    Message::Terminate => {
+                        log::info!("Worker {} was told to terminate.", id);
 
-                    break;
+                        break;
+                    }
                 }
             }
         });
 
-        Worker {
-            id,
-            thread: Some(thread),
-        }
+        Worker { id, thread: Some(thread) }
     }
 }
 
-#[cfg(feature="ditherpunk")]
+#[cfg(feature = "ditherpunk")]
 fn heap_usage() -> usize {
-    match xous::rsyscall(xous::SysCall::IncreaseHeap(0, xous::MemoryFlags::R)).expect("couldn't get heap size") {
+    match xous::rsyscall(xous::SysCall::IncreaseHeap(0, xous::MemoryFlags::R))
+        .expect("couldn't get heap size")
+    {
         xous::Result::MemoryRange(m) => {
             let usage = m.len();
             usage
@@ -890,7 +979,7 @@ fn heap_usage() -> usize {
         _ => {
             log::error!("Couldn't measure heap usage");
             0
-         },
+        }
     }
 }
 

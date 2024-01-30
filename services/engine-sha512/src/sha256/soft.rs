@@ -1,44 +1,28 @@
 #![allow(clippy::many_single_char_names)]
-use crate::consts::BLOCK_LEN;
 use core::convert::TryInto;
 
-#[inline(always)]
-fn shl(v: [u32; 4], o: u32) -> [u32; 4] {
-    [v[0] >> o, v[1] >> o, v[2] >> o, v[3] >> o]
-}
+use crate::consts::BLOCK_LEN;
 
 #[inline(always)]
-fn shr(v: [u32; 4], o: u32) -> [u32; 4] {
-    [v[0] << o, v[1] << o, v[2] << o, v[3] << o]
-}
+fn shl(v: [u32; 4], o: u32) -> [u32; 4] { [v[0] >> o, v[1] >> o, v[2] >> o, v[3] >> o] }
 
 #[inline(always)]
-fn or(a: [u32; 4], b: [u32; 4]) -> [u32; 4] {
-    [a[0] | b[0], a[1] | b[1], a[2] | b[2], a[3] | b[3]]
-}
+fn shr(v: [u32; 4], o: u32) -> [u32; 4] { [v[0] << o, v[1] << o, v[2] << o, v[3] << o] }
 
 #[inline(always)]
-fn xor(a: [u32; 4], b: [u32; 4]) -> [u32; 4] {
-    [a[0] ^ b[0], a[1] ^ b[1], a[2] ^ b[2], a[3] ^ b[3]]
-}
+fn or(a: [u32; 4], b: [u32; 4]) -> [u32; 4] { [a[0] | b[0], a[1] | b[1], a[2] | b[2], a[3] | b[3]] }
+
+#[inline(always)]
+fn xor(a: [u32; 4], b: [u32; 4]) -> [u32; 4] { [a[0] ^ b[0], a[1] ^ b[1], a[2] ^ b[2], a[3] ^ b[3]] }
 
 #[inline(always)]
 fn add(a: [u32; 4], b: [u32; 4]) -> [u32; 4] {
-    [
-        a[0].wrapping_add(b[0]),
-        a[1].wrapping_add(b[1]),
-        a[2].wrapping_add(b[2]),
-        a[3].wrapping_add(b[3]),
-    ]
+    [a[0].wrapping_add(b[0]), a[1].wrapping_add(b[1]), a[2].wrapping_add(b[2]), a[3].wrapping_add(b[3])]
 }
 
-fn sha256load(v2: [u32; 4], v3: [u32; 4]) -> [u32; 4] {
-    [v3[3], v2[0], v2[1], v2[2]]
-}
+fn sha256load(v2: [u32; 4], v3: [u32; 4]) -> [u32; 4] { [v3[3], v2[0], v2[1], v2[2]] }
 
-fn sha256swap(v0: [u32; 4]) -> [u32; 4] {
-    [v0[2], v0[3], v0[0], v0[1]]
-}
+fn sha256swap(v0: [u32; 4]) -> [u32; 4] { [v0[2], v0[3], v0[0], v0[1]] }
 #[inline(never)] // bunnie: reduce binary size
 fn sha256msg1(v0: [u32; 4], v1: [u32; 4]) -> [u32; 4] {
     // sigma 0 on vectors
@@ -98,38 +82,14 @@ fn sha256_digest_round_x2(cdgh: [u32; 4], abef: [u32; 4], wk: [u32; 4]) -> [u32;
     let [c0, d0, g0, h0] = cdgh;
 
     // a round
-    let x0 = big_sigma1!(e0)
-        .wrapping_add(bool3ary_202!(e0, f0, g0))
-        .wrapping_add(wk0)
-        .wrapping_add(h0);
+    let x0 = big_sigma1!(e0).wrapping_add(bool3ary_202!(e0, f0, g0)).wrapping_add(wk0).wrapping_add(h0);
     let y0 = big_sigma0!(a0).wrapping_add(bool3ary_232!(a0, b0, c0));
-    let (a1, b1, c1, d1, e1, f1, g1, h1) = (
-        x0.wrapping_add(y0),
-        a0,
-        b0,
-        c0,
-        x0.wrapping_add(d0),
-        e0,
-        f0,
-        g0,
-    );
+    let (a1, b1, c1, d1, e1, f1, g1, h1) = (x0.wrapping_add(y0), a0, b0, c0, x0.wrapping_add(d0), e0, f0, g0);
 
     // a round
-    let x1 = big_sigma1!(e1)
-        .wrapping_add(bool3ary_202!(e1, f1, g1))
-        .wrapping_add(wk1)
-        .wrapping_add(h1);
+    let x1 = big_sigma1!(e1).wrapping_add(bool3ary_202!(e1, f1, g1)).wrapping_add(wk1).wrapping_add(h1);
     let y1 = big_sigma0!(a1).wrapping_add(bool3ary_232!(a1, b1, c1));
-    let (a2, b2, _, _, e2, f2, _, _) = (
-        x1.wrapping_add(y1),
-        a1,
-        b1,
-        c1,
-        x1.wrapping_add(d1),
-        e1,
-        f1,
-        g1,
-    );
+    let (a2, b2, _, _, e2, f2, _, _) = (x1.wrapping_add(y1), a1, b1, c1, x1.wrapping_add(d1), e1, f1, g1);
 
     [a2, b2, e2, f2]
 }
@@ -151,11 +111,7 @@ macro_rules! rounds4 {
 }
 
 macro_rules! schedule_rounds4 {
-    (
-        $abef:ident, $cdgh:ident,
-        $w0:expr, $w1:expr, $w2:expr, $w3:expr, $w4:expr,
-        $i: expr
-    ) => {{
+    ($abef:ident, $cdgh:ident, $w0:expr, $w1:expr, $w2:expr, $w3:expr, $w4:expr, $i:expr) => {{
         $w4 = schedule($w0, $w1, $w2, $w3);
         rounds4!($abef, $cdgh, $w4, $i);
     }};

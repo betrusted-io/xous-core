@@ -657,6 +657,7 @@ def main():
             # now try to download all the artifacts and check their versions
             # this list should visit kernels in order from newest to oldest.
             URL_LIST = [
+                'https://ci.betrusted.io/releases/v0.9.15/',
                 'https://ci.betrusted.io/releases/v0.9.14/',
                 'https://ci.betrusted.io/releases/v0.9.13/',
                 'https://ci.betrusted.io/releases/v0.9.12/',
@@ -674,7 +675,7 @@ def main():
                 # first try the stable branch and see if it meets the version requirement
                 print("Downloading candidate restore kernel...")
                 candidate_kernel = requests.get(URL_LIST[attempt] + 'xous-' + language + '.img').content
-                if int.from_bytes(candidate_kernel[:4], 'little') != 1:
+                if int.from_bytes(candidate_kernel[:4], 'little') != 1 and int.from_bytes(candidate_kernel[:4], 'little') != 2:
                     print("Downloaded kernel image has unexpected signature version. Trying the next image.")
                     attempt += 1
                     continue

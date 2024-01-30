@@ -1,17 +1,16 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
-
-#![recursion_limit="512"]
+#![recursion_limit = "512"]
 
 mod api;
-use api::*;
-
-use num_traits::*;
 use core::sync::atomic::{AtomicBool, Ordering};
+
+use api::*;
+use num_traits::*;
 use xous::msg_blocking_scalar_unpack;
 use xous_ipc::Buffer;
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 #[macro_use]
 extern crate engine25519_as;
 
@@ -19,25 +18,28 @@ static RUN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static DISALLOW_SUSPEND: AtomicBool = AtomicBool::new(false);
 static SUSPEND_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation {
-    use utralib::generated::*;
-    use crate::api::*;
-    use susres::{RegManager, RegOrField, SuspendResume};
-    use num_traits::*;
-    use core::sync::atomic::Ordering;
-    use crate::RUN_IN_PROGRESS;
-    use crate::DISALLOW_SUSPEND;
     use core::convert::TryInto;
+    use core::sync::atomic::Ordering;
+
+    use num_traits::*;
+    use susres::{RegManager, RegOrField, SuspendResume};
+    use utralib::generated::*;
+
+    use crate::api::*;
+    use crate::DISALLOW_SUSPEND;
+    use crate::RUN_IN_PROGRESS;
 
     pub struct Engine25519Hw {
         csr: utralib::CSR<u32>,
         // these are slices mapped directly to the hardware memory space
         ucode_hw: &'static mut [u32],
         rf_hw: &'static mut [u32],
-        susres: RegManager::<{utra::engine::ENGINE_NUMREGS}>,
+        susres: RegManager<{ utra::engine::ENGINE_NUMREGS }>,
         handler_conn: Option<xous::CID>,
-        // don't use the susres ManagedMem primitive; it blows out the stack. Instead, heap-allocate the backing stores.
+        // don't use the susres ManagedMem primitive; it blows out the stack. Instead, heap-allocate the
+        // backing stores.
         ucode_backing: &'static mut [u32],
         rf_backing: &'static mut [u32],
         mpc_resume: Option<u32>,
@@ -60,27 +62,35 @@ mod implementation {
         if engine.do_notify {
             if let Some(conn) = engine.handler_conn {
                 if reason & engine.csr.ms(utra::engine::EV_PENDING_FINISHED, 1) != 0 {
-                    xous::try_send_message(conn,
-                        xous::Message::new_scalar(Opcode::EngineDone.to_usize().unwrap(),
-                            0, 0, 0, 0)).map(|_|()).unwrap();
+                    xous::try_send_message(
+                        conn,
+                        xous::Message::new_scalar(Opcode::EngineDone.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .map(|_| ())
+                    .unwrap();
                 }
                 if reason & engine.csr.ms(utra::engine::EV_PENDING_ILLEGAL_OPCODE, 1) != 0 {
-                    xous::try_send_message(conn,
-                        xous::Message::new_scalar(Opcode::IllegalOpcode.to_usize().unwrap(),
-                            0, 0, 0, 0)).map(|_|()).unwrap();
+                    xous::try_send_message(
+                        conn,
+                        xous::Message::new_scalar(Opcode::IllegalOpcode.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .map(|_| ())
+                    .unwrap();
                 }
             } else {
                 panic!("engine interrupt happened without a handler");
             }
         }
         // clear the interrupt
-        engine.csr
-            .wo(utra::engine::EV_PENDING, reason);
+        engine.csr.wo(utra::engine::EV_PENDING, reason);
     }
 
     impl Engine25519Hw {
         pub fn new(handler_conn: xous::CID) -> Engine25519Hw {
-            assert!(TOTAL_RF_SIZE_IN_U32 == RF_TOTAL_U32_SIZE, "sanity check has failed on logical dimensions of register file vs hardware aperture sizes");
+            assert!(
+                TOTAL_RF_SIZE_IN_U32 == RF_TOTAL_U32_SIZE,
+                "sanity check has failed on logical dimensions of register file vs hardware aperture sizes"
+            );
 
             log::trace!("creating engine25519 CSR");
             let csr = xous::syscall::map_memory(
@@ -104,21 +114,37 @@ mod implementation {
                 None,
                 UCODE_U8_SIZE,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
-            ).expect("couldn't map backing store for microcode");
+            )
+            .expect("couldn't map backing store for microcode");
             let rf_mem = xous::syscall::map_memory(
                 None,
                 None,
                 RF_TOTAL_U8_SIZE,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
-            ).expect("couldn't map RF backing store");
+            )
+            .expect("couldn't map RF backing store");
             Engine25519Hw {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
-                ucode_hw: unsafe{core::slice::from_raw_parts_mut(mem.as_mut_ptr().add(UCODE_U8_BASE) as *mut u32, UCODE_U32_SIZE)},
-                rf_hw: unsafe{core::slice::from_raw_parts_mut(mem.as_mut_ptr().add(RF_U8_BASE) as *mut u32, RF_TOTAL_U32_SIZE)},
+                ucode_hw: unsafe {
+                    core::slice::from_raw_parts_mut(
+                        mem.as_mut_ptr().add(UCODE_U8_BASE) as *mut u32,
+                        UCODE_U32_SIZE,
+                    )
+                },
+                rf_hw: unsafe {
+                    core::slice::from_raw_parts_mut(
+                        mem.as_mut_ptr().add(RF_U8_BASE) as *mut u32,
+                        RF_TOTAL_U32_SIZE,
+                    )
+                },
                 handler_conn: Some(handler_conn),
-                ucode_backing: unsafe{core::slice::from_raw_parts_mut(ucode_mem.as_mut_ptr() as *mut u32, UCODE_U32_SIZE)},
-                rf_backing: unsafe{core::slice::from_raw_parts_mut(rf_mem.as_mut_ptr() as *mut u32, RF_TOTAL_U32_SIZE)},
+                ucode_backing: unsafe {
+                    core::slice::from_raw_parts_mut(ucode_mem.as_mut_ptr() as *mut u32, UCODE_U32_SIZE)
+                },
+                rf_backing: unsafe {
+                    core::slice::from_raw_parts_mut(rf_mem.as_mut_ptr() as *mut u32, RF_TOTAL_U32_SIZE)
+                },
                 mpc_resume: None,
                 clean_resume: None,
                 do_notify: false,
@@ -138,13 +164,15 @@ mod implementation {
 
             log::trace!("enabling interrupt");
             self.csr.wo(utra::engine::EV_PENDING, 0xFFFF_FFFF); // clear any droppings.
-            self.csr.wo(utra::engine::EV_ENABLE,
-                self.csr.ms(utra::engine::EV_ENABLE_FINISHED, 1) |
-                self.csr.ms(utra::engine::EV_ENABLE_ILLEGAL_OPCODE, 1)
+            self.csr.wo(
+                utra::engine::EV_ENABLE,
+                self.csr.ms(utra::engine::EV_ENABLE_FINISHED, 1)
+                    | self.csr.ms(utra::engine::EV_ENABLE_ILLEGAL_OPCODE, 1),
             );
 
-            // setup the susres context. Most of the defaults are fine, so they aren't explicitly initialized in the code above,
-            // but they still have to show up down here in case we're suspended mid-op
+            // setup the susres context. Most of the defaults are fine, so they aren't explicitly initialized
+            // in the code above, but they still have to show up down here in case we're suspended
+            // mid-op
             log::trace!("setting up susres");
             self.susres.push(RegOrField::Reg(utra::engine::POWER), None); // on resume, this needs to be setup first, so that the "pause" state is captured correctly
             self.susres.push(RegOrField::Reg(utra::engine::WINDOW), None);
@@ -155,7 +183,8 @@ mod implementation {
             // manually handle event enable, because the bootloader could have messed with our current state
             // self.susres.push(RegOrField::Reg(utra::engine::EV_ENABLE), None);
 
-            // self.susres.push(RegOrField::Reg(utra::engine::CONTROL), None); // don't push this, we need to manually coordinate `mpcresume` before resuming
+            // self.susres.push(RegOrField::Reg(utra::engine::CONTROL), None); // don't push this, we need to
+            // manually coordinate `mpcresume` before resuming
         }
 
         pub fn suspend(&mut self) {
@@ -165,18 +194,19 @@ mod implementation {
                 // request a pause from the engine. it will stop executing at the next microcode op
                 // and assert STATUS_PAUSE_GNT
                 self.csr.rmwf(utra::engine::POWER_PAUSE_REQ, 1);
-                while (self.csr.rf(utra::engine::STATUS_PAUSE_GNT) == 0) && (self.csr.rf(utra::engine::STATUS_RUNNING) == 1) {
+                while (self.csr.rf(utra::engine::STATUS_PAUSE_GNT) == 0)
+                    && (self.csr.rf(utra::engine::STATUS_RUNNING) == 1)
+                {
                     // busy wait for this to clear, or the engine to stop running; should happen in << 1us
                     if self.csr.rf(utra::engine::STATUS_PAUSE_GNT) == 1 {
                         // store the current PC value as a resume note
                         self.mpc_resume = Some(self.csr.rf(utra::engine::STATUS_MPC));
                     } else {
-                        // the implication here is the engine actually finished its last opcode, so it would not enter the paused state;
-                        // rather, it is now stopped.
+                        // the implication here is the engine actually finished its last opcode, so it would
+                        // not enter the paused state; rather, it is now stopped.
                         self.mpc_resume = None;
                     }
                 }
-
             } else {
                 self.mpc_resume = None;
             }
@@ -206,6 +236,7 @@ mod implementation {
             // now backup all the machine registers
             self.susres.suspend();
         }
+
         pub fn resume(&mut self) {
             self.susres.resume();
             // if the power wasn't on, we have to flip it on temporarily to access the backing memories
@@ -232,9 +263,10 @@ mod implementation {
             log::info!("orig_state: {:?}", orig_state);
             // clear any droppings from the bootloader, and then re-enable
             self.csr.wo(utra::engine::EV_PENDING, 0xFFFF_FFFF);
-            self.csr.wo(utra::engine::EV_ENABLE,
-                self.csr.ms(utra::engine::EV_ENABLE_FINISHED, 1) |
-                self.csr.ms(utra::engine::EV_ENABLE_ILLEGAL_OPCODE, 1)
+            self.csr.wo(
+                utra::engine::EV_ENABLE,
+                self.csr.ms(utra::engine::EV_ENABLE_FINISHED, 1)
+                    | self.csr.ms(utra::engine::EV_ENABLE_ILLEGAL_OPCODE, 1),
             );
 
             // in the case of a resume from pause, we need to specify the PC to resume from
@@ -242,19 +274,24 @@ mod implementation {
             if let Some(mpc) = self.mpc_resume {
                 log::info!("suspended during engine25519 transaction, resuming...");
                 if self.csr.rf(utra::engine::POWER_PAUSE_REQ) != 1 {
-                    log::error!("resuming from an unexpected state: we had mpc of {} set, but pause was not requested!", mpc);
+                    log::error!(
+                        "resuming from an unexpected state: we had mpc of {} set, but pause was not requested!",
+                        mpc
+                    );
                     self.clean_resume = Some(false);
                     // we don't resume execution. Presumably this will cause terrible things to happen such as
                     // the interrupt waiting for execution to be done to never trigger.
                     // perhaps we could try to trigger that somehow...?
                 } else {
-                    // the pause was requested, but crucially, the engine was not in the "go" state. This means that
-                    // the engine will get its starting PC from the resume PC when we hit go again, instead of the mpstart register.
+                    // the pause was requested, but crucially, the engine was not in the "go" state. This
+                    // means that the engine will get its starting PC from the resume PC
+                    // when we hit go again, instead of the mpstart register.
                     self.csr.wfo(utra::engine::MPRESUME_MPRESUME, mpc);
                     // start the engine
                     self.csr.wfo(utra::engine::CONTROL_GO, 1);
                     // it should grab the PC from `mpresume` and then go to the paused state. Wait until
-                    // we have achieved the identical paused state that happened before resume, before unpausing!
+                    // we have achieved the identical paused state that happened before resume, before
+                    // unpausing!
                     while self.csr.rf(utra::engine::STATUS_PAUSE_GNT) == 0 {
                         // this should be very fast, within a couple CPU cycles
                     }
@@ -270,9 +307,7 @@ mod implementation {
         }
 
         #[allow(dead_code)]
-        pub(crate) fn power_dbg(&self) -> u32 {
-            self.csr.r(utra::engine::POWER)
-        }
+        pub(crate) fn power_dbg(&self) -> u32 { self.csr.r(utra::engine::POWER) }
 
         pub fn power_on(&mut self, on: bool) {
             if on {
@@ -281,6 +316,7 @@ mod implementation {
                 self.csr.rmwf(utra::engine::POWER_ON, 0);
             }
         }
+
         pub fn run(&mut self, job: Job) {
             self.montgomery_len = None;
             log::trace!("entering run");
@@ -296,9 +332,14 @@ mod implementation {
             log::trace!("using window {}", window);
             // this should "just panic" if we have a bad window arg, which is the desired behavior
             //let mut num = 0;
-            for (&src, dst) in job.rf.iter().zip(self.rf_hw[window * RF_SIZE_IN_U32..(window+1) * RF_SIZE_IN_U32].iter_mut()) {
+            for (&src, dst) in job
+                .rf
+                .iter()
+                .zip(self.rf_hw[window * RF_SIZE_IN_U32..(window + 1) * RF_SIZE_IN_U32].iter_mut())
+            {
                 //*dst = src;  // this gets optimized away, so replace it with the below line of code
-                // since these are given to us by an iter, and we aren't doing .add() etc. on the pointers, should be safe.
+                // since these are given to us by an iter, and we aren't doing .add() etc. on the pointers,
+                // should be safe.
                 unsafe { (dst as *mut u32).write_volatile(src) };
 
                 // performance critical, so comment it out if not using this debug code
@@ -311,7 +352,8 @@ mod implementation {
             //num = 0;
             for (&src, dst) in job.ucode.iter().zip(self.ucode_hw.iter_mut()) {
                 //*dst = src;  // this gets optimized away, so replace it with the below line of code
-                // since these are given to us by an iter, and we aren't doing .add() etc. on the pointers, should be safe.
+                // since these are given to us by an iter, and we aren't doing .add() etc. on the pointers,
+                // should be safe.
                 unsafe { (dst as *mut u32).write_volatile(src) };
 
                 /*if src != 0 {
@@ -335,17 +377,25 @@ mod implementation {
             }
             // setup the sync polling variable
             RUN_IN_PROGRESS.store(true, Ordering::Relaxed);
-            // this will start the run. interrupts should *already* be enabled for the completion notification...
+            // this will start the run. interrupts should *already* be enabled for the completion
+            // notification...
             self.csr.wfo(utra::engine::CONTROL_GO, 1);
 
             // we are now in a stable config, suspends are allowed
             DISALLOW_SUSPEND.store(false, Ordering::Relaxed);
         }
+
         fn copy_reg(&mut self, r: [u8; 32], ra: usize, window: usize) {
-            for (src, dst) in r.chunks_exact(4).zip(self.rf_hw[window * RF_SIZE_IN_U32 + ra * 8..window * RF_SIZE_IN_U32 + (ra+1) * 8].iter_mut()) {
-                unsafe{ (dst as *mut u32).write_volatile(u32::from_le_bytes(src[0..4].try_into().unwrap()));}
+            for (src, dst) in r.chunks_exact(4).zip(
+                self.rf_hw[window * RF_SIZE_IN_U32 + ra * 8..window * RF_SIZE_IN_U32 + (ra + 1) * 8]
+                    .iter_mut(),
+            ) {
+                unsafe {
+                    (dst as *mut u32).write_volatile(u32::from_le_bytes(src[0..4].try_into().unwrap()));
+                }
             }
         }
+
         fn load_montgomery(&mut self, mpstart: u32) -> u32 {
             let mcode = assemble_engine25519!(
                 start:
@@ -615,6 +665,7 @@ mod implementation {
             }
             mcode.len() as u32
         }
+
         pub fn montgomery(&mut self, job: MontgomeryJob) {
             log::trace!("entering run");
             // block any suspends from happening while we set up the engine
@@ -628,12 +679,15 @@ mod implementation {
             self.copy_reg(job.x1_w, 28, window);
             self.copy_reg(job.affine_u, 24, window);
             self.copy_reg(job.scalar, 31, window);
-            self.copy_reg([
-                254, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            ], 19, window); // 254 as loop counter
+            self.copy_reg(
+                [
+                    254, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00,
+                ],
+                19,
+                window,
+            ); // 254 as loop counter
 
             let mpstart = 0;
             // this optimization shaves off about 0.13ms per iteration
@@ -651,7 +705,8 @@ mod implementation {
 
             // setup the sync polling variable
             RUN_IN_PROGRESS.store(true, Ordering::Relaxed);
-            // this will start the run. interrupts should *already* be enabled for the completion notification...
+            // this will start the run. interrupts should *already* be enabled for the completion
+            // notification...
             self.csr.wfo(utra::engine::CONTROL_GO, 1);
 
             // we are now in a stable config, suspends are allowed
@@ -671,9 +726,13 @@ mod implementation {
             let mut ret_rf: [u32; RF_SIZE_IN_U32] = [0; RF_SIZE_IN_U32];
             let window = self.csr.rf(utra::engine::WINDOW_WINDOW) as usize;
             //let mut num = 0;
-            for (&src, dst) in self.rf_hw[window * RF_SIZE_IN_U32..(window+1) * RF_SIZE_IN_U32].iter().zip(ret_rf.iter_mut()) {
+            for (&src, dst) in self.rf_hw[window * RF_SIZE_IN_U32..(window + 1) * RF_SIZE_IN_U32]
+                .iter()
+                .zip(ret_rf.iter_mut())
+            {
                 //*dst = src;  // this gets optimized away, so replace it with the below line of code
-                // since these are given to us by an iter, and we aren't doing .add() etc. on the pointers, should be safe.
+                // since these are given to us by an iter, and we aren't doing .add() etc. on the pointers,
+                // should be safe.
                 unsafe { (dst as *mut u32).write_volatile(src) };
                 /*
                 if src != 0 {
@@ -684,6 +743,7 @@ mod implementation {
 
             JobResult::Result(ret_rf)
         }
+
         pub fn get_single_result(&mut self, r: usize) -> JobResult {
             if let Some(clean_resume) = self.clean_resume {
                 if !clean_resume {
@@ -696,7 +756,11 @@ mod implementation {
 
             let mut ret_r: [u8; 32] = [0; 32];
             let window = self.csr.rf(utra::engine::WINDOW_WINDOW) as usize;
-            for (&src, dst) in self.rf_hw[window * RF_SIZE_IN_U32 + r * 8..window * RF_SIZE_IN_U32 + (r+1) * 8].iter().zip(ret_r.chunks_exact_mut(4)) {
+            for (&src, dst) in self.rf_hw
+                [window * RF_SIZE_IN_U32 + r * 8..window * RF_SIZE_IN_U32 + (r + 1) * 8]
+                .iter()
+                .zip(ret_r.chunks_exact_mut(4))
+            {
                 for (&src_byte, dst_byte) in src.to_le_bytes().iter().zip(dst.iter_mut()) {
                     *dst_byte = src_byte;
                 }
@@ -712,34 +776,28 @@ mod implementation {
 mod implementation {
     use crate::api::*;
 
-    pub struct Engine25519Hw {
-    }
+    pub struct Engine25519Hw {}
 
     impl Engine25519Hw {
-        pub fn new(_handler_conn: xous::CID) -> Engine25519Hw {
-            Engine25519Hw {
-            }
-        }
+        pub fn new(_handler_conn: xous::CID) -> Engine25519Hw { Engine25519Hw {} }
+
         pub fn init(&mut self) {}
-        pub fn suspend(&self) {
-        }
-        pub fn resume(&self) {
-        }
-        pub fn run(&mut self, _job: Job) {
-        }
-        pub fn get_result(&mut self) -> JobResult {
-            JobResult::IllegalOpcodeException
-        }
-        pub fn power_on(&mut self, _on: bool) {
-        }
-        pub fn montgomery(&mut self, _job: MontgomeryJob) {
-        }
-        pub fn get_single_result(&mut self, _r: usize) -> JobResult {
-            JobResult::EngineUnavailable
-        }
+
+        pub fn suspend(&self) {}
+
+        pub fn resume(&self) {}
+
+        pub fn run(&mut self, _job: Job) {}
+
+        pub fn get_result(&mut self) -> JobResult { JobResult::IllegalOpcodeException }
+
+        pub fn power_on(&mut self, _on: bool) {}
+
+        pub fn montgomery(&mut self, _job: MontgomeryJob) {}
+
+        pub fn get_single_result(&mut self, _r: usize) -> JobResult { JobResult::EngineUnavailable }
     }
 }
-
 
 fn susres_thread(engine_arg: usize) {
     use crate::implementation::Engine25519Hw;
@@ -750,7 +808,13 @@ fn susres_thread(engine_arg: usize) {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(susres_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Late), &xns, api::SusResOps::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(
+        Some(susres::SuspendOrder::Late),
+        &xns,
+        api::SusResOps::SuspendResume as u32,
+        sr_cid,
+    )
+    .expect("couldn't create suspend/resume object");
 
     log::trace!("starting engine25519 suspend/resume manager loop");
     loop {
@@ -799,7 +863,8 @@ fn main() -> ! {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let engine25519_sid = xns.register_name(api::SERVER_NAME_ENGINE25519, None).expect("can't register server");
+    let engine25519_sid =
+        xns.register_name(api::SERVER_NAME_ENGINE25519, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", engine25519_sid);
 
     let handler_conn = xous::connect(engine25519_sid).expect("couldn't create IRQ handler connection");
@@ -810,7 +875,8 @@ fn main() -> ! {
     log::trace!("ready to accept requests");
 
     // register a suspend/resume listener
-    xous::create_thread_1(susres_thread, engine25519.as_mut() as *mut Engine25519Hw as usize).expect("couldn't start susres handler thread");
+    xous::create_thread_1(susres_thread, engine25519.as_mut() as *mut Engine25519Hw as usize)
+        .expect("couldn't start susres handler thread");
 
     let mut client_cid: Option<xous::CID> = None;
     let mut job_count = 0;
@@ -830,7 +896,8 @@ fn main() -> ! {
                     xous::yield_slice();
                 }
                 engine25519.power_on(true);
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let montgomery_job = buffer.to_original::<MontgomeryJob, _>().unwrap();
                 engine25519.montgomery(montgomery_job);
                 while RUN_IN_PROGRESS.load(Ordering::Relaxed) {
@@ -853,7 +920,8 @@ fn main() -> ! {
                 }
                 engine25519.power_on(true);
 
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let job = buffer.to_original::<Job, _>().unwrap();
 
                 let response = if client_cid.is_none() {
@@ -861,7 +929,10 @@ fn main() -> ! {
                         log::trace!("running async job");
                         // async job
                         // the presence of an ID indicates we are doing an async method
-                        client_cid = Some(xous::connect(xous::SID::from_array(job_id)).expect("couldn't connect to the caller's server"));
+                        client_cid = Some(
+                            xous::connect(xous::SID::from_array(job_id))
+                                .expect("couldn't connect to the caller's server"),
+                        );
                         engine25519.run(job);
                         // just let the caller know we started a job, but don't return any results
                         JobResult::Started
@@ -882,7 +953,7 @@ fn main() -> ! {
                     JobResult::EngineUnavailable
                 };
                 buffer.replace(response).unwrap();
-            },
+            }
             Some(Opcode::IsFree) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if client_cid.is_none() {
                     xous::return_scalar(msg.sender, 1).expect("couldn't return IsIdle query");
@@ -894,21 +965,32 @@ fn main() -> ! {
                 if let Some(cid) = client_cid {
                     let result = engine25519.get_result();
                     let buf = Buffer::into_buf(result).or(Err(xous::Error::InternalError)).unwrap();
-                    buf.send(cid, Return::Result.to_u32().unwrap()).expect("couldn't return result to caller");
+                    buf.send(cid, Return::Result.to_u32().unwrap())
+                        .expect("couldn't return result to caller");
 
                     // this simultaneously releases the lock and disconnects from the caller
-                    unsafe{xous::disconnect(client_cid.take().unwrap()).expect("couldn't disconnect from the caller");}
+                    unsafe {
+                        xous::disconnect(client_cid.take().unwrap())
+                            .expect("couldn't disconnect from the caller");
+                    }
                 } else {
-                    log::error!("illegal state: got a result, but no client was registered. Did we forget to disable interrupts on a synchronous call??");
+                    log::error!(
+                        "illegal state: got a result, but no client was registered. Did we forget to disable interrupts on a synchronous call??"
+                    );
                 }
                 engine25519.power_on(false);
-            },
+            }
             Some(Opcode::IllegalOpcode) => {
                 if let Some(cid) = client_cid {
-                    let buf = Buffer::into_buf(JobResult::IllegalOpcodeException).or(Err(xous::Error::InternalError)).unwrap();
-                    buf.send(cid, Return::Result.to_u32().unwrap()).expect("couldn't return result to caller");
+                    let buf = Buffer::into_buf(JobResult::IllegalOpcodeException)
+                        .or(Err(xous::Error::InternalError))
+                        .unwrap();
+                    buf.send(cid, Return::Result.to_u32().unwrap())
+                        .expect("couldn't return result to caller");
                 } else {
-                    log::error!("illegal state: got a result, but no client was registered. Did we forget to disable interrupts on a synchronous call??");
+                    log::error!(
+                        "illegal state: got a result, but no client was registered. Did we forget to disable interrupts on a synchronous call??"
+                    );
                 }
                 engine25519.power_on(false);
             }

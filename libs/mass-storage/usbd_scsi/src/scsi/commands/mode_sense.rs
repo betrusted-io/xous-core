@@ -39,29 +39,29 @@ pub struct ModeSenseXCommand {
 pub struct ModeSense6Command {
     #[pkd(7, 0, 0, 0)]
     pub op_code: u8,
-    
+
     #[pkd(3, 3, 1, 1)]
     pub disable_block_descriptors: bool,
-    
+
     #[pkd(7, 6, 2, 2)]
     pub page_control: PageControl,
-    
+
     #[pkd(5, 0, 2, 2)]
     pub page_code: u8,
-    
+
     #[pkd(7, 0, 3, 3)]
     pub subpage_code: u8,
-    
+
     #[pkd(7, 0, 4, 4)]
     pub allocation_length: u8,
-    
+
     #[pkd(7, 0, 5, 5)]
     pub control: Control,
 }
 impl ParsePackedStruct for ModeSense6Command {}
 impl From<ModeSense6Command> for ModeSenseXCommand {
     fn from(m: ModeSense6Command) -> Self {
-        Self { 
+        Self {
             command_length: CommandLength::C6,
             page_control: m.page_control,
         }
@@ -73,7 +73,7 @@ impl From<ModeSense6Command> for ModeSenseXCommand {
 pub struct ModeSense10Command {
     #[pkd(7, 0, 0, 0)]
     pub op_code: u8,
-    
+
     #[pkd(4, 4, 1, 1)]
     pub long_lba_accepted: bool,
 
@@ -85,7 +85,7 @@ pub struct ModeSense10Command {
 
     #[pkd(5, 0, 2, 2)]
     pub page_code: u8,
-    
+
     #[pkd(7, 0, 3, 3)]
     pub subpage_code: u8,
 
@@ -100,7 +100,7 @@ impl From<ModeSense10Command> for ModeSenseXCommand {
     fn from(m: ModeSense10Command) -> Self {
         Self {
             command_length: CommandLength::C10,
-            page_control: m.page_control, 
+            page_control: m.page_control,
         }
     }
 }

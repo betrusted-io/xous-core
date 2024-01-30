@@ -1,19 +1,45 @@
-use crate::oqc_test::OqcOp;
-use crate::{ShellCmdApi,CommonEnv};
-use xous_ipc::String;
-use xous::{MessageEnvelope, Message};
-
-use codec::*;
-use base64::encode;
 use core::fmt::Write;
 use core::mem::size_of;
-use core::sync::atomic::{AtomicBool, Ordering, AtomicU32};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
-use num_traits::*;
-#[cfg(feature="extra-tests")]
+#[cfg(feature = "extra-tests")]
 use std::time::Instant;
 
+use base64::encode;
+use codec::*;
+use num_traits::*;
+use xous::{Message, MessageEnvelope};
+use xous_ipc::String;
+
+use crate::oqc_test::OqcOp;
+use crate::{CommonEnv, ShellCmdApi};
+
 static AUDIO_OQC: AtomicBool = AtomicBool::new(false);
+
+/// Test-only replacement for `rand::thread_rng()`, which is unusable for
+/// us, as we want to allow running stdlib tests on tier-3 targets which may
+/// not have `getrandom` support.
+///
+/// Does a bit of a song and dance to ensure that the seed is different on
+/// each call (as some tests sadly rely on this), but doesn't try that hard.
+///
+/// This is duplicated in the `core`, `alloc` test suites (as well as
+/// `std`'s integration tests), but figuring out a mechanism to share these
+/// seems far more painful than copy-pasting a 7 line function a couple
+/// times, given that even under a perma-unstable feature, I don't think we
+/// want to expose types from `rand` from `std`.
+#[track_caller]
+#[cfg(feature = "locktests")]
+pub(crate) fn test_rng() -> rand_xorshift::XorShiftRng {
+    use core::convert::TryInto;
+    use core::hash::{BuildHasher, Hash, Hasher};
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    core::panic::Location::caller().hash(&mut hasher);
+    let hc64 = hasher.finish();
+    let seed_vec = [hc64.to_le_bytes(), 0x0102030405060708u64.to_le_bytes()].concat();
+    let seed: [u8; 16] = seed_vec.as_slice().try_into().unwrap();
+    rand::SeedableRng::from_seed(seed)
+}
 
 #[derive(Debug)]
 pub struct Test {
@@ -25,7 +51,8 @@ pub struct Test {
     callback_conn: u32,
     framecount: u32,
     play_sample: f32, // count of play samples generated. in f32 to avoid int<->f32 conversions
-    rec_sample: usize, // count of record samples recorded. in usize because we're not doing f32 wave table computations on this
+    rec_sample: usize, /* count of record samples recorded. in usize because we're not doing f32 wave table
+                       * computations on this */
     left_play: bool,
     right_play: bool,
     speaker_play: bool,
@@ -37,7 +64,7 @@ pub struct Test {
     oqc_cid: Option<xous::CID>,
     kbd: Option<keyboard::Keyboard>,
     oqc_start: u64,
-    #[cfg(any(feature="precursor", feature="renode"))]
+    #[cfg(any(feature = "precursor", feature = "renode"))]
     jtag: jtag::Jtag,
 }
 impl Test {
@@ -64,9 +91,11 @@ impl Test {
             start_elapsed: None,
             end_elapsed: None,
             oqc_cid: None,
-            kbd: Some(keyboard::Keyboard::new(&xns).unwrap()), // allocate and save for use in the oqc_tester, so that the xous_names table is fully allocated
+            kbd: Some(keyboard::Keyboard::new(&xns).unwrap()), /* allocate and save for use in the
+                                                                * oqc_tester, so that the xous_names table
+                                                                * is fully allocated */
             oqc_start: 0,
-            #[cfg(any(feature="precursor", feature="renode"))]
+            #[cfg(any(feature = "precursor", feature = "renode"))]
             jtag: jtag::Jtag::new(&xns).unwrap(),
         }
     }
@@ -105,7 +134,7 @@ fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntErro
                 }
                 significance /= 10;
             } else {
-                return "z".parse::<i32>() // you can't create a ParseIntError any other way
+                return "z".parse::<i32>(); // you can't create a ParseIntError any other way
             }
         }
         Ok(result)
@@ -118,7 +147,11 @@ fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntErro
 impl<'a> ShellCmdApi<'a> for Test {
     cmd_api!(test);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         const SENTINEL: &'static str = "|TSTR";
 
         self.state += 1;
@@ -129,11 +162,11 @@ impl<'a> ShellCmdApi<'a> for Test {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
-                #[cfg(feature="extra-tests")]
+                #[cfg(feature = "extra-tests")]
                 "panic" => {
                     assert!(1 == 0, "Panic test: 1 == 0 failure!");
                 }
-                #[cfg(feature="extra-tests")]
+                #[cfg(feature = "extra-tests")]
                 "instant" => {
                     write!(ret, "start elapsed_ms {}\n", env.ticktimer.elapsed_ms()).unwrap();
                     let now = Instant::now();
@@ -141,17 +174,125 @@ impl<'a> ShellCmdApi<'a> for Test {
                     write!(ret, "Duration (ms): {}\n", now.elapsed().as_millis()).unwrap();
                     write!(ret, "end elapsed_ms {}\n", env.ticktimer.elapsed_ms()).unwrap();
                 }
+                #[cfg(feature = "locktests")]
+                "frob" => {
+                    const N: u32 = 10;
+                    const M: usize = if cfg!(miri) { 10000 } else { 100000 };
+                    use std::sync::mpsc::channel;
+                    use std::sync::RwLock;
+                    use std::thread;
+
+                    use rand::Rng;
+
+                    log::info!("start frobbing");
+                    let r = Arc::new(RwLock::new(()));
+
+                    let (tx, rx) = channel::<()>();
+                    for _ in 0..N {
+                        let tx = tx.clone();
+                        let r = r.clone();
+                        thread::spawn(move || {
+                            let mut rng = test_rng();
+                            for _ in 0..M {
+                                if rng.gen_bool(1.0 / (N as f64)) {
+                                    drop(r.write().unwrap());
+                                } else {
+                                    drop(r.read().unwrap());
+                                }
+                            }
+                            drop(tx);
+                        });
+                    }
+                    drop(tx);
+                    let _ = rx.recv();
+                    log::info!("end frobbing");
+                }
+                #[cfg(feature = "locktests")]
+                "futz" => {
+                    const AMT: u32 = if cfg!(miri) { 100 } else { 100_000 };
+                    const NTHREADS: u32 = 2;
+                    let rx_count: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+                    let (tx, rx) = std::sync::mpsc::channel::<i32>();
+
+                    log::info!("start futzing");
+                    let t = std::thread::spawn(move || {
+                        for i in 0..AMT * NTHREADS {
+                            assert_eq!(rx.recv().unwrap(), 1);
+                            rx_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            if i % 1000 == 0 {
+                                log::info!("rx {}", rx_count.load(Ordering::SeqCst));
+                            }
+                        }
+                        match rx.try_recv() {
+                            Ok(..) => panic!(),
+                            _ => {}
+                        }
+                    });
+
+                    log::info!("starting futz tx");
+                    for _ in 0..NTHREADS {
+                        let tx = tx.clone();
+                        std::thread::spawn(move || {
+                            for i in 0..AMT {
+                                tx.send(1).unwrap();
+                                if i % 1000 == 0 {
+                                    log::info!("sent 1000");
+                                }
+                            }
+                        });
+                    }
+                    drop(tx);
+                    log::info!("waiting for futz to join");
+                    t.join().ok().expect("thread panicked");
+                    log::info!("futz done");
+                }
+                #[cfg(feature = "locktests")]
+                "frobnicate" => {
+                    use core::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+                    use std::thread;
+
+                    const LOOPS_PER_THREAD: usize = 2_000_000_000;
+                    const THREAD_COUNT: usize = 5;
+
+                    static TEST_ATOM: AtomicUsize = AtomicUsize::new(1);
+
+                    fn atom_test(_id: usize, count: usize) {
+                        for _idx in 0..count {
+                            while TEST_ATOM.compare_exchange(1, 5, SeqCst, SeqCst).is_err() {
+                                thread::yield_now();
+                                thread::yield_now();
+                            }
+                            assert_eq!(TEST_ATOM.swap(1, SeqCst), 5);
+                            /* if idx % 500_000 == 0 {
+                                log::info!("{}", idx);
+                            } */
+                        }
+                    }
+                    log::info!("Starting atom test...");
+                    let mut joiners = vec![];
+
+                    for tid in 0..THREAD_COUNT {
+                        joiners.push(thread::spawn(move || atom_test(tid, LOOPS_PER_THREAD)));
+                    }
+                    log::info!("Waiting for joins...");
+                    for j in joiners {
+                        j.join().unwrap();
+                    }
+
+                    log::info!("Done!");
+                }
                 "factory" => {
                     self.start_time = match env.llio.get_rtc_secs() {
                         Ok(s) => Some(s),
                         _ => {
                             log::info!("{}|RTC|FAIL|SET|", SENTINEL);
                             None
-                        },
+                        }
                     };
                     self.start_elapsed = Some(env.ticktimer.elapsed_ms());
 
-                    // set uart MUX, and turn off WFI so UART reports are "clean" (no stuck characters when CPU is in WFI)
+                    // set uart MUX, and turn off WFI so UART reports are "clean" (no stuck characters when
+                    // CPU is in WFI)
                     env.llio.set_uart_mux(llio::UartType::Log).unwrap();
                     env.llio.wfi_override(true).unwrap();
 
@@ -178,7 +319,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("{}|GYRO|{}|{}|{}|{}|", SENTINEL, x, y, z, id);
                     let wf_rev = env.com.get_wf200_fw_rev().unwrap();
                     log::info!("{}|WF200REV|{}|{}|{}|", SENTINEL, wf_rev.maj, wf_rev.min, wf_rev.rev);
-                    let (ec_rev, ec_dirty) =  env.com.get_ec_git_rev().unwrap();
+                    let (ec_rev, ec_dirty) = env.com.get_ec_git_rev().unwrap();
                     log::info!("{}|ECREV|{:x}|{:?}|", SENTINEL, ec_rev, ec_dirty);
                     let morestats = env.com.get_more_stats().unwrap();
                     log::info!("{}|BATTSTATS|{:?}|", SENTINEL, morestats);
@@ -189,28 +330,43 @@ impl<'a> ShellCmdApi<'a> for Test {
                     let mut ro_pass = true;
                     let mut av_excurs: [u32; 2] = [0; 2];
                     let mut ht = env.trng.get_health_tests().unwrap();
-                    for _ in 0..3 { // run the test 3 times
+                    for _ in 0..3 {
+                        // run the test 3 times
                         av_excurs = [
-                            (((ht.av_excursion[0].max as f32 - ht.av_excursion[0].min as f32) / 4096.0) * 1000.0) as u32,
-                            (((ht.av_excursion[1].max as f32 - ht.av_excursion[1].min as f32) / 4096.0) * 1000.0) as u32,
+                            (((ht.av_excursion[0].max as f32 - ht.av_excursion[0].min as f32) / 4096.0)
+                                * 1000.0) as u32,
+                            (((ht.av_excursion[1].max as f32 - ht.av_excursion[1].min as f32) / 4096.0)
+                                * 1000.0) as u32,
                         ];
                         // 78mv minimum excursion requirement for good entropy generation
-                        if av_excurs[0] < 78 { av_pass[0] = false; }
-                        if av_excurs[1] < 78 { av_pass[1] = false; }
+                        if av_excurs[0] < 78 {
+                            av_pass[0] = false;
+                        }
+                        if av_excurs[1] < 78 {
+                            av_pass[1] = false;
+                        }
                         for core in ht.ro_miniruns.iter() {
                             for (bin, &val) in core.run_count.iter().enumerate() {
                                 match bin {
                                     0 => {
-                                        if val < 440 || val > 584 { ro_pass = false; }
-                                    },
+                                        if val < 440 || val > 584 {
+                                            ro_pass = false;
+                                        }
+                                    }
                                     1 => {
-                                        if val < 193 || val > 318 { ro_pass = false; }
-                                    },
+                                        if val < 193 || val > 318 {
+                                            ro_pass = false;
+                                        }
+                                    }
                                     2 => {
-                                        if val < 80 || val > 175 { ro_pass = false; }
-                                    },
+                                        if val < 80 || val > 175 {
+                                            ro_pass = false;
+                                        }
+                                    }
                                     3 => {
-                                        if val < 29 || val > 99 { ro_pass = false; }
+                                        if val < 29 || val > 99 {
+                                            ro_pass = false;
+                                        }
                                     }
                                     _ => {
                                         log::error!("internal error: too many bins in trng test!");
@@ -227,7 +383,11 @@ impl<'a> ShellCmdApi<'a> for Test {
                         ht = env.trng.get_health_tests().unwrap();
                     }
                     if av_pass[0] && av_pass[1] && ro_pass {
-                        log::info!("{}|TRNG|PASS|{}|{}|{}|{}|{}|{}|", SENTINEL, av_excurs[0], av_excurs[1],
+                        log::info!(
+                            "{}|TRNG|PASS|{}|{}|{}|{}|{}|{}|",
+                            SENTINEL,
+                            av_excurs[0],
+                            av_excurs[1],
                             ht.ro_miniruns[0].run_count[0],
                             ht.ro_miniruns[0].run_count[1],
                             ht.ro_miniruns[0].run_count[2],
@@ -241,7 +401,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                         log::info!("{}|TRNG|FAIL|AV1|{}|", SENTINEL, av_excurs[1]);
                     }
                     if !ro_pass {
-                        log::info!("{}|TRNG|FAIL|RO|{}|{}|{}|{}|", SENTINEL,
+                        log::info!(
+                            "{}|TRNG|FAIL|RO|{}|{}|{}|{}|",
+                            SENTINEL,
                             ht.ro_miniruns[0].run_count[0],
                             ht.ro_miniruns[0].run_count[1],
                             ht.ro_miniruns[0].run_count[2],
@@ -256,7 +418,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                     self.end_elapsed = Some(env.ticktimer.elapsed_ms());
                     self.end_time = env.llio.get_rtc_secs().ok();
 
-                    let exact_time_secs = ((self.end_elapsed.unwrap() - self.start_elapsed.unwrap()) / 1000) as i32;
+                    let exact_time_secs =
+                        ((self.end_elapsed.unwrap() - self.start_elapsed.unwrap()) / 1000) as i32;
                     if let Some(end_secs) = self.end_time {
                         if let Some(start_secs) = self.start_time {
                             let elapsed_secs = (end_secs - start_secs) as i32;
@@ -346,10 +509,26 @@ impl<'a> ShellCmdApi<'a> for Test {
                     };
                     if let Some(channel_str) = tokens.next() {
                         match channel_str {
-                            "left" => {self.left_play = true; self.right_play = false; self.speaker_play = false;},
-                            "right" => {self.right_play = true; self.left_play = false; self.speaker_play = false;},
-                            "speaker" => {self.left_play = true; self.right_play = false; self.speaker_play = true;},
-                            _ => {self.left_play = true; self.right_play = true; self.speaker_play = true;}
+                            "left" => {
+                                self.left_play = true;
+                                self.right_play = false;
+                                self.speaker_play = false;
+                            }
+                            "right" => {
+                                self.right_play = true;
+                                self.left_play = false;
+                                self.speaker_play = false;
+                            }
+                            "speaker" => {
+                                self.left_play = true;
+                                self.right_play = false;
+                                self.speaker_play = true;
+                            }
+                            _ => {
+                                self.left_play = true;
+                                self.right_play = true;
+                                self.speaker_play = true;
+                            }
                         }
                     } else {
                         self.left_play = true;
@@ -382,7 +561,6 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     self.codec.resume().unwrap();
                     log::info!("{}|ASTART|{}|{}|{}|", SENTINEL, self.freq, self.left_play, self.right_play);
-
                 }
                 "astop" => {
                     self.codec.abort().unwrap(); // this should stop callbacks from occurring too.
@@ -394,19 +572,26 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     // now do FFT analysis on the sample buffer
                     // analyze one channel at a time
-                    if self.recbuf.is_none() { // lazy allocate recbuf
-                        self.recbuf = Some(xous::syscall::map_memory(
-                            None,
-                            None,
-                            0x8000,
-                            xous::MemoryFlags::R | xous::MemoryFlags::W,
-                        ).expect("couldn't allocate record buffer"));
+                    if self.recbuf.is_none() {
+                        // lazy allocate recbuf
+                        self.recbuf = Some(
+                            xous::syscall::map_memory(
+                                None,
+                                None,
+                                0x8000,
+                                xous::MemoryFlags::R | xous::MemoryFlags::W,
+                            )
+                            .expect("couldn't allocate record buffer"),
+                        );
                     }
                     if let Some(recbuf) = self.recbuf {
                         let recslice = unsafe { recbuf.as_slice::<u8>() };
                         const BUFLEN: usize = 512;
                         // serialize and send audio as b64 encoded data
-                        for (i, sample) in recslice[recslice.len()-4096 * size_of::<u32>()..].chunks_exact(BUFLEN).enumerate() {
+                        for (i, sample) in recslice[recslice.len() - 4096 * size_of::<u32>()..]
+                            .chunks_exact(BUFLEN)
+                            .enumerate()
+                        {
                             let b64str = encode(sample);
                             log::info!("{}|ASAMP|{}|{}", SENTINEL, i, b64str);
                         }
@@ -416,18 +601,27 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("{}|ASTOP|", SENTINEL);
                 }
                 "oqc" => {
-                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 0.005033 * 100_000 against 1.5V * 100_000
+                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
+                        // 0.005033 * 100_000 against 1.5V * 100_000
                         // if power is plugged in, deny powerdown request
-                        write!(ret, "Can't run OQC test while charging. Unplug charging cable and try again.").unwrap();
+                        write!(
+                            ret,
+                            "Can't run OQC test while charging. Unplug charging cable and try again."
+                        )
+                        .unwrap();
                         return Ok(Some(ret));
                     }
-                    // start the server if it isn't started already, but only allow it to start once. Note that the CID stays the same between calls,
-                    // because the SID is stable between calls and we're calling from the same process each time.
+                    // start the server if it isn't started already, but only allow it to start once. Note
+                    // that the CID stays the same between calls, because the SID is
+                    // stable between calls and we're calling from the same process each time.
                     let oqc_cid = if let Some(oc) = self.oqc_cid {
                         oc
                     } else {
                         let oqc_cid = Arc::new(AtomicU32::new(0));
-                        let kbd = self.kbd.take().expect("someone took the keyboard server before we could use it!");
+                        let kbd = self
+                            .kbd
+                            .take()
+                            .expect("someone took the keyboard server before we could use it!");
                         // start the OQC thread
                         let _ = std::thread::spawn({
                             let oqc_cid = oqc_cid.clone();
@@ -449,9 +643,10 @@ impl<'a> ShellCmdApi<'a> for Test {
                     env.llio.wfi_override(true).unwrap();
                     // activate SSID scanning while the test runs
                     env.com.set_ssid_scanning(true).expect("couldn't turn on SSID scanning");
-                    //xous::rsyscall(xous::SysCall::IncreaseHeap(65536, xous::MemoryFlags::R | xous::MemoryFlags::W)).expect("couldn't increase our heap");
+                    //xous::rsyscall(xous::SysCall::IncreaseHeap(65536, xous::MemoryFlags::R |
+                    // xous::MemoryFlags::W)).expect("couldn't increase our heap");
                     ret.clear();
-                    #[cfg(any(feature="precursor", feature="renode"))]
+                    #[cfg(any(feature = "precursor", feature = "renode"))]
                     if 0x362f093 != self.jtag.get_id().unwrap() {
                         write!(ret, "FAIL: JTAG self access").unwrap();
                         return Ok(Some(ret));
@@ -462,7 +657,12 @@ impl<'a> ShellCmdApi<'a> for Test {
                         return Ok(Some(ret));
                     }
                     if battstats[12] > 4200 {
-                        write!(ret, "FAIL: Battery voltage too high ({}mV).\nSuspect issue with U17P or U11K.", battstats[12]).unwrap();
+                        write!(
+                            ret,
+                            "FAIL: Battery voltage too high ({}mV).\nSuspect issue with U17P or U11K.",
+                            battstats[12]
+                        )
+                        .unwrap();
                         return Ok(Some(ret));
                     }
                     log::info!("initiating suspend");
@@ -472,9 +672,17 @@ impl<'a> ShellCmdApi<'a> for Test {
                     env.ticktimer.sleep_ms(1000).unwrap(); // pause for the suspend/resume cycle
 
                     let timeout = 60_000;
-                    xous::send_message(oqc_cid,
-                        xous::Message::new_blocking_scalar(OqcOp::Trigger.to_usize().unwrap(), timeout, 0, 0, 0,)
-                    ).expect("couldn't trigger self test");
+                    xous::send_message(
+                        oqc_cid,
+                        xous::Message::new_blocking_scalar(
+                            OqcOp::Trigger.to_usize().unwrap(),
+                            timeout,
+                            0,
+                            0,
+                            0,
+                        ),
+                    )
+                    .expect("couldn't trigger self test");
                     // join the LAN while the keyboard test is running
                     log::info!("starting wlan join");
                     env.com.wlan_set_ssid("precursortest").unwrap();
@@ -491,10 +699,20 @@ impl<'a> ShellCmdApi<'a> for Test {
                                 write!(ret, "RSSI reported in dBm:\n").unwrap();
                                 for ssid in ssid_list {
                                     if ssid.name.len() > 0 {
-                                        write!(ret, "-{} {}\n", ssid.rssi, &ssid.name.as_str().unwrap_or("UTF-8 error")).unwrap();
+                                        write!(
+                                            ret,
+                                            "-{} {}\n",
+                                            ssid.rssi,
+                                            &ssid.name.as_str().unwrap_or("UTF-8 error")
+                                        )
+                                        .unwrap();
                                     }
                                 }
-                                write!(ret, "CHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",).unwrap();
+                                write!(
+                                    ret,
+                                    "CHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",
+                                )
+                                .unwrap();
                                 let soc_ver = env.llio.soc_gitrev().unwrap();
                                 write!(ret, "Version {}\n", soc_ver.to_string()).unwrap();
                                 log::info!("finished status update");
@@ -594,19 +812,20 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     env.llio.wfi_override(false).unwrap();
                 }
-                #[cfg(feature="extra-tests")]
+                #[cfg(feature = "extra-tests")]
                 "devboot" => {
                     env.gam.set_devboot(true).unwrap();
                     write!(ret, "devboot on").unwrap();
                 }
-                #[cfg(feature="extra-tests")]
+                #[cfg(feature = "extra-tests")]
                 "devbootoff" => {
                     // this should do nothing if devboot was already set
                     env.gam.set_devboot(false).unwrap();
                     write!(ret, "devboot off").unwrap();
                 }
                 "ship" => {
-                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 0.005033 * 100_000 against 1.5V * 100_000
+                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
+                        // 0.005033 * 100_000 against 1.5V * 100_000
                         // if power is plugged in, deny powerdown request
                         write!(ret, "System can't go into ship mode while charging. Unplug charging cable and try again.").unwrap();
                     } else {
@@ -632,12 +851,13 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "Ship mode request denied").unwrap();
                     }
                 }
-                #[cfg(feature="extra-tests")]
+                #[cfg(feature = "extra-tests")]
                 "timeblock" => {
-                    let time_cid = xous::connect(xous::SID::from_bytes(b"timeserverpublic").unwrap()).unwrap();
-                    let result = xous::send_message(time_cid,
-                        xous::Message::new_blocking_scalar(3, 0, 0, 0, 0)
-                    ).unwrap();
+                    let time_cid =
+                        xous::connect(xous::SID::from_bytes(b"timeserverpublic").unwrap()).unwrap();
+                    let result =
+                        xous::send_message(time_cid, xous::Message::new_blocking_scalar(3, 0, 0, 0, 0))
+                            .unwrap();
                     match result {
                         xous::Result::Scalar2(msb, lsb) => {
                             log::info!("GetTimeUtc: {}, {}", msb, lsb);
@@ -647,21 +867,22 @@ impl<'a> ShellCmdApi<'a> for Test {
                         }
                     }
                 }
-                #[cfg(feature="ditherpunk")]
+                #[cfg(feature = "ditherpunk")]
                 "modals" => {
                     modals::tests::spawn_test();
                 }
-                #[cfg(feature="extra-tests")]
+                #[cfg(feature = "extra-tests")]
                 "bip39" => {
                     let modals = modals::Modals::new(&env.xns).unwrap();
                     // 4. bip39 display test
                     let refnum = 0b00000110001101100111100111001010000110110010100010110101110011111101101010011100000110000110101100110110011111100010011100011110u128;
                     let refvec = refnum.to_be_bytes().to_vec();
-                    modals.show_bip39(Some("Some bip39 words"), &refvec)
-                    .expect("couldn't show bip39 words");
+                    modals.show_bip39(Some("Some bip39 words"), &refvec).expect("couldn't show bip39 words");
 
                     // 5. bip39 input test
-                    log::info!("type these words: alert record income curve mercy tree heavy loan hen recycle mean devote");
+                    log::info!(
+                        "type these words: alert record income curve mercy tree heavy loan hen recycle mean devote"
+                    );
                     match modals.input_bip39(Some("Input BIP39 words")) {
                         Ok(data) => {
                             log::info!("got bip39 input: {:x?}", data);
@@ -675,18 +896,20 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("{:?}", state);
                     write!(ret, "{:?}", state).ok();
                 }
-                #[cfg(feature="dbg-ecupdate")]
+                #[cfg(feature = "dbg-ecupdate")]
                 "ecup" => {
                     let ecup_conn = env.xns.request_connection_blocking("__ECUP server__").unwrap();
-                    xous::send_message(ecup_conn,
+                    xous::send_message(
+                        ecup_conn,
                         xous::Message::new_blocking_scalar(
                             3, // hard coded to match UpdateOp
-                            0, 0, 0, 0
-                        )
-                    ).unwrap();
+                            0, 0, 0, 0,
+                        ),
+                    )
+                    .unwrap();
                     write!(ret, "\nDid EC auto update command").unwrap();
                 }
-                #[cfg(feature="benchmarks")]
+                #[cfg(feature = "benchmarks")]
                 "bench" => {
                     let bench_original_sid = xous::create_server().unwrap();
                     let bench_original_cid = xous::connect(bench_original_sid).unwrap();
@@ -712,8 +935,12 @@ impl<'a> ShellCmdApi<'a> for Test {
                             let mut msg_opt = None;
                             let mut return_type = 0;
                             loop {
-                                xous::reply_and_receive_next_legacy(bench_new_sid, &mut msg_opt, &mut return_type)
-                                    .unwrap();
+                                xous::reply_and_receive_next_legacy(
+                                    bench_new_sid,
+                                    &mut msg_opt,
+                                    &mut return_type,
+                                )
+                                .unwrap();
                                 let msg = msg_opt.as_mut().unwrap();
                                 if let Some(scalar) = msg.body.scalar_message_mut() {
                                     scalar.arg1 += 1;
@@ -736,71 +963,78 @@ impl<'a> ShellCmdApi<'a> for Test {
                     let start_time = tt.elapsed_ms();
                     let mut a = 0;
                     while a < ITERS {
-                        a = match xous::send_message(bench_original_cid,
-                            Message::new_blocking_scalar(0, a, 0, 0, 0)
+                        a = match xous::send_message(
+                            bench_original_cid,
+                            Message::new_blocking_scalar(0, a, 0, 0, 0),
                         ) {
                             Ok(xous::Result::Scalar1(a_prime)) => a_prime,
-                            _ => panic!("incorrect return type")
+                            _ => panic!("incorrect return type"),
                         }
                     }
-                    let result = format!("Original took {}ms for {} iters\n", tt.elapsed_ms() - start_time, ITERS);
+                    let result =
+                        format!("Original took {}ms for {} iters\n", tt.elapsed_ms() - start_time, ITERS);
                     log::info!("{}", result);
                     write!(ret, "{}\n", result).ok();
                     // this quits the thread
-                    xous::send_message(bench_original_cid,
-                        Message::new_blocking_scalar(1, 0, 0, 0, 0)
-                    ).ok();
-                    unsafe {xous::disconnect(bench_original_cid).ok()};
+                    xous::send_message(bench_original_cid, Message::new_blocking_scalar(1, 0, 0, 0, 0)).ok();
+                    unsafe { xous::disconnect(bench_original_cid).ok() };
 
                     let start_time = tt.elapsed_ms();
                     let mut a = 0;
                     while a < ITERS {
-                        a = match xous::send_message(bench_new_cid,
-                            Message::new_blocking_scalar(0, a, 0, 0, 0)
+                        a = match xous::send_message(
+                            bench_new_cid,
+                            Message::new_blocking_scalar(0, a, 0, 0, 0),
                         ) {
                             Ok(xous::Result::Scalar1(a_prime)) => a_prime,
-                            _ => panic!("incorrect return type")
+                            _ => panic!("incorrect return type"),
                         }
                     }
                     let result = format!("New took {}ms for {} iters\n", tt.elapsed_ms() - start_time, ITERS);
                     write!(ret, "{}", result).ok();
                     log::info!("{}", result);
                     // this quits the thread
-                    xous::send_message(bench_new_cid,
-                        Message::new_blocking_scalar(1, 0, 0, 0, 0)
-                    ).ok();
-                    unsafe {xous::disconnect(bench_new_cid).ok()};
+                    xous::send_message(bench_new_cid, Message::new_blocking_scalar(1, 0, 0, 0, 0)).ok();
+                    unsafe { xous::disconnect(bench_new_cid).ok() };
                 }
                 _ => {
                     () // do nothing
                 }
             }
-
         }
         Ok(Some(ret))
     }
 
-    fn callback(&mut self, msg: &MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(
+        &mut self,
+        msg: &MessageEnvelope,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         const AMPLITUDE: f32 = 0.8;
 
         match &msg.body {
-            Message::Scalar(xous::ScalarMessage{id: _, arg1: free_play, arg2: _avail_rec, arg3: _, arg4: _}) => {
+            Message::Scalar(xous::ScalarMessage {
+                id: _,
+                arg1: free_play,
+                arg2: _avail_rec,
+                arg3: _,
+                arg4: _,
+            }) => {
                 log::debug!("{} extending playback", free_play);
                 let mut frames: FrameRing = FrameRing::new();
-                let frames_to_push = if frames.writeable_count() < *free_play {
-                    frames.writeable_count()
-                } else {
-                    *free_play
-                };
+                let frames_to_push =
+                    if frames.writeable_count() < *free_play { frames.writeable_count() } else { *free_play };
                 self.framecount += frames_to_push as u32;
 
                 log::debug!("f{} p{}", self.framecount, frames_to_push);
                 for _ in 0..frames_to_push {
-                    let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
+                    let mut frame: [u32; codec::FIFO_DEPTH] =
+                        [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
                     // put the "expensive" f32 comparison outside the cosine wave table computation loop
                     let omega = self.freq * 2.0 * std::f32::consts::PI / SAMPLE_RATE_HZ;
                     for sample in frame.iter_mut() {
-                        let raw_sine: i16 = (AMPLITUDE * cos_table::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
+                        let raw_sine: i16 =
+                            (AMPLITUDE * cos_table::cos(self.play_sample * omega) * i16::MAX as f32) as i16;
                         let left = if self.left_play { raw_sine as u16 } else { ZERO_PCM };
                         let right = if self.right_play { raw_sine as u16 } else { ZERO_PCM };
                         *sample = right as u32 | (left as u32) << 16;
@@ -808,18 +1042,21 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
 
                     frames.nq_frame(frame).unwrap();
-
                 }
                 self.codec.swap_frames(&mut frames).unwrap();
 
                 if !AUDIO_OQC.load(Ordering::Relaxed) {
-                    if self.recbuf.is_none() { // lazy allocate recbuf
-                        self.recbuf = Some(xous::syscall::map_memory(
-                            None,
-                            None,
-                            0x8000,
-                            xous::MemoryFlags::R | xous::MemoryFlags::W,
-                        ).expect("couldn't allocate record buffer"));
+                    if self.recbuf.is_none() {
+                        // lazy allocate recbuf
+                        self.recbuf = Some(
+                            xous::syscall::map_memory(
+                                None,
+                                None,
+                                0x8000,
+                                xous::MemoryFlags::R | xous::MemoryFlags::W,
+                            )
+                            .expect("couldn't allocate record buffer"),
+                        );
                     }
                     if let Some(mut recbuf) = self.recbuf {
                         let rec_samples = unsafe { recbuf.as_slice_mut::<u32>() };
@@ -829,7 +1066,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                                 for &sample in frame.iter() {
                                     rec_samples[self.rec_sample] = sample;
                                     // increment and wrap around on overflow
-                                    // we should be sampling a continuous tone, so we'll get a small phase discontinutity once in the buffer.
+                                    // we should be sampling a continuous tone, so we'll get a small phase
+                                    // discontinutity once in the buffer.
                                     // should be no problem for the analysis phase.
                                     self.rec_sample += 1;
                                     if self.rec_sample >= rec_len {
@@ -876,10 +1114,10 @@ impl<'a> ShellCmdApi<'a> for Test {
                         log::info!("CMD: if you can read this, ship mode failed!");
                     }
                 }
-            },
+            }
             Message::Move(_mm) => {
                 log::error!("received memory message when not expected")
-            },
+            }
             _ => {
                 log::error!("received unknown callback type")
             }
@@ -889,19 +1127,20 @@ impl<'a> ShellCmdApi<'a> for Test {
     }
 }
 
-fn oqc_status(conn: xous::CID) -> Option<bool> { // None if still running or not yet run; Some(true) if pass; Some(false) if fail
-    let result = xous::send_message(conn,
-        xous::Message::new_blocking_scalar(OqcOp::Status.to_usize().unwrap(), 0, 0, 0, 0)
-    ).expect("couldn't query test status");
+fn oqc_status(conn: xous::CID) -> Option<bool> {
+    // None if still running or not yet run; Some(true) if pass; Some(false) if fail
+    let result = xous::send_message(
+        conn,
+        xous::Message::new_blocking_scalar(OqcOp::Status.to_usize().unwrap(), 0, 0, 0, 0),
+    )
+    .expect("couldn't query test status");
     match result {
-        xous::Result::Scalar1(val) => {
-            match val {
-                0 => return None,
-                1 => return Some(true),
-                2 => return Some(false),
-                _ => return Some(false),
-            }
-        }
+        xous::Result::Scalar1(val) => match val {
+            0 => return None,
+            1 => return Some(true),
+            2 => return Some(false),
+            _ => return Some(false),
+        },
         _ => {
             log::error!("internal error");
             panic!("improper result code on oqc status query");

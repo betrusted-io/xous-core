@@ -1,4 +1,5 @@
-// Copyright 2019-2022 Google LLC
+#![cfg_attr(rustfmt, rustfmt_skip)]
+// Copyright2019-2022 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,8 +43,6 @@ pub mod api;
 // TODO(kaczmarczyck): Refactor this so that ctap module isn't public.
 pub mod ctap;
 pub mod env;
-#[cfg(feature = "std")]
-pub mod test_helpers;
 
 pub const KEEPALIVE_DELAY_MS: u64 = 100;
 pub const KEEPALIVE_DELAY: Duration = Duration::from_millis(KEEPALIVE_DELAY_MS);

@@ -1,4 +1,4 @@
-pub(crate) const SERVER_NAME_CODEC: &str     = "_Low-level Audio Codec Server_";
+pub(crate) const SERVER_NAME_CODEC: &str = "_Low-level Audio Codec Server_";
 
 #[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -24,9 +24,11 @@ pub(crate) enum Opcode {
     /// Powers on the CODEC, sets up 8k stereo streaming; puts audio in "paused" state
     Setup8kStereo,
 
-    /// Pause the stream without powering anything off. Will wait until the current playback frames in process are finished.
+    /// Pause the stream without powering anything off. Will wait until the current playback frames in
+    /// process are finished.
     PauseStream,
-    /// Pause the stream without powering anything off. Clears the buffer immediately, losing any frames in playback.
+    /// Pause the stream without powering anything off. Clears the buffer immediately, losing any frames in
+    /// playback.
     AbortStream,
 
     /// Resumes the stream withouth re-initializing anything
@@ -69,7 +71,6 @@ pub enum VolumeOps {
     RestoreDefault,
 }
 
-
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum EventCallback {
     Event,
@@ -79,8 +80,10 @@ pub(crate) enum EventCallback {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub(crate) struct ScalarHook {
     pub sid: (u32, u32, u32, u32),
-    pub id: u32,  // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
-    pub cid: xous::CID,   // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
+    pub id: u32, /* ID of the scalar message to send through (e.g. the discriminant of the Enum on the
+                  * caller's side API) */
+    pub cid: xous::CID, /* caller-side connection ID for the scalar message to route to. Created by the
+                         * caller before hooking. */
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -128,31 +131,30 @@ impl FrameRing {
             auth_token: None,
         }
     }
+
     pub fn clear(&mut self) {
         self.buffer = [[(ZERO_PCM as u32 | (ZERO_PCM as u32) << 16); FIFO_DEPTH]; FRAMES];
         self.rd_frame = 0;
         self.wr_frame = 0;
         self.rec_ptr = 0;
     }
+
     pub fn reset_ptrs(&mut self) {
         self.rd_frame = 0;
         self.wr_frame = 0;
         self.rec_ptr = 0;
     }
+
     /*
       empty: rd_frame == wr_frame
       full: wr_frame == (rd_frame - 1) || (rd_frame == 0) && (wr_frame == F-1)
     */
-    pub fn is_empty(&self) -> bool {
-        self.rd_frame == self.wr_frame
-    }
+    pub fn is_empty(&self) -> bool { self.rd_frame == self.wr_frame }
+
     pub fn is_full(&self) -> bool {
-        if self.rd_frame == 0 {
-            self.wr_frame == FRAMES-1
-        } else {
-            self.wr_frame == (self.rd_frame - 1)
-        }
+        if self.rd_frame == 0 { self.wr_frame == FRAMES - 1 } else { self.wr_frame == (self.rd_frame - 1) }
     }
+
     pub fn readable_count(&self) -> usize {
         if self.wr_frame >= self.rd_frame {
             self.wr_frame - self.rd_frame
@@ -160,10 +162,11 @@ impl FrameRing {
             self.wr_frame + FRAMES - self.rd_frame
         }
     }
-    pub fn writeable_count(&self) -> usize {
-        (FRAMES-1) - self.readable_count()
-    }
-    // this is less time efficient, but more space efficient, as we don't allocate intermediate buffers, clear them, etc.
+
+    pub fn writeable_count(&self) -> usize { (FRAMES - 1) - self.readable_count() }
+
+    // this is less time efficient, but more space efficient, as we don't allocate intermediate buffers, clear
+    // them, etc.
     pub fn rec_sample(&mut self, sample: u32) -> bool {
         if self.rec_ptr < FIFO_DEPTH {
             self.buffer[self.wr_frame][self.rec_ptr] = sample;
@@ -173,6 +176,7 @@ impl FrameRing {
             false
         }
     }
+
     pub fn rec_advance(&mut self) -> bool {
         if self.is_full() {
             false
@@ -182,6 +186,7 @@ impl FrameRing {
             true
         }
     }
+
     pub fn nq_frame(&mut self, frame: [u32; FIFO_DEPTH]) -> Result<(), [u32; FIFO_DEPTH]> {
         if self.is_full() {
             return Err(frame);
@@ -194,6 +199,7 @@ impl FrameRing {
         self.rec_ptr = 0;
         Ok(())
     }
+
     pub fn dq_frame(&mut self) -> Option<[u32; FIFO_DEPTH]> {
         if self.is_empty() {
             None

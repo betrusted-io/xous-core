@@ -10,7 +10,7 @@ use core::convert::Infallible;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     /// Pack or Unpack method called with a slice of insufficient length
-    /// Check the `PACK_BYTES_LEN` on the struct impl 
+    /// Check the `PACK_BYTES_LEN` on the struct impl
     InsufficientBytes,
 
     /// Attempted to unpack an enum but the value found didn't match any

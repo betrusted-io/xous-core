@@ -1,21 +1,26 @@
-use crate::{ShellCmdApi, CommonEnv};
-use xous_ipc::String;
 use std::fmt::Write;
 
-pub struct EcUpdate {
-}
+use xous_ipc::String;
+
+use crate::{CommonEnv, ShellCmdApi};
+
+pub struct EcUpdate {}
 impl EcUpdate {
-    pub fn new() -> Self {
-        EcUpdate {  }
-    }
+    pub fn new() -> Self { EcUpdate {} }
 }
 
 // this command is just a thin shim to shoot messages off to the EC update server, which is located
 // in the Status crate.
 impl<'a> ShellCmdApi<'a> for EcUpdate {
-    cmd_api!(ecup); // inserts boilerplate for command API
+    cmd_api!(ecup);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    // inserts boilerplate for command API
+
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         let helpstring = "ecup [gw] [fw] [wf200] [auto]";
 
@@ -26,43 +31,51 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "fw" => {
-                    let result = xous::send_message(ecup_conn,
+                    let result = xous::send_message(
+                        ecup_conn,
                         xous::Message::new_blocking_scalar(
                             1, // hard coded to match UpdateOp
-                            0, 0, 0, 0
-                        )
-                    ).unwrap();
+                            0, 0, 0, 0,
+                        ),
+                    )
+                    .unwrap();
                     env.ticktimer.sleep_ms(200).unwrap();
                     write!(ret, "EC firmware update: {:?}", result).unwrap();
                 }
                 "gw" => {
-                    let result = xous::send_message(ecup_conn,
+                    let result = xous::send_message(
+                        ecup_conn,
                         xous::Message::new_blocking_scalar(
                             0, // hard coded to match UpdateOp
-                            0, 0, 0, 0
-                        )
-                    ).unwrap();
+                            0, 0, 0, 0,
+                        ),
+                    )
+                    .unwrap();
                     env.ticktimer.sleep_ms(200).unwrap();
                     write!(ret, "EC gateware update: {:?}", result).unwrap();
                 }
                 // note: "reset" has been moved to `ver ecreset`
                 "wf200" => {
-                    let result = xous::send_message(ecup_conn,
+                    let result = xous::send_message(
+                        ecup_conn,
                         xous::Message::new_blocking_scalar(
                             2, // hard coded to match UpdateOp
-                            0, 0, 0, 0
-                        )
-                    ).unwrap();
+                            0, 0, 0, 0,
+                        ),
+                    )
+                    .unwrap();
                     env.ticktimer.sleep_ms(200).unwrap();
                     write!(ret, "EC wf200 update: {:?}", result).unwrap();
                 }
                 "auto" => {
-                    let result = xous::send_message(ecup_conn,
+                    let result = xous::send_message(
+                        ecup_conn,
                         xous::Message::new_blocking_scalar(
                             3, // hard coded to match UpdateOp
-                            0, 0, 0, 0
-                        )
-                    ).unwrap();
+                            0, 0, 0, 0,
+                        ),
+                    )
+                    .unwrap();
                     env.ticktimer.sleep_ms(200).unwrap();
                     write!(ret, "Full EC firmware update: {:?}", result).unwrap();
                 }
@@ -73,5 +86,4 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
         }
         Ok(Some(ret))
     }
-
 }

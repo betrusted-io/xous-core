@@ -1,4 +1,5 @@
 use rkyv::{Archive, Deserialize, Serialize};
+
 use crate::api::*;
 
 /// Scalar responses to pings have the following format:
@@ -14,8 +15,9 @@ pub enum NetPingCallback {
     Timeout,
     /// dest unreachable
     Unreachable,
-    /// An advisory message that one could drop the responding server, if it was spawned specifically for this use
-    /// However, if the caller has grand plans to queue up more pings...then by all means, keep it around.
+    /// An advisory message that one could drop the responding server, if it was spawned specifically for
+    /// this use However, if the caller has grand plans to queue up more pings...then by all means, keep
+    /// it around.
     Drop,
 }
 

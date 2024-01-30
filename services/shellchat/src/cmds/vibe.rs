@@ -1,22 +1,25 @@
-use crate::{ShellCmdApi, CommonEnv};
-use xous_ipc::String;
-
 use core::fmt::Write;
 
+use xous_ipc::String;
+
+use crate::{CommonEnv, ShellCmdApi};
+
 #[derive(Debug)]
-pub struct Vibe {
-}
+pub struct Vibe {}
 impl Vibe {
-    pub fn new() -> Self {
-        Vibe {
-        }
-    }
+    pub fn new() -> Self { Vibe {} }
 }
 
 impl<'a> ShellCmdApi<'a> for Vibe {
-    cmd_api!(vibe); // inserts boilerplate for command API
+    cmd_api!(vibe);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    // inserts boilerplate for command API
+
+    fn process(
+        &mut self,
+        args: String<1024>,
+        env: &mut CommonEnv,
+    ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         let helpstring = "vibe [on] [off] [long] [double]";
 

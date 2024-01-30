@@ -16,6 +16,4 @@ pub fn id() -> u32 {
     }
 }
 
-pub fn set_id(id: u32) {
-    CACHED_PID.store(id, Ordering::Relaxed);
-}
+pub fn set_id(id: u32) { CACHED_PID.store(id, Ordering::Relaxed); }

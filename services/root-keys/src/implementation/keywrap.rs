@@ -33,10 +33,9 @@
 /// may necessarily be insecure -- it seems /very close/ to the spec, maybe just a
 /// problem with how the block counter is incremented between rounds -- but it is still
 /// not compliant, so, we should migrate away from it!
-
 use aes::cipher::generic_array::GenericArray;
-use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+use aes::Aes256;
 use byteorder::{BigEndian, ByteOrder};
 
 use crate::api::KeywrapError;
@@ -52,16 +51,11 @@ impl Aes256KeyWrap {
     pub const KEY_BYTES: usize = 32;
     pub const MAC_BYTES: usize = 8;
 
-    pub fn new(key: &[u8; Self::KEY_BYTES]) -> Self {
-        Aes256KeyWrap {
-            aes: Aes256::new(key.into()),
-        }
-    }
+    pub fn new(key: &[u8; Self::KEY_BYTES]) -> Self { Aes256KeyWrap { aes: Aes256::new(key.into()) } }
 
     #[allow(dead_code)]
     pub fn encapsulate(&self, input: &[u8]) -> Result<Vec<u8>, KeywrapError> {
-        if input.len() > std::u32::MAX as usize
-            || input.len() as u64 >= std::u64::MAX / FEISTEL_ROUNDS as u64
+        if input.len() > std::u32::MAX as usize || input.len() as u64 >= std::u64::MAX / FEISTEL_ROUNDS as u64
         {
             return Err(KeywrapError::InvalidDataSize);
         }
@@ -88,10 +82,7 @@ impl Aes256KeyWrap {
                 self.aes.encrypt_block(&mut block);
                 counter += 1;
                 BigEndian::write_u64(&mut counter_bin, counter);
-                block[8..16]
-                    .iter_mut()
-                    .zip(counter_bin.iter())
-                    .for_each(|(a, b)| *a ^= b);
+                block[8..16].iter_mut().zip(counter_bin.iter()).for_each(|(a, b)| *a ^= b);
                 output[i..i + 8].copy_from_slice(&block[8..16]);
                 i += 8;
             }
@@ -104,13 +95,8 @@ impl Aes256KeyWrap {
         if input.len() % 8 != 0 {
             return Err(KeywrapError::InvalidDataSize);
         }
-        let output_len = input
-            .len()
-            .checked_sub(Self::MAC_BYTES)
-            .ok_or(KeywrapError::InvalidOutputSize)?;
-        if output_len > std::u32::MAX as usize
-            || output_len as u64 >= std::u64::MAX / FEISTEL_ROUNDS as u64
-        {
+        let output_len = input.len().checked_sub(Self::MAC_BYTES).ok_or(KeywrapError::InvalidOutputSize)?;
+        if output_len > std::u32::MAX as usize || output_len as u64 >= std::u64::MAX / FEISTEL_ROUNDS as u64 {
             return Err(KeywrapError::InvalidDataSize);
         }
         if expected_len > output_len || (expected_len & !7) > output_len {
@@ -126,10 +112,7 @@ impl Aes256KeyWrap {
         if output.len() == 8 {
             block.copy_from_slice(input);
             self.aes.decrypt_block(&mut block);
-            let c = block[0..8]
-                .iter()
-                .zip(aiv.iter())
-                .fold(0, |acc, (a, b)| acc | (a ^ b));
+            let c = block[0..8].iter().zip(aiv.iter()).fold(0, |acc, (a, b)| acc | (a ^ b));
             if c != 0 {
                 return Err(KeywrapError::IntegrityCheckFailed);
             }
@@ -148,18 +131,12 @@ impl Aes256KeyWrap {
                 block[8..16].copy_from_slice(&output[i..][0..8]);
                 BigEndian::write_u64(&mut counter_bin, counter);
                 counter -= 1;
-                block[8..16]
-                    .iter_mut()
-                    .zip(counter_bin.iter())
-                    .for_each(|(a, b)| *a ^= b);
+                block[8..16].iter_mut().zip(counter_bin.iter()).for_each(|(a, b)| *a ^= b);
                 self.aes.decrypt_block(&mut block);
                 output[i..][0..8].copy_from_slice(&block[8..16]);
             }
         }
-        let c = block[0..8]
-            .iter()
-            .zip(aiv.iter())
-            .fold(0, |acc, (a, b)| acc | (a ^ b));
+        let c = block[0..8].iter().zip(aiv.iter()).fold(0, |acc, (a, b)| acc | (a ^ b));
         if c != 0 {
             return Err(KeywrapError::IntegrityCheckFailed);
         }

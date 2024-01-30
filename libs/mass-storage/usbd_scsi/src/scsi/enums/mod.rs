@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: MIT
 // SPDX-LIcense-Identifier: Apache 2.0
 
+#![allow(unused_imports)]
+
 mod op_code;
 pub use op_code::*;
 

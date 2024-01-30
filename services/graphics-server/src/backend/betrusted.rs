@@ -1,8 +1,9 @@
-use crate::api::Point;
-use crate::api::{LINES, WIDTH};
 use susres::{RegManager, RegOrField, SuspendResume};
 use utralib::generated::*;
 use xous::MemoryRange;
+
+use crate::api::Point;
+use crate::api::{LINES, WIDTH};
 
 pub const FB_WIDTH_WORDS: usize = 11;
 pub const FB_WIDTH_PIXELS: usize = WIDTH as usize;
@@ -76,9 +77,7 @@ impl XousDisplay {
         };
 
         display.set_clock(CONFIG_CLOCK_FREQUENCY);
-        display
-            .susres
-            .push(RegOrField::Field(utra::memlcd::PRESCALER_PRESCALER), None);
+        display.susres.push(RegOrField::Field(utra::memlcd::PRESCALER_PRESCALER), None);
 
         /*
         use log::{error, info};
@@ -104,24 +103,20 @@ impl XousDisplay {
     /// any access to these registers have to be protected with a mutex of some form. In the case of
     /// the panic handler, the `is_panic` `AtomicBool` will suppress graphics loop operation
     /// in the case of a panic.
-    pub unsafe fn hw_regs(&self) -> (u32, u32) {
-        (
-            self.hwfb.as_mut_ptr() as u32,
-            self.csr.base() as u32
-        )
-    }
+    pub unsafe fn hw_regs(&self) -> (u32, u32) { (self.hwfb.as_mut_ptr() as u32, self.csr.base() as u32) }
 
     pub fn stash(&mut self) {
-        let fb = unsafe{core::slice::from_raw_parts_mut(self.fb.as_mut_ptr() as *mut u32, FB_SIZE)};
+        let fb = unsafe { core::slice::from_raw_parts_mut(self.fb.as_mut_ptr() as *mut u32, FB_SIZE) };
         for lines in 0..FB_LINES {
             // set the dirty bits prior to stashing the frame buffer
             fb[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
         }
         let srfb_ptr = self.srfb.as_mut_ptr() as *mut u32;
         for (index, &src) in fb.iter().enumerate() {
-            unsafe{srfb_ptr.add(index).write_volatile(src)};
+            unsafe { srfb_ptr.add(index).write_volatile(src) };
         }
     }
+
     pub fn pop(&mut self) {
         // Safety: `u32` contains no undefined values
         let fb: &mut [u32] = unsafe { self.fb.as_slice_mut() };
@@ -135,14 +130,14 @@ impl XousDisplay {
         while self.busy() {
             // just wait until any pending FB operations are done
         }
-        let fb = unsafe{core::slice::from_raw_parts_mut(self.fb.as_mut_ptr() as *mut u32, FB_SIZE)};
+        let fb = unsafe { core::slice::from_raw_parts_mut(self.fb.as_mut_ptr() as *mut u32, FB_SIZE) };
         for lines in 0..FB_LINES {
             // set the dirty bits prior to stashing the frame buffer
             fb[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
         }
         let srfb_ptr = self.srfb.as_mut_ptr() as *mut u32;
         for (index, &src) in fb.iter().enumerate() {
-            unsafe{srfb_ptr.add(index).write_volatile(src)};
+            unsafe { srfb_ptr.add(index).write_volatile(src) };
         }
         self.susres.suspend();
 
@@ -172,7 +167,7 @@ impl XousDisplay {
                 }
             }
 
-             // set the dirty bits
+            // set the dirty bits
             unsafe {
                 (*hwfb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
             }
@@ -183,6 +178,7 @@ impl XousDisplay {
             // busy wait, blocking suspend until this has happened
         }
     }
+
     pub fn resume(&mut self) {
         self.susres.resume();
         // Safety: `u32` contains no undefined values
@@ -192,9 +188,7 @@ impl XousDisplay {
         self.redraw();
     }
 
-    pub fn screen_size(&self) -> Point {
-        Point::new(FB_WIDTH_PIXELS as i16, FB_LINES as i16)
-    }
+    pub fn screen_size(&self) -> Point { Point::new(FB_WIDTH_PIXELS as i16, FB_LINES as i16) }
 
     pub fn redraw(&mut self) {
         let mut busy_count = 0;
@@ -214,8 +208,7 @@ impl XousDisplay {
         // clear all the dirty bits, under the theory that it's time-wise cheaper on average
         // to visit every line and clear the dirty bits than it is to do an update_all()
         for lines in 0..FB_LINES {
-            if unsafe { (*fb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] & 0xFFFF_0000 } != 0x0
-            {
+            if unsafe { (*fb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] & 0xFFFF_0000 } != 0x0 {
                 dirty_count += 1;
             }
             unsafe {
@@ -251,17 +244,12 @@ impl XousDisplay {
 
     ///
     fn set_clock(&mut self, clk_mhz: u32) {
-        self.csr
-            .wfo(utra::memlcd::PRESCALER_PRESCALER, (clk_mhz / 2_000_000) - 1);
+        self.csr.wfo(utra::memlcd::PRESCALER_PRESCALER, (clk_mhz / 2_000_000) - 1);
     }
 
-    fn update_all(&mut self) {
-        self.csr.wfo(utra::memlcd::COMMAND_UPDATEALL, 1);
-    }
+    fn update_all(&mut self) { self.csr.wfo(utra::memlcd::COMMAND_UPDATEALL, 1); }
 
-    fn update_dirty(&mut self) {
-        self.csr.wfo(utra::memlcd::COMMAND_UPDATEDIRTY, 1);
-    }
+    fn update_dirty(&mut self) { self.csr.wfo(utra::memlcd::COMMAND_UPDATEDIRTY, 1); }
 
     /// "synchronous clear" -- must be called on init, so that the state of the LCD
     /// internal memory is consistent with the state of the frame buffer
@@ -280,9 +268,7 @@ impl XousDisplay {
     }
     */
 
-    fn busy(&self) -> bool {
-        self.csr.rf(utra::memlcd::BUSY_BUSY) == 1
-    }
+    fn busy(&self) -> bool { self.csr.rf(utra::memlcd::BUSY_BUSY) == 1 }
 
     pub fn set_devboot(&mut self, ena: bool) {
         if ena {

@@ -18,16 +18,30 @@ type Locale = String;
 type Value = String;
 type Translations = HashMap<Key, HashMap<Locale, Value>>;
 
+macro_rules! build_debug {
+    ($($tokens: tt)*) => {
+        println!("cargo:warning={}", format!($($tokens)*))
+    }
+}
+
 fn read_locales() -> Translations {
     let mut translations: Translations = HashMap::new();
 
-    let project_dir = project_root();
+    let mut project_dir = project_root();
     let build_directory = project_dir.to_str().unwrap();
     let locales = format!("{}/**/i18n.json", build_directory);
-    println!("Reading {}", &locales);
-
-    for entry in glob(&locales).expect("Failed to read glob pattern") {
+    build_debug!("Reading {}", &locales);
+    // TODO: once this works, get from external directory/location arguments from xtask script
+    project_dir.pop(); //sibling directory
+    project_dir.push("sigchat");
+    let external_directory = project_dir.to_str().unwrap();
+    let external_locales = format!("{}/**/i18n.json", external_directory);
+    build_debug!("Reading external {}", &external_locales);
+    let paths = glob(&locales).expect("Failed to read glob pattern for in tree fiels");
+    let external_paths = glob(&external_locales).expect("Filed to read glob pattern for external files");
+    for entry in paths.chain(external_paths) {
         let entry = entry.unwrap();
+        build_debug!("{:?}",entry);
         println!("cargo:rerun-if-changed={}", entry.display());
         let file = File::open(entry).expect("Failed to open the file");
         let mut reader = std::io::BufReader::new(file);
