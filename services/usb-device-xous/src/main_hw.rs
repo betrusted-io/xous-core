@@ -1,5 +1,3 @@
-use crate::*;
-use crate::hid::AppHIDConfig;
 use core::num::NonZeroU8;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::collections::VecDeque;
@@ -26,6 +24,9 @@ use xous_usb_hid::device::keyboard::{NKROBootKeyboard, NKROBootKeyboardConfig};
 use xous_usb_hid::device::DeviceClass;
 use xous_usb_hid::page::Keyboard;
 use xous_usb_hid::prelude::*;
+
+use crate::hid::AppHIDConfig;
+use crate::*;
 
 /// Time allowed for switchover between device core types. It's longer because some hosts
 /// get really confused when you have the same VID/PID show up with a different set of endpoints.
@@ -96,7 +97,7 @@ pub(crate) fn main_hw() -> ! {
         if soc_ver < minimum_ver {
             if soc_ver.min != 0 {
                 // don't show during hosted mode, which reports 0.0.0+0
-                    tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
+                tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
                 let modals = modals::Modals::new(&xns).unwrap();
                 modals.show_notification(
                     &format!("SoC version >= 0.9.8+20 required for USB HID. Detected rev: {}. Refusing to start USB driver.",
@@ -293,7 +294,6 @@ pub(crate) fn main_hw() -> ! {
         AppHIDConfig::default(),
         100, // 100 * 64 bytes = 6.4kb, quite the backlog
     );
-
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -935,7 +935,7 @@ pub(crate) fn main_hw() -> ! {
                                 usbmgmt.ll_reset(false);
                             }
                         }
-                    },
+                    }
                     UsbDeviceType::HIDv2 => {
                         log::info!("Connectiing HIDv2 device");
                         match view {
@@ -1103,7 +1103,9 @@ pub(crate) fn main_hw() -> ! {
                         Views::Serial => {
                             xous::return_scalar(msg.sender, UsbDeviceType::Serial as usize).unwrap()
                         }
-                        Views::HIDv2 => xous::return_scalar(msg.sender, UsbDeviceType::HIDv2 as usize).unwrap(),
+                        Views::HIDv2 => {
+                            xous::return_scalar(msg.sender, UsbDeviceType::HIDv2 as usize).unwrap()
+                        }
                     }
                 } else {
                     xous::return_scalar(msg.sender, UsbDeviceType::Debug as usize).unwrap();
@@ -1612,9 +1614,8 @@ pub(crate) fn main_hw() -> ! {
                 }
             }
             Some(Opcode::HIDSetDescriptor) => {
-                let buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let data = buffer.to_original::<HIDReportDescriptorMessage, _>().unwrap();
 
                 // This branch can only error if data.descriptor is longer than the
@@ -1624,47 +1625,41 @@ pub(crate) fn main_hw() -> ! {
                     Ok(_) => (),
                     Err(error) => {
                         log::error!("cannot set hidv2 device report: {:?}", error);
-                    },
+                    }
                 }
             }
-            Some(Opcode::HIDUnsetDescriptor) => {
-                match hidv2.reset_device_report() {
-                    Ok(_) => (),
-                    Err(error) => log::error!("cannot reset hidv2 device report: {:?}", error),
-                }
-            }
+            Some(Opcode::HIDUnsetDescriptor) => match hidv2.reset_device_report() {
+                Ok(_) => (),
+                Err(error) => log::error!("cannot reset hidv2 device report: {:?}", error),
+            },
             Some(Opcode::HIDReadReport) => {
                 if !hidv2.descriptor_set() {
                     log::warn!("trying to read a HID report with no descriptor set!");
-                    continue
+                    continue;
                 }
 
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
 
                 let mut data = buffer.to_original::<HIDReportMessage, _>().unwrap();
 
                 data.data = hidv2.read_report();
 
                 buffer.replace(data).expect("couldn't serialize return");
-            },
+            }
             Some(Opcode::HIDWriteReport) => {
                 if !hidv2.descriptor_set() {
                     log::warn!("trying to write a HID report with no descriptor set!");
-                    continue
+                    continue;
                 }
 
-                let buffer = unsafe {
-                    Buffer::from_memory_message(msg.body.memory_message().unwrap())
-                };
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let data = buffer.to_original::<HIDReport, _>().unwrap();
-
 
                 log::info!("report to be written to USB: {:?}", data);
 
                 hidv2.write_report(data);
-            },
+            }
             Some(Opcode::RegisterUsbObserver) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let ur = buffer.as_flat::<UsbListenerRegistration, _>().unwrap();

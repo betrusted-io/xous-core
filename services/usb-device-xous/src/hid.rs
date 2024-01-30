@@ -1,8 +1,8 @@
-use crate::api::HIDReport;
-use frunk_core::hlist::{HCons, HNil};
-use fugit::ExtU32;
 use std::sync::Arc;
 use std::{collections::VecDeque, sync::Mutex};
+
+use frunk_core::hlist::{HCons, HNil};
+use fugit::ExtU32;
 use usb_device::device::UsbDeviceBuilder;
 use usb_device::{
     class_prelude::{UsbBus, UsbBusAllocator},
@@ -13,12 +13,14 @@ use usb_device_xous::UsbDeviceState;
 use xous_usb_hid::{
     device::DeviceClass,
     interface::{
-        HeapInterface, HeapInterfaceBuilder, HeapInterfaceConfig, InBytes64, OutBytes64,
-        ReportSingle, UsbAllocatable,
+        HeapInterface, HeapInterfaceBuilder, HeapInterfaceConfig, InBytes64, OutBytes64, ReportSingle,
+        UsbAllocatable,
     },
     usb_class::{UsbHidClass, UsbHidClassBuilder},
     UsbHidError,
 };
+
+use crate::api::HIDReport;
 
 /// AppHIDDevice implements a UsbBus device whose internal USB interface allows for a heap-allocated
 /// device report descriptor.
@@ -28,10 +30,7 @@ pub struct AppHIDDevice<'a, B: UsbBus> {
 
 impl<'a, B: UsbBus> AppHIDDevice<'a, B> {
     pub fn write_report(&mut self, report: &HIDReport) -> Result<(), UsbHidError> {
-        self.interface
-            .write_report(&report.0)
-            .map(|_| ())
-            .map_err(UsbHidError::from)
+        self.interface.write_report(&report.0).map(|_| ()).map_err(UsbHidError::from)
     }
 
     pub fn read_report(&mut self) -> usb_device::Result<HIDReport> {
@@ -42,10 +41,7 @@ impl<'a, B: UsbBus> AppHIDDevice<'a, B> {
         }
     }
 
-    pub fn set_device_descriptor(
-        &mut self,
-        descriptor: Vec<u8>,
-    ) -> Result<(), usb_device::UsbError> {
+    pub fn set_device_descriptor(&mut self, descriptor: Vec<u8>) -> Result<(), usb_device::UsbError> {
         self.interface.set_report_descriptor(descriptor)
     }
 }
@@ -53,15 +49,11 @@ impl<'a, B: UsbBus> AppHIDDevice<'a, B> {
 impl<'a, B: UsbBus> DeviceClass<'a> for AppHIDDevice<'a, B> {
     type I = HeapInterface<'a, B, InBytes64, OutBytes64, ReportSingle>;
 
-    fn interface(&mut self) -> &mut Self::I {
-        &mut self.interface
-    }
+    fn interface(&mut self) -> &mut Self::I { &mut self.interface }
 
     fn reset(&mut self) {}
 
-    fn tick(&mut self) -> Result<(), UsbHidError> {
-        Ok(())
-    }
+    fn tick(&mut self) -> Result<(), UsbHidError> { Ok(()) }
 }
 
 pub struct AppHIDConfig<'a> {
@@ -95,9 +87,7 @@ impl<'a, B: UsbBus + 'a> UsbAllocatable<'a, B> for AppHIDConfig<'a> {
     type Allocated = AppHIDDevice<'a, B>;
 
     fn allocate(self, usb_alloc: &'a UsbBusAllocator<B>) -> Self::Allocated {
-        Self::Allocated {
-            interface: HeapInterface::new(usb_alloc, self.interface),
-        }
+        Self::Allocated { interface: HeapInterface::new(usb_alloc, self.interface) }
     }
 }
 
@@ -118,8 +108,8 @@ pub enum AppHIDError {
 /// It buffers incoming HID reports in a queue until it is requested to return some.
 /// Developers can set the maximum amount of HID reports to buffer, and AppHID will drop the oldest when a new
 /// one is added, and threshold is met.
-/// The buffer is heap-allocated: one HID report is 64 bytes, so depending on your configuration you might need
-/// to increase the heap limits for your process.
+/// The buffer is heap-allocated: one HID report is 64 bytes, so depending on your configuration you might
+/// need to increase the heap limits for your process.
 pub struct AppHID<'a, B: UsbBus> {
     max_stored_reports: usize,
     incoming_reports: VecDeque<HIDReport>,
@@ -157,14 +147,10 @@ impl<'a, B: UsbBus> AppHID<'a, B> {
 
     /// Forces the reset of the underlying USB device.
     /// Causes host to re-enumerate.
-    pub fn force_reset(&mut self) -> usb_device::Result<()> {
-        self.device.force_reset()
-    }
+    pub fn force_reset(&mut self) -> usb_device::Result<()> { self.device.force_reset() }
 
     /// Returns the current state of the underlying USB device.
-    pub fn state(&self) -> UsbDeviceState {
-        self.device.state()
-    }
+    pub fn state(&self) -> UsbDeviceState { self.device.state() }
 
     /// Polls for new reports on the bus, sent from the USB host.
     pub fn poll(&mut self) -> Result<(), AppHIDError> {
@@ -179,21 +165,22 @@ impl<'a, B: UsbBus> AppHID<'a, B> {
         let hidv2_device = self.class.device::<AppHIDDevice<'_, _>, _>();
         match hidv2_device.read_report() {
             Ok(report) => {
-                let result = 'result_scope : {
+                let result = 'result_scope: {
                     let reports_stored = self.incoming_reports.len();
                     if reports_stored < self.max_stored_reports {
                         break 'result_scope Ok(());
                     }
 
                     self.incoming_reports.pop_front().unwrap();
-                    break 'result_scope Err(AppHIDError::OldestReportDropped)
+                    break 'result_scope Err(AppHIDError::OldestReportDropped);
                 };
 
                 self.incoming_reports.push_back(report);
                 result
             }
             Err(err) => {
-                // If we have something that isn't WouldBlock, maybe stuff's about to blow up: return to caller.
+                // If we have something that isn't WouldBlock, maybe stuff's about to blow up: return to
+                // caller.
                 if !matches!(err, UsbError::WouldBlock) {
                     return Err(AppHIDError::UsbError(err));
                 }
@@ -208,19 +195,16 @@ impl<'a, B: UsbBus> AppHID<'a, B> {
     pub fn set_device_report(&mut self, descriptor: Vec<u8>) -> Result<(), AppHIDError> {
         let descr_len = descriptor.len();
         let hidv2_device = self.class.device::<AppHIDDevice<'_, _>, _>();
-        hidv2_device
-            .set_device_descriptor(descriptor)
-            .map_err(|e| AppHIDError::UsbError(e))
-            .and_then(|_| {
-                *self.device_descr_set.lock().unwrap() = match descr_len {
-                    0 => false,
-                    _ => true,
-                };
+        hidv2_device.set_device_descriptor(descriptor).map_err(|e| AppHIDError::UsbError(e)).and_then(|_| {
+            *self.device_descr_set.lock().unwrap() = match descr_len {
+                0 => false,
+                _ => true,
+            };
 
-                self.device.force_reset().ok();
+            self.device.force_reset().ok();
 
-                Ok(())
-            })
+            Ok(())
+        })
     }
 
     /// Resets the stored device descriptor report and drops all the stored incoming reports, if any.
@@ -231,9 +215,7 @@ impl<'a, B: UsbBus> AppHID<'a, B> {
     }
 
     /// Returns true if there is a device descriptor set for the AppHID.
-    pub fn descriptor_set(&self) -> bool {
-        *self.device_descr_set.lock().unwrap()
-    }
+    pub fn descriptor_set(&self) -> bool { *self.device_descr_set.lock().unwrap() }
 
     /// Returns the oldest HID report read from the USB bus.
     pub fn read_report(&mut self) -> Option<HIDReport> {

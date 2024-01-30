@@ -171,9 +171,7 @@ pub struct HIDReportDescriptorMessage {
 pub struct HIDReport(pub [u8; 64]);
 
 impl Default for HIDReport {
-    fn default() -> Self {
-        return Self([0u8; 64])
-    }
+    fn default() -> Self { return Self([0u8; 64]) }
 }
 
 #[derive(Debug, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
