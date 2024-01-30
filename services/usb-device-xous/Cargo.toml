@@ -28,7 +28,7 @@ xous-semver = "0.1.2"
 utralib = { version = "0.1.24", optional = true, default-features = false }
 trng = { path = "../trng" }
 
-xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git" }
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch="main" }
 embedded-time = "0.12.1"                                                    # required by the keyboard interface
 packed_struct = { version = "0.10", default-features = false }              # used by the xous-usb-hid crate
 num_enum = { version = "0.5", default-features = false }                    # used by the xous-usb-hid crate
