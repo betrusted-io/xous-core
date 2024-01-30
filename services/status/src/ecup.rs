@@ -1,10 +1,9 @@
 use std::convert::TryInto;
 
-use digest::Digest;
 use locales::t;
 use modals::Modals;
 use num_traits::*;
-use sha2::*;
+use sha2::Digest;
 use xous::msg_blocking_scalar_unpack;
 use xous_semver::SemVer;
 
@@ -651,7 +650,7 @@ fn do_update(
 }
 
 fn validate_package(pkg: &[u8], pkg_type: PackageType) -> bool {
-    let mut hasher = sha2::Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware);
+    let mut hasher = sha2::Sha512_256::new();
     let mut temp: [u8; 4] = Default::default();
     temp.copy_from_slice(&pkg[0x20..0x24]);
     if pkg_type == PackageType::Ec {
