@@ -49,8 +49,8 @@ chrono = { version = "0.4.19", default-features = false, features = ["std"] }
 passwords = "3.1.9"
 
 # totp
-sha-1 = "0.9.8"
-hmac = "0.11.0"
+sha1 = "0.10.6"
+hmac = "0.12.1"
 digest = "0.9.0"
 base32 = "0.4.0"
 sha2 = { version = "0.10.8", features = ["precursor"] }
