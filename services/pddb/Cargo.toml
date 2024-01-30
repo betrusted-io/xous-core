@@ -37,7 +37,7 @@ rand_core = "0.5.1"
 # passwords
 sha2 = { version = "0.10.8", features = ["precursor"] }
 digest = "0.9.0"
-hkdf = "0.11.0"
+hkdf = "0.12.4"
 zeroize = "1.3.0"
 zeroize_derive = "1.1.0"
 
