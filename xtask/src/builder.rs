@@ -78,9 +78,9 @@ impl CrateSpec {
 }
 impl From<&str> for CrateSpec {
     fn from(spec: &str) -> CrateSpec {
-        // remote crates are specified as "name@version", i.e. "xous-names@0.9.9"
-        if spec.contains('@') {
-            let (name, version) = spec.split_once('@').expect("couldn't parse crate specifier");
+        // remote crates are specified as "name^version", i.e. "xous-names^0.9.9"
+        if spec.contains('^') {
+            let (name, version) = spec.split_once('^').expect("couldn't parse crate specifier");
             CrateSpec::CratesIo(name.to_string(), version.to_string(), false)
         // prebuilt crates are specified as "name#url"
         // i.e. "espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/"
@@ -331,27 +331,18 @@ impl Builder {
         false
     }
 
-    /// Add just one service. Services can only be local.
+    /// Add just one service
     pub fn add_service<'a>(&'a mut self, service_spec: &str, xip: bool) -> &'a mut Builder {
-        let spec = CrateSpec::Local(service_spec.to_owned(), xip);
-        self.services.push(spec);
-        self
-    }
-
-    /// Add just one service. This one, if it contains the `@` specifier, will be interpreted as a crates.io
-    /// domiciled service
-    #[allow(dead_code)]
-    pub fn add_remote_service<'a>(&'a mut self, service_spec: &str, xip: bool) -> &'a mut Builder {
         let mut spec: CrateSpec = service_spec.into();
         spec.set_xip(xip);
         self.services.push(spec);
         self
     }
 
-    /// Add a list of services. Services can only be local.
+    /// Add a list of services
     pub fn add_services<'a>(&'a mut self, service_list: &Vec<String>) -> &'a mut Builder {
         for service in service_list {
-            self.services.push(CrateSpec::Local(service.to_string(), false));
+            self.services.push(service.as_str().into());
         }
         self
     }

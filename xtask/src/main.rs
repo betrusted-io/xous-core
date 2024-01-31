@@ -482,6 +482,7 @@ fn print_help() {
     [--no-verify]
     [--gdb-stub]
     [--debug-loader]
+    [--offline]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
@@ -504,6 +505,7 @@ be merged in with explicit app/service treatment with the following flags:
 [--no-verify]            Do not verify that local sources match crates.io downloaded sources
 [--gdb-stub]             Build the kernel with GDB support
 [--debug-loader]         Enable debug printing in the loader
+[--offline]              Avoid network traffic
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.
