@@ -17,7 +17,7 @@ default-members = [
   "services/shellchat",
   "services/llio",
   "services/codec",
-  "services/engine-sha512",
+  #  "services/engine-sha512",
   "services/engine-25519",
   "services/aes",
   "services/spinor",
@@ -60,7 +60,7 @@ members = [
   "services/content-plugin-api",
   "services/llio",
   "services/codec",
-  "services/engine-sha512",
+  #  "services/engine-sha512",
   "services/engine-25519",
   "services/aes",
   "services/spinor",
@@ -135,8 +135,9 @@ incremental = true
 opt-level = "s" # z,s: Optimize for size instead of performance; 1 for easier debugging; comment out for "best performance" (but in Rust 1.72 this causes regressions)
 
 # prefer hardware-accelerated versions of services
-[patch.crates-io.sha2]
-path = "services/engine-sha512"
+[patch.crates-io]
+sha2 = { git = "https://github.com/betrusted-io/hashes.git", branch = "sha2-v0.10.8-xous" }
+sha2_legacy = { git = "https://github.com/RustCrypto/hashes.git", tag = "sha2-v0.9.9", package = "sha2" }
 
 [patch.crates-io.aes]
 path = "services/aes"

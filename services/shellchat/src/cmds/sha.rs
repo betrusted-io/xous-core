@@ -1,8 +1,7 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use digest::Digest;
 use num_traits::*;
-use sha2::*;
+use sha2::Digest;
 use xous_ipc::String;
 
 use crate::{CommonEnv, ShellCmdApi};
@@ -25,7 +24,7 @@ const TEST_ITERS: usize = 1000;
 const TEST_MAX_LEN: usize = 8192;
 const TEST_FIXED_LEN: bool = true;
 /*
-benchamrk notes:
+benchmark notes:
 TEST_MAX_LEN = 16384 (fixed length) / TEST_ITERS = 1000: hw 25.986ms/hash, sw 155.11ms/hash
 TEST_MAX_LEN = 16384 (random length) / TEST_ITERS = 1000: hw 15.262ms/hash, sw 80.053ms/hash
 TEST_MAX_LEN = 256 (random length) / TEST_ITERS = 1000: hw 6.968ms/hash, sw 3.987ms/hash
@@ -46,6 +45,9 @@ power consumption -
 ~ 23mA for SHA hardware unit doing 8k fixed length hashes, ~14% extra power, 1.65mJ/hash
 172mA while running sw benchmark (78.525ms/hash) -> ~10mA excess power for software -> 3.22mJ/hash
 ~50% power savings to use hardware hasher
+
+v0.10.8 API implementation
+TEST_MAX_LEN = 8192 (fixed length) / TEST_ITERS = 1000: hw 11.464ms/hash, sw 21.502ms/hash
  */
 
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
@@ -69,33 +71,58 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(BenchOp::StartSha512Hw) | Some(BenchOp::StartSha512Sw) => {
                 let mut hw_mode = true;
-                let mut hasher = match FromPrimitive::from_usize(msg.body.id()) {
+                let mut accumulator = [0 as u8; 64];
+                match FromPrimitive::from_usize(msg.body.id()) {
                     Some(BenchOp::StartSha512Sw) => {
                         hw_mode = false;
-                        sha2::Sha512::new_with_strategy(FallbackStrategy::SoftwareOnly)
-                    }
-                    _ => sha2::Sha512::new_with_strategy(FallbackStrategy::WaitForHardware),
-                };
-                let mut accumulator = [0 as u8; 64];
-                for i in 0..TEST_ITERS {
-                    //log::debug!("iter {}", i);
-                    // pick a random length for the test -- this helps to exercise corner cases in the hash
-                    // handler core
-                    let iterlen = if TEST_FIXED_LEN {
-                        TEST_MAX_LEN
-                    } else {
-                        if i < TEST_MAX_LEN - 2 {
-                            (dataset[i] as usize) | ((dataset[i + 1] as usize) << 8) % TEST_MAX_LEN
-                        } else {
-                            TEST_MAX_LEN
+                        let mut hasher = sha2::Sha512Sw::new();
+                        // have to duplicate this code because the hasher is a different type.
+                        for i in 0..TEST_ITERS {
+                            //log::debug!("iter {}", i);
+                            // pick a random length for the test -- this helps to exercise corner cases in the
+                            // hash handler core
+                            let iterlen = if TEST_FIXED_LEN {
+                                TEST_MAX_LEN
+                            } else {
+                                if i < TEST_MAX_LEN - 2 {
+                                    (dataset[i] as usize) | ((dataset[i + 1] as usize) << 8) % TEST_MAX_LEN
+                                } else {
+                                    TEST_MAX_LEN
+                                }
+                            };
+                            hasher.update(&dataset[..iterlen]);
+                            let digest = hasher.finalize_reset();
+                            for (&src, dest) in digest.iter().zip(&mut accumulator.iter_mut()) {
+                                *dest = (*dest).wrapping_add(src);
+                            }
                         }
-                    };
-                    hasher.update(&dataset[..iterlen]);
-                    let digest = hasher.finalize_reset();
-                    for (&src, dest) in digest.iter().zip(&mut accumulator.iter_mut()) {
-                        *dest = (*dest).wrapping_add(src);
                     }
-                }
+                    _ => {
+                        // should be "wait for hardware", but is currently "hardware-then-software"...
+                        let mut hasher = sha2::Sha512Hw::new();
+                        // have to duplicate this code because the hasher is a different type.
+                        for i in 0..TEST_ITERS {
+                            //log::debug!("iter {}", i);
+                            // pick a random length for the test -- this helps to exercise corner cases in the
+                            // hash handler core
+                            let iterlen = if TEST_FIXED_LEN {
+                                TEST_MAX_LEN
+                            } else {
+                                if i < TEST_MAX_LEN - 2 {
+                                    (dataset[i] as usize) | ((dataset[i + 1] as usize) << 8) % TEST_MAX_LEN
+                                } else {
+                                    TEST_MAX_LEN
+                                }
+                            };
+                            hasher.update(&dataset[..iterlen]);
+                            let digest = hasher.finalize_reset();
+                            for (&src, dest) in digest.iter().zip(&mut accumulator.iter_mut()) {
+                                *dest = (*dest).wrapping_add(src);
+                            }
+                        }
+                    }
+                };
+
                 let mut pass = true;
                 for (&current, previous) in accumulator.iter().zip(last_result.iter_mut()) {
                     if current != *previous {
@@ -190,7 +217,7 @@ impl<'a> ShellCmdApi<'a> for Sha {
                     ];
 
                     let mut pass: bool = true;
-                    let mut hasher = sha2::Sha512::new_with_strategy(FallbackStrategy::WaitForHardware);
+                    let mut hasher = sha2::Sha512::new();
 
                     hasher.update(K_DATA);
                     let digest = hasher.finalize();
@@ -217,8 +244,7 @@ impl<'a> ShellCmdApi<'a> for Sha {
                     ];
 
                     let mut pass: bool = true;
-                    let mut hasher =
-                        sha2::Sha512Trunc256::new_with_strategy(FallbackStrategy::WaitForHardware);
+                    let mut hasher = sha2::Sha512_256::new();
 
                     hasher.update(K_DATA);
                     let digest = hasher.finalize();

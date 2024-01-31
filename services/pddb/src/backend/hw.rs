@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind, Result};
 
-use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
+use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt};
 use aes::{Aes256, Block, BLOCK_SIZE};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
@@ -18,6 +18,7 @@ use backend::bcrypt::*;
 use modals::Modals;
 use root_keys::api::AesRootkeyType;
 use root_keys::api::KeywrapError;
+use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
 use spinor::SPINOR_BULK_ERASE_SIZE;
 use subtle::ConstantTimeEq;
 
@@ -28,10 +29,8 @@ type FspaceSet = HashSet<PhysPage>;
 #[cfg(feature = "deterministic")]
 type FspaceSet = BTreeSet<PhysPage>;
 
-use digest::Digest;
 #[cfg(feature = "perfcounter")]
 use perflib::*;
-use sha2::{FallbackStrategy, Sha512Trunc256};
 #[cfg(feature = "perfcounter")]
 use utralib::AtomicCsr;
 use zeroize::Zeroize;
@@ -614,6 +613,7 @@ impl PddbOs {
         data_key: &[u8; AES_KEYSIZE],
         basis_name: &str,
     ) -> Option<HashMap<VirtAddr, PhysPage>> {
+        use aes::cipher::KeyInit;
         let cipher = Aes256::new(&GenericArray::from_slice(pt_key));
         let pt = self.pt_as_slice();
         let mut map = HashMap::<VirtAddr, PhysPage>::new();
@@ -774,6 +774,7 @@ impl PddbOs {
     pub(crate) fn clear_password(&self) { self.rootkeys.clear_password(AesRootkeyType::User0); }
 
     pub(crate) fn try_login(&mut self) -> PasswordState {
+        use aes::cipher::KeyInit;
         if self.system_basis_key.is_none() || self.cipher_ecb.is_none() {
             let scd = self.static_crypto_data_get();
             if scd.version == 0xFFFF_FFFF {
@@ -942,6 +943,7 @@ impl PddbOs {
     /// Anytime the fscb is updated, all the partial records are nuked, as well as any existing record.
     /// Then, a _random_ location is picked to place the structure to help with wear levelling.
     fn fast_space_write(&mut self, fs: &FastSpace) {
+        use aes::cipher::KeyInit;
         self.syskey_ensure();
         if let Some(system_basis_key) = &self.system_basis_key {
             let cipher = Aes256GcmSiv::new(&system_basis_key.data.into());
@@ -1259,6 +1261,7 @@ impl PddbOs {
     /// | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | xx | yy | yy | yy | yy | yy | ...  # page must contain FastSpace record
     /// | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | FF | zz | zz | zz | zz | zz | ...  # page contains an arbitrary number of SpaceUpdate records
     fn fast_space_read(&mut self) {
+        use aes::cipher::KeyInit;
         self.syskey_ensure();
         if let Some(system_key) = &self.system_basis_key {
             // remove the old contents, since we're about to re-read an authorative copy from disk.
@@ -1753,6 +1756,7 @@ impl PddbOs {
         aad: &[u8],
         page: &PhysPage,
     ) -> Option<Vec<u8>> {
+        use aes::cipher::KeyInit;
         const KCOM_NONCE_LEN: usize = 32;
         const KCOM_LEN: usize = 32;
         const MAC_LEN: usize = 16;
@@ -1842,6 +1846,7 @@ impl PddbOs {
         data: &mut [u8],
         pp: &PhysPage,
     ) {
+        use aes::cipher::KeyInit;
         assert!(data.len() == KCOM_CT_LEN, "did not get a key-commit sized region to patch");
         // updates the journal type
         let j = JournalType::from_le_bytes(data[..size_of::<JournalType>()].try_into().unwrap())
@@ -1882,14 +1887,14 @@ impl PddbOs {
     /// and `nonce_com` which is the commitment nonce, set at 256 bits.
     /// The result is two tuples, (kenc, kcom).
     fn kcom_func(&self, key: &[u8; 32], nonce_com: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
-        let mut h_enc = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        let mut h_enc = Sha512_256Sw::new();
         h_enc.update(key);
         // per https://eprint.iacr.org/2020/1456.pdf Table 4 on page 13 Type I Lenc
         h_enc.update([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x01]);
         h_enc.update(nonce_com);
         let k_enc = h_enc.finalize();
 
-        let mut h_com = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        let mut h_com = Sha512_256Sw::new();
         h_com.update(key);
         // per https://eprint.iacr.org/2020/1456.pdf Table 4 on page 13 Type I Lcom. Note one-bit difference in last byte.
         h_com.update([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x02]);
@@ -2037,6 +2042,7 @@ impl PddbOs {
     /// The number of servers that can connect to the Spinor crate is strictly tracked, so we borrow a
     /// reference to the Spinor object allocated to the PDDB implementation for this operation.
     pub(crate) fn pddb_format(&mut self, fast: bool, progress: Option<&modals::Modals>) -> Result<()> {
+        use aes::cipher::KeyInit;
         if !self.rootkeys.is_initialized().unwrap() {
             return Err(Error::new(
                 ErrorKind::Unsupported,
@@ -2436,6 +2442,7 @@ impl PddbOs {
     /// If there are items allocated in the FSCB that have not had their corresponding physical
     /// page table entries on disk written, the operation will fail.
     pub(crate) fn pddb_rekey(&mut self, op: PddbRekeyOp, cache: &Vec<BasisCacheEntry>) -> PddbRekeyOp {
+        use aes::cipher::KeyInit;
         match op {
             PddbRekeyOp::FromDnaFast(dna) | PddbRekeyOp::FromDnaSafe(dna) => {
                 if cache.len() != 0 {
@@ -2875,12 +2882,12 @@ impl PddbOs {
         plaintext_pw[72] = 0; // always null terminate
 
         log::info!("creating salt");
-        // uses Sha512Trunc256 on the salt array to generate a compressed version of
+        // uses Sha512_256 on the salt array to generate a compressed version of
         // the basis name and plaintext password, which forms the Salt that is fed into bcrypt
         // our salt is probably way too big but what else are we going to use all that page's data for?
         let scd = self.static_crypto_data_get();
         let mut salt = [0u8; 16];
-        let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        let mut hasher = Sha512_256Sw::new();
         hasher.update(&scd.salt_base[32..]); // reserve the first 32 bytes of salt for the HKDF
         hasher.update(&bname_copy);
         hasher.update(&plaintext_pw);
@@ -2949,7 +2956,7 @@ impl PddbOs {
                 region.len() == root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE,
                 "CHECKSUM_BLOCKLEN_PAGE is not an even divisor of the PDDB size"
             );
-            let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware);
+            let mut hasher = Sha512_256Hw::new();
             hasher.update(region); // reserve the first 32 bytes of salt for the HKDF
             let digest = hasher.finalize();
             // copy only the first 128 bits of the hash into the checksum array
@@ -3100,11 +3107,11 @@ impl PddbOs {
         plaintext_pw[72] = 0; // always null terminate
 
         log::info!("creating salt");
-        // uses Sha512Trunc256 on the salt array to generate a compressed version of
+        // uses Sha512_256 on the salt array to generate a compressed version of
         // the basis name and plaintext password, which forms the Salt that is fed into bcrypt
         // our salt is probably way too big but what else are we going to use all that page's data for?
         let mut salt = [0u8; 16];
-        let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        let mut hasher = Sha512_256Sw::new();
         hasher.update(&scd.salt_base);
         hasher.update(&bname_copy);
         hasher.update(&plaintext_pw);
@@ -3123,7 +3130,7 @@ impl PddbOs {
         log::info!("derived bcrypt password in {}ms", elapsed);
 
         // 4. take the resulting 24-byte password and expand it to 32 bytes using sha512trunc256
-        let mut expander = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        let mut expander = Sha512_256Sw::new();
         expander.update(hashed_password);
         let final_key = expander.finalize();
         let mut key = [0u8; AES_KEYSIZE];
@@ -3301,6 +3308,7 @@ impl PddbOs {
     /// Must be within this structure because it accesses the rootkeys, and we don't want to make that public.
     #[cfg(feature = "migration1")]
     pub(crate) fn migration_v1_to_v2(&mut self, pw_cid: xous::CID) -> PasswordState {
+        use aes::cipher::KeyInit;
         let scd = self.static_crypto_data_get_v1();
         if scd.version == 0xFFFF_FFFF {
             // system is in the blank state

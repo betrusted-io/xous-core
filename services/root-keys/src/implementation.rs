@@ -6,12 +6,11 @@ use core::convert::TryInto;
 use core::mem::size_of;
 use core::num::NonZeroUsize;
 
-use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+use aes::cipher::{BlockDecrypt, BlockEncrypt};
 use aes::Aes256;
 use cipher::generic_array::GenericArray;
 use curve25519_dalek::constants;
 use curve25519_dalek::scalar::Scalar;
-use digest::Digest;
 use ed25519_dalek::{ExpandedSecretKey, Keypair, PublicKey, SecretKey, Signature, Signer};
 use gam::modal::{ActionType, Modal, ProgressBar, Slider};
 use graphics_server::BulkRead;
@@ -21,7 +20,8 @@ use num_traits::*;
 pub use oracle::FpgaKeySource;
 use rand_core::RngCore;
 use root_keys::key2bits::*;
-use sha2::{FallbackStrategy, Sha256, Sha512, Sha512Trunc256};
+use sha2::Digest;
+use sha2::{Sha256, Sha512Hw, Sha512_256Sw};
 use utralib::generated::*;
 use xous::KERNEL_BACKUP_OFFSET;
 use xous_semver::SemVer;
@@ -56,8 +56,8 @@ const SELFSIG_OFFSET: usize = 0x27_F000;
 /// This structure is mapped into the password cache page and can be zero-ized at any time
 /// we avoid using fancy Rust structures because everything has to "make sense" after a forced zero-ization
 /// The "password" here is generated as follows:
-///   `user plaintext (up to first 72 bytes) -> bcrypt (24 bytes) -> sha512trunc256 -> [u8; 32]`
-/// The final sha512trunc256 expansion is because we will use this to XOR against secret keys stored in
+///   `user plaintext (up to first 72 bytes) -> bcrypt (24 bytes) -> Sha512_256 -> [u8; 32]`
+/// The final Sha512_256 expansion is because we will use this to XOR against secret keys stored in
 /// the KEYROM that may be up to 256 bits in length. For shorter keys, the hashed password is simply
 /// truncated.
 #[repr(C)]
@@ -382,7 +382,7 @@ impl<'a> RootKeys {
         } // prevent increment-up attacks that roll over
         log::debug!("rollback_limit: {}", rollback_limit);
         for _i in 0..MAX_ROLLBACK_LIMIT - rollback_limit as u8 {
-            let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+            let mut hasher = Sha512_256Sw::new();
             hasher.update(&key);
             let digest = hasher.finalize();
             assert!(digest.len() == 32, "Digest had an incorrect length");
@@ -400,6 +400,7 @@ impl<'a> RootKeys {
     /// data laying around.
     /// ASSUME: the caller has confirmed that the user password is valid and in cache
     pub fn aes_op(&mut self, key_index: u8, op_type: AesOpType, block: &mut [u8; 16]) {
+        use aes::cipher::KeyInit;
         let mut key = match key_index {
             KeyRomLocs::USER_KEY => {
                 let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
@@ -433,6 +434,7 @@ impl<'a> RootKeys {
     }
 
     pub fn aes_par_op(&mut self, key_index: u8, op_type: AesOpType, blocks: &mut [[u8; 16]; PAR_BLOCKS]) {
+        use aes::cipher::KeyInit;
         let mut key = match key_index {
             KeyRomLocs::USER_KEY => {
                 let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
@@ -859,8 +861,7 @@ impl<'a> RootKeys {
 
         // expand the 24-byte (192-bit) bcrypt result into 256 bits, so we can use it directly as XOR key
         // material against 256-bit AES and curve25519 keys
-        // for such a small hash, software is the most performant choice
-        let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        let mut hasher = Sha512_256Sw::new();
         hasher.update(hashed_password);
         let digest = hasher.finalize();
 
@@ -1159,7 +1160,7 @@ impl<'a> RootKeys {
             // the KeyROM has not yet been set (it should be zero, but there is no reason for it
             // to be at this point).
             for _i in 0..MAX_ROLLBACK_LIMIT {
-                let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+                let mut hasher = Sha512_256Sw::new();
                 hasher.update(&derived_sk);
                 let digest = hasher.finalize();
                 derived_sk.copy_from_slice(&digest);
@@ -2680,7 +2681,7 @@ impl<'a> RootKeys {
             + 8; // two u32 words are appended to the end, which repeat the "version" and "length" fields encoded in the signature block
 
         // this is a huge hash, so, get a hardware hasher, even if it means waiting for it
-        let mut hasher = Sha512::new_with_strategy(FallbackStrategy::WaitForHardware);
+        let mut hasher = Sha512Hw::new();
 
         // extract the secret key so we can prime the hash
         let expanded_key = ExpandedSecretKey::from(&signing_key.secret);
@@ -2723,10 +2724,14 @@ impl<'a> RootKeys {
             pb
         });
 
-        let r = Scalar::from_hash(hasher);
+        // FIXME: this should turn back into a Scalar-from-hash routine when Ed25519 gets API-bumped to be
+        // compatible with the hasher
+        let mut output = [0u8; 64];
+        output.copy_from_slice(hasher.finalize().as_slice());
+        let r = Scalar::from_bytes_mod_order_wide(&output);
         let R = (&r * &constants::ED25519_BASEPOINT_TABLE).compress();
 
-        let mut hasher = Sha512::new_with_strategy(FallbackStrategy::WaitForHardware);
+        let mut hasher = Sha512Hw::new();
         hasher.update(R.as_bytes());
         hasher.update(signing_key.public.as_bytes());
 
@@ -2762,7 +2767,11 @@ impl<'a> RootKeys {
             pb.increment_work(1);
         }
 
-        let k = Scalar::from_hash(hasher);
+        // FIXME: this should turn back into a Scalar-from-hash routine when Ed25519 gets API-bumped to be
+        // compatible with the hasher
+        let mut output = [0u8; 64];
+        output.copy_from_slice(hasher.finalize().as_slice());
+        let k = Scalar::from_bytes_mod_order_wide(&output);
         let s = &(&k * &key) + &r;
 
         let mut signature_bytes: [u8; 64] = [0u8; 64];
@@ -3319,7 +3328,7 @@ impl<'a> RootKeys {
 
         // compute a hash of the data, for fast verification of the backup header integrity to detect media
         // errors, etc.
-        let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware);
+        let mut hasher = Sha512_256Sw::new();
         hasher.update(&block[..size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()]);
         let digest = hasher.finalize();
         assert!(digest.len() == HASH_LEN, "Wrong length hash selected! Check your code.");

@@ -2,7 +2,7 @@ use core::mem::size_of;
 use core::ops::{Deref, DerefMut};
 
 use aes_gcm_siv::{
-    aead::{Aead, KeyInit, Payload},
+    aead::{Aead, Payload},
     Aes256GcmSiv, Nonce, Tag,
 };
 use rand_core::RngCore;
@@ -105,17 +105,17 @@ impl DerefMut for BackupDataCt {
 /// and `nonce_com` which is the commitment nonce, set at 256 bits.
 /// The result is two tuples, (kenc, kcom).
 fn kcom_func(key: &[u8; 32], nonce_com: &[u8; 32]) -> (BackupKey, BackupKey) {
-    use digest::Digest;
-    use sha2::{FallbackStrategy, Sha512Trunc256};
-
-    let mut h_enc = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+    use sha2::{Digest, Sha512_256Sw};
+    // Note: for such a small hash, it would be faster to use a software-only strategy
+    let mut h_enc = Sha512_256Sw::new();
     h_enc.update(key);
     // per https://eprint.iacr.org/2020/1456.pdf Table 4 on page 13 Type I Lenc
     h_enc.update([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x01]);
     h_enc.update(nonce_com);
     let k_enc = h_enc.finalize();
 
-    let mut h_com = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+    // Note: for such a small hash, it would be faster to use a software-only strategy
+    let mut h_com = Sha512_256Sw::new();
     h_com.update(key);
     // per https://eprint.iacr.org/2020/1456.pdf Table 4 on page 13 Type I Lcom. Note one-bit difference in last byte.
     h_com.update([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x02]);
@@ -129,6 +129,8 @@ fn kcom_func(key: &[u8; 32], nonce_com: &[u8; 32]) -> (BackupKey, BackupKey) {
 }
 
 pub(crate) fn create_backup(key: BackupKey, header: BackupHeader, keyrom: KeyRomExport) -> BackupDataCt {
+    use aes_gcm_siv::KeyInit;
+
     let xns = xous_names::XousNames::new().unwrap();
     let mut trng = trng::Trng::new(&xns).unwrap();
 
@@ -180,6 +182,8 @@ pub(crate) fn create_backup(key: BackupKey, header: BackupHeader, keyrom: KeyRom
 /// It is up to the caller to validate if the plaintext header matches the decrypted
 /// version embedded in the return data.
 pub(crate) fn restore_backup(key: &BackupKey, backup: &BackupDataCt) -> Option<BackupDataPt> {
+    use aes_gcm_siv::KeyInit;
+
     let (kenc, kcom) = kcom_func(&key.0, &backup.commit_nonce);
     let cipher = Aes256GcmSiv::new(&kenc.0.into());
 

@@ -11,9 +11,8 @@
 /// the code to refer to the table without change, all we do is swap out
 /// which language module is included in the two lines below.
 pub mod en;
-use digest::Digest;
 pub use en::*;
-use sha2::*;
+use sha2::Digest;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Bip39Error {

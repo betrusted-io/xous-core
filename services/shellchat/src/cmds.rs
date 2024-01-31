@@ -144,9 +144,9 @@ use tts::*;
 mod engine;
 #[cfg(feature = "benchmarks")]
 use engine::*;
-#[cfg(feature = "benchmarks")]
+#[cfg(feature = "hashtest")]
 mod sha;
-#[cfg(feature = "benchmarks")]
+#[cfg(feature = "hashtest")]
 use sha::*;
 #[cfg(feature = "aestests")]
 mod aes_cmd;
@@ -183,7 +183,7 @@ pub struct CmdEnv {
     #[cfg(feature = "tts")]
     tts_cmd: Tts,
 
-    #[cfg(feature = "benchmarks")]
+    #[cfg(feature = "hashtest")]
     sha_cmd: Sha,
     #[cfg(feature = "aestests")]
     aes_cmd: Aes,
@@ -229,7 +229,7 @@ impl CmdEnv {
             event_csr: AtomicCsr::new(event1_csr.as_mut_ptr() as *mut u32),
         };
         //let fcc = Fcc::new(&mut common);
-        #[cfg(feature = "benchmarks")]
+        #[cfg(feature = "hashtest")]
         let sha = Sha::new(&xns, &mut _common);
         #[cfg(feature = "aestests")]
         let aes = Aes::new(&xns, &mut _common);
@@ -321,7 +321,7 @@ impl CmdEnv {
             #[cfg(feature = "tts")]
             tts_cmd: Tts::new(&xns),
 
-            #[cfg(feature = "benchmarks")]
+            #[cfg(feature = "hashtest")]
             sha_cmd: sha,
             #[cfg(feature = "aestests")]
             aes_cmd: aes,
@@ -371,7 +371,7 @@ impl CmdEnv {
             &mut self.test_cmd,
             #[cfg(feature = "tts")]
             &mut self.tts_cmd,
-            #[cfg(feature = "benchmarks")]
+            #[cfg(feature = "hashtest")]
             &mut self.sha_cmd,
             #[cfg(feature = "aestests")]
             &mut self.aes_cmd,

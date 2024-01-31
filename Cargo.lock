@@ -1193,7 +1193,7 @@ dependencies = [
  "rfc6979 0.2.0",
  "serde",
  "serde_json",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "subtle",
  "trng",
  "untrusted",
@@ -1581,7 +1581,7 @@ dependencies = [
  "ed25519",
  "rand 0.7.3",
  "serde",
- "sha2 0.9.8",
+ "sha2 0.9.9",
  "zeroize",
 ]
 
@@ -2078,7 +2078,7 @@ dependencies = [
  "num-traits",
  "qrcode",
  "rkyv",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "trng",
  "tts-frontend",
  "utralib",
@@ -2341,12 +2341,11 @@ dependencies = [
 
 [[package]]
 name = "hkdf"
-version = "0.11.0"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01706d578d5c281058480e673ae4086a9f4710d8df1ad80a5b03e39ece5f886b"
+checksum = "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
 dependencies = [
- "digest 0.9.0",
- "hmac 0.11.0",
+ "hmac 0.12.1",
 ]
 
 [[package]]
@@ -3248,7 +3247,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "sec1",
- "sha2 0.9.8",
+ "sha2 0.9.9",
 ]
 
 [[package]]
@@ -3388,7 +3387,7 @@ dependencies = [
  "digest 0.10.7",
  "hmac 0.12.1",
  "password-hash",
- "sha2 0.10.7",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -3417,7 +3416,7 @@ dependencies = [
  "rand_core 0.5.1",
  "rkyv",
  "root-keys",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "spinor",
  "subtle",
  "trng",
@@ -4146,7 +4145,7 @@ dependencies = [
  "num-traits",
  "rand_core 0.5.1",
  "rkyv",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "spinor",
  "subtle",
  "trng",
@@ -4440,23 +4439,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "sha-1"
-version = "0.9.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99cd6713db3cf16b6c84e06321e049a9b9f699826e16096d23bbcc44d15d51a6"
-dependencies = [
- "block-buffer 0.9.0",
- "cfg-if",
- "cpufeatures",
- "digest 0.9.0",
- "opaque-debug",
-]
-
-[[package]]
 name = "sha1"
-version = "0.10.4"
+version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "006769ba83e921b3085caa8334186b00cf92b4cb1a6cf4632fbccc8eff5c7549"
+checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -4465,34 +4451,36 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.9.8"
+version = "0.9.9"
+source = "git+https://github.com/RustCrypto/hashes.git?tag=sha2-v0.9.9#e942f6f13a820a58716587f508fa50b6582cf34f"
 dependencies = [
  "block-buffer 0.9.0",
+ "cfg-if",
+ "cpufeatures",
  "digest 0.9.0",
+ "opaque-debug",
+]
+
+[[package]]
+name = "sha2"
+version = "0.10.8"
+source = "git+https://github.com/betrusted-io/hashes.git?branch=sha2-v0.10.8-xous#899876dcf233eb50ea0ccf8d5cfeb874bba06334"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "crypto-common",
+ "digest 0.10.7",
  "log",
  "num-derive",
  "num-traits",
- "opaque-debug",
+ "rand 0.8.5",
  "rkyv",
- "trng",
  "utralib",
  "xous 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
- "xous-api-ticktimer",
  "xous-ipc 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "sha2"
-version = "0.10.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "479fb9d862239e610720565ca91403019f2f00410f1864c5aa7479b950a76ed8"
-dependencies = [
- "cfg-if",
- "cpufeatures",
- "digest 0.10.7",
 ]
 
 [[package]]
@@ -4557,7 +4545,7 @@ dependencies = [
  "ring",
  "rkyv",
  "root-keys",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "spinor",
  "threadpool",
  "tls",
@@ -4726,7 +4714,7 @@ dependencies = [
  "pddb",
  "rkyv",
  "root-keys",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "trng",
  "usb-device-xous",
  "userprefs",
@@ -5018,7 +5006,7 @@ dependencies = [
  "rkyv",
  "rustls",
  "rustls-webpki 0.101.5",
- "sha2 0.9.8",
+ "sha2 0.10.8",
  "ureq",
  "webpki-roots 0.24.0",
  "x509-parser",
@@ -5059,7 +5047,7 @@ dependencies = [
  "pem",
  "pkcs8",
  "ring",
- "sha2 0.9.8",
+ "sha2 0.9.9",
  "svd2utra",
  "xmas-elf",
  "xous-semver",
@@ -5521,7 +5509,7 @@ dependencies = [
  "gam",
  "graphics-server",
  "hex 0.4.3",
- "hmac 0.11.0",
+ "hmac 0.12.1",
  "ime-plugin-api",
  "locales",
  "log",
@@ -5537,8 +5525,8 @@ dependencies = [
  "rand_core 0.6.3",
  "random-pick",
  "rkyv",
- "sha-1",
- "sha2 0.9.8",
+ "sha1",
+ "sha2 0.10.8",
  "sntpc",
  "subtle",
  "trng",

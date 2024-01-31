@@ -5,7 +5,7 @@ use std::{
     time::{SystemTime, SystemTimeError},
 };
 
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, Mac};
 use num_traits::*;
 use sha1::Sha1;
 use xous::{send_message, Message};
