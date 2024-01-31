@@ -147,4 +147,4 @@ extra-tests = []
 mass-storage = []
 locktests = [
 ] # for debugging some specific `std` tests cherry-picked out of the test suite
-default = ["hashtest"] # "debugprint"
+default = [] # "debugprint"
