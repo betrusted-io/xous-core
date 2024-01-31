@@ -465,6 +465,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - `sigchat` moved to its own repo with AGPL licensing: https://github.com/betrusted-io/sigchat
 - Formatting and contribution standards have been modified. Formatting with `rustfmt` and trailing white space removal is now mandatory for all Xous contributions, see [#477](https://github.com/betrusted-io/xous-core/pull/477) for a discussion of how we got there and why.
 - The repo has gone through a "flag day" where all the crates have been formatted, which means commits before the flag day may be more difficult to undo. The changes are committed on a crate-by-crate basis, so if something is really broken we can undo the formatting for the crate and add an exception to the rustfmt rules.
+- the `sha2` API has been upgraded from 0.9.9 to 0.10.8. In the process of upgrading this, the `sha2` code is now domiciled in a fork of the `RustCrypto/hashes` repo. This should hopefully make tracking changes on RustCrypto somewhat easier, at the price of some difficulty in maintaining external crate pins (but I think that can be solved with some scripting). In the process of conversion, crates that depend on the 0.9.9 API for acceleration are now not accelerated. In particular, the ed25519-dalek signature check on the gateware at boot now runs with software SHA-512, which means that boot is much slower. This should be fixed before the release is live, but users testing the bleeding edge should be aware of this temporary regression in performance.
 
 
 ## Roadmap
