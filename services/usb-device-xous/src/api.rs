@@ -27,6 +27,8 @@ pub(crate) enum Opcode {
     DebugUsbOp = 9,
     /// Set autotype rate
     SetAutotypeRate = 10,
+    /// Register a USB event observer
+    RegisterUsbObserver = 11,
 
     /// Send a U2F message
     U2fTx = 128,
@@ -138,4 +140,11 @@ pub struct UsbSerialAscii {
 pub struct UsbSerialBinary {
     pub d: [u8; SERIAL_BINARY_BUFLEN],
     pub len: usize,
+}
+
+/// this structure is used to register a USB listener.
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub(crate) struct UsbListenerRegistration {
+    pub server_name: xous_ipc::String<64>,
+    pub listener_op_id: usize,
 }

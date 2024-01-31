@@ -3,8 +3,11 @@
         "context_name": "App Loader",
         "menu_name": {
             "appmenu.app-loader": {
-            "en": "App Loader",
-            "en-tts": "App Loader"
+                "en": "App Loader",
+                "en-tts": "App Loader",
+                "fr": "App Loader *EN*",
+                "ja": "App Loader *EN*",
+                "zh": "App Loader *EN*"
             }
         },
         "submenu": 2
@@ -21,6 +24,19 @@
             }
         }
     },
+    "chat-test": {
+        "context_name": "Chat UI test",
+        "menu_name": {
+            "appmenu.chat-test": {
+                "en": "Chat UI test",
+                "en-tts": "Chat UI test",
+                "fr": "Chat UI test *EN*",
+                "ja": "Chat UI test *EN*",
+                "zh": "Chat UI test *EN*"
+            }
+        },
+        "submenu": 1
+    },
     "hello": {
         "context_name": "Hello World",
         "menu_name": {
@@ -33,6 +49,19 @@
             }
         }
     },
+    "mtxchat": {
+        "context_name": "[matrix]",
+        "menu_name": {
+            "appmenu.mtxchat": {
+                "en": "[matrix]",
+                "en-tts": "[matrix]",
+                "fr": "[matrix] *EN*",
+                "ja": "[matrix] *EN*",
+                "zh": "[matrix] *EN*"
+            }
+        },
+        "submenu": 1
+    },
     "mtxcli": {
         "context_name": "Matrix cli",
         "menu_name": {
@@ -44,24 +73,6 @@
                 "zh": "基本 MATRIX 演示"
             }
         }
-    },
-    "mtxchat": {
-        "context_name": "[matrix]",
-        "menu_name": {
-            "appmenu.mtxchat": {
-                "en": "[matrix]"
-            }
-        },
-        "submenu": 1
-    },
-    "chat-test": {
-        "context_name": "Chat UI test",
-        "menu_name": {
-            "appmenu.chat-test": {
-                "en": "Chat UI test"
-            }
-        },
-        "submenu": 1
     },
     "repl": {
         "context_name": "repl demo app",
@@ -79,10 +90,26 @@
         "context_name": "signal",
         "menu_name": {
             "appmenu.sigchat": {
-                "en": "Signal"
+                "en": "Signal",
+                "en-tts": "Signal",
+                "fr": "Signal *EN*",
+                "ja": "Signal *EN*",
+                "zh": "Signal *EN*"
             }
         },
         "submenu": 1
+    },
+    "transientdisk": {
+        "context_name": "Transient USB disk",
+        "menu_name": {
+            "appmenu.transientdisk": {
+                "en": "Transient USB disk",
+                "en-tts": "Transient USB disk",
+                "fr": "Transient USB disk *EN*",
+                "ja": "Transient USB disk *EN*",
+                "zh": "Transient USB disk *EN*"
+            }
+        }
     },
     "vault": {
         "context_name": "Key Vault",
@@ -96,13 +123,5 @@
             }
         },
         "submenu": 1
-    },
-    "transientdisk": {
-        "context_name": "Transient USB disk",
-        "menu_name": {
-            "appmenu.transientdisk": {
-                "en": "Transient USB disk"
-            }
-        }
     }
 }
