@@ -154,6 +154,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::args().filter(|x| x == "--debug-loader").count() != 0 {
         builder.add_loader_feature("debug-print");
     }
+    if env::args().filter(|x| x == "--offline").count() != 0 {
+        builder.add_global_flag("--offline");
+    }
 
     // ---- now process the verb plus position dependent arguments ----
     let mut args = env::args();

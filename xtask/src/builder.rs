@@ -122,6 +122,7 @@ pub(crate) struct Builder {
     /// services identically.
     apps: Vec<CrateSpec>,
     features: Vec<String>,
+    global_flags: Vec<String>,
     stream: BuildStream,
     min_ver: String,
     target: Option<String>,
@@ -149,6 +150,7 @@ impl Builder {
             services: Vec::new(),
             apps: Vec::new(),
             features: Vec::new(),
+            global_flags: Vec::new(),
             stream: BuildStream::Release,
             min_ver: crate::MIN_XOUS_VERSION.to_string(),
             target: Some(crate::TARGET_TRIPLE_RISCV32.to_string()),
@@ -195,6 +197,11 @@ impl Builder {
     #[allow(dead_code)]
     pub fn kernel_disable_defaults<'a>(&'a mut self) -> &'a mut Builder {
         self.kernel_disable_defaults = true;
+        self
+    }
+
+    pub fn add_global_flag<'a>(&'a mut self, flag: &str) -> &'a mut Builder {
+        self.global_flags.push(flag.to_string());
         self
     }
 
@@ -433,6 +440,10 @@ impl Builder {
             stream.to_str(),
         );
         remote_args.push(&output_root);
+
+        for flag in self.global_flags.iter() {
+            local_args.push(flag);
+        }
 
         // modify the stream if release (debug is the default for builds; release is the default for installs)
         match stream {
