@@ -18,7 +18,7 @@ use backend::bcrypt::*;
 use modals::Modals;
 use root_keys::api::AesRootkeyType;
 use root_keys::api::KeywrapError;
-use sha2::{Digest, Sha512_256, Sha512_256Sw};
+use sha2::{Digest, Sha512_256Hw, Sha512_256Sw};
 use spinor::SPINOR_BULK_ERASE_SIZE;
 use subtle::ConstantTimeEq;
 
@@ -2956,8 +2956,7 @@ impl PddbOs {
                 region.len() == root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE,
                 "CHECKSUM_BLOCKLEN_PAGE is not an even divisor of the PDDB size"
             );
-            // FIXME: should be "wait for hardware" strategy but this does not exist in 0.10 API
-            let mut hasher = Sha512_256::new();
+            let mut hasher = Sha512_256Hw::new();
             hasher.update(region); // reserve the first 32 bytes of salt for the HKDF
             let digest = hasher.finalize();
             // copy only the first 128 bits of the hash into the checksum array

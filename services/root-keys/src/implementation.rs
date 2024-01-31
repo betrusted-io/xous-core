@@ -21,7 +21,7 @@ pub use oracle::FpgaKeySource;
 use rand_core::RngCore;
 use root_keys::key2bits::*;
 use sha2::Digest;
-use sha2::{Sha256, Sha512, Sha512_256Sw};
+use sha2::{Sha256, Sha512Hw, Sha512_256Sw};
 use utralib::generated::*;
 use xous::KERNEL_BACKUP_OFFSET;
 use xous_semver::SemVer;
@@ -2681,8 +2681,7 @@ impl<'a> RootKeys {
             + 8; // two u32 words are appended to the end, which repeat the "version" and "length" fields encoded in the signature block
 
         // this is a huge hash, so, get a hardware hasher, even if it means waiting for it
-        // FIXME: should be "wait for hardware" strategy but this does not exist in 0.10 API
-        let mut hasher = Sha512::new();
+        let mut hasher = Sha512Hw::new();
 
         // extract the secret key so we can prime the hash
         let expanded_key = ExpandedSecretKey::from(&signing_key.secret);
@@ -2732,8 +2731,7 @@ impl<'a> RootKeys {
         let r = Scalar::from_bytes_mod_order_wide(&output);
         let R = (&r * &constants::ED25519_BASEPOINT_TABLE).compress();
 
-        // FIXME: should be "wait for hardware" strategy but this does not exist in 0.10 API
-        let mut hasher = Sha512::new();
+        let mut hasher = Sha512Hw::new();
         hasher.update(R.as_bytes());
         hasher.update(signing_key.public.as_bytes());
 

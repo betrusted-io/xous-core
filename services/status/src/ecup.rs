@@ -650,8 +650,7 @@ fn do_update(
 }
 
 fn validate_package(pkg: &[u8], pkg_type: PackageType) -> bool {
-    // FIXME: should be "wait for hardware" strategy but this does not exist in 0.10 API
-    let mut hasher = sha2::Sha512_256::new();
+    let mut hasher = sha2::Sha512_256Hw::new();
     let mut temp: [u8; 4] = Default::default();
     temp.copy_from_slice(&pkg[0x20..0x24]);
     if pkg_type == PackageType::Ec {
