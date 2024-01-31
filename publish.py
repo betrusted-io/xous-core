@@ -249,20 +249,23 @@ def main():
         print("Can't simultaneously change to local and remote paths. Pick only one operation.")
         exit(1)
 
+    crate_roots = ['.', '../hashes/sha2']
+
     if args.bump or args.local_paths or args.remote_paths:
         cargo_toml_paths = []
-        for path in Path('.').rglob('Cargo.toml'):
-            if 'target' not in str(path):
-                not_core_path = True
-                for cratespec in cratelist:
-                    editpath = cratespec[1]
-                    normpath = str(Path(path)).replace('\\', '/').rpartition('/')[0]  # fix windows paths
-                    # print(editpath)
-                    # print(normpath)
-                    if editpath == normpath:
-                        not_core_path = False
-                if not_core_path:
-                    cargo_toml_paths += [path]
+        for roots in crate_roots:
+            for path in Path(roots).rglob('Cargo.toml'):
+                if 'target' not in str(path):
+                    not_core_path = True
+                    for cratespec in cratelist:
+                        editpath = cratespec[1]
+                        normpath = str(Path(path)).replace('\\', '/').rpartition('/')[0]  # fix windows paths
+                        # print(editpath)
+                        # print(normpath)
+                        if editpath == normpath:
+                            not_core_path = False
+                    if not_core_path:
+                        cargo_toml_paths += [path]
 
         # import pprint
         # pp = pprint.PrettyPrinter(indent=2)
@@ -332,6 +335,10 @@ def main():
                 except:
                     print("Retry failed, moving on anyways...")
             time.sleep(1)
+
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("Don't forget to manually push alternate crate roots to github: {}".format(crate_roots[1:]))
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
 if __name__ == "__main__":
     main()
