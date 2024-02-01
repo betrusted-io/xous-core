@@ -20,8 +20,8 @@ bitfield = "0.13.2"
 vcell = "0.1.3"
 utralib = { version = "0.1.24", optional = true, default-features = false }
 
-xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git" }
-embedded-time = "0.12.1"                                                    # required by the keyboard interface
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
+embedded-time = "0.12.1"                                                                     # required by the keyboard interface
 
 [dependencies.usb-device]
 # see top level Cargo.toml for patch.crates-io directive to help with dev work

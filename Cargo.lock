@@ -5354,7 +5354,7 @@ dependencies = [
  "xous-api-ticktimer",
  "xous-ipc 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-semver",
- "xous-usb-hid 0.4.3 (git+https://github.com/betrusted-io/xous-usb-hid.git?branch=main)",
+ "xous-usb-hid",
 ]
 
 [[package]]
@@ -5377,7 +5377,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-usb-hid 0.4.3 (git+https://github.com/betrusted-io/xous-usb-hid.git)",
+ "xous-usb-hid",
 ]
 
 [[package]]
@@ -5560,7 +5560,7 @@ dependencies = [
  "xous-api-susres",
  "xous-api-ticktimer",
  "xous-ipc 0.9.57 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-usb-hid 0.4.3 (git+https://github.com/betrusted-io/xous-usb-hid.git)",
+ "xous-usb-hid",
 ]
 
 [[package]]
@@ -6341,20 +6341,6 @@ dependencies = [
 name = "xous-usb-hid"
 version = "0.4.3"
 source = "git+https://github.com/betrusted-io/xous-usb-hid.git?branch=main#793ec00243c525f2d17dc1d3a185abdeec57aaf6"
-dependencies = [
- "frunk",
- "fugit",
- "heapless 0.7.16",
- "num_enum 0.6.1",
- "option-block",
- "packed_struct",
- "usb-device",
-]
-
-[[package]]
-name = "xous-usb-hid"
-version = "0.4.3"
-source = "git+https://github.com/betrusted-io/xous-usb-hid.git#eba35e886d08e504cf10026221aec0fbfc63e201"
 dependencies = [
  "frunk",
  "fugit",
