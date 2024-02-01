@@ -2,10 +2,11 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 use core::fmt::Write;
+use std::sync::mpsc::{self, Receiver, Sender};
+
 use graphics_server::api::GlyphStyle;
 use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
 use num_traits::*;
-use std::sync::mpsc::{self, Receiver, Sender};
 use usb_device_xous::UsbHid;
 
 pub(crate) const SERVER_NAME_HIDV2: &str = "_HIDv2_";
@@ -68,18 +69,9 @@ impl HIDv2Demo {
             .expect("Could not register GAM UX")
             .unwrap();
 
-        let content = gam
-            .request_content_canvas(gam_token)
-            .expect("Could not get content canvas");
-        let screensize = gam
-            .get_canvas_bounds(content)
-            .expect("Could not get canvas dimensions");
-        Self {
-            gam,
-            _gam_token: gam_token,
-            content,
-            screensize,
-        }
+        let content = gam.request_content_canvas(gam_token).expect("Could not get content canvas");
+        let screensize = gam.get_canvas_bounds(content).expect("Could not get canvas dimensions");
+        Self { gam, _gam_token: gam_token, content, screensize }
     }
 
     /// Clear the entire screen.
@@ -90,11 +82,7 @@ impl HIDv2Demo {
                 Rectangle::new_with_style(
                     Point::new(0, 0),
                     self.screensize,
-                    DrawStyle {
-                        fill_color: Some(PixelColor::Light),
-                        stroke_color: None,
-                        stroke_width: 0,
-                    },
+                    DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 },
                 ),
             )
             .expect("can't clear content area");
@@ -123,9 +111,7 @@ impl HIDv2Demo {
         write!(text_view.text, "{}", "Echoing whatever on HID USB stack...")
             .expect("Could not write to text view");
 
-        self.gam
-            .post_textview(&mut text_view)
-            .expect("Could not render text view");
+        self.gam.post_textview(&mut text_view).expect("Could not render text view");
         self.gam.redraw().expect("Could not redraw screen");
     }
 }
@@ -140,9 +126,7 @@ fn main() -> ! {
     let mut allow_redraw = true;
 
     // Register the server with xous
-    let sid = xns
-        .register_name(SERVER_NAME_HIDV2, None)
-        .expect("can't register server");
+    let sid = xns.register_name(SERVER_NAME_HIDV2, None).expect("can't register server");
 
     let mut hidv2_demo = HIDv2Demo::new(&xns, sid);
 
@@ -201,11 +185,9 @@ fn start_hid_thread() -> Sender<bool> {
 
     let usbd = UsbHid::new();
 
-    usbd.connect_hid_app(FIDO_REPORT_DESCRIPTOR.to_vec())
-        .unwrap();
+    usbd.connect_hid_app(FIDO_REPORT_DESCRIPTOR.to_vec()).unwrap();
 
-    usbd.switch_to_core(usb_device_xous::UsbDeviceType::HIDv2)
-        .unwrap();
+    usbd.switch_to_core(usb_device_xous::UsbDeviceType::HIDv2).unwrap();
 
     std::thread::spawn(move || {
         loop {
@@ -227,8 +209,7 @@ fn start_hid_thread() -> Sender<bool> {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
-        usbd.switch_to_core(usb_device_xous::UsbDeviceType::Debug)
-            .unwrap();
+        usbd.switch_to_core(usb_device_xous::UsbDeviceType::Debug).unwrap();
     });
 
     return tx;
