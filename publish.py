@@ -310,7 +310,7 @@ def main():
         # small quirk: if you're doing a utralib update, just use -u only.
         # there is some order-sensitivity in how the dictionaries are accessed
         # but of course dictionaries are unordered. I think we need to re-do
-        # the specifier from a dictionary to an ordered list, to gurantee that
+        # the specifier from a dictionary to an ordered list, to guarantee that
         # publishing happens in the correct operation order.
         wet_cmd = ["cargo",  "publish"]
         dry_cmd = ["cargo",  "publish", "--dry-run", "--allow-dirty"]
