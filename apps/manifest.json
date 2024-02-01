@@ -49,6 +49,14 @@
             }
         }
     },
+    "hidv2": {
+        "context_name": "HID v2 demo",
+        "menu_name": {
+            "appmenu.hidv2": {
+                "en": "HID v2 demo"
+            }
+        }
+    },
     "mtxchat": {
         "context_name": "[matrix]",
         "menu_name": {

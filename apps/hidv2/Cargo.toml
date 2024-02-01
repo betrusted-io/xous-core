@@ -1,0 +1,22 @@
+[package]
+name = "hidv2"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.14"
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
+xous = "0.9.53"
+xous-ipc = "0.9.53"
+log-server = { package = "xous-api-log", version = "0.1.49" }
+xous-names = { package = "xous-api-names", version = "0.9.51" }
+gam = {path = "../../services/gam" }
+graphics-server = {path = "../../services/graphics-server" }
+locales = {path = "../../locales"}
+tts-frontend = {path="../../services/tts"}
+usb-device-xous = {path="../../services/usb-device-xous"}
+
+[features]
+tts = []
+default = []

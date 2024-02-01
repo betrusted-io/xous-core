@@ -62,6 +62,19 @@ pub(crate) enum Opcode {
     #[cfg(feature = "mass-storage")]
     ResetBlockDevice = 1026,
 
+    // HIDv2
+    /// Read a HID report
+    HIDReadReport = 1027,
+
+    /// Write a HID report
+    HIDWriteReport = 1028,
+
+    /// Set the HID descriptor to be pushed to the USB host
+    HIDSetDescriptor = 1029,
+
+    /// Unset HID descriptor and reset HIDv2 state
+    HIDUnsetDescriptor = 1030,
+
     /// Handle the USB interrupt
     UsbIrqHandler = 2048,
     /// Suspend/resume callback
@@ -110,8 +123,10 @@ pub enum UsbDeviceType {
     #[cfg(feature = "mass-storage")]
     MassStorage = 3,
     Serial = 4,
+    HIDv2 = 5,
 }
 use std::convert::TryFrom;
+
 impl TryFrom<usize> for UsbDeviceType {
     type Error = &'static str;
 
@@ -123,6 +138,7 @@ impl TryFrom<usize> for UsbDeviceType {
             #[cfg(feature = "mass-storage")]
             3 => Ok(UsbDeviceType::MassStorage),
             4 => Ok(UsbDeviceType::Serial),
+            5 => Ok(UsbDeviceType::HIDv2),
             _ => Err("Invalid UsbDeviceType specifier"),
         }
     }
@@ -140,6 +156,27 @@ pub struct UsbSerialAscii {
 pub struct UsbSerialBinary {
     pub d: [u8; SERIAL_BINARY_BUFLEN],
     pub len: usize,
+}
+
+pub const MAX_HID_REPORT_DESCRIPTOR_LEN: usize = 1024;
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct HIDReportDescriptorMessage {
+    pub descriptor: [u8; MAX_HID_REPORT_DESCRIPTOR_LEN],
+    pub len: usize,
+}
+
+#[derive(Copy, Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[repr(C, align(8))]
+pub struct HIDReport(pub [u8; 64]);
+
+impl Default for HIDReport {
+    fn default() -> Self { return Self([0u8; 64]) }
+}
+
+#[derive(Debug, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct HIDReportMessage {
+    pub data: Option<HIDReport>,
 }
 
 /// this structure is used to register a USB listener.

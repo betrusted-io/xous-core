@@ -28,7 +28,7 @@ xous-semver = "0.1.2"
 utralib = { version = "0.1.24", optional = true, default-features = false }
 trng = { path = "../trng" }
 
-xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git" }
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch="main" }
 embedded-time = "0.12.1"                                                    # required by the keyboard interface
 packed_struct = { version = "0.10", default-features = false }              # used by the xous-usb-hid crate
 num_enum = { version = "0.5", default-features = false }                    # used by the xous-usb-hid crate
@@ -41,6 +41,8 @@ usbd_mass_storage = { path = "../../libs/mass-storage/usbd_mass_storage", option
 usbd-serial = "0.1.1"
 
 ghostfat = "0.5.0"
+fugit = "0.3.7"
+frunk_core = "0.4.2"
 
 [dependencies.usb-device]
 # see top level Cargo.toml for patch.crates-io directive to help with dev work

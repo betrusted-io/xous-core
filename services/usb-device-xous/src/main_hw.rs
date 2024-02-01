@@ -25,12 +25,13 @@ use xous_usb_hid::device::DeviceClass;
 use xous_usb_hid::page::Keyboard;
 use xous_usb_hid::prelude::*;
 
+use crate::hid::AppHIDConfig;
 use crate::*;
 
 /// Time allowed for switchover between device core types. It's longer because some hosts
 /// get really confused when you have the same VID/PID show up with a different set of endpoints.
 const EXTENDED_CORE_RESET_MS: usize = 4000;
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 #[repr(usize)]
 enum Views {
     FidoWithKbd = 0,
@@ -38,6 +39,7 @@ enum Views {
     #[cfg(feature = "mass-storage")]
     MassStorage = 2,
     Serial = 3,
+    HIDv2 = 4,
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -187,7 +189,7 @@ pub(crate) fn main_hw() -> ! {
     let mut usbmgmt = usb_fidokbd_dev.get_iface();
     // before doing any allocs, clone a copy of the hardware access structure so we can build a second
     // view into the hardware with only FIDO descriptors
-    let usb_fido_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    let usb_fido_dev: SpinalUsbDevice = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
     usb_fido_dev.init();
     // do the same thing for mass storage
     #[cfg(feature = "mass-storage")]
@@ -281,6 +283,17 @@ pub(crate) fn main_hw() -> ! {
     const TRNG_REFILL_DELAY_MS: u32 = 1; // we re-poll very fast once we see the host taking data
     const TRNG_BACKOFF_MS: u32 = 1;
     const TRNG_BACKOFF_MAX_MS: u32 = 1000; // cap on how far we backoff the polling rate
+
+    let usb_hidv2_dev = SpinalUsbDevice::new(usbdev_sid, usb.clone(), csr.clone());
+    let hidv2_alloc = UsbBusAllocator::new(usb_hidv2_dev);
+
+    let mut hidv2 = hid::AppHID::new(
+        UsbVidPid(0x1209, 0x3613),
+        &serial_number,
+        &hidv2_alloc,
+        AppHIDConfig::default(),
+        100, // 100 * 64 bytes = 6.4kb, quite the backlog
+    );
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -483,6 +496,12 @@ pub(crate) fn main_hw() -> ! {
                             _ => (),
                         };
                     }
+                    Views::HIDv2 => {
+                        match hidv2.force_reset() {
+                            Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                            _ => (),
+                        };
+                    }
                     Views::Serial => match serial_device.force_reset() {
                         Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
                         _ => (),
@@ -604,6 +623,7 @@ pub(crate) fn main_hw() -> ! {
                         #[cfg(feature = "mass-storage")]
                         Views::MassStorage => panic!("did not expect u2f tx when in mass storage mode!"),
                         Views::Serial => panic!("did not expect u2f tx while in serial mode!"),
+                        Views::HIDv2 => panic!("did not expect u2f tx while in hidv2 mode!"),
                     };
                     u2f.write_report(&u2f_msg).ok();
                     log::debug!("sent U2F packet {:x?}", u2f_ipc.data);
@@ -645,7 +665,7 @@ pub(crate) fn main_hw() -> ! {
                     }
                     Views::Serial => {
                         if serial_device.poll(&mut [&mut serial_port]) {
-                            let mut data = [0u8; SERIAL_BUF_LEN];
+                            let mut data: [u8; 1024] = [0u8; SERIAL_BUF_LEN];
                             match serial_listen_mode {
                                 SerialListenMode::NoListener => match serial_port.read(&mut data) {
                                     Ok(len) => match std::str::from_utf8(&data[..len]) {
@@ -757,6 +777,14 @@ pub(crate) fn main_hw() -> ! {
                         }
                         None
                     }
+                    Views::HIDv2 => {
+                        match hidv2.poll() {
+                            Ok(_) => (),
+                            Err(error) => log::error!("hidv2 poll error: {:?}", error),
+                        }
+
+                        None
+                    }
                 };
                 if let Some(u2f) = maybe_u2f {
                     match u2f.read_report() {
@@ -789,6 +817,7 @@ pub(crate) fn main_hw() -> ! {
                     #[cfg(feature = "mass-storage")]
                     Views::MassStorage => ums_device.state() == UsbDeviceState::Suspend,
                     Views::Serial => serial_device.state() == UsbDeviceState::Suspend,
+                    Views::HIDv2 => hidv2.state() == UsbDeviceState::Suspend,
                 };
                 if is_suspend {
                     log::info!("suspend detected");
@@ -899,6 +928,20 @@ pub(crate) fn main_hw() -> ! {
                             Views::Serial => usbmgmt.connect_device_core(true),
                             _ => {
                                 view = Views::Serial;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            }
+                        }
+                    }
+                    UsbDeviceType::HIDv2 => {
+                        log::info!("Connectiing HIDv2 device");
+                        match view {
+                            Views::HIDv2 => usbmgmt.connect_device_core(true),
+                            _ => {
+                                view = Views::HIDv2;
                                 usbmgmt.ll_reset(true);
                                 tt.sleep_ms(1000).ok();
                                 usbmgmt.ll_connect_device_core(true);
@@ -1025,6 +1068,22 @@ pub(crate) fn main_hw() -> ! {
                             }
                         }
                     }
+                    UsbDeviceType::HIDv2 => {
+                        log::info!("Ensuring HIDv2 device");
+                        if !usbmgmt.is_device_connected() {
+                            view = Views::HIDv2;
+                            usbmgmt.connect_device_core(true);
+                        } else {
+                            if view != Views::HIDv2 {
+                                view = Views::HIDv2;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            }
+                        }
+                    }
                 }
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
@@ -1043,6 +1102,9 @@ pub(crate) fn main_hw() -> ! {
                         }
                         Views::Serial => {
                             xous::return_scalar(msg.sender, UsbDeviceType::Serial as usize).unwrap()
+                        }
+                        Views::HIDv2 => {
+                            xous::return_scalar(msg.sender, UsbDeviceType::HIDv2 as usize).unwrap()
                         }
                     }
                 } else {
@@ -1096,6 +1158,7 @@ pub(crate) fn main_hw() -> ! {
                         xous::return_scalar(msg.sender, ums_device.state() as usize).unwrap()
                     }
                     Views::Serial => xous::return_scalar(msg.sender, serial_device.state() as usize).unwrap(),
+                    Views::HIDv2 => xous::return_scalar(msg.sender, hidv2.state() as usize).unwrap(),
                 }
             }),
             Some(Opcode::SendKeyCode) => msg_blocking_scalar_unpack!(msg, code0, code1, code2, autoup, {
@@ -1549,6 +1612,53 @@ pub(crate) fn main_hw() -> ! {
                 } else {
                     serial_trng_interval.store(TRNG_REFILL_DELAY_MS, Ordering::SeqCst);
                 }
+            }
+            Some(Opcode::HIDSetDescriptor) => {
+                let buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let data = buffer.to_original::<HIDReportDescriptorMessage, _>().unwrap();
+
+                // This branch can only error if data.descriptor is longer than the
+                // expected maximum.
+                // The userland library checks this for us already.
+                match hidv2.set_device_report(Vec::from(&data.descriptor[..data.len])) {
+                    Ok(_) => (),
+                    Err(error) => {
+                        log::error!("cannot set hidv2 device report: {:?}", error);
+                    }
+                }
+            }
+            Some(Opcode::HIDUnsetDescriptor) => match hidv2.reset_device_report() {
+                Ok(_) => (),
+                Err(error) => log::error!("cannot reset hidv2 device report: {:?}", error),
+            },
+            Some(Opcode::HIDReadReport) => {
+                if !hidv2.descriptor_set() {
+                    log::warn!("trying to read a HID report with no descriptor set!");
+                    continue;
+                }
+
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+
+                let mut data = buffer.to_original::<HIDReportMessage, _>().unwrap();
+
+                data.data = hidv2.read_report();
+
+                buffer.replace(data).expect("couldn't serialize return");
+            }
+            Some(Opcode::HIDWriteReport) => {
+                if !hidv2.descriptor_set() {
+                    log::warn!("trying to write a HID report with no descriptor set!");
+                    continue;
+                }
+
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let data = buffer.to_original::<HIDReport, _>().unwrap();
+
+                log::info!("report to be written to USB: {:?}", data);
+
+                hidv2.write_report(data);
             }
             Some(Opcode::RegisterUsbObserver) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };

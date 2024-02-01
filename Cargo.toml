@@ -85,6 +85,7 @@ members = [
   "apps/vault/tools/vaultbackup-rs",
   "apps/transientdisk",
   "apps/chat-test",
+  "apps/hidv2",
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",

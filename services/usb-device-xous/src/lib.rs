@@ -380,6 +380,72 @@ impl UsbHid {
         buf.lend(self.conn, Opcode::RegisterUsbObserver.to_u32().unwrap())
             .expect("couldn't register listener");
     }
+
+    /// Sets the userland application HID device descriptor.
+    /// It cannot be longer than 1024 bytes. 
+    pub fn connect_hid_app(&self, descriptor: Vec<u8>) -> Result<(), xous::Error> {
+        if descriptor.len() > MAX_HID_REPORT_DESCRIPTOR_LEN {
+            return Err(xous::Error::OutOfMemory)
+        }
+
+        let mut container = HIDReportDescriptorMessage{ 
+            descriptor: [0u8; MAX_HID_REPORT_DESCRIPTOR_LEN],
+            len: descriptor.len(),
+         };
+
+         for (place, element) in container.descriptor.iter_mut().zip(descriptor.iter()) {
+            *place = *element;
+        }
+
+        let mut buf = Buffer::into_buf(container).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::HIDSetDescriptor.to_u32().unwrap()).map(|_| ())?;
+
+        Ok(())
+    }
+
+    /// Unset the userland application HID device descriptor and discards the cached 
+    /// reports.
+    pub fn disconnect_hid_app(&self) -> Result<(), xous::Error> {
+        match send_message(self.conn, Message::new_blocking_scalar(
+            Opcode::HIDUnsetDescriptor.to_usize().unwrap(), 
+            0, 0, 0, 0)
+        ) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Reads a HID report off the USB bus.
+    pub fn read_report(&self) -> Result<HIDReport, xous::Error> {
+        let report = HIDReportMessage::default();
+
+        let mut buf = Buffer::into_buf(report).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::HIDReadReport.to_u32().unwrap()).map(|_| ())?;
+        
+        let report = buf.as_flat::<HIDReportMessage, _>().unwrap();
+
+        match &report.data {
+            rkyv::core_impl::ArchivedOption::Some(data) => {
+                let mut ret = HIDReport::default();
+
+                for (&s, d) in data.0[..data.0.len() as usize].iter().zip(ret.0.iter_mut()) {
+                    *d = s;
+                }
+
+                Ok(ret)
+                
+            },
+            rkyv::core_impl::ArchivedOption::None => Err(xous::Error::UnknownError),
+        }
+    }
+
+    /// Writes a HID report on the USB bus.
+    pub fn write_report(&self, report: HIDReport) -> Result<(), xous::Error> {
+        let buf = Buffer::into_buf(report).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::HIDWriteReport.to_u32().unwrap()).map(|_| ())?;
+
+        Ok(())
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
