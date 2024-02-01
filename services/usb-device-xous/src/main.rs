@@ -24,7 +24,7 @@ use spinal_udc::*;
 #[cfg(all(any(feature = "precursor", feature = "renode"), feature = "mass-storage"))]
 mod apps_block_device;
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod hid;
 #[cfg(not(target_os = "xous"))]
 mod hosted;
