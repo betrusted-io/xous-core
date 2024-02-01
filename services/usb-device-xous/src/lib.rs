@@ -382,18 +382,18 @@ impl UsbHid {
     }
 
     /// Sets the userland application HID device descriptor.
-    /// It cannot be longer than 1024 bytes. 
+    /// It cannot be longer than 1024 bytes.
     pub fn connect_hid_app(&self, descriptor: Vec<u8>) -> Result<(), xous::Error> {
         if descriptor.len() > MAX_HID_REPORT_DESCRIPTOR_LEN {
-            return Err(xous::Error::OutOfMemory)
+            return Err(xous::Error::OutOfMemory);
         }
 
-        let mut container = HIDReportDescriptorMessage{ 
+        let mut container = HIDReportDescriptorMessage {
             descriptor: [0u8; MAX_HID_REPORT_DESCRIPTOR_LEN],
             len: descriptor.len(),
-         };
+        };
 
-         for (place, element) in container.descriptor.iter_mut().zip(descriptor.iter()) {
+        for (place, element) in container.descriptor.iter_mut().zip(descriptor.iter()) {
             *place = *element;
         }
 
@@ -403,12 +403,12 @@ impl UsbHid {
         Ok(())
     }
 
-    /// Unset the userland application HID device descriptor and discards the cached 
+    /// Unset the userland application HID device descriptor and discards the cached
     /// reports.
     pub fn disconnect_hid_app(&self) -> Result<(), xous::Error> {
-        match send_message(self.conn, Message::new_blocking_scalar(
-            Opcode::HIDUnsetDescriptor.to_usize().unwrap(), 
-            0, 0, 0, 0)
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::HIDUnsetDescriptor.to_usize().unwrap(), 0, 0, 0, 0),
         ) {
             Ok(_) => Ok(()),
             Err(err) => Err(err),
@@ -421,7 +421,7 @@ impl UsbHid {
 
         let mut buf = Buffer::into_buf(report).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::HIDReadReport.to_u32().unwrap()).map(|_| ())?;
-        
+
         let report = buf.as_flat::<HIDReportMessage, _>().unwrap();
 
         match &report.data {
@@ -433,8 +433,7 @@ impl UsbHid {
                 }
 
                 Ok(ret)
-                
-            },
+            }
             rkyv::core_impl::ArchivedOption::None => Err(xous::Error::UnknownError),
         }
     }
