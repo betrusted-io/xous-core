@@ -1,7 +1,6 @@
 mod rkyv_enum;
 use core::mem::size_of;
 use core::ops::{Deref, DerefMut};
-
 pub use rkyv_enum::*;
 
 pub(crate) const SERVER_NAME_KEYS: &str = "_Root key server and update manager_";

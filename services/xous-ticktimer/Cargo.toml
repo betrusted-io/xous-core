@@ -25,11 +25,12 @@ num-traits = { version = "0.2.14", default-features = false }
 xous-semver = "0.1.2"
 utralib = { version = "0.1.24", optional = true, default-features = false }
 
-[target.'cfg(target_arch = "arm")'.dependencies]
-atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
+# TODO: fix this
+#[target.'cfg(target_arch = "arm")'.dependencies]
+#atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
 
 [features]
-atsama5d27 = ["utralib/atsama5d27"]
+#atsama5d27 = ["utralib/atsama5d27"]
 
 # you may want to remove the watchdog feature if you're debugging a crash, as it will force the system to reboot automatically
 precursor = ["utralib/precursor", "susres/precursor", "watchdog"]

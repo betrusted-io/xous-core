@@ -465,24 +465,20 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     }
                 }
                 "ed2" => {
-                    use ed25519_dalek::{Keypair, Signature, Signer};
-                    let keypair: Keypair;
-                    let good_sig: Signature;
-                    let bad_sig: Signature;
-
+                    use ed25519_dalek::{Signature, Signer, SigningKey};
                     let good: &[u8] = "test message".as_bytes();
                     let bad: &[u8] = "wrong message".as_bytes();
 
-                    keypair = Keypair::generate(&mut env.trng);
-                    good_sig = keypair.sign(&good);
-                    bad_sig = keypair.sign(&bad);
+                    let signingkey = SigningKey::generate(&mut env.trng);
+                    let good_sig = signingkey.sign(&good);
+                    let bad_sig = signingkey.sign(&bad);
 
-                    if keypair.verify(&good, &good_sig).is_ok() {
+                    if signingkey.verify(&good, &good_sig).is_ok() {
                         write!(ret, "Verification of valid signtaure passed!\n").unwrap();
                     } else {
                         write!(ret, "Verification of valid signtaure failed!\n").unwrap();
                     }
-                    if keypair.verify(&good, &bad_sig).is_err() {
+                    if signingkey.verify(&good, &bad_sig).is_err() {
                         write!(
                             ret,
                             "Verification of a signature on a different message failed, as expected.\n"
@@ -491,7 +487,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     } else {
                         write!(ret, "Verification of a signature on a different message passed (this is unexpected)!\n").unwrap();
                     }
-                    if keypair.verify(&bad, &good_sig).is_err() {
+                    if signingkey.verify(&bad, &good_sig).is_err() {
                         write!(
                             ret,
                             "Verification of a signature on a different message failed, as expected.\n"
@@ -507,20 +503,18 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     use hex::FromHex;
                     let secret_key: &[u8] =
                         b"833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42";
-                    let public_key: &[u8] =
+                    let signing_key: &[u8] =
                         b"ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf";
                     let message: &[u8] = b"616263";
                     let signature: &[u8] = b"98a70222f0b8121aa9d30f813d683f809e462b469c7ff87639499bb94e6dae4131f85042463c2a355a2003d062adf5aaa10b8c61e636062aaad11c2a26083406";
-
-                    let sec_bytes = <[u8; 32]>::from_hex(secret_key).unwrap();
-                    let pub_bytes = <[u8; 32]>::from_hex(public_key).unwrap();
                     let msg_bytes = <[u8; 3]>::from_hex(message).unwrap();
-                    let sig_bytes = <[u8; 64]>::from_hex(signature).unwrap();
 
-                    let secret: SecretKey = SecretKey::from_bytes(&sec_bytes[..SECRET_KEY_LENGTH]).unwrap();
-                    let public: PublicKey = PublicKey::from_bytes(&pub_bytes[..PUBLIC_KEY_LENGTH]).unwrap();
-                    let keypair: Keypair = Keypair { secret, public };
-                    let sig1: Signature = Signature::from_bytes(&sig_bytes[..]).unwrap();
+                    let secret_key_bytes = <[u8; SECRET_KEY_LENGTH]>::from_hex(secret_key).unwrap();
+                    let signing_key_bytes = <[u8; PUBLIC_KEY_LENGTH]>::from_hex(signing_key).unwrap();
+                    let signature_bytes = <[u8; SIGNATURE_LENGTH]>::from_hex(signature).unwrap();
+
+                    let signingkey: SigningKey = SigningKey::from_bytes(&signing_key_bytes);
+                    let sig1: Signature = Signature::from_bytes(&signature_bytes);
 
                     //let mut prehash_for_signing = engine_sha512::Sha512::default(); // this defaults to Hw
                     // then Sw strategy let mut prehash_for_verifying =
@@ -531,7 +525,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     prehash_for_signing.update(&msg_bytes[..]);
                     prehash_for_verifying.update(&msg_bytes[..]);
 
-                    let sig2: Signature = keypair.sign_prehashed(prehash_for_signing, None).unwrap();
+                    let sig2: Signature = signingkey.sign_prehashed(prehash_for_signing, None).unwrap();
 
                     log::info!("original: {:02x?}", sig1);
                     log::info!("produced: {:02x?}", sig2);
@@ -546,7 +540,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
                         )
                         .unwrap();
                     }
-                    if keypair.verify_prehashed(prehash_for_verifying, None, &sig2).is_err() {
+                    if signingkey.verify_prehashed(prehash_for_verifying, None, &sig2).is_err() {
                         pass = false;
                         write!(ret, "Could not verify ed25519ph signature!").unwrap();
                     }
