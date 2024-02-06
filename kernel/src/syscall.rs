@@ -175,7 +175,7 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
 
             // Mark the server's context as "Ready". If this fails, return the context
             // to the blocking list.
-            #[cfg(target_os = "xous")]
+            #[cfg(baremetal)]
             ss.ready_thread(server_pid, server_tid).map_err(|e| {
                 ss.server_from_sidx_mut(sidx)
                     .expect("server couldn't be located")
@@ -883,7 +883,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::CreateThread(thread_init) => SystemServices::with_mut(|ss| {
             ss.create_thread(pid, thread_init).map(|new_tid| {
                 // Set the return value of the existing thread to be the new thread ID
-                if cfg!(target_os = "xous") {
+                if cfg!(baremetal) {
                     // Immediately switch to the new thread
                     ss.switch_to_thread(pid, Some(new_tid)).expect("couldn't activate new thread");
                     ss.set_thread_result(pid, tid, xous_kernel::Result::ThreadID(new_tid))

@@ -876,7 +876,7 @@ impl SystemServices {
                 }
 
                 // Activate this process on this CPU
-                #[cfg(not(target_os = "xous"))]
+                #[cfg(not(baremetal))]
                 process.activate()?;
                 ArchProcess::current().set_tid(new_thread)?;
                 process.current_thread = new_thread as _;
