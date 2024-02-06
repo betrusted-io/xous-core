@@ -4482,7 +4482,7 @@ dependencies = [
 [[package]]
 name = "sha2"
 version = "0.10.8"
-source = "git+https://github.com/betrusted-io/hashes.git?branch=sha2-v0.10.8-xous#899876dcf233eb50ea0ccf8d5cfeb874bba06334"
+source = "git+https://github.com/betrusted-io/hashes.git?branch=sha2-v0.10.8-xous#dc0f81d1486fbf49f8b15cb056c5ac7671a2dc88"
 dependencies = [
  "cfg-if",
  "cpufeatures",
