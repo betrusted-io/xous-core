@@ -3,7 +3,7 @@ use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use lazy_static::lazy_static;
@@ -25,49 +25,60 @@ lazy_static! {
 /// cache it inside an atomic boolean. If this is `true` then
 /// it means we can assume the check passed already.
 static DONE_COMPILER_CHECK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static DONE_KERNEL_COMPILER_CHECK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Ensure we have a compatible compiler toolchain. We use a new Target,
-/// and we want to give the user a friendly way of installing the latest
-/// Rust toolchain.
-pub(crate) fn ensure_compiler(
-    target: &Option<&str>,
-    force_install: bool,
-    remove_existing: bool,
-) -> Result<(), String> {
-    use std::process::Stdio;
-    if DONE_COMPILER_CHECK.load(std::sync::atomic::Ordering::SeqCst) {
-        return Ok(());
-    }
+fn ask_to_install() -> bool {
+    let mut buffer = String::new();
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+    loop {
+        stdout.flush().unwrap();
+        buffer.clear();
+        stdin.read_line(&mut buffer).unwrap();
 
-    /// Return the sysroot for the given target. If the target does not exist,
-    /// return None.
-    fn get_sysroot(target: Option<&str>) -> Result<Option<String>, String> {
-        let mut args = vec!["--print", "sysroot"];
-        if let Some(target) = target {
-            args.push("--target");
-            args.push(target);
+        let trimmed = buffer.trim();
+
+        if trimmed == "n" || trimmed == "N" {
+            return false;
         }
 
-        let sysroot_cmd = Command::new("rustc")
-            .stderr(Stdio::null())
-            .stdout(Stdio::piped())
-            .args(&args)
-            .spawn()
-            .expect("could not run rustc");
-        let sysroot_output = sysroot_cmd.wait_with_output().unwrap();
-        let have_toolchain = sysroot_output.status.success();
+        if trimmed == "y" || trimmed == "Y" || trimmed.is_empty() {
+            return true;
+        }
+        println!();
+        println!("Please answer 'y' or 'n'");
+    }
+}
+/// Return the sysroot for the given target. If the target does not exist,
+/// return None.
+fn get_sysroot(target: Option<&str>, check_version: bool) -> Result<Option<String>, String> {
+    let mut args = vec!["--print", "sysroot"];
+    if let Some(target) = target {
+        args.push("--target");
+        args.push(target);
+    }
 
-        let toolchain_path = String::from_utf8(sysroot_output.stdout)
-            .map_err(|_| "Unable to find Rust sysroot".to_owned())?
-            .trim()
-            .to_owned();
+    let sysroot_cmd = Command::new("rustc")
+        .stderr(Stdio::null())
+        .stdout(Stdio::piped())
+        .args(&args)
+        .spawn()
+        .expect("could not run rustc");
+    let sysroot_output = sysroot_cmd.wait_with_output().unwrap();
+    let have_toolchain = sysroot_output.status.success();
 
-        // Look for the "RUST_VERSION" file to ensure it's compatible with this version.
-        if let Some(target) = target {
-            let mut version_path = PathBuf::from(&toolchain_path);
-            version_path.push("lib");
-            version_path.push("rustlib");
-            version_path.push(target);
+    let toolchain_path = String::from_utf8(sysroot_output.stdout)
+        .map_err(|_| "Unable to find Rust sysroot".to_owned())?
+        .trim()
+        .to_owned();
+
+    // Look for the "RUST_VERSION" file to ensure it's compatible with this version.
+    if let Some(target) = target {
+        let mut version_path = PathBuf::from(&toolchain_path);
+        version_path.push("lib");
+        version_path.push("rustlib");
+        version_path.push(target);
+        if check_version {
             version_path.push("RUST_VERSION");
             if let Ok(mut vp) = File::open(&version_path) {
                 let mut version_str = String::new();
@@ -91,14 +102,81 @@ pub(crate) fn ensure_compiler(
                 // return Err("Outdated toolchain installed".to_owned());
                 return Ok(None);
             }
+        } else {
+            if !std::path::Path::new(&version_path).exists() {
+                return Ok(None);
+            }
         }
+    }
 
-        if have_toolchain { Ok(Some(toolchain_path)) } else { Ok(None) }
+    if have_toolchain { Ok(Some(toolchain_path)) } else { Ok(None) }
+}
+
+pub(crate) fn ensure_kernel_compiler(target: &Option<&str>, force_install: bool) -> Result<(), String> {
+    if DONE_KERNEL_COMPILER_CHECK.load(std::sync::atomic::Ordering::SeqCst) {
+        return Ok(());
     }
 
     // If the sysroot exists, then we're good.
     let target = target.unwrap_or(TARGET_TRIPLE_RISCV32);
-    if let Some(path) = get_sysroot(Some(target))? {
+    if get_sysroot(Some(target), false)?.is_some() {
+        DONE_COMPILER_CHECK.store(true, std::sync::atomic::Ordering::SeqCst);
+        return Ok(());
+    }
+
+    // If the terminal is a tty, or if toolchain installation is forced,
+    // download the latest toolchain.
+    if !atty::is(atty::Stream::Stdin) && !force_install {
+        return Err(format!("Toolchain for {} not found", target));
+    }
+
+    if force_install {
+        println!("Downloading toolchain");
+    } else {
+        println!("Error: {} target was not found on this system!", target);
+        print!("Would you like this program to attempt to download and install it using rustup?   [Y/n] ");
+        if ask_to_install() {
+            println!("Installing toolchain for {} via rustup", target);
+        } else {
+            return Err(format!("Please install the {} toolchain", target));
+        }
+    }
+
+    let rustup_command = Command::new("rustup")
+        .stderr(Stdio::null())
+        .stdout(Stdio::piped())
+        .args(&["target", "add", target])
+        .spawn()
+        .map_err(|e| format!("could not run rustup: {}", e))?;
+
+    let rustup_output = rustup_command.wait_with_output().unwrap();
+    if !rustup_output.status.success() {
+        return Err(format!(
+            "could not add target {}: {}",
+            target,
+            String::from_utf8_lossy(&rustup_output.stdout)
+        ));
+    }
+
+    DONE_COMPILER_CHECK.store(true, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
+/// Ensure we have a compatible compiler toolchain. We use a new Target,
+/// and we want to give the user a friendly way of installing the latest
+/// Rust toolchain.
+pub(crate) fn ensure_compiler(
+    target: &Option<&str>,
+    force_install: bool,
+    remove_existing: bool,
+) -> Result<(), String> {
+    if DONE_COMPILER_CHECK.load(std::sync::atomic::Ordering::SeqCst) {
+        return Ok(());
+    }
+
+    // If the sysroot exists, then we're good.
+    let target = target.unwrap_or(TARGET_TRIPLE_RISCV32);
+    if let Some(path) = get_sysroot(Some(target), true)? {
         let mut version_path = PathBuf::from(&path);
         version_path.push("lib");
         version_path.push("rustlib");
@@ -125,7 +203,8 @@ pub(crate) fn ensure_compiler(
     }
 
     // Since no sysroot exists, we must download a new one.
-    let toolchain_path = get_sysroot(None)?.ok_or_else(|| "default toolchain not installed".to_owned())?;
+    let toolchain_path =
+        get_sysroot(None, true)?.ok_or_else(|| "default toolchain not installed".to_owned())?;
     // If the terminal is a tty, or if toolchain installation is forced,
     // download the latest toolchain.
     if !atty::is(atty::Stream::Stdin) && !force_install {
@@ -139,34 +218,16 @@ pub(crate) fn ensure_compiler(
     }
 
     // Ask the user if they want to install the toolchain.
-    let mut buffer = String::new();
-    let stdin = std::io::stdin();
-    let mut stdout = std::io::stdout();
     if force_install {
         println!("Downloading toolchain");
     } else {
         println!("Error: Toolchain for {} was not found on this system!", target);
-    }
-    loop {
-        if force_install {
-            break;
-        }
-
         print!("Would you like this program to attempt to download and install it?   [Y/n] ");
-        stdout.flush().unwrap();
-        buffer.clear();
-        stdin.read_line(&mut buffer).unwrap();
-
-        let trimmed = buffer.trim();
-
-        if trimmed == "n" || trimmed == "N" {
+        if ask_to_install() {
+            println!("Installing toolchain for {} into {}", target, toolchain_path);
+        } else {
             return Err(format!("Please install the {} toolchain", target));
         }
-
-        if trimmed == "y" || trimmed == "Y" || trimmed.is_empty() {
-            break;
-        }
-        println!();
     }
 
     fn get_toolchain_url(target: &str, major: u64, minor: u64, patch: u64) -> Result<String, String> {
@@ -239,31 +300,13 @@ pub(crate) fn ensure_compiler(
     println!("Downloading toolchain from {}...", toolchain_url);
 
     print!("Download in progress...");
-    stdout.flush().unwrap();
+    std::io::stdout().flush().ok();
     let mut zip_data = vec![];
     {
-        let agent = ureq::builder()
-            // .middleware(CounterMiddleware(shared_state.clone()))
-            .build();
+        let agent = ureq::builder().build();
 
         let mut freader = agent.get(&toolchain_url).call().map_err(|e| format!("{}", e))?.into_reader();
         freader.read_to_end(&mut zip_data).map_err(|e| format!("{}", e))?;
-        // |total_bytes, bytes_so_far, _total_uploaded, _uploaded_so_far| {
-        //     // If either number is infinite, don't print anything and just continue.
-        //     if total_bytes.is_infinite() || bytes_so_far.is_infinite() {
-        //         return true;
-        //     }
-
-        //     // Display progress.
-        //     print!(
-        //         "\rDownload progress: {:3.02}% ",
-        //         bytes_so_far / total_bytes * 100.0
-        //     );
-        //     stdout.flush().unwrap();
-
-        //     // Return `true` to continue the transfer.
-        //     true
-        // },
         println!();
     }
     println!("Download successful. Total data size is {} bytes", zip_data.len());

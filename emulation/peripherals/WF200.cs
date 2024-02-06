@@ -623,7 +623,7 @@ namespace Antmicro.Renode.Peripherals.Network.Betrusted
                 return;
             }
 
-            var req = (WfxMessage.Requests)(request.Id);
+            var req = (WfxMessage.Requests)request.Id;
             if (req == WfxMessage.Requests.Configuration)
             {
                 var message = new WfxMessage(WfxMessage.Confirmations.Configuration, okayResponse, configurationOffset);
@@ -748,8 +748,8 @@ namespace Antmicro.Renode.Peripherals.Network.Betrusted
                 sendFrameResponse[3] = 0;
 
                 // uint16_t packet_id (from request)
-                sendFrameResponse[4] = (byte)(payload[2]);
-                sendFrameResponse[5] = (byte)(payload[3]);
+                sendFrameResponse[4] = payload[2];
+                sendFrameResponse[5] = payload[3];
                 sendFrameResponse[6] = 0;
 
                 // uint16_t reserved
@@ -759,11 +759,14 @@ namespace Antmicro.Renode.Peripherals.Network.Betrusted
                 sendFrameResponse[8] = 0;
                 sendFrameResponse[9] = 0x30;
 
-                var frame_data = payload.GetRange(8, payload.Count - 8).ToArray();
+                // Our bus is 16-bits, but sometimes we want to transmit an odd number of bytes.
+                // Support omitting the last byte if necessary.
+                var roundingError = payload[4] & 1;
+                var frame_data = payload.GetRange(8, payload.Count - 8 - roundingError).ToArray();
                 var packet_data_length = (payload[4] << 0) | (payload[5] << 8) | (payload[6] << 16) | (payload[7] << 24);
                 if (frame_data.Length != packet_data_length)
                 {
-                    this.Log(LogLevel.Error, "Warning: host reported payload length of {0}, but transmitted a payload length of {1}", packet_data_length, frame_data.Length);
+                    this.Log(LogLevel.Warning, "host reported payload length of {0}, but transmitted a payload length of {1}", packet_data_length, frame_data.Length);
                 }
                 if (!Misc.TryCreateFrameOrLogWarning(this, frame_data, out var frame, addCrc: true))
                 {

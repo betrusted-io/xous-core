@@ -42,8 +42,10 @@ const MIN_XOUS_VERSION: &str = "v0.9.8-791";
 
 /// target triple for precursor builds
 pub(crate) const TARGET_TRIPLE_RISCV32: &str = "riscv32imac-unknown-xous-elf";
+pub(crate) const TARGET_TRIPLE_RISCV32_KERNEL: &str = "riscv32imac-unknown-none-elf";
 /// target triple for ARM builds
 pub(crate) const TARGET_TRIPLE_ARM: &str = "armv7a-unknown-xous-elf";
+pub(crate) const TARGET_TRIPLE_ARM_KERNEL: &str = "armv7a-unknown-none-elf";
 
 // because I have nowhere else to note this. The commit that contains the rkyv-enum derive
 // refactor to work around warnings thrown by Rust 1.64.0 is: f815ed85b58b671178fbf53b4cea34186fc406eb
@@ -164,7 +166,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match task.as_deref() {
         Some("install-toolkit") | Some("install-toolchain") => {
             let arg = env::args().nth(2);
-            ensure_compiler(&Some(TARGET_TRIPLE_RISCV32), true, arg.map(|x| x == "--force").unwrap_or(false))?
+            ensure_compiler(
+                &Some(TARGET_TRIPLE_RISCV32),
+                true,
+                arg.map(|x| x == "--force").unwrap_or(false),
+            )?;
+            ensure_kernel_compiler(&Some(TARGET_TRIPLE_RISCV32_KERNEL), true)?;
         }
         // ----- renode configs --------
         Some("renode-image") => {

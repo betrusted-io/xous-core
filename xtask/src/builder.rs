@@ -126,6 +126,8 @@ pub(crate) struct Builder {
     stream: BuildStream,
     min_ver: String,
     target: Option<String>,
+    /// The kernel might require a different target than the rest of the programs.
+    target_kernel: Option<String>,
     utra_target: String,
     run_svd2repl: bool,
     locale_override: Option<String>,
@@ -154,6 +156,7 @@ impl Builder {
             stream: BuildStream::Release,
             min_ver: crate::MIN_XOUS_VERSION.to_string(),
             target: Some(crate::TARGET_TRIPLE_RISCV32.to_string()),
+            target_kernel: Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string()),
             utra_target: format!("precursor-{}", crate::PRECURSOR_SOC_VERSION).to_string(),
             run_svd2repl: false,
             locale_override: None,
@@ -236,6 +239,7 @@ impl Builder {
     /// Configure for renode targets
     pub fn target_renode<'a>(&'a mut self) -> &'a mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
         self.run_svd2repl = true;
         self.utra_target = "renode".to_string();
@@ -249,6 +253,7 @@ impl Builder {
     /// be just the gitrev of the soc version, not the entire feature name.
     pub fn target_precursor<'a>(&'a mut self, soc_version: &str) -> &'a mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
         self.utra_target = format!("precursor-{}", soc_version).to_string();
         self.run_svd2repl = false;
@@ -259,6 +264,7 @@ impl Builder {
 
     pub fn target_precursor_no_image<'a>(&'a mut self, soc_version: &str) -> &'a mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
         self.utra_target = format!("precursor-{}", soc_version).to_string();
         self.run_svd2repl = false;
@@ -269,6 +275,7 @@ impl Builder {
     /// Configure for ARM targets
     pub fn target_arm(&mut self) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_ARM.to_string());
+        self.target_kernel = Some(crate::TARGET_TRIPLE_ARM_KERNEL.to_string());
         self.stream = BuildStream::Debug;
         self.utra_target = "atsama5d27".to_string();
         self.run_svd2repl = false;
@@ -280,6 +287,7 @@ impl Builder {
     /// Configure various Cramium targets
     pub fn target_cramium_fpga<'a>(&'a mut self) -> &'a mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
         self.utra_target = "cramium-fpga".to_string();
         self.run_svd2repl = false;
@@ -290,6 +298,7 @@ impl Builder {
 
     pub fn target_cramium_soc<'a>(&'a mut self) -> &'a mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
+        self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
         self.utra_target = "cramium-soc".to_string();
         self.run_svd2repl = false;
@@ -591,16 +600,14 @@ impl Builder {
         }
 
         // ------ configure target generation feature flags ------
-        let target = if self.utra_target.contains("renode") {
+        if self.utra_target.contains("renode") {
             self.features.push("renode".into());
             self.loader_features.push("renode".into());
             self.kernel_features.push("renode".into());
-            Some(crate::TARGET_TRIPLE_RISCV32)
         } else if self.utra_target.contains("hosted") {
             self.features.push("hosted".into());
             // there is no loader in hosed mode
             self.kernel_features.push("hosted".into());
-            None
         } else if self.utra_target.contains("precursor") {
             self.features.push("precursor".into());
             self.features.push(format!("utralib/{}", &self.utra_target));
@@ -608,11 +615,9 @@ impl Builder {
             self.kernel_features.push(format!("utralib/{}", &self.utra_target));
             self.loader_features.push("precursor".into());
             self.loader_features.push(format!("utralib/{}", &self.utra_target));
-            Some(crate::TARGET_TRIPLE_RISCV32)
         } else if self.utra_target.contains("atsama5d2") {
             self.kernel_features.push("atsama5d27".into());
             self.loader_features.push("atsama5d27".into());
-            Some(crate::TARGET_TRIPLE_ARM)
         } else if self.utra_target.contains("cramium-fpga") {
             self.features.push("cramium-fpga".into());
             self.features.push(format!("utralib/{}", &self.utra_target));
@@ -620,7 +625,6 @@ impl Builder {
             self.kernel_features.push(format!("utralib/{}", &self.utra_target));
             self.loader_features.push("cramium-fpga".into());
             self.loader_features.push(format!("utralib/{}", &self.utra_target));
-            Some(crate::TARGET_TRIPLE_RISCV32)
         } else if self.utra_target.contains("cramium-soc") {
             self.features.push("cramium-soc".into());
             self.features.push(format!("utralib/{}", &self.utra_target));
@@ -628,12 +632,12 @@ impl Builder {
             self.kernel_features.push(format!("utralib/{}", &self.utra_target));
             self.loader_features.push("cramium-soc".into());
             self.loader_features.push(format!("utralib/{}", &self.utra_target));
-            Some(crate::TARGET_TRIPLE_RISCV32)
         } else {
             return Err("Target unknown: please check your UTRA target".into());
-        };
+        }
 
         crate::utils::ensure_compiler(&self.target.as_ref().map(|s| s.as_str()), false, false)?;
+        crate::utils::ensure_kernel_compiler(&self.target_kernel.as_ref().map(|s| s.as_str()), false)?;
         self.locale_override(); // apply the locale override
 
         // ------ build the services & apps ------
@@ -656,7 +660,7 @@ impl Builder {
         let mut services_path = self.builder(
             &[&self.services[..], &self.apps[..]].concat(),
             &self.features,
-            &target,
+            &self.target.as_deref(),
             self.stream,
             &vec![],
             false,
@@ -735,7 +739,7 @@ impl Builder {
                 let _ = self.builder(
                     &vec![CrateSpec::Local("xous-kernel".into(), false)],
                     &self.kernel_features,
-                    &target,
+                    &self.target_kernel.as_deref(),
                     self.stream,
                     &vec![],
                     false,
@@ -751,7 +755,7 @@ impl Builder {
             let kernel_path = self.builder(
                 &vec![self.kernel.clone()],
                 &self.kernel_features,
-                &target,
+                &self.target_kernel.as_deref(),
                 self.stream,
                 &kernel_extra,
                 false,
@@ -773,7 +777,7 @@ impl Builder {
             let loader = self.builder(
                 &vec![self.loader.clone()],
                 &self.loader_features,
-                &target,
+                &self.target_kernel.as_deref(),
                 BuildStream::Release, // loader doesn't fit if you build with Debug
                 &loader_extra,
                 true, // loader builds without any default features
