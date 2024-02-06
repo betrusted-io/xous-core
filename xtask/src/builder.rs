@@ -230,6 +230,7 @@ impl Builder {
     pub fn target_hosted<'a>(&'a mut self) -> &'a mut Builder {
         self.loader = CrateSpec::None;
         self.target = None;
+        self.target_kernel = None;
         self.stream = BuildStream::Release;
         self.utra_target = "hosted".to_string();
         self.run_svd2repl = false;

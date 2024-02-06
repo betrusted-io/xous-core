@@ -305,6 +305,9 @@ def main():
         for patch in patches:
             patch.debug_mode(not args.wet_run)
             patch.increment_versions(mode)
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("Don't forget to check in & update git rev in Cargo.lock for: {}".format(crate_roots[1:]))
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
     if args.publish:
         # small quirk: if you're doing a utralib update, just use -u only.

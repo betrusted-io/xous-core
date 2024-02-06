@@ -11,7 +11,7 @@ resolver = "2"
 [dependencies]
 bitflags = "1.2.1"
 stats_alloc = { version = "0.1.8", optional = true }
-xous-kernel = { package = "xous", version = "0.9.57", features = [
+xous-kernel = { package = "xous", version = "0.9.58", features = [
     "forget-memory-messages",
 ] }
 utralib = { version = "0.1.24", optional = true, default_features = false }
@@ -19,7 +19,7 @@ rand_chacha = { version = "0.3.1", optional = true, default_features = false }
 cramium-hal = { path = "../libs/cramium-hal", optional = true, default_features = false }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
-xous-kernel = { package = "xous", version = "0.9.57", features = [
+xous-kernel = { package = "xous", version = "0.9.58", features = [
     "forget-memory-messages",
     "processes-as-threads",
 ] }
@@ -34,7 +34,7 @@ armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "upd
     "critical-section",
 ] }
 atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
-xous-kernel = { package = "xous", version = "0.9.57", features = ["v2p"] }
+xous-kernel = { package = "xous", version = "0.9.58", features = ["v2p"] }
 critical-section = "1.1.1"
 
 [features]
