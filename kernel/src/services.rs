@@ -568,17 +568,6 @@ impl SystemServices {
         Ok(())
     }
 
-    // #[cfg(not(baremetal))]
-    // pub fn make_callback_to(
-    //     &mut self,
-    //     _pid: PID,
-    //     _pc: *const usize,
-    //     _irq_no: usize,
-    //     _arg: *mut usize,
-    // ) -> Result<(), xous_kernel::Error> {
-    //     Err(xous_kernel::Error::UnhandledSyscall)
-    // }
-
     /// Create a stack frame in the specified process and jump to it.
     /// 1. Pause the current process and switch to the new one
     /// 2. Save the process state, if it hasn't already been saved
@@ -934,11 +923,6 @@ impl SystemServices {
                 panic!("PID {} TID {} was not in a state to be switched from: {:?}", pid, tid, other);
             }
         };
-        // log_process_update(file!(), line!(), process, old_state);
-        // klog!(
-        //     "unschedule_thread({}:{}): New state is {:?}",
-        //     pid, tid, process.state
-        // );
         Ok(())
     }
 
@@ -950,14 +934,6 @@ impl SystemServices {
             }
         }
         panic!("PID {} TID {} not running: {:?}", pid, tid, process.state);
-        // match &process.state {
-        //     &ProcessState::Sleeping => false,
-        //     &ProcessState::Ready(_x) => false,
-        //     &ProcessState::Free => false,
-        //     &ProcessState::Running(x) if x & (1 << tid) != 0 => false,
-        //     &ProcessState::Setup(_) => false,
-        //     &ProcessState::Running(_) => true,
-        // }
     }
 
     pub fn set_thread_result(
