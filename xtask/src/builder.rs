@@ -637,6 +637,7 @@ impl Builder {
         }
 
         crate::utils::ensure_compiler(&self.target.as_ref().map(|s| s.as_str()), false, false)?;
+        crate::utils::ensure_kernel_compiler(&self.target_kernel.as_ref().map(|s| s.as_str()), false)?;
         self.locale_override(); // apply the locale override
 
         // ------ build the services & apps ------

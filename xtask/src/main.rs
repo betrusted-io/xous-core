@@ -166,7 +166,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match task.as_deref() {
         Some("install-toolkit") | Some("install-toolchain") => {
             let arg = env::args().nth(2);
-            ensure_compiler(&Some(TARGET_TRIPLE_RISCV32), true, arg.map(|x| x == "--force").unwrap_or(false))?
+            ensure_compiler(
+                &Some(TARGET_TRIPLE_RISCV32),
+                true,
+                arg.map(|x| x == "--force").unwrap_or(false),
+            )?;
+            ensure_kernel_compiler(&Some(TARGET_TRIPLE_RISCV32_KERNEL), true)?;
         }
         // ----- renode configs --------
         Some("renode-image") => {
