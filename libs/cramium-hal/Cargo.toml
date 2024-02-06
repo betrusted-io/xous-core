@@ -18,7 +18,7 @@ rkyv = { version = "0.4.3", default-features = false, features = [
 num-derive = { version = "0.3.3", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 
-[target.'cfg(target_os = "xous")'.dependencies]
+# [target.'cfg(target_os = "xous")'.dependencies]
 xous = { version = "0.9.58", features = ["v2p"] }
 
 [features]
