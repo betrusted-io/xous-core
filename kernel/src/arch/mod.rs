@@ -16,9 +16,9 @@ mod riscv;
 #[cfg(target_arch = "riscv32")]
 pub use crate::arch::riscv::*;
 
-#[cfg(all(target_arch = "riscv64", not(target_os = "xous")))]
+#[cfg(all(target_arch = "riscv64", not(baremetal)))]
 mod riscv;
-#[cfg(all(target_arch = "riscv64", not(target_os = "xous")))]
+#[cfg(all(target_arch = "riscv64", not(baremetal)))]
 pub use riscv::*;
 
 #[cfg(all(target_arch = "x86_64", not(any(windows, unix))))]

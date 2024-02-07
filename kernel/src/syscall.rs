@@ -175,7 +175,7 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
 
             // Mark the server's context as "Ready". If this fails, return the context
             // to the blocking list.
-            #[cfg(target_os = "xous")]
+            #[cfg(baremetal)]
             ss.ready_thread(server_pid, server_tid).map_err(|e| {
                 ss.server_from_sidx_mut(sidx)
                     .expect("server couldn't be located")
@@ -709,27 +709,6 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 let range =
                     mm.map_range(phys_ptr, virt_ptr, size.get(), pid, req_flags, MemoryType::Default)?;
 
-                // If we're handing back an address in main RAM, zero it out. If
-                // phys is 0, then the page will be lazily allocated, so we
-                // don't need to do this.
-                // if !phys_ptr.is_null() {
-                //     for (phys, virt) in (phys_ptr as usize..range.len()).step_by(PAGE_SIZE).zip(
-                //         (range.as_ptr() as usize..(range.as_ptr() as usize + range.len()))
-                //             .step_by(PAGE_SIZE),
-                //     ) {
-                //         // Zero out the virtual page if it's in main memory
-                //         if mm.is_main_memory(phys as *mut u8) {
-                //             let start = virt as *mut usize;
-                //             for offset in 0..(PAGE_SIZE / core::mem::size_of::<usize>()) {
-                //                 unsafe { start.add(offset).write_volatile(0) };
-                //             }
-                //         }
-
-                //         // Hand the virtual page to the process
-                //         crate::arch::mem::hand_page_to_user(virt as *mut u8)
-                //             .expect("couldn't hand page to user");
-                //       }
-
                 if !phys_ptr.is_null() {
                     if mm.is_main_memory(phys_ptr) {
                         let range_start = range.as_mut_ptr() as *mut usize;
@@ -883,7 +862,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::CreateThread(thread_init) => SystemServices::with_mut(|ss| {
             ss.create_thread(pid, thread_init).map(|new_tid| {
                 // Set the return value of the existing thread to be the new thread ID
-                if cfg!(target_os = "xous") {
+                if cfg!(baremetal) {
                     // Immediately switch to the new thread
                     ss.switch_to_thread(pid, Some(new_tid)).expect("couldn't activate new thread");
                     ss.set_thread_result(pid, tid, xous_kernel::Result::ThreadID(new_tid))

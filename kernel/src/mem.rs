@@ -501,23 +501,6 @@ impl MemoryManager {
         )
     }
 
-    // /// Transfer ownership of a page without moving it. This is a very
-    // /// specialized function which should only be used when creating a
-    // /// brand-new process.
-    // pub fn move_page_ownership(
-    //     &mut self,
-    //     src_addr: *mut u8,
-    //     src_pid: PID,
-    //     dest_pid: PID,
-    // ) -> Result<(), xous_kernel::Error> {
-    //     let phys_addr = crate::arch::mem::virt_to_phys(src_addr as usize)?;
-    //     self.claim_release_move(
-    //         phys_addr as *mut usize,
-    //         dest_pid,
-    //         ClaimReleaseMove::Move(src_pid),
-    //     )
-    // }
-
     /// Mark the page in the current process as being lent.  If the borrow is
     /// read-only, then additionally remove the "write" bit on it.  If the page
     /// is writable, then remove it from the current process until the borrow is

@@ -468,7 +468,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Implement #478: backlight should turn on automatically when a U2F/FIDO packet comes in from the host, allowing users in dark conditions to see the screen and know what they are approving.
 - the `sha2` API has been upgraded from 0.9.9 to 0.10.8. In the process of upgrading this, the `sha2` code is now domiciled in a fork of the `RustCrypto/hashes` repo. This should hopefully make tracking changes on RustCrypto somewhat easier, at the price of some difficulty in maintaining external crate pins (but I think that can be solved with some scripting). In the process of conversion, crates that depend on the 0.9.9 API for acceleration are now not accelerated. In particular, the ed25519-dalek signature check on the gateware at boot now runs with software SHA-512, which means that boot is much slower. This should be fixed before the release is live, but users testing the bleeding edge should be aware of this temporary regression in performance.
 - @gsora has added the `hidapi` - apps can now register a HID descriptor for custom interactions over USB. See `apps/hidv2` for democumentation.
-
+- change kernel and loader targets to riscv-unknown-elf-none because `xous` is now a proper target (required for Rust 1.76 compatibility)
 
 ## Roadmap
 - Lots of testing and bug fixes
