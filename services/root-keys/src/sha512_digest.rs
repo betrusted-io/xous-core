@@ -1,6 +1,13 @@
+use core::fmt;
+
 use digest::{
-    consts::{U128, U64},
-    BlockInput, FixedOutputDirty, Reset, Update,
+    block_buffer::Eager,
+    core_api::{
+        AlgorithmName, Block, BlockSizeUser, Buffer, BufferKindUser, OutputSizeUser, TruncSide, UpdateCore,
+        VariableOutputCore,
+    },
+    typenum::{U128, U64},
+    FixedOutput, HashMarker, InvalidOutputSize, Output, Update,
 };
 
 /// Wrap a pre-hash value in a Digest trait
@@ -20,30 +27,59 @@ impl Default for Sha512Prehash {
     fn default() -> Self { Sha512Prehash::new() }
 }
 
-impl BlockInput for Sha512Prehash {
+impl HashMarker for Sha512Prehash {}
+
+impl BlockSizeUser for Sha512Prehash {
     type BlockSize = U128;
 }
 
-impl Update for Sha512Prehash {
-    fn update(&mut self, _input: impl AsRef<[u8]>) {
-        panic!("Prehash implementation cannot process any new data");
+impl BufferKindUser for Sha512Prehash {
+    type BufferKind = Eager;
+}
+
+impl OutputSizeUser for Sha512Prehash {
+    type OutputSize = U64;
+}
+
+impl AlgorithmName for Sha512Prehash {
+    #[inline]
+    fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str("Sha512") }
+}
+
+impl fmt::Debug for Sha512Prehash {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str("Sha512Prehash { ... }") }
+}
+
+impl UpdateCore for Sha512Prehash {
+    fn update_blocks(&mut self, blocks: &[Block<Self>]) {
+        panic!("Prehash implementation can't take block updates");
     }
 }
 
-impl FixedOutputDirty for Sha512Prehash {
-    type OutputSize = U64;
+impl VariableOutputCore for Sha512Prehash {
+    const TRUNC_SIDE: TruncSide = TruncSide::Left;
 
-    fn finalize_into_dirty(&mut self, out: &mut digest::Output<Self>) {
-        if let Some(hash) = self.hash {
-            for (dest, &src) in out.chunks_exact_mut(1).zip(hash.iter()) {
-                dest.copy_from_slice(&[src])
-            }
-        } else {
-            panic!("Sha512Prehash object was not initialized with a pre-hash value before use!");
+    fn new(output_size: usize) -> Result<Self, InvalidOutputSize> { Ok(Self { hash: None }) }
+
+    fn finalize_variable_core(&mut self, buffer: &mut Buffer<Self>, out: &mut Output<Self>) {
+        for (dest, &src) in out.chunks_exact_mut(1).zip(self.hash.unwrap().iter()) {
+            dest.copy_from_slice(&[src])
         }
     }
 }
 
-impl Reset for Sha512Prehash {
-    fn reset(&mut self) {}
+impl Update for Sha512Prehash {
+    /// Update state using the provided data.
+    fn update(&mut self, data: &[u8]) {
+        panic!("Prehash implementation can't take block updates");
+    }
+}
+impl FixedOutput for Sha512Prehash {
+    /// Consume value and write result into provided array.
+    fn finalize_into(self, out: &mut Output<Self>) {
+        for (dest, &src) in out.chunks_exact_mut(1).zip(self.hash.unwrap().iter()) {
+            dest.copy_from_slice(&[src])
+        }
+    }
 }
