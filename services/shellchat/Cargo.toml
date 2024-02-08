@@ -99,6 +99,15 @@ hex = { version = "0.4.3", default-features = false, features = [] }
 [dependencies.curve25519-dalek]
 version = "4.1.1"        # note this is patched to our fork in ./Cargo.toml
 default-features = false
+#Note: legacy_compatibility enables calling Scalar::from_bits on curve25519_dalek::Scalar.
+# This method is deprecated due to the danger that if one used it without verifying that
+# the key is on the prime order subgroup (which can be ensured by clamping), then one would
+# be vulnerable to an invlid curve attack. In this crate, it is only used in the tests where
+# its use is valid. I suspect this is fine, but I'd like to verify that the call is unable to 
+# be used in any other crate where this feature is not enabled. I don't fully understand how 
+# crate unification works, but I suspect you don't get different versions of the crate based one
+# features.
+features = ["legacy_compatibility"]
 
 [dependencies.x25519-dalek]
 version = "2.0.0"
