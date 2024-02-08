@@ -39,7 +39,7 @@ ctap-crypto = { path = "libraries/crypto" }
 cbor = { path = "libraries/cbor" }
 persistent_store = { path = "libraries/persistent_store" }
 ed25519-compact = { version = "1", default-features = false, optional = true }
-rand = { version = "0.8.4", optional = true }
+rand = { version = "0.8.5", optional = true }
 
 # ux formatting
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }

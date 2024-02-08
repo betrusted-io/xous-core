@@ -90,7 +90,7 @@ tungstenite = { version = "0.20.0", optional = true }
 
 # for performance testing
 perflib = { path = "../../libs/perflib", optional = true }
-random-pick = { version = "1.2.15", optional = true }
+random-pick = { version = "1.2.16", optional = true }
 
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
