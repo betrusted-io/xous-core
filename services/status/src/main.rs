@@ -530,8 +530,8 @@ fn wrapped_main() -> ! {
                     // once we have unlocked the PDDB and know our timezone, we'll compare the embedded
                     // timestamp to our current time, and delete the backup if it's too
                     // old.
-                    backup_time = Some(chrono::DateTime::<Utc>::from_utc(
-                        NaiveDateTime::from_timestamp(header.timestamp as i64, 0),
+                    backup_time = Some(chrono::DateTime::<Utc>::from_naive_utc_and_offset(
+                        NaiveDateTime::from_timestamp_opt(header.timestamp as i64, 0).unwrap(),
                         chrono::offset::Utc,
                     ));
                 }
@@ -1234,8 +1234,8 @@ fn wrapped_main() -> ! {
                     uptime_tv.clear_str();
                     if let Some(timestamp) = localtime.get_local_time_ms() {
                         // we "say" UTC but actually local time is in whatever the local time is
-                        let dt = chrono::DateTime::<Utc>::from_utc(
-                            NaiveDateTime::from_timestamp(timestamp as i64 / 1000, 0),
+                        let dt = chrono::DateTime::<Utc>::from_naive_utc_and_offset(
+                            NaiveDateTime::from_timestamp_opt(timestamp as i64 / 1000, 0).unwrap(),
                             chrono::offset::Utc,
                         );
                         let timestr = dt.format("%H:%M %m/%d").to_string();
