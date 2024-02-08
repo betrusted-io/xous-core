@@ -47,7 +47,8 @@ power consumption -
 ~50% power savings to use hardware hasher
 
 v0.10.8 API implementation
-TEST_MAX_LEN = 8192 (fixed length) / TEST_ITERS = 1000: hw 11.464ms/hash, sw 21.502ms/hash
+TEST_MAX_LEN = 8192 (fixed length) / TEST_ITERS = 1000: hw 11.464ms/hash, sw 21.502ms/hash (with trng ID bug (ID was not regenerated on each iteration), oops)
+TEST_MAX_LEN = 8192 (fixed length) / TEST_ITERS = 1000: hw 12.196ms/hash, sw 21.643ms/hash
  */
 
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
