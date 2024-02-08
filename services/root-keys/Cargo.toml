@@ -33,7 +33,7 @@ aes-kw = { version = "0.2.1", features = ["alloc"] }
 
 # bcrypt
 cipher = "0.4.3"
-blowfish = { version = "0.8.0", features = ["bcrypt"] }
+blowfish = { version = "0.9.1", features = ["bcrypt"] }
 
 # password modals - keep them in this crate to minimize plaintext password manipulations
 gam = { path = "../gam" }
