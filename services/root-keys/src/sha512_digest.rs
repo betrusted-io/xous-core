@@ -52,7 +52,7 @@ impl fmt::Debug for Sha512Prehash {
 }
 
 impl UpdateCore for Sha512Prehash {
-    fn update_blocks(&mut self, blocks: &[Block<Self>]) {
+    fn update_blocks(&mut self, _blocks: &[Block<Self>]) {
         panic!("Prehash implementation can't take block updates");
     }
 }
@@ -60,9 +60,9 @@ impl UpdateCore for Sha512Prehash {
 impl VariableOutputCore for Sha512Prehash {
     const TRUNC_SIDE: TruncSide = TruncSide::Left;
 
-    fn new(output_size: usize) -> Result<Self, InvalidOutputSize> { Ok(Self { hash: None }) }
+    fn new(_output_size: usize) -> Result<Self, InvalidOutputSize> { Ok(Self { hash: None }) }
 
-    fn finalize_variable_core(&mut self, buffer: &mut Buffer<Self>, out: &mut Output<Self>) {
+    fn finalize_variable_core(&mut self, _buffer: &mut Buffer<Self>, out: &mut Output<Self>) {
         for (dest, &src) in out.chunks_exact_mut(1).zip(self.hash.unwrap().iter()) {
             dest.copy_from_slice(&[src])
         }
@@ -71,7 +71,7 @@ impl VariableOutputCore for Sha512Prehash {
 
 impl Update for Sha512Prehash {
     /// Update state using the provided data.
-    fn update(&mut self, data: &[u8]) {
+    fn update(&mut self, _data: &[u8]) {
         panic!("Prehash implementation can't take block updates");
     }
 }
