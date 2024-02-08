@@ -25,9 +25,9 @@ keyboard = { path = "../keyboard" }
 susres = { package = "xous-api-susres", version = "0.9.54" }
 codec = { path = "../codec" }
 sha2 = { version = "0.10.8" }
-digest = "0.9.0"
+digest = "0.10.7"
 aes = { path = "../aes" }
-cipher = "0.3.0"
+cipher = "0.4.4"
 engine-25519 = { path = "../engine-25519" }
 spinor = { path = "../spinor" }
 root-keys = { path = "../root-keys" }
@@ -44,13 +44,13 @@ locales = { path = "../../locales" }
 
 trng = { path = "../trng" }
 
-num-derive = { version = "0.3.3", default-features = false }
+num-derive = { version = "0.4.1", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.4.3", default-features = false, features = [
     "const_generics",
 ] }
 
-chrono = { version = "0.4.19", default-features = false, features = ["std"] }
+chrono = { version = "0.4.33", default-features = false, features = ["std"] }
 
 # for audio self-test analysis
 base64 = "0.20.0"
@@ -90,27 +90,27 @@ tungstenite = { version = "0.20.0", optional = true }
 
 # for performance testing
 perflib = { path = "../../libs/perflib", optional = true }
-random-pick = { version = "1.2.15", optional = true }
+random-pick = { version = "1.2.16", optional = true }
 
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
 hex = { version = "0.4.3", default-features = false, features = [] }
 #sha2 = {version = "0.9.5", default-features = false, features = []}
 [dependencies.curve25519-dalek]
-version = "3.1.0"                       # note this is patched to our fork in ./Cargo.toml
+version = "4.1.1"        # note this is patched to our fork in ./Cargo.toml
 default-features = false
-features = ["u32_backend", "betrusted"]
 
 [dependencies.x25519-dalek]
-version = "1.1.1"
+version = "2.0.0"
+# TODO: static_secrets is only needed by the engine tests. Ideally, we would put the static_secrets version in dev deps only
 default-features = false
-features = ["u32_backend"]
+features = ["static_secrets"]
 
 [dependencies.ed25519-dalek]
-version = "1.0.1"
+version = "2.1.0"
 #path = "../../../ed25519-dalek"
 default-features = false
-features = ["u32_backend", "rand"]
+features = ["rand_core"]
 
 [features]
 precursor = ["utralib/precursor", "sha2/precursor"]
@@ -145,6 +145,7 @@ shellperf = [
 ] # this also needs the project-wide "perfcounter" feature to be selected. shellchat is the exclusive manager of the performance counter, do not use with e.g. "vaultperf" feature
 extra-tests = []
 mass-storage = []
+rand-api = []
 locktests = [
 ] # for debugging some specific `std` tests cherry-picked out of the test suite
 default = [] # "debugprint"

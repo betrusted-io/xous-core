@@ -81,8 +81,9 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
                     }
                     write!(ret, "Pumped {}x1k values out of the engine", ROUNDS).unwrap();
                 }
-                // rand_core API tests - commented out because they only need to be run once, basically.
-                /*
+                // rand_core API tests - not included by default because it only needs to be run whenever
+                // the rand API is updated
+                #[cfg(feature = "rand-api")]
                 "api" => {
                     // the purpose of these tests is to check the edge-case code because
                     // the trng fetch is u32, but rand_core allows u8
@@ -143,7 +144,7 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
                     let mut test4100 = [0u8; 4100];
                     OsRng.fill_bytes(&mut test4100);
                     log::info!("test 4100: {:?}", &test4100[4092..]);
-                } */
+                }
                 "errs" => {
                     write!(ret, "TRNG error stats: {:?}", env.trng.get_error_stats().unwrap()).unwrap();
                 }

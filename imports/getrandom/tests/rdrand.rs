@@ -6,10 +6,17 @@
 use getrandom::Error;
 #[macro_use]
 extern crate cfg_if;
+#[path = "../src/lazy.rs"]
+mod lazy;
 #[path = "../src/rdrand.rs"]
 mod rdrand;
 #[path = "../src/util.rs"]
 mod util;
 
-use rdrand::getrandom_inner as getrandom_impl;
+// The rdrand implementation has the signature of getrandom_uninit(), but our
+// tests expect getrandom_impl() to have the signature of getrandom().
+fn getrandom_impl(dest: &mut [u8]) -> Result<(), Error> {
+    rdrand::getrandom_inner(unsafe { util::slice_as_uninit_mut(dest) })?;
+    Ok(())
+}
 mod common;

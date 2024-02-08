@@ -30,10 +30,10 @@ xous-semver = "0.1.2"
 utralib = { version = "0.1.24", optional = true, default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
-chrono = "0.4.19"
+chrono = "0.4.33"
 
 [dev-dependencies]
-"chrono" = "0.4.19"
+chrono = "0.4.33"
 
 [features]
 precursor = ["utralib/precursor"]

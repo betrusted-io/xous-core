@@ -9,9 +9,9 @@ use core::num::NonZeroUsize;
 use aes::cipher::{BlockDecrypt, BlockEncrypt};
 use aes::Aes256;
 use cipher::generic_array::GenericArray;
-use curve25519_dalek::constants;
 use curve25519_dalek::scalar::Scalar;
-use ed25519_dalek::{ExpandedSecretKey, Keypair, PublicKey, SecretKey, Signature, Signer};
+use curve25519_dalek::{edwards::CompressedEdwardsY, EdwardsPoint};
+use ed25519_dalek::{DigestSigner, Signature, Signer, SigningKey, VerifyingKey};
 use gam::modal::{ActionType, Modal, ProgressBar, Slider};
 use graphics_server::BulkRead;
 use keywrap::*;
@@ -20,8 +20,7 @@ use num_traits::*;
 pub use oracle::FpgaKeySource;
 use rand_core::RngCore;
 use root_keys::key2bits::*;
-use sha2::Digest;
-use sha2::{Sha256, Sha512Hw, Sha512_256Sw};
+use sha2::{Digest, Sha256, Sha512Hw, Sha512Sw, Sha512_256Sw};
 use utralib::generated::*;
 use xous::KERNEL_BACKUP_OFFSET;
 use xous_semver::SemVer;
@@ -1169,25 +1168,26 @@ impl<'a> RootKeys {
                     log::info!("iter {} key {:x?}", _i, derived_sk);
                 }
             }
-            let sk: SecretKey = SecretKey::from_bytes(&derived_sk).expect("couldn't construct secret key");
-            let pk: PublicKey = (&sk).into();
-            // keypair zeroizes on drop
-            Keypair { public: pk, secret: sk }
+            let sk: SigningKey = SigningKey::from_bytes(&derived_sk);
+            // SigningKey zeroizes on drop
+            sk
         } else {
-            Keypair::from_bytes(&[
+            let sk = SigningKey::from_keypair_bytes(&[
                 168, 167, 118, 92, 141, 162, 215, 147, 134, 43, 8, 176, 0, 222, 188, 167, 178, 14, 137, 237,
                 82, 199, 133, 162, 179, 235, 161, 219, 156, 182, 42, 39, 28, 155, 234, 227, 42, 234, 200,
                 117, 7, 193, 128, 148, 56, 126, 255, 28, 116, 97, 66, 130, 175, 253, 129, 82, 216, 113, 53,
                 46, 223, 63, 88, 187,
             ])
-            .unwrap()
+            .unwrap();
+            // SigningKey zeroizes on drop
+            sk
         };
-        log::debug!("keypair pubkey: {:?}", keypair.public.to_bytes());
-        log::debug!("keypair pubkey: {:x?}", keypair.public.to_bytes());
+        log::debug!("keypair pubkey: {:?}", keypair.verifying_key());
+        log::debug!("keypair pubkey: {:x?}", keypair.verifying_key());
         #[cfg(feature = "hazardous-debug")]
-        log::debug!("keypair privkey: {:?}", keypair.secret.to_bytes());
+        log::debug!("keypair sign+verify (after anti-rollback): {:?}", keypair.to_keypair_bytes());
         #[cfg(feature = "hazardous-debug")]
-        log::debug!("keypair privkey (after anti-rollback): {:x?}", keypair.secret.to_bytes());
+        log::debug!("keypair sign+verify (after anti-rollback): {:x?}", keypair.to_keypair_bytes());
 
         // encrypt the FPGA key using the update password. in an un-init system, it is provided to us in
         // plaintext format e.g. in the case that we're doing a BBRAM boot (eFuse flow would give us a
@@ -1231,7 +1231,7 @@ impl<'a> RootKeys {
         pb.set_percentage(5);
 
         // pub key is easy, no need to encrypt
-        let public_key: [u8; ed25519_dalek::PUBLIC_KEY_LENGTH] = keypair.public.to_bytes();
+        let public_key: [u8; ed25519_dalek::PUBLIC_KEY_LENGTH] = keypair.verifying_key().to_bytes();
         for (src, dst) in public_key.chunks(4).into_iter().zip(unsafe {
             self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::SELFSIGN_PUBKEY as usize
                 ..KeyRomLocs::SELFSIGN_PUBKEY as usize + 256 / (size_of::<u32>() * 8)]
@@ -1376,7 +1376,7 @@ impl<'a> RootKeys {
         dst_oracle.clear();
 
         // as a sanity check, check the kernel self signature
-        let pubkey = PublicKey::from_bytes(&public_key).expect("public key was not valid");
+        let pubkey = VerifyingKey::from_bytes(&public_key).expect("public key was not valid");
         let ret = if !self.verify_selfsign_kernel(Some(&pubkey)) {
             log::error!("kernel signature failed to verify, probably should not try to reboot!");
             Err(RootkeyResult::IntegrityError)
@@ -1503,7 +1503,8 @@ impl<'a> RootKeys {
             #[cfg(feature = "hazardous-debug")]
             log::debug!("keypair_bytes {:x?}", keypair_bytes);
             // Keypair zeroizes the secret key on drop.
-            let keypair = Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
+            let keypair =
+                SigningKey::from_keypair_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
             #[cfg(feature = "hazardous-debug")]
             log::debug!(
                 "keypair privkey (after anti-rollback + conversion): {:x?}",
@@ -1711,14 +1712,14 @@ impl<'a> RootKeys {
         #[cfg(feature = "hazardous-debug")]
         log::debug!("trying to make a keypair from {:x?}", keypair_bytes);
         // Keypair zeroizes on drop
-        let keypair: Option<Keypair> = if ((update_type == UpdateType::BbramProvision)
+        let keypair: Option<SigningKey> = if ((update_type == UpdateType::BbramProvision)
             || (update_type == UpdateType::EfuseProvision))
             && !self.is_initialized()
         {
             // don't try to derive signing keys if we're doing BBRAM provisioning on an otherwise blank device
             None
         } else {
-            Some(Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?)
+            Some(SigningKey::from_keypair_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?)
         };
         log::debug!("keypair success");
         #[cfg(feature = "hazardous-debug")]
@@ -1854,10 +1855,10 @@ impl<'a> RootKeys {
         let pubkey = match update_type {
             UpdateType::Restore => {
                 log::info!("Restore process is verifying using staged public key");
-                PublicKey::from_bytes(&self.read_staged_key_256(KeyRomLocs::SELFSIGN_PUBKEY))
+                VerifyingKey::from_bytes(&self.read_staged_key_256(KeyRomLocs::SELFSIGN_PUBKEY))
                     .expect("public key was not valid")
             }
-            _ => PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY))
+            _ => VerifyingKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY))
                 .expect("public key was not valid"),
         };
         self.purge_sensitive_data();
@@ -2052,7 +2053,7 @@ impl<'a> RootKeys {
             *key = src;
         }
         // Keypair zeroizes the secret key on drop.
-        let keypair = Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
+        let keypair = SigningKey::from_keypair_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
         #[cfg(feature = "hazardous-debug")]
         log::debug!("keypair privkey (after anti-rollback + conversion): {:x?}", keypair.secret.to_bytes());
 
@@ -2657,6 +2658,7 @@ impl<'a> RootKeys {
     ///   - because we have limited physical memory, it's not a great idea to simply allocate a huge block of
     ///     RAM and copy the loader + font data there and sign it; it means in low memory conditions we can't
     ///     do signatures
+    ///
     /// The ideal solution for us is to pre-hash the entire loader region, and then have it signed.
     /// the ed25519-dalek crate does support this, but, it's also not a "standard" hash and sign, because
     /// it adds some good ideas to the signature. For entirely self-signed regions, we can use the
@@ -2666,8 +2668,23 @@ impl<'a> RootKeys {
     /// primed with a nonce that's derived from the secret key. So, we re-implement this, so we can
     /// interleave the hash as required to allow us to process the font data in page-sized chunks that
     /// don't use a huge amount of RAM.
+    ///
+    /// Some more color on "interoperability reasons": originally, the pre-hash method of signing wasn't
+    /// hammered out when the APIs were created. So, the verification method baked into the SoC's ROM uses
+    /// a standard, non-prehash signature. While it would be trivial to upgrade *this* API to use a
+    /// now-standardized pre-hash signature, it would be risky to upgrade the SoC ROM (a measurable risk
+    /// of users bricking devices). So, we opt instead to carefully re-implement the signature check here,
+    /// rather than subject users to a risk of bricking.
+    ///
+    /// However, it might be worth noting that for *future versions of hardware* we should migrate the
+    /// loader signature to a pre-hash version, so we have more flexibility on how we compute hashes and
+    /// we can stay with 100% spec-compliant APIs.
     #[allow(non_snake_case)]
-    pub fn sign_loader(&self, signing_key: &Keypair, maybe_pb: Option<&mut ProgressBar>) -> (Signature, u32) {
+    pub fn sign_loader(
+        &self,
+        signing_key: &SigningKey,
+        maybe_pb: Option<&mut ProgressBar>,
+    ) -> (Signature, u32) {
         let maybe_pb = maybe_pb.map(|pb| {
             pb.rebase_subtask_work(0, 2);
             pb
@@ -2680,16 +2697,16 @@ impl<'a> RootKeys {
             + 16 // for the current semver
             + 8; // two u32 words are appended to the end, which repeat the "version" and "length" fields encoded in the signature block
 
+        // compute the nonce. This is a small hash, so use a software hasher.
+        let mut nonce_hasher = Sha512Sw::new();
+        nonce_hasher.update(signing_key.as_bytes());
+        let hazmat = nonce_hasher.finalize();
+        let hash_prefix = &hazmat.as_slice()[32..];
+
         // this is a huge hash, so, get a hardware hasher, even if it means waiting for it
         let mut hasher = Sha512Hw::new();
-
-        // extract the secret key so we can prime the hash
-        let expanded_key = ExpandedSecretKey::from(&signing_key.secret);
-        let nonce = &(expanded_key.to_bytes()[32..]);
-        let mut lower: [u8; 32] = [0; 32];
-        lower.copy_from_slice(&(expanded_key.to_bytes()[..32]));
-        let key = Scalar::from_bits(lower);
-        hasher.update(nonce);
+        // prime the hash with the nonce derived from the upper bits of the secret key's hash.
+        hasher.update(hash_prefix);
 
         {
             // this is the equivalent of hasher.update(&message)
@@ -2724,16 +2741,12 @@ impl<'a> RootKeys {
             pb
         });
 
-        // FIXME: this should turn back into a Scalar-from-hash routine when Ed25519 gets API-bumped to be
-        // compatible with the hasher
-        let mut output = [0u8; 64];
-        output.copy_from_slice(hasher.finalize().as_slice());
-        let r = Scalar::from_bytes_mod_order_wide(&output);
-        let R = (&r * &constants::ED25519_BASEPOINT_TABLE).compress();
+        let r = Scalar::from_hash(hasher);
+        let R: CompressedEdwardsY = EdwardsPoint::mul_base(&r).compress();
 
         let mut hasher = Sha512Hw::new();
         hasher.update(R.as_bytes());
-        hasher.update(signing_key.public.as_bytes());
+        hasher.update(signing_key.verifying_key().as_bytes());
 
         {
             // this is the equivalent of hasher.update(&message)
@@ -2767,22 +2780,18 @@ impl<'a> RootKeys {
             pb.increment_work(1);
         }
 
-        // FIXME: this should turn back into a Scalar-from-hash routine when Ed25519 gets API-bumped to be
-        // compatible with the hasher
-        let mut output = [0u8; 64];
-        output.copy_from_slice(hasher.finalize().as_slice());
-        let k = Scalar::from_bytes_mod_order_wide(&output);
-        let s = &(&k * &key) + &r;
+        let k = Scalar::from_hash(hasher);
+        let s = &(&k * &signing_key.to_scalar()) + &r;
 
         let mut signature_bytes: [u8; 64] = [0u8; 64];
 
         signature_bytes[..32].copy_from_slice(&R.as_bytes()[..]);
         signature_bytes[32..].copy_from_slice(&s.as_bytes()[..]);
 
-        (ed25519_dalek::ed25519::signature::Signature::from_bytes(&signature_bytes).unwrap(), loader_len)
+        (Signature::from_bytes(&signature_bytes), loader_len)
     }
 
-    pub fn sign_kernel(&self, signing_key: &Keypair) -> (Signature, u32) {
+    pub fn sign_kernel(&self, signing_key: &SigningKey) -> (Signature, u32) {
         let kernel_sig_region = self.kernel_sig();
         let kernel_end_region = self.kernel_end();
         assert!(kernel_end_region.len() % 4096 == 0); // this must be aligned to a page boundary.
@@ -2842,15 +2851,15 @@ impl<'a> RootKeys {
                 ..(SIGBLOCK_SIZE as usize + kernel_len) & end_mask])
         );
         (
-            signing_key.sign_prehashed(self.kernel_hash(), None).expect("Error computing pre-hash signature"),
+            signing_key.try_sign_digest(self.kernel_hash()).expect("Error computing pre-hash signature"),
             kernel_len as u32,
         )
     }
 
     /// the public key must already be in the cache -- this version is used by the init routine, before the
     /// keys are written
-    pub fn verify_selfsign_kernel(&mut self, maybe_pubkey: Option<&PublicKey>) -> bool {
-        let local_pk = PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY))
+    pub fn verify_selfsign_kernel(&mut self, maybe_pubkey: Option<&VerifyingKey>) -> bool {
+        let local_pk = VerifyingKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY))
             .expect("public key was not valid");
         let pubkey = if let Some(pk) = maybe_pubkey { pk } else { &local_pk };
         log::debug!("pubkey as reconstituted: {:x?}", pubkey);
@@ -2859,7 +2868,7 @@ impl<'a> RootKeys {
         let sig_region = &kernel_sig_region[..core::mem::size_of::<SignatureInFlash>()];
         let sig_rec: &SignatureInFlash =
             unsafe { (sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap() }; // this pointer better not be null, we just created it!
-        let sig = Signature::from_bytes(&sig_rec.signature).expect("Signature malformed");
+        let sig = Signature::from_bytes(&sig_rec.signature);
 
         let kern_len = sig_rec.signed_len as usize;
         log::debug!("recorded kernel len: {} bytes", kern_len);
@@ -2876,7 +2885,7 @@ impl<'a> RootKeys {
         }
     }
 
-    pub fn sign_gateware(&self, signing_key: &Keypair) -> (Signature, u32) {
+    pub fn sign_gateware(&self, signing_key: &SigningKey) -> (Signature, u32) {
         let gateware_region = self.gateware();
 
         (signing_key.sign(&gateware_region[..SELFSIG_OFFSET]), SELFSIG_OFFSET as u32)
@@ -2884,8 +2893,8 @@ impl<'a> RootKeys {
 
     /// This is a fast check on the gateware meant to be called on boot just to confirm that we're using a
     /// self-signed gateware
-    pub fn verify_gateware_self_signature(&mut self, maybe_pubkey: Option<&PublicKey>) -> bool {
-        let local_pk = PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY))
+    pub fn verify_gateware_self_signature(&mut self, maybe_pubkey: Option<&VerifyingKey>) -> bool {
+        let local_pk = VerifyingKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY))
             .expect("public key was not valid");
         let pubkey = if let Some(pk) = maybe_pubkey { pk } else { &local_pk };
         // read the signature directly out of the keyrom
@@ -2902,14 +2911,7 @@ impl<'a> RootKeys {
         }
         let sig_rec: &SignatureInFlash =
             unsafe { (sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap() }; // this pointer better not be null, we just created it!
-        let sig = match Signature::from_bytes(&sig_rec.signature) {
-            Ok(s) => s,
-            Err(e) => {
-                log::error!("Signature malformed: {:?}", e);
-                log::debug!("Raw bytes: {:x?}", &sig_rec.signature);
-                return false;
-            }
-        };
+        let sig = Signature::from_bytes(&sig_rec.signature);
         log::debug!("sig_rec ({}): {:x?}", sig_rec.signed_len, sig_rec.signature);
         log::debug!("sig: {:x?}", sig.to_bytes());
         log::debug!("pubkey: {:x?}", pubkey.to_bytes());
@@ -2948,10 +2950,7 @@ impl<'a> RootKeys {
         }
         let sig_rec: &SignatureInFlash =
             unsafe { (sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap() };
-        let sig = match Signature::from_bytes(&sig_rec.signature) {
-            Ok(sig) => sig,
-            Err(_) => return SignatureResult::MalformedSignature,
-        };
+        let sig = Signature::from_bytes(&sig_rec.signature);
         let mut sigtype = SignatureResult::SelfSignOk;
         // check against all the known signature types in detail
         loop {
@@ -2977,7 +2976,7 @@ impl<'a> RootKeys {
                 }
                 continue;
             }
-            let pubkey = match PublicKey::from_bytes(&pubkey_bytes) {
+            let pubkey = match VerifyingKey::from_bytes(&pubkey_bytes) {
                 Ok(pubkey) => pubkey,
                 Err(_) => return SignatureResult::InvalidPubKey,
             };
@@ -3263,7 +3262,7 @@ impl<'a> RootKeys {
             *key = src;
         }
         // Keypair zeroizes the secret key on drop.
-        let keypair = Keypair::from_bytes(&keypair_bytes).ok()?;
+        let keypair = SigningKey::from_keypair_bytes(&keypair_bytes).ok()?;
         #[cfg(feature = "hazardous-debug")]
         log::debug!("keypair privkey (after anti-rollback + conversion): {:x?}", keypair.secret.to_bytes());
 

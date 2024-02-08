@@ -150,7 +150,7 @@ impl Trng {
         .expect("TRNG|LIB: can't set test mode");
     }
 
-    /// Gets test data from the TRNG. If hte test mode was not previously set, this will
+    /// Gets test data from the TRNG. If the test mode was not previously set, this will
     /// eventually cause a panic. We don't add extra overhead code to make this safer
     /// because as a test mode the caller expected to know what they are doing (and adding
     /// more safety code increases overhead for the 99.9999999% of the time when we aren't

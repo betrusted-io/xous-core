@@ -63,7 +63,10 @@ pub fn atime_to_str(req_atime: u64) -> String {
         request_str.push_str(t!("vault.u2f.appinfo.never", locales::LANG));
     } else {
         let now = utc_now();
-        let atime = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(req_atime as i64, 0), Utc);
+        let atime = DateTime::<Utc>::from_naive_utc_and_offset(
+            NaiveDateTime::from_timestamp_opt(req_atime as i64, 0).unwrap(),
+            Utc,
+        );
         // avoid format! macro, it is too slow.
         if now.signed_duration_since(atime).num_days() > 1 {
             request_str.push_str(t!("vault.u2f.appinfo.last_authtime", locales::LANG));
@@ -90,8 +93,8 @@ pub fn atime_to_str(req_atime: u64) -> String {
 /// target
 pub fn utc_now() -> DateTime<Utc> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("system time before Unix epoch");
-    let naive = NaiveDateTime::from_timestamp(now.as_secs() as i64, now.subsec_nanos() as u32);
-    DateTime::from_utc(naive, Utc)
+    let naive = NaiveDateTime::from_timestamp_opt(now.as_secs() as i64, now.subsec_nanos() as u32).unwrap();
+    DateTime::from_naive_utc_and_offset(naive, Utc)
 }
 
 /// app info format:

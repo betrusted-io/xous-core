@@ -666,7 +666,7 @@ pub(crate) fn start_time_ux() {
                             match result {
                                 Ok(time) => {
                                     log::info!("Got NTP time: {}.{}", time.sec(), time.sec_fraction());
-                                    let current_time = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0)
+                                    let current_time = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap()
                                         + chrono::Duration::seconds(time.sec() as i64);
                                     log::info!("Setting UTC time: {:?}", current_time.to_string());
                                     xous::send_message(
@@ -744,9 +744,17 @@ pub(crate) fn start_time_ux() {
                         }
 
                         log::info!("Setting time: {}/{}/{} {}:{}:{}", months, days, years, hours, mins, secs);
-                        let new_dt = chrono::FixedOffset::east((tz_offset_ms / 1000) as i32)
-                            .ymd(years as i32 + 2000, months as u32, days as u32)
-                            .and_hms(hours as u32, mins as u32, secs as u32);
+                        let new_dt = chrono::FixedOffset::east_opt((tz_offset_ms / 1000) as i32)
+                            .unwrap()
+                            .with_ymd_and_hms(
+                                years as i32 + 2000,
+                                months as u32,
+                                days as u32,
+                                hours as u32,
+                                mins as u32,
+                                secs as u32,
+                            )
+                            .unwrap();
                         xous::send_message(
                             timeserver_cid,
                             Message::new_scalar(

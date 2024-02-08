@@ -20,8 +20,8 @@ pem = "0.8.3"
 svd2utra = "0.1.22"
 xmas-elf = "0.9.0"
 xous-semver = "0.1.2"
-ed25519-dalek = "1.0.1"
-sha2 = { version = "0.9.5" }
+ed25519-dalek = { version = "2.1.0", features = ["digest"] }
+sha2 = { version = "0.10.8" }
 pkcs8 = { version = "0.8.0", features = ["pem"] }
 base64 = "0.20.0"
 
