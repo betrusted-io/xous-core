@@ -1155,6 +1155,8 @@ dependencies = [
  "cpufeatures",
  "curve25519-dalek-derive",
  "digest 0.10.7",
+ "engine-25519",
+ "engine25519-as",
  "fiat-crypto 0.2.6",
  "platforms",
  "rustc_version 0.4.0",
