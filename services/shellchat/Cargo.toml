@@ -50,7 +50,7 @@ rkyv = { version = "0.4.3", default-features = false, features = [
     "const_generics",
 ] }
 
-chrono = { version = "0.4.19", default-features = false, features = ["std"] }
+chrono = { version = "0.4.33", default-features = false, features = ["std"] }
 
 # for audio self-test analysis
 base64 = "0.20.0"
@@ -97,7 +97,7 @@ random-pick = { version = "1.2.15", optional = true }
 hex = { version = "0.4.3", default-features = false, features = [] }
 #sha2 = {version = "0.9.5", default-features = false, features = []}
 [dependencies.curve25519-dalek]
-version = "4.1.1"                       # note this is patched to our fork in ./Cargo.toml
+version = "4.1.1"        # note this is patched to our fork in ./Cargo.toml
 default-features = false
 
 [dependencies.x25519-dalek]

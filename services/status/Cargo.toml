@@ -39,7 +39,7 @@ rkyv = { version = "0.4.3", default-features = false, features = [
     "const_generics",
 ] }
 
-chrono = { version = "0.4.19", default-features = false, features = ["std"] }
+chrono = { version = "0.4.33", default-features = false, features = ["std"] }
 crossbeam = "0.8.2"
 
 sha2 = { version = "0.10.8" }
@@ -51,7 +51,7 @@ utralib = { version = "0.1.24", optional = true, default-features = false }
 
 # short circuit the datetime call on hosted mode
 [target.'cfg(any(windows,unix))'.dependencies]
-chrono = "0.4.19"
+chrono = "0.4.33"
 
 [features]
 precursor = ["utralib/precursor", "sha2/precursor"]
