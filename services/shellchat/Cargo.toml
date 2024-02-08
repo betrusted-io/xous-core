@@ -101,7 +101,7 @@ version = "4.1.1"        # note this is patched to our fork in ./Cargo.toml
 default-features = false
 
 [dependencies.x25519-dalek]
-version = "2.0.0"
+version = "2.0.1"
 # TODO: static_secrets is only needed by the engine tests. Ideally, we would put the static_secrets version in dev deps only
 default-features = false
 features = ["static_secrets"]
