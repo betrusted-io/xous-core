@@ -1,57 +1,47 @@
-// Copyright 2018 Developers of the Rand project.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
 //! Implementations that just need to read from a file
 use crate::{
-    util::LazyUsize,
     util_libc::{open_readonly, sys_fill_exact},
     Error,
 };
 use core::{
     cell::UnsafeCell,
+    mem::MaybeUninit,
     sync::atomic::{AtomicUsize, Ordering::Relaxed},
 };
 
-#[cfg(any(
-    target_os = "dragonfly",
-    target_os = "emscripten",
-    target_os = "haiku",
-    target_os = "macos",
-    target_os = "solaris",
-    target_os = "illumos"
-))]
+// We prefer using /dev/urandom and only use /dev/random if the OS
+// documentation indicates that /dev/urandom is insecure.
+// On Solaris/Illumos, see src/solaris_illumos.rs
+// On Dragonfly, Haiku, and QNX Neutrino the devices are identical.
+#[cfg(any(target_os = "solaris", target_os = "illumos"))]
 const FILE_PATH: &str = "/dev/random\0";
-#[cfg(any(target_os = "android", target_os = "linux", target_os = "redox"))]
+#[cfg(any(
+    target_os = "aix",
+    target_os = "android",
+    target_os = "linux",
+    target_os = "redox",
+    target_os = "dragonfly",
+    target_os = "haiku",
+    target_os = "nto",
+))]
 const FILE_PATH: &str = "/dev/urandom\0";
+const FD_UNINIT: usize = usize::max_value();
 
-pub fn getrandom_inner(dest: &mut [u8]) -> Result<(), Error> {
+pub fn getrandom_inner(dest: &mut [MaybeUninit<u8>]) -> Result<(), Error> {
     let fd = get_rng_fd()?;
-    let read = |buf: &mut [u8]| unsafe { libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) };
-
-    if cfg!(target_os = "emscripten") {
-        // `Crypto.getRandomValues` documents `dest` should be at most 65536 bytes.
-        for chunk in dest.chunks_mut(65536) {
-            sys_fill_exact(chunk, read)?;
-        }
-    } else {
-        sys_fill_exact(dest, read)?;
-    }
-    Ok(())
+    sys_fill_exact(dest, |buf| unsafe {
+        libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
+    })
 }
 
 // Returns the file descriptor for the device file used to retrieve random
 // bytes. The file will be opened exactly once. All subsequent calls will
 // return the same file descriptor. This file descriptor is never closed.
 fn get_rng_fd() -> Result<libc::c_int, Error> {
-    static FD: AtomicUsize = AtomicUsize::new(LazyUsize::UNINIT);
+    static FD: AtomicUsize = AtomicUsize::new(FD_UNINIT);
     fn get_fd() -> Option<libc::c_int> {
         match FD.load(Relaxed) {
-            LazyUsize::UNINIT => None,
+            FD_UNINIT => None,
             val => Some(val as libc::c_int),
         }
     }
@@ -76,8 +66,8 @@ fn get_rng_fd() -> Result<libc::c_int, Error> {
     wait_until_rng_ready()?;
 
     let fd = unsafe { open_readonly(FILE_PATH)? };
-    // The fd always fits in a usize without conflicting with UNINIT.
-    debug_assert!(fd >= 0 && (fd as usize) < LazyUsize::UNINIT);
+    // The fd always fits in a usize without conflicting with FD_UNINIT.
+    debug_assert!(fd >= 0 && (fd as usize) < FD_UNINIT);
     FD.store(fd as usize, Relaxed);
 
     Ok(fd)

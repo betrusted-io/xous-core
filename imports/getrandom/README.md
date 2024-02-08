@@ -3,7 +3,7 @@
 [![Build Status]][GitHub Actions] [![Crate]][crates.io] [![Documentation]][docs.rs] [![Dependency Status]][deps.rs] [![Downloads]][crates.io] [![License]][LICENSE-MIT]
 
 [GitHub Actions]: https://github.com/rust-random/getrandom/actions?query=workflow:Tests+branch:master
-[Build Status]: https://github.com/rust-random/getrandom/workflows/Tests/badge.svg?branch=master
+[Build Status]: https://github.com/rust-random/getrandom/actions/workflows/tests.yml/badge.svg?branch=master
 [crates.io]: https://crates.io/crates/getrandom
 [Crate]: https://img.shields.io/crates/v/getrandom
 [docs.rs]: https://docs.rs/getrandom
@@ -15,10 +15,10 @@
 [License]: https://img.shields.io/crates/l/getrandom
 
 
-A Rust library for retrieving random data from (operating) system source. It is
-assumed that system always provides high-quality cryptographically secure random
+A Rust library for retrieving random data from (operating) system sources. It is
+assumed that the system always provides high-quality cryptographically secure random
 data, ideally backed by hardware entropy sources. This crate derives its name
-from Linux's `getrandom` function, but is cross platform, roughly supporting
+from Linux's `getrandom` function, but is cross-platform, roughly supporting
 the same set of platforms as Rust's `std` lib.
 
 This is a low-level API. Most users should prefer using high-level random-number
@@ -52,13 +52,30 @@ crate features, WASM support and Custom RNGs see the
 
 ## Minimum Supported Rust Version
 
-This crate requires Rust 1.34.0 or later.
+This crate requires Rust 1.36.0 or later.
 
-# License
+## Platform Support
+
+This crate generally supports the same operating system and platform versions that the Rust standard library does. 
+Additional targets may be supported using pluggable custom implementations.
+
+This means that as Rust drops support for old versions of operating systems (such as old Linux kernel versions, Android API levels, etc)
+in stable releases, `getrandom` may create new patch releases (`0.N.x`) that remove support for outdated platform versions.
+
+## License
 
 The `getrandom` library is distributed under either of
 
- * [Apache License, Version 2.0](LICENSE-APACHE)
- * [MIT license](LICENSE-MIT)
+ * [Apache License, Version 2.0][LICENSE-APACHE]
+ * [MIT license][LICENSE-MIT]
 
 at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
+
+[LICENSE-APACHE]: https://github.com/rust-random/getrandom/blob/master/LICENSE-APACHE
+[LICENSE-MIT]: https://github.com/rust-random/getrandom/blob/master/LICENSE-MIT

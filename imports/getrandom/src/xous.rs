@@ -11,8 +11,10 @@
 /// In general, `getrandom` will be fast enough for interactive usage, though
 /// significantly slower than a user-space CSPRNG; for the latter consider
 /// [`rand::thread_rng`](https://docs.rs/rand/*/rand/fn.thread_rng.html).
+use crate::util::slice_as_uninit;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
+use core::mem::MaybeUninit;
 
 use xous_ipc::Buffer;
 
@@ -34,7 +36,7 @@ fn ensure_trng_conn() {
     }
 }
 
-pub fn getrandom_inner(dest: &mut [u8]) -> Result<(), crate::error::Error> {
+pub fn getrandom_inner(dest: &mut [MaybeUninit<u8>]) -> Result<(), crate::error::Error> {
     if dest.is_empty() {
         return Ok(());
     }
@@ -80,28 +82,28 @@ pub fn next_u64() -> u64 {
     }
 }
 
-pub fn fill_bytes_via_next(dest: &mut [u8]) {
+pub fn fill_bytes_via_next(dest: &mut [MaybeUninit<u8>]) {
     use core::mem::transmute;
     let mut left = dest;
     while left.len() >= 8 {
         let (l, r) = { left }.split_at_mut(8);
         left = r;
         let chunk: [u8; 8] = unsafe { transmute(next_u64().to_le()) };
-        l.copy_from_slice(&chunk);
+        l.copy_from_slice(slice_as_uninit(&chunk));
     }
     let n = left.len();
     if n > 4 {
         let chunk: [u8; 8] = unsafe { transmute(next_u64().to_le()) };
-        left.copy_from_slice(&chunk[..n]);
+        left.copy_from_slice(slice_as_uninit(&chunk[..n]));
     } else if n > 0 {
         let chunk: [u8; 4] = unsafe { transmute(next_u32().to_le()) };
-        left.copy_from_slice(&chunk[..n]);
+        left.copy_from_slice(slice_as_uninit(&chunk[..n]));
     }
 }
 
 /// This implementation will try to fill bytes using the more efficient but smaller scalar messages,
 /// until it becomes faster to use a memory message.
-fn fill_bytes(dest: &mut [u8]) {
+fn fill_bytes(dest: &mut [MaybeUninit<u8>]) {
     if dest.len() < 64 {
         fill_bytes_via_next(dest);
     } else {
@@ -130,7 +132,7 @@ fn fill_bytes(dest: &mut [u8]) {
                 unsafe { core::slice::from_raw_parts(rtb.data.as_ptr() as *mut u8, rtb.data.len() * 4) };
             // we've allocated an extra remainder word to handle the last word overflow, if anything
             // we'll end up throwing away a couple of unused bytes, but better than copying zeroes!
-            remainder.copy_from_slice(&ret_u8[..remainder.len()]);
+            remainder.copy_from_slice(slice_as_uninit(&ret_u8[..remainder.len()]));
         }
     }
 }

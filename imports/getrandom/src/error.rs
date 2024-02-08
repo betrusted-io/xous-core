@@ -1,10 +1,3 @@
-// Copyright 2018 Developers of the Rand project.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
 use core::{fmt, num::NonZeroU32};
 
 /// A small and `no_std` compatible error type
@@ -35,7 +28,11 @@ impl Error {
     pub const UNSUPPORTED: Error = internal_error(0);
     /// The platform-specific `errno` returned a non-positive value.
     pub const ERRNO_NOT_POSITIVE: Error = internal_error(1);
-    /// Call to iOS [`SecRandomCopyBytes`](https://developer.apple.com/documentation/security/1399291-secrandomcopybytes) failed.
+    /// Encountered an unexpected situation which should not happen in practice.
+    pub const UNEXPECTED: Error = internal_error(2);
+    /// Call to [`CCRandomGenerateBytes`](https://opensource.apple.com/source/CommonCrypto/CommonCrypto-60074/include/CommonRandom.h.auto.html) failed
+    /// on iOS, tvOS, or waatchOS.
+    // TODO: Update this constant name in the next breaking release.
     pub const IOS_SEC_RANDOM: Error = internal_error(3);
     /// Call to Windows [`RtlGenRandom`](https://docs.microsoft.com/en-us/windows/win32/api/ntsecapi/nf-ntsecapi-rtlgenrandom) failed.
     pub const WINDOWS_RTL_GEN_RANDOM: Error = internal_error(4);
@@ -43,16 +40,19 @@ impl Error {
     pub const FAILED_RDRAND: Error = internal_error(5);
     /// RDRAND instruction unsupported on this target.
     pub const NO_RDRAND: Error = internal_error(6);
-    /// The browser does not have support for `self.crypto`.
+    /// The environment does not support the Web Crypto API.
     pub const WEB_CRYPTO: Error = internal_error(7);
-    /// The browser does not have support for `crypto.getRandomValues`.
+    /// Calling Web Crypto API `crypto.getRandomValues` failed.
     pub const WEB_GET_RANDOM_VALUES: Error = internal_error(8);
     /// On VxWorks, call to `randSecure` failed (random number generator is not yet initialized).
     pub const VXWORKS_RAND_SECURE: Error = internal_error(11);
-    /// NodeJS does not have support for the `crypto` module.
+    /// Node.js does not have the `crypto` CommonJS module.
     pub const NODE_CRYPTO: Error = internal_error(12);
-    /// NodeJS does not have support for `crypto.randomFillSync`.
+    /// Calling Node.js function `crypto.randomFillSync` failed.
     pub const NODE_RANDOM_FILL_SYNC: Error = internal_error(13);
+    /// Called from an ES module on Node.js. This is unsupported, see:
+    /// <https://docs.rs/getrandom#nodejs-es-module-support>.
+    pub const NODE_ES_MODULE: Error = internal_error(14);
 
     /// Codes below this point represent OS Errors (i.e. positive i32 values).
     /// Codes at or above this point, but below [`Error::CUSTOM_START`] are
@@ -161,15 +161,17 @@ fn internal_desc(error: Error) -> Option<&'static str> {
     match error {
         Error::UNSUPPORTED => Some("getrandom: this target is not supported"),
         Error::ERRNO_NOT_POSITIVE => Some("errno: did not return a positive value"),
+        Error::UNEXPECTED => Some("unexpected situation"),
         Error::IOS_SEC_RANDOM => Some("SecRandomCopyBytes: iOS Security framework failure"),
         Error::WINDOWS_RTL_GEN_RANDOM => Some("RtlGenRandom: Windows system function failure"),
         Error::FAILED_RDRAND => Some("RDRAND: failed multiple times: CPU issue likely"),
         Error::NO_RDRAND => Some("RDRAND: instruction not supported"),
         Error::WEB_CRYPTO => Some("Web Crypto API is unavailable"),
-        Error::WEB_GET_RANDOM_VALUES => Some("Web API crypto.getRandomValues is unavailable"),
+        Error::WEB_GET_RANDOM_VALUES => Some("Calling Web API crypto.getRandomValues failed"),
         Error::VXWORKS_RAND_SECURE => Some("randSecure: VxWorks RNG module is not initialized"),
-        Error::NODE_CRYPTO => Some("Node.js crypto module is unavailable"),
-        Error::NODE_RANDOM_FILL_SYNC => Some("Node.js API crypto.randomFillSync is unavailable"),
+        Error::NODE_CRYPTO => Some("Node.js crypto CommonJS module is unavailable"),
+        Error::NODE_RANDOM_FILL_SYNC => Some("Calling Node.js API crypto.randomFillSync failed"),
+        Error::NODE_ES_MODULE => Some("Node.js ES modules are not directly supported, see https://docs.rs/getrandom#nodejs-es-module-support"),
         _ => None,
     }
 }
