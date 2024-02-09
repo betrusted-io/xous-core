@@ -8,18 +8,18 @@ edition = "2021"
 [dependencies]
 argh = "0.1.8"
 ctaphid = "0.1.1"
-cbor = {path = "../../libraries/cbor"}
-backup = {path = "../../libraries/backup"}
-hidapi = {version = "1.4.1", default_features = false}
+cbor = { path = "../../libraries/cbor" }
+backup = { path = "../../libraries/backup" }
+hidapi = { version = "1.4.1", default_features = false }
 serde_json = "1.0.82"
-serde = {version = "1.0.138", features = ["derive"]}
+serde = { version = "1.0.138", features = ["derive"] }
 hex = "0.4.3"
 clap = { version = "3.2.12", features = ["derive"] }
 anyhow = "1.0.58"
 log = "0.4.17"
 env_logger = "0.9.0"
 serde_repr = "0.1.9"
-url = "2.2.2"
+url = "2.3.1"
 base64 = "0.5.2"
 base32 = "0.4.0"
 protobuf = "3.1.0"
