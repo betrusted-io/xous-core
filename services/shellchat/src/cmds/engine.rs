@@ -180,9 +180,9 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 let mut fails = 0;
 
                 use x25519_dalek::{PublicKey, StaticSecret};
-                let alice_secret = StaticSecret::new(&mut trng);
+                let alice_secret = StaticSecret::random_from_rng(&mut trng);
                 let alice_public = PublicKey::from(&alice_secret);
-                let bob_secret = StaticSecret::new(&mut trng);
+                let bob_secret = StaticSecret::random_from_rng(&mut trng);
                 let bob_public = PublicKey::from(&bob_secret);
                 for _ in 0..TEST_ITERS_DH {
                     let alice_shared_secret = alice_secret.diffie_hellman(&bob_public);
@@ -365,9 +365,9 @@ impl<'a> ShellCmdApi<'a> for Engine {
                 }
                 "dh" => {
                     use x25519_dalek::{EphemeralSecret, PublicKey};
-                    let alice_secret = EphemeralSecret::new(&mut env.trng);
+                    let alice_secret = EphemeralSecret::random_from_rng(&mut env.trng);
                     let alice_public = PublicKey::from(&alice_secret);
-                    let bob_secret = EphemeralSecret::new(&mut env.trng);
+                    let bob_secret = EphemeralSecret::random_from_rng(&mut env.trng);
                     let bob_public = PublicKey::from(&bob_secret);
                     let alice_shared_secret = alice_secret.diffie_hellman(&bob_public);
                     let bob_shared_secret = bob_secret.diffie_hellman(&alice_public);
@@ -389,29 +389,12 @@ impl<'a> ShellCmdApi<'a> for Engine {
 
                     /////////////////////// fixed vectors from x25519-dalek tests
                     use curve25519_dalek::montgomery::MontgomeryPoint;
-                    use curve25519_dalek::scalar::Scalar;
-                    /// "Decode" a scalar from a 32-byte array.
-                    ///
-                    /// By "decode" here, what is really meant is applying key clamping by twiddling
-                    /// some bits.
-                    ///
-                    /// # Returns
-                    ///
-                    /// A `Scalar`.
-                    fn clamp_scalar(mut scalar: [u8; 32]) -> Scalar {
-                        scalar[0] &= 248;
-                        scalar[31] &= 127;
-                        scalar[31] |= 64;
-
-                        Scalar::from_bits(scalar)
-                    }
-
                     /// The bare, byte-oriented x25519 function, exactly as specified in RFC7748.
                     ///
                     /// This can be used with [`X25519_BASEPOINT_BYTES`] for people who
                     /// cannot use the better, safer, and faster DH API.
                     fn x25519(k: [u8; 32], u: [u8; 32]) -> [u8; 32] {
-                        (clamp_scalar(k) * MontgomeryPoint(u)).to_bytes()
+                        MontgomeryPoint(u).mul_clamped(k).to_bytes()
                     }
                     {
                         let input_scalar: [u8; 32] = [
@@ -465,24 +448,20 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     }
                 }
                 "ed2" => {
-                    use ed25519_dalek::{Keypair, Signature, Signer};
-                    let keypair: Keypair;
-                    let good_sig: Signature;
-                    let bad_sig: Signature;
-
+                    use ed25519_dalek::{Signer, SigningKey};
                     let good: &[u8] = "test message".as_bytes();
                     let bad: &[u8] = "wrong message".as_bytes();
 
-                    keypair = Keypair::generate(&mut env.trng);
-                    good_sig = keypair.sign(&good);
-                    bad_sig = keypair.sign(&bad);
+                    let signingkey = SigningKey::generate(&mut env.trng);
+                    let good_sig = signingkey.sign(&good);
+                    let bad_sig = signingkey.sign(&bad);
 
-                    if keypair.verify(&good, &good_sig).is_ok() {
+                    if signingkey.verify(&good, &good_sig).is_ok() {
                         write!(ret, "Verification of valid signtaure passed!\n").unwrap();
                     } else {
                         write!(ret, "Verification of valid signtaure failed!\n").unwrap();
                     }
-                    if keypair.verify(&good, &bad_sig).is_err() {
+                    if signingkey.verify(&good, &bad_sig).is_err() {
                         write!(
                             ret,
                             "Verification of a signature on a different message failed, as expected.\n"
@@ -491,7 +470,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     } else {
                         write!(ret, "Verification of a signature on a different message passed (this is unexpected)!\n").unwrap();
                     }
-                    if keypair.verify(&bad, &good_sig).is_err() {
+                    if signingkey.verify(&bad, &good_sig).is_err() {
                         write!(
                             ret,
                             "Verification of a signature on a different message failed, as expected.\n"
@@ -505,22 +484,22 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     use ed25519_dalek::*;
                     // use ed25519::signature::Signature as _;
                     use hex::FromHex;
-                    let secret_key: &[u8] =
+                    let signing_key: &[u8] =
                         b"833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42";
                     let public_key: &[u8] =
                         b"ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf";
                     let message: &[u8] = b"616263";
                     let signature: &[u8] = b"98a70222f0b8121aa9d30f813d683f809e462b469c7ff87639499bb94e6dae4131f85042463c2a355a2003d062adf5aaa10b8c61e636062aaad11c2a26083406";
-
-                    let sec_bytes = <[u8; 32]>::from_hex(secret_key).unwrap();
-                    let pub_bytes = <[u8; 32]>::from_hex(public_key).unwrap();
                     let msg_bytes = <[u8; 3]>::from_hex(message).unwrap();
-                    let sig_bytes = <[u8; 64]>::from_hex(signature).unwrap();
 
-                    let secret: SecretKey = SecretKey::from_bytes(&sec_bytes[..SECRET_KEY_LENGTH]).unwrap();
-                    let public: PublicKey = PublicKey::from_bytes(&pub_bytes[..PUBLIC_KEY_LENGTH]).unwrap();
-                    let keypair: Keypair = Keypair { secret, public };
-                    let sig1: Signature = Signature::from_bytes(&sig_bytes[..]).unwrap();
+                    let signing_key_bytes = <[u8; SECRET_KEY_LENGTH]>::from_hex(signing_key).unwrap();
+                    let public_key_bytes = <[u8; PUBLIC_KEY_LENGTH]>::from_hex(public_key).unwrap();
+                    let signature_bytes = <[u8; SIGNATURE_LENGTH]>::from_hex(signature).unwrap();
+
+                    let signingkey: SigningKey = SigningKey::from_bytes(&signing_key_bytes);
+                    let expected_verifying_key = VerifyingKey::from_bytes(&public_key_bytes).unwrap();
+                    assert_eq!(expected_verifying_key, signingkey.verifying_key());
+                    let sig1: Signature = Signature::from_bytes(&signature_bytes);
 
                     //let mut prehash_for_signing = engine_sha512::Sha512::default(); // this defaults to Hw
                     // then Sw strategy let mut prehash_for_verifying =
@@ -531,7 +510,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     prehash_for_signing.update(&msg_bytes[..]);
                     prehash_for_verifying.update(&msg_bytes[..]);
 
-                    let sig2: Signature = keypair.sign_prehashed(prehash_for_signing, None).unwrap();
+                    let sig2: Signature = signingkey.sign_prehashed(prehash_for_signing, None).unwrap();
 
                     log::info!("original: {:02x?}", sig1);
                     log::info!("produced: {:02x?}", sig2);
@@ -546,7 +525,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
                         )
                         .unwrap();
                     }
-                    if keypair.verify_prehashed(prehash_for_verifying, None, &sig2).is_err() {
+                    if signingkey.verify_prehashed(prehash_for_verifying, None, &sig2).is_err() {
                         pass = false;
                         write!(ret, "Could not verify ed25519ph signature!").unwrap();
                     }

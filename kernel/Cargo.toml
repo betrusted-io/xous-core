@@ -33,7 +33,8 @@ gdbstub_arch = { version = "0.2.4", optional = true, default-features = false }
 armv7 = { git = "https://github.com/Foundation-Devices/armv7.git", branch = "update", features = [
     "critical-section",
 ] }
-atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
+# FIXME: bring atsama5d27 target up to date so utralib dependency does not conflict
+# atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master" }
 xous-kernel = { package = "xous", version = "0.9.58", features = ["v2p"] }
 critical-section = "1.1.1"
 

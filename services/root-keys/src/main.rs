@@ -99,7 +99,7 @@ mod implementation {
 
     use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
     use aes::Aes256;
-    use ed25519_dalek::PublicKey;
+    use ed25519_dalek::VerifyingKey;
     use gam::modal::{Modal, Slider};
     use gam::{ActionType, ProgressBar};
     use locales::t;
@@ -255,7 +255,7 @@ mod implementation {
 
         pub fn finish_key_init(&mut self) {}
 
-        pub fn verify_gateware_self_signature(&mut self, _pk: Option<&PublicKey>) -> bool { true }
+        pub fn verify_gateware_self_signature(&mut self, _pk: Option<&VerifyingKey>) -> bool { true }
 
         pub fn test(
             &mut self,

@@ -28,13 +28,14 @@ cramium-hal = { path = "../../libs/cramium-hal", optional = true, default-featur
     "std",
 ] }
 
-[target.'cfg(target_arch = "arm")'.dependencies]
-atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", features = [
-    "lcd-console",
-] }
-xous = { version = "0.9.58", features = [
-    "v2p",
-] } # v2p feature is used when lcd-console feature is turned on
+# FIXME: bring atsama5d27 target up to date so utralib dependency does not conflict
+# [target.'cfg(target_arch = "arm")'.dependencies]
+# atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", features = [
+#     "lcd-console",
+# ] }
+# xous = { version = "0.9.58", features = [
+#     "v2p",
+# ] } # v2p feature is used when lcd-console feature is turned on
 
 [features]
 cramium-soc = ["utralib/cramium-soc", "cramium-hal"]

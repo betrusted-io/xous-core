@@ -1,11 +1,11 @@
 use std::io::{Error, ErrorKind, Read, Write};
 use std::path::Path;
 
-use ed25519_dalek::{Digest, ExpandedSecretKey, PublicKey, SecretKey};
+use ed25519_dalek::{DigestSigner, SigningKey};
 use pkcs8::der::Decodable;
 use pkcs8::PrivateKeyInfo;
 use ring::signature::Ed25519KeyPair;
-use sha2::Sha512;
+use sha2::{Digest, Sha512};
 
 const LOADER_VERSION: u32 = 1;
 const LOADER_PREHASH_VERSION: u32 = 2;
@@ -139,12 +139,11 @@ pub fn sign_image_prehash(
     // First 2 bytes of the `private_key` are a record specifier and length field. Check they are correct.
     assert!(private_key.private_key[0] == 0x4);
     assert!(private_key.private_key[1] == 0x20);
+    let mut secbytes = [0u8; 32];
+    secbytes.copy_from_slice(&private_key.private_key[2..]);
     // Now we can use the private key data.
-    let signing_key_compact =
-        SecretKey::from_bytes(&private_key.private_key[2..]).map_err(|e| format!("{}", e))?;
-    let public_key = PublicKey::from(&signing_key_compact);
-    let signing_key = ExpandedSecretKey::from(&signing_key_compact);
-    let signature = signing_key.sign_prehashed(h, &public_key, None).map_err(|e| format!("{}", e))?;
+    let signing_key = SigningKey::from_bytes(&secbytes);
+    let signature = signing_key.sign_digest(h);
 
     dest_file.write_all(&LOADER_PREHASH_VERSION.to_le_bytes())?;
     dest_file.write_all(&(source.len() as u32).to_le_bytes())?;

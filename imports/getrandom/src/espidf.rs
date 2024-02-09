@@ -1,20 +1,12 @@
-// Copyright 2021 Developers of the Rand project.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
 //! Implementation for ESP-IDF
 use crate::Error;
-use core::ffi::c_void;
+use core::{ffi::c_void, mem::MaybeUninit};
 
 extern "C" {
     fn esp_fill_random(buf: *mut c_void, len: usize) -> u32;
 }
 
-pub fn getrandom_inner(dest: &mut [u8]) -> Result<(), Error> {
+pub fn getrandom_inner(dest: &mut [MaybeUninit<u8>]) -> Result<(), Error> {
     // Not that NOT enabling WiFi, BT, or the voltage noise entropy source (via `bootloader_random_enable`)
     // will cause ESP-IDF to return pseudo-random numbers based on the voltage noise entropy, after the initial boot process:
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/random.html

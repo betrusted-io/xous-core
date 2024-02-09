@@ -26,7 +26,7 @@ trng = { path = "../trng" }
 # and the more logically grouped status crate has run out of resources.
 llio = { path = "../llio" }
 pddb = { path = "../pddb" }
-chrono = { version = "0.4.19", default-features = false, features = ["std"] }
+chrono = { version = "0.4.33", default-features = false, features = ["std"] }
 sntpc = { version = "0.3.1" }                                                 #, features = ["log"]
 locales = { path = "../../locales" }
 gam = { path = "../gam" }

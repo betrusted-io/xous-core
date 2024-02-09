@@ -36,8 +36,8 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                     let mut localtime = llio::LocalTime::new();
                     if let Some(timestamp) = localtime.get_local_time_ms() {
                         // we "say" UTC but actually local time is in whatever the local time is
-                        let dt = chrono::DateTime::<Utc>::from_utc(
-                            NaiveDateTime::from_timestamp(timestamp as i64 / 1000, 0),
+                        let dt = chrono::DateTime::<Utc>::from_naive_utc_and_offset(
+                            NaiveDateTime::from_timestamp_opt(timestamp as i64 / 1000, 0).unwrap(),
                             chrono::offset::Utc,
                         );
                         let timestr = dt.format("%m/%d/%Y %T").to_string();
