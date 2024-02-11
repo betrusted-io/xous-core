@@ -2210,7 +2210,7 @@ dependencies = [
  "atomic-polyfill",
  "hash32 0.2.1",
  "rustc_version 0.4.0",
- "spin 0.9.8",
+ "spin",
  "stable_deref_trait",
 ]
 
@@ -4152,21 +4152,6 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.16.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc"
-dependencies = [
- "cc",
- "libc",
- "once_cell",
- "spin 0.5.2",
- "untrusted 0.7.1",
- "web-sys",
- "winapi",
-]
-
-[[package]]
-name = "ring"
 version = "0.17.7"
 dependencies = [
  "cc",
@@ -4175,7 +4160,7 @@ dependencies = [
  "libc",
  "log",
  "rkyv",
- "spin 0.9.8",
+ "spin",
  "untrusted 0.9.0",
  "windows-sys 0.52.0",
  "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4310,7 +4295,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e87c9956bd9807afa1f77e0f7594af32566e830e088a5576d27c5b6f30f49d41"
 dependencies = [
  "log",
- "ring 0.17.7",
+ "ring",
  "rustls-pki-types",
  "rustls-webpki",
  "subtle",
@@ -4329,7 +4314,7 @@ version = "0.102.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef4ca26037c909dedb327b48c3327d0ba91d3dd3c4e05dad328f210ffb68e95b"
 dependencies = [
- "ring 0.17.7",
+ "ring",
  "rustls-pki-types",
  "untrusted 0.9.0",
 ]
@@ -4369,12 +4354,12 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "sct"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d53dcdb7c9f8158937a7981b48accfd39a43af418591a5d008c7b22b5e1b7ca4"
+checksum = "da046153aa2352493d6cb7da4b6e5c0c057d8a1d0a9aa8560baffdd945acd414"
 dependencies = [
- "ring 0.16.20",
- "untrusted 0.7.1",
+ "ring",
+ "untrusted 0.9.0",
 ]
 
 [[package]]
@@ -4628,9 +4613,10 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_xorshift",
  "random-pick",
- "ring 0.17.7",
+ "ring",
  "rkyv",
  "root-keys",
+ "rustls",
  "sha2 0.10.8",
  "spinor",
  "threadpool",
@@ -4644,6 +4630,7 @@ dependencies = [
  "url",
  "usb-device-xous",
  "utralib 0.1.24",
+ "webpki-roots",
  "x25519-dalek",
  "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
@@ -4733,12 +4720,6 @@ dependencies = [
  "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
 ]
-
-[[package]]
-name = "spin"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "spin"
@@ -5164,7 +5145,7 @@ dependencies = [
  "log",
  "pem",
  "pkcs8 0.8.0",
- "ring 0.17.7",
+ "ring",
  "sha2 0.10.8",
  "svd2utra 0.1.22",
  "xmas-elf",
@@ -5384,9 +5365,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "ureq"
-version = "2.9.4"
+version = "2.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "399dd89e2af196ae4f83a47bb37a1455e664fe2fed97b3ae68a1c4a3f8216e76"
+checksum = "0b52731d03d6bb2fd18289d4028aee361d6c28d44977846793b994b13cdcc64d"
 dependencies = [
  "base64 0.21.7",
  "flate2",
