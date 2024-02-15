@@ -1,13 +1,24 @@
 use locales::t;
 use modals::Modals;
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::WebPkiServerVerifier;
-use rustls::client::danger::{ServerCertVerified, ServerCertVerifier};
+use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-use rustls::{CertificateError, Error, RootCertStore};
+use rustls::{CertificateError, DigitallySignedStruct, Error, RootCertStore, SignatureScheme};
+use std::sync::Arc;
+use webpki::ring as webpki_algs;
 use xous_names::XousNames;
 
+#[derive(Debug)]
 pub struct StifledCertificateVerification {
     pub roots: RootCertStore,
+    pub supported: WebPkiSupportedAlgorithms,
+}
+
+impl StifledCertificateVerification {
+    pub fn new() -> Self {
+        Self { roots: rustls::RootCertStore::empty(), supported: SUPPORTED_SIG_ALGS }
+    }
 }
 
 impl ServerCertVerifier for StifledCertificateVerification {
@@ -19,45 +30,112 @@ impl ServerCertVerifier for StifledCertificateVerification {
         end_entity: &CertificateDer,
         intermediates: &[CertificateDer],
         server_name: &ServerName,
-        scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp: &[u8],
         now: UnixTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
-        let rustls_default_verifier = WebPkiServerVerifier::new(self.roots.clone(), None);
-        match rustls_default_verifier.verify_server_cert(
-            end_entity,
-            intermediates,
-            server_name,
-            scts,
-            ocsp,
-            now,
-        ) {
-            Ok(ok) => Ok(ok),
-            Err(Error::InvalidCertificate(e)) => {
-                let xns = XousNames::new().unwrap();
-                let modals = Modals::new(&xns).unwrap();
-                match e {
-                    CertificateError::UnknownIssuer => Ok(ServerCertVerified::assertion()),
-                    CertificateError::NotValidYet => {
-                        modals
-                            .show_notification(t!("tls.probe_help_not_valid_yet", locales::LANG), None)
-                            .expect("modal failed");
-                        Err(Error::InvalidCertificate(e))
-                    }
-                    _ => {
-                        modals
-                            .show_notification(
-                                format!("{}\n{:?}", t!("tls.probe_invalid_certificate", locales::LANG), e)
+        if let Ok(rustls_default_verifier) =
+            WebPkiServerVerifier::builder(Arc::new(self.roots.clone())).build()
+        {
+            match rustls_default_verifier.verify_server_cert(
+                end_entity,
+                intermediates,
+                server_name,
+                ocsp,
+                now,
+            ) {
+                Ok(ok) => Ok(ok),
+                Err(Error::InvalidCertificate(e)) => {
+                    let xns = XousNames::new().unwrap();
+                    let modals = Modals::new(&xns).unwrap();
+                    match e {
+                        CertificateError::UnknownIssuer => Ok(ServerCertVerified::assertion()),
+                        CertificateError::NotValidYet => {
+                            modals
+                                .show_notification(t!("tls.probe_help_not_valid_yet", locales::LANG), None)
+                                .expect("modal failed");
+                            Err(Error::InvalidCertificate(e))
+                        }
+                        _ => {
+                            modals
+                                .show_notification(
+                                    format!(
+                                        "{}\n{:?}",
+                                        t!("tls.probe_invalid_certificate", locales::LANG),
+                                        e
+                                    )
                                     .as_str(),
-                                None,
-                            )
-                            .expect("modal failed");
+                                    None,
+                                )
+                                .expect("modal failed");
 
-                        Err(Error::InvalidCertificate(e))
+                            Err(Error::InvalidCertificate(e))
+                        }
                     }
                 }
+                Err(e) => Err(e),
             }
-            Err(e) => Err(e),
+        } else {
+            Err(Error::General("failed to build WebPkiServerVerifier".to_string()))
         }
     }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        verify_tls12_signature(message, cert, dss, &self.supported)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        verify_tls13_signature(message, cert, dss, &self.supported)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.supported.supported_schemes()
+    }
 }
+
+/// Vendor in the sadly private rustls::crypto::ring::SUPPORTED_SIG_ALGS
+/// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
+/// compiled against *ring*.
+static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
+    all: &[
+        webpki_algs::ECDSA_P256_SHA256,
+        webpki_algs::ECDSA_P256_SHA384,
+        webpki_algs::ECDSA_P384_SHA256,
+        webpki_algs::ECDSA_P384_SHA384,
+        webpki_algs::ED25519,
+        webpki_algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+        webpki_algs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+        webpki_algs::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+        webpki_algs::RSA_PKCS1_2048_8192_SHA256,
+        webpki_algs::RSA_PKCS1_2048_8192_SHA384,
+        webpki_algs::RSA_PKCS1_2048_8192_SHA512,
+        webpki_algs::RSA_PKCS1_3072_8192_SHA384,
+    ],
+    mapping: &[
+        // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
+        (
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            &[webpki_algs::ECDSA_P384_SHA384, webpki_algs::ECDSA_P256_SHA384],
+        ),
+        (
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            &[webpki_algs::ECDSA_P256_SHA256, webpki_algs::ECDSA_P384_SHA256],
+        ),
+        (SignatureScheme::ED25519, &[webpki_algs::ED25519]),
+        (SignatureScheme::RSA_PSS_SHA512, &[webpki_algs::RSA_PSS_2048_8192_SHA512_LEGACY_KEY]),
+        (SignatureScheme::RSA_PSS_SHA384, &[webpki_algs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY]),
+        (SignatureScheme::RSA_PSS_SHA256, &[webpki_algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY]),
+        (SignatureScheme::RSA_PKCS1_SHA512, &[webpki_algs::RSA_PKCS1_2048_8192_SHA512]),
+        (SignatureScheme::RSA_PKCS1_SHA384, &[webpki_algs::RSA_PKCS1_2048_8192_SHA384]),
+        (SignatureScheme::RSA_PKCS1_SHA256, &[webpki_algs::RSA_PKCS1_2048_8192_SHA256]),
+    ],
+};
