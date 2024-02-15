@@ -1,6 +1,6 @@
 use locales::t;
 use modals::Modals;
-use rustls::client::WebPkiVerifier;
+use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::ServerCertVerified;
 use rustls::{CertificateError, Error, RootCertStore};
 use xous_names::XousNames;
@@ -22,7 +22,7 @@ impl rustls::client::ServerCertVerifier for StifledCertificateVerification {
         ocsp: &[u8],
         now: std::time::SystemTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
-        let rustls_default_verifier = WebPkiVerifier::new(self.roots.clone(), None);
+        let rustls_default_verifier = WebPkiServerVerifier::new(self.roots.clone(), None);
         match rustls_default_verifier.verify_server_cert(
             end_entity,
             intermediates,
