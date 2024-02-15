@@ -2,7 +2,7 @@ use locales::t;
 use modals::Modals;
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::ServerCertVerified;
-use rustls::pki_types::{ServerName, UnixTime};
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{CertificateError, Error, RootCertStore};
 use xous_names::XousNames;
 
@@ -16,8 +16,8 @@ impl rustls::client::ServerCertVerifier for StifledCertificateVerification {
     /// return ServerCertVerified::assertion()
     fn verify_server_cert(
         &self,
-        end_entity: &rustls::Certificate,
-        intermediates: &[rustls::Certificate],
+        end_entity: &CertificateDer,
+        intermediates: &[CertificateDer],
         server_name: &ServerName,
         scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp: &[u8],

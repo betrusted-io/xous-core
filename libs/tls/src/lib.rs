@@ -15,7 +15,8 @@ use rkyv::{
     ser::{serializers::WriteSerializer, Serializer},
     Deserialize,
 };
-use rustls::{Certificate, ClientConfig, ClientConnection, RootCertStore};
+use rustls::{ClientConfig, ClientConnection, RootCertStore};
+use rustls::pki_types::CertificateDer;
 use sha2::Digest;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use xous_names::XousNames;
@@ -42,16 +43,14 @@ impl Tls {
     ///  # Returns
     ///
     /// a count of trusted certificates
-    pub fn trust_modal(&self, certificates: Vec<Certificate>) -> usize {
+    pub fn trust_modal(&self, certificates: Vec<CertificateDer>) -> usize {
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
 
         let certificates: Vec<(String, X509Certificate)> = certificates
             .iter()
             .map(|cert| {
-                let mut hasher = sha2::Sha256::new();
-                hasher.update(&cert);
-                (format!("{:X}", hasher.finalize()), X509Certificate::from_der(cert.as_ref()))
+                X509Certificate::from_der(cert)
             })
             .filter(|(_fingerprint, result)| result.is_ok())
             .map(|(fingerprint, result)| (fingerprint, result.unwrap().1))
@@ -239,8 +238,8 @@ impl Tls {
     /// # Returns
     ///
     /// true if the certificate is saved in the TLS_TRUSTED_DICT in the pddb
-    pub fn is_trusted_cert(&self, cert: Certificate) -> bool {
-        match X509Certificate::from_der(cert.as_ref()) {
+    pub fn is_trusted_cert(&self, cert: CertificateDer) -> bool {
+        match X509Certificate::from_der(cert) {
             Ok(result) => self.is_trusted_x509(&result.1),
             Err(e) => {
                 log::warn!("failed to get x509 from Certificate: {e}");
@@ -307,7 +306,7 @@ impl Tls {
     /// # Returns
     ///
     /// The TLS chain of trust for the host
-    pub fn probe(&self, host: &str) -> Result<Vec<Certificate>, Error> {
+    pub fn probe(&self, host: &str) -> Result<Vec<CertificateDer>, Error> {
         log::info!("starting TLS probe");
         // Attempt to open the tls connection with an empty root_store
         let root_store = rustls::RootCertStore::empty();
