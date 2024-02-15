@@ -168,8 +168,8 @@ fn rm_der_header(der: &[u8]) -> Result<Vec<u8>, Error> {
     }
 }
 
-impl<'a> From<&webpki::TrustAnchor<'a>> for RustlsOwnedTrustAnchor {
-    fn from(ta: &webpki::TrustAnchor) -> Self {
+impl<'a> From<&rustls::pki_types::TrustAnchor<'a>> for RustlsOwnedTrustAnchor {
+    fn from(ta: &rustls::pki_types::TrustAnchor) -> Self {
         Self::from_subject_spki_name_constraints(ta.subject, ta.spki, ta.name_constraints)
     }
 }
