@@ -1,7 +1,7 @@
 use locales::t;
 use modals::Modals;
 use rustls::client::WebPkiServerVerifier;
-use rustls::client::danger::ServerCertVerified;
+use rustls::client::danger::{ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{CertificateError, Error, RootCertStore};
 use xous_names::XousNames;
@@ -10,7 +10,7 @@ pub struct StifledCertificateVerification {
     pub roots: RootCertStore,
 }
 
-impl rustls::client::ServerCertVerifier for StifledCertificateVerification {
+impl ServerCertVerifier for StifledCertificateVerification {
     /// Will verify the certificate with the default rustls WebPkiVerifier,
     /// BUT specifically overrides a `CertificateError::UnknownIssuer` and
     /// return ServerCertVerified::assertion()
