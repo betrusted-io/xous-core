@@ -10,13 +10,12 @@ use std::sync::Arc;
 
 use locales::t;
 use modals::Modals;
+use ota::OwnedTrustAnchor;
 use rkyv::{
     de::deserializers::AllocDeserializer,
     ser::{serializers::WriteSerializer, Serializer},
     Deserialize,
 };
-use ota::OwnedTrustAnchor;
-use rustls::crypto::ring;
 use rustls::pki_types::{CertificateDer, TrustAnchor};
 use rustls::{ClientConfig, ClientConnection, RootCertStore};
 use x509_parser::prelude::{parse_x509_certificate, FromDer, X509Certificate};
@@ -304,19 +303,14 @@ impl Tls {
         log::info!("starting TLS probe");
         match host.to_owned().try_into() {
             Ok(server_name) => {
-                match rustls::ClientConfig::builder_with_provider(Arc::new(ring::default_provider()))
-                    .with_safe_default_protocol_versions()
-                {
-                    Ok(config_builder) => {
-                        // Stifle the default rustls certificate verification's complaint about an
-                        // unknown/untrusted CA root certificate so that we get to see the certificate chain
-                        let config = config_builder
-                            .dangerous()
-                            .with_custom_certificate_verifier(Arc::new(
-                                danger::StifledCertificateVerification::new(),
-                            ))
-                            .with_no_client_auth();
-                        let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
+                // Stifle the default rustls certificate verification's complaint about an
+                // unknown/untrusted CA root certificate so that we get to see the certificate chain
+                let config = rustls::ClientConfig::builder()
+                    .dangerous()
+                    .with_custom_certificate_verifier(Arc::new(danger::StifledCertificateVerification::new()))
+                    .with_no_client_auth();
+                match rustls::ClientConnection::new(Arc::new(config), server_name) {
+                    Ok(mut conn) => {
                         log::info!("connect TCPstream to {}", host);
                         match TcpStream::connect((host, 443)) {
                             Ok(mut sock) => match conn.complete_io(&mut sock) {
@@ -336,7 +330,7 @@ impl Tls {
                         }
                     }
                     Err(e) => {
-                        log::warn!("{e}");
+                        log::warn!("failed to create ClientConnection: {e}");
                         Err(Error::from(ErrorKind::InvalidInput))
                     }
                 }
