@@ -1,6 +1,6 @@
 pub mod cmd;
 mod danger;
-pub mod rota;
+pub mod ota;
 pub mod xtls;
 
 use std::convert::{Into, TryFrom, TryInto};
@@ -15,13 +15,12 @@ use rkyv::{
     ser::{serializers::WriteSerializer, Serializer},
     Deserialize,
 };
+use ota::OwnedTrustAnchor;
 use rustls::{ClientConfig, ClientConnection, RootCertStore};
 use rustls::pki_types::CertificateDer;
 use sha2::Digest;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use xous_names::XousNames;
-
-use crate::rota::RustlsOwnedTrustAnchor;
 
 /// PDDB Dict for tls trusted certificates keys
 const TLS_TRUSTED_DICT: &str = "tls.trusted";
@@ -71,15 +70,12 @@ impl Tls {
                     .unwrap()
                     .iter()
                     .map(|i| &certificates[*i].1)
-                    .map(|x509| RustlsOwnedTrustAnchor::from(x509))
-                    .for_each(|rota| {
-                        self.save_rota(&rota).unwrap_or_else(|e| {
+                    .map(|x509| OwnedTrustAnchor::from(x509))
+                    .for_each(|ta| {
+                        self.save_ta(&ta).unwrap_or_else(|e| {
                             log::warn!("failed to save cert: {e}");
                             modals
-                                .show_notification(
-                                    format!("failed to save:\n{}\n{e}", &rota.subject()).as_str(),
-                                    None,
-                                )
+                                .show_notification(format!("failed to save:\n{:?}\n{e}", &ta).as_str(), None)
                                 .expect("modal failed");
                         });
                     });
@@ -137,17 +133,10 @@ impl Tls {
     /// # Arguments
     ///
     /// * `ta` - a trusted trust-anchor
-    pub fn save_rota(&self, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
+    pub fn save_ta(&self, ta: &OwnedTrustAnchor) -> Result<(), Error> {
         let key = ta.pddb_key();
-        match self.pddb.get(
-            TLS_TRUSTED_DICT,
-            &key,
-            None,
-            true,
-            true,
-            Some(rota::MAX_ROTA_BYTES),
-            None::<fn()>,
-        ) {
+        match self.pddb.get(TLS_TRUSTED_DICT, &key, None, true, true, Some(ota::MAX_OTA_BYTES), None::<fn()>)
+        {
             Ok(mut pddb_key) => {
                 let mut buf = Vec::<u8>::new();
                 // reserve 2 bytes to hold a u16 (see below)
@@ -185,17 +174,17 @@ impl Tls {
     /// # Arguments
     ///
     /// * `key` - pddb key holding the trust-anchor
-    pub fn get_rota(&self, key: &str) -> Option<RustlsOwnedTrustAnchor> {
+    pub fn get_ota(&self, key: &str) -> Option<OwnedTrustAnchor> {
         match self.pddb.get(TLS_TRUSTED_DICT, key, None, false, false, None, None::<fn()>) {
             Ok(mut pddb_key) => {
-                let mut bytes = [0u8; rota::MAX_ROTA_BYTES];
+                let mut bytes = [0u8; ota::MAX_OTA_BYTES];
                 match pddb_key.read(&mut bytes) {
                     Ok(_) => {
                         // extract pos u16 from the first 2 bytes
                         let pos: u16 = u16::from_be_bytes([bytes[0], bytes[1]]);
                         let pos: usize = pos.into();
                         // deserialize the trust-anchor
-                        let archive = unsafe { rkyv::archived_value::<RustlsOwnedTrustAnchor>(&bytes, pos) };
+                        let archive = unsafe { rkyv::archived_value::<OwnedTrustAnchor>(&bytes, pos) };
                         let ta = archive.deserialize(&mut AllocDeserializer {}).ok();
                         log::info!("get trust anchor {}", key);
                         log::trace!("get trust anchor'{}' = '{:?}'", key, &ta);
@@ -215,16 +204,16 @@ impl Tls {
     }
 
     /// Returns a Vec of all trusted trust-anchors
-    pub fn trusted(&self) -> Vec<RustlsOwnedTrustAnchor> {
+    pub fn trusted(&self) -> Vec<OwnedTrustAnchor> {
         match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
             Ok(list) => list
                 .iter()
-                .map(|key| self.get_rota(&key))
-                .filter_map(|rota| rota)
-                .collect::<Vec<RustlsOwnedTrustAnchor>>(),
+                .map(|key| self.get_ota(&key))
+                .filter_map(|ota| ota)
+                .collect::<Vec<OwnedTrustAnchor>>(),
             Err(e) => {
                 log::warn!("failed to get iter over trusted: {e}");
-                Vec::<RustlsOwnedTrustAnchor>::new()
+                Vec::<OwnedTrustAnchor>::new()
             }
         }
     }
@@ -258,7 +247,7 @@ impl Tls {
     ///
     /// true if the certificate is saved in the TLS_TRUSTED_DICT in the pddb
     pub fn is_trusted_x509(&self, x509: &X509Certificate) -> bool {
-        let ta = RustlsOwnedTrustAnchor::from(x509);
+        let ta = OwnedTrustAnchor::from(x509);
         let key = ta.pddb_key();
         match self.pddb.get(TLS_TRUSTED_DICT, &key, None, false, false, None, None::<fn()>) {
             Ok(_) => {
@@ -275,17 +264,19 @@ impl Tls {
     /// Returns a RootCertStore containing all trusted trust-anchors
     pub fn root_store(&self) -> RootCertStore {
         let mut root_store = RootCertStore::empty();
-        match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
-            Ok(list) => {
-                let rota = list
-                    .iter()
-                    .map(|key| self.get_rota(&key))
-                    .filter_map(|rota| rota)
-                    .map(|t| Into::<rustls::OwnedTrustAnchor>::into(t));
-                root_store.add_trust_anchors(rota);
+        let trusted = match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
+            Ok(list) => list
+                .iter()
+                .map(|key| self.get_ota(&key))
+                .filter_map(|ota| ota)
+                .map(|ota| ota.into())
+                .collect::<Vec<TrustAnchor>>(),
+            Err(e) => {
+                log::warn!("failed to get iter over trusted: {e}");
+                Vec::<TrustAnchor>::new()
             }
-            Err(e) => log::warn!("failed to get iter over trusted: {e}"),
-        }
+        };
+        root_store.extend(trusted);
         root_store
     }
 
