@@ -16,10 +16,10 @@ use rkyv::{
     Deserialize,
 };
 use ota::OwnedTrustAnchor;
+use rustls::crypto::ring;
+use rustls::pki_types::{CertificateDer, TrustAnchor};
 use rustls::{ClientConfig, ClientConnection, RootCertStore};
-use rustls::pki_types::CertificateDer;
-use sha2::Digest;
-use x509_parser::prelude::{FromDer, X509Certificate};
+use x509_parser::prelude::{parse_x509_certificate, FromDer, X509Certificate};
 use xous_names::XousNames;
 
 /// PDDB Dict for tls trusted certificates keys
@@ -46,19 +46,20 @@ impl Tls {
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
 
-        let certificates: Vec<(String, X509Certificate)> = certificates
+        let certificates: Vec<(&[u8], X509Certificate)> = certificates
             .iter()
-            .map(|cert| {
-                X509Certificate::from_der(cert)
-            })
-            .filter(|(_fingerprint, result)| result.is_ok())
-            .map(|(fingerprint, result)| (fingerprint, result.unwrap().1))
+            .map(|cert| X509Certificate::from_der(cert))
+            .filter(|result| result.is_ok())
+            .map(|result| result.unwrap())
             .filter(|(_fingerprint, x509)| x509.is_ca())
             .collect();
 
         let chain: Vec<String> = certificates
             .iter()
-            .map(|(fingerprint, x509)| format!("🏛 {}\n{}", &x509.subject(), open_hex(fingerprint),))
+            .map(|(fingerprint, x509)| {
+                let fp = std::str::from_utf8(*fingerprint).unwrap_or("");
+                format!("🏛 {}\n{}", &x509.subject(), open_hex(fp))
+            })
             .collect();
         let chain: Vec<&str> = chain.iter().map(AsRef::as_ref).collect();
         modals.add_list(chain).expect("couldn't build checkbox list");
@@ -228,7 +229,7 @@ impl Tls {
     ///
     /// true if the certificate is saved in the TLS_TRUSTED_DICT in the pddb
     pub fn is_trusted_cert(&self, cert: CertificateDer) -> bool {
-        match X509Certificate::from_der(cert) {
+        match parse_x509_certificate(cert.as_ref()) {
             Ok(result) => self.is_trusted_x509(&result.1),
             Err(e) => {
                 log::warn!("failed to get x509 from Certificate: {e}");
@@ -297,36 +298,44 @@ impl Tls {
     /// # Returns
     ///
     /// The TLS chain of trust for the host
-    pub fn probe(&self, host: &str) -> Result<Vec<CertificateDer>, Error> {
+    pub fn probe(&self, host: &str) -> Result<Option<Vec<CertificateDer>>, Error> {
         log::info!("starting TLS probe");
-        // Attempt to open the tls connection with an empty root_store
-        let root_store = rustls::RootCertStore::empty();
-        // Stifle the default rustls certificate verification's complaint about an
-        // unknown/untrusted CA root certificate so that we get to see the certificate chain
-        let stifled_verifier = Arc::new(danger::StifledCertificateVerification { roots: root_store });
-        let config = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_custom_certificate_verifier(stifled_verifier)
-            .with_no_client_auth();
-        match host.try_into() {
+        match host.to_owned().try_into() {
             Ok(server_name) => {
-                let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-                log::info!("connect TCPstream to {}", host);
-                match TcpStream::connect((host, 443)) {
-                    Ok(mut sock) => {
-                        match conn.complete_io(&mut sock) {
-                            Ok(_) => log::info!("handshake complete"),
+                match rustls::ClientConfig::builder_with_provider(Arc::new(ring::default_provider()))
+                    .with_safe_default_protocol_versions()
+                {
+                    Ok(config_builder) => {
+                        // Stifle the default rustls certificate verification's complaint about an
+                        // unknown/untrusted CA root certificate so that we get to see the certificate chain
+                        let config = config_builder
+                            .dangerous()
+                            .with_custom_certificate_verifier(Arc::new(
+                                danger::StifledCertificateVerification::new(),
+                            ))
+                            .with_no_client_auth();
+                        let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
+                        log::info!("connect TCPstream to {}", host);
+                        match TcpStream::connect((host, 443)) {
+                            Ok(mut sock) => match conn.complete_io(&mut sock) {
+                                Ok(_) => log::info!("handshake complete"),
+                                Err(e) => log::warn!("{e}"),
+                            },
                             Err(e) => log::warn!("{e}"),
                         }
                         conn.send_close_notify();
                         match conn.peer_certificates() {
-                            Some(certificates) => Ok(certificates.to_vec()),
-                            None => Ok(vec![]),
+                            Some(certificates) => {
+                                let cert_owned: Vec<CertificateDer<'static>> =
+                                    certificates.iter().map(|cert| cert.clone().into_owned()).collect();
+                                Ok(Some(cert_owned))
+                            }
+                            None => Ok(None),
                         }
                     }
                     Err(e) => {
                         log::warn!("{e}");
-                        Err(e)
+                        Err(Error::from(ErrorKind::InvalidInput))
                     }
                 }
             }
@@ -387,10 +396,7 @@ impl Tls {
     }
 
     pub fn client_config(&self) -> ClientConfig {
-        rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(self.root_store())
-            .with_no_client_auth()
+        rustls::ClientConfig::builder().with_root_certificates(self.root_store()).with_no_client_auth()
     }
 
     /// Construct a tls-stream on the tcp-stream provided
