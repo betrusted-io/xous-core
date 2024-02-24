@@ -30,7 +30,10 @@ impl OwnedTrustAnchor {
     pub fn pddb_key(&self) -> String {
         let subject = match std::str::from_utf8(&self.subject) {
             Ok(subject) => subject,
-            Err(e) => "",
+            Err(e) => {
+                log::warn!("failed to extract ota.subject: {e}");
+                ""
+            }
         };
         let begin = match subject.find("CN=") {
             Some(begin) => Some(begin),

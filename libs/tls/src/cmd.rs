@@ -35,8 +35,8 @@ pub fn shellchat<'a>(mut tokens: impl Iterator<Item = &'a str>) -> Result<Option
             log::set_max_level(log::LevelFilter::Info);
             log::info!("starting TLS trusted listing");
             let tls = Tls::new();
-            for rota in tls.trusted() {
-                write!(ret, "🏛 {}\n", rota.subject()).ok();
+            for ota in tls.trusted() {
+                write!(ret, "🏛 {}\n", ota).ok();
             }
             log::info!("finished TLS trusted listing");
         }
@@ -94,7 +94,6 @@ pub fn shellchat<'a>(mut tokens: impl Iterator<Item = &'a str>) -> Result<Option
             log::info!("build TLS client config");
             let tls = Tls::new();
             let config = rustls::ClientConfig::builder()
-                .with_safe_defaults()
                 .with_root_certificates(tls.root_store())
                 .with_no_client_auth();
             let target = match tokens.next() {

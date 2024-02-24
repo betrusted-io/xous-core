@@ -30,7 +30,9 @@ pub struct Tls {
 }
 
 impl Tls {
-    pub fn new() -> Tls { Tls { pddb: pddb::Pddb::new() } }
+    pub fn new() -> Tls {
+        Tls { pddb: pddb::Pddb::new() }
+    }
 
     /// Presents a modal to the user to select trusted tls certificates
     /// and saves the selected certificates to the pddb
@@ -360,7 +362,10 @@ impl Tls {
     /// the number of trusted Certificates offered by the host
     pub fn inspect(&self, host: &str) -> Result<usize, Error> {
         match self.probe(host) {
-            Ok(certs) => Ok(self.trust_modal(certs)),
+            Ok(certs) => match certs {
+                Some(certs) => Ok(self.trust_modal(certs.to_vec())),
+                None => Ok(0),
+            },
             Err(e) => {
                 log::warn!("failed to probe {host}: {e}");
                 Ok(0)
@@ -384,9 +389,12 @@ impl Tls {
     /// true if the user trusts at least one of the Certificates offered by the host.
     pub fn accessible(&self, host: &str, inspect: bool) -> bool {
         match self.probe(host) {
-            Ok(certs) => match certs.iter().find(|&cert| self.is_trusted_cert(cert.clone())) {
-                Some(_) => true,
-                None => inspect && (self.trust_modal(certs) > 0),
+            Ok(certs) => match certs {
+                Some(certs) => match certs.iter().find(|&cert| self.is_trusted_cert(cert.clone())) {
+                    Some(_) => true,
+                    None => inspect && (self.trust_modal(certs.to_vec()) > 0),
+                },
+                None => false,
             },
             Err(e) => {
                 log::warn!("failed to probe {host}: {e}");
