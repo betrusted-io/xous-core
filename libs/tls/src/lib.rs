@@ -414,12 +414,17 @@ impl Tls {
         host: &str,
         sock: TcpStream,
     ) -> Result<rustls::StreamOwned<ClientConnection, TcpStream>, Error> {
-        match rustls::ClientConnection::new(
-            Arc::new(self.client_config()),
-            host.try_into().expect("failed url host_str"),
-        ) {
-            Ok(conn) => Ok(rustls::StreamOwned::new(conn, sock)),
-            Err(_) => Err(Error::new(ErrorKind::Other, "failed to configure client connection")),
+        match host.to_owned().try_into() {
+            Ok(server_name) => {
+                match rustls::ClientConnection::new(Arc::new(self.client_config()), server_name) {
+                    Ok(conn) => Ok(rustls::StreamOwned::new(conn, sock)),
+                    Err(_) => Err(Error::new(ErrorKind::Other, "failed to configure client connection")),
+                }
+            }
+            Err(e) => {
+                log::warn!("failed to create sever_name from {host}: {e}");
+                Err(Error::from(ErrorKind::InvalidInput))
+            }
         }
     }
 }
