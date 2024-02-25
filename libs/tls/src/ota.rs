@@ -3,7 +3,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use rustls::pki_types::{Der, TrustAnchor};
 use std::cmp::min;
 use std::fmt;
-use x509_parser::prelude::X509Certificate;
+use x509_parser::prelude::{FromDer, X509Certificate};
 
 pub const MAX_OTA_BYTES: usize = 1028;
 
@@ -66,11 +66,22 @@ impl OwnedTrustAnchor {
         const KEY_NAME_LEN: usize = 127 - 8 - 8 - 8 - 4 - 4;
         pddb_key[..min(pddb_key.len(), KEY_NAME_LEN - 1)].to_string()
     }
+
+    // decoded subject
+    pub fn subject(&self) -> String {
+        match x509_parser::x509::X509Name::from_der(&self.subject) {
+            Ok((_, decoded)) => decoded.to_string(),
+            Err(e) => {
+                log::warn!("{:?}", e);
+                "der decode failed".to_string()
+            }
+        }
+    }
 }
 
 impl fmt::Display for OwnedTrustAnchor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", std::str::from_utf8(&self.subject).unwrap_or("failed convert from_utf8"))
+        write!(f, "{}", self.subject())
     }
 }
 
