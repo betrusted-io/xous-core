@@ -3,7 +3,7 @@ use modals::Modals;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::WebPkiServerVerifier;
 use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
-use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::pki_types::{CertificateDer, Der, ServerName, TrustAnchor, UnixTime};
 use rustls::{CertificateError, DigitallySignedStruct, Error, RootCertStore, SignatureScheme};
 use std::sync::Arc;
 use webpki::ring as webpki_algs;
@@ -17,7 +17,16 @@ pub struct StifledCertificateVerification {
 
 impl StifledCertificateVerification {
     pub fn new() -> Self {
-        Self { roots: rustls::RootCertStore::empty(), supported: SUPPORTED_SIG_ALGS }
+        let mut root_cert_store = rustls::RootCertStore::empty();
+        // rustls::ServerCertVerifierBuilder::build() returns a 
+        // `CertVerifierBuilderError` if no trust anchors have been provided.
+        let single_bogus_ta_to_avoid_error_on_empty_roots = TrustAnchor {
+            subject: Der::from_slice(b"bogus subject"),
+            subject_public_key_info: Der::from_slice(b"bogus subject_public_key_info"),
+            name_constraints: None,
+        };
+        root_cert_store.roots.push(single_bogus_ta_to_avoid_error_on_empty_roots);
+        Self { roots: root_cert_store, supported: SUPPORTED_SIG_ALGS }
     }
 }
 
