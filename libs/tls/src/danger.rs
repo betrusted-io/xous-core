@@ -42,49 +42,51 @@ impl ServerCertVerifier for StifledCertificateVerification {
         ocsp: &[u8],
         now: UnixTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
-        if let Ok(rustls_default_verifier) =
-            WebPkiServerVerifier::builder(Arc::new(self.roots.clone())).build()
-        {
-            match rustls_default_verifier.verify_server_cert(
-                end_entity,
-                intermediates,
-                server_name,
-                ocsp,
-                now,
-            ) {
-                Ok(ok) => Ok(ok),
-                Err(Error::InvalidCertificate(e)) => {
-                    let xns = XousNames::new().unwrap();
-                    let modals = Modals::new(&xns).unwrap();
-                    match e {
-                        CertificateError::UnknownIssuer => Ok(ServerCertVerified::assertion()),
-                        CertificateError::NotValidYet => {
-                            modals
-                                .show_notification(t!("tls.probe_help_not_valid_yet", locales::LANG), None)
-                                .expect("modal failed");
-                            Err(Error::InvalidCertificate(e))
-                        }
-                        _ => {
-                            modals
-                                .show_notification(
-                                    format!(
-                                        "{}\n{:?}",
-                                        t!("tls.probe_invalid_certificate", locales::LANG),
-                                        e
+        match WebPkiServerVerifier::builder(Arc::new(self.roots.clone())).build() {
+            Ok(rustls_default_verifier) => {
+                match rustls_default_verifier.verify_server_cert(
+                    end_entity,
+                    intermediates,
+                    server_name,
+                    ocsp,
+                    now,
+                ) {
+                    Ok(ok) => Ok(ok),
+                    Err(Error::InvalidCertificate(e)) => {
+                        let xns = XousNames::new().unwrap();
+                        let modals = Modals::new(&xns).unwrap();
+                        match e {
+                            CertificateError::UnknownIssuer => Ok(ServerCertVerified::assertion()),
+                            CertificateError::NotValidYet => {
+                                modals
+                                    .show_notification(t!("tls.probe_help_not_valid_yet", locales::LANG), None)
+                                    .expect("modal failed");
+                                Err(Error::InvalidCertificate(e))
+                            }
+                            _ => {
+                                modals
+                                    .show_notification(
+                                        format!(
+                                            "{}\n{:?}",
+                                            t!("tls.probe_invalid_certificate", locales::LANG),
+                                            e
+                                        )
+                                        .as_str(),
+                                        None,
                                     )
-                                    .as_str(),
-                                    None,
-                                )
-                                .expect("modal failed");
+                                    .expect("modal failed");
 
-                            Err(Error::InvalidCertificate(e))
+                                Err(Error::InvalidCertificate(e))
+                            }
                         }
                     }
+                    Err(e) => Err(e),
                 }
-                Err(e) => Err(e),
+            },
+            Err(e) => {
+                log::warn!("failed to build WebPkiServerVerifier: {e}");
+                Err(Error::General("failed to build WebPkiServerVerifier".to_string()))
             }
-        } else {
-            Err(Error::General("failed to build WebPkiServerVerifier".to_string()))
         }
     }
 
