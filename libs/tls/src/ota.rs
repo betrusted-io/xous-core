@@ -108,13 +108,9 @@ impl<'a> From<&X509Certificate<'a>> for OwnedTrustAnchor {
 impl<'a> Into<TrustAnchor<'a>> for OwnedTrustAnchor {
     fn into(self) -> TrustAnchor<'a> {
         TrustAnchor {
-            subject: Der::from_slice(self.subject.as_slice()),
-            subject_public_key_info: Der::from_slice(self.spki.as_slice()),
-            name_constraints: if self.name_constraints.is_some() {
-                Some(Der::from_slice(self.name_constraints.as_deref().unwrap()))
-            } else {
-                None
-            },
+            subject: Der::from(self.subject),
+            subject_public_key_info: Der::from(self.spki),
+            name_constraints: self.name_constraints.map_or(None, |nc| Some(Der::from(nc))),
         }
         .to_owned()
     }
