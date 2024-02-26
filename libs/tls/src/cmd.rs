@@ -39,18 +39,16 @@ pub fn shellchat<'a>(mut tokens: impl Iterator<Item = &'a str>) -> Result<Option
         // save/trust all Root CA's in webpki-roots en-masse
         #[cfg(feature = "rootCA")]
         Some("mozilla") => {
-            let otas: Vec<crate::OwnedTrustAnchor> =
-                webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| (*ta).clone().into()).collect();
-            let mut count: u32 = otas.len().try_into().unwrap();
             let xns = XousNames::new().unwrap();
             let modals = Modals::new(&xns).unwrap();
+            let mut count: u32 = webpki_roots::TLS_SERVER_ROOTS.len().try_into().unwrap();
             modals
                 .start_progress(t!("tls.mozilla_progress", locales::LANG), 0, count, 0)
                 .expect("no progress");
             count = 0;
             let tls = Tls::new();
-            for rota in otas {
-                tls.save_ta(&rota).unwrap_or_else(|e| log::warn!("{e}"));
+            for ta in webpki_roots::TLS_SERVER_ROOTS {
+                tls.save_ta(&(*ta).clone().into()).unwrap_or_else(|e| log::warn!("{e}"));
                 modals.update_progress(count).expect("no progress");
                 count += 1;
             }

@@ -106,6 +106,5 @@ impl<'a> Into<TrustAnchor<'a>> for OwnedTrustAnchor {
             subject_public_key_info: Der::from(self.spki),
             name_constraints: self.name_constraints.map_or(None, |nc| Some(Der::from(nc))),
         }
-        .to_owned()
     }
 }
