@@ -95,43 +95,52 @@ pub fn shellchat<'a>(mut tokens: impl Iterator<Item = &'a str>) -> Result<Option
                     write!(ret, "{}", t!("tls.test_success_tcp", locales::LANG)).ok();
                     match ServerName::try_from(target.to_owned()) {
                         Ok(server_name) => {
-                            let mut conn =
-                                rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-                            let mut tls = rustls::Stream::new(&mut conn, &mut sock);
-                            log::info!("create http headers and write to server");
-                            let msg = format!(
-                                "GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
-                                target
-                            );
-                            match tls.write_all(msg.as_bytes()) {
-                                Ok(()) => {
-                                    log::info!("tls accepted GET");
-                                    write!(ret, "{}", t!("tls.test_success_get", locales::LANG)).ok();
-                                    let mut plaintext = Vec::new();
-                                    log::info!("read TLS response");
-                                    match tls.read_to_end(&mut plaintext) {
-                                        Ok(n) => {
-                                            log::info!("tls received {} bytes", n);
-                                            write!(
-                                                ret,
-                                                "{} {}\n",
-                                                t!("tls.test_success_bytes", locales::LANG),
-                                                n
-                                            )
-                                            .ok();
-                                            log::info!("{}", from_utf8(&plaintext).unwrap_or("utf-error"));
+                            match rustls::ClientConnection::new(Arc::new(config), server_name) {
+                                Ok(mut conn) => {
+                                    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+                                    log::info!("create http headers and write to server");
+                                    let msg = format!(
+                                        "GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
+                                        target
+                                    );
+                                    match tls.write_all(msg.as_bytes()) {
+                                        Ok(()) => {
+                                            log::info!("tls accepted GET");
+                                            write!(ret, "{}", t!("tls.test_success_get", locales::LANG)).ok();
+                                            let mut plaintext = Vec::new();
+                                            log::info!("read TLS response");
+                                            match tls.read_to_end(&mut plaintext) {
+                                                Ok(n) => {
+                                                    log::info!("tls received {} bytes", n);
+                                                    write!(
+                                                        ret,
+                                                        "{} {}\n",
+                                                        t!("tls.test_success_bytes", locales::LANG),
+                                                        n
+                                                    )
+                                                    .ok();
+                                                    log::info!(
+                                                        "{}",
+                                                        from_utf8(&plaintext).unwrap_or("utf-error")
+                                                    );
+                                                }
+                                                Err(e) => {
+                                                    log::warn!("failed to read tls response: {e}");
+                                                    write!(ret, "{e}\n").ok();
+                                                }
+                                            };
                                         }
                                         Err(e) => {
-                                            log::warn!("failed to read tls response: {e}");
+                                            log::warn!("failed to GET on tls connection: {e}");
                                             write!(ret, "{e}\n").ok();
                                         }
                                     };
                                 }
                                 Err(e) => {
-                                    log::warn!("failed to GET on tls connection: {e}");
+                                    log::warn!("failed to construct ClientConnection: {e}");
                                     write!(ret, "{e}\n").ok();
                                 }
-                            };
+                            }
                         }
                         Err(e) => {
                             log::warn!("failed to convert target into a valid ServerName: {e}");
