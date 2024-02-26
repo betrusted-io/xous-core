@@ -1,3 +1,5 @@
+use crate::Tls;
+use locales::t;
 use rustls::pki_types::ServerName;
 use std::convert::TryFrom;
 use std::io::Read;
@@ -5,14 +7,8 @@ use std::io::Write;
 use std::net::TcpStream;
 use std::str::from_utf8;
 use std::sync::Arc;
-
-use locales::t;
 #[cfg(feature = "rootCA")]
-use modals::Modals;
-#[cfg(feature = "rootCA")]
-use xous_names::XousNames;
-
-use crate::Tls;
+use {modals::Modals, std::convert::TryInto, xous_names::XousNames};
 
 pub fn shellchat<'a>(mut tokens: impl Iterator<Item = &'a str>) -> Result<Option<String>, xous::Error> {
     use core::fmt::Write;
@@ -43,18 +39,9 @@ pub fn shellchat<'a>(mut tokens: impl Iterator<Item = &'a str>) -> Result<Option
         // save/trust all Root CA's in webpki-roots en-masse
         #[cfg(feature = "rootCA")]
         Some("mozilla") => {
-            let rotas: Vec<crate::RustlsOwnedTrustAnchor> = webpki_roots::TLS_SERVER_ROOTS
-                .0
-                .iter()
-                .map(|ta| {
-                    crate::RustlsOwnedTrustAnchor::from_subject_spki_name_constraints(
-                        ta.subject,
-                        ta.spki,
-                        ta.name_constraints,
-                    )
-                })
-                .collect();
-            let mut count: u32 = rotas.len().try_into().unwrap();
+            let otas: Vec<crate::OwnedTrustAnchor> =
+                webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| (*ta).clone().into()).collect();
+            let mut count: u32 = otas.len().try_into().unwrap();
             let xns = XousNames::new().unwrap();
             let modals = Modals::new(&xns).unwrap();
             modals
@@ -62,8 +49,8 @@ pub fn shellchat<'a>(mut tokens: impl Iterator<Item = &'a str>) -> Result<Option
                 .expect("no progress");
             count = 0;
             let tls = Tls::new();
-            for rota in rotas {
-                tls.save_rota(&rota).unwrap_or_else(|e| log::warn!("{e}"));
+            for rota in otas {
+                tls.save_ta(&rota).unwrap_or_else(|e| log::warn!("{e}"));
                 modals.update_progress(count).expect("no progress");
                 count += 1;
             }
