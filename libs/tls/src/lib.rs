@@ -136,37 +136,42 @@ impl Tls {
     ///
     /// * `ta` - a trusted trust-anchor
     pub fn save_ta(&self, ta: &OwnedTrustAnchor) -> Result<(), Error> {
-        let key = ta.pddb_key();
-        match self.pddb.get(TLS_TRUSTED_DICT, &key, None, true, true, Some(ota::MAX_OTA_BYTES), None::<fn()>)
-        {
-            Ok(mut pddb_key) => {
-                let mut buf = Vec::<u8>::new();
-                // reserve 2 bytes to hold a u16 (see below)
-                let reserved = 2;
-                buf.push(0u8);
-                buf.push(0u8);
+        match ta.pddb_key() {
+            Ok(key) => {
+                // log::warn!("AAA {:?}", ta);
+                match self.pddb.get(TLS_TRUSTED_DICT, &key, None, true, true, Some(ota::MAX_OTA_BYTES), None::<fn()>)
+                {
+                    Ok(mut pddb_key) => {
+                        let mut buf = Vec::<u8>::new();
+                        // reserve 2 bytes to hold a u16 (see below)
+                        let reserved = 2;
+                        buf.push(0u8);
+                        buf.push(0u8);
 
-                // serialize the trust-anchor
-                let mut serializer = WriteSerializer::with_pos(buf, reserved);
-                let pos = serializer.serialize_value(ta).unwrap();
-                let mut bytes = serializer.into_inner();
+                        // serialize the trust-anchor
+                        let mut serializer = WriteSerializer::with_pos(buf, reserved);
+                        let pos = serializer.serialize_value(ta).unwrap();
+                        let mut bytes = serializer.into_inner();
 
-                // copy pop u16 into the first 2 bytes to enable the rkyv archive to be deserialised
-                let pos: u16 = u16::try_from(pos).expect("data > u16");
-                let pos_bytes = pos.to_be_bytes();
-                bytes[0] = pos_bytes[0];
-                bytes[1] = pos_bytes[1];
-                match pddb_key.write(&bytes) {
-                    Ok(len) => {
-                        self.pddb.sync().ok();
-                        log::info!("Wrote {} bytes to {}:{}", len, TLS_TRUSTED_DICT, key);
+                        // copy pop u16 into the first 2 bytes to enable the rkyv archive to be deserialised
+                        let pos: u16 = u16::try_from(pos).expect("data > u16");
+                        let pos_bytes = pos.to_be_bytes();
+                        bytes[0] = pos_bytes[0];
+                        bytes[1] = pos_bytes[1];
+                        match pddb_key.write(&bytes) {
+                            Ok(len) => {
+                                self.pddb.sync().ok();
+                                log::info!("Wrote {} bytes to {}:{}", len, TLS_TRUSTED_DICT, key);
+                            }
+                            Err(e) => {
+                                log::warn!("Error writing {}:{}: {:?}", TLS_TRUSTED_DICT, key, e);
+                            }
+                        }
                     }
-                    Err(e) => {
-                        log::warn!("Error writing {}:{}: {:?}", TLS_TRUSTED_DICT, key, e);
-                    }
+                    Err(e) => log::warn!("failed to create {}:{}\n{}", TLS_TRUSTED_DICT, key, e),
                 }
             }
-            Err(e) => log::warn!("failed to create {}:{}\n{}", TLS_TRUSTED_DICT, key, e),
+            Err(e) => log::warn!("failed to get pddb_key {e}"),
         }
         Ok(())
     }
@@ -250,14 +255,21 @@ impl Tls {
     /// true if the certificate is saved in the TLS_TRUSTED_DICT in the pddb
     pub fn is_trusted_x509(&self, x509: &X509Certificate) -> bool {
         let ta = OwnedTrustAnchor::from(x509);
-        let key = ta.pddb_key();
-        match self.pddb.get(TLS_TRUSTED_DICT, &key, None, false, false, None, None::<fn()>) {
-            Ok(_) => {
-                log::info!("trusted: {key}");
-                true
+        match ta.pddb_key() {
+            Ok(key) => {
+                match self.pddb.get(TLS_TRUSTED_DICT, &key, None, false, false, None, None::<fn()>) {
+                    Ok(_) => {
+                        log::info!("trusted: {key}");
+                        true
+                    }
+                    Err(_) => {
+                        log::info!("UNtrusted: {key}");
+                        false
+                    }
+                }
             }
-            Err(_) => {
-                log::info!("UNtrusted: {key}");
+            Err(e) => {
+                log::warn!("failed to get pddb_key: {e}");
                 false
             }
         }

@@ -3,6 +3,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use rustls::pki_types::{Der, TrustAnchor};
 use std::cmp::min;
 use std::fmt;
+use std::io::{Error, ErrorKind};
 use x509_parser::prelude::{FromDer, X509Certificate};
 
 pub const MAX_OTA_BYTES: usize = 1028;
@@ -27,55 +28,66 @@ impl OwnedTrustAnchor {
         }
     }
 
-    pub fn pddb_key(&self) -> String {
-        let subject = self.subject();
-        let begin = match subject.find("CN=") {
-            Some(begin) => Some(begin),
-            None => subject.find("OU="),
-        };
-
-        let mut pddb_key = match begin {
-            Some(mut begin) => {
-                begin += 3;
-                let end = match subject[begin..].find(",") {
-                    Some(e) => begin + e,
-                    None => subject.len(),
+    pub fn pddb_key(&self) -> Result<String, Error> {
+        match self.subject() {
+            Ok(subject) => {
+                let begin = match subject.find("CN=") {
+                    Some(begin) => Some(begin),
+                    None => subject.find("OU="),
                 };
-                &subject[begin..end]
+
+                let mut pddb_key = match begin {
+                    Some(mut begin) => {
+                        begin += 3;
+                        let end = match subject[begin..].find(",") {
+                            Some(e) => begin + e,
+                            None => subject.len(),
+                        };
+                        &subject[begin..end]
+                    }
+                    None => {
+                        log::warn!("Subject missing CN= & OU= :{}", &subject);
+                        &subject
+                    }
+                }
+                .to_string();
+
+                // grab a few arbitrary bytes from spki so pddb_key is deterministic & unique
+                let k = &self.spki;
+                pddb_key.push_str(&format!(" {:X}{:X}{:X}{:X}", k[6], k[7], k[8], k[9]));
+
+                // mirror of pddb::KEY_NAME_LEN
+                // u64: vaddr/len/resvd, u32: flags, age = 95
+                // would this be better as a pddb pub?
+                const KEY_NAME_LEN: usize = 127 - 8 - 8 - 8 - 4 - 4;
+                Ok(pddb_key[..min(pddb_key.len(), KEY_NAME_LEN - 1)].to_string())
             }
-            None => {
-                log::warn!("Subject missing CN= & OU= :{}", &subject);
-                &subject
+            Err(e) => {
+                log::warn!("failed to construct pddb_key: {e}");
+                Err(Error::from(ErrorKind::InvalidData))
             }
         }
-        .to_string();
-
-        // grab a few arbitrary bytes from spki so pddb_key is deterministic & unique
-        let k = &self.spki;
-        pddb_key.push_str(&format!(" {:X}{:X}{:X}{:X}", k[6], k[7], k[8], k[9]));
-
-        // mirror of pddb::KEY_NAME_LEN
-        // u64: vaddr/len/resvd, u32: flags, age = 95
-        // would this be better as a pddb pub?
-        const KEY_NAME_LEN: usize = 127 - 8 - 8 - 8 - 4 - 4;
-        pddb_key[..min(pddb_key.len(), KEY_NAME_LEN - 1)].to_string()
     }
 
     // decoded subject
-    pub fn subject(&self) -> String {
+    pub fn subject(&self) -> Result<String, Error> {
         match x509_parser::x509::X509Name::from_der(&self.subject) {
-            Ok((_, decoded)) => decoded.to_string(),
+            Ok((_, decoded)) => Ok(decoded.to_string()),
             Err(e) => {
-                log::warn!("{:?}", e);
-                "der decode failed".to_string()
+                log::warn!("failed to decode Subject: {:?}", e);
+                Err(Error::from(ErrorKind::InvalidData))
             }
         }
+    }
+impl fmt::Debug for OwnedTrustAnchor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}\nDer{:?}", self.subject().unwrap_or("Subject error".to_string()), self.spki)
     }
 }
 
 impl fmt::Display for OwnedTrustAnchor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.subject())
+        write!(f, "{}", self.subject().unwrap_or("Subject error".to_string()))
     }
 }
 
