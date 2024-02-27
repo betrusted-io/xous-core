@@ -48,7 +48,8 @@ pub fn shellchat<'a>(mut tokens: impl Iterator<Item = &'a str>) -> Result<Option
             count = 0;
             let tls = Tls::new();
             for ta in webpki_roots::TLS_SERVER_ROOTS {
-                tls.save_ta(&(*ta).clone().into()).unwrap_or_else(|e| log::warn!("{e}"));
+                let ota = crate::OwnedTrustAnchor::from(ta);
+                tls.save_ta(&ota).unwrap_or_else(|e| log::warn!("{e}"));
                 modals.update_progress(count).expect("no progress");
                 count += 1;
             }

@@ -91,12 +91,12 @@ impl fmt::Display for OwnedTrustAnchor {
     }
 }
 
-impl<'a> From<TrustAnchor<'a>> for OwnedTrustAnchor {
-    fn from(ta: TrustAnchor) -> Self {
+impl<'a> From<&TrustAnchor<'a>> for OwnedTrustAnchor {
+    fn from(ta: &TrustAnchor) -> Self {
         Self::from_subject_spki_name_constraints(
-            ta.subject.as_ref().to_owned(),
-            ta.subject_public_key_info.as_ref().to_owned(),
-            ta.name_constraints.map(|nc| nc.as_ref().to_owned()),
+            ta.subject.as_ref(),
+            ta.subject_public_key_info.as_ref(),
+            ta.name_constraints.as_ref().map(|nc| nc.as_ref()),
         )
     }
 }
