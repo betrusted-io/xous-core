@@ -9,6 +9,9 @@ use std::sync::Arc;
 use webpki::ring as webpki_algs;
 use xous_names::XousNames;
 
+/// The entire purpose of the StifledCertificateVerification is to gain access to
+/// the certificate-chain-of-trust offered by a host by stifling CertificateError::UnknownIssuer
+///
 #[derive(Debug)]
 pub struct StifledCertificateVerification {
     pub roots: RootCertStore,
@@ -16,9 +19,19 @@ pub struct StifledCertificateVerification {
 }
 
 impl StifledCertificateVerification {
+
+    /// rustls includes a sanity check early in the process, to ensure that the RootCertStore
+    /// contains at least one root certificate before going to the trouble of asking the host
+    /// to offer its certificate chain of trust. Trouble is, xous/tls wants to probe the host
+    /// to see what is offered up before deciding if we trust it.
+    ///
+    /// The somewhat hacky work-around is to add a single bogus TrustAnchor to RootCertStore,
+    /// and neither the bogus TrustAnchor or the RootCertStore exist beyond the lifetime of
+    /// this StifledCertificateVerification.
+    ///
     pub fn new() -> Self {
         let mut root_cert_store = rustls::RootCertStore::empty();
-        // rustls::ServerCertVerifierBuilder::build() returns a 
+        // rustls::ServerCertVerifierBuilder::build() returns a
         // `CertVerifierBuilderError` if no trust anchors have been provided.
         let single_bogus_ta_to_avoid_error_on_empty_roots = TrustAnchor {
             subject: Der::from_slice(b"bogus subject"),
@@ -59,7 +72,10 @@ impl ServerCertVerifier for StifledCertificateVerification {
                             CertificateError::UnknownIssuer => Ok(ServerCertVerified::assertion()),
                             CertificateError::NotValidYet => {
                                 modals
-                                    .show_notification(t!("tls.probe_help_not_valid_yet", locales::LANG), None)
+                                    .show_notification(
+                                        t!("tls.probe_help_not_valid_yet", locales::LANG),
+                                        None,
+                                    )
                                     .expect("modal failed");
                                 Err(Error::InvalidCertificate(e))
                             }
@@ -82,7 +98,7 @@ impl ServerCertVerifier for StifledCertificateVerification {
                     }
                     Err(e) => Err(e),
                 }
-            },
+            }
             Err(e) => {
                 log::warn!("failed to build WebPkiServerVerifier: {e}");
                 Err(Error::General("failed to build WebPkiServerVerifier".to_string()))
@@ -116,6 +132,7 @@ impl ServerCertVerifier for StifledCertificateVerification {
 /// Vendor in the sadly private rustls::crypto::ring::SUPPORTED_SIG_ALGS
 /// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
 /// compiled against *ring*.
+///
 static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
     all: &[
         webpki_algs::ECDSA_P256_SHA256,

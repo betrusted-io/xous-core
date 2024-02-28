@@ -3,11 +3,6 @@ mod danger;
 pub mod ota;
 pub mod xtls;
 
-use std::convert::{Into, TryFrom, TryInto};
-use std::io::{Error, ErrorKind, Read, Write};
-use std::net::TcpStream;
-use std::sync::Arc;
-
 use locales::t;
 use modals::Modals;
 use ota::OwnedTrustAnchor;
@@ -18,6 +13,10 @@ use rkyv::{
 };
 use rustls::pki_types::{CertificateDer, TrustAnchor};
 use rustls::{ClientConfig, ClientConnection, RootCertStore};
+use std::convert::{Into, TryFrom, TryInto};
+use std::io::{Error, ErrorKind, Read, Write};
+use std::net::TcpStream;
+use std::sync::Arc;
 use x509_parser::prelude::{parse_x509_certificate, FromDer, X509Certificate};
 use xous_names::XousNames;
 
@@ -43,10 +42,10 @@ impl Tls {
     ///  # Returns
     ///
     /// a count of trusted certificates
+    ///
     pub fn trust_modal(&self, certificates: Vec<CertificateDer>) -> usize {
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
-
         let certificates: Vec<(&[u8], X509Certificate)> = certificates
             .iter()
             .map(|cert| X509Certificate::from_der(cert))
@@ -54,7 +53,6 @@ impl Tls {
             .map(|result| result.unwrap())
             .filter(|(_fingerprint, x509)| x509.is_ca())
             .collect();
-
         let chain: Vec<String> = certificates
             .iter()
             .map(|(fingerprint, x509)| {
@@ -96,6 +94,7 @@ impl Tls {
     /// # Returns
     ///
     /// the number of trust-anchors deleted
+    ///
     pub fn del_all_rota(&self) -> Result<usize, Error> {
         let count = match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
             Ok(list) => list.len(),
@@ -105,10 +104,6 @@ impl Tls {
             Ok(_) => {
                 log::info!("Deleted {}\n", TLS_TRUSTED_DICT);
                 self.pddb.sync().or_else(|e| Ok::<(), Error>(log::warn!("{e}"))).ok();
-                // match self.pddb.sync() {
-                //     Err(e) => log::warn!("{e}"),
-                //     _ => (),
-                // }
             }
             Err(e) => log::warn!("failed to delete {}: {:?}", TLS_TRUSTED_DICT, e),
         }
@@ -120,6 +115,7 @@ impl Tls {
     /// # Arguments
     ///
     /// * `key` - the pddb-key containing the unwanted trust-anchor
+    ///
     pub fn del_rota(&self, key: &str) -> Result<(), Error> {
         match self.pddb.delete_key(TLS_TRUSTED_DICT, key, None) {
             Ok(_) => {
@@ -136,24 +132,29 @@ impl Tls {
     /// # Arguments
     ///
     /// * `ta` - a trusted trust-anchor
+    ///
     pub fn save_ta(&self, ta: &OwnedTrustAnchor) -> Result<(), Error> {
         match ta.pddb_key() {
             Ok(key) => {
-                // log::warn!("AAA {:?}", ta);
-                match self.pddb.get(TLS_TRUSTED_DICT, &key, None, true, true, Some(ota::MAX_OTA_BYTES), None::<fn()>)
-                {
+                match self.pddb.get(
+                    TLS_TRUSTED_DICT,
+                    &key,
+                    None,
+                    true,
+                    true,
+                    Some(ota::MAX_OTA_BYTES),
+                    None::<fn()>,
+                ) {
                     Ok(mut pddb_key) => {
                         let mut buf = Vec::<u8>::new();
                         // reserve 2 bytes to hold a u16 (see below)
                         let reserved = 2;
                         buf.push(0u8);
                         buf.push(0u8);
-
                         // serialize the trust-anchor
                         let mut serializer = WriteSerializer::with_pos(buf, reserved);
                         let pos = serializer.serialize_value(ta).unwrap();
                         let mut bytes = serializer.into_inner();
-
                         // copy pop u16 into the first 2 bytes to enable the rkyv archive to be deserialised
                         let pos: u16 = u16::try_from(pos).expect("data > u16");
                         let pos_bytes = pos.to_be_bytes();
@@ -182,6 +183,7 @@ impl Tls {
     /// # Arguments
     ///
     /// * `key` - pddb key holding the trust-anchor
+    ///
     pub fn get_ota(&self, key: &str) -> Option<OwnedTrustAnchor> {
         match self.pddb.get(TLS_TRUSTED_DICT, key, None, false, false, None, None::<fn()>) {
             Ok(mut pddb_key) => {
@@ -211,7 +213,12 @@ impl Tls {
         }
     }
 
-    /// Returns a Vec of all trusted trust-anchors
+    /// Returns a Vec of all trusted (saved) OwnedTrustAnchors
+    ///
+    /// # Returns
+    ///
+    /// a Vec of OwnedTrustAnchor.
+    ///
     pub fn trusted(&self) -> Vec<OwnedTrustAnchor> {
         match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
             Ok(list) => list
@@ -235,6 +242,7 @@ impl Tls {
     /// # Returns
     ///
     /// true if the certificate is saved in the TLS_TRUSTED_DICT in the pddb
+    ///
     pub fn is_trusted_cert(&self, cert: CertificateDer) -> bool {
         match parse_x509_certificate(cert.as_ref()) {
             Ok(result) => self.is_trusted_x509(&result.1),
@@ -255,28 +263,38 @@ impl Tls {
     ///
     /// true if the certificate is saved in the TLS_TRUSTED_DICT in the pddb
     pub fn is_trusted_x509(&self, x509: &X509Certificate) -> bool {
-        let ta = OwnedTrustAnchor::from(x509);
-        match ta.pddb_key() {
-            Ok(key) => {
-                match self.pddb.get(TLS_TRUSTED_DICT, &key, None, false, false, None, None::<fn()>) {
-                    Ok(_) => {
-                        log::info!("trusted: {key}");
-                        true
-                    }
-                    Err(_) => {
-                        log::info!("UNtrusted: {key}");
-                        false
+        match OwnedTrustAnchor::from_x509(x509) {
+            Ok(ta) => match ta.pddb_key() {
+                Ok(key) => {
+                    match self.pddb.get(TLS_TRUSTED_DICT, &key, None, false, false, None, None::<fn()>) {
+                        Ok(_) => {
+                            log::info!("trusted: {key}");
+                            true
+                        }
+                        Err(_) => {
+                            log::info!("UNtrusted: {key}");
+                            false
+                        }
                     }
                 }
-            }
+                Err(e) => {
+                    log::warn!("failed to get pddb_key: {e}");
+                    false
+                }
+            },
             Err(e) => {
-                log::warn!("failed to get pddb_key: {e}");
+                log::warn!("failed construct OwnedTrustAnchor from x509: {e}");
                 false
             }
         }
     }
 
-    /// Returns a RootCertStore containing all trusted trust-anchors
+    /// Returns a RootCertStore containing all trusted (saved) TrustAnchors
+    ///
+    /// # Returns
+    ///
+    /// a RootCertStore suitable for rustls
+    ///
     pub fn root_store(&self) -> RootCertStore {
         let mut root_store = RootCertStore::empty();
         let trusted = match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
@@ -295,7 +313,7 @@ impl Tls {
         root_store
     }
 
-    /// Probes the host and returns the TLS chain of trust
+    /// Probes the host and returns the TLS chain of trust for a host
     ///
     /// Establishes a tls connection to the host, extracts the
     /// certificates offered and immediately closes the connection.
@@ -369,6 +387,7 @@ impl Tls {
     /// # Returns
     ///
     /// the number of trusted Certificates offered by the host
+    ///
     pub fn inspect(&self, host: &str) -> Result<usize, Error> {
         match self.probe(host) {
             Ok(certs) => {
@@ -427,6 +446,7 @@ impl Tls {
     /// # Returns
     ///
     /// an owned rusttls stream on the tcp-stream provided
+    ///
     pub fn stream_owned(
         &self,
         host: &str,
