@@ -11,6 +11,7 @@ use xous_names::XousNames;
 
 /// The entire purpose of the StifledCertificateVerification is to gain access to
 /// the certificate-chain-of-trust offered by a host by stifling CertificateError::UnknownIssuer
+/// see https://github.com/rustls/rustls/issues/1819
 ///
 #[derive(Debug)]
 pub struct StifledCertificateVerification {
