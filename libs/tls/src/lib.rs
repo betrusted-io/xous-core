@@ -311,8 +311,10 @@ impl Tls {
     ///
     /// # Returns
     ///
-    /// The TLS chain of trust for the host
-    pub fn probe(&self, host: &str) -> Result<Option<Vec<CertificateDer>>, Error> {
+    /// * A Vec<CertificateDer> containing the TLS chain of trust offered by the host
+    /// * Error if the communication with the host fails
+    ///
+    pub fn probe(&self, host: &str) -> Result<Vec<CertificateDer>, Error> {
         log::info!("starting TLS probe");
         match host.to_owned().try_into() {
             Ok(server_name) => {
@@ -337,9 +339,9 @@ impl Tls {
                             Some(certificates) => {
                                 let cert_owned: Vec<CertificateDer<'static>> =
                                     certificates.iter().map(|cert| cert.clone().into_owned()).collect();
-                                Ok(Some(cert_owned))
+                                Ok(cert_owned)
                             }
-                            None => Ok(None),
+                            None => Ok(Vec::<CertificateDer<'static>>::new()),
                         }
                     }
                     Err(e) => {
@@ -369,10 +371,13 @@ impl Tls {
     /// the number of trusted Certificates offered by the host
     pub fn inspect(&self, host: &str) -> Result<usize, Error> {
         match self.probe(host) {
-            Ok(certs) => match certs {
-                Some(certs) => Ok(self.trust_modal(certs.to_vec())),
-                None => Ok(0),
-            },
+            Ok(certs) => {
+                if certs.len() > 0 {
+                    Ok(self.trust_modal(certs.to_vec()))
+                } else {
+                    Ok(0)
+                }
+            }
             Err(e) => {
                 log::warn!("failed to probe {host}: {e}");
                 Ok(0)
@@ -394,14 +399,12 @@ impl Tls {
     /// # Returns
     ///
     /// true if the user trusts at least one of the Certificates offered by the host.
+    ///
     pub fn accessible(&self, host: &str, inspect: bool) -> bool {
         match self.probe(host) {
-            Ok(certs) => match certs {
-                Some(certs) => match certs.iter().find(|&cert| self.is_trusted_cert(cert.clone())) {
-                    Some(_) => true,
-                    None => inspect && (self.trust_modal(certs.to_vec()) > 0),
-                },
-                None => false,
+            Ok(certs) => match certs.iter().find(|&cert| self.is_trusted_cert(cert.clone())) {
+                Some(_) => true,
+                None => inspect && (self.trust_modal(certs.to_vec()) > 0),
             },
             Err(e) => {
                 log::warn!("failed to probe {host}: {e}");

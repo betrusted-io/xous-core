@@ -37,11 +37,9 @@ impl ureq::TlsConnector for TlsConnector {
                                         if let Some(rustls_error) = inner.downcast_ref::<rustls::Error>() {
                                             if let rustls::Error::InvalidCertificate(_) = rustls_error {
                                                 if let Ok(certs) = tls.probe(dns_name) {
-                                                    if let Some(certs) = certs {
-                                                        if certs.len() > 0 {
-                                                            log::info!("try again with new trusted certs");
-                                                            continue;
-                                                        }
+                                                    if certs.len() > 0 {
+                                                        log::info!("try again with new trusted certs");
+                                                        continue;
                                                     }
                                                 }
                                             }
@@ -56,11 +54,9 @@ impl ureq::TlsConnector for TlsConnector {
                         // errors generated early in the tls handshake
                         Err(rustls::Error::InvalidCertificate(_)) => {
                             if let Ok(certs) = tls.probe(dns_name) {
-                                if let Some(certs) = certs {
-                                    if certs.len() > 0 {
-                                        log::info!("try again with new trusted certs");
-                                        continue;
-                                    }
+                                if certs.len() > 0 {
+                                    log::info!("try again with new trusted certs");
+                                    continue;
                                 }
                             }
                         }
