@@ -98,11 +98,7 @@ pub fn shellchat<'a>(mut tokens: impl Iterator<Item = &'a str>) -> Result<Option
                                 Ok(mut conn) => {
                                     let mut tls = rustls::Stream::new(&mut conn, &mut sock);
                                     log::info!("create http headers and write to server");
-                                    let msg = format!(
-                                        "GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
-                                        target
-                                    );
-                                    match tls.write_all(msg.as_bytes()) {
+                                    match tls.write_all(b"GET / HTTP/1.1\r\n\r\n") {
                                         Ok(()) => {
                                             log::info!("tls accepted GET");
                                             write!(ret, "{}", t!("tls.test_success_get", locales::LANG)).ok();
