@@ -72,7 +72,8 @@ impl Tls {
                     .unwrap()
                     .iter()
                     .map(|i| &certificates[*i].1)
-                    .map(|x509| OwnedTrustAnchor::from(x509))
+                    .map(|x509| OwnedTrustAnchor::from_x509(x509))
+                    .filter_map(|ta| ta.ok())
                     .for_each(|ta| {
                         self.save_ta(&ta).unwrap_or_else(|e| {
                             log::warn!("failed to save cert: {e}");

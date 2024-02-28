@@ -1,14 +1,16 @@
 // A rkyv serialisable intermediatory for a TrustAnchor
+use der::{Encode, Header, Reader, Tag};
 use rkyv::{Archive, Deserialize, Serialize};
 use rustls::pki_types::{Der, TrustAnchor};
 use std::cmp::min;
+use std::convert::TryInto;
 use std::fmt;
 use std::io::{Error, ErrorKind};
 use x509_parser::prelude::{FromDer, X509Certificate};
 
 pub const MAX_OTA_BYTES: usize = 1028;
 
-#[derive(Archive, Serialize, Deserialize, Debug)]
+#[derive(Archive, Serialize, Deserialize)]
 pub struct OwnedTrustAnchor {
     pub subject: Vec<u8>,
     pub spki: Vec<u8>,
@@ -25,6 +27,32 @@ impl OwnedTrustAnchor {
             subject: subject.into(),
             spki: spki.into(),
             name_constraints: name_constraints.map(|x| x.into()),
+        }
+    }
+
+    pub fn from_x509(x509: &X509Certificate) -> Result<Self, Error> {
+        match (
+            rm_der_header(x509.subject().as_raw()),
+            rm_der_header(x509.public_key().raw),
+            x509.name_constraints(),
+        ) {
+            (Ok(subject), Ok(spki), Ok(name_constraints)) => match name_constraints {
+                // Ignore name_constrains for now TODO
+                Some(_) => Ok(Self::from_subject_spki_name_constraints(subject, spki, None::<&[u8]>)),
+                None => Ok(Self::from_subject_spki_name_constraints(subject, spki, None::<&[u8]>)),
+            },
+            (Err(e), _, _) => {
+                log::warn!("failed to remove header from subject: {e}");
+                Err(Error::from(ErrorKind::InvalidData))
+            }
+            (_, Err(e), _) => {
+                log::warn!("failed to remove header from subject_public_key_info: {e}");
+                Err(Error::from(ErrorKind::InvalidData))
+            }
+            (_, _, Err(e)) => {
+                log::warn!("failed to extract name_constraints: {e}");
+                Err(Error::from(ErrorKind::InvalidData))
+            }
         }
     }
 
@@ -71,10 +99,16 @@ impl OwnedTrustAnchor {
 
     // decoded subject
     pub fn subject(&self) -> Result<String, Error> {
-        match x509_parser::x509::X509Name::from_der(&self.subject) {
-            Ok((_, decoded)) => Ok(decoded.to_string()),
+        match add_der_header(Tag::Sequence, &self.subject) {
+            Ok(subject) => match x509_parser::x509::X509Name::from_der(&subject) {
+                Ok((_, decoded)) => Ok(decoded.to_string()),
+                Err(e) => {
+                    log::warn!("failed to decode Subject: {:?}", e);
+                    Err(Error::from(ErrorKind::InvalidData))
+                }
+            },
             Err(e) => {
-                log::warn!("failed to decode Subject: {:?}", e);
+                log::warn!("failed to add der header to subject: {e}");
                 Err(Error::from(ErrorKind::InvalidData))
             }
         }
@@ -101,16 +135,6 @@ impl<'a> From<&TrustAnchor<'a>> for OwnedTrustAnchor {
     }
 }
 
-impl<'a> From<&X509Certificate<'a>> for OwnedTrustAnchor {
-    fn from(x509: &X509Certificate) -> Self {
-        Self::from_subject_spki_name_constraints(
-            x509.subject().as_raw(),
-            x509.public_key().raw,
-            None::<&[u8]>, // ignore name constraints for now TODO
-        )
-    }
-}
-
 impl<'a> Into<TrustAnchor<'a>> for OwnedTrustAnchor {
     fn into(self) -> TrustAnchor<'a> {
         TrustAnchor {
@@ -118,5 +142,34 @@ impl<'a> Into<TrustAnchor<'a>> for OwnedTrustAnchor {
             subject_public_key_info: Der::from(self.spki),
             name_constraints: self.name_constraints.map_or(None, |nc| Some(Der::from(nc))),
         }
+
+/// Add a DER header to a DER encoded [u8]
+fn add_der_header(tag: Tag, naked: &Vec<u8>) -> Result<Vec<u8>, Error> {
+    match Header::new(tag, naked.len()) {
+        Ok(header) => {
+            let mut buff: [u8; 32] = [0u8; 32];
+            match header.encode_to_slice(&mut buff) {
+                Ok(der) => Ok([der, naked].concat()),
+                Err(_) => Err(Error::new(ErrorKind::InvalidData, "der parse failed: encode")),
+            }
+        }
+        Err(_) => Err(Error::new(ErrorKind::InvalidData, "der parse failed: header")),
+    }
+}
+
+/// Remove a DER header from a DER encoded [u8]
+fn rm_der_header(der: &[u8]) -> Result<Vec<u8>, Error> {
+    match der::SliceReader::new(der) {
+        Ok(reader) => match reader.peek_header() {
+            Ok(header) => match header.encoded_len() {
+                Ok(len) => match TryInto::<usize>::try_into(len) {
+                    Ok(len) => Ok(der[len..].to_vec()),
+                    Err(_) => Err(Error::new(ErrorKind::InvalidData, "der decode failed: into")),
+                },
+                Err(_) => Err(Error::new(ErrorKind::InvalidData, "der decode failed: length")),
+            },
+            Err(_) => Err(Error::new(ErrorKind::InvalidData, "der decode failed: header")),
+        },
+        Err(_) => Err(Error::new(ErrorKind::InvalidData, "der decode failed: reader")),
     }
 }
