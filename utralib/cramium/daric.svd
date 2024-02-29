@@ -14015,6 +14015,691 @@ soc/candidate/pio/rp_pio.sv]]></description>
             </addressBlock>
         </peripheral>
         <peripheral>
+            <name>BIO</name>
+            <baseAddress>0x50124000</baseAddress>
+            <groupName>BIO</groupName>
+            <registers>
+                <register>
+                    <name>SFR_CTRL</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>en</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[en read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>restart</name>
+                            <msb>7</msb>
+                            <bitRange>[7:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[restart read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>clkdiv_restart</name>
+                            <msb>11</msb>
+                            <bitRange>[11:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[clkdiv_restart read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_CFGINFO</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>constant0</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[constant value of 8]]></description>
+                        </field>
+                        <field>
+                            <name>constant1</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[constant value of 4]]></description>
+                        </field>
+                        <field>
+                            <name>constant2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[constant value of 4096]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FLEVEL</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>pclk_regfifo_level0</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[pclk_regfifo_level[0] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level1</name>
+                            <msb>7</msb>
+                            <bitRange>[7:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[pclk_regfifo_level[1] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level2</name>
+                            <msb>11</msb>
+                            <bitRange>[11:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[pclk_regfifo_level[2] read only status register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_regfifo_level3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:12]</bitRange>
+                            <lsb>12</lsb>
+                            <description><![CDATA[pclk_regfifo_level[3] read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_TXF3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdin</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdin read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0024</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0028</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_RXF3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x002c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>fdout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[fdout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_ELEVEL0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0030</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>pclk_fifo_event_level0</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[pclk_fifo_event_level[0] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_fifo_event_level1</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[pclk_fifo_event_level[1] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_fifo_event_level2</name>
+                            <msb>23</msb>
+                            <bitRange>[23:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[pclk_fifo_event_level[2] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_fifo_event_level3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:24]</bitRange>
+                            <lsb>24</lsb>
+                            <description><![CDATA[pclk_fifo_event_level[3] read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_ELEVEL1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0034</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>pclk_fifo_event_level4</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[pclk_fifo_event_level[4] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_fifo_event_level5</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[pclk_fifo_event_level[5] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_fifo_event_level6</name>
+                            <msb>23</msb>
+                            <bitRange>[23:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[pclk_fifo_event_level[6] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_fifo_event_level7</name>
+                            <msb>31</msb>
+                            <bitRange>[31:24]</bitRange>
+                            <lsb>24</lsb>
+                            <description><![CDATA[pclk_fifo_event_level[7] read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_ETYPE</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0038</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>pclk_fifo_event_lt_mask</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[pclk_fifo_event_lt_mask read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_fifo_event_eq_mask</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[pclk_fifo_event_eq_mask read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>pclk_fifo_event_gt_mask</name>
+                            <msb>23</msb>
+                            <bitRange>[23:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[pclk_fifo_event_gt_mask read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_SET</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x003c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_set</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_set read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_CLR</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0040</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_clr</name>
+                            <msb>23</msb>
+                            <bitRange>[23:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_clr read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_EVENT_STATUS</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0044</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_event_status</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_event_status read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_QDIV0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0050</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>unused_div</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[unused_div read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_frac</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[div_frac read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_int</name>
+                            <msb>31</msb>
+                            <bitRange>[31:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[div_int read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_QDIV1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0054</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>unused_div</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[unused_div read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_frac</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[div_frac read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_int</name>
+                            <msb>31</msb>
+                            <bitRange>[31:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[div_int read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_QDIV2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0058</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>unused_div</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[unused_div read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_frac</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[div_frac read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_int</name>
+                            <msb>31</msb>
+                            <bitRange>[31:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[div_int read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_QDIV3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x005c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>unused_div</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[unused_div read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_frac</name>
+                            <msb>15</msb>
+                            <bitRange>[15:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[div_frac read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>div_int</name>
+                            <msb>31</msb>
+                            <bitRange>[31:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[div_int read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_SYNC_BYPASS</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0060</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_sync_bypass</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_sync_bypass read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IO_OE_INV</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0064</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_io_oe_inv</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_io_oe_inv read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IO_O_INV</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0068</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_io_o_inv</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_io_o_inv read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IO_I_INV</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x006c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_io_i_inv</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_io_i_inv read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IRQMASK_0</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0070</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_irqmask_0</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_irqmask_0 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IRQMASK_1</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0074</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_irqmask_1</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_irqmask_1 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IRQMASK_2</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0078</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_irqmask_2</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_irqmask_2 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IRQMASK_3</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x007c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_irqmask_3</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_irqmask_3 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_IRQ_EDGE</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0080</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_irq_edge</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_irq_edge read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DBG_PADOUT</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0084</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_dbg_padout</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_dbg_padout read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_DBG_PADOE</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0088</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_dbg_padoe</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_dbg_padoe read only status register]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x8c</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
             <name>CORESUB_SRAMTRM</name>
             <baseAddress>0x40014000</baseAddress>
             <groupName>CORESUB_SRAMTRM</groupName>
@@ -15445,6 +16130,11 @@ soc/candidate/mbox_v0.1.sv]]></description>
                 <size>0x00001000</size>
             </memoryRegion>
             <memoryRegion>
+                <name>BIO</name>
+                <baseAddress>0x50124000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
                 <name>SEG_LKEY</name>
                 <baseAddress>0x40020000</baseAddress>
                 <size>0x00000100</size>
@@ -15607,6 +16297,11 @@ soc/candidate/mbox_v0.1.sv]]></description>
             <memoryRegion>
                 <name>AOC</name>
                 <baseAddress>0x40060000</baseAddress>
+                <size>0x00001000</size>
+            </memoryRegion>
+            <memoryRegion>
+                <name>BIO_RAM</name>
+                <baseAddress>0x50125000</baseAddress>
                 <size>0x00001000</size>
             </memoryRegion>
         </memoryRegions>
