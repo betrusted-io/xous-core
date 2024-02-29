@@ -79,4 +79,5 @@ pub fn bio_tests() {
     report_api(crate::get_id());
 
     units::hello_world();
+    units::hello_multiverse();
 }
