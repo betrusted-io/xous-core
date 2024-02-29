@@ -19,7 +19,6 @@ pub struct StifledCertificateVerification {
 }
 
 impl StifledCertificateVerification {
-
     /// rustls includes a sanity check early in the process, to ensure that the RootCertStore
     /// contains at least one root certificate before going to the trouble of asking the host
     /// to offer its certificate chain of trust. Trouble is, xous/tls wants to probe the host
