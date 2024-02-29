@@ -2,11 +2,10 @@ use locales::t;
 use modals::Modals;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::WebPkiServerVerifier;
-use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
+use rustls::crypto::{ring, verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
 use rustls::pki_types::{CertificateDer, Der, ServerName, TrustAnchor, UnixTime};
 use rustls::{CertificateError, DigitallySignedStruct, Error, RootCertStore, SignatureScheme};
 use std::sync::Arc;
-use webpki::ring as webpki_algs;
 use xous_names::XousNames;
 
 /// The entire purpose of the StifledCertificateVerification is to gain access to
@@ -40,7 +39,7 @@ impl StifledCertificateVerification {
             name_constraints: None,
         };
         root_cert_store.roots.push(single_bogus_ta_to_avoid_error_on_empty_roots);
-        Self { roots: root_cert_store, supported: SUPPORTED_SIG_ALGS }
+        Self { roots: root_cert_store, supported: ring::default_provider().signature_verification_algorithms }
     }
 }
 
@@ -129,42 +128,3 @@ impl ServerCertVerifier for StifledCertificateVerification {
         self.supported.supported_schemes()
     }
 }
-
-/// Vendor in the sadly private rustls::crypto::ring::SUPPORTED_SIG_ALGS
-/// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
-/// compiled against *ring*.
-///
-static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
-    all: &[
-        webpki_algs::ECDSA_P256_SHA256,
-        webpki_algs::ECDSA_P256_SHA384,
-        webpki_algs::ECDSA_P384_SHA256,
-        webpki_algs::ECDSA_P384_SHA384,
-        webpki_algs::ED25519,
-        webpki_algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
-        webpki_algs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-        webpki_algs::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-        webpki_algs::RSA_PKCS1_2048_8192_SHA256,
-        webpki_algs::RSA_PKCS1_2048_8192_SHA384,
-        webpki_algs::RSA_PKCS1_2048_8192_SHA512,
-        webpki_algs::RSA_PKCS1_3072_8192_SHA384,
-    ],
-    mapping: &[
-        // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
-        (
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            &[webpki_algs::ECDSA_P384_SHA384, webpki_algs::ECDSA_P256_SHA384],
-        ),
-        (
-            SignatureScheme::ECDSA_NISTP256_SHA256,
-            &[webpki_algs::ECDSA_P256_SHA256, webpki_algs::ECDSA_P384_SHA256],
-        ),
-        (SignatureScheme::ED25519, &[webpki_algs::ED25519]),
-        (SignatureScheme::RSA_PSS_SHA512, &[webpki_algs::RSA_PSS_2048_8192_SHA512_LEGACY_KEY]),
-        (SignatureScheme::RSA_PSS_SHA384, &[webpki_algs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY]),
-        (SignatureScheme::RSA_PSS_SHA256, &[webpki_algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY]),
-        (SignatureScheme::RSA_PKCS1_SHA512, &[webpki_algs::RSA_PKCS1_2048_8192_SHA512]),
-        (SignatureScheme::RSA_PKCS1_SHA384, &[webpki_algs::RSA_PKCS1_2048_8192_SHA384]),
-        (SignatureScheme::RSA_PKCS1_SHA256, &[webpki_algs::RSA_PKCS1_2048_8192_SHA256]),
-    ],
-};
