@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use locales::t;
 use modals::Modals;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -5,13 +7,11 @@ use rustls::client::WebPkiServerVerifier;
 use rustls::crypto::{ring, verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
 use rustls::pki_types::{CertificateDer, Der, ServerName, TrustAnchor, UnixTime};
 use rustls::{CertificateError, DigitallySignedStruct, Error, RootCertStore, SignatureScheme};
-use std::sync::Arc;
 use xous_names::XousNames;
 
 /// The entire purpose of the StifledCertificateVerification is to gain access to
 /// the certificate-chain-of-trust offered by a host by stifling CertificateError::UnknownIssuer
 /// see https://github.com/rustls/rustls/issues/1819
-///
 #[derive(Debug)]
 pub struct StifledCertificateVerification {
     pub roots: RootCertStore,
@@ -27,7 +27,6 @@ impl StifledCertificateVerification {
     /// The somewhat hacky work-around is to add a single bogus TrustAnchor to RootCertStore,
     /// and neither the bogus TrustAnchor or the RootCertStore exist beyond the lifetime of
     /// this StifledCertificateVerification.
-    ///
     pub fn new() -> Self {
         let mut root_cert_store = rustls::RootCertStore::empty();
         // rustls::ServerCertVerifierBuilder::build() returns a
@@ -123,7 +122,5 @@ impl ServerCertVerifier for StifledCertificateVerification {
         verify_tls13_signature(message, cert, dss, &self.supported)
     }
 
-    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        self.supported.supported_schemes()
-    }
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> { self.supported.supported_schemes() }
 }

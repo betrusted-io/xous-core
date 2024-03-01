@@ -3,6 +3,11 @@ mod danger;
 pub mod ota;
 pub mod xtls;
 
+use std::convert::{Into, TryFrom, TryInto};
+use std::io::{Error, ErrorKind, Read, Write};
+use std::net::TcpStream;
+use std::sync::Arc;
+
 use locales::t;
 use modals::Modals;
 use ota::OwnedTrustAnchor;
@@ -13,10 +18,6 @@ use rkyv::{
 };
 use rustls::pki_types::{CertificateDer, TrustAnchor};
 use rustls::{ClientConfig, ClientConnection, RootCertStore};
-use std::convert::{Into, TryFrom, TryInto};
-use std::io::{Error, ErrorKind, Read, Write};
-use std::net::TcpStream;
-use std::sync::Arc;
 use x509_parser::prelude::{parse_x509_certificate, FromDer, X509Certificate};
 use xous_names::XousNames;
 
@@ -28,9 +29,7 @@ pub struct Tls {
 }
 
 impl Tls {
-    pub fn new() -> Tls {
-        Tls { pddb: pddb::Pddb::new() }
-    }
+    pub fn new() -> Tls { Tls { pddb: pddb::Pddb::new() } }
 
     /// Presents a modal to the user to select trusted tls certificates
     /// and saves the selected certificates to the pddb
@@ -42,7 +41,6 @@ impl Tls {
     ///  # Returns
     ///
     /// a count of trusted certificates
-    ///
     pub fn trust_modal(&self, certificates: Vec<CertificateDer>) -> usize {
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
@@ -94,7 +92,6 @@ impl Tls {
     /// # Returns
     ///
     /// the number of trust-anchors deleted
-    ///
     pub fn del_all_rota(&self) -> Result<usize, Error> {
         let count = match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
             Ok(list) => list.len(),
@@ -115,7 +112,6 @@ impl Tls {
     /// # Arguments
     ///
     /// * `key` - the pddb-key containing the unwanted trust-anchor
-    ///
     pub fn del_rota(&self, key: &str) -> Result<(), Error> {
         match self.pddb.delete_key(TLS_TRUSTED_DICT, key, None) {
             Ok(_) => {
@@ -132,7 +128,6 @@ impl Tls {
     /// # Arguments
     ///
     /// * `ta` - a trusted trust-anchor
-    ///
     pub fn save_ta(&self, ta: &OwnedTrustAnchor) -> Result<(), Error> {
         match ta.pddb_key() {
             Ok(key) => {
@@ -183,7 +178,6 @@ impl Tls {
     /// # Arguments
     ///
     /// * `key` - pddb key holding the trust-anchor
-    ///
     pub fn get_ota(&self, key: &str) -> Option<OwnedTrustAnchor> {
         match self.pddb.get(TLS_TRUSTED_DICT, key, None, false, false, None, None::<fn()>) {
             Ok(mut pddb_key) => {
@@ -218,7 +212,6 @@ impl Tls {
     /// # Returns
     ///
     /// a Vec of OwnedTrustAnchor.
-    ///
     pub fn trusted(&self) -> Vec<OwnedTrustAnchor> {
         match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
             Ok(list) => list
@@ -242,7 +235,6 @@ impl Tls {
     /// # Returns
     ///
     /// true if the certificate is saved in the TLS_TRUSTED_DICT in the pddb
-    ///
     pub fn is_trusted_cert(&self, cert: CertificateDer) -> bool {
         match parse_x509_certificate(cert.as_ref()) {
             Ok(result) => self.is_trusted_x509(&result.1),
@@ -294,7 +286,6 @@ impl Tls {
     /// # Returns
     ///
     /// a RootCertStore suitable for rustls
-    ///
     pub fn root_store(&self) -> RootCertStore {
         let mut root_store = RootCertStore::empty();
         let trusted = match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
@@ -331,7 +322,6 @@ impl Tls {
     ///
     /// * A Vec<CertificateDer> containing the TLS chain of trust offered by the host
     /// * Error if the communication with the host fails
-    ///
     pub fn probe(&self, host: &str) -> Result<Vec<CertificateDer>, Error> {
         log::info!("starting TLS probe");
         match host.to_owned().try_into() {
@@ -387,7 +377,6 @@ impl Tls {
     /// # Returns
     ///
     /// the number of trusted Certificates offered by the host
-    ///
     pub fn inspect(&self, host: &str) -> Result<usize, Error> {
         match self.probe(host) {
             Ok(certs) => {
@@ -418,7 +407,6 @@ impl Tls {
     /// # Returns
     ///
     /// true if the user trusts at least one of the Certificates offered by the host.
-    ///
     pub fn accessible(&self, host: &str, inspect: bool) -> bool {
         match self.probe(host) {
             Ok(certs) => match certs.iter().find(|&cert| self.is_trusted_cert(cert.clone())) {
@@ -446,7 +434,6 @@ impl Tls {
     /// # Returns
     ///
     /// an owned rusttls stream on the tcp-stream provided
-    ///
     pub fn stream_owned(
         &self,
         host: &str,

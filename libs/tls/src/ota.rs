@@ -1,11 +1,12 @@
 // A rkyv serialisable intermediatory for a TrustAnchor
-use der::{Encode, Header, Reader, Tag};
-use rkyv::{Archive, Deserialize, Serialize};
-use rustls::pki_types::{Der, TrustAnchor};
 use std::cmp::min;
 use std::convert::TryInto;
 use std::fmt;
 use std::io::{Error, ErrorKind};
+
+use der::{Encode, Header, Reader, Tag};
+use rkyv::{Archive, Deserialize, Serialize};
+use rustls::pki_types::{Der, TrustAnchor};
 use x509_parser::prelude::{FromDer, X509Certificate};
 use x509_parser::x509::X509Name;
 
@@ -44,7 +45,6 @@ impl OwnedTrustAnchor {
     /// # Returns
     ///
     /// An OwnedTrustAnchor based on the supplied X509Certificate
-    ///
     pub fn from_x509(x509: &X509Certificate) -> Result<Self, Error> {
         match (
             rm_der_header(x509.subject().as_raw()),

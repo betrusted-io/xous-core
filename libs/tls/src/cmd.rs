@@ -1,14 +1,16 @@
-use crate::Tls;
-use locales::t;
-use rustls::pki_types::ServerName;
 use std::convert::TryFrom;
 use std::io::Read;
 use std::io::Write;
 use std::net::TcpStream;
 use std::str::from_utf8;
 use std::sync::Arc;
+
+use locales::t;
+use rustls::pki_types::ServerName;
 #[cfg(feature = "rootCA")]
 use {modals::Modals, std::convert::TryInto, xous_names::XousNames};
+
+use crate::Tls;
 
 pub fn shellchat<'a>(mut tokens: impl Iterator<Item = &'a str>) -> Result<Option<String>, xous::Error> {
     use core::fmt::Write;

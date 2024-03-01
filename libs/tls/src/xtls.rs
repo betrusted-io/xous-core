@@ -1,6 +1,7 @@
+use std::{convert::TryFrom, fmt::Debug, io, net::TcpStream, result::Result, sync::Arc};
+
 use rustls::pki_types::ServerName;
 use rustls::{ClientConnection, StreamOwned};
-use std::{convert::TryFrom, fmt::Debug, io, net::TcpStream, result::Result, sync::Arc};
 use ureq::{ReadWrite, Response};
 
 use crate::Tls;
@@ -92,35 +93,23 @@ pub struct TlsStream(StreamOwned<ClientConnection, Box<dyn ReadWrite>>);
 
 impl TlsStream {
     /// Returns a shared reference to the inner stream.
-    pub fn get_ref(&self) -> &Box<dyn ReadWrite> {
-        self.0.get_ref()
-    }
+    pub fn get_ref(&self) -> &Box<dyn ReadWrite> { self.0.get_ref() }
 
     /// Returns a mutable reference to the inner stream.
-    pub fn get_mut(&mut self) -> &mut Box<dyn ReadWrite> {
-        self.0.get_mut()
-    }
+    pub fn get_mut(&mut self) -> &mut Box<dyn ReadWrite> { self.0.get_mut() }
 }
 
 impl io::Read for TlsStream {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        Ok(self.0.read(buf)?)
-    }
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> { Ok(self.0.read(buf)?) }
 }
 
 impl io::Write for TlsStream {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        Ok(self.0.write(buf)?)
-    }
+    fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> { Ok(self.0.write(buf)?) }
 
-    fn flush(&mut self) -> Result<(), std::io::Error> {
-        Ok(self.0.flush()?)
-    }
+    fn flush(&mut self) -> Result<(), std::io::Error> { Ok(self.0.flush()?) }
 }
 
 // required for the return type in TlsConnect::connect()
 impl ReadWrite for TlsStream {
-    fn socket(&self) -> Option<&TcpStream> {
-        self.get_ref().socket()
-    }
+    fn socket(&self) -> Option<&TcpStream> { self.get_ref().socket() }
 }
