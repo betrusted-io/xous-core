@@ -119,7 +119,8 @@ macro_rules! bio_code {
                 report_api($name_start as u32);
                 report_api($name_end as u32);
             }
-            unsafe { core::slice::from_raw_parts($name_start, ($name_end as usize) - ($name_start as usize))}
+            // skip the first 4 bytes, as they contain the loading offset
+            unsafe { core::slice::from_raw_parts($name_start.add(4), ($name_end as usize) - ($name_start as usize) - 4)}
         }
 
         core::arch::global_asm!(
