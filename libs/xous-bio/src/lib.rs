@@ -95,3 +95,43 @@ impl BioSharedState {
         }
     }
 }
+
+#[macro_export]
+/// This macro takes three identifiers and assembly code:
+///   - name of the function to call to retrieve the assembled code
+///   - a unique identifier that serves as label name for the start of the code
+///   - a unique identifier that serves as label name for the end of the code
+///   - a comma separated list of strings that form the assembly itself
+///
+///   *** The comma separated list must *not* end in a comma. ***
+///
+///   The macro is unable to derive names of functions or identifiers for labels
+///   due to the partially hygienic macro rules of Rust, so you have to come
+///   up with a list of unique names by yourself.
+macro_rules! bio_code {
+    ($fn_name:ident, $name_start:ident, $name_end:ident, $($item:expr),*) => {
+        pub fn $fn_name() -> &'static [u8] {
+            extern {
+                static $name_start: *const u8;
+                static $name_end: *const u8;
+            }
+            unsafe {
+                report_api($name_start as u32);
+                report_api($name_end as u32);
+            }
+            unsafe { core::slice::from_raw_parts($name_start, ($name_end as usize) - ($name_start as usize))}
+        }
+
+        core::arch::global_asm!(
+            ".align 4",
+            concat!(".globl ", stringify!($name_start)),
+            concat!(stringify!($name_start), ":"),
+            ".word .",
+            $($item),*
+            , ".align 4",
+            concat!(".globl ", stringify!($name_end)),
+            concat!(stringify!($name_end), ":"),
+            ".word .",
+        );
+    };
+}
