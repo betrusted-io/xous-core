@@ -4153,6 +4153,7 @@ dependencies = [
 [[package]]
 name = "ring"
 version = "0.17.7"
+source = "git+https://github.com/betrusted-io/ring-xous?rev=5f86cb10bebd521a45fb3abb06995200aeda2948#5f86cb10bebd521a45fb3abb06995200aeda2948"
 dependencies = [
  "cc",
  "cfg-if",
