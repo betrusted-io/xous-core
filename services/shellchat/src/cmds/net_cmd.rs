@@ -482,12 +482,13 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                 }
                 // only valid for hardware configs with TLS enabled
+                /* // ring::xous_test is not ported in ring 0.17.x -- will be ported on-demand
                 #[cfg(all(any(feature = "precursor", feature = "renode"), feature = "tls"))]
                 "rt" => {
                     log::set_max_level(log::LevelFilter::Trace);
                     ring::xous_test::p256_elem_add_test();
                     log::set_max_level(log::LevelFilter::Info);
-                }
+                } */
                 #[cfg(feature = "websocket")]
                 "ws" => {
                     if self.ws.is_none() {
