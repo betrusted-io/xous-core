@@ -14080,6 +14080,29 @@ soc/candidate/pio/rp_pio.sv]]></description>
                     </fields>
                 </register>
                 <register>
+                    <name>SFR_CONFIG</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>snap_to_which</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[snap_to_which read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>snap_to_quantum</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[snap_to_quantum read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>SFR_FLEVEL</name>
                     <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
                     <addressOffset>0x000c</addressOffset>
