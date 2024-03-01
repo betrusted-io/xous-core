@@ -1,6 +1,6 @@
 pub mod cmd;
 mod danger;
-pub mod rota;
+pub mod ota;
 pub mod xtls;
 
 use std::convert::{Into, TryFrom, TryInto};
@@ -10,17 +10,16 @@ use std::sync::Arc;
 
 use locales::t;
 use modals::Modals;
+use ota::OwnedTrustAnchor;
 use rkyv::{
     de::deserializers::AllocDeserializer,
     ser::{serializers::WriteSerializer, Serializer},
     Deserialize,
 };
-use rustls::{Certificate, ClientConfig, ClientConnection, RootCertStore};
-use sha2::Digest;
-use x509_parser::prelude::{FromDer, X509Certificate};
+use rustls::pki_types::{CertificateDer, TrustAnchor};
+use rustls::{ClientConfig, ClientConnection, RootCertStore};
+use x509_parser::prelude::{parse_x509_certificate, FromDer, X509Certificate};
 use xous_names::XousNames;
-
-use crate::rota::RustlsOwnedTrustAnchor;
 
 /// PDDB Dict for tls trusted certificates keys
 const TLS_TRUSTED_DICT: &str = "tls.trusted";
@@ -42,25 +41,22 @@ impl Tls {
     ///  # Returns
     ///
     /// a count of trusted certificates
-    pub fn trust_modal(&self, certificates: Vec<Certificate>) -> usize {
+    pub fn trust_modal(&self, certificates: Vec<CertificateDer>) -> usize {
         let xns = XousNames::new().unwrap();
         let modals = Modals::new(&xns).unwrap();
-
-        let certificates: Vec<(String, X509Certificate)> = certificates
+        let certificates: Vec<(&[u8], X509Certificate)> = certificates
             .iter()
-            .map(|cert| {
-                let mut hasher = sha2::Sha256::new();
-                hasher.update(&cert);
-                (format!("{:X}", hasher.finalize()), X509Certificate::from_der(cert.as_ref()))
-            })
-            .filter(|(_fingerprint, result)| result.is_ok())
-            .map(|(fingerprint, result)| (fingerprint, result.unwrap().1))
+            .map(|cert| X509Certificate::from_der(cert))
+            .filter(|result| result.is_ok())
+            .map(|result| result.unwrap())
             .filter(|(_fingerprint, x509)| x509.is_ca())
             .collect();
-
         let chain: Vec<String> = certificates
             .iter()
-            .map(|(fingerprint, x509)| format!("🏛 {}\n{}", &x509.subject(), open_hex(fingerprint),))
+            .map(|(fingerprint, x509)| {
+                let fp = std::str::from_utf8(*fingerprint).unwrap_or("");
+                format!("🏛 {}\n{}", &x509.subject(), open_hex(fp))
+            })
             .collect();
         let chain: Vec<&str> = chain.iter().map(AsRef::as_ref).collect();
         modals.add_list(chain).expect("couldn't build checkbox list");
@@ -72,15 +68,13 @@ impl Tls {
                     .unwrap()
                     .iter()
                     .map(|i| &certificates[*i].1)
-                    .map(|x509| RustlsOwnedTrustAnchor::from(x509))
-                    .for_each(|rota| {
-                        self.save_rota(&rota).unwrap_or_else(|e| {
+                    .map(|x509| OwnedTrustAnchor::from_x509(x509))
+                    .filter_map(|ta| ta.ok())
+                    .for_each(|ta| {
+                        self.save_ta(&ta).unwrap_or_else(|e| {
                             log::warn!("failed to save cert: {e}");
                             modals
-                                .show_notification(
-                                    format!("failed to save:\n{}\n{e}", &rota.subject()).as_str(),
-                                    None,
-                                )
+                                .show_notification(format!("failed to save:\n{:?}\n{e}", &ta).as_str(), None)
                                 .expect("modal failed");
                         });
                     });
@@ -107,10 +101,6 @@ impl Tls {
             Ok(_) => {
                 log::info!("Deleted {}\n", TLS_TRUSTED_DICT);
                 self.pddb.sync().or_else(|e| Ok::<(), Error>(log::warn!("{e}"))).ok();
-                // match self.pddb.sync() {
-                //     Err(e) => log::warn!("{e}"),
-                //     _ => (),
-                // }
             }
             Err(e) => log::warn!("failed to delete {}: {:?}", TLS_TRUSTED_DICT, e),
         }
@@ -138,45 +128,47 @@ impl Tls {
     /// # Arguments
     ///
     /// * `ta` - a trusted trust-anchor
-    pub fn save_rota(&self, ta: &RustlsOwnedTrustAnchor) -> Result<(), Error> {
-        let key = ta.pddb_key();
-        match self.pddb.get(
-            TLS_TRUSTED_DICT,
-            &key,
-            None,
-            true,
-            true,
-            Some(rota::MAX_ROTA_BYTES),
-            None::<fn()>,
-        ) {
-            Ok(mut pddb_key) => {
-                let mut buf = Vec::<u8>::new();
-                // reserve 2 bytes to hold a u16 (see below)
-                let reserved = 2;
-                buf.push(0u8);
-                buf.push(0u8);
-
-                // serialize the trust-anchor
-                let mut serializer = WriteSerializer::with_pos(buf, reserved);
-                let pos = serializer.serialize_value(ta).unwrap();
-                let mut bytes = serializer.into_inner();
-
-                // copy pop u16 into the first 2 bytes to enable the rkyv archive to be deserialised
-                let pos: u16 = u16::try_from(pos).expect("data > u16");
-                let pos_bytes = pos.to_be_bytes();
-                bytes[0] = pos_bytes[0];
-                bytes[1] = pos_bytes[1];
-                match pddb_key.write(&bytes) {
-                    Ok(len) => {
-                        self.pddb.sync().ok();
-                        log::info!("Wrote {} bytes to {}:{}", len, TLS_TRUSTED_DICT, key);
+    pub fn save_ta(&self, ta: &OwnedTrustAnchor) -> Result<(), Error> {
+        match ta.pddb_key() {
+            Ok(key) => {
+                match self.pddb.get(
+                    TLS_TRUSTED_DICT,
+                    &key,
+                    None,
+                    true,
+                    true,
+                    Some(ota::MAX_OTA_BYTES),
+                    None::<fn()>,
+                ) {
+                    Ok(mut pddb_key) => {
+                        let mut buf = Vec::<u8>::new();
+                        // reserve 2 bytes to hold a u16 (see below)
+                        let reserved = 2;
+                        buf.push(0u8);
+                        buf.push(0u8);
+                        // serialize the trust-anchor
+                        let mut serializer = WriteSerializer::with_pos(buf, reserved);
+                        let pos = serializer.serialize_value(ta).unwrap();
+                        let mut bytes = serializer.into_inner();
+                        // copy pop u16 into the first 2 bytes to enable the rkyv archive to be deserialised
+                        let pos: u16 = u16::try_from(pos).expect("data > u16");
+                        let pos_bytes = pos.to_be_bytes();
+                        bytes[0] = pos_bytes[0];
+                        bytes[1] = pos_bytes[1];
+                        match pddb_key.write(&bytes) {
+                            Ok(len) => {
+                                self.pddb.sync().ok();
+                                log::info!("Wrote {} bytes to {}:{}", len, TLS_TRUSTED_DICT, key);
+                            }
+                            Err(e) => {
+                                log::warn!("Error writing {}:{}: {:?}", TLS_TRUSTED_DICT, key, e);
+                            }
+                        }
                     }
-                    Err(e) => {
-                        log::warn!("Error writing {}:{}: {:?}", TLS_TRUSTED_DICT, key, e);
-                    }
+                    Err(e) => log::warn!("failed to create {}:{}\n{}", TLS_TRUSTED_DICT, key, e),
                 }
             }
-            Err(e) => log::warn!("failed to create {}:{}\n{}", TLS_TRUSTED_DICT, key, e),
+            Err(e) => log::warn!("failed to get pddb_key {e}"),
         }
         Ok(())
     }
@@ -186,17 +178,17 @@ impl Tls {
     /// # Arguments
     ///
     /// * `key` - pddb key holding the trust-anchor
-    pub fn get_rota(&self, key: &str) -> Option<RustlsOwnedTrustAnchor> {
+    pub fn get_ota(&self, key: &str) -> Option<OwnedTrustAnchor> {
         match self.pddb.get(TLS_TRUSTED_DICT, key, None, false, false, None, None::<fn()>) {
             Ok(mut pddb_key) => {
-                let mut bytes = [0u8; rota::MAX_ROTA_BYTES];
+                let mut bytes = [0u8; ota::MAX_OTA_BYTES];
                 match pddb_key.read(&mut bytes) {
                     Ok(_) => {
                         // extract pos u16 from the first 2 bytes
                         let pos: u16 = u16::from_be_bytes([bytes[0], bytes[1]]);
                         let pos: usize = pos.into();
                         // deserialize the trust-anchor
-                        let archive = unsafe { rkyv::archived_value::<RustlsOwnedTrustAnchor>(&bytes, pos) };
+                        let archive = unsafe { rkyv::archived_value::<OwnedTrustAnchor>(&bytes, pos) };
                         let ta = archive.deserialize(&mut AllocDeserializer {}).ok();
                         log::info!("get trust anchor {}", key);
                         log::trace!("get trust anchor'{}' = '{:?}'", key, &ta);
@@ -215,17 +207,21 @@ impl Tls {
         }
     }
 
-    /// Returns a Vec of all trusted trust-anchors
-    pub fn trusted(&self) -> Vec<RustlsOwnedTrustAnchor> {
+    /// Returns a Vec of all trusted (saved) OwnedTrustAnchors
+    ///
+    /// # Returns
+    ///
+    /// a Vec of OwnedTrustAnchor.
+    pub fn trusted(&self) -> Vec<OwnedTrustAnchor> {
         match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
             Ok(list) => list
                 .iter()
-                .map(|key| self.get_rota(&key))
-                .filter_map(|rota| rota)
-                .collect::<Vec<RustlsOwnedTrustAnchor>>(),
+                .map(|key| self.get_ota(&key))
+                .filter_map(|ota| ota)
+                .collect::<Vec<OwnedTrustAnchor>>(),
             Err(e) => {
                 log::warn!("failed to get iter over trusted: {e}");
-                Vec::<RustlsOwnedTrustAnchor>::new()
+                Vec::<OwnedTrustAnchor>::new()
             }
         }
     }
@@ -239,8 +235,8 @@ impl Tls {
     /// # Returns
     ///
     /// true if the certificate is saved in the TLS_TRUSTED_DICT in the pddb
-    pub fn is_trusted_cert(&self, cert: Certificate) -> bool {
-        match X509Certificate::from_der(cert.as_ref()) {
+    pub fn is_trusted_cert(&self, cert: CertificateDer) -> bool {
+        match parse_x509_certificate(cert.as_ref()) {
             Ok(result) => self.is_trusted_x509(&result.1),
             Err(e) => {
                 log::warn!("failed to get x509 from Certificate: {e}");
@@ -259,38 +255,56 @@ impl Tls {
     ///
     /// true if the certificate is saved in the TLS_TRUSTED_DICT in the pddb
     pub fn is_trusted_x509(&self, x509: &X509Certificate) -> bool {
-        let ta = RustlsOwnedTrustAnchor::from(x509);
-        let key = ta.pddb_key();
-        match self.pddb.get(TLS_TRUSTED_DICT, &key, None, false, false, None, None::<fn()>) {
-            Ok(_) => {
-                log::info!("trusted: {key}");
-                true
-            }
-            Err(_) => {
-                log::info!("UNtrusted: {key}");
+        match OwnedTrustAnchor::from_x509(x509) {
+            Ok(ta) => match ta.pddb_key() {
+                Ok(key) => {
+                    match self.pddb.get(TLS_TRUSTED_DICT, &key, None, false, false, None, None::<fn()>) {
+                        Ok(_) => {
+                            log::info!("trusted: {key}");
+                            true
+                        }
+                        Err(_) => {
+                            log::info!("UNtrusted: {key}");
+                            false
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("failed to get pddb_key: {e}");
+                    false
+                }
+            },
+            Err(e) => {
+                log::warn!("failed construct OwnedTrustAnchor from x509: {e}");
                 false
             }
         }
     }
 
-    /// Returns a RootCertStore containing all trusted trust-anchors
+    /// Returns a RootCertStore containing all trusted (saved) TrustAnchors
+    ///
+    /// # Returns
+    ///
+    /// a RootCertStore suitable for rustls
     pub fn root_store(&self) -> RootCertStore {
         let mut root_store = RootCertStore::empty();
-        match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
-            Ok(list) => {
-                let rota = list
-                    .iter()
-                    .map(|key| self.get_rota(&key))
-                    .filter_map(|rota| rota)
-                    .map(|t| Into::<rustls::OwnedTrustAnchor>::into(t));
-                root_store.add_trust_anchors(rota);
+        let trusted = match self.pddb.list_keys(TLS_TRUSTED_DICT, None) {
+            Ok(list) => list
+                .iter()
+                .map(|key| self.get_ota(&key))
+                .filter_map(|ota| ota)
+                .map(|ota| ota.into())
+                .collect::<Vec<TrustAnchor>>(),
+            Err(e) => {
+                log::warn!("failed to get iter over trusted: {e}");
+                Vec::<TrustAnchor>::new()
             }
-            Err(e) => log::warn!("failed to get iter over trusted: {e}"),
-        }
+        };
+        root_store.extend(trusted);
         root_store
     }
 
-    /// Probes the host and returns the TLS chain of trust
+    /// Probes the host and returns the TLS chain of trust for a host
     ///
     /// Establishes a tls connection to the host, extracts the
     /// certificates offered and immediately closes the connection.
@@ -306,37 +320,41 @@ impl Tls {
     ///
     /// # Returns
     ///
-    /// The TLS chain of trust for the host
-    pub fn probe(&self, host: &str) -> Result<Vec<Certificate>, Error> {
+    /// * A Vec<CertificateDer> containing the TLS chain of trust offered by the host
+    /// * Error if the communication with the host fails
+    pub fn probe(&self, host: &str) -> Result<Vec<CertificateDer>, Error> {
         log::info!("starting TLS probe");
-        // Attempt to open the tls connection with an empty root_store
-        let root_store = rustls::RootCertStore::empty();
-        // Stifle the default rustls certificate verification's complaint about an
-        // unknown/untrusted CA root certificate so that we get to see the certificate chain
-        let stifled_verifier = Arc::new(danger::StifledCertificateVerification { roots: root_store });
-        let config = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_custom_certificate_verifier(stifled_verifier)
-            .with_no_client_auth();
-        match host.try_into() {
+        match host.to_owned().try_into() {
             Ok(server_name) => {
-                let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-                log::info!("connect TCPstream to {}", host);
-                match TcpStream::connect((host, 443)) {
-                    Ok(mut sock) => {
-                        match conn.complete_io(&mut sock) {
-                            Ok(_) => log::info!("handshake complete"),
+                // Stifle the default rustls certificate verification's complaint about an
+                // unknown/untrusted CA root certificate so that we get to see the certificate chain
+                let config = rustls::ClientConfig::builder()
+                    .dangerous()
+                    .with_custom_certificate_verifier(Arc::new(danger::StifledCertificateVerification::new()))
+                    .with_no_client_auth();
+                match rustls::ClientConnection::new(Arc::new(config), server_name) {
+                    Ok(mut conn) => {
+                        log::info!("connect TCPstream to {}", host);
+                        match TcpStream::connect((host, 443)) {
+                            Ok(mut sock) => match conn.complete_io(&mut sock) {
+                                Ok(_) => log::info!("handshake complete"),
+                                Err(e) => log::warn!("{e}"),
+                            },
                             Err(e) => log::warn!("{e}"),
                         }
                         conn.send_close_notify();
                         match conn.peer_certificates() {
-                            Some(certificates) => Ok(certificates.to_vec()),
-                            None => Ok(vec![]),
+                            Some(certificates) => {
+                                let cert_owned: Vec<CertificateDer<'static>> =
+                                    certificates.iter().map(|cert| cert.clone().into_owned()).collect();
+                                Ok(cert_owned)
+                            }
+                            None => Ok(Vec::<CertificateDer<'static>>::new()),
                         }
                     }
                     Err(e) => {
-                        log::warn!("{e}");
-                        Err(e)
+                        log::warn!("failed to create ClientConnection: {e}");
+                        Err(Error::from(ErrorKind::InvalidInput))
                     }
                 }
             }
@@ -361,7 +379,13 @@ impl Tls {
     /// the number of trusted Certificates offered by the host
     pub fn inspect(&self, host: &str) -> Result<usize, Error> {
         match self.probe(host) {
-            Ok(certs) => Ok(self.trust_modal(certs)),
+            Ok(certs) => {
+                if certs.len() > 0 {
+                    Ok(self.trust_modal(certs.to_vec()))
+                } else {
+                    Ok(0)
+                }
+            }
             Err(e) => {
                 log::warn!("failed to probe {host}: {e}");
                 Ok(0)
@@ -387,7 +411,7 @@ impl Tls {
         match self.probe(host) {
             Ok(certs) => match certs.iter().find(|&cert| self.is_trusted_cert(cert.clone())) {
                 Some(_) => true,
-                None => inspect && (self.trust_modal(certs) > 0),
+                None => inspect && (self.trust_modal(certs.to_vec()) > 0),
             },
             Err(e) => {
                 log::warn!("failed to probe {host}: {e}");
@@ -397,10 +421,7 @@ impl Tls {
     }
 
     pub fn client_config(&self) -> ClientConfig {
-        rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(self.root_store())
-            .with_no_client_auth()
+        rustls::ClientConfig::builder().with_root_certificates(self.root_store()).with_no_client_auth()
     }
 
     /// Construct a tls-stream on the tcp-stream provided
@@ -418,12 +439,17 @@ impl Tls {
         host: &str,
         sock: TcpStream,
     ) -> Result<rustls::StreamOwned<ClientConnection, TcpStream>, Error> {
-        match rustls::ClientConnection::new(
-            Arc::new(self.client_config()),
-            host.try_into().expect("failed url host_str"),
-        ) {
-            Ok(conn) => Ok(rustls::StreamOwned::new(conn, sock)),
-            Err(_) => Err(Error::new(ErrorKind::Other, "failed to configure client connection")),
+        match host.to_owned().try_into() {
+            Ok(server_name) => {
+                match rustls::ClientConnection::new(Arc::new(self.client_config()), server_name) {
+                    Ok(conn) => Ok(rustls::StreamOwned::new(conn, sock)),
+                    Err(_) => Err(Error::new(ErrorKind::Other, "failed to configure client connection")),
+                }
+            }
+            Err(e) => {
+                log::warn!("failed to create sever_name from {host}: {e}");
+                Err(Error::from(ErrorKind::InvalidInput))
+            }
         }
     }
 }

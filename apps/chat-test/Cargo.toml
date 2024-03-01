@@ -38,8 +38,8 @@ rkyv = { version = "0.4.3", default-features = false, features = [
 ] }
 serde = { version = "1.0", features = ["derive"] }
 tls = { path = "../../libs/tls" }
-ureq = { version = "2.7.1", features = ["json"] }
-url = "2.2.2"
+ureq = { version = "2.9.4", features = ["json"] }
+url = "2.3.1"
 
 [features]
 default = []

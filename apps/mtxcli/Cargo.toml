@@ -31,7 +31,7 @@ pddb = { path = "../../services/pddb" }
 # new dependencies for mtxcli
 percent-encoding = "2.2"
 serde = { version = "1.0", features = ["derive"] }
-ureq = { version = "2.5", features = ["json"] }
+ureq = { version = "2.9.4", features = ["json"] }
 
 [features]
 default = []

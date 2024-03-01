@@ -80,10 +80,14 @@ tracing-subscriber = { version = "0.3.11", optional = true }
 
 # for rustls testing
 tls = { path = "../../libs/tls", optional = true }
-url = { version = "2.2.2", optional = true }
+url = { version = "2.3.1", optional = true }
 # for testing ring math functions
 # note requirement for patch to xous-ring in workspace Cargo.toml
-ring = { version = "=0.16.20", optional = true }
+ring = { version = "=0.17.7", optional = true }
+
+# for direct TLS testing - API broke from 0.16 to 0.17 rustls
+rustls = { version = "0.22.2", optional = true }
+webpki-roots = { version = "0.26.0", optional = true }
 
 # for websocket testing
 tungstenite = { version = "0.20.0", optional = true }
@@ -97,7 +101,7 @@ random-pick = { version = "1.2.16", optional = true }
 hex = { version = "0.4.3", default-features = false, features = [] }
 #sha2 = {version = "0.9.5", default-features = false, features = []}
 [dependencies.curve25519-dalek]
-version = "=4.1.1"        # note this is patched to our fork in ./Cargo.toml
+version = "=4.1.1"       # note this is patched to our fork in ./Cargo.toml
 default-features = false
 
 [dependencies.x25519-dalek]
@@ -148,4 +152,5 @@ mass-storage = []
 rand-api = []
 locktests = [
 ] # for debugging some specific `std` tests cherry-picked out of the test suite
+simple-tls = ["rustls", "webpki-roots"]
 default = [] # "debugprint"
