@@ -482,12 +482,13 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                 }
                 // only valid for hardware configs with TLS enabled
+                /* // ring::xous_test is not ported in ring 0.17.x -- will be ported on-demand
                 #[cfg(all(any(feature = "precursor", feature = "renode"), feature = "tls"))]
                 "rt" => {
                     log::set_max_level(log::LevelFilter::Trace);
                     ring::xous_test::p256_elem_add_test();
                     log::set_max_level(log::LevelFilter::Info);
-                }
+                } */
                 #[cfg(feature = "websocket")]
                 "ws" => {
                     if self.ws.is_none() {
@@ -560,6 +561,48 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     if let Ok(Some(r)) = tls::cmd::shellchat(&mut tokens) {
                         write!(ret, "{r}").unwrap();
                     }
+                }
+                #[cfg(feature = "simple-tls")]
+                "rustls" => {
+                    use std::convert::TryInto;
+                    log::set_max_level(log::LevelFilter::Trace);
+                    log::info!("starting TLS run");
+                    let mut root_store = rustls::RootCertStore::empty();
+                    log::info!("create root store");
+                    root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+                    log::info!("build TLS client config");
+                    let config = rustls::ClientConfig::builder()
+                        .with_root_certificates(root_store)
+                        .with_no_client_auth();
+
+                    log::info!("point TLS to bunniefoo.com");
+                    let server_name = "bunniefoo.com".try_into().unwrap();
+                    let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
+
+                    log::info!("connect TCPstream to bunniefoo.com");
+                    let mut sock = TcpStream::connect(("bunniefoo.com", 443)).unwrap();
+                    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+                    log::info!("create http headers and write to server");
+                    tls.write_all(
+                        concat!(
+                            "GET / HTTP/1.1\r\n",
+                            "Host: bunniefoo.com\r\n",
+                            "Connection: close\r\n",
+                            "Accept-Encoding: identity\r\n",
+                            "\r\n"
+                        )
+                        .as_bytes(),
+                    )
+                    .unwrap();
+                    log::info!("readout cipher suite");
+                    let ciphersuite = tls.conn.negotiated_cipher_suite().unwrap();
+                    log::info!("Current ciphersuite: {:?}", ciphersuite.suite());
+                    let mut plaintext = Vec::new();
+                    log::info!("read TLS response");
+                    tls.read_to_end(&mut plaintext).ok();
+                    log::info!("len: {}", plaintext.len());
+                    log::info!("{}", std::str::from_utf8(&plaintext).unwrap_or("utf-error"));
+                    log::set_max_level(log::LevelFilter::Info);
                 }
                 // note: to use the `shellperf` option, you need to load a version of the SOC that has the
                 // performance counters built in. this can be generated using the command
