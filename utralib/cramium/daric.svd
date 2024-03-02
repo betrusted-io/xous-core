@@ -14420,6 +14420,50 @@ soc/candidate/pio/rp_pio.sv]]></description>
                     </fields>
                 </register>
                 <register>
+                    <name>SFR_EXTCLOCK</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0048</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>use_extclk</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[use_extclk read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>extclk_gpio_0</name>
+                            <msb>8</msb>
+                            <bitRange>[8:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[extclk_gpio_0 read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>extclk_gpio_1</name>
+                            <msb>13</msb>
+                            <bitRange>[13:9]</bitRange>
+                            <lsb>9</lsb>
+                            <description><![CDATA[extclk_gpio_1 read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>extclk_gpio_2</name>
+                            <msb>18</msb>
+                            <bitRange>[18:14]</bitRange>
+                            <lsb>14</lsb>
+                            <description><![CDATA[extclk_gpio_2 read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>extclk_gpio_3</name>
+                            <msb>23</msb>
+                            <bitRange>[23:19]</bitRange>
+                            <lsb>19</lsb>
+                            <description><![CDATA[extclk_gpio_3 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>SFR_QDIV0</name>
                     <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
                     <addressOffset>0x0050</addressOffset>
