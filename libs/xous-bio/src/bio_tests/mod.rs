@@ -80,26 +80,29 @@ pub fn bio_tests() {
 
     units::hello_world();
     units::hello_multiverse();
+    units::fifo_basic();
 }
 
 // Test plan:
 // Unit tests:
-//   - Basic FIFO stall test. Two cores writing to each other to unlock.
-//   - Host FIFO stall on empty test. Core stalls until host provides data.
-//   - Host FIFO stall on full test. Core stall until host reads data.
-//   - GPIO input path test
-//   - GPIO direction control test
-//   - FIFO level trigger test - eq, gt, lt on various channels, at various fullness levels
-//   - Stall on event - register bit test, between cores
-//   - Stall on event - register bit test, to host
-//   - Stall on event - FIFO level test
-//   - Host IRQ generation test - some combination with event tests above to confirm IRQ generation
-//   - Core ID read test
-//   - Core aclk counter test
+//   -[x] Basic FIFO stall test. Two cores writing to each other to unlock.
+//   -[ ] Host FIFO stall on empty test. Core stalls until host provides data.
+//   -[ ] Host FIFO stall on full test. Core stall until host reads data.
+//   -[ ] GPIO input path test
+//   -[ ] GPIO direction control test
+//   -[ ] FIFO level trigger test - eq, gt, lt on various channels, at various fullness levels
+//   -[ ] Stall on event - register bit test, between cores
+//   -[ ] Stall on event - register bit test, to host
+//   -[ ] Stall on event - FIFO level test
+//   -[ ] Host IRQ generation test - some combination with event tests above to confirm IRQ generation
+//   -[ ] Extclk as x20 stall source
+//   -[ ] Check Extclk:gpio pin mapping (make sure bit ordering is not swapped)
+//   -[ ] Core ID read test
+//   -[ ] Core aclk counter test
 // Application tests:
-//   - SPI loopback test
-//   - I2C loopback test
-//   - IR controller test
-//   - Arithmetic test, utilizing load/store on core 0
-//   - Arithmetic test, without store, cores 1-3
-//   - DMA transfer test -- might have to wait until full-chip integration to get MDMA core?
+//   -[ ] SPI loopback test - implement using extclk as spi clk for input
+//   -[ ] I2C loopback test
+//   -[ ] IR controller test
+//   -[ ] Arithmetic test, utilizing load/store on core 0
+//   -[ ] Arithmetic test, without store, cores 1-3
+//   -[ ] DMA transfer test -- might have to wait until full-chip integration to get MDMA core?
