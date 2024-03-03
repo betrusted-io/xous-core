@@ -14282,113 +14282,104 @@ soc/candidate/pio/rp_pio.sv]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>SFR_ELEVEL0</name>
+                    <name>SFR_ELEVEL</name>
                     <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
                     <addressOffset>0x0030</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>pclk_fifo_event_level0</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
+                            <name>fifo_event_level0</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[pclk_fifo_event_level[0] read/write control register]]></description>
+                            <description><![CDATA[fifo_event_level[0] read/write control register]]></description>
                         </field>
                         <field>
-                            <name>pclk_fifo_event_level1</name>
-                            <msb>15</msb>
-                            <bitRange>[15:8]</bitRange>
-                            <lsb>8</lsb>
-                            <description><![CDATA[pclk_fifo_event_level[1] read/write control register]]></description>
-                        </field>
-                        <field>
-                            <name>pclk_fifo_event_level2</name>
-                            <msb>23</msb>
-                            <bitRange>[23:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[pclk_fifo_event_level[2] read/write control register]]></description>
-                        </field>
-                        <field>
-                            <name>pclk_fifo_event_level3</name>
-                            <msb>31</msb>
-                            <bitRange>[31:24]</bitRange>
-                            <lsb>24</lsb>
-                            <description><![CDATA[pclk_fifo_event_level[3] read/write control register]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>SFR_ELEVEL1</name>
-                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
-                    <addressOffset>0x0034</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>pclk_fifo_event_level4</name>
+                            <name>fifo_event_level1</name>
                             <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[pclk_fifo_event_level[4] read/write control register]]></description>
+                            <bitRange>[7:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[fifo_event_level[1] read/write control register]]></description>
                         </field>
                         <field>
-                            <name>pclk_fifo_event_level5</name>
-                            <msb>15</msb>
-                            <bitRange>[15:8]</bitRange>
+                            <name>fifo_event_level2</name>
+                            <msb>11</msb>
+                            <bitRange>[11:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[pclk_fifo_event_level[5] read/write control register]]></description>
+                            <description><![CDATA[fifo_event_level[2] read/write control register]]></description>
                         </field>
                         <field>
-                            <name>pclk_fifo_event_level6</name>
-                            <msb>23</msb>
-                            <bitRange>[23:16]</bitRange>
+                            <name>fifo_event_level3</name>
+                            <msb>15</msb>
+                            <bitRange>[15:12]</bitRange>
+                            <lsb>12</lsb>
+                            <description><![CDATA[fifo_event_level[3] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_level4</name>
+                            <msb>19</msb>
+                            <bitRange>[19:16]</bitRange>
                             <lsb>16</lsb>
-                            <description><![CDATA[pclk_fifo_event_level[6] read/write control register]]></description>
+                            <description><![CDATA[fifo_event_level[4] read/write control register]]></description>
                         </field>
                         <field>
-                            <name>pclk_fifo_event_level7</name>
-                            <msb>31</msb>
-                            <bitRange>[31:24]</bitRange>
+                            <name>fifo_event_level5</name>
+                            <msb>23</msb>
+                            <bitRange>[23:20]</bitRange>
+                            <lsb>20</lsb>
+                            <description><![CDATA[fifo_event_level[5] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_level6</name>
+                            <msb>27</msb>
+                            <bitRange>[27:24]</bitRange>
                             <lsb>24</lsb>
-                            <description><![CDATA[pclk_fifo_event_level[7] read/write control register]]></description>
+                            <description><![CDATA[fifo_event_level[6] read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_event_level7</name>
+                            <msb>31</msb>
+                            <bitRange>[31:28]</bitRange>
+                            <lsb>28</lsb>
+                            <description><![CDATA[fifo_event_level[7] read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>SFR_ETYPE</name>
                     <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
-                    <addressOffset>0x0038</addressOffset>
+                    <addressOffset>0x0034</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>pclk_fifo_event_lt_mask</name>
+                            <name>fifo_event_lt_mask</name>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[pclk_fifo_event_lt_mask read/write control register]]></description>
+                            <description><![CDATA[fifo_event_lt_mask read/write control register]]></description>
                         </field>
                         <field>
-                            <name>pclk_fifo_event_eq_mask</name>
+                            <name>fifo_event_eq_mask</name>
                             <msb>15</msb>
                             <bitRange>[15:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[pclk_fifo_event_eq_mask read/write control register]]></description>
+                            <description><![CDATA[fifo_event_eq_mask read/write control register]]></description>
                         </field>
                         <field>
-                            <name>pclk_fifo_event_gt_mask</name>
+                            <name>fifo_event_gt_mask</name>
                             <msb>23</msb>
                             <bitRange>[23:16]</bitRange>
                             <lsb>16</lsb>
-                            <description><![CDATA[pclk_fifo_event_gt_mask read/write control register]]></description>
+                            <description><![CDATA[fifo_event_gt_mask read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>SFR_EVENT_SET</name>
                     <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
-                    <addressOffset>0x003c</addressOffset>
+                    <addressOffset>0x0038</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -14404,7 +14395,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 <register>
                     <name>SFR_EVENT_CLR</name>
                     <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
-                    <addressOffset>0x0040</addressOffset>
+                    <addressOffset>0x003c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -14420,7 +14411,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 <register>
                     <name>SFR_EVENT_STATUS</name>
                     <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
-                    <addressOffset>0x0044</addressOffset>
+                    <addressOffset>0x0040</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -14436,7 +14427,7 @@ soc/candidate/pio/rp_pio.sv]]></description>
                 <register>
                     <name>SFR_EXTCLOCK</name>
                     <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
-                    <addressOffset>0x0048</addressOffset>
+                    <addressOffset>0x0044</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -14474,6 +14465,22 @@ soc/candidate/pio/rp_pio.sv]]></description>
                             <bitRange>[23:19]</bitRange>
                             <lsb>19</lsb>
                             <description><![CDATA[extclk_gpio_3 read/write control register]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SFR_FIFO_CLR</name>
+                    <description><![CDATA[See file:///F:/code/cram-soc/soc_oss/bio/bio.sv]]></description>
+                    <addressOffset>0x0048</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sfr_fifo_clr</name>
+                            <msb>3</msb>
+                            <bitRange>[3:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[sfr_fifo_clr read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
