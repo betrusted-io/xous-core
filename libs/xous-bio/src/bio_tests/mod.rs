@@ -1,5 +1,14 @@
 pub mod units;
 
+// masks for utra::main::WDATA, which is abused to control GPIO register states for testing this module
+// these signals are "pulled through" the hierarchy and only exist in the test configuration, thus
+// they don't have a utralib entry
+pub const TEST_I2C_MASK: u32     = 0b00001;
+pub const TEST_FORCE_MASK: u32   = 0b00010;
+pub const TEST_LOOP_OE_MASK: u32 = 0b00100;
+pub const TEST_INVERT_MASK: u32  = 0b01000;
+pub const TEST_FORCE_OFFSET: usize  = 16; // top 16 bits
+
 #[cfg(not(any(target_os = "xous")))]
 mod duart {
     pub const UART_DOUT: utralib::Register = utralib::Register::new(0, 0xff);
@@ -81,22 +90,23 @@ pub fn bio_tests() {
     units::hello_world();
     units::hello_multiverse();
     units::fifo_basic();
+    units::host_fifo_tests();
 }
 
 // Test plan:
 // Unit tests:
 //   -[x] Basic FIFO stall test. Two cores writing to each other to unlock.
-//   -[ ] Host FIFO stall on empty test. Core stalls until host provides data.
-//   -[ ] Host FIFO stall on full test. Core stall until host reads data.
-//   -[ ] GPIO input path test
+//   -[x] Host FIFO stall on empty test. Core stalls until host provides data.
+//   -[x] Host FIFO stall on full test. Core stall until host reads data.
+//   -[x] GPIO input path test
+//   -[ ] Extclk as x20 stall source
+//   -[ ] Check Extclk:gpio pin mapping (make sure bit ordering is not swapped)
 //   -[ ] GPIO direction control test
 //   -[ ] FIFO level trigger test - eq, gt, lt on various channels, at various fullness levels
 //   -[ ] Stall on event - register bit test, between cores
 //   -[ ] Stall on event - register bit test, to host
 //   -[ ] Stall on event - FIFO level test
 //   -[ ] Host IRQ generation test - some combination with event tests above to confirm IRQ generation
-//   -[ ] Extclk as x20 stall source
-//   -[ ] Check Extclk:gpio pin mapping (make sure bit ordering is not swapped)
 //   -[ ] Core ID read test
 //   -[ ] Core aclk counter test
 // Application tests:
