@@ -91,6 +91,7 @@ pub fn bio_tests() {
     units::hello_multiverse();
     units::fifo_basic();
     units::host_fifo_tests();
+    units::fifo_level_tests();
 }
 
 // Test plan:
@@ -103,9 +104,9 @@ pub fn bio_tests() {
 //   -[ ] Check Extclk:gpio pin mapping (make sure bit ordering is not swapped)
 //   -[ ] GPIO direction control test
 //   -[ ] FIFO level trigger test - eq, gt, lt on various channels, at various fullness levels
-//   -[ ] Stall on event - register bit test, between cores
-//   -[ ] Stall on event - register bit test, to host
-//   -[ ] Stall on event - FIFO level test
+//   -[x] Stall on event - register bit test, between cores
+//   -[x] Stall on event - register bit test, to host
+//   -[x] Stall on event - FIFO level test
 //   -[ ] Host IRQ generation test - some combination with event tests above to confirm IRQ generation
 //   -[ ] Core ID read test
 //   -[ ] Core aclk counter test
