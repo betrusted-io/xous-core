@@ -14087,18 +14087,32 @@ soc/candidate/pio/rp_pio.sv]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>snap_to_which</name>
+                            <name>snap_output_to_which</name>
                             <msb>1</msb>
                             <bitRange>[1:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[snap_to_which read/write control register]]></description>
+                            <description><![CDATA[snap_output_to_which read/write control register]]></description>
                         </field>
                         <field>
-                            <name>snap_to_quantum</name>
+                            <name>snap_output_to_quantum</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[snap_to_quantum read/write control register]]></description>
+                            <description><![CDATA[snap_output_to_quantum read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>snap_input_to_which</name>
+                            <msb>4</msb>
+                            <bitRange>[4:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[snap_input_to_which read/write control register]]></description>
+                        </field>
+                        <field>
+                            <name>snap_input_to_quantum</name>
+                            <msb>5</msb>
+                            <bitRange>[5:5]</bitRange>
+                            <lsb>5</lsb>
+                            <description><![CDATA[snap_input_to_quantum read/write control register]]></description>
                         </field>
                     </fields>
                 </register>
