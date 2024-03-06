@@ -31,6 +31,6 @@ rkyv = { version = "0.4.3", default-features = false, features = [
 ] }
 
 [features]
-pio = []
-pio-memlcd = []
+# add this feature to enable pre-emption
+quantum-timer = ["utralib"]
 default = []
