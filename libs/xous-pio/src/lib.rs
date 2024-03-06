@@ -947,6 +947,11 @@ impl PioSm {
         (self.pio.r(rp_pio::SFR_IRQ) & (1 << int_number)) != 0
     }
 
+    pub fn sm_interrupt_clear(&mut self, int_number: usize) {
+        assert!(int_number < 8);
+        self.pio.wo(rp_pio::SFR_IRQ, 1 << int_number)
+    }
+
     pub fn sm_drain_tx_fifo(&mut self) {
         let sm_offset = self.sm_to_stride_offset();
         let instr = {
