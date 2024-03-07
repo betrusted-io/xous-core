@@ -226,6 +226,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_service("ffi-test", false);
             builder.add_loader_feature("renode-bypass");
         }
+        Some("renode-swap") => {
+            builder.target_renode();
+
+            for service in base_pkgs {
+                builder.add_service(service, true);
+            }
+            builder.add_service("xous-swapper", true);
+            builder.add_apps(&get_cratespecs());
+        }
 
         // ------- hosted mode configs -------
         Some("run") => {
