@@ -658,7 +658,7 @@ pub fn pagetable_entry(addr: usize) -> Result<*mut usize, xous_kernel::Error> {
 
     let l1_pt = unsafe { &(*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
     let l1_pte = l1_pt.entries[vpn1];
-    if l1_pte & 1 == 0 {
+    if l1_pte & MMUFlags::VALID.bits() == 0 {
         return Err(xous_kernel::Error::BadAddress);
     }
     Ok((PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE + vpn0 * 4) as *mut usize)
