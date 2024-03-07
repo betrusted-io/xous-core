@@ -228,11 +228,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("renode-swap") => {
             builder.target_renode();
+            // It is important that this is the first service added, because the swapper *must* be in PID 2
+            builder.add_service("xous-swapper", true);
+            builder.add_kernel_feature("swap");
 
             for service in base_pkgs {
                 builder.add_service(service, true);
             }
-            builder.add_service("xous-swapper", true);
             builder.add_apps(&get_cratespecs());
         }
 
