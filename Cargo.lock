@@ -6390,6 +6390,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "xous-swapper"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "num-derive 0.3.3",
+ "num-traits",
+ "utralib 0.1.24",
+ "xous",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "xous-ticktimer"
 version = "0.1.32"
 dependencies = [

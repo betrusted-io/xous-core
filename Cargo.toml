@@ -106,6 +106,7 @@ members = [
   "libs/xous-pl230",
   "libs/cramium-hal",
   "services/cram-hal-service",
+  "services/xous-swapper",
 ]
 resolver = "2"
 
