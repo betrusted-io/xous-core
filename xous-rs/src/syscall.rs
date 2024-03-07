@@ -510,6 +510,8 @@ pub enum SysCall {
     ///
     /// ## Arguments
     ///   * **sid0**, **sid1**, **sid2**, **sid3**: 128-bit SID as four u32
+    ///   * **handler**: address of the blocking swap handler
+    ///   * **state**: address of the process-local state of the swap handler
     ///
     /// ## Returns
     /// Returns a Scalar5 with raw pointers as follows:
@@ -517,7 +519,7 @@ pub enum SysCall {
     ///   - `arg2`: A pointer to the SMT
     ///   - `arg3`: A pointer to the RPT
     #[cfg(feature = "swap")]
-    RegisterSwapper(u32, u32, u32, u32),
+    RegisterSwapper(u32, u32, u32, u32, usize, usize),
 
     /// Evict a page.
     ///
@@ -878,14 +880,14 @@ impl SysCall {
                 [SysCallNumber::VirtToPhysPid as usize, pid.get() as usize, *vaddr, 0, 0, 0, 0, 0]
             }
             #[cfg(feature = "swap")]
-            SysCall::RegisterSwapper(s0, s1, s2, s3) => [
+            SysCall::RegisterSwapper(s0, s1, s2, s3, handler, state) => [
                 SysCallNumber::RegisterSwapper as usize,
                 *s0 as usize,
                 *s1 as usize,
                 *s2 as usize,
                 *s3 as usize,
-                0,
-                0,
+                *handler,
+                *state,
                 0,
             ],
             #[cfg(feature = "swap")]
@@ -1040,7 +1042,7 @@ impl SysCall {
             }
             #[cfg(feature = "swap")]
             SysCallNumber::RegisterSwapper => {
-                SysCall::RegisterSwapper(a1 as u32, a2 as u32, a3 as u32, a3 as u32)
+                SysCall::RegisterSwapper(a1 as u32, a2 as u32, a3 as u32, a3 as u32, a4 as usize, a5 as usize)
             }
             #[cfg(feature = "swap")]
             SysCallNumber::EvictPage => SysCall::EvictPage(pid_from_usize(a1)?, a2 as _),
