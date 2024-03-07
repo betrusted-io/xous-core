@@ -55,6 +55,10 @@ pub const BASE_QUANTA_MS: u32 = 10;
 pub const BOOKEND_START: &str = "_|TT|_";
 pub const BOOKEND_END: &str = "_|TE|_";
 
+/// Hard-wired PID of the swapper
+#[cfg(feature = "swap")]
+pub const SWAPPER_PID: u8 = 2;
+
 #[cfg(not(any(target_os = "xous", target_os = "none")))]
 use core::sync::atomic::AtomicU64;
 
