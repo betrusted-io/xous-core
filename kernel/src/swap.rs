@@ -226,6 +226,7 @@ impl Swap {
                 self.pc as *const usize,
                 self.swapper_args_pid2_vaddr,
                 payload_ptr as *mut usize,
+                crate::arch::process::RETURN_FROM_EXCEPTION_HANDLER,
             )
         })
         .expect("couldn't switch to handler");
