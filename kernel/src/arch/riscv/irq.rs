@@ -10,8 +10,9 @@ use crate::arch::current_pid;
 use crate::arch::exception::RiscvException;
 use crate::arch::mem::MemoryMapping;
 use crate::arch::process::{Process as ArchProcess, RETURN_FROM_EXCEPTION_HANDLER};
-use crate::arch::process::{Thread, EXIT_THREAD, RETURN_FROM_ISR};
+use crate::arch::process::{Thread, EXIT_THREAD, RETURN_FROM_ISR, RETURN_FROM_SWAPPER};
 use crate::services::SystemServices;
+use crate::swap::Swap;
 
 extern "Rust" {
     fn _xous_syscall_return_result(result: &xous_kernel::Result, context: &Thread) -> !;
@@ -304,6 +305,22 @@ pub extern "C" fn trap_handler(
             finish_isr();
             ArchProcess::with_current_mut(|process| {
                 crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
+            });
+        }
+
+        RiscvException::InstructionPageFault(RETURN_FROM_SWAPPER, _offset) => {
+            // Cleanup after the swapper
+            let response =
+                Swap::with_mut(|s| s.exit_blocking_call()).unwrap_or_else(xous_kernel::Result::Error);
+            // Resume like we're returning from a syscall.
+            enable_all_irqs();
+            ArchProcess::with_current_mut(|p| {
+                let thread = p.current_thread();
+                if response == xous_kernel::Result::ResumeProcess {
+                    crate::arch::syscall::resume(current_pid().get() == 1, thread);
+                } else {
+                    unsafe { _xous_syscall_return_result(&response, thread) };
+                }
             });
         }
 
