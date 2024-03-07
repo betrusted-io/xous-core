@@ -35,6 +35,7 @@ pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::E
                             f.get() as *mut usize,
                             irq_no,
                             arg.map(|x| x.get() as *mut usize).unwrap_or(core::ptr::null_mut::<usize>()),
+                            arch::process::RETURN_FROM_ISR,
                         )
                         .map(|_| xous_kernel::Result::ResumeProcess)
                     });
