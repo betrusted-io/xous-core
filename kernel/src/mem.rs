@@ -667,6 +667,12 @@ impl MemoryManager {
         self.claim_release_move(addr, pid, ClaimReleaseMove::Release)
     }
 
+    #[cfg(feature = "swap")]
+    /// Same as `release_page`, but with public visibility when the `swap` feature is active
+    pub fn release_page_swap(&mut self, addr: *mut usize, pid: PID) -> Result<(), xous_kernel::Error> {
+        self.claim_release_move(addr, pid, ClaimReleaseMove::Release)
+    }
+
     /// Convert an offset in the `MEMORY_ALLOCATIONS` array into a physical address.
     #[cfg(baremetal)]
     fn allocation_offset_to_address(&self, offset: usize) -> Option<usize> {
