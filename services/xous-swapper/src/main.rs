@@ -105,6 +105,21 @@ impl Write for DebugUart {
     }
 }
 
+/// This structure contains shared state accessible between the userspace code and the blocking swap call
+/// handler.
+struct SwapperSharedState {}
+impl SwapperSharedState {
+    pub fn new() -> Self { Self {} }
+}
+
+/// blocking swap call handler
+/// `arg` is a pointer to an argument block. It encodes the opcode and other parameters used by the handler:
+///    - word 0 is a pointer to the state that the swapper IRQ context can modify (shared with the main loop)
+///    - word 1 encodes the opcode
+///    - remaining words have a function depending on the opcode
+/// `target` is a pointer to the physical page of memory that's being swapped
+fn swap_handler(arg: usize, target: *mut usize) { todo!() }
+
 fn main() {
     // init the log, but this is mostly unused.
     log_server::init_wait().unwrap();
@@ -120,20 +135,28 @@ fn main() {
     write!(duart, "Swapper started.\n\r").ok();
 
     let sid = xous::create_server().unwrap();
+    let mut swapper_state = SwapperSharedState::new();
 
     // Register the swapper with the kernel. Written as a raw syscall, since this is
     // the only instance of its use (no point in use-once code to wrap it).
     let (s0, s1, s2, s3) = sid.to_u32();
     let (spt_init, smt_base_init, smt_bounds_init, rpt_init) =
-        xous::rsyscall(xous::SysCall::RegisterSwapper(s0, s1, s2, s3))
-            .and_then(|result| {
-                if let xous::Result::Scalar5(spt, smt_base, smt_bounds, rpt, _) = result {
-                    Ok((spt, smt_base, smt_bounds, rpt))
-                } else {
-                    panic!("Failed to register swapper");
-                }
-            })
-            .unwrap();
+        xous::rsyscall(xous::SysCall::RegisterSwapper(
+            s0,
+            s1,
+            s2,
+            s3,
+            swap_handler as *mut usize as usize,
+            &mut swapper_state as *mut SwapperSharedState as usize,
+        ))
+        .and_then(|result| {
+            if let xous::Result::Scalar5(spt, smt_base, smt_bounds, rpt, _) = result {
+                Ok((spt, smt_base, smt_bounds, rpt))
+            } else {
+                panic!("Failed to register swapper");
+            }
+        })
+        .unwrap();
     // safety: this is only safe because the loader guarantees this raw pointer is initialized and aligned
     // correctly
     let spt = unsafe { &mut *(spt_init as *mut SwapPageTables) };
