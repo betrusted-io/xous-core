@@ -579,6 +579,7 @@ impl SystemServices {
         pc: *const usize,
         irq_no: usize,
         arg: *mut usize,
+        ret_addr: usize,
     ) -> Result<(), xous_kernel::Error> {
         // Get the current process (which was just interrupted) and mark it as
         // "ready to run".  If this function is called when the current process
@@ -665,7 +666,7 @@ impl SystemServices {
                 pid.get() == 1,
                 pc as usize,
                 sp,
-                arch::process::RETURN_FROM_ISR,
+                ret_addr,
                 &[irq_no, arg as usize],
             );
         });
