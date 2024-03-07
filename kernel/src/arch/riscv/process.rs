@@ -27,6 +27,9 @@ pub const EXIT_THREAD: usize = 0xff80_3000;
 /// This is the address a thread will return to when it finishes handling an exception.
 pub const RETURN_FROM_EXCEPTION_HANDLER: usize = 0xff80_4000;
 
+/// This is the address the swapper returns from
+pub const RETURN_FROM_SWAPPER: usize = 0xff80_8000;
+
 /// Support processing interrupts, which normally are TID 0. Since
 /// the TID is a NonZeroU8, we must pick a value here that can be
 /// used throughout the rest of the kernel.
