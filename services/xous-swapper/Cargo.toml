@@ -30,5 +30,5 @@ hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 
 # for now, debug-print only works on Precursor targets
-debug-print = ["precursor", "utralib/precursor"]
+debug-print = []
 default = ["debug-print"]

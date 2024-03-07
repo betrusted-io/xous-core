@@ -1,5 +1,6 @@
 use core::fmt::{Error, Write};
 
+use num_traits::FromPrimitive;
 use utralib::*;
 
 /// This trait defines a set of functions to get and receive MACs (message
@@ -116,7 +117,7 @@ fn main() {
     // and is mutually exclusive with the "gdb-stub" feature in the kernel since it uses
     // the same physical hardware.
     let mut duart = DebugUart::new();
-    write!(duart, "Swapper started.\n\r");
+    write!(duart, "Swapper started.\n\r").ok();
 
     let sid = xous::create_server().unwrap();
 
@@ -127,7 +128,7 @@ fn main() {
         xous::rsyscall(xous::SysCall::RegisterSwapper(s0, s1, s2, s3))
             .and_then(|result| {
                 if let xous::Result::Scalar5(spt, smt_base, smt_bounds, rpt, _) = result {
-                    Ok((spt, smt, rpt))
+                    Ok((spt, smt_base, smt_bounds, rpt))
                 } else {
                     panic!("Failed to register swapper");
                 }
@@ -150,17 +151,17 @@ fn main() {
 
     let mut msg_opt = None;
     loop {
-        xous::reply_and_receive_next(shch_sid, &mut msg_opt).unwrap();
+        xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
-        write!(duart, "Swapper got {:?}", msg);
+        write!(duart, "Swapper got {:?}", msg).ok();
         match op {
             Some(Opcode::WriteToSwap) => {
                 unimplemented!();
             }
             // ... todo, other opcodes.
             _ => {
-                write!(duart, "Unknown opcode {:?}", op);
+                write!(duart, "Unknown opcode {:?}", op).ok();
             }
         }
     }
