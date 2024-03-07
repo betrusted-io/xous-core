@@ -1012,6 +1012,19 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::RegisterSwapper(s0, s1, s2, s3) => {
             Swap::with_mut(|swap| swap.register_handler(s0, s1, s2, s3))
         }
+        #[cfg(feature = "swap")]
+        SysCall::EvictPage(target_pid, vaddr) => {
+            if pid.get() != 2 {
+                klog!("Illegal caller"); // only PID 2 can call this
+                return Err(xous_kernel::Error::AccessDenied);
+            }
+            let phys_addr = crate::arch::mem::virt_to_phys_pid(target_pid, vaddr as usize);
+            match phys_addr {
+                Ok(pa) => Swap::with_mut(|swap| swap.evict_page(target_pid, vaddr, pa)),
+                Err(_) => Err(xous_kernel::Error::BadAddress),
+            }
+        }
+
         /* https://github.com/betrusted-io/xous-core/issues/90
         SysCall::SetExceptionHandler(pc, sp) => SystemServices::with_mut(|ss| {
             ss.set_exception_handler(pid, pc, sp)

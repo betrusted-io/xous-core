@@ -1,4 +1,4 @@
-use xous_kernel::SID;
+use xous_kernel::{PID, SID};
 
 #[cfg(baremetal)]
 #[no_mangle]
@@ -44,21 +44,44 @@ impl Swap {
         SWAP.with(|ss| f(&mut ss.borrow_mut()))
     }
 
-    pub fn init_from_args(&mut self, args: &crate::args::KernelArguments) -> Result<(), xous_kernel::Error> {
+    pub fn init_from_args(
+        &mut self,
+        args: &crate::args::KernelArguments,
+    ) -> Result<xous_kernel::Result, xous_kernel::Error> {
         for tag in args.iter() {
             if tag.name == u32::from_le_bytes(*b"Swap") {
                 self.spt_ptr = tag.data[0] as usize;
                 self.smt_base = tag.data[1] as usize;
                 self.smt_bounds = tag.data[2] as usize;
                 self.rpt_ptr = tag.data[3] as usize;
-                return Ok(());
+                return Ok(xous_kernel::Result::Ok);
             }
         }
         Err(xous_kernel::Error::UseBeforeInit)
     }
 
-    pub fn register_handler(&mut self, s0: u32, s1: u32, s2: u32, s3: u32) {
-        assert!(self.sid == SID::from_u32(0, 0, 0, 0), "Swap handler already registered, fatal error!");
-        self.sid = SID::from_u32(s0, s1, s2, s3);
+    pub fn register_handler(
+        &mut self,
+        s0: u32,
+        s1: u32,
+        s2: u32,
+        s3: u32,
+    ) -> Result<xous_kernel::Result, xous_kernel::Error> {
+        if self.sid == SID::from_u32(0, 0, 0, 0) {
+            self.sid = SID::from_u32(s0, s1, s2, s3);
+            Ok(xous_kernel::Result::Ok)
+        } else {
+            // someone is trying to steal the swapper's privileges!
+            Err(xous_kernel::Error::AccessDenied)
+        }
+    }
+
+    pub fn evict_page(
+        &mut self,
+        target_pid: PID,
+        vaddr: usize,
+        paddr: usize,
+    ) -> Result<xous_kernel::Result, xous_kernel::Error> {
+        todo!()
     }
 }
