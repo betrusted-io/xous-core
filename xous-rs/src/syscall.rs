@@ -516,7 +516,24 @@ pub enum SysCall {
     ///   - `arg1`: A pointer to the SPT
     ///   - `arg2`: A pointer to the SMT
     ///   - `arg3`: A pointer to the RPT
+    #[cfg(feature = "swap")]
     RegisterSwapper(u32, u32, u32, u32),
+
+    /// Evict a page.
+    ///
+    /// This syscall can only be called by PID 2, the swapper.
+    ///
+    /// ## Arguments
+    ///     * **pid**: PID of target process
+    ///     * **vaddr**: The virtual address to evict
+    ///
+    /// ## Returns
+    /// No return value
+    ///
+    /// ## Errors
+    ///     * **BadAddress**: The mapping does not exist
+    #[cfg(feature = "swap")]
+    EvictPage(PID, usize),
 
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
@@ -871,6 +888,10 @@ impl SysCall {
                 0,
                 0,
             ],
+            #[cfg(feature = "swap")]
+            SysCall::EvictPage(pid, vaddr) => {
+                [SysCallNumber::EvictPage as usize, pid.get() as usize, *vaddr, 0, 0, 0, 0, 0]
+            }
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::Invalid as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
             }
@@ -1017,9 +1038,12 @@ impl SysCall {
             SysCallNumber::ReturnScalar5 => {
                 SysCall::ReturnScalar5(MessageSender::from_usize(a1), a2, a3, a4, a5, a6)
             }
+            #[cfg(feature = "swap")]
             SysCallNumber::RegisterSwapper => {
                 SysCall::RegisterSwapper(a1 as u32, a2 as u32, a3 as u32, a3 as u32)
             }
+            #[cfg(feature = "swap")]
+            SysCallNumber::EvictPage => SysCall::EvictPage(pid_from_usize(a1)?, a2 as _),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
