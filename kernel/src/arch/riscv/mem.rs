@@ -52,7 +52,7 @@ bitflags! {
         const A         = 0b00_0100_0000;
         const D         = 0b00_1000_0000;
         const S         = 0b01_0000_0000; // Shared page
-        const P         = 0b10_0000_0000; // Previously writable
+        const P         = 0b10_0000_0000; // swaP
     }
 }
 
@@ -821,11 +821,8 @@ pub fn return_page_inner(
         panic!("page wasn't shared in destination space");
     }
 
-    // Clear the `SHARED` and `PREVIOUSLY-WRITABLE` bits, and set the `VALID` bit.
-    unsafe {
-        dest_entry
-            .write_volatile(dest_entry_value & !(MMUFlags::S | MMUFlags::P).bits() | MMUFlags::VALID.bits())
-    };
+    // Clear the `SHARED` bit, and set the `VALID` bit.
+    unsafe { dest_entry.write_volatile(dest_entry_value & !(MMUFlags::S).bits() | MMUFlags::VALID.bits()) };
     unsafe { flush_mmu() };
 
     // Swap back to our previous address space
