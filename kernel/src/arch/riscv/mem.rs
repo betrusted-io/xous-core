@@ -1050,3 +1050,48 @@ pub fn update_page_flags(virt: usize, flags: MemoryFlags) -> Result<(), xous_ker
 
     Ok(())
 }
+
+#[cfg(feature = "swap")]
+/// Takes in the target PID and virtual address to evict. Performs the unmapping, release from
+/// the target, and re-mapping into the swapper's memory space. Returns a pointer to the
+/// data in the swapper's virtual memory space
+pub fn evict_page(target_pid: PID, vaddr: usize) -> Result<usize, xous_kernel::Error> {
+    use crate::services::SystemServices;
+    SystemServices::with(|system_services| {
+        // swap to the target memory space
+        let target_map = system_services.get_process(target_pid).unwrap().mapping;
+        target_map.activate().unwrap();
+
+        // get the PTE in the target memory space
+        let entry = pagetable_entry(vaddr as usize)?;
+        let target_pte = unsafe { entry.read_volatile() };
+        let target_paddr = (target_pte >> 10) << 12;
+
+        // sanity check
+        if (target_pte & MMUFlags::VALID.bits() == 0) || (target_pte & MMUFlags::P.bits() != 0) {
+            return Err(xous_kernel::Error::BadAddress);
+        }
+        if target_pte & MMUFlags::S.bits() != 0 {
+            return Err(xous_kernel::Error::ShareViolation);
+        }
+
+        // clear the valid bit, mark as swapped
+        let new_pte = (target_pte & !MMUFlags::VALID.bits()) | MMUFlags::P.bits();
+        unsafe { entry.write_volatile(new_pte) };
+
+        // switch into the swapper memory space
+        let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
+        let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
+        swapper_map.activate()?;
+        let payload_virt = MemoryManager::with_mut(|mm| {
+            let payload_virt = mm
+                .find_virtual_address(core::ptr::null_mut(), PAGE_SIZE, xous_kernel::MemoryType::Messages)
+                .expect("couldn't find virtuall address in swapper space for target page")
+                as usize;
+            let _result = map_page_inner(mm, swapper_pid, target_paddr, payload_virt, MemoryFlags::R, true);
+            unsafe { flush_mmu() };
+            payload_virt
+        });
+        Ok(payload_virt)
+    })
+}
