@@ -1,4 +1,4 @@
-use xous_kernel::{PID, SID};
+use xous_kernel::{AllocAdvice, PID, SID};
 
 /* for non-blocking calls
 use xous_Kernel::{try_send_message, MemoryFlags, Message, MessageEnvelope, SysCallResult, TID};
@@ -19,34 +19,6 @@ pub enum BlockingSwapOp {
     AllocateAdvisory(PID),
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum AllocAdvice {
-    /// the PID of the allocation, virtual address in PID space, physical address
-    Allocate(PID, usize, usize),
-    /// the PID of the page freed, virtuall address in PID space, physical address
-    Free(PID, usize, usize),
-    /// not yet initialized record
-    Uninit,
-}
-impl AllocAdvice {
-    pub fn serialize(&self) -> (usize, usize) {
-        match self {
-            AllocAdvice::Allocate(pid, vaddr, paddr) => {
-                (
-                    (pid.get() as usize) << 24 | (vaddr >> 12),
-                    (1 << 24) | (paddr >> 12), // 1 indicates an alloc
-                )
-            }
-            AllocAdvice::Free(pid, vaddr, paddr) => {
-                (
-                    (pid.get() as usize) << 24 | (vaddr >> 12),
-                    (0 << 24) | (paddr >> 12), // 0 indicates a free
-                )
-            }
-            AllocAdvice::Uninit => (0, 0),
-        }
-    }
-}
 #[cfg(baremetal)]
 #[no_mangle]
 static mut SWAP: Swap = Swap {
