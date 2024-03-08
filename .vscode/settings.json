@@ -21,6 +21,7 @@
     },
     "rust-analyzer.cargo.features": [
         "precursor",
+        "swap",
         "mass-storage"
     ],
     "rust-analyzer.files.excludeDirs": [
