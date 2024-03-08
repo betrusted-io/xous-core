@@ -57,10 +57,8 @@ pub enum Opcode {
     ReadFromSwap = 1,
     /// Kernel message advising us that a page of RAM was allocated
     AllocateAdvisory = 2,
-    /// Kernel message requesting N pages to be swapped out.
-    Trim = 3,
-    /// Kernel message informing us that we have pages to free.
-    Free = 4,
+    /// A message from the kernel handler context to evaluate if a trim is needed
+    EvalTrim = 256,
 }
 
 pub struct DebugUart {
@@ -107,9 +105,11 @@ impl Write for DebugUart {
 
 /// This structure contains shared state accessible between the userspace code and the blocking swap call
 /// handler.
-struct SwapperSharedState {}
+struct SwapperSharedState {
+    duart: DebugUart,
+}
 impl SwapperSharedState {
-    pub fn new() -> Self { Self {} }
+    pub fn new() -> Self { Self { duart: DebugUart::new() } }
 }
 
 /// blocking swap call handler
@@ -117,16 +117,44 @@ impl SwapperSharedState {
 /// opcode. Not all arguments are used in all cases, unused argument values have no valid meaning (but in
 /// practice typically contain the previous call's value, or 0).
 fn swap_handler(
-    _a0: usize,
-    _a1: usize,
-    _a2: usize,
-    _a3: usize,
-    _a4: usize,
-    _a5: usize,
-    _a6: usize,
-    _a7: usize,
+    shared_state: usize,
+    opcode: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+    a5: usize,
+    a6: usize,
+    a7: usize,
 ) {
-    todo!()
+    // safety: lots of footguns actually, but this is the only way to get this pointer into
+    // our context. SwapperSharedState is a Rust structure that is aligned and initialized,
+    // so the cast is safe enough, but we have to be careful because this is executed in an
+    // interrupt context: we can't wait on locks (they'll hang forever if they are locked).
+    let ss = unsafe { &mut *(shared_state as *mut SwapperSharedState) };
+
+    let op: Option<Opcode> = FromPrimitive::from_usize(opcode);
+    match op {
+        Some(Opcode::WriteToSwap) => {
+            let pid = a2 as u8;
+            let vaddr_in_pid = a3;
+            let vaddr_in_swap = a4;
+        }
+        Some(Opcode::ReadFromSwap) => {
+            let pid = a2 as u8;
+            let vaddr_in_pid = a3;
+            let vaddr_in_swap = a4;
+        }
+        Some(Opcode::AllocateAdvisory) => {
+            let advisories = [
+                xous::AllocAdvice::deserialize(a2, a3),
+                xous::AllocAdvice::deserialize(a4, a5),
+                xous::AllocAdvice::deserialize(a6, a7),
+            ];
+        }
+        _ => {
+            write!(ss.duart, "Unimplemented or unknown opcode: {}", opcode).ok();
+        }
+    }
 }
 
 fn main() {
@@ -140,11 +168,10 @@ fn main() {
     // debug UART to handle this. This needs to be enabled with the "debug-print" feature
     // and is mutually exclusive with the "gdb-stub" feature in the kernel since it uses
     // the same physical hardware.
-    let mut duart = DebugUart::new();
-    write!(duart, "Swapper started.\n\r").ok();
+    let mut ss = SwapperSharedState::new();
+    write!(ss.duart, "Swapper started.\n\r").ok();
 
     let sid = xous::create_server().unwrap();
-    let mut swapper_state = SwapperSharedState::new();
 
     // Register the swapper with the kernel. Written as a raw syscall, since this is
     // the only instance of its use (no point in use-once code to wrap it).
@@ -156,7 +183,7 @@ fn main() {
             s2,
             s3,
             swap_handler as *mut usize as usize,
-            &mut swapper_state as *mut SwapperSharedState as usize,
+            &mut ss as *mut SwapperSharedState as usize,
         ))
         .and_then(|result| {
             if let xous::Result::Scalar5(spt, smt_base, smt_bounds, rpt, _) = result {
@@ -186,14 +213,14 @@ fn main() {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
-        write!(duart, "Swapper got {:?}", msg).ok();
+        write!(ss.duart, "Swapper got {:?}", msg).ok();
         match op {
             Some(Opcode::WriteToSwap) => {
                 unimplemented!();
             }
             // ... todo, other opcodes.
             _ => {
-                write!(duart, "Unknown opcode {:?}", op).ok();
+                write!(ss.duart, "Unknown opcode {:?}", op).ok();
             }
         }
     }
