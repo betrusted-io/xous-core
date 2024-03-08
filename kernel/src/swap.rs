@@ -26,14 +26,8 @@ static mut SWAP: Swap = Swap {
     pc: 0,
     prev_op: None,
     swapper_state: 0,
-    swapper_args_pid2_vaddr: 0,
-    mappable_args: SwapperArgs { data: [0u32; 1024] },
+    swapper_args: [0usize; 8],
 };
-
-#[repr(C, align(4096))]
-struct SwapperArgs {
-    data: [u32; 1024],
-}
 
 pub struct Swap {
     /// Pointer to the swap page table base
@@ -52,10 +46,8 @@ pub struct Swap {
     prev_op: Option<BlockingSwapOp>,
     /// state for the swapper. this is a PID-2 local virtual address, passed from the swapper on registration
     swapper_state: usize,
-    /// virtual address of the below arg block in PID2 space
-    swapper_args_pid2_vaddr: usize,
     /// storage for args
-    mappable_args: SwapperArgs,
+    swapper_args: [usize; 8],
 }
 impl Swap {
     /// Calls the provided function with the current inner process state.
@@ -113,33 +105,6 @@ impl Swap {
         if self.sid == SID::from_u32(0, 0, 0, 0) {
             self.sid = SID::from_u32(s0, s1, s2, s3);
             self.pc = handler;
-            // map the arguments into the swapper's space, without unmapping it from the kernel space
-            let args_phys_addr =
-                crate::arch::mem::virt_to_phys(&self.mappable_args as *const SwapperArgs as usize).unwrap();
-            SystemServices::with_mut(|system_services| {
-                let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
-                // map the argument block into the swapper
-                let args_virt = MemoryManager::with_mut(|mm| {
-                    let args_virt = mm
-                        .find_virtual_address(
-                            core::ptr::null_mut(),
-                            PAGE_SIZE,
-                            xous_kernel::MemoryType::Messages,
-                        )
-                        .expect("couldn't map swapper args into swapper space")
-                        as usize;
-                    let _result = crate::arch::mem::map_page_inner(
-                        mm,
-                        swapper_pid,
-                        args_phys_addr,
-                        args_virt,
-                        MemoryFlags::R | MemoryFlags::W,
-                        true,
-                    );
-                    args_virt
-                });
-                self.swapper_args_pid2_vaddr = args_virt;
-            });
             self.swapper_state = state;
             Ok(xous_kernel::Result::Ok)
         } else {
@@ -205,11 +170,12 @@ impl Swap {
         // setup the argument block
         match op {
             BlockingSwapOp::WriteToSwap(pid, phys_addr, virt_addr) => {
-                self.mappable_args.data[0] = self.swapper_state as u32;
-                self.mappable_args.data[1] = 0; // WriteToSwap opcode
-                self.mappable_args.data[2] = pid.get() as u32;
-                self.mappable_args.data[3] = phys_addr as u32;
-                self.mappable_args.data[4] = virt_addr as u32;
+                self.swapper_args[0] = self.swapper_state;
+                self.swapper_args[1] = 0; // WriteToSwap opcode
+                self.swapper_args[2] = payload_ptr;
+                self.swapper_args[3] = pid.get() as usize;
+                self.swapper_args[4] = phys_addr;
+                self.swapper_args[5] = virt_addr;
             }
             _ => {
                 todo!()
@@ -224,9 +190,7 @@ impl Swap {
             ss.make_callback_to(
                 swapper_pid,
                 self.pc as *const usize,
-                self.swapper_args_pid2_vaddr,
-                payload_ptr as *mut usize,
-                crate::arch::process::RETURN_FROM_EXCEPTION_HANDLER,
+                crate::services::CallbackType::Swap(self.swapper_args),
             )
         })
         .expect("couldn't switch to handler");
