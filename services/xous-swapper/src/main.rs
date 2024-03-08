@@ -113,12 +113,21 @@ impl SwapperSharedState {
 }
 
 /// blocking swap call handler
-/// `arg` is a pointer to an argument block. It encodes the opcode and other parameters used by the handler:
-///    - word 0 is a pointer to the state that the swapper IRQ context can modify (shared with the main loop)
-///    - word 1 encodes the opcode
-///    - remaining words have a function depending on the opcode
-/// `target` is a pointer to the physical page of memory that's being swapped
-fn swap_handler(arg: usize, target: *mut usize) { todo!() }
+/// 8 argument values are always pushed on the stack; the meaning is bound differently based upon the specific
+/// opcode. Not all arguments are used in all cases, unused argument values have no valid meaning (but in
+/// practice typically contain the previous call's value, or 0).
+fn swap_handler(
+    _a0: usize,
+    _a1: usize,
+    _a2: usize,
+    _a3: usize,
+    _a4: usize,
+    _a5: usize,
+    _a6: usize,
+    _a7: usize,
+) {
+    todo!()
+}
 
 fn main() {
     // init the log, but this is mostly unused.
