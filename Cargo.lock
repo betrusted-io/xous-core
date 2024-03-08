@@ -4962,6 +4962,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-swapper"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "num-derive 0.3.3",
+ "num-traits",
+ "rkyv",
+ "utralib 0.1.24",
+ "xous",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-susres",
+ "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
