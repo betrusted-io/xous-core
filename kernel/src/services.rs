@@ -591,7 +591,6 @@ impl SystemServices {
         // isn't running, that means the system has gotten into an invalid
         // state.
 
-        use core::num::IntErrorKind;
         {
             let current_pid = self.current_pid();
             let current = self.get_process_mut(current_pid).expect("couldn't get current PID");
