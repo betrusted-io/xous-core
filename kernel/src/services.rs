@@ -32,6 +32,13 @@ const MINIELF_FLG_X: u8 = 4;
 #[cfg(baremetal)]
 const MINIELF_FLG_EHF: u8 = 8;
 
+#[derive(Debug)]
+pub enum CallbackType {
+    /// args: irq_no, arg
+    Interrupt(usize, *mut usize),
+    Swap([usize; 8]),
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ExceptionHandler {
     /// Address (in program space) where the exception handler is
@@ -577,14 +584,14 @@ impl SystemServices {
         &mut self,
         pid: PID,
         pc: *const usize,
-        irq_no: usize,
-        arg: *mut usize,
-        ret_addr: usize,
+        cb_type: CallbackType,
     ) -> Result<(), xous_kernel::Error> {
         // Get the current process (which was just interrupted) and mark it as
         // "ready to run".  If this function is called when the current process
         // isn't running, that means the system has gotten into an invalid
         // state.
+
+        use core::num::IntErrorKind;
         {
             let current_pid = self.current_pid();
             let current = self.get_process_mut(current_pid).expect("couldn't get current PID");
@@ -620,8 +627,8 @@ impl SystemServices {
             #[cfg(feature = "gdb-stub")]
             if let ProcessState::Debug(_) = process.state {
                 println!(
-                    "Making a callback for IRQ {} to process {:?} which is currently in a debug state!",
-                    irq_no, pid
+                    "Making a callback of type {:?} to process {:?} which is currently in a debug state!",
+                    cb_type, pid
                 );
                 process.state = ProcessState::DebugIrq(available_threads);
             } else {
@@ -661,14 +668,28 @@ impl SystemServices {
             arch_process.set_tid(arch::process::IRQ_TID).unwrap();
 
             // Construct the new frame
-            arch::syscall::invoke(
-                arch_process.current_thread_mut(),
-                pid.get() == 1,
-                pc as usize,
-                sp,
-                ret_addr,
-                &[irq_no, arg as usize],
-            );
+            match cb_type {
+                CallbackType::Interrupt(irq_no, arg) => {
+                    arch::syscall::invoke(
+                        arch_process.current_thread_mut(),
+                        pid.get() == 1,
+                        pc as usize,
+                        sp,
+                        arch::process::RETURN_FROM_ISR,
+                        &[irq_no, arg as usize],
+                    );
+                }
+                CallbackType::Swap(args) => {
+                    arch::syscall::invoke(
+                        arch_process.current_thread_mut(),
+                        pid.get() == 1,
+                        pc as usize,
+                        sp,
+                        arch::process::RETURN_FROM_SWAPPER,
+                        &args,
+                    );
+                }
+            }
         });
         Ok(())
     }
