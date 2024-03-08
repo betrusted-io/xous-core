@@ -310,8 +310,10 @@ pub extern "C" fn trap_handler(
 
         RiscvException::InstructionPageFault(RETURN_FROM_SWAPPER, _offset) => {
             // Cleanup after the swapper
-            let response =
-                Swap::with_mut(|s| s.exit_blocking_call()).unwrap_or_else(xous_kernel::Result::Error);
+            let response = Swap::with_mut(|s|
+                // safety: this is safe because on return from swapper, we're in the swapper's memory space.
+                unsafe { s.exit_blocking_call() })
+            .unwrap_or_else(xous_kernel::Result::Error);
             // Resume like we're returning from a syscall.
             enable_all_irqs();
             ArchProcess::with_current_mut(|p| {
