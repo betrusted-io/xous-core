@@ -235,6 +235,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for service in base_pkgs {
                 builder.add_service(service, true);
             }
+            builder.add_service("test-swapper", false); // when we implement loaded-but-swapped, use that instead
             builder.add_apps(&get_cratespecs());
         }
 
