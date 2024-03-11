@@ -1,5 +1,6 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
+#[cfg(feature = "engine-ll")]
 use engine_25519::*;
 use num_traits::*;
 use xous_ipc::String;
@@ -27,9 +28,12 @@ pub(crate) enum BenchResult {
     DhDone,
 }
 
+#[cfg(feature = "engine-ll")]
 const TEST_ITERS: usize = 10;
+#[cfg(feature = "engine-ll")]
 const TEST_ITERS_DH: usize = 200;
 
+#[cfg(feature = "engine-ll")]
 fn vector_read(word_offset: usize) -> u32 {
     let mut bytes: [u8; 4] = [0; 4];
     for i in 0..4 {
@@ -38,6 +42,7 @@ fn vector_read(word_offset: usize) -> u32 {
     u32::from_le_bytes(bytes)
 }
 
+#[cfg(feature = "engine-ll")]
 fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
     let mut test_offset: usize = 0x0;
     let mut passes: usize = 0;
@@ -129,6 +134,7 @@ benchmark notes:
 +59mA +/-1mA current draw off fully charged battery when running the benchmark
 1246-1261ms/check vector iteration (10 iters total, 1450 vectors total)
 */
+#[cfg(feature = "engine-ll")]
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
     let xns = xous_names::XousNames::new().unwrap();
@@ -284,11 +290,13 @@ pub struct Engine {
 impl Engine {
     pub fn new(xns: &xous_names::XousNames, env: &mut CommonEnv) -> Self {
         let sid = xous::create_server().unwrap();
+        #[cfg(feature = "engine-ll")]
         let sid_tuple = sid.to_u32();
 
         let cb_id = env.register_handler(String::<256>::from_str("engine"));
         CB_ID.store(cb_id, Ordering::Relaxed);
 
+        #[cfg(feature = "engine-ll")]
         xous::create_thread_4(
             benchmark_thread,
             sid_tuple.0 as usize,
@@ -299,6 +307,7 @@ impl Engine {
         .unwrap();
         Engine {
             susres: susres::Susres::new_without_hook(&xns).unwrap(),
+            // this is a dummy and hangs if engine-ll is not an active feature
             benchmark_cid: xous::connect(sid).unwrap(),
             start_time: None,
         }
@@ -317,12 +326,16 @@ impl<'a> ShellCmdApi<'a> for Engine {
     ) -> Result<Option<String<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
+        #[cfg(feature = "engine-ll")]
         let helpstring = "engine [check] [bench] [benchdh] [susres] [dh] [ed] [wycheproof]";
+        #[cfg(not(feature = "engine-ll"))]
+        let helpstring = "engine [susres] [dh] [ed] [wycheproof]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                #[cfg(feature = "engine-ll")]
                 "check" => {
                     let mut engine = engine_25519::Engine25519::new();
                     log::debug!("running vectors");
@@ -330,6 +343,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
 
                     write!(ret, "Engine passed {} vectors, failed {} vectors", passes, fails).unwrap();
                 }
+                #[cfg(feature = "engine-ll")]
                 "bench" => {
                     let start = env.ticktimer.elapsed_ms();
                     self.start_time = Some(start);
@@ -340,6 +354,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     .unwrap();
                     write!(ret, "Starting Engine hardware benchmark with {} iters", TEST_ITERS).unwrap();
                 }
+                #[cfg(feature = "engine-ll")]
                 "benchdh" => {
                     let start = env.ticktimer.elapsed_ms();
                     self.start_time = Some(start);
@@ -364,13 +379,18 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     write!(ret, "Interrupted Engine hardware benchmark with a suspend/resume").unwrap();
                 }
                 "dh" => {
+                    log::info!("starting DH test");
                     use x25519_dalek::{EphemeralSecret, PublicKey};
                     let alice_secret = EphemeralSecret::random_from_rng(&mut env.trng);
+                    log::info!("1");
                     let alice_public = PublicKey::from(&alice_secret);
                     let bob_secret = EphemeralSecret::random_from_rng(&mut env.trng);
                     let bob_public = PublicKey::from(&bob_secret);
+                    log::info!("2");
                     let alice_shared_secret = alice_secret.diffie_hellman(&bob_public);
+                    log::info!("3");
                     let bob_shared_secret = bob_secret.diffie_hellman(&alice_public);
+                    log::info!("4");
                     let mut pass = true;
                     for (&alice, &bob) in
                         alice_shared_secret.as_bytes().iter().zip(bob_shared_secret.as_bytes().iter())
@@ -571,6 +591,8 @@ impl<'a> ShellCmdApi<'a> for Engine {
         } else {
             write!(ret, "{}", helpstring).unwrap();
         }
+        // de-allocate the engine at the end of the test, so other processes can grab it
+        curve25519_dalek::backend::serial::u32e::free_engine();
         Ok(Some(ret))
     }
 

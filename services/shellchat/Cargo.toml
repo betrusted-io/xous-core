@@ -28,7 +28,7 @@ sha2 = { version = "0.10.8" }
 digest = "0.10.7"
 aes = { path = "../aes" }
 cipher = "0.4.4"
-engine-25519 = { path = "../engine-25519" }
+engine-25519 = { path = "../engine-25519", optional = true }
 spinor = { path = "../spinor" }
 root-keys = { path = "../root-keys" }
 jtag = { path = "../jtag" }
@@ -105,13 +105,13 @@ version = "=4.1.1"       # note this is patched to our fork in ./Cargo.toml
 default-features = false
 
 [dependencies.x25519-dalek]
-version = "2.0.1"
+version = "=2.0.1"
 # TODO: static_secrets is only needed by the engine tests. Ideally, we would put the static_secrets version in dev deps only
 default-features = false
 features = ["static_secrets"]
 
 [dependencies.ed25519-dalek]
-version = "2.1.0"
+version = "=2.1.0"
 #path = "../../../ed25519-dalek"
 default-features = false
 features = ["rand_core"]
@@ -127,6 +127,7 @@ benchmarks = [
 ] # adds the benchmark routines. Left off normally to free up code and memory space.
 hashtest = []
 aestests = [] # adds AES tests
+engine-ll = [] # low-level engine tests
 tts = [] # adds text to speech plugin
 pddbtest = ["rand_chacha"]
 autobasis = ["rand_chacha"]
@@ -153,4 +154,4 @@ rand-api = []
 locktests = [
 ] # for debugging some specific `std` tests cherry-picked out of the test suite
 simple-tls = ["rustls", "webpki-roots"]
-default = [] # "debugprint"
+default = ["benchmarks"] # "debugprint"
