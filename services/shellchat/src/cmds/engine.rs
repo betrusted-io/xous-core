@@ -28,12 +28,9 @@ pub(crate) enum BenchResult {
     DhDone,
 }
 
-#[cfg(feature = "engine-ll")]
 const TEST_ITERS: usize = 10;
-#[cfg(feature = "engine-ll")]
 const TEST_ITERS_DH: usize = 200;
 
-#[cfg(feature = "engine-ll")]
 fn vector_read(word_offset: usize) -> u32 {
     let mut bytes: [u8; 4] = [0; 4];
     for i in 0..4 {
@@ -42,8 +39,13 @@ fn vector_read(word_offset: usize) -> u32 {
     u32::from_le_bytes(bytes)
 }
 
-#[cfg(feature = "engine-ll")]
-fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
+fn run_vectors() -> (usize, usize) {
+    use curve25519_dalek::backend::serial::u32e::*;
+    ensure_engine();
+    // safety: it's safe because it's after ensure_engine()
+    let ucode_hw = unsafe { get_ucode() };
+    let rf_hw = unsafe { get_rf() };
+
     let mut test_offset: usize = 0x0;
     let mut passes: usize = 0;
     let mut fails: usize = 0;
@@ -63,17 +65,9 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
         let num_vectors = (vector_read(test_offset) >> 0) & 0x3F_FFFF;
         test_offset += 1;
 
-        let mut job = Job {
-            id: None,
-            uc_start: load_addr,
-            uc_len: code_len,
-            ucode: [0; 1024],
-            rf: [0; RF_SIZE_IN_U32],
-            window: Some(window as u8),
-        };
-
-        for i in load_addr as usize..(load_addr + code_len) as usize {
-            job.ucode[i] = vector_read(test_offset);
+        let mut mcode = Vec::<i32>::new();
+        for _i in load_addr as usize..(load_addr + code_len) as usize {
+            mcode.push(vector_read(test_offset) as i32);
             test_offset += 1;
         }
 
@@ -84,32 +78,20 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
             // a test suite can have numerous vectors against a common code base
             for argcnt in 0..num_args {
                 for word in 0..8 {
-                    job.rf[(/* window * 32 * 8 + */argcnt * 8 + word) as usize] = vector_read(test_offset);
+                    rf_hw[(window * 32 * 8 + argcnt * 8 + word) as usize] = vector_read(test_offset);
                     test_offset += 1;
                 }
             }
 
             let mut passed = true;
             log::trace!("spawning job");
-            match engine.spawn_job(job) {
-                Ok(rf_result) => {
-                    for word in 0..8 {
-                        let expect = vector_read(test_offset);
-                        test_offset += 1;
-                        let actual = rf_result[(/* window * 32 * 8 + */31 * 8 + word) as usize];
-                        if expect != actual {
-                            log::error!("e/a {:08x}/{:08x}", expect, actual);
-                            passed = false;
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::error!(
-                        "system error {:?} in running test vector: {}/0x{:x}",
-                        e,
-                        vector,
-                        test_offset
-                    );
+            run_job(ucode_hw, rf_hw, &mcode, window as usize);
+            for word in 0..8 {
+                let expect = vector_read(test_offset);
+                test_offset += 1;
+                let actual = rf_hw[(window * 32 * 8 + 31 * 8 + word) as usize];
+                if expect != actual {
+                    log::error!("e/a {:08x}/{:08x}", expect, actual);
                     passed = false;
                 }
             }
@@ -126,6 +108,7 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
             }
         }
     }
+    curve25519_dalek::backend::serial::u32e::free_engine();
     (passes, fails)
 }
 /*
@@ -134,13 +117,10 @@ benchmark notes:
 +59mA +/-1mA current draw off fully charged battery when running the benchmark
 1246-1261ms/check vector iteration (10 iters total, 1450 vectors total)
 */
-#[cfg(feature = "engine-ll")]
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
     let xns = xous_names::XousNames::new().unwrap();
     let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
-
-    let mut engine = engine_25519::Engine25519::new();
 
     let mut trng = trng::Trng::new(&xns).unwrap();
 
@@ -152,7 +132,7 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 let mut passes = 0;
                 let mut fails = 0;
                 for _ in 0..TEST_ITERS {
-                    let (p, f) = run_vectors(&mut engine);
+                    let (p, f) = run_vectors();
                     passes += p;
                     fails += f;
                 }
@@ -290,13 +270,11 @@ pub struct Engine {
 impl Engine {
     pub fn new(xns: &xous_names::XousNames, env: &mut CommonEnv) -> Self {
         let sid = xous::create_server().unwrap();
-        #[cfg(feature = "engine-ll")]
         let sid_tuple = sid.to_u32();
 
         let cb_id = env.register_handler(String::<256>::from_str("engine"));
         CB_ID.store(cb_id, Ordering::Relaxed);
 
-        #[cfg(feature = "engine-ll")]
         xous::create_thread_4(
             benchmark_thread,
             sid_tuple.0 as usize,
@@ -335,15 +313,12 @@ impl<'a> ShellCmdApi<'a> for Engine {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
-                #[cfg(feature = "engine-ll")]
                 "check" => {
-                    let mut engine = engine_25519::Engine25519::new();
                     log::debug!("running vectors");
-                    let (passes, fails) = run_vectors(&mut engine);
+                    let (passes, fails) = run_vectors();
 
                     write!(ret, "Engine passed {} vectors, failed {} vectors", passes, fails).unwrap();
                 }
-                #[cfg(feature = "engine-ll")]
                 "bench" => {
                     let start = env.ticktimer.elapsed_ms();
                     self.start_time = Some(start);
@@ -354,7 +329,6 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     .unwrap();
                     write!(ret, "Starting Engine hardware benchmark with {} iters", TEST_ITERS).unwrap();
                 }
-                #[cfg(feature = "engine-ll")]
                 "benchdh" => {
                     let start = env.ticktimer.elapsed_ms();
                     self.start_time = Some(start);
