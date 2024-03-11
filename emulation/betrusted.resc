@@ -107,6 +107,12 @@ macro reset
 emulation CreateServerSocketTerminal 8888 "kernel" False
 connector Connect sysbus.uart kernel
 
+# Connect the `app_uart` port -- which is the port on which
+# the Xous gdbserver runs -- to TCP port 3456, to allow for
+# application-aware debugging
+emulation CreateServerSocketTerminal 3456 "gdb" False
+connector Connect sysbus.app_uart gdb
+
 runMacro $reset
 
 mach clear
