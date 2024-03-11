@@ -1,7 +1,6 @@
 use super::{report_api, TEST_INVERT_MASK};
 use crate::*;
 
-
 // this test requires manual inspection of the outputs
 // the GPIO pins should toggle with 0x11, 0x12, 0x13...
 // at the specified quantum rate of the machine.
@@ -19,7 +18,7 @@ pub fn hello_world() {
     bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x111);
     report_api(0x1310_600D);
 }
-
+#[rustfmt::skip]
 bio_code!(hello_world_code, HELLO_START, HELLO_END,
     "add  x1, zero, 0x10",
     "0:",
@@ -49,15 +48,17 @@ pub fn hello_multiverse() {
     bio_ss.bio.wo(utra::bio::SFR_QDIV2, 0x20_0000);
     bio_ss.bio.wo(utra::bio::SFR_QDIV3, 0x20_0000);
     // snap GPIO outputs to the quantum
-    bio_ss.bio.wo(utra::bio::SFR_CONFIG,
+    bio_ss.bio.wo(
+        utra::bio::SFR_CONFIG,
         bio_ss.bio.ms(utra::bio::SFR_CONFIG_SNAP_OUTPUT_TO_QUANTUM, 1)
-        | bio_ss.bio.ms(utra::bio::SFR_CONFIG_SNAP_OUTPUT_TO_QUANTUM, 2) // arbitrary choice, they should all be the same
+            | bio_ss.bio.ms(utra::bio::SFR_CONFIG_SNAP_OUTPUT_TO_QUANTUM, 2), /* arbitrary choice, they
+                                                                               * should all be the same */
     );
     // start all the machines, all at once
     bio_ss.bio.wo(utra::bio::SFR_CTRL, 0xfff);
     report_api(0x1311_600D);
 }
-
+#[rustfmt::skip]
 bio_code!(multiverse_code, MULTIVERSE_START, MULTIVERSE_END,
     // Reset vectors for each core are aligned to 4-byte boundaries
     // As long as the jump target is <2kiB from reset, this will emit
@@ -160,7 +161,7 @@ pub fn fifo_basic() {
 
     report_api(0x1312_600D);
 }
-
+#[rustfmt::skip]
 bio_code!(fifo_basic_code, FIFO_BASIC_START, FIFO_BASIC_END,
     "j 90f",
     "nop",
@@ -348,7 +349,7 @@ pub fn host_fifo_tests() {
     assert!(stop_check == stop_val);
     report_api(0x1313_600D);
 }
-
+#[rustfmt::skip]
 bio_code!(fifo_host_bitbang, FIFO_HOST_BITBANG_START, FIFO_HOST_BITBANG_END,
     "j 90f",
     "nop",
@@ -379,7 +380,11 @@ bio_code!(fifo_host_bitbang, FIFO_HOST_BITBANG_START, FIFO_HOST_BITBANG_END,
 //  - waits on event bit 2 (0x2 mask)
 //  - takes gpio in and writes it to fifo2
 //  - acks core 0 on event bit 3
-bio_code!(fifo_host_bitbang_level_trig, FIFO_HOST_BITBANG_LEVEL_TRIG_START, FIFO_HOST_BITBANG_LEVEL_TRIG_END,
+#[rustfmt::skip]
+bio_code!(
+    fifo_host_bitbang_level_trig,
+    FIFO_HOST_BITBANG_LEVEL_TRIG_START,
+    FIFO_HOST_BITBANG_LEVEL_TRIG_END,
     "j 90f",
     "nop",
     "j 91f",

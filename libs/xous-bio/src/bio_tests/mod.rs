@@ -1,13 +1,14 @@
+pub mod spi;
 pub mod units;
 
 // masks for utra::main::WDATA, which is abused to control GPIO register states for testing this module
 // these signals are "pulled through" the hierarchy and only exist in the test configuration, thus
 // they don't have a utralib entry
-pub const TEST_I2C_MASK: u32     = 0b00001;
-pub const TEST_FORCE_MASK: u32   = 0b00010;
+pub const TEST_I2C_MASK: u32 = 0b00001;
+pub const TEST_FORCE_MASK: u32 = 0b00010;
 pub const TEST_LOOP_OE_MASK: u32 = 0b00100;
-pub const TEST_INVERT_MASK: u32  = 0b01000;
-pub const TEST_FORCE_OFFSET: usize  = 16; // top 16 bits
+pub const TEST_INVERT_MASK: u32 = 0b01000;
+pub const TEST_FORCE_OFFSET: usize = 16; // top 16 bits
 
 #[cfg(not(any(target_os = "xous")))]
 mod duart {
@@ -87,6 +88,7 @@ pub fn report_api(d: u32) {
 pub fn bio_tests() {
     report_api(crate::get_id());
 
+    spi::spi_test();
     units::hello_world();
     units::hello_multiverse();
     units::fifo_basic();
