@@ -99,7 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "root-keys",
             "trng",
             "sha2@0.10.8",
-            "engine-25519",
+            // "engine-25519",
             "jtag",
             // GUI front end
             "status",
