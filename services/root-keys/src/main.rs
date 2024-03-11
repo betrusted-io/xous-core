@@ -2382,6 +2382,8 @@ fn main() -> ! {
                 log::error!("couldn't convert opcode");
             }
         }
+        // de-allocate the engine at the end of root-keys, so other crates can use it.
+        curve25519_dalek::backend::serial::u32e::free_engine();
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");
