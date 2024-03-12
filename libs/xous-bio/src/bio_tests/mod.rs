@@ -102,18 +102,18 @@ pub fn bio_tests() {
 //   -[x] Host FIFO stall on empty test. Core stalls until host provides data.
 //   -[x] Host FIFO stall on full test. Core stall until host reads data.
 //   -[x] GPIO input path test
-//   -[ ] Extclk as x20 stall source
-//   -[ ] Check Extclk:gpio pin mapping (make sure bit ordering is not swapped)
+//   -[x] Extclk as x20 stall source
+//   -[x] Check Extclk:gpio pin mapping (make sure bit ordering is not swapped)
 //   -[ ] GPIO direction control test
 //   -[ ] FIFO level trigger test - eq, gt, lt on various channels, at various fullness levels
 //   -[x] Stall on event - register bit test, between cores
 //   -[x] Stall on event - register bit test, to host
 //   -[x] Stall on event - FIFO level test
 //   -[ ] Host IRQ generation test - some combination with event tests above to confirm IRQ generation
-//   -[ ] Core ID read test
+//   -[x] Core ID read test
 //   -[ ] Core aclk counter test
 // Application tests:
-//   -[ ] SPI loopback test - implement using extclk as spi clk for input
+//   -[x] SPI loopback test - implement using extclk as spi clk for input
 //   -[ ] I2C loopback test
 //   -[ ] IR controller test
 //   -[ ] Arithmetic test, utilizing load/store on core 0

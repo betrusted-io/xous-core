@@ -33,7 +33,11 @@ pub fn spi_test() {
     // this actually shouldn't matter, but set it to be "fast" for testing
     bio_ss.bio.wo(utra::bio::SFR_QDIV3, 0x1_0000);
     // snap GPIO outputs
-    bio_ss.bio.wo(utra::bio::SFR_CONFIG, 1);
+    bio_ss.bio.wo(
+        utra::bio::SFR_CONFIG,
+        bio_ss.bio.ms(utra::bio::SFR_CONFIG_SNAP_OUTPUT_TO_QUANTUM, 1)
+        | bio_ss.bio.ms(utra::bio::SFR_CONFIG_SNAP_OUTPUT_TO_WHICH, 2)
+    );
 
     // bypass sync on all but clock
     bio_ss.bio.wo(utra::bio::SFR_SYNC_BYPASS, 0x500);
@@ -82,6 +86,17 @@ pub fn spi_test() {
     report_api(0x51C0_600D);
 }
 
+// This is written to also test some additional features:
+//   - loading word out of RAM (the random mask at the top)
+//   - machine ID based dispatch
+//   - how fast the SPI could run, hence the unrolled loop
+//   - Receive clock triggering a code event (quanta register x20
+//     is remapped to a GPIO input instead of the clock divider)
+//   - Branch on quanta read (saves one clock cycle for a tight loop;
+//     not strictly necessary but we use the idiom here to cap Tx loop)
+// This runs at about a 25MHz SPI clock rate, assuming an 800MHz
+// core clock for the complex. The Rx loop is potentially much faster
+// than the Tx loop.
 #[rustfmt::skip]
 bio_code!(
     spi_driver,

@@ -51,7 +51,7 @@ pub fn hello_multiverse() {
     bio_ss.bio.wo(
         utra::bio::SFR_CONFIG,
         bio_ss.bio.ms(utra::bio::SFR_CONFIG_SNAP_OUTPUT_TO_QUANTUM, 1)
-            | bio_ss.bio.ms(utra::bio::SFR_CONFIG_SNAP_OUTPUT_TO_QUANTUM, 2), /* arbitrary choice, they
+            | bio_ss.bio.ms(utra::bio::SFR_CONFIG_SNAP_OUTPUT_TO_QUANTUM, 1), /* arbitrary choice, they
                                                                                * should all be the same */
     );
     // start all the machines, all at once
@@ -236,6 +236,8 @@ pub fn host_fifo_tests() {
     bio_ss.bio.wo(utra::bio::SFR_CTRL, 0x0);
     let code = fifo_host_bitbang();
     bio_ss.load_code(code, 0);
+    // reset all the fifos
+    bio_ss.bio.wo(utra::bio::SFR_FIFO_CLR, 0xF);
 
     // configure & run the 0th machine
     // clock it slowly, so the fifo builds up back pressure
