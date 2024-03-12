@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2024-01-22 23:22:07]]></description>
+    <description><![CDATA[Litex SoC 2024-03-03 02:37:32]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1532,18 +1532,18 @@ of triggering]]></description>
                             <description><![CDATA[Level of the ``pioirq1`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b10s5</name>
+                            <name>pioirq2</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Level of the ``nc_b10s5`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq2`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b10s6</name>
+                            <name>pioirq3</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Level of the ``nc_b10s6`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq3`` event]]></description>
                         </field>
                         <field>
                             <name>nc_b10s7</name>
@@ -1659,19 +1659,19 @@ triggering]]></description>
 triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b10s5</name>
+                            <name>pioirq2</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[`1` when a "nc_b10s5" event occurs. This event uses an `EventSourceFlex` form of
+                            <description><![CDATA[`1` when a "pioirq2" event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b10s6</name>
+                            <name>pioirq3</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[`1` when a "nc_b10s6" event occurs. This event uses an `EventSourceFlex` form of
+                            <description><![CDATA[`1` when a "pioirq3" event occurs. This event uses an `EventSourceFlex` form of
 triggering]]></description>
                         </field>
                         <field>
@@ -1792,18 +1792,18 @@ of triggering]]></description>
                             <description><![CDATA[Write a ``1`` to enable the ``pioirq1`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b10s5</name>
+                            <name>pioirq2</name>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b10s5`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq2`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b10s6</name>
+                            <name>pioirq3</name>
                             <msb>6</msb>
                             <bitRange>[6:6]</bitRange>
                             <lsb>6</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b10s6`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq3`` Event]]></description>
                         </field>
                         <field>
                             <name>nc_b10s7</name>
@@ -5151,18 +5151,18 @@ of triggering]]></description>
                             <description><![CDATA[Level of the ``pioirq1_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s2</name>
+                            <name>pioirq2_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s2`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq2_dupe`` event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s3</name>
+                            <name>pioirq3_dupe</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[Level of the ``nc_b18s3`` event]]></description>
+                            <description><![CDATA[Level of the ``pioirq3_dupe`` event]]></description>
                         </field>
                         <field>
                             <name>nc_b18s4</name>
@@ -5275,20 +5275,20 @@ form of triggering]]></description>
 form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s2</name>
+                            <name>pioirq2_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s2" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq2_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s3</name>
+                            <name>pioirq3_dupe</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[`1` when a "nc_b18s3" event occurs. This event uses an `EventSourceFlex` form of
-triggering]]></description>
+                            <description><![CDATA[`1` when a "pioirq3_dupe" event occurs. This event uses an `EventSourceFlex`
+form of triggering]]></description>
                         </field>
                         <field>
                             <name>nc_b18s4</name>
@@ -5411,18 +5411,18 @@ of triggering]]></description>
                             <description><![CDATA[Write a ``1`` to enable the ``pioirq1_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s2</name>
+                            <name>pioirq2_dupe</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s2`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq2_dupe`` Event]]></description>
                         </field>
                         <field>
-                            <name>nc_b18s3</name>
+                            <name>pioirq3_dupe</name>
                             <msb>3</msb>
                             <bitRange>[3:3]</bitRange>
                             <lsb>3</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``nc_b18s3`` Event]]></description>
+                            <description><![CDATA[Write a ``1`` to enable the ``pioirq3_dupe`` Event]]></description>
                         </field>
                         <field>
                             <name>nc_b18s4</name>
@@ -10422,6 +10422,8 @@ register to disable individual events.]]></description>
             <constant name="IFSUB_EV_SDDCIRQ" value="162" />
             <constant name="IFSUB_EV_PIOIRQ0" value="163" />
             <constant name="IFSUB_EV_PIOIRQ1" value="164" />
+            <constant name="IFSUB_EV_PIOIRQ2" value="165" />
+            <constant name="IFSUB_EV_PIOIRQ3" value="166" />
             <constant name="IFSUB_EV_I2C0_NACK" value="200" />
             <constant name="IFSUB_EV_I2C1_NACK" value="201" />
             <constant name="IFSUB_EV_I2C2_NACK" value="202" />
