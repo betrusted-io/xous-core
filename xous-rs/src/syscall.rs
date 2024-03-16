@@ -1042,7 +1042,7 @@ impl SysCall {
             }
             #[cfg(feature = "swap")]
             SysCallNumber::RegisterSwapper => {
-                SysCall::RegisterSwapper(a1 as u32, a2 as u32, a3 as u32, a3 as u32, a4 as usize, a5 as usize)
+                SysCall::RegisterSwapper(a1 as u32, a2 as u32, a3 as u32, a4 as u32, a5 as usize, a6 as usize)
             }
             #[cfg(feature = "swap")]
             SysCallNumber::EvictPage => SysCall::EvictPage(pid_from_usize(a1)?, a2 as _),
