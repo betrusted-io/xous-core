@@ -985,7 +985,7 @@ impl Builder {
         }
 
         let swap_spec = if let Some((offset, size)) = self.swap {
-            format!("{:x}:{:x}", offset, size)
+            format!("0x{:x}:0x{:x}", offset, size) // create-image requires a base decorator, but the argument into xtask does not.
         } else {
             String::new()
         };
