@@ -158,21 +158,14 @@ fn swap_handler(
 }
 
 fn main() {
-    // init the log, but this is mostly unused.
-    log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
-    log::info!("my PID is {}", xous::process::id());
-
     // swapper is not allowed to use `log` for debugging under most circumstances, because
     // the swapper can't send messages when handling a swap call. Instead, we use a local
     // debug UART to handle this. This needs to be enabled with the "debug-print" feature
     // and is mutually exclusive with the "gdb-stub" feature in the kernel since it uses
     // the same physical hardware.
     let mut ss = SwapperSharedState::new();
-    write!(ss.duart, "Swapper started.\n\r").ok();
 
     let sid = xous::create_server().unwrap();
-
     // Register the swapper with the kernel. Written as a raw syscall, since this is
     // the only instance of its use (no point in use-once code to wrap it).
     let (s0, s1, s2, s3) = sid.to_u32();
@@ -207,6 +200,13 @@ fn main() {
     // safety: this is only safe because the loader guarantees this raw pointer is initialized and aligned
     // correctly
     let rpt = unsafe { &mut *(rpt_init as *mut RuntimePageTracker) };
+
+    // init the log, but this is mostly unused.
+    log_server::init_wait().unwrap();
+    log::set_max_level(log::LevelFilter::Info);
+    log::info!("my PID is {}", xous::process::id());
+    // test the debug serial port
+    write!(ss.duart, "Swapper started.\n\r").ok();
 
     let mut msg_opt = None;
     loop {
