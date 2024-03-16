@@ -14,6 +14,7 @@ use tools::tags::inif::IniF;
 use tools::tags::inis::IniS;
 use tools::tags::memory::{MemoryRegion, MemoryRegions};
 use tools::tags::pnam::ProcessNames;
+use tools::tags::swap::Swap;
 use tools::tags::xkrn::XousKernel;
 use tools::utils::{parse_csr_csv, parse_u32};
 use tools::xous_arguments::XousArguments;
@@ -22,13 +23,6 @@ struct RamConfig {
     offset: u32,
     size: u32,
     name: u32,
-    regions: MemoryRegions,
-    memory_required: u32,
-}
-
-struct SwapConfig {
-    offset: u32,
-    size: u32,
     regions: MemoryRegions,
     memory_required: u32,
 }
@@ -195,12 +189,7 @@ fn main() {
         memory_required: 0,
     };
 
-    let mut swap_config = SwapConfig {
-        offset: Default::default(),
-        size: Default::default(),
-        regions: MemoryRegions::new(),
-        memory_required: 0,
-    };
+    let mut swap: Option<Swap> = None;
 
     let mut process_names = ProcessNames::new();
 
@@ -333,7 +322,7 @@ fn main() {
             return;
         }
 
-        swap_config.offset = match parse_u32(swap_parts[0]) {
+        let offset = match parse_u32(swap_parts[0]) {
             Ok(o) => o,
             Err(e) => {
                 eprintln!("Error: Unable to parse {}: {:?}", swap_parts[0], e);
@@ -341,7 +330,7 @@ fn main() {
             }
         };
 
-        swap_config.size = match parse_u32(swap_parts[1]) {
+        let size = match parse_u32(swap_parts[1]) {
             Ok(o) => o,
             Err(e) => {
                 eprintln!("Error: Unable to parse {}: {:?}", swap_parts[1], e);
@@ -349,13 +338,13 @@ fn main() {
             }
         };
 
-        swap_config.memory_required += swap_config.size / 4096;
+        swap = Some(Swap::new(offset, size));
     }
 
     let mut args = XousArguments::new(ram_config.offset, ram_config.size, ram_config.name);
 
     if !ram_config.regions.is_empty() {
-        if !swap_config.regions.is_empty() {
+        if let Some(s) = swap {
             // now process the swap region.
             #[cfg(any(feature = "precursor", feature = "renode"))]
             {
@@ -363,19 +352,16 @@ fn main() {
                 // so we can impose an artificial rule like "swap must be higher than RAM", instead
                 // of trying to handle the generic cases like "swap could be anywhere, maybe even
                 // a window inside RAM, or lower, or multiple fragments, or...".
-                assert!(
-                    swap_config.offset > ram_config.offset,
-                    "swap is assumed to be at a higher address than RAM"
-                );
+                assert!(s.offset > ram_config.offset, "swap is assumed to be at a higher address than RAM");
                 // split the RAM space, if necessary, to accommodate swap
-                if swap_config.offset < ram_config.offset + ram_config.size {
-                    ram_config.size = swap_config.offset - ram_config.offset;
+                if s.offset < ram_config.offset + ram_config.size {
+                    ram_config.size = s.offset - ram_config.offset;
                 }
             }
             // Note that other configurations don't split RAM, since the swap is provisioned directly
             // in hardware, and thus, no post-processing is required.
 
-            args.add(swap_config.regions);
+            args.add(s);
             args.add(ram_config.regions);
         } else {
             args.add(ram_config.regions);
@@ -467,5 +453,8 @@ fn main() {
     println!("Arguments: {}", args);
 
     println!("Runtime will require {} bytes to track memory allocations", ram_config.memory_required);
+    if let Some(s) = swap {
+        println!("Runtime will also require {} bytes to track swap", s.size / 4096);
+    }
     println!("Image created in file {}", output_filename);
 }
