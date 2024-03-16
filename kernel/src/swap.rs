@@ -32,6 +32,7 @@ static mut SWAP: Swap = Swap {
     swapper_state: 0,
     swapper_args: [0usize; 8],
     alloc_advisories: [AllocAdvice::Uninit, AllocAdvice::Uninit, AllocAdvice::Uninit],
+    missing_pages: 0,
 };
 
 pub struct Swap {
@@ -55,6 +56,8 @@ pub struct Swap {
     swapper_args: [usize; 8],
     /// track advisories to the allocator
     alloc_advisories: [AllocAdvice; 3],
+    /// count missing advisories because the swapper has yet to register
+    missing_pages: usize,
 }
 impl Swap {
     pub fn with_mut<F, R>(f: F) -> R
@@ -276,6 +279,8 @@ impl Swap {
         let evicted_ptr = crate::arch::mem::evict_page_inner(target_pid, vaddr).expect("couldn't evict page");
 
         // this is safe because evict_page() leaves us in the swapper memory context
+        #[cfg(feature = "debug-swap")]
+        println!("evict_page - swapper activate, PC: {:08x}", self.pc);
         unsafe {
             self.blocking_activate_swapper(BlockingSwapOp::WriteToSwap(target_pid, vaddr, evicted_ptr));
         }
@@ -292,6 +297,8 @@ impl Swap {
         // we are now in the swapper's memory space
 
         // this is safe because map_page_to_swapper() leaves us in the swapper memory context
+        #[cfg(feature = "debug-swap")]
+        println!("retrieve_page - swapper activate, PC: {:08x}", self.pc);
         unsafe {
             self.blocking_activate_swapper(BlockingSwapOp::ReadFromSwap(
                 target_pid,
@@ -312,7 +319,8 @@ impl Swap {
         paddr: usize,
         is_allocate: bool,
     ) {
-        let mut placed_index: Option<usize> = None;
+        let mut last_index: usize = 0;
+        let mut overflow = false;
         for (index, advisory) in self.alloc_advisories.iter_mut().enumerate() {
             if *advisory == AllocAdvice::Uninit {
                 if is_allocate {
@@ -320,28 +328,41 @@ impl Swap {
                 } else {
                     *advisory = AllocAdvice::Free(target_pid, target_vaddr_in_pid, paddr);
                 }
-                placed_index = Some(index);
+                last_index = index;
+                overflow = false;
                 break;
+            } else {
+                overflow = true;
+                last_index = index;
             }
         }
-        match placed_index {
-            Some(i) => {
-                if i == self.alloc_advisories.len() - 1 {
-                    let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
-                    SystemServices::with(|ss| {
-                        ss.get_process(swapper_pid).unwrap().mapping.activate().unwrap()
-                    });
+        if self.pc != 0 {
+            if last_index >= self.alloc_advisories.len() - 1 {
+                let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
+                SystemServices::with(|ss| ss.get_process(swapper_pid).unwrap().mapping.activate().unwrap());
 
-                    // this is safe because we've changed into the swapper's memory space
-                    unsafe {
-                        self.blocking_activate_swapper(BlockingSwapOp::AllocateAdvisory(target_pid));
-                        // ^^ also note this has the side effect of clearing the advisory storage table
-                    }
-                    // call proceeds to swapper space -> we've diverged and will return via the
-                    // swapper return path
+                // this is safe because we've changed into the swapper's memory space
+                #[cfg(feature = "debug-swap")]
+                println!("advise_alloc - swapper activate, PC: {:08x}", self.pc);
+                unsafe {
+                    self.blocking_activate_swapper(BlockingSwapOp::AllocateAdvisory(target_pid));
+                    // ^^ also note this has the side effect of clearing the advisory storage table
                 }
+                // call proceeds to swapper space -> we've diverged and will return via the
+                // swapper return path
             }
-            None => panic!("Error: advisory record ran out of space"),
+        } else {
+            // If the swapper hasn't registered yet, don't advise it of anything - the call
+            // would crash. That being said, this means we effectively get some extra pages of
+            // memory that are "wired" (not swappable) since they were never marked as allocated.
+            // If this is a small number, I think it's not worth the complexity to track and
+            // register? For now, just print to the kernel log so we know how bad this is;
+            // if the swapper registers *immediately* (without doing any debug prints or sycalls),
+            // we actually miss no pages.
+            if overflow {
+                self.missing_pages += 1;
+                println!("missed advisory: {}", self.missing_pages);
+            }
         }
     }
 }
