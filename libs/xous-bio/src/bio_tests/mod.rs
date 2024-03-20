@@ -88,12 +88,12 @@ pub fn report_api(d: u32) {
 pub fn bio_tests() {
     report_api(crate::get_id());
 
+    units::fifo_level_tests();
     spi::spi_test();
     units::hello_world();
     units::hello_multiverse();
     units::fifo_basic();
     units::host_fifo_tests();
-    units::fifo_level_tests();
 }
 
 // Test plan:
@@ -105,11 +105,11 @@ pub fn bio_tests() {
 //   -[x] Extclk as x20 stall source
 //   -[x] Check Extclk:gpio pin mapping (make sure bit ordering is not swapped)
 //   -[ ] GPIO direction control test
-//   -[ ] FIFO level trigger test - eq, gt, lt on various channels, at various fullness levels
+//   -[x] FIFO level trigger test - eq, gt, lt on various channels, at various fullness levels
 //   -[x] Stall on event - register bit test, between cores
 //   -[x] Stall on event - register bit test, to host
 //   -[x] Stall on event - FIFO level test
-//   -[ ] Host IRQ generation test - some combination with event tests above to confirm IRQ generation
+//   -[x] Host IRQ generation test - some combination with event tests above to confirm IRQ generation
 //   -[x] Core ID read test
 //   -[ ] Core aclk counter test
 // Application tests:

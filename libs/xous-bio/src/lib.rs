@@ -58,6 +58,14 @@ pub fn lfsr_next(state: u16) -> u16 {
 
     ((state << 1) + bit) & 0x1_FF
 }
+
+/// used to generate some test vectors
+pub fn lfsr_next_u32(state: u32) -> u32 {
+    let bit = ((state >> 31) ^ (state >> 21) ^ (state >> 1) ^ (state >> 0)) & 1;
+
+    (state << 1) + bit
+}
+
 pub struct BioSharedState {
     pub bio: CSR<u32>,
     pub imem_slice: &'static mut [u32],

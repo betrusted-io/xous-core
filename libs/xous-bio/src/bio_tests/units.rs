@@ -1,3 +1,5 @@
+use utralib::utra::bio::{SFR_ETYPE_FIFO_EVENT_EQ_MASK, SFR_ETYPE_FIFO_EVENT_GT_MASK, SFR_ETYPE_FIFO_EVENT_LT_MASK};
+
 use super::{report_api, TEST_INVERT_MASK};
 use crate::*;
 
@@ -430,6 +432,14 @@ bio_code!(
     "j 22b"
 );
 
+#[derive(Clone, Copy)]
+struct FifoLevelTestConfig {
+    tx_reg: crate::Register,
+    rx_reg: crate::Register,
+    levels: [crate::Field; 2],
+    event_masks: [u32; 2],
+}
+
 // TODO: i think this can be done without any code running on the machines; the host can
 // set and observe all fifo levels and triggers directly.
 pub fn fifo_level_tests() {
@@ -459,5 +469,233 @@ pub fn fifo_level_tests() {
     bio_ss.bio.rmwf(utra::bio::SFR_ETYPE_FIFO_EVENT_LT_MASK, 0b11_01_01_00);
     bio_ss.bio.rmwf(utra::bio::SFR_ETYPE_FIFO_EVENT_GT_MASK, 0b10_10_10_00);
 
+    /*
+    The structure of the FIFO events is that there are two event level configurations
+    per FIFO, structured as fifo [N] gets event level [N*2, N*2+1].
+
+    Each event level could trigger on equals, less than, greater than, or any combination
+    of the three.
+     */
+    let fifo_test_configs: [FifoLevelTestConfig; 4] = [
+        FifoLevelTestConfig {
+            tx_reg: utra::bio::SFR_TXF0,
+            rx_reg: utra::bio::SFR_RXF0,
+            levels: [utra::bio::SFR_ELEVEL_FIFO_EVENT_LEVEL0, utra::bio::SFR_ELEVEL_FIFO_EVENT_LEVEL1],
+            event_masks: [0x1, 0x2],
+        },
+        FifoLevelTestConfig {
+            tx_reg: utra::bio::SFR_TXF1,
+            rx_reg: utra::bio::SFR_RXF1,
+            levels: [utra::bio::SFR_ELEVEL_FIFO_EVENT_LEVEL2, utra::bio::SFR_ELEVEL_FIFO_EVENT_LEVEL3],
+            event_masks: [0x4, 0x8],
+        },
+        FifoLevelTestConfig {
+            tx_reg: utra::bio::SFR_TXF2,
+            rx_reg: utra::bio::SFR_RXF2,
+            levels: [utra::bio::SFR_ELEVEL_FIFO_EVENT_LEVEL4, utra::bio::SFR_ELEVEL_FIFO_EVENT_LEVEL5],
+            event_masks: [0x10, 0x20],
+        },
+        FifoLevelTestConfig {
+            tx_reg: utra::bio::SFR_TXF3,
+            rx_reg: utra::bio::SFR_RXF3,
+            levels: [utra::bio::SFR_ELEVEL_FIFO_EVENT_LEVEL6, utra::bio::SFR_ELEVEL_FIFO_EVENT_LEVEL7],
+            event_masks: [0x40, 0x80],
+        },
+    ];
+    const FIFO_MAX: u32 = 9;
+    let mut rx_checks = [0u32; FIFO_MAX as usize];
+    let mut tx_state = 0x1;
+    let irq_masks: [Register; 4] = [
+        utra::bio::SFR_IRQMASK_0, utra::bio::SFR_IRQMASK_1, utra::bio::SFR_IRQMASK_2, utra::bio::SFR_IRQMASK_3
+    ];
+    let irqarray18 = CSR::new(utra::irqarray18::HW_IRQARRAY18_BASE as *mut u32);
+
+    for (bank, config) in fifo_test_configs.iter().enumerate() {
+        let irq_mask_reg = irq_masks[bank];
+        let irq_mask = (1 << bank) as u32;
+        report_api(0xf1f0_f1f0 + irq_mask);
+        // we want to check that less than, equals, and greater than triggers work individually
+        // then we want to check that lt+eq and gt+eq work together
+        // lt+gt trigger doesn't make sense, we just don't check that
+        for (&level, &mask) in config.levels.iter().zip(config.event_masks.iter()) {
+            bio_ss.bio.wo(irq_mask_reg, mask << 24);
+            // reset all the fifos
+            bio_ss.bio.wo(utra::bio::SFR_FIFO_CLR, 0xF);
+            for test_level in 0..FIFO_MAX {
+                report_api(0xf1f0_4000 + test_level + ((bank as u32) << 8));
+                // test eq at level
+                bio_ss.bio.wfo(level, test_level);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, mask);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_LT_MASK, 0);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_GT_MASK, 0);
+                // fill
+                for check_level in 0..FIFO_MAX {
+                    let ev_check = bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) >> 24;
+                    // report_api(ev_check);
+                    if check_level == test_level {
+                        assert!(ev_check & mask == mask);
+                        // report_api(irqarray18.r(utra::irqarray18::EV_STATUS));
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        // report_api(irqarray18.r(utra::irqarray18::EV_STATUS));
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                    bio_ss.bio.wo(config.tx_reg, tx_state);
+                    // report_api(tx_state);
+                    rx_checks[check_level as usize] = tx_state;
+                    tx_state = crate::lfsr_next_u32(tx_state);
+                }
+                // drain
+                // report_api(0xdddd_dddd);
+                for check_level in 0..FIFO_MAX {
+                    let rx = bio_ss.bio.r(config.rx_reg);
+                    // report_api(rx);
+                    assert!(rx == rx_checks[check_level as usize]);
+                    let ev_check = bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) >> 24;
+                    if FIFO_MAX - check_level - 1 == test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                }
+
+                // test lt at level
+                bio_ss.bio.wfo(level, test_level);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, 0);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_LT_MASK, mask);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_GT_MASK, 0);
+                // fill
+                for check_level in 0..FIFO_MAX {
+                    let ev_check = bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) >> 24;
+                    if check_level < test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                    bio_ss.bio.wo(config.tx_reg, tx_state);
+                    rx_checks[check_level as usize] = tx_state;
+                    tx_state = crate::lfsr_next_u32(tx_state);
+                }
+                // drain
+                for check_level in 0..FIFO_MAX {
+                    let rx = bio_ss.bio.r(config.rx_reg);
+                    assert!(rx == rx_checks[check_level as usize]);
+                    let ev_check = bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) >> 24;
+                    if FIFO_MAX - check_level - 1 < test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                }
+
+                // test gt at level
+                bio_ss.bio.wfo(level, test_level);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, 0);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_LT_MASK, 0);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_GT_MASK, mask);
+                // fill
+                for check_level in 0..FIFO_MAX {
+                    let ev_check = bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) >> 24;
+                    if check_level > test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                    bio_ss.bio.wo(config.tx_reg, tx_state);
+                    rx_checks[check_level as usize] = tx_state;
+                    tx_state = crate::lfsr_next_u32(tx_state);
+                }
+                // drain
+                for check_level in 0..FIFO_MAX {
+                    let rx = bio_ss.bio.r(config.rx_reg);
+                    assert!(rx == rx_checks[check_level as usize]);
+                    let ev_check = bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) >> 24;
+                    if FIFO_MAX - check_level - 1 > test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                }
+
+                // test lt eq at level
+                bio_ss.bio.wfo(level, test_level);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, mask);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_LT_MASK, mask);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_GT_MASK, 0);
+                // fill
+                for check_level in 0..FIFO_MAX {
+                    let ev_check = bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) >> 24;
+                    if check_level <= test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                    bio_ss.bio.wo(config.tx_reg, tx_state);
+                    rx_checks[check_level as usize] = tx_state;
+                    tx_state = crate::lfsr_next_u32(tx_state);
+                }
+                // drain
+                for check_level in 0..FIFO_MAX {
+                    let rx = bio_ss.bio.r(config.rx_reg);
+                    assert!(rx == rx_checks[check_level as usize]);
+                    let ev_check = bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) >> 24;
+                    if FIFO_MAX - check_level - 1 <= test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                }
+
+                // test gt eq at level
+                bio_ss.bio.wfo(level, test_level);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_EQ_MASK, mask);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_LT_MASK, 0);
+                bio_ss.bio.rmwf(SFR_ETYPE_FIFO_EVENT_GT_MASK, mask);
+                // fill
+                for check_level in 0..FIFO_MAX {
+                    let ev_check = bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) >> 24;
+                    if check_level >= test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                    bio_ss.bio.wo(config.tx_reg, tx_state);
+                    rx_checks[check_level as usize] = tx_state;
+                    tx_state = crate::lfsr_next_u32(tx_state);
+                }
+                // drain
+                for check_level in 0..FIFO_MAX {
+                    let rx = bio_ss.bio.r(config.rx_reg);
+                    assert!(rx == rx_checks[check_level as usize]);
+                    let ev_check = bio_ss.bio.r(utra::bio::SFR_EVENT_STATUS) >> 24;
+                    if FIFO_MAX - check_level - 1 >= test_level {
+                        assert!(ev_check & mask == mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask == irq_mask);
+                    } else {
+                        assert!(ev_check & mask != mask);
+                        assert!(irqarray18.r(utra::irqarray18::EV_STATUS) & irq_mask != irq_mask);
+                    }
+                }
+            }
+            bio_ss.bio.wo(irq_mask_reg, 0);
+        }
+    }
     report_api(0x1314_600D);
 }
