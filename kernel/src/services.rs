@@ -314,7 +314,7 @@ impl SystemServices {
     {
         #[cfg(baremetal)]
         unsafe {
-            f(&SYSTEM_SERVICES)
+            f(&*core::ptr::addr_of!(SYSTEM_SERVICES))
         }
         #[cfg(not(baremetal))]
         SYSTEM_SERVICES.with(|ss| f(&ss.borrow()))
@@ -326,7 +326,7 @@ impl SystemServices {
     {
         #[cfg(baremetal)]
         unsafe {
-            f(&mut SYSTEM_SERVICES)
+            f(&mut *core::ptr::addr_of_mut!(SYSTEM_SERVICES))
         }
 
         #[cfg(not(baremetal))]
