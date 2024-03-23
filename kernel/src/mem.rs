@@ -93,7 +93,7 @@ impl MemoryManager {
     {
         #[cfg(baremetal)]
         unsafe {
-            f(&mut MEMORY_MANAGER)
+            f(&mut *core::ptr::addr_of_mut!(MEMORY_MANAGER))
         }
 
         #[cfg(not(baremetal))]
@@ -107,7 +107,7 @@ impl MemoryManager {
     {
         #[cfg(baremetal)]
         unsafe {
-            f(&MEMORY_MANAGER)
+            f(&*core::ptr::addr_of!(MEMORY_MANAGER))
         }
 
         #[cfg(not(baremetal))]

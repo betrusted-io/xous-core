@@ -516,7 +516,7 @@ impl Process {
     }
 
     pub fn destroy(pid: PID) -> Result<(), xous_kernel::Error> {
-        let process_table = unsafe { &mut PROCESS_TABLE };
+        let process_table = unsafe { &mut *core::ptr::addr_of_mut!(PROCESS_TABLE) };
         let pid_idx = pid.get() as usize - 1;
         if pid_idx >= process_table.table.len() {
             panic!("attempted to destroy PID that exceeds table index: {}", pid);
@@ -597,7 +597,7 @@ impl core::fmt::Display for Thread {
 pub fn set_current_pid(pid: PID) {
     let pid_idx = (pid.get() - 1) as usize;
     unsafe {
-        let pt = &mut PROCESS_TABLE;
+        let pt = &mut *core::ptr::addr_of_mut!(PROCESS_TABLE);
 
         match pt.table.get(pid_idx) {
             None | Some(false) => panic!("PID {} does not exist", pid),
