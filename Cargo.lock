@@ -1150,7 +1150,8 @@ checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
 
 [[package]]
 name = "curve25519-dalek"
-version = "4.1.1"
+version = "4.1.2"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#0fc7183a2a4c82a5ea575f56ca975cef46cd6398"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -1158,7 +1159,6 @@ dependencies = [
  "digest 0.10.7",
  "engine25519-as",
  "log",
- "platforms",
  "rustc_version 0.4.0",
  "subtle",
  "utralib 0.1.24",
@@ -1169,6 +1169,7 @@ dependencies = [
 [[package]]
 name = "curve25519-dalek-derive"
 version = "0.1.1"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#0fc7183a2a4c82a5ea575f56ca975cef46cd6398"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3648,12 +3649,6 @@ name = "pkg-config"
 version = "0.3.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2900ede94e305130c13ddd391e0ab7cbaeb783945ae07a279c268cb05109c6cb"
-
-[[package]]
-name = "platforms"
-version = "3.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "626dec3cac7cc0e1577a2ec3fc496277ec2baa084bebad95bb6fdbfae235f84c"
 
 [[package]]
 name = "plotters"
