@@ -1,5 +1,6 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
+#[cfg(feature = "engine-ll")]
 use engine_25519::*;
 use num_traits::*;
 use xous_ipc::String;
@@ -38,7 +39,13 @@ fn vector_read(word_offset: usize) -> u32 {
     u32::from_le_bytes(bytes)
 }
 
-fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
+fn run_vectors() -> (usize, usize) {
+    use curve25519_dalek::backend::serial::u32e::*;
+    ensure_engine();
+    // safety: it's safe because it's after ensure_engine()
+    let ucode_hw = unsafe { get_ucode() };
+    let rf_hw = unsafe { get_rf() };
+
     let mut test_offset: usize = 0x0;
     let mut passes: usize = 0;
     let mut fails: usize = 0;
@@ -58,17 +65,9 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
         let num_vectors = (vector_read(test_offset) >> 0) & 0x3F_FFFF;
         test_offset += 1;
 
-        let mut job = Job {
-            id: None,
-            uc_start: load_addr,
-            uc_len: code_len,
-            ucode: [0; 1024],
-            rf: [0; RF_SIZE_IN_U32],
-            window: Some(window as u8),
-        };
-
-        for i in load_addr as usize..(load_addr + code_len) as usize {
-            job.ucode[i] = vector_read(test_offset);
+        let mut mcode = Vec::<i32>::new();
+        for _i in load_addr as usize..(load_addr + code_len) as usize {
+            mcode.push(vector_read(test_offset) as i32);
             test_offset += 1;
         }
 
@@ -79,32 +78,20 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
             // a test suite can have numerous vectors against a common code base
             for argcnt in 0..num_args {
                 for word in 0..8 {
-                    job.rf[(/* window * 32 * 8 + */argcnt * 8 + word) as usize] = vector_read(test_offset);
+                    rf_hw[(window * 32 * 8 + argcnt * 8 + word) as usize] = vector_read(test_offset);
                     test_offset += 1;
                 }
             }
 
             let mut passed = true;
             log::trace!("spawning job");
-            match engine.spawn_job(job) {
-                Ok(rf_result) => {
-                    for word in 0..8 {
-                        let expect = vector_read(test_offset);
-                        test_offset += 1;
-                        let actual = rf_result[(/* window * 32 * 8 + */31 * 8 + word) as usize];
-                        if expect != actual {
-                            log::error!("e/a {:08x}/{:08x}", expect, actual);
-                            passed = false;
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::error!(
-                        "system error {:?} in running test vector: {}/0x{:x}",
-                        e,
-                        vector,
-                        test_offset
-                    );
+            run_job(ucode_hw, rf_hw, &mcode, window as usize);
+            for word in 0..8 {
+                let expect = vector_read(test_offset);
+                test_offset += 1;
+                let actual = rf_hw[(window * 32 * 8 + 31 * 8 + word) as usize];
+                if expect != actual {
+                    log::error!("e/a {:08x}/{:08x}", expect, actual);
                     passed = false;
                 }
             }
@@ -121,6 +108,7 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
             }
         }
     }
+    curve25519_dalek::backend::serial::u32e::free_engine();
     (passes, fails)
 }
 /*
@@ -134,8 +122,6 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let xns = xous_names::XousNames::new().unwrap();
     let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
 
-    let mut engine = engine_25519::Engine25519::new();
-
     let mut trng = trng::Trng::new(&xns).unwrap();
 
     loop {
@@ -146,7 +132,7 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 let mut passes = 0;
                 let mut fails = 0;
                 for _ in 0..TEST_ITERS {
-                    let (p, f) = run_vectors(&mut engine);
+                    let (p, f) = run_vectors();
                     passes += p;
                     fails += f;
                 }
@@ -299,6 +285,7 @@ impl Engine {
         .unwrap();
         Engine {
             susres: susres::Susres::new_without_hook(&xns).unwrap(),
+            // this is a dummy and hangs if engine-ll is not an active feature
             benchmark_cid: xous::connect(sid).unwrap(),
             start_time: None,
         }
@@ -317,16 +304,18 @@ impl<'a> ShellCmdApi<'a> for Engine {
     ) -> Result<Option<String<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
+        #[cfg(feature = "engine-ll")]
         let helpstring = "engine [check] [bench] [benchdh] [susres] [dh] [ed] [wycheproof]";
+        #[cfg(not(feature = "engine-ll"))]
+        let helpstring = "engine [susres] [dh] [ed] [wycheproof]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "check" => {
-                    let mut engine = engine_25519::Engine25519::new();
                     log::debug!("running vectors");
-                    let (passes, fails) = run_vectors(&mut engine);
+                    let (passes, fails) = run_vectors();
 
                     write!(ret, "Engine passed {} vectors, failed {} vectors", passes, fails).unwrap();
                 }
@@ -364,13 +353,18 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     write!(ret, "Interrupted Engine hardware benchmark with a suspend/resume").unwrap();
                 }
                 "dh" => {
+                    log::info!("starting DH test");
                     use x25519_dalek::{EphemeralSecret, PublicKey};
                     let alice_secret = EphemeralSecret::random_from_rng(&mut env.trng);
+                    log::info!("1");
                     let alice_public = PublicKey::from(&alice_secret);
                     let bob_secret = EphemeralSecret::random_from_rng(&mut env.trng);
                     let bob_public = PublicKey::from(&bob_secret);
+                    log::info!("2");
                     let alice_shared_secret = alice_secret.diffie_hellman(&bob_public);
+                    log::info!("3");
                     let bob_shared_secret = bob_secret.diffie_hellman(&alice_public);
+                    log::info!("4");
                     let mut pass = true;
                     for (&alice, &bob) in
                         alice_shared_secret.as_bytes().iter().zip(bob_shared_secret.as_bytes().iter())
@@ -571,6 +565,8 @@ impl<'a> ShellCmdApi<'a> for Engine {
         } else {
             write!(ret, "{}", helpstring).unwrap();
         }
+        // de-allocate the engine at the end of the test, so other processes can grab it
+        curve25519_dalek::backend::serial::u32e::free_engine();
         Ok(Some(ret))
     }
 
