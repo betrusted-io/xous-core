@@ -2383,6 +2383,7 @@ fn main() -> ! {
             }
         }
         // de-allocate the engine at the end of root-keys, so other crates can use it.
+        #[cfg(target_os = "xous")]
         curve25519_dalek::backend::serial::u32e::free_engine();
     }
     // clean up our program
