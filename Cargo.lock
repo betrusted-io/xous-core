@@ -1151,7 +1151,7 @@ checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
 [[package]]
 name = "curve25519-dalek"
 version = "4.1.2"
-source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#0fc7183a2a4c82a5ea575f56ca975cef46cd6398"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#b6ce2f60a9c4217a926006d2feb5d3822c6641d9"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -1169,7 +1169,7 @@ dependencies = [
 [[package]]
 name = "curve25519-dalek-derive"
 version = "0.1.1"
-source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#0fc7183a2a4c82a5ea575f56ca975cef46cd6398"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#b6ce2f60a9c4217a926006d2feb5d3822c6641d9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1651,7 +1651,7 @@ dependencies = [
 [[package]]
 name = "engine25519-as"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=d249c967556b02ab5439eacb5078fa00c60b93d6#d249c967556b02ab5439eacb5078fa00c60b93d6"
+source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=775e8406eb4aad08f05ae10619fcb4ca891ba0a6#775e8406eb4aad08f05ae10619fcb4ca891ba0a6"
 
 [[package]]
 name = "enum-iterator"
