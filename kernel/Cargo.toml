@@ -53,6 +53,8 @@ report-memory = ["stats_alloc"]
 wrap-print = []
 big-heap = []                          # Cause heaps to start at 12 MM instead of 512 kB
 v2p = ["xous-kernel/v2p"]
+swap = ["xous-kernel/swap"]
+debug-swap = []
 
 # patches for simulation targets ONLY. Applying these flags will result in totally broken security.
 hwsim = []

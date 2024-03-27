@@ -6,7 +6,7 @@ use core::fmt;
 use xous_kernel::{MemoryFlags, MemoryRange, PID};
 
 pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
-use crate::arch::process::Process;
+use crate::{arch::process::Process, swap::Swap};
 
 #[derive(Debug)]
 enum ClaimReleaseMove {
@@ -468,6 +468,12 @@ impl MemoryManager {
         // address from this process.
         if let Ok(phys) = crate::arch::mem::virt_to_phys(virt as usize) {
             self.release_page(phys as *mut usize, pid).ok();
+            #[cfg(feature = "swap")]
+            Swap::with_mut(|s| s.advise_alloc(pid, virt as usize, phys, false));
+        } else {
+            // return a null physical pointer if the virtual memory is just being freed
+            #[cfg(feature = "swap")]
+            Swap::with_mut(|s| s.advise_alloc(pid, virt as usize, 0, false));
         };
 
         // Free the virtual address.
@@ -664,6 +670,12 @@ impl MemoryManager {
 
     /// Mark a given address as no longer being owned by the specified process ID
     fn release_page(&mut self, addr: *mut usize, pid: PID) -> Result<(), xous_kernel::Error> {
+        self.claim_release_move(addr, pid, ClaimReleaseMove::Release)
+    }
+
+    #[cfg(feature = "swap")]
+    /// Same as `release_page`, but with public visibility when the `swap` feature is active
+    pub fn release_page_swap(&mut self, addr: *mut usize, pid: PID) -> Result<(), xous_kernel::Error> {
         self.claim_release_move(addr, pid, ClaimReleaseMove::Release)
     }
 

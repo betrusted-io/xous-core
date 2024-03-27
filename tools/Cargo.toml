@@ -42,3 +42,10 @@ name = "read-tags"
 
 [[bin]]
 name = "sign-image"
+
+[features]
+precursor = []
+renode = []
+cramium-soc = []
+atsama5d2 = []
+default = []

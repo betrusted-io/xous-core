@@ -55,6 +55,10 @@ pub const BASE_QUANTA_MS: u32 = 10;
 pub const BOOKEND_START: &str = "_|TT|_";
 pub const BOOKEND_END: &str = "_|TE|_";
 
+/// Hard-wired PID of the swapper
+#[cfg(feature = "swap")]
+pub const SWAPPER_PID: u8 = 2;
+
 #[cfg(not(any(target_os = "xous", target_os = "none")))]
 use core::sync::atomic::AtomicU64;
 
@@ -582,4 +586,46 @@ macro_rules! msg_blocking_scalar_unpack {
             log::error!("message expansion failed in msg_scalar_unpack macro")
         }
     }};
+}
+
+#[cfg(feature = "swap")]
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum AllocAdvice {
+    /// the PID of the allocation, virtual address in PID space, physical address
+    Allocate(PID, usize, usize),
+    /// the PID of the page freed, virtuall address in PID space, physical address
+    Free(PID, usize, usize),
+    /// not yet initialized record
+    Uninit,
+}
+#[cfg(feature = "swap")]
+impl AllocAdvice {
+    pub fn serialize(&self) -> (usize, usize) {
+        match self {
+            AllocAdvice::Allocate(pid, vaddr, paddr) => {
+                (
+                    (pid.get() as usize) << 24 | (vaddr >> 12),
+                    (1 << 24) | (paddr >> 12), // 1 indicates an alloc
+                )
+            }
+            AllocAdvice::Free(pid, vaddr, paddr) => {
+                (
+                    (pid.get() as usize) << 24 | (vaddr >> 12),
+                    (0 << 24) | (paddr >> 12), // 0 indicates a free
+                )
+            }
+            AllocAdvice::Uninit => (0, 0),
+        }
+    }
+
+    pub fn deserialize(a0: usize, a1: usize) -> Self {
+        if a0 == 0 && a1 == 0 {
+            AllocAdvice::Uninit
+        } else if (a1 & (1 << 24)) == 0 {
+            // don't have to mask a0 or a1 high bits because << 12 shifts the high flag byte out
+            AllocAdvice::Free(NonZeroU8::new((a0 >> 24) as u8).unwrap(), a0 << 12, a1 << 12)
+        } else {
+            AllocAdvice::Allocate(NonZeroU8::new((a0 >> 24) as u8).unwrap(), a0 << 12, a1 << 12)
+        }
+    }
 }

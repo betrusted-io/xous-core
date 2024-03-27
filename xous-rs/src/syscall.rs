@@ -506,6 +506,37 @@ pub enum SysCall {
     #[cfg(feature = "v2p")]
     VirtToPhysPid(PID /* Process ID */, usize /* virtual address */),
 
+    /// Registers a swapper.
+    ///
+    /// ## Arguments
+    ///   * **sid0**, **sid1**, **sid2**, **sid3**: 128-bit SID as four u32
+    ///   * **handler**: address of the blocking swap handler
+    ///   * **state**: address of the process-local state of the swap handler
+    ///
+    /// ## Returns
+    /// Returns a Scalar5 with raw pointers as follows:
+    ///   - `arg1`: A pointer to the SPT
+    ///   - `arg2`: A pointer to the SMT
+    ///   - `arg3`: A pointer to the RPT
+    #[cfg(feature = "swap")]
+    RegisterSwapper(u32, u32, u32, u32, usize, usize),
+
+    /// Evict a page.
+    ///
+    /// This syscall can only be called by PID 2, the swapper.
+    ///
+    /// ## Arguments
+    ///     * **pid**: PID of target process
+    ///     * **vaddr**: The virtual address to evict
+    ///
+    /// ## Returns
+    /// No return value
+    ///
+    /// ## Errors
+    ///     * **BadAddress**: The mapping does not exist
+    #[cfg(feature = "swap")]
+    EvictPage(PID, usize),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -556,6 +587,10 @@ pub enum SysCallNumber {
     ReplyAndReceiveNext = 41,
     #[cfg(feature = "v2p")]
     VirtToPhysPid = 42,
+    #[cfg(feature = "swap")]
+    RegisterSwapper = 43,
+    #[cfg(feature = "swap")]
+    EvictPage = 44,
     Invalid,
 }
 
@@ -606,6 +641,10 @@ impl SysCallNumber {
             41 => ReplyAndReceiveNext,
             #[cfg(feature = "v2p")]
             42 => VirtToPhysPid,
+            #[cfg(feature = "swap")]
+            43 => RegisterSwapper,
+            #[cfg(feature = "swap")]
+            44 => EvictPage,
             _ => Invalid,
         }
     }
@@ -840,6 +879,21 @@ impl SysCall {
             SysCall::VirtToPhysPid(pid, vaddr) => {
                 [SysCallNumber::VirtToPhysPid as usize, pid.get() as usize, *vaddr, 0, 0, 0, 0, 0]
             }
+            #[cfg(feature = "swap")]
+            SysCall::RegisterSwapper(s0, s1, s2, s3, handler, state) => [
+                SysCallNumber::RegisterSwapper as usize,
+                *s0 as usize,
+                *s1 as usize,
+                *s2 as usize,
+                *s3 as usize,
+                *handler,
+                *state,
+                0,
+            ],
+            #[cfg(feature = "swap")]
+            SysCall::EvictPage(pid, vaddr) => {
+                [SysCallNumber::EvictPage as usize, pid.get() as usize, *vaddr, 0, 0, 0, 0, 0]
+            }
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::Invalid as usize, *a1, *a2, *a3, *a4, *a5, *a6, *a7]
             }
@@ -986,6 +1040,12 @@ impl SysCall {
             SysCallNumber::ReturnScalar5 => {
                 SysCall::ReturnScalar5(MessageSender::from_usize(a1), a2, a3, a4, a5, a6)
             }
+            #[cfg(feature = "swap")]
+            SysCallNumber::RegisterSwapper => {
+                SysCall::RegisterSwapper(a1 as u32, a2 as u32, a3 as u32, a4 as u32, a5 as usize, a6 as usize)
+            }
+            #[cfg(feature = "swap")]
+            SysCallNumber::EvictPage => SysCall::EvictPage(pid_from_usize(a1)?, a2 as _),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
