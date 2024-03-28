@@ -1633,21 +1633,7 @@ dependencies = [
 [[package]]
 name = "engine-25519"
 version = "0.1.0"
-dependencies = [
- "engine25519-as",
- "llio",
- "log",
- "num-derive 0.3.3",
- "num-traits",
- "rkyv",
- "utralib 0.1.24",
- "xous 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-api-log",
- "xous-api-names",
- "xous-api-susres",
- "xous-api-ticktimer",
- "xous-ipc 0.9.58 (registry+https://github.com/rust-lang/crates.io-index)",
-]
+source = "git+https://github.com/betrusted-io/xous-engine-25519.git?rev=63d3d1f30736022e791deaacf4dd62c00b42fe2e#63d3d1f30736022e791deaacf4dd62c00b42fe2e"
 
 [[package]]
 name = "engine25519-as"
