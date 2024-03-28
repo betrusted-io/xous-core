@@ -41,7 +41,9 @@ fn vector_read(word_offset: usize) -> u32 {
 
 fn run_vectors() -> (usize, usize) {
     use curve25519_dalek::backend::serial::u32e::*;
-    ensure_engine();
+    while ensure_engine().is_err() {
+        xous::yield_slice();
+    }
     // safety: it's safe because it's after ensure_engine()
     let ucode_hw = unsafe { get_ucode() };
     let rf_hw = unsafe { get_rf() };
@@ -116,6 +118,10 @@ benchmark notes:
 
 +59mA +/-1mA current draw off fully charged battery when running the benchmark
 1246-1261ms/check vector iteration (10 iters total, 1450 vectors total)
+
+With new curve25519 api:
+53.6ms/check vector iteration (10 iters total, 1450 vectors total) with engine retained
+56.5ms/check with auto-free
 */
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
@@ -160,6 +166,9 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 13.54ms/2xop (200 iters -hw) -- microcode pre-loaded, minimal registers transferred using MontgomeryJob call
                 12.2ms/2xop (200 iters -hw) -- with L2 cache on (128k)
                 12.29ms/2xop (200 iters -hw) -- with L2 cache on (64k)
+
+                8.37ms/2xop (200 iters - hw) - with new curve25519 lib and engine retained after every loop
+                33.04ms/2xop (200 iters - hw) - with new curve25519 lib and auto-free engine after every loop
             */
             Some(BenchOp::StartDh) => {
                 let mut passes = 0;
