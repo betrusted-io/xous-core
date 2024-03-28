@@ -1151,13 +1151,14 @@ checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
 [[package]]
 name = "curve25519-dalek"
 version = "4.1.2"
-source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#b6ce2f60a9c4217a926006d2feb5d3822c6641d9"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#468e304624b4bc4004863c9147176238cfc0dc10"
 dependencies = [
  "cfg-if",
  "cpufeatures",
  "curve25519-dalek-derive",
  "digest 0.10.7",
  "engine25519-as",
+ "fiat-crypto 0.2.7",
  "log",
  "rustc_version 0.4.0",
  "subtle",
@@ -1169,7 +1170,7 @@ dependencies = [
 [[package]]
 name = "curve25519-dalek-derive"
 version = "0.1.1"
-source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#b6ce2f60a9c4217a926006d2feb5d3822c6641d9"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#468e304624b4bc4004863c9147176238cfc0dc10"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1186,7 +1187,7 @@ dependencies = [
  "digest 0.9.0",
  "engine-25519",
  "engine25519-as",
- "fiat-crypto",
+ "fiat-crypto 0.1.20",
  "hex 0.4.3",
  "log",
  "packed_simd_2",
@@ -1812,6 +1813,12 @@ name = "fiat-crypto"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e825f6987101665dea6ec934c09ec6d721de7bc1bf92248e1d5810c8cd636b77"
+
+[[package]]
+name = "fiat-crypto"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c007b1ae3abe1cb6f85a16305acd418b7ca6343b953633fee2b76d8f108b830f"
 
 [[package]]
 name = "filetime"
