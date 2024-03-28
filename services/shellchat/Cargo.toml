@@ -153,4 +153,4 @@ rand-api = []
 locktests = [
 ] # for debugging some specific `std` tests cherry-picked out of the test suite
 simple-tls = ["rustls", "webpki-roots"]
-default = ["benchmarks"] # "debugprint"
+default = [] # "debugprint"
