@@ -17,8 +17,6 @@ default-members = [
   "services/shellchat",
   "services/llio",
   "services/codec",
-  #  "services/engine-sha512",
-  "services/engine-25519",
   "services/aes",
   "services/spinor",
   "services/root-keys",
@@ -60,8 +58,6 @@ members = [
   "services/content-plugin-api",
   "services/llio",
   "services/codec",
-  #  "services/engine-sha512",
-  "services/engine-25519",
   "services/aes",
   "services/spinor",
   "services/root-keys",
@@ -150,9 +146,6 @@ git = "https://github.com/betrusted-io/curve25519-dalek.git"
 branch = "main"
 # path = "../curve25519-dalek/curve25519-dalek" # when doing local dev work
 # feature overrides are specified at the crate level
-
-[patch."https://github.com/betrusted-io/xous-engine-25519.git"]
-engine-25519 = { path = "services/engine-25519" }
 
 [patch.crates-io.usb-device]
 git = "https://github.com/betrusted-io/usb-device.git"
