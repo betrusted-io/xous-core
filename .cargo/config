@@ -15,3 +15,6 @@ rustflags = ["--cfg", "crossbeam_no_atomic_64"]
 #     "-C", "link-arg=-shared",
 #     "--cfg", "crossbeam_no_atomic_64"
 #     ]
+
+[target.riscv32imac-unknown-xous-elf]
+rustflags = ["--cfg", 'curve25519_dalek_backend="u32e_backend"']
