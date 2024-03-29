@@ -66,7 +66,7 @@ impl Swap {
     {
         #[cfg(baremetal)]
         unsafe {
-            f(&mut SWAP)
+            f(&mut *core::ptr::addr_of_mut!(SWAP))
         }
 
         #[cfg(not(baremetal))]
