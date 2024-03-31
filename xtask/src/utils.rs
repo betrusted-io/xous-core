@@ -181,7 +181,8 @@ pub(crate) fn ensure_compiler(
         version_path.push(target);
         if remove_existing {
             println!("Target path exists, removing it");
-            std::fs::remove_dir_all(version_path).map_err(|e| format!("unable to remove existing toolchain: {}", e))?;
+            std::fs::remove_dir_all(version_path)
+                .map_err(|e| format!("unable to remove existing toolchain: {}", e))?;
             println!("Also removing target directories for existing toolchain");
             let mut target_main = project_root();
             target_main.push("target");

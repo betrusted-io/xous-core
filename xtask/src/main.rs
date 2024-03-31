@@ -175,10 +175,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // ----- renode configs --------
         Some("renode-image") => {
-            builder
-                .target_renode()
-                .add_services(&user_pkgs)
-                .add_apps(&get_cratespecs());
+            builder.target_renode().add_services(&user_pkgs).add_apps(&get_cratespecs());
         }
         Some("renode-image-debug") => {
             builder
@@ -188,23 +185,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_apps(&get_cratespecs());
         }
         Some("renode-test") => {
-            builder
-                .target_renode()
-                .add_services(&base_pkgs)
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
         }
         Some("libstd-test") => {
-            builder
-                .target_renode()
-                .add_services(&base_pkgs)
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
             builder.add_loader_feature("renode-bypass");
         }
         Some("libstd-net") => {
-            builder
-                .target_renode()
-                .add_services(&base_pkgs)
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
             builder.add_loader_feature("renode-bypass").add_loader_feature("renode-minimal");
             builder
                 .add_service("net", false)
@@ -213,16 +201,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_service("dns", false);
         }
         Some("renode-aes-test") => {
-            builder
-                .target_renode()
-                .add_services(&aes_test_pkgs)
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&aes_test_pkgs).add_services(&get_cratespecs());
         }
         Some("ffi-test") => {
-            builder
-                .target_renode()
-                .add_services(&gfx_base_pkgs)
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&gfx_base_pkgs).add_services(&get_cratespecs());
             builder.add_service("ffi-test", false);
             builder.add_loader_feature("renode-bypass");
         }
@@ -274,11 +256,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_feature("graphics-server/gfx-testing");
         }
         Some("hosted-ci") => {
-            builder
-                .target_hosted()
-                .add_services(&user_pkgs)
-                .hosted_build_only()
-                .add_apps(&get_cratespecs());
+            builder.target_hosted().add_services(&user_pkgs).hosted_build_only().add_apps(&get_cratespecs());
         }
 
         // ------ Precursor hardware image configs ------
@@ -396,9 +374,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_feature("avalanchetest");
         }
         Some("compile-apps") => {
-            builder
-                .target_precursor_no_image(PRECURSOR_SOC_VERSION)
-                .add_services(&gfx_base_pkgs);
+            builder.target_precursor_no_image(PRECURSOR_SOC_VERSION).add_services(&gfx_base_pkgs);
         }
 
         // ------ Cramium hardware image configs ------
