@@ -202,19 +202,26 @@ fn main() {
     // correctly
     let rpt = unsafe { &mut *(rpt_init as *mut RuntimePageTracker) };
 
+    writeln!(
+        ss.duart,
+        "Swap params: spt {:x}, base {:x}, bounds: {:x}, rpt: {:x}",
+        spt_init, smt_base_init, smt_bounds_init, rpt_init
+    )
+    .ok();
+
     // init the log, but this is mostly unused.
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
     // test the debug serial port
-    write!(ss.duart, "Swapper started.\n\r").ok();
+    writeln!(ss.duart, "Swapper started.").ok();
 
     let mut msg_opt = None;
     loop {
         xous::reply_and_receive_next(sid, &mut msg_opt).unwrap();
         let msg = msg_opt.as_mut().unwrap();
         let op: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
-        write!(ss.duart, "Swapper got {:?}", msg).ok();
+        writeln!(ss.duart, "Swapper got {:?}", msg).ok();
         match op {
             Some(Opcode::WriteToSwap) => {
                 unimplemented!();
