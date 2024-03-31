@@ -938,9 +938,21 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
         flush_mmu();
 
         // if swap is activated, advise the swapper that data was allocated
-        // not that the prior path on `retrieve_page` *won't* hit this call, because `retrieve_page` diverges.
+        // note that the prior path on `retrieve_page` *won't* hit this call, because `retrieve_page`
+        // diverges.
         #[cfg(feature = "swap")]
-        Swap::with_mut(|s| s.advise_alloc(crate::arch::process::current_pid(), virt, new_page, true));
+        {
+            println!("ensure_page_exists_inner - advise alloc");
+            Swap::with_mut(|s| {
+                s.advise_alloc(
+                    crate::arch::process::current_pid(),
+                    crate::arch::process::current_tid(),
+                    virt,
+                    new_page,
+                    true,
+                )
+            });
+        }
     };
 
     Ok(new_page)
