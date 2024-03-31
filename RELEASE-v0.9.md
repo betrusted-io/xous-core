@@ -472,6 +472,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - @gsora has added the `hidapi` - apps can now register a HID descriptor for custom interactions over USB. See `apps/hidv2` for democumentation.
 - change kernel and loader targets to riscv-unknown-elf-none because `xous` is now a proper target (required for Rust 1.76 compatibility)
 - `curve25519-dalek` API is now at 4.1.2, thanks to @kotval for pulling it together. The new API removes `engine-25519` and rolls hardware allocate/release into the forked crate, similar to how sha2 was ported. `engine-25519` crate now removed from source tree, as it is now depracted since all the functionality was pulled into `curve25519-dalek`.
+- keymap is checked on every call to send a key to the USB keyboard. This allows us to toggle the keymap temporarily to allow typing into hosts with a different keymap (instead of requiring a reboot)
 
 ## Roadmap
 - Lots of testing and bug fixes
