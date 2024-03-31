@@ -350,9 +350,9 @@ impl Builder {
     }
 
     /// Add a list of services
-    pub fn add_services<'a>(&'a mut self, service_list: &Vec<String>) -> &'a mut Builder {
+    pub fn add_services<S: AsRef<str>>(&mut self, service_list: impl IntoIterator<Item = S>) -> &mut Builder {
         for service in service_list {
-            self.services.push(service.as_str().into());
+            self.services.push(service.as_ref().into());
         }
         self
     }
@@ -367,9 +367,9 @@ impl Builder {
     }
 
     /// Add a list of apps. Apps can be remote or downloaded externally.
-    pub fn add_apps<'a>(&'a mut self, app_list: &Vec<String>) -> &'a mut Builder {
+    pub fn add_apps<S: AsRef<str>>(&mut self, app_list: impl IntoIterator<Item = S>) -> &mut Builder {
         for app in app_list {
-            self.apps.push(app.as_str().into());
+            self.apps.push(app.as_ref().into());
         }
         self
     }
@@ -415,11 +415,11 @@ impl Builder {
     fn builder(
         &self,
         packages: &Vec<CrateSpec>,
-        features: &Vec<String>,
+        features: &[String],
         target: &Option<&str>,
         // the stream is specified separately here because the loader is special-case always release
         stream: BuildStream,
-        extra_args: &Vec<String>,
+        extra_args: &[String],
         no_default_features: bool,
     ) -> Result<Vec<String>, DynError> {
         // list of build artifacts, as full paths specific to the host OS
@@ -795,7 +795,7 @@ impl Builder {
             if self.run_svd2repl {
                 Command::new(cargo())
                     .current_dir(project_root())
-                    .args(&[
+                    .args([
                         "run",
                         "-p",
                         "svd2repl",
@@ -836,7 +836,7 @@ impl Builder {
             loader_presign.push("loader_presign.bin");
             let status = Command::new(cargo())
                 .current_dir(project_root())
-                .args(&[
+                .args([
                     "run",
                     "--package",
                     "tools",
@@ -853,7 +853,7 @@ impl Builder {
 
             let status = Command::new(cargo())
                 .current_dir(project_root())
-                .args(&[
+                .args([
                     "run",
                     "--package",
                     "tools",
@@ -879,7 +879,7 @@ impl Builder {
 
             let status = Command::new(cargo())
                 .current_dir(project_root())
-                .args(&[
+                .args([
                     "run",
                     "--package",
                     "tools",

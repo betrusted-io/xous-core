@@ -145,7 +145,7 @@ pub(crate) fn ensure_kernel_compiler(target: &Option<&str>, force_install: bool)
     let rustup_command = Command::new("rustup")
         .stderr(Stdio::null())
         .stdout(Stdio::piped())
-        .args(&["target", "add", target])
+        .args(["target", "add", target])
         .spawn()
         .map_err(|e| format!("could not run rustup: {}", e))?;
 
@@ -377,7 +377,7 @@ pub(crate) fn wycheproof_import() -> Result<(), crate::DynError> {
     let output_file = "services/shellchat/src/cmds/x25519_test.bin";
     let status = Command::new(cargo())
         .current_dir(project_root())
-        .args(&["run", "--package", "wycheproof-import", "--", input_file, output_file])
+        .args(["run", "--package", "wycheproof-import", "--", input_file, output_file])
         .status()?;
     if !status.success() {
         return Err("wycheproof-import failed. If any, the output will not be usable.".into());
