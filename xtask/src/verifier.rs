@@ -53,7 +53,7 @@ pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
                 cache_leaf.push_str(&regdir);
             }
         }
-        if cache_leaf.len() == 0 {
+        if cache_leaf.is_empty() {
             return Err("Can't find expected registry source location".into());
         }
         // this now has the path to the cache directory
@@ -79,20 +79,18 @@ pub fn verify(spec: CrateSpec, hard_failure: bool) -> Result<(), DynError> {
             && name != "svd2utra"
         {
             Path::new(&subdir)
+        } else if name == "xous" {
+            Path::new("./xous-rs")
+        } else if name == "xous-ipc" {
+            Path::new("./xous-ipc")
+        } else if name == "xous-kernel" {
+            Path::new("./kernel")
+        } else if name == "utralib" {
+            Path::new("./utralib")
+        } else if name == "svd2utra" {
+            Path::new("./svd2utra")
         } else {
-            if name == "xous" {
-                Path::new("./xous-rs")
-            } else if name == "xous-ipc" {
-                Path::new("./xous-ipc")
-            } else if name == "xous-kernel" {
-                Path::new("./kernel")
-            } else if name == "utralib" {
-                Path::new("./utralib")
-            } else if name == "svd2utra" {
-                Path::new("./svd2utra")
-            } else {
-                panic!("Consistency error: special case handling did not find either xous or xous-ipc");
-            }
+            panic!("Consistency error: special case handling did not find either xous or xous-ipc");
         };
 
         // now recurse through the source path and check that it matches the cache, except for Cargo.toml

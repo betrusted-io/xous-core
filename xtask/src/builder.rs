@@ -476,13 +476,13 @@ impl Builder {
         let mut remote_pkgs = Vec::<(&str, &str)>::new();
         for pkg in packages.iter() {
             match pkg {
-                CrateSpec::Local(name, _xip) => local_pkgs.push(&name),
+                CrateSpec::Local(name, _xip) => local_pkgs.push(name),
                 CrateSpec::CratesIo(name, version, _xip) => remote_pkgs.push((&name, &version)),
                 _ => {}
             }
         }
 
-        if local_pkgs.len() > 0 {
+        if !local_pkgs.is_empty() {
             for pkg in local_pkgs {
                 local_args.push("--package");
                 local_args.push(pkg);
@@ -491,7 +491,7 @@ impl Builder {
             if no_default_features {
                 local_args.push("--no-default-features");
             }
-            if features.len() > 0 {
+            if !features.is_empty() {
                 for feature in features {
                     local_args.push("--features");
                     local_args.push(feature);
@@ -510,12 +510,12 @@ impl Builder {
                 return Err("Local build failed".into());
             }
         }
-        if remote_pkgs.len() > 0 {
+        if !remote_pkgs.is_empty() {
             // remote packages are installed one at a time
             if no_default_features {
                 local_args.push("--no-default-features");
             }
-            if features.len() > 0 {
+            if !features.is_empty() {
                 for feature in features {
                     remote_args.push("--features");
                     remote_args.push(feature);
@@ -588,14 +588,14 @@ impl Builder {
             // the service wasn't found in any of the other lists, mark it as non-xip
             inie.push(service.to_string());
         }
-        assert!(inie.len() + inif.len() == services.len());
+        assert_eq!(inie.len() + inif.len(), services.len());
         (inie, inif)
     }
 
     /// Consume the builder and execute the configured build task. This handles dispatching all
     /// configurations, including renode, hosted, and hardware targets.
     pub fn build(mut self) -> Result<(), DynError> {
-        if self.apps.len() == 0 && self.services.len() == 0 {
+        if self.apps.is_empty() && self.services.is_empty() {
             // no services were specified - don't build anything
             return Ok(());
         }
@@ -637,8 +637,8 @@ impl Builder {
             return Err("Target unknown: please check your UTRA target".into());
         }
 
-        crate::utils::ensure_compiler(&self.target.as_ref().map(|s| s.as_str()), false, false)?;
-        crate::utils::ensure_kernel_compiler(&self.target_kernel.as_ref().map(|s| s.as_str()), false)?;
+        crate::utils::ensure_compiler(&self.target.as_deref(), false, false)?;
+        crate::utils::ensure_kernel_compiler(&self.target_kernel.as_deref(), false)?;
         self.locale_override(); // apply the locale override
 
         // ------ build the services & apps ------
@@ -647,12 +647,9 @@ impl Builder {
             match app {
                 CrateSpec::Local(name, _xip) => app_names.push(name.into()),
                 CrateSpec::CratesIo(name, _version, _xip) => app_names.push(name.into()),
-                CrateSpec::BinaryFile(name, _location, _xip) => {
+                CrateSpec::BinaryFile(Some(name), _location, _xip) => {
                     // if binary file has a name, ensure it ends up in the app menu
-                    if let Some(n) = name {
-                        app_names.push(n.to_string())
-                    } else {
-                    }
+                    app_names.push(name.to_string())
                 }
                 _ => {}
             }
@@ -677,11 +674,8 @@ impl Builder {
             // hosted mode doesn't specify a cross-compilation target!
             // throw a warning if prebuilt files are specified for hosted mode
             for item in [&self.services[..], &self.apps[..]].concat() {
-                match item {
-                    CrateSpec::Prebuilt(name, _, _xip) => {
-                        println!("Warning! Pre-built binaries not supported for hosted mode ({})", name)
-                    }
-                    _ => {}
+                if let CrateSpec::Prebuilt(name, _, _xip) = item {
+                    println!("Warning! Pre-built binaries not supported for hosted mode ({})", name);
                 }
             }
             // fixup windows paths
@@ -691,9 +685,8 @@ impl Builder {
                 }
             }
             let mut hosted_args = vec!["run"];
-            match self.stream {
-                BuildStream::Release => hosted_args.push("--release"),
-                _ => {}
+            if let BuildStream::Release = self.stream {
+                hosted_args.push("--release");
             }
             hosted_args.push("--");
             for service in services_path.iter() {
@@ -712,8 +705,8 @@ impl Builder {
             }
             for f in canonicalized_paths {
                 let path_as_str = f.to_str().expect("Couldn't canonicalize executable target").to_string();
-                let windows_clean_path = if path_as_str.starts_with("\\\\?\\") {
-                    path_as_str[4..].to_owned()
+                let windows_clean_path = if let Some(stripped) = path_as_str.strip_prefix("\\\\?\\") {
+                    stripped.to_owned()
                 } else {
                     path_as_str
                 };
@@ -765,12 +758,12 @@ impl Builder {
             // ------ build the loader ------
             // stash any LTO settings applied to the kernel; proper layout of the loader
             // block depends on the loader being compact and highly optimized.
-            let existing_lto = std::env::var("CARGO_PROFILE_RELEASE_LTO").map(|v| Some(v)).unwrap_or(None);
+            let existing_lto = env::var("CARGO_PROFILE_RELEASE_LTO").map(Some).unwrap_or(None);
             let existing_codegen_units =
-                std::env::var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS").map(|v| Some(v)).unwrap_or(None);
+                env::var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS").map(Some).unwrap_or(None);
             // these settings will generate the most compact code (but also the hardest to debug)
-            std::env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
-            std::env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
+            env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
+            env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
             let mut loader_extra = vec![];
             if self.loader_disable_defaults {
                 loader_extra.push("--no-default-features".to_string());
@@ -785,10 +778,10 @@ impl Builder {
             )?;
             // restore the LTO settings
             if let Some(existing) = existing_lto {
-                std::env::set_var("CARGO_PROFILE_RELEASE_LTO", existing);
+                env::set_var("CARGO_PROFILE_RELEASE_LTO", existing);
             }
             if let Some(existing) = existing_codegen_units {
-                std::env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", existing);
+                env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", existing);
             }
 
             // ------ if targeting renode, regenerate the Platform file -----
@@ -812,7 +805,7 @@ impl Builder {
                 self.target.as_ref().expect("target"),
                 self.stream.to_str()
             );
-            let mut svd_spec_file = OpenOptions::new().read(true).open(&svd_spec_path)?;
+            let mut svd_spec_file = OpenOptions::new().read(true).open(svd_spec_path)?;
             let mut svd_path_str = String::new();
             svd_spec_file.read_to_string(&mut svd_path_str)?;
             let mut svd_paths = Vec::new();
@@ -933,14 +926,14 @@ impl Builder {
         for i in init {
             args.push("--init");
             // strip '@' version specifiers out of the package names, if they exist.
-            let i = if i.contains("@") { i.split("@").next().unwrap() } else { i };
+            let i = if i.contains('@') { i.split('@').next().unwrap() } else { i };
             args.push(i);
         }
 
         for i in inif {
             args.push("--inif");
             // strip '@' version specifiers out of the package names, if they exist.
-            let i = if i.contains("@") { i.split("@").next().unwrap() } else { i };
+            let i = if i.contains('@') { i.split('@').next().unwrap() } else { i };
             args.push(i);
         }
 
@@ -952,7 +945,7 @@ impl Builder {
             args.push(&memory_spec[0]);
             for spec in memory_spec[1..].iter() {
                 args.push("--extra-svd");
-                args.push(&spec);
+                args.push(spec);
             }
         }
 
@@ -967,28 +960,25 @@ impl Builder {
     fn fetch_prebuilds(&self) -> Result<Vec<String>, DynError> {
         let mut paths = Vec::<String>::new();
         for item in [&self.services[..], &self.apps[..]].concat() {
-            match item {
-                CrateSpec::Prebuilt(name, url, _xip) => {
-                    let exec_name = format!(
-                        "target/{}/{}/{}",
-                        self.target.as_ref().expect("target"),
-                        self.stream.to_str(),
-                        name
-                    );
-                    println!("Fetching {} executable from build server...", name);
-                    let mut exec_file = OpenOptions::new()
-                        .read(true)
-                        .write(true)
-                        .create(true)
-                        .truncate(true)
-                        .open(&exec_name)
-                        .expect("Can't open our version file for writing");
-                    let mut freader = ureq::get(&url).call()?.into_reader();
-                    std::io::copy(&mut freader, &mut exec_file)?;
-                    println!("{} pre-built exec is {} bytes", name, exec_file.metadata().unwrap().len());
-                    paths.push(exec_name);
-                }
-                _ => {}
+            if let CrateSpec::Prebuilt(name, url, _xip) = item {
+                let exec_name = format!(
+                    "target/{}/{}/{}",
+                    self.target.as_ref().expect("target"),
+                    self.stream.to_str(),
+                    name
+                );
+                println!("Fetching {} executable from build server...", name);
+                let mut exec_file = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(&exec_name)
+                    .expect("Can't open our version file for writing");
+                let mut freader = ureq::get(&url).call()?.into_reader();
+                std::io::copy(&mut freader, &mut exec_file)?;
+                println!("{} pre-built exec is {} bytes", name, exec_file.metadata().unwrap().len());
+                paths.push(exec_name);
             }
         }
         Ok(paths)
@@ -997,11 +987,8 @@ impl Builder {
     fn enumerate_binary_files(&self) -> Result<Vec<String>, DynError> {
         let mut paths = Vec::<String>::new();
         for item in [&self.services[..], &self.apps[..]].concat() {
-            match item {
-                CrateSpec::BinaryFile(_name, path, _xip) => {
-                    paths.push(path);
-                }
-                _ => {}
+            if let CrateSpec::BinaryFile(_name, path, _xip) = item {
+                paths.push(path);
             }
         }
         Ok(paths)
@@ -1025,7 +1012,7 @@ impl Builder {
                 .truncate(true)
                 .open("locales/src/locale.rs")
                 .expect("Can't open locale for modification");
-            write!(locale_override, "pub const LANG: &str = \"{}\";\n", locale).unwrap();
+            writeln!(locale_override, "pub const LANG: &str = \"{}\";", locale).unwrap();
         }
     }
 

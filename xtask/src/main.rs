@@ -118,11 +118,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ---- extract position independent args ----
     let loader_key = get_flag("--lkey")?;
-    if loader_key.len() != 0 {
+    if !loader_key.is_empty() {
         builder.loader_key_file(loader_key[0].to_string());
     }
     let kernel_key = get_flag("--kkey")?;
-    if kernel_key.len() != 0 {
+    if !kernel_key.is_empty() {
         builder.kernel_key_file(kernel_key[0].to_string());
     }
 
