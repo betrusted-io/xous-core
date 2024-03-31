@@ -414,7 +414,7 @@ impl Builder {
     /// method, and it gets called repeatedly to build the kernel, loader, and services.
     fn builder(
         &self,
-        packages: &Vec<CrateSpec>,
+        packages: &[CrateSpec],
         features: &[String],
         target: &Option<&str>,
         // the stream is specified separately here because the loader is special-case always release
@@ -660,7 +660,7 @@ impl Builder {
             &self.features,
             &self.target.as_deref(),
             self.stream,
-            &vec![],
+            &[],
             false,
         )?;
 
@@ -731,11 +731,11 @@ impl Builder {
             } else {
                 // confirm the kernel can build before quitting
                 let _ = self.builder(
-                    &vec![CrateSpec::Local("xous-kernel".into(), false)],
+                    &[CrateSpec::Local("xous-kernel".into(), false)],
                     &self.kernel_features,
                     &self.target_kernel.as_deref(),
                     self.stream,
-                    &vec![],
+                    &[],
                     false,
                 )?;
                 println!("Dry run requested: only building and not running");
@@ -747,7 +747,7 @@ impl Builder {
                 kernel_extra.push("--no-default-features".to_string());
             }
             let kernel_path = self.builder(
-                &vec![self.kernel.clone()],
+                &[self.kernel.clone()],
                 &self.kernel_features,
                 &self.target_kernel.as_deref(),
                 self.stream,
@@ -769,7 +769,7 @@ impl Builder {
                 loader_extra.push("--no-default-features".to_string());
             }
             let loader = self.builder(
-                &vec![self.loader.clone()],
+                &[self.loader.clone()],
                 &self.loader_features,
                 &self.target_kernel.as_deref(),
                 BuildStream::Release, // loader doesn't fit if you build with Debug
