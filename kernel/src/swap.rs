@@ -102,9 +102,16 @@ impl Swap {
             self.sid = SID::from_u32(s0, s1, s2, s3);
             self.pc = handler;
             self.swapper_state = state;
-            Ok(xous_kernel::Result::Ok)
+            #[cfg(feature = "debug-swap")]
+            println!(
+                "handler registered: sid {:?} pc {:?} state {:?}",
+                self.sid, self.pc, self.swapper_state
+            );
+            Ok(xous_kernel::Result::Scalar5(self.spt_ptr, self.smt_base, self.smt_bounds, self.rpt_ptr, 0))
         } else {
             // someone is trying to steal the swapper's privileges!
+            #[cfg(feature = "debug-swap")]
+            println!("Handler double-register detected!");
             Err(xous_kernel::Error::AccessDenied)
         }
     }
