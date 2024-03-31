@@ -309,20 +309,44 @@ pub extern "C" fn trap_handler(
         }
 
         RiscvException::InstructionPageFault(RETURN_FROM_SWAPPER, _offset) => {
+            #[cfg(feature = "debug-swap")]
+            {
+                let pid = crate::arch::process::current_pid();
+                let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
+                println!(
+                    "RETURN_FROM_SWAPPER PROCESS_TABLE.current: {}, hw_pid: {}",
+                    pid.get(),
+                    hardware_pid
+                );
+            }
             // Cleanup after the swapper
-            let response = Swap::with_mut(|s|
+            let _response = Swap::with_mut(|s|
                 // safety: this is safe because on return from swapper, we're in the swapper's memory space.
                 unsafe { s.exit_blocking_call() })
             .unwrap_or_else(xous_kernel::Result::Error);
-            // Resume like we're returning from a syscall.
+
+            #[cfg(feature = "debug-swap")]
+            {
+                let pid = crate::arch::process::current_pid();
+                let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
+                println!(
+                    "aft swapper cleanup PROCESS_TABLE.current: {}, hw_pid: {}",
+                    pid.get(),
+                    hardware_pid
+                );
+
+                // debugging
+                SystemServices::with(|ss| {
+                    let current = ss.get_process(current_pid()).unwrap();
+                    let state = current.state();
+                    println!("state after swapper switch: {} {:?}", current.pid.get(), state);
+                });
+            }
+            // Re-enable interrupts now that we're out of the swap context
             enable_all_irqs();
-            ArchProcess::with_current_mut(|p| {
-                let thread = p.current_thread();
-                if response == xous_kernel::Result::ResumeProcess {
-                    crate::arch::syscall::resume(current_pid().get() == 1, thread);
-                } else {
-                    unsafe { _xous_syscall_return_result(&response, thread) };
-                }
+
+            ArchProcess::with_current_mut(|process| {
+                crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
             });
         }
 
