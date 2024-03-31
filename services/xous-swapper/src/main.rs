@@ -133,6 +133,7 @@ fn swap_handler(
     let ss = unsafe { &mut *(shared_state as *mut SwapperSharedState) };
 
     let op: Option<Opcode> = FromPrimitive::from_usize(opcode);
+    writeln!(ss.duart, "got Opcode: {:?}", op).ok();
     match op {
         Some(Opcode::WriteToSwap) => {
             let pid = a2 as u8;
@@ -152,7 +153,7 @@ fn swap_handler(
             ];
         }
         _ => {
-            write!(ss.duart, "Unimplemented or unknown opcode: {}", opcode).ok();
+            writeln!(ss.duart, "Unimplemented or unknown opcode: {}", opcode).ok();
         }
     }
 }
