@@ -1,5 +1,5 @@
 // Versioning infrastructure
-// This generates the SEMVER data that is displayed when quering `xous ver`
+// This generates the SEMVER data that is displayed when querying `xous ver`
 // It also generates timestamps, if demanded.
 
 use std::fs::OpenOptions;

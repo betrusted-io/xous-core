@@ -250,7 +250,7 @@ impl Builder {
     }
 
     /// Configure for precursor targets. This is the default, but it's good practice
-    /// to call it anyways just in case the defaults change. The `soc_version` should
+    /// to call it anyway just in case the defaults change. The `soc_version` should
     /// be just the gitrev of the soc version, not the entire feature name.
     pub fn target_precursor(&mut self, soc_version: &str) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());

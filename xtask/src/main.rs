@@ -31,7 +31,7 @@ const PRECURSOR_SOC_VERSION: &str = "pvt";
   Backups older than this cannot be parsed because the migration code for that backup
   was deprecated. The main purpose of this field is to assist the restore script
   in selecting a kernel: it will automatically downgrade a kernel as far as it must
-  to read a very old backup. This tag is *not* useful for enforcing a minimum
+  read a very old backup. This tag is *not* useful for enforcing a minimum
   version of the kernel to read a very *new* backup.
 
   Instead, when picking a kernel to restore from, the latest kernel should always be picked,
