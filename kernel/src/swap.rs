@@ -1,4 +1,4 @@
-use xous_kernel::{AllocAdvice, PID, SID};
+use xous_kernel::{AllocAdvice, PID, SID, TID};
 
 /* for non-blocking calls
 use xous_Kernel::{try_send_message, MemoryFlags, Message, MessageEnvelope, SysCallResult, TID};
@@ -16,7 +16,7 @@ pub enum BlockingSwapOp {
     /// physical address of block
     ReadFromSwap(PID, usize, usize, usize),
     /// PID of the process to return to after the allocate advisory
-    AllocateAdvisory(PID),
+    AllocateAdvisory(PID, TID),
 }
 
 #[cfg(baremetal)]
@@ -179,7 +179,7 @@ impl Swap {
                 self.swapper_args[3] = vaddr_in_pid;
                 self.swapper_args[4] = vaddr_in_swap;
             }
-            BlockingSwapOp::AllocateAdvisory(_pid) => {
+            BlockingSwapOp::AllocateAdvisory(_pid, _tid) => {
                 self.swapper_args[0] = self.swapper_state;
                 self.swapper_args[1] = 2; // AllocateAdvisory
                 for (index, advisory) in self.alloc_advisories.iter_mut().enumerate() {
@@ -239,6 +239,7 @@ impl Swap {
                     SystemServices::with(|system_services| {
                         // swap to the swapper space
                         let target_map = system_services.get_process(pid).unwrap().mapping;
+                        crate::arch::process::set_current_pid(pid);
                         target_map.activate()
                     })?;
 
@@ -263,13 +264,12 @@ impl Swap {
                     Ok(xous_kernel::Result::ResumeProcess)
                 })
             }
-            Some(BlockingSwapOp::AllocateAdvisory(pid)) => {
-                // return to the target PID
-                SystemServices::with(|system_services| {
-                    // swap back to the original allocator's space
-                    system_services.get_process(pid).unwrap().mapping.activate()?;
-                    Ok(xous_kernel::Result::ResumeProcess)
-                })
+            Some(BlockingSwapOp::AllocateAdvisory(pid, tid)) => {
+                // Switch to the previous process' address space.
+                SystemServices::with_mut(|ss| {
+                    ss.finish_callback_and_resume(pid, tid).expect("unable to resume previous PID")
+                });
+                Ok(xous_kernel::Result::ResumeProcess)
             }
             None => panic!("No previous swap op was set"),
         }
@@ -315,6 +315,7 @@ impl Swap {
         &mut self,
         // also the PID to return from after reporting to the swapper
         target_pid: PID,
+        target_tid: TID,
         target_vaddr_in_pid: usize,
         paddr: usize,
         is_allocate: bool,
@@ -338,6 +339,15 @@ impl Swap {
         }
         if self.pc != 0 {
             if last_index >= self.alloc_advisories.len() - 1 {
+                {
+                    // debugging
+                    SystemServices::with(|ss| {
+                        let current = ss.get_process(current_pid()).unwrap();
+                        let state = current.state();
+                        println!("state before swapper switch: {} {:?}", current.pid.get(), state);
+                    });
+                }
+
                 let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
                 SystemServices::with(|ss| ss.get_process(swapper_pid).unwrap().mapping.activate().unwrap());
 
@@ -345,7 +355,7 @@ impl Swap {
                 #[cfg(feature = "debug-swap")]
                 println!("advise_alloc - swapper activate, PC: {:08x}", self.pc);
                 unsafe {
-                    self.blocking_activate_swapper(BlockingSwapOp::AllocateAdvisory(target_pid));
+                    self.blocking_activate_swapper(BlockingSwapOp::AllocateAdvisory(target_pid, target_tid));
                     // ^^ also note this has the side effect of clearing the advisory storage table
                 }
                 // call proceeds to swapper space -> we've diverged and will return via the
