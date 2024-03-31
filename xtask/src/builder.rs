@@ -169,7 +169,7 @@ impl Builder {
     /// Specify an alternate loader key, as a String that can encode a file name
     /// in the local directory, or a path + filename.
     #[allow(dead_code)]
-    pub fn loader_key_file<'a>(&'a mut self, filename: String) -> &'a mut Builder {
+    pub fn loader_key_file(&mut self, filename: String) -> &mut Builder {
         self.loader_key = filename;
         self
     }
@@ -177,33 +177,33 @@ impl Builder {
     /// Specify an alternate loader key, as a String that can encode a file name
     /// in the local directory, or a path + filename.
     #[allow(dead_code)]
-    pub fn kernel_key_file<'a>(&'a mut self, filename: String) -> &'a mut Builder {
+    pub fn kernel_key_file(&mut self, filename: String) -> &mut Builder {
         self.kernel_key = filename;
         self
     }
 
     /// Set the build stream (debug or release)
     #[allow(dead_code)]
-    pub fn stream<'a>(&'a mut self, stream: BuildStream) -> &'a mut Builder {
+    pub fn stream(&mut self, stream: BuildStream) -> &mut Builder {
         self.stream = stream;
         self
     }
 
     /// Disable default features on the loader
     #[allow(dead_code)]
-    pub fn loader_disable_defaults<'a>(&'a mut self) -> &'a mut Builder {
+    pub fn loader_disable_defaults(&mut self) -> &mut Builder {
         self.loader_disable_defaults = true;
         self
     }
 
     /// Disable default features on the loader
     #[allow(dead_code)]
-    pub fn kernel_disable_defaults<'a>(&'a mut self) -> &'a mut Builder {
+    pub fn kernel_disable_defaults(&mut self) -> &mut Builder {
         self.kernel_disable_defaults = true;
         self
     }
 
-    pub fn add_global_flag<'a>(&'a mut self, flag: &str) -> &'a mut Builder {
+    pub fn add_global_flag(&mut self, flag: &str) -> &mut Builder {
         self.global_flags.push(flag.to_string());
         self
     }
@@ -215,19 +215,19 @@ impl Builder {
     /// version. Eventually (on the order of many months or years), this code gets retired,
     /// otherwise we accumulate rarely-used code ad nauseam.
     #[allow(dead_code)]
-    pub fn set_min_xous_ver<'a>(&'a mut self, min_ver_string: &str) -> &'a mut Builder {
+    pub fn set_min_xous_ver(&mut self, min_ver_string: &str) -> &mut Builder {
         self.min_ver = min_ver_string.to_string();
         self
     }
 
     /// specify a locale string to override for the current build
-    pub fn override_locale<'a>(&'a mut self, locale: &str) -> &'a mut Builder {
+    pub fn override_locale(&mut self, locale: &str) -> &mut Builder {
         self.locale_override = Some(locale.into());
         self
     }
 
     /// Configure for hosted mode
-    pub fn target_hosted<'a>(&'a mut self) -> &'a mut Builder {
+    pub fn target_hosted(&mut self) -> &mut Builder {
         self.loader = CrateSpec::None;
         self.target = None;
         self.target_kernel = None;
@@ -238,7 +238,7 @@ impl Builder {
     }
 
     /// Configure for renode targets
-    pub fn target_renode<'a>(&'a mut self) -> &'a mut Builder {
+    pub fn target_renode(&mut self) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
@@ -252,7 +252,7 @@ impl Builder {
     /// Configure for precursor targets. This is the default, but it's good practice
     /// to call it anyways just in case the defaults change. The `soc_version` should
     /// be just the gitrev of the soc version, not the entire feature name.
-    pub fn target_precursor<'a>(&'a mut self, soc_version: &str) -> &'a mut Builder {
+    pub fn target_precursor(&mut self, soc_version: &str) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
@@ -263,7 +263,7 @@ impl Builder {
         self
     }
 
-    pub fn target_precursor_no_image<'a>(&'a mut self, soc_version: &str) -> &'a mut Builder {
+    pub fn target_precursor_no_image(&mut self, soc_version: &str) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
@@ -286,7 +286,7 @@ impl Builder {
     }
 
     /// Configure various Cramium targets
-    pub fn target_cramium_fpga<'a>(&'a mut self) -> &'a mut Builder {
+    pub fn target_cramium_fpga(&mut self) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
@@ -297,7 +297,7 @@ impl Builder {
         self
     }
 
-    pub fn target_cramium_soc<'a>(&'a mut self) -> &'a mut Builder {
+    pub fn target_cramium_soc(&mut self) -> &mut Builder {
         self.target = Some(crate::TARGET_TRIPLE_RISCV32.to_string());
         self.target_kernel = Some(crate::TARGET_TRIPLE_RISCV32_KERNEL.to_string());
         self.stream = BuildStream::Release;
@@ -311,14 +311,14 @@ impl Builder {
     /// Override the default kernel. For example, to use the kernel from crates.io, specify as
     /// "xous-kernel@0.9.9"
     #[allow(dead_code)]
-    pub fn use_kernel<'a>(&'a mut self, spec: &str) -> &'a mut Builder {
+    pub fn use_kernel(&mut self, spec: &str) -> &mut Builder {
         self.kernel = spec.into();
         self
     }
 
     /// Override the default loader
     #[allow(dead_code)]
-    pub fn use_loader<'a>(&'a mut self, spec: &str) -> &'a mut Builder {
+    pub fn use_loader(&mut self, spec: &str) -> &mut Builder {
         self.loader = spec.into();
         self
     }
@@ -342,7 +342,7 @@ impl Builder {
     }
 
     /// Add just one service
-    pub fn add_service<'a>(&'a mut self, service_spec: &str, xip: bool) -> &'a mut Builder {
+    pub fn add_service(&mut self, service_spec: &str, xip: bool) -> &mut Builder {
         let mut spec: CrateSpec = service_spec.into();
         spec.set_xip(xip);
         self.services.push(spec);
@@ -359,7 +359,7 @@ impl Builder {
 
     /// Add just one app. Apps can be remote or downloaded externally.
     #[allow(dead_code)]
-    pub fn add_app<'a>(&'a mut self, app_spec: &str, xip: bool) -> &'a mut Builder {
+    pub fn add_app(&mut self, app_spec: &str, xip: bool) -> &mut Builder {
         let mut spec: CrateSpec = app_spec.into();
         spec.set_xip(xip);
         self.apps.push(spec);
@@ -375,14 +375,14 @@ impl Builder {
     }
 
     /// add a feature to be passed on to services
-    pub fn add_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
+    pub fn add_feature(&mut self, feature: &str) -> &mut Builder {
         self.features.push(feature.into());
         self
     }
 
     /// remove a feature previously added by a previous call
     #[allow(dead_code)]
-    pub fn remove_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
+    pub fn remove_feature(&mut self, feature: &str) -> &mut Builder {
         self.features.retain(|x| x != feature);
         self
     }
@@ -391,20 +391,20 @@ impl Builder {
     pub fn has_feature(&self, feature: &str) -> bool { self.features.contains(&feature.to_string()) }
 
     /// add a feature to be passed on to just the loader
-    pub fn add_loader_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
+    pub fn add_loader_feature(&mut self, feature: &str) -> &mut Builder {
         self.loader_features.push(feature.into());
         self
     }
 
     /// add a feature to be passed on to just the loader
     #[allow(dead_code)]
-    pub fn add_kernel_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
+    pub fn add_kernel_feature(&mut self, feature: &str) -> &mut Builder {
         self.kernel_features.push(feature.into());
         self
     }
 
     /// only build a hosted target. don't run it. Used exclusively to confirm that hosted mode builds in CI.
-    pub fn hosted_build_only<'a>(&'a mut self) -> &'a mut Builder {
+    pub fn hosted_build_only(&mut self) -> &mut Builder {
         self.dry_run = true;
         self
     }
