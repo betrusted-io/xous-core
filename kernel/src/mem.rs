@@ -463,17 +463,18 @@ impl MemoryManager {
     /// * MemoryInUse - The specified page is already mapped
     pub fn unmap_page(&mut self, virt: *mut usize) -> Result<usize, xous_kernel::Error> {
         let pid = crate::arch::process::current_pid();
+        let tid = crate::arch::process::current_tid();
 
         // If the virtual address has an assigned physical address, release that
         // address from this process.
         if let Ok(phys) = crate::arch::mem::virt_to_phys(virt as usize) {
             self.release_page(phys as *mut usize, pid).ok();
             #[cfg(feature = "swap")]
-            Swap::with_mut(|s| s.advise_alloc(pid, virt as usize, phys, false));
+            Swap::with_mut(|s| s.advise_alloc(pid, tid, virt as usize, phys, false));
         } else {
             // return a null physical pointer if the virtual memory is just being freed
             #[cfg(feature = "swap")]
-            Swap::with_mut(|s| s.advise_alloc(pid, virt as usize, 0, false));
+            Swap::with_mut(|s| s.advise_alloc(pid, tid, virt as usize, 0, false));
         };
 
         // Free the virtual address.
