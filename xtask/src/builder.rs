@@ -15,7 +15,7 @@ pub(crate) enum BuildStream {
     Release,
 }
 impl BuildStream {
-    pub fn to_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             BuildStream::Debug => "debug",
             BuildStream::Release => "release",
@@ -438,7 +438,7 @@ impl Builder {
                 Some(t) => format!("{}/", t),
                 None => "".to_string(),
             },
-            stream.to_str(),
+            stream.as_str(),
         );
         remote_args.push(&output_root);
 
@@ -803,7 +803,7 @@ impl Builder {
             let svd_spec_path = format!(
                 "target/{}/{}/build/SVD_PATH",
                 self.target.as_ref().expect("target"),
-                self.stream.to_str()
+                self.stream.as_str()
             );
             let mut svd_spec_file = OpenOptions::new().read(true).open(svd_spec_path)?;
             let mut svd_path_str = String::new();
@@ -910,7 +910,7 @@ impl Builder {
         inif: &[String],
         memory_spec: Vec<String>,
     ) -> Result<PathBuf, DynError> {
-        let stream = self.stream.to_str();
+        let stream = self.stream.as_str();
         let mut args = vec!["run", "--package", "tools", "--bin", "create-image", "--"];
 
         let mut output_file = PathBuf::new();
@@ -964,7 +964,7 @@ impl Builder {
                 let exec_name = format!(
                     "target/{}/{}/{}",
                     self.target.as_ref().expect("target"),
-                    self.stream.to_str(),
+                    self.stream.as_str(),
                     name
                 );
                 println!("Fetching {} executable from build server...", name);
