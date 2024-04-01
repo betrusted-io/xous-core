@@ -320,7 +320,7 @@ pub extern "C" fn trap_handler(
                 );
             }
             // Cleanup after the swapper
-            let _response = Swap::with_mut(|s|
+            let response = Swap::with_mut(|s|
                 // safety: this is safe because on return from swapper, we're in the swapper's memory space.
                 unsafe { s.exit_blocking_call() })
             .unwrap_or_else(xous_kernel::Result::Error);
@@ -345,9 +345,17 @@ pub extern "C" fn trap_handler(
             // Re-enable interrupts now that we're out of the swap context
             enable_all_irqs();
 
-            ArchProcess::with_current_mut(|process| {
-                crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
-            });
+            if response == xous_kernel::Result::ResumeProcess {
+                ArchProcess::with_current_mut(|process| {
+                    crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
+                });
+            } else {
+                ArchProcess::with_current_mut(|p| {
+                    let thread = p.current_thread();
+                    println!("Returning to address {:08x}", thread.sepc);
+                    unsafe { _xous_syscall_return_result(&response, thread) };
+                });
+            }
         }
 
         #[cfg(feature = "gdb-stub")]
