@@ -93,7 +93,7 @@ impl MiniElf {
         load_offset: usize,
         pid: XousPid,
         params: &[u8],
-        xip: bool,
+        ini_type: IniType,
     ) -> usize {
         println!("Mapping PID {} starting at offset {:08x}", pid, load_offset);
         let mut allocated_bytes = 0;
@@ -104,16 +104,20 @@ impl MiniElf {
         let image_phys_base = allocator.base_addr as usize + self.load_offset as usize;
         // It is a requirement that the image generator lay out the artifacts on disk such that
         // the page offsets line up for XIP sections. This assert confirms this necessary pre-condition.
-        if xip {
-            assert!(
-                (image_phys_base & (PAGE_SIZE - 1)) == self.sections[0].virt as usize & (PAGE_SIZE - 1),
-                "Image generator did not align load offsets to page offsets!"
-            );
+        match ini_type {
+            IniType::IniF => {
+                assert!(
+                    (image_phys_base & (PAGE_SIZE - 1)) == self.sections[0].virt as usize & (PAGE_SIZE - 1),
+                    "Image generator did not align load offsets to page offsets!"
+                );
+            }
+            _ => {
+                println!(
+                    "flash_map_offset: {:x} / base_addr {:x} load_offset {:x}",
+                    image_phys_base as usize, allocator.base_addr as usize, self.load_offset as usize
+                );
+            }
         }
-        println!(
-            "flash_map_offset: {:x} / base_addr {:x} load_offset {:x}",
-            image_phys_base as usize, allocator.base_addr as usize, self.load_offset as usize
-        );
 
         // The load offset is the end of this process.  Shift it down by one page
         // so we get the start of the first page.
@@ -231,7 +235,7 @@ impl MiniElf {
                 panic!("init section addresses are not strictly increasing");
             }
 
-            if copy_to_ram || !xip {
+            if copy_to_ram || ini_type == IniType::IniE {
                 let mut this_page = section.virt as usize & !(PAGE_SIZE - 1);
                 let mut bytes_to_copy = section.len();
 
@@ -350,6 +354,8 @@ impl MiniElf {
                 }
 
                 // --- map FLASH pages to virtual memory ---
+                // TODO: handle mapping of swap-located pages to virtual memory
+                todo!("Handle swap-located pages mapping into virtual memory");
                 while pages_to_map > 0 {
                     let map_phys_addr = (image_phys_base + section_map_phys_offset) & !(PAGE_SIZE - 1);
                     allocator.map_page(tt, map_phys_addr, virt_page, flag_defaults, pid as XousPid);
