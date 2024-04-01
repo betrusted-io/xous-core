@@ -9,9 +9,12 @@ use xous_kernel::{SysCall, PID, TID};
 use crate::arch::current_pid;
 use crate::arch::exception::RiscvException;
 use crate::arch::mem::MemoryMapping;
+#[cfg(feature = "swap")]
+use crate::arch::process::RETURN_FROM_SWAPPER;
 use crate::arch::process::{Process as ArchProcess, RETURN_FROM_EXCEPTION_HANDLER};
-use crate::arch::process::{Thread, EXIT_THREAD, RETURN_FROM_ISR, RETURN_FROM_SWAPPER};
+use crate::arch::process::{Thread, EXIT_THREAD, RETURN_FROM_ISR};
 use crate::services::SystemServices;
+#[cfg(feature = "swap")]
 use crate::swap::Swap;
 
 extern "Rust" {
@@ -307,7 +310,7 @@ pub extern "C" fn trap_handler(
                 crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
             });
         }
-
+        #[cfg(feature = "swap")]
         RiscvException::InstructionPageFault(RETURN_FROM_SWAPPER, _offset) => {
             #[cfg(feature = "debug-swap")]
             {
