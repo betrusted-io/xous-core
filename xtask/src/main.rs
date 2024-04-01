@@ -31,7 +31,7 @@ const PRECURSOR_SOC_VERSION: &str = "pvt";
   Backups older than this cannot be parsed because the migration code for that backup
   was deprecated. The main purpose of this field is to assist the restore script
   in selecting a kernel: it will automatically downgrade a kernel as far as it must
-  to read a very old backup. This tag is *not* useful for enforcing a minimum
+  read a very old backup. This tag is *not* useful for enforcing a minimum
   version of the kernel to read a very *new* backup.
 
   Instead, when picking a kernel to restore from, the latest kernel should always be picked,
@@ -118,11 +118,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ---- extract position independent args ----
     let loader_key = get_flag("--lkey")?;
-    if loader_key.len() != 0 {
+    if !loader_key.is_empty() {
         builder.loader_key_file(loader_key[0].to_string());
     }
     let kernel_key = get_flag("--kkey")?;
-    if kernel_key.len() != 0 {
+    if !kernel_key.is_empty() {
         builder.kernel_key_file(kernel_key[0].to_string());
     }
     let swap_key = get_flag("--swap")?;
@@ -209,36 +209,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // ----- renode configs --------
         Some("renode-image") => {
-            builder
-                .target_renode()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                .add_apps(&get_cratespecs());
+            builder.target_renode().add_services(&user_pkgs).add_apps(&get_cratespecs());
         }
         Some("renode-image-debug") => {
             builder
                 .target_renode()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .stream(BuildStream::Debug)
                 .add_apps(&get_cratespecs());
         }
         Some("renode-test") => {
-            builder
-                .target_renode()
-                .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
         }
         Some("libstd-test") => {
-            builder
-                .target_renode()
-                .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
             builder.add_loader_feature("renode-bypass");
         }
         Some("libstd-net") => {
-            builder
-                .target_renode()
-                .add_services(&base_pkgs.into_iter().map(String::from).collect())
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
             builder.add_loader_feature("renode-bypass").add_loader_feature("renode-minimal");
             builder
                 .add_service("net", LoaderRegion::Ram)
@@ -247,16 +235,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_service("dns", LoaderRegion::Ram);
         }
         Some("renode-aes-test") => {
-            builder
-                .target_renode()
-                .add_services(&aes_test_pkgs.into_iter().map(String::from).collect())
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&aes_test_pkgs).add_services(&get_cratespecs());
         }
         Some("ffi-test") => {
-            builder
-                .target_renode()
-                .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
-                .add_services(&get_cratespecs());
+            builder.target_renode().add_services(&gfx_base_pkgs).add_services(&get_cratespecs());
             builder.add_service("ffi-test", LoaderRegion::Ram);
             builder.add_loader_feature("renode-bypass");
         }
@@ -280,7 +262,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("run") => {
             builder
                 .target_hosted()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("pddbtest")
                 .add_feature("ditherpunk")
                 .add_feature("tracking-alloc")
@@ -291,14 +273,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("pddb-ci") => {
             builder
                 .target_hosted()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("pddb/ci")
                 .add_feature("pddb/deterministic");
         }
         Some("pddb-btest") => {
             builder
                 .target_hosted()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("pddbtest")
                 .add_feature("autobasis") // this will make secret basis tracking synthetic and automated for stress testing
                 .add_feature("autobasis-ci")
@@ -307,7 +289,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("hosted-debug") => {
             builder
                 .target_hosted()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("pddbtest")
                 .add_feature("ditherpunk")
                 .add_feature("tracking-alloc")
@@ -318,30 +300,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("gfx-dev") => {
             builder
                 .target_hosted()
-                .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&gfx_base_pkgs)
                 .add_services(&get_cratespecs())
                 .add_feature("graphics-server/gfx-testing");
         }
         Some("hosted-ci") => {
-            builder
-                .target_hosted()
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
-                .hosted_build_only()
-                .add_apps(&get_cratespecs());
+            builder.target_hosted().add_services(&user_pkgs).hosted_build_only().add_apps(&get_cratespecs());
         }
 
         // ------ Precursor hardware image configs ------
         Some("app-image") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("mass-storage") // add this in by default to help with testing
                 .add_apps(&get_cratespecs());
         }
         Some("app-image-xip") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                //.add_services(&user_pkgs.into_iter().map(String::from).collect())
+                //.add_services(&user_pkgs)
                 .add_feature("mass-storage"); // add this in by default to help with testing
             for service in user_pkgs {
                 if (service != "shellchat") && (service != "ime-plugin-shell" && (service != "net")) {
@@ -371,7 +349,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // by the usb_update script.
             builder
                 .target_precursor("c809403-perflib")
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_apps(&get_cratespecs())
                 .add_feature("perfcounter")
                 .add_kernel_feature("v2p");
@@ -399,7 +377,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             pkgs.push("ime-plugin-tts");
             pkgs.retain(|&pkg| pkg != "ime-plugin-shell");
 
-            builder.add_services(&pkgs.into_iter().map(String::from).collect())
+            builder.add_services(&pkgs)
                 .add_apps(&get_cratespecs())
                 .add_service("espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded",
                     LoaderRegion::Ram)
@@ -410,13 +388,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("tiny") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&base_pkgs)
                 .add_services(&get_cratespecs());
         }
         Some("usbdev") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&base_pkgs.into_iter().map(String::from).collect())
+                .add_services(&base_pkgs)
                 .add_services(&get_cratespecs());
             //builder.add_service("usb-test");
             builder.add_service("usb-device-xous", LoaderRegion::Ram);
@@ -424,31 +402,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("pddb-dev") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&pddb_dev_pkgs.into_iter().map(String::from).collect())
+                .add_services(&pddb_dev_pkgs)
                 .add_services(&get_cratespecs());
         }
         Some("trng-test") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("urandomtest");
         }
         Some("ro-test") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("ringosctest");
         }
         Some("av-test") => {
             builder
                 .target_precursor(PRECURSOR_SOC_VERSION)
-                .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                .add_services(&user_pkgs)
                 .add_feature("avalanchetest");
         }
         Some("compile-apps") => {
-            builder
-                .target_precursor_no_image(PRECURSOR_SOC_VERSION)
-                .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect());
+            builder.target_precursor_no_image(PRECURSOR_SOC_VERSION).add_services(&gfx_base_pkgs);
         }
 
         // ------ Cramium hardware image configs ------
@@ -473,11 +449,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("arm-tiny") => {
             builder
                 .target_arm()
-                .add_services(&vec![
-                    "xous-log".to_string(),
-                    "xous-ticktimer".to_string(),
-                    "xous-names".to_string(),
-                    "ticktimer-test-client".to_string(),
+                .add_services([
+                    "xous-log",
+                    "xous-ticktimer",
+                    "xous-names",
+                    "ticktimer-test-client",
                 ])
                 .add_kernel_feature("v2p") // required to use LCD DMA with lcd-console
                 .add_feature("atsama5d27")

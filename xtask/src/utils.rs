@@ -82,7 +82,7 @@ fn get_sysroot(target: Option<&str>, check_version: bool) -> Result<Option<Strin
             version_path.push("RUST_VERSION");
             if let Ok(mut vp) = File::open(&version_path) {
                 let mut version_str = String::new();
-                if let Err(_) = vp.read_to_string(&mut version_str) {
+                if vp.read_to_string(&mut version_str).is_err() {
                     return Err("Unable to get version string".to_owned());
                 }
 
@@ -102,10 +102,8 @@ fn get_sysroot(target: Option<&str>, check_version: bool) -> Result<Option<Strin
                 // return Err("Outdated toolchain installed".to_owned());
                 return Ok(None);
             }
-        } else {
-            if !std::path::Path::new(&version_path).exists() {
-                return Ok(None);
-            }
+        } else if !Path::new(&version_path).exists() {
+            return Ok(None);
         }
     }
 
@@ -145,7 +143,7 @@ pub(crate) fn ensure_kernel_compiler(target: &Option<&str>, force_install: bool)
     let rustup_command = Command::new("rustup")
         .stderr(Stdio::null())
         .stdout(Stdio::piped())
-        .args(&["target", "add", target])
+        .args(["target", "add", target])
         .spawn()
         .map_err(|e| format!("could not run rustup: {}", e))?;
 
@@ -184,7 +182,7 @@ pub(crate) fn ensure_compiler(
         if remove_existing {
             println!("Target path exists, removing it");
             std::fs::remove_dir_all(version_path)
-                .or_else(|e| Err(format!("unable to remove existing toolchain: {}", e)))?;
+                .map_err(|e| format!("unable to remove existing toolchain: {}", e))?;
             println!("Also removing target directories for existing toolchain");
             let mut target_main = project_root();
             target_main.push("target");
@@ -234,7 +232,7 @@ pub(crate) fn ensure_compiler(
         let url = TOOLCHAIN_RELEASE_URLS
             .get(target)
             .ok_or_else(|| format!("Can't find toolchain URL for target {}", target))?;
-        let j: serde_json::Value = ureq::get(&url)
+        let j: serde_json::Value = ureq::get(url)
             .set("Accept", "application/vnd.github.v3+json")
             .call()
             .map_err(|e| format!("{}", e))?
@@ -272,7 +270,7 @@ pub(crate) fn ensure_compiler(
                 },
             };
 
-            let first_asset = match assets.get(0) {
+            let first_asset = match assets.first() {
                 None => continue,
                 Some(s) => s,
             };
@@ -313,7 +311,7 @@ pub(crate) fn ensure_compiler(
 
     /// Extract the zipfile to the target directory, ensuring that all files
     /// contained within are created.
-    fn extract_zip<P: std::io::Read + std::io::Seek, P2: AsRef<Path>>(
+    fn extract_zip<P: Read + std::io::Seek, P2: AsRef<Path>>(
         archive_data: P,
         extract_to: P2,
     ) -> Result<(), String> {
@@ -335,12 +333,12 @@ pub(crate) fn ensure_compiler(
                 // Create the parent directory if necessary
                 if let Some(parent) = output_path.parent() {
                     if !parent.exists() {
-                        std::fs::create_dir_all(&parent).map_err(|e| {
+                        std::fs::create_dir_all(parent).map_err(|e| {
                             format!("unable to create directory {}: {}", output_path.display(), e)
                         })?;
                     }
                 }
-                let mut outfile = std::fs::File::create(&output_path)
+                let mut outfile = File::create(&output_path)
                     .map_err(|e| format!("unable to create file {}: {}", output_path.display(), e))?;
                 std::io::copy(&mut entry_in_archive, &mut outfile).map_err(|e| {
                     format!("unable to write extracted file {}: {}", output_path.display(), e)
@@ -364,11 +362,11 @@ pub(crate) fn generate_locales() -> Result<(), std::io::Error> {
     filetime::set_file_mtime("locales/src/lib.rs", ts)?;
     let mut path = project_root();
     path.push("locales");
-    let status = Command::new(cargo()).current_dir(path).args(&["build", "--package", "locales"]).status()?;
+    let status = Command::new(cargo()).current_dir(path).args(["build", "--package", "locales"]).status()?;
     if !status.success() {
         return Err(std::io::Error::new(std::io::ErrorKind::Other, "Couldn't generate the locales"));
     }
-    return Ok(());
+    Ok(())
 }
 
 /// Import the Wycheproof test vectors
@@ -377,7 +375,7 @@ pub(crate) fn wycheproof_import() -> Result<(), crate::DynError> {
     let output_file = "services/shellchat/src/cmds/x25519_test.bin";
     let status = Command::new(cargo())
         .current_dir(project_root())
-        .args(&["run", "--package", "wycheproof-import", "--", input_file, output_file])
+        .args(["run", "--package", "wycheproof-import", "--", input_file, output_file])
         .status()?;
     if !status.success() {
         return Err("wycheproof-import failed. If any, the output will not be usable.".into());
@@ -386,23 +384,23 @@ pub(crate) fn wycheproof_import() -> Result<(), crate::DynError> {
     println!();
     println!("Wrote wycheproof x25519 testvectors to '{}'.", output_file);
 
-    return Ok(());
+    Ok(())
 }
 
 pub(crate) fn track_language_changes(last_lang: &str) -> Result<(), crate::DynError> {
     let last_config = "target/LAST_LANG";
     let mut contents = String::new();
 
-    let changed = match OpenOptions::new().read(true).open(&last_config) {
+    let changed = match OpenOptions::new().read(true).open(last_config) {
         Ok(mut file) => {
             file.read_to_string(&mut contents).unwrap();
-            if contents != last_lang { true } else { false }
+            contents != last_lang
         }
         _ => true,
     };
     if changed {
         println!("Locale language changed to {}", last_lang);
-        let mut file = OpenOptions::new().create(true).write(true).truncate(true).open(&last_config).unwrap();
+        let mut file = OpenOptions::new().create(true).write(true).truncate(true).open(last_config).unwrap();
         write!(file, "{}", last_lang).unwrap();
         generate_locales()?
     } else {
