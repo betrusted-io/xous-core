@@ -194,6 +194,7 @@ pub fn handle_vendor_command(session: &mut VendorSession, allow_host: bool) -> H
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum BackupError {
     CborError(DecoderError),
     CborConversionError(backup::CborConversionError),
