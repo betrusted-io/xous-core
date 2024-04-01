@@ -732,7 +732,6 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             })
         }
         SysCall::UnmapMemory(range) => {
-            println!("UnmapMemory: {:x?}", range);
             #[cfg(feature = "swap")]
             // this call may diverge if it generates an advisory to the swapper
             let result = crate::swap::Swap::with_mut(|s| s.unmap(range));
