@@ -147,6 +147,7 @@ pub fn copy_args(cfg: &mut BootConfig) {
 enum TagType {
     IniE,
     IniF,
+    IniS,
     XKrn,
     Other,
 }
@@ -156,6 +157,8 @@ impl From<u32> for TagType {
             TagType::IniE
         } else if code == u32::from_le_bytes(*b"IniF") {
             TagType::IniF
+        } else if code == u32::from_le_bytes(*b"IniS") {
+            TagType::IniS
         } else if code == u32::from_le_bytes(*b"XKrn") {
             TagType::XKrn
         } else {
@@ -169,6 +172,7 @@ impl TagType {
         match self {
             TagType::IniE => "IniE",
             TagType::IniF => "IniF",
+            TagType::IniS => "IniS",
             TagType::XKrn => "XKrn",
             TagType::Other => "Other",
         }
@@ -313,6 +317,17 @@ fn copy_processes(cfg: &mut BootConfig) {
                     }
                 }
                 println!("Done with sections");
+            }
+            TagType::IniS => {
+                // IniS does not necessarily exist in linear memory space.
+
+                // TODO: access IniS image and figure out what regions are "write" and allocate/copy
+                // those into RAM. We do this because there isn't a 1:1 mapping of these to the
+                // images on disk which creates a problem for the swapper.
+
+                // Then, for regions that *are* aligned, allocate them into the swapper's
+                // memory space, and copy the data into swap.
+                todo!("implement inis handling");
             }
             TagType::XKrn => {
                 let prog = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
