@@ -949,7 +949,7 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
                     crate::arch::process::current_tid(),
                     virt,
                     new_page,
-                    true,
+                    None,
                 )
             });
         }
