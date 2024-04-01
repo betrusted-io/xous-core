@@ -5,7 +5,8 @@ use std::mem::size_of;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Condvar, Mutex};
 
-use crate::{Result, SysCall, SysCallResult, PID, TID};
+pub use crate::PID;
+use crate::{Result, SysCall, SysCallResult, TID};
 
 mod mem;
 pub use mem::*;

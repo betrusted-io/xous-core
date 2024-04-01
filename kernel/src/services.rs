@@ -33,6 +33,7 @@ const MINIELF_FLG_X: u8 = 4;
 const MINIELF_FLG_EHF: u8 = 8;
 
 #[derive(Debug)]
+#[allow(dead_code)] // suppresses unused warnings in hosted mode
 pub enum CallbackType {
     /// args: irq_no, arg
     Interrupt(usize, *mut usize),
@@ -267,6 +268,7 @@ impl Process {
     }
 
     /// Reveal state for debugging outside the crate.
+    #[cfg(all(feature = "swap", baremetal))]
     pub fn state(&self) -> ProcessState { self.state }
 }
 

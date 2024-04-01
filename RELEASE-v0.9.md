@@ -473,6 +473,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - change kernel and loader targets to riscv-unknown-elf-none because `xous` is now a proper target (required for Rust 1.76 compatibility)
 - `curve25519-dalek` API is now at 4.1.2, thanks to @kotval for pulling it together. The new API removes `engine-25519` and rolls hardware allocate/release into the forked crate, similar to how sha2 was ported. `engine-25519` crate now removed from source tree, as it is now depracted since all the functionality was pulled into `curve25519-dalek`.
 - keymap is checked on every call to send a key to the USB keyboard. This allows us to toggle the keymap temporarily to allow typing into hosts with a different keymap (instead of requiring a reboot)
+- Encrypted swap introduced: encrypted swap will allow Xous to run on microcontrollers that have small internal memory footprints, and rely on external SPI RAM for backing storage. This should create a step function in physical security when running on a microcontroller with sufficient internal protected RAM to hold the working set and core OS, as it will complicated attacks that attempt to read out off-chip RAM.
+- So far, the kernel API calls to support encrypted swap are in place. Still remaining are image creation, loader setup, and the actual swapper itself.
 
 ## Roadmap
 - Lots of testing and bug fixes

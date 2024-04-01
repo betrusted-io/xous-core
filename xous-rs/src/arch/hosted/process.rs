@@ -1,7 +1,6 @@
 use core::convert::{TryFrom, TryInto};
 
 use super::CHILD_PROCESS_ADDRESS;
-pub use crate::PID;
 
 /// A 16-byte random nonce that identifies this process to the kernel. This
 /// is usually provided through the environment variable `XOUS_PROCESS_KEY`.

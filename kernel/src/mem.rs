@@ -9,6 +9,8 @@ pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
 use crate::arch::process::Process;
 
 #[derive(Debug)]
+// below suppresses warning from unused Move argument in hosted mode
+#[allow(dead_code)]
 enum ClaimReleaseMove {
     Claim,
     Release,
