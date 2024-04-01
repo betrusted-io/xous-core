@@ -10,6 +10,7 @@ use xous_kernel::{MemoryFlags, PID};
 
 use crate::arch::process::InitialProcess;
 use crate::mem::MemoryManager;
+#[cfg(feature = "swap")]
 use crate::swap::Swap;
 
 // pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;
