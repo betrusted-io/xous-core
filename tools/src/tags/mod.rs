@@ -1,8 +1,10 @@
 pub mod bflg;
 pub mod inie;
 pub mod inif;
+pub mod inis;
 pub mod memory;
 pub mod pnam;
+pub mod swap;
 pub mod xkrn;
 
 pub(crate) const PAGE_SIZE: usize = 4096;

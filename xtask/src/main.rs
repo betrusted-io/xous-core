@@ -125,6 +125,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !kernel_key.is_empty() {
         builder.kernel_key_file(kernel_key[0].to_string());
     }
+    let swap_key = get_flag("--swap")?;
+    if swap_key.len() != 0 {
+        let swap_parts: Vec<&str> = swap_key[0].split(':').collect();
+        if swap_parts.len() != 2 {
+            return Err(
+                "Error: --swap argument should be of the form [offset]:[size] as hex numbers without 0x"
+                    .into(),
+            );
+        }
+
+        let offset = match u32::from_str_radix(swap_parts[0], 16) {
+            Ok(o) => o,
+            Err(e) => {
+                return Err(format!(
+                    "Error: offset should be hex number without 0x prefix {}: {:?}",
+                    swap_parts[0], e
+                )
+                .into());
+            }
+        };
+
+        let size = match u32::from_str_radix(swap_parts[1], 16) {
+            Ok(o) => o,
+            Err(e) => {
+                return Err(format!(
+                    "Error: offset should be hex number without 0x prefix {}: {:?}",
+                    swap_parts[1], e
+                )
+                .into());
+            }
+        };
+
+        builder.set_swap(offset, size);
+    }
 
     let extra_apps = get_flag("--app")?;
     builder.add_apps(&extra_apps);
@@ -195,18 +229,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
             builder.add_loader_feature("renode-bypass").add_loader_feature("renode-minimal");
             builder
-                .add_service("net", false)
-                .add_service("com", false)
-                .add_service("llio", false)
-                .add_service("dns", false);
+                .add_service("net", LoaderRegion::Ram)
+                .add_service("com", LoaderRegion::Ram)
+                .add_service("llio", LoaderRegion::Ram)
+                .add_service("dns", LoaderRegion::Ram);
         }
         Some("renode-aes-test") => {
             builder.target_renode().add_services(&aes_test_pkgs).add_services(&get_cratespecs());
         }
         Some("ffi-test") => {
             builder.target_renode().add_services(&gfx_base_pkgs).add_services(&get_cratespecs());
-            builder.add_service("ffi-test", false);
+            builder.add_service("ffi-test", LoaderRegion::Ram);
             builder.add_loader_feature("renode-bypass");
+        }
+        Some("renode-swap") => {
+            if !builder.is_swap_set() {
+                builder.set_swap(0x4040_0000, 8 * 1024 * 1024);
+            }
+            builder.target_renode();
+            // It is important that this is the first service added, because the swapper *must* be in PID 2
+            builder.add_service("xous-swapper", LoaderRegion::Ram);
+            builder.add_kernel_feature("swap");
+
+            for service in base_pkgs {
+                builder.add_service(service, LoaderRegion::Flash);
+            }
+            builder.add_service("test-swapper", LoaderRegion::Swap); // when we implement loaded-but-swapped, use that instead
+            builder.add_apps(&get_cratespecs());
         }
 
         // ------- hosted mode configs -------
@@ -274,13 +323,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_feature("mass-storage"); // add this in by default to help with testing
             for service in user_pkgs {
                 if (service != "shellchat") && (service != "ime-plugin-shell" && (service != "net")) {
-                    builder.add_service(service, false);
+                    builder.add_service(service, LoaderRegion::Ram);
                 } else {
-                    builder.add_service(service, true);
+                    builder.add_service(service, LoaderRegion::Flash);
                 }
             }
             for app in get_cratespecs() {
-                builder.add_app(&app, true);
+                builder.add_app(&app, LoaderRegion::Flash);
             }
         }
         Some("perf-image") => {
@@ -330,7 +379,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             builder.add_services(&pkgs)
                 .add_apps(&get_cratespecs())
-                .add_service("espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded", false)
+                .add_service("espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded",
+                    LoaderRegion::Ram)
                 .override_locale("en-tts")
                 .add_feature("tts")
                 .add_feature("braille");
@@ -347,7 +397,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_services(&base_pkgs)
                 .add_services(&get_cratespecs());
             //builder.add_service("usb-test");
-            builder.add_service("usb-device-xous", false);
+            builder.add_service("usb-device-xous", LoaderRegion::Ram);
         }
         Some("pddb-dev") => {
             builder
@@ -391,7 +441,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             builder.add_services(&get_cratespecs());
             for service in cramium_pkgs {
-                builder.add_service(service, true);
+                builder.add_service(service, LoaderRegion::Flash);
             }
         }
 
@@ -459,6 +509,7 @@ fn print_help() {
 "cargo xtask [verb] [cratespecs ..]
     [--feature [feature name]]
     [--lkey [loader key]] [--kkey [kernel key]]
+    [--swap [offset:size]]
     [--app [cratespec]]
     [--service [cratespec]]
     [--no-timestamp]
@@ -489,6 +540,7 @@ be merged in with explicit app/service treatment with the following flags:
 [--gdb-stub]             Build the kernel with GDB support
 [--debug-loader]         Enable debug printing in the loader
 [--offline]              Avoid network traffic
+[--swap offset:size]     Specify a region for swap memory. The behavior of this depends on the target.
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.

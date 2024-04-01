@@ -11,6 +11,8 @@ use crate::irq::{interrupt_claim, interrupt_free};
 use crate::mem::{MemoryManager, PAGE_SIZE};
 use crate::server::{SenderID, WaitingMessage};
 use crate::services::SystemServices;
+#[cfg(feature = "swap")]
+use crate::swap::Swap;
 
 /* Quoth Xobs:
  The idea behind SWITCHTO_CALLER was that you'd have a process act as a scheduler,
@@ -729,22 +731,32 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 Ok(xous_kernel::Result::MemoryRange(range))
             })
         }
-        SysCall::UnmapMemory(range) => MemoryManager::with_mut(|mm| {
-            let mut result = Ok(xous_kernel::Result::Ok);
-            let virt = range.as_ptr() as usize;
-            let size = range.len();
-            if cfg!(baremetal) && virt & 0xfff != 0 {
-                return Err(xous_kernel::Error::BadAlignment);
-            }
-            for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
-                if let Err(e) = mm.unmap_page(addr as *mut usize) {
-                    if result.is_ok() {
-                        result = Err(e);
+        SysCall::UnmapMemory(range) => {
+            println!("UnmapMemory: {:x?}", range);
+            #[cfg(feature = "swap")]
+            // this call may diverge if it generates an advisory to the swapper
+            let result = crate::swap::Swap::with_mut(|s| s.unmap(range));
+            #[cfg(not(feature = "swap"))]
+            let result = {
+                MemoryManager::with_mut(|mm| {
+                    let mut result = Ok(xous_kernel::Result::Ok);
+                    let virt = range.as_ptr() as usize;
+                    let size = range.len();
+                    if cfg!(baremetal) && virt & 0xfff != 0 {
+                        return Err(xous_kernel::Error::BadAlignment);
                     }
-                }
-            }
+                    for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
+                        if let Err(e) = mm.unmap_page(addr as *mut usize) {
+                            if result.is_ok() {
+                                result = Err(e);
+                            }
+                        }
+                    }
+                    result
+                })
+            };
             result
-        }),
+        }
         SysCall::IncreaseHeap(delta, flags) => {
             if delta & 0xfff != 0 {
                 return Err(xous_kernel::Error::BadAlignment);
@@ -1006,6 +1018,19 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 Err(_) => Err(xous_kernel::Error::BadAddress),
             }
         }
+        #[cfg(feature = "swap")]
+        SysCall::RegisterSwapper(s0, s1, s2, s3, handler, state) => {
+            Swap::with_mut(|swap| swap.register_handler(s0, s1, s2, s3, handler, state))
+        }
+        #[cfg(feature = "swap")]
+        SysCall::EvictPage(target_pid, vaddr) => {
+            if pid.get() != xous_kernel::SWAPPER_PID {
+                klog!("Illegal caller"); // only PID 2 can call this
+                return Err(xous_kernel::Error::AccessDenied);
+            }
+            Swap::with_mut(|swap| swap.evict_page(target_pid, vaddr))
+        }
+
         /* https://github.com/betrusted-io/xous-core/issues/90
         SysCall::SetExceptionHandler(pc, sp) => SystemServices::with_mut(|ss| {
             ss.set_exception_handler(pid, pc, sp)

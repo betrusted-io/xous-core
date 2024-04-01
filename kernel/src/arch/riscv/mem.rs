@@ -10,6 +10,7 @@ use xous_kernel::{MemoryFlags, PID};
 
 use crate::arch::process::InitialProcess;
 use crate::mem::MemoryManager;
+use crate::swap::Swap;
 
 // pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;
 pub const DEFAULT_HEAP_BASE: usize = 0x2000_0000;
@@ -32,7 +33,7 @@ pub const FLG_A: usize = 0x40;
 pub const FLG_D: usize = 0x80;
 
 extern "C" {
-    fn flush_mmu();
+    pub fn flush_mmu();
 }
 
 unsafe fn zeropage(s: *mut u32) {
@@ -52,7 +53,7 @@ bitflags! {
         const A         = 0b00_0100_0000;
         const D         = 0b00_1000_0000;
         const S         = 0b01_0000_0000; // Shared page
-        const P         = 0b10_0000_0000; // Previously writable
+        const P         = 0b10_0000_0000; // swaP
     }
 }
 
@@ -658,7 +659,7 @@ pub fn pagetable_entry(addr: usize) -> Result<*mut usize, xous_kernel::Error> {
 
     let l1_pt = unsafe { &(*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
     let l1_pte = l1_pt.entries[vpn1];
-    if l1_pte & 1 == 0 {
+    if l1_pte & MMUFlags::VALID.bits() == 0 {
         return Err(xous_kernel::Error::BadAddress);
     }
     Ok((PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE + vpn0 * 4) as *mut usize)
@@ -821,11 +822,8 @@ pub fn return_page_inner(
         panic!("page wasn't shared in destination space");
     }
 
-    // Clear the `SHARED` and `PREVIOUSLY-WRITABLE` bits, and set the `VALID` bit.
-    unsafe {
-        dest_entry
-            .write_volatile(dest_entry_value & !(MMUFlags::S | MMUFlags::P).bits() | MMUFlags::VALID.bits())
-    };
+    // Clear the `SHARED` bit, and set the `VALID` bit.
+    unsafe { dest_entry.write_volatile(dest_entry_value & !(MMUFlags::S).bits() | MMUFlags::VALID.bits()) };
     unsafe { flush_mmu() };
 
     // Swap back to our previous address space
@@ -891,7 +889,12 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
 
     let flags = current_entry & 0x1ff;
 
+    #[cfg(not(feature = "swap"))]
     if flags & MMUFlags::VALID.bits() != 0 {
+        return Ok(address);
+    }
+    #[cfg(feature = "swap")]
+    if (flags & MMUFlags::VALID.bits() != 0) && (flags & MMUFlags::P.bits() == 0) {
         return Ok(address);
     }
 
@@ -905,14 +908,27 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
     let new_page = MemoryManager::with_mut(|mm| {
         mm.alloc_page(crate::arch::process::current_pid()).expect("Couldn't allocate new page")
     });
+
     let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
     let ppn0 = (new_page >> 12) & ((1 << 10) - 1);
     unsafe {
-        // Map the page to our process
-        *entry = (ppn1 << 20) | (ppn0 << 10) | (flags | FLG_VALID /* valid */ | FLG_D /* D */ | FLG_A/* A */);
-        flush_mmu();
+        #[cfg(feature = "swap")]
+        if flags & MMUFlags::P.bits() == 1 {
+            // page is swapped; fill page, map and return
+            Swap::with_mut(|s| s.retrieve_page(crate::arch::process::current_pid(), virt, new_page))
+
+            // the execution flow diverges from here: it returns via the interrupt context handler. -> !
+        } else {
+            // page is reserved: simple zero it out
+            // Map the page to our process
+            *entry =
+                (ppn1 << 20) | (ppn0 << 10) | (flags | FLG_VALID /* valid */ | FLG_D /* D */ | FLG_A/* A */);
+            flush_mmu();
+            zeropage(virt as *mut u32);
+        }
 
         // Zero-out the page
+        #[cfg(not(feature = "swap"))]
         zeropage(virt as *mut u32);
 
         // Move the page into userspace
@@ -920,6 +936,23 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
             | (ppn0 << 10)
             | (flags | FLG_VALID /* valid */ | FLG_U /* USER */ | FLG_D /* D */ | FLG_A/* A */);
         flush_mmu();
+
+        // if swap is activated, advise the swapper that data was allocated
+        // note that the prior path on `retrieve_page` *won't* hit this call, because `retrieve_page`
+        // diverges.
+        #[cfg(feature = "swap")]
+        {
+            println!("ensure_page_exists_inner - advise alloc");
+            Swap::with_mut(|s| {
+                s.advise_alloc(
+                    crate::arch::process::current_pid(),
+                    crate::arch::process::current_tid(),
+                    virt,
+                    new_page,
+                    None,
+                )
+            });
+        }
     };
 
     Ok(new_page)
@@ -1052,4 +1085,72 @@ pub fn update_page_flags(virt: usize, flags: MemoryFlags) -> Result<(), xous_ker
     l0_pt.entries[vpn0] = mmu_flags;
 
     Ok(())
+}
+
+#[cfg(feature = "swap")]
+/// Takes in the target PID and virtual address to evict. Performs the unmapping, release from
+/// the target, and re-mapping into the swapper's memory space. Returns a pointer to the
+/// data in the swapper's virtual memory space
+pub fn evict_page_inner(target_pid: PID, vaddr: usize) -> Result<usize, xous_kernel::Error> {
+    use crate::services::SystemServices;
+    SystemServices::with(|system_services| {
+        // swap to the target memory space
+        let target_map = system_services.get_process(target_pid).unwrap().mapping;
+        target_map.activate().unwrap();
+
+        // get the PTE in the target memory space
+        let entry = pagetable_entry(vaddr as usize)?;
+        let target_pte = unsafe { entry.read_volatile() };
+        let target_paddr = (target_pte >> 10) << 12;
+
+        // sanity check
+        if (target_pte & MMUFlags::VALID.bits() == 0) || (target_pte & MMUFlags::P.bits() != 0) {
+            return Err(xous_kernel::Error::BadAddress);
+        }
+        if target_pte & MMUFlags::S.bits() != 0 {
+            return Err(xous_kernel::Error::ShareViolation);
+        }
+
+        // clear the valid bit, mark as swapped
+        let new_pte = (target_pte & !MMUFlags::VALID.bits()) | MMUFlags::P.bits();
+        unsafe { entry.write_volatile(new_pte) };
+
+        // switch into the swapper memory space
+        let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
+        let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
+        swapper_map.activate()?;
+        let payload_virt = MemoryManager::with_mut(|mm| {
+            let payload_virt = mm
+                .find_virtual_address(core::ptr::null_mut(), PAGE_SIZE, xous_kernel::MemoryType::Messages)
+                .expect("couldn't find virtuall address in swapper space for target page")
+                as usize;
+            let _result = map_page_inner(mm, swapper_pid, target_paddr, payload_virt, MemoryFlags::R, true);
+            unsafe { flush_mmu() };
+            payload_virt
+        });
+        Ok(payload_virt)
+    })
+}
+
+#[cfg(feature = "swap")]
+pub fn map_page_to_swapper(paddr: usize) -> Result<usize, xous_kernel::Error> {
+    use crate::services::SystemServices;
+    SystemServices::with(|system_services| {
+        let swapper_pid = PID::new(xous_kernel::SWAPPER_PID).unwrap();
+        // swap to the swapper space
+        let swapper_map = system_services.get_process(swapper_pid).unwrap().mapping;
+        swapper_map.activate()?;
+
+        let payload_virt = MemoryManager::with_mut(|mm| {
+            let payload_virt = mm
+                .find_virtual_address(core::ptr::null_mut(), PAGE_SIZE, xous_kernel::MemoryType::Messages)
+                .expect("couldn't find virtuall address in swapper space for target page")
+                as usize;
+            let _result =
+                map_page_inner(mm, swapper_pid, paddr, payload_virt, MemoryFlags::R | MemoryFlags::W, true);
+            unsafe { flush_mmu() };
+            payload_virt
+        });
+        Ok(payload_virt)
+    })
 }

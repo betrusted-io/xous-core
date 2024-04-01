@@ -470,7 +470,7 @@ impl MemoryManager {
         // address from this process.
         if let Ok(phys) = crate::arch::mem::virt_to_phys(virt as usize) {
             self.release_page(phys as *mut usize, pid).ok();
-        };
+        }
 
         // Free the virtual address.
         crate::arch::mem::unmap_page_inner(self, virt as usize)
@@ -666,6 +666,12 @@ impl MemoryManager {
 
     /// Mark a given address as no longer being owned by the specified process ID
     fn release_page(&mut self, addr: *mut usize, pid: PID) -> Result<(), xous_kernel::Error> {
+        self.claim_release_move(addr, pid, ClaimReleaseMove::Release)
+    }
+
+    #[cfg(feature = "swap")]
+    /// Same as `release_page`, but with public visibility when the `swap` feature is active
+    pub fn release_page_swap(&mut self, addr: *mut usize, pid: PID) -> Result<(), xous_kernel::Error> {
         self.claim_release_move(addr, pid, ClaimReleaseMove::Release)
     }
 
