@@ -354,7 +354,10 @@ impl SystemServices {
         let init_offsets = {
             let mut init_count = 1;
             for arg in args.iter() {
-                if arg.name == u32::from_le_bytes(*b"IniE") || arg.name == u32::from_le_bytes(*b"IniF") {
+                if arg.name == u32::from_le_bytes(*b"IniE")
+                    || arg.name == u32::from_le_bytes(*b"IniF")
+                    || arg.name == u32::from_le_bytes(*b"IniS")
+                {
                     init_count += 1;
                 }
             }
@@ -367,7 +370,10 @@ impl SystemServices {
         let mut arg_iter = args.iter().peekable();
         loop {
             if let Some(arg) = arg_iter.peek() {
-                if arg.name == u32::from_le_bytes(*b"IniE") || arg.name == u32::from_le_bytes(*b"IniF") {
+                if arg.name == u32::from_le_bytes(*b"IniE")
+                    || arg.name == u32::from_le_bytes(*b"IniF")
+                    || arg.name == u32::from_le_bytes(*b"IniS")
+                {
                     break;
                 }
             } else {
@@ -400,7 +406,7 @@ impl SystemServices {
             } else {
                 // This code makes the following assumption:
                 //   - Arguments are in the same order as processes
-                //   - All processes take the form of IniE/IniF such that the flags are in the last word
+                //   - All processes take the form of IniE/IniF/IniS such that the flags are in the last word
                 //   - Process #1 is the kernel
                 // Any changes to this will break this code!
                 let mut eh_frame = 0;
