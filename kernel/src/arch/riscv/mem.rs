@@ -823,8 +823,18 @@ pub fn return_page_inner(
         panic!("page wasn't shared in destination space");
     }
 
+    #[cfg(feature = "swap")]
     // Clear the `SHARED` bit, and set the `VALID` bit.
-    unsafe { dest_entry.write_volatile(dest_entry_value & !(MMUFlags::S).bits() | MMUFlags::VALID.bits()) };
+    unsafe {
+        dest_entry.write_volatile(dest_entry_value & !(MMUFlags::S).bits() | MMUFlags::VALID.bits())
+    };
+    #[cfg(not(feature = "swap"))]
+    // Clear the `SHARED` and `PREVIOUSLY-WRITABLE` bits, and set the `VALID` bit.
+    unsafe {
+        dest_entry
+            .write_volatile(dest_entry_value & !(MMUFlags::S | MMUFlags::P).bits() | MMUFlags::VALID.bits())
+    };
+
     unsafe { flush_mmu() };
 
     // Swap back to our previous address space
@@ -928,9 +938,14 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
             zeropage(virt as *mut u32);
         }
 
-        // Zero-out the page
         #[cfg(not(feature = "swap"))]
-        zeropage(virt as *mut u32);
+        {
+            *entry =
+                (ppn1 << 20) | (ppn0 << 10) | (flags | FLG_VALID /* valid */ | FLG_D /* D */ | FLG_A/* A */);
+            flush_mmu();
+            // Zero-out the page
+            zeropage(virt as *mut u32);
+        }
 
         // Move the page into userspace
         *entry = (ppn1 << 20)
