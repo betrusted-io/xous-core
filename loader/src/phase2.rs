@@ -80,15 +80,22 @@ pub fn phase_2(cfg: &mut BootConfig, fs_prehash: &[u8; 64]) {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
             println!("\n\nCopying IniE program into memory");
-            let allocated = inie.load(cfg, process_offset, pid, &env, false);
+            let allocated = inie.load(cfg, process_offset, pid, &env, IniType::IniE);
             println!("IniE Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"IniF") {
             let inif = MiniElf::new(&tag);
             println!("\n\nMapping IniF program into memory");
-            let allocated = inif.load(cfg, process_offset, pid, &env, true);
+            let allocated = inif.load(cfg, process_offset, pid, &env, IniType::IniF);
             println!("IniF Allocated {:x}", allocated);
+            process_offset -= allocated;
+            pid += 1;
+        } else if tag.name == u32::from_le_bytes(*b"IniS") {
+            let inis = MiniElf::new(&tag);
+            println!("\n\nMapping IniS program into memory");
+            let allocated = inis.load(cfg, process_offset, pid, &env, IniType::IniS);
+            println!("IniS Allocated {:x}", allocated);
             process_offset -= allocated;
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"XKrn") {
