@@ -59,6 +59,16 @@ pub struct PageTable {
     entries: [usize; PAGE_SIZE / WORD_SIZE],
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum IniType {
+    // RAM
+    IniE,
+    // XIP
+    IniF,
+    // Swap
+    IniS,
+}
+
 /// Entrypoint
 /// This makes the program self-sufficient by setting up memory page assignment
 /// and copying the arguments to RAM.
@@ -344,7 +354,10 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
             assert!(!kernel_seen, "kernel appears twice");
             assert!(tag.size as usize == mem::size_of::<ProgramDescription>(), "invalid XKrn size");
             kernel_seen = true;
-        } else if tag.name == u32::from_le_bytes(*b"IniE") || tag.name == u32::from_le_bytes(*b"IniF") {
+        } else if tag.name == u32::from_le_bytes(*b"IniE")
+            || tag.name == u32::from_le_bytes(*b"IniF")
+            || tag.name == u32::from_le_bytes(*b"IniS")
+        {
             assert!(tag.size >= 4, "invalid Init size");
             init_seen = true;
             cfg.init_process_count += 1;
@@ -466,6 +479,11 @@ fn check_load(cfg: &mut BootConfig) {
             let inif = MiniElf::new(&tag);
             println!("\n\nChecking IniF region");
             inif.check(cfg, inif.load_offset as usize, pid, true);
+            pid += 1;
+        } else if tag.name == u32::from_le_bytes(*b"IniS") {
+            let inis = MiniElf::new(&tag);
+            println!("\n\nChecking IniS region");
+            inis.check(cfg, inis.load_offset as usize, pid, true);
             pid += 1;
         }
     }
