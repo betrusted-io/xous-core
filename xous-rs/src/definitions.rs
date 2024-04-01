@@ -307,18 +307,18 @@ impl core::fmt::Display for MemoryType {
 #[repr(C)]
 #[derive(Debug, PartialEq)]
 pub enum Result {
-    // 0
+    /// 0
     Ok,
-    // 1
+    /// 1
     Error(Error),
 
-    // 2
+    /// 2
     MemoryAddress(MemoryAddress),
 
-    // 3
+    /// 3
     MemoryRange(MemoryRange),
 
-    // 4
+    /// 4
     ReadyThreads(
         usize, /* count */
         usize,
@@ -329,25 +329,25 @@ pub enum Result {
         /* pid2 */ usize, /* context2 */
     ),
 
-    // 5
+    /// 5
     ResumeProcess,
 
-    // 6
+    /// 6
     ServerID(SID),
 
-    // 7
+    /// 7
     ConnectionID(CID),
 
-    // 8
+    /// 8
     NewServerID(SID, CID),
 
-    // 9
+    /// 9
     MessageEnvelope(MessageEnvelope),
 
-    // 10
+    /// 10
     ThreadID(TID),
 
-    // 11
+    /// 11
     ProcessID(PID),
 
     /// 12: The requested system call is unimplemented
@@ -381,9 +381,10 @@ pub enum Result {
     /// 20: A scalar with five values
     Scalar5(usize, usize, usize, usize, usize),
 
-    // 21: A message is returned as part of `send_message()` when the result is blocking
+    /// 21: A message is returned as part of `send_message()` when the result is blocking
     Message(Message),
 
+    /// Reserved: do not rely on the argument numbering for this variant.
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
