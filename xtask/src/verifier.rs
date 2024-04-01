@@ -12,12 +12,12 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     // TODO: retire utralib/svd2utra from publication as well
     let check_pkgs = [
         // this set updates with kernel API changes
-        "xous^0.9.58",
-        "xous-ipc^0.9.58",
-        "xous-api-log^0.1.54",
-        "xous-api-names^0.9.56",
-        "xous-api-susres^0.9.54",
-        "xous-api-ticktimer^0.9.54",
+        "xous^0.9.59",
+        "xous-ipc^0.9.59",
+        "xous-api-log^0.1.55",
+        "xous-api-names^0.9.57",
+        "xous-api-susres^0.9.55",
+        "xous-api-ticktimer^0.9.55",
     ];
     // utra/svd2utra changes are downgraded to warnings because these now prefer to pull
     // from the local patch version, so any inconsistency simply indicates we forgot to
