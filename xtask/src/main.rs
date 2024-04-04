@@ -244,7 +244,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("renode-swap") => {
             if !builder.is_swap_set() {
-                builder.set_swap(0x4040_0000, 8 * 1024 * 1024);
+                builder.set_swap(0x4080_0000, 8 * 1024 * 1024);
             }
             builder.target_renode();
             // It is important that this is the first service added, because the swapper *must* be in PID 2
