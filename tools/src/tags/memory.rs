@@ -84,6 +84,15 @@ impl MemoryRegions {
     pub fn len(&self) -> usize { self.regions.len() }
 
     pub fn is_empty(&self) -> bool { self.regions.is_empty() }
+
+    #[allow(dead_code)]
+    pub fn patch(&mut self, region_name: &str, new_spec: MemoryRegion) {
+        if let Some(index) = self.regions.iter().position(|&x| x.name == MemoryRegion::make_name(region_name))
+        {
+            self.regions.remove(index);
+            self.regions.insert(index, new_spec);
+        }
+    }
 }
 
 impl XousArgument for MemoryRegions {
