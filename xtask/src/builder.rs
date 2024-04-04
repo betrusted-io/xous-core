@@ -971,9 +971,16 @@ impl Builder {
         } else {
             String::new()
         };
+        let mut swap_file = PathBuf::new();
         if self.swap.is_some() {
             args.push("--swap");
             args.push(&swap_spec);
+            swap_file.push("target");
+            swap_file.push(self.target.as_ref().expect("target"));
+            swap_file.push(stream);
+            swap_file.push("swap.img");
+            args.push("--swap-name");
+            args.push(swap_file.to_str().unwrap())
         }
 
         if memory_spec.len() == 1 {
