@@ -366,6 +366,8 @@ fn main() {
                 if s.offset < ram_config.offset + ram_config.size {
                     ram_config.size = s.offset - ram_config.offset;
                 }
+                args.ram_start = ram_config.offset;
+                args.ram_length = ram_config.size;
             }
             // Note that other configurations don't split RAM, since the swap is provisioned directly
             // in hardware, and thus, no post-processing is required.
