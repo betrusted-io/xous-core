@@ -1,0 +1,149 @@
+# Boot Renode Script (boot.resc)
+
+
+# Add this script's path to the global path, so
+# we can include files relative to ourselves.
+path add $ORIGIN
+
+using sysbus
+
+# Add peripherals that are defined in C#.  You must restart Renode
+# if you modify these files.
+i @peripherals/ABRTCMC.cs
+i @peripherals/BetrustedEcI2C.cs
+i @peripherals/BetrustedSocI2C.cs
+i @peripherals/BetrustedSpinor.cs
+i @peripherals/BetrustedWatchdog.cs
+i @peripherals/BQ24157.cs
+i @peripherals/BQ27421.cs
+i @peripherals/BtEvents.cs
+i @peripherals/ComConnector.cs
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComPeripheral"
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComController"
+i @peripherals/ComEc.cs
+i @peripherals/ComSoC.cs
+i @peripherals/EcPower.cs
+i @peripherals/EcWifi.cs
+i @peripherals/engine.cs
+i @peripherals/Jtag.cs
+i @peripherals/keyboard.cs
+i @peripherals/keyrom.cs
+i @peripherals/LiteX_Timer_32.cs
+i @peripherals/LM3509.cs
+i @peripherals/LSM6DS3.cs
+i @peripherals/memlcd.cs
+i @peripherals/MXIC_MX66UM1G45G.cs
+i @peripherals/sha512.cs
+i @peripherals/spinor_soft_int.cs
+i @peripherals/ticktimer.cs
+i @peripherals/trng_kernel.cs
+i @peripherals/trng_server.cs
+i @peripherals/TLV320AIC3100.cs
+i @peripherals/TUSB320LAI.cs
+i @peripherals/WF200.cs
+i @peripherals/wfi.cs
+
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.CPU.VexRiscv"
+i @peripherals/vexriscv-aes.cs
+
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.Timers.Betrusted.TickTimer"
+i @peripherals/susres.cs
+
+# Create the COM SPI bus
+emulation CreateComConnector "com"
+
+############### Define the Betrusted SoC ###############
+mach create "SoC"
+machine LoadPlatformDescription @soc/betrusted-soc.repl
+
+machine StartGdbServer 3333 true
+showAnalyzer uart
+showAnalyzer console
+showAnalyzer app_uart
+showAnalyzer memlcd
+
+# sysbus LogPeripheralAccess engine true
+# sysbus LogPeripheralAccess sha512 true
+# sysbus LogPeripheralAccess i2c true
+# sysbus LogPeripheralAccess trng_kernel true
+
+sysbus Tag <0xB0000000, 0xB0006000> "Framebuffer"
+
+# logLevel -1 keyboard
+# logLevel -1 ticktimer
+# logLevel -1 engine
+# logLevel -1 i2c
+# logLevel -1 i2c.abracom_rtc
+# logLevel -1 sha512
+# logLevel -1 sysbus.spinor.flash
+# sysbus LogPeripheralAccess spinor true
+
+# Silence GPIO
+sysbus SilenceRange <0xf0003000, 0xF0003FFF>
+# Silence POWER
+sysbus SilenceRange <0xF0014000 100>
+
+# Attach the flash backing to the filesystem
+sysbus.spinor.flash BackingFile $ORIGIN/../tools/pddb-images/renode.bin
+
+# Load the SPI flash into RAM
+sysbus LoadBinary @../utralib/renode/soc_csr.bin 0x20000000
+
+# Connect the SoC to the SPI bus
+connector Connect sysbus.com com
+
+# The macro `reset` gets called implicitly when running `machine Reset`
+macro reset
+"""
+    #sysbus LoadBinary @flash-formatted.bin 0x20000000
+    sysbus LoadBinary @../target/riscv32imac-unknown-xous-elf/release/loader.bin 0x20500000
+    sysbus LoadBinary @../target/riscv32imac-unknown-xous-elf/release/xous.img 0x20980000
+    sysbus LoadBinary @../target/riscv32imac-unknown-xous-elf/release/swap.img 0x21200000
+    # Set $a0 to point at the args binary
+    cpu SetRegisterUnsafe 10 0x20980000
+    cpu PC 0x20501000
+"""
+
+# Connect the serial port to an Ethernet port
+emulation CreateServerSocketTerminal 8888 "kernel" False
+connector Connect sysbus.uart kernel
+
+# Connect the `app_uart` port -- which is the port on which
+# the Xous gdbserver runs -- to TCP port 3456, to allow for
+# application-aware debugging
+emulation CreateServerSocketTerminal 3456 "gdb" False
+connector Connect sysbus.app_uart gdb
+
+runMacro $reset
+
+mach clear
+
+############### Define the Betrusted EC ###############
+mach create "EC"
+machine LoadPlatformDescription @ec/betrusted-ec.repl
+
+# logLevel -1 i2c
+# logLevel -1 i2c.bq27421
+# logLevel -1 wifi
+# logLevel 0 wifi.wf200
+# sysbus LogPeripheralAccess wifi true
+
+machine StartGdbServer 3334 true
+showAnalyzer uart
+
+# Connect the EC to the SPI bus
+connector Connect sysbus.com com
+
+macro reset
+"""
+    sysbus LoadBinary @ec/bt-ec.bin 0x20000000
+    sysbus LoadBinary @ec/wf200_fw.bin 0x2009C000
+    sysbus LoadBinary @ec/loader.bin 0x00000000
+    cpu PC 0
+    cpu SP 0x1001FFFC
+"""
+runMacro $reset
+
+mach clear
+
+start
