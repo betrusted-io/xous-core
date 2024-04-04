@@ -8,6 +8,7 @@ use std::fs::File;
 
 use clap::{App, Arg};
 use tools::elf::{read_minielf, read_program};
+use tools::swap_writer::SwapWriter;
 use tools::tags::bflg::Bflg;
 use tools::tags::inie::IniE;
 use tools::tags::inif::IniF;
@@ -165,6 +166,13 @@ fn main() {
                 .takes_value(true)
                 .value_name("OFFSET:SIZE")
                 .help("Swap offset and size, in the form of [offset]:[size]; note: offset and size have platform-dependent interpretations")
+        )
+        .arg(
+            Arg::with_name("swap-name")
+                .long("swap-name")
+                .takes_value(true)
+                .value_name("OUTPUT")
+                .help("Output file to store swap image data")
         )
         .arg(
             Arg::with_name("debug")
@@ -342,6 +350,7 @@ fn main() {
     }
 
     let mut args = XousArguments::new(ram_config.offset, ram_config.size, ram_config.name);
+    let mut swap_args: Option<XousArguments> = None;
 
     if !ram_config.regions.is_empty() {
         if let Some(s) = swap {
@@ -360,6 +369,7 @@ fn main() {
             }
             // Note that other configurations don't split RAM, since the swap is provisioned directly
             // in hardware, and thus, no post-processing is required.
+            swap_args = Some(XousArguments::new(s.offset, s.size, s.name));
 
             args.add(s);
             args.add(ram_config.regions);
@@ -412,19 +422,23 @@ fn main() {
     }
 
     if let Some(init_paths) = matches.values_of("inis") {
-        for init_path in init_paths {
-            let program_name = std::path::Path::new(init_path);
-            process_names.set(
-                pid,
-                program_name
-                    .file_stem()
-                    .expect("program had no name")
-                    .to_str()
-                    .expect("program name is not valid utf-8"),
-            );
-            pid += 1;
-            let init = read_minielf(init_path).expect("couldn't parse init file");
-            args.add(IniS::new(init.entry_point, init.sections, init.program, init.alignment_offset));
+        if let Some(ref mut sargs) = swap_args {
+            for init_path in init_paths {
+                let program_name = std::path::Path::new(init_path);
+                process_names.set(
+                    pid,
+                    program_name
+                        .file_stem()
+                        .expect("program had no name")
+                        .to_str()
+                        .expect("program name is not valid utf-8"),
+                );
+                pid += 1;
+                let init = read_minielf(init_path).expect("couldn't parse init file");
+                sargs.add(IniS::new(init.entry_point, init.sections, init.program, init.alignment_offset));
+            }
+        } else {
+            println!("Warning: inis regions specified, but no swap region specified. Ignoring inis regions!");
         }
     }
 
@@ -452,6 +466,18 @@ fn main() {
 
     println!("Arguments: {}", args);
 
+    if let Some(mut sargs) = swap_args {
+        let mut swap_buffer = SwapWriter::new();
+        sargs.write(&mut swap_buffer).expect("Couldn't write out swap args");
+
+        let swap_filename = matches.value_of("swap-name").expect("swap filename not present");
+        let sf = File::create(swap_filename)
+            .unwrap_or_else(|_| panic!("Couldn't create output file {}", swap_filename));
+        swap_buffer.encrypt_to(sf).expect("Couldn't flush swap buffer to disk");
+
+        println!("Swap arguments: {}", sargs);
+        println!("Swap data created in file {}", swap_filename);
+    }
     println!("Runtime will require {} bytes to track memory allocations", ram_config.memory_required);
     if let Some(s) = swap {
         println!("Runtime will also require {} bytes to track swap", s.size / 4096);
