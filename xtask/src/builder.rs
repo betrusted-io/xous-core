@@ -933,7 +933,18 @@ impl Builder {
         memory_spec: Vec<String>,
     ) -> Result<PathBuf, DynError> {
         let stream = self.stream.as_str();
-        let mut args = vec!["run", "--package", "tools", "--bin", "create-image", "--"];
+        let mut args = vec!["run", "--package", "tools", "--bin", "create-image"];
+        args.push("--features");
+        if self.utra_target.contains("renode") {
+            args.push("renode");
+        } else if self.utra_target.contains("precursor") {
+            args.push("precursor");
+        } else if self.utra_target.contains("atsama5d2") {
+            args.push("atsama5d2");
+        } else if self.utra_target.contains("cramium-soc") {
+            args.push("cramium-soc")
+        }
+        args.push("--");
 
         let mut output_file = PathBuf::new();
         output_file.push("target");
