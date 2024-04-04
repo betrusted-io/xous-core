@@ -54,6 +54,8 @@ impl SwapHeader {
 impl SwapWriter {
     pub fn new() -> Self { SwapWriter { buffer: Cursor::new(Vec::new()) } }
 
+    /// Take the swap file and wrap it data structures that facilitate per-device encryption
+    /// after deployment to a user device.
     pub fn encrypt_to<T>(&mut self, mut f: T) -> Result<usize>
     where
         T: Write + Seek,
