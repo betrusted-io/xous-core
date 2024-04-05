@@ -5,10 +5,10 @@ use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Swap {
-    /// Starting offset (in bytes)
+    /// Starting offset (in bytes) of the swap RAM
     pub offset: u32,
 
-    /// Length (in bytes)
+    /// Total swap length (in bytes) - not all is usable, as a portion is reserved for the MAC codes
     pub size: u32,
 
     /// Region name (as a type)
@@ -18,8 +18,8 @@ pub struct Swap {
     /// by the device upon completion of the keying ceremony.
     pub key: [u8; 32],
 
-    /// Unused
-    _padding: u32,
+    /// Starting offset of swap in FLASH
+    pub offset_flash: u32,
 }
 
 impl fmt::Display for Swap {
@@ -37,7 +37,8 @@ impl Swap {
             size,
             name: u32::from_le_bytes(*b"Swap") as XousArgumentCode,
             key: [0u8; 32],
-            _padding: 0,
+            // location for swap offset in FLASH (for precursor)
+            offset_flash: 0x21200000,
         }
     }
 }
@@ -53,7 +54,7 @@ impl XousArgument for Swap {
         output.write_all(&self.size.to_le_bytes())?;
         output.write_all(&self.name.to_le_bytes())?;
         output.write_all(&self.key)?;
-        output.write_all(&0u32.to_le_bytes())?;
+        output.write_all(&self.offset_flash.to_le_bytes())?;
         written += 4 * 4 + 32;
         Ok(written)
     }
