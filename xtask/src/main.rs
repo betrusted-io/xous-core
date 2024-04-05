@@ -247,6 +247,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 builder.set_swap(0x4080_0000, 8 * 1024 * 1024);
             }
             builder.target_renode();
+            builder.add_loader_feature("debug-print");
+
             // It is important that this is the first service added, because the swapper *must* be in PID 2
             builder.add_service("xous-swapper", LoaderRegion::Ram);
             builder.add_kernel_feature("swap");
