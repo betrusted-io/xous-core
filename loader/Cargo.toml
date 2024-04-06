@@ -78,4 +78,4 @@ simulation-only = []
 board-bringup = []
 #default = ["debug-print"]
 resume = []                                # suspend/resume pathway code
-default = ["debug-print", "board-bringup"]
+default = []
