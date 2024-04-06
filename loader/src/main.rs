@@ -127,7 +127,10 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
     read_initial_config(&mut cfg);
 
     #[cfg(feature = "swap")]
-    let mut swap = SwapHal::new(&cfg);
+    {
+        cfg.swap_hal = SwapHal::new(&cfg);
+        read_swap_config(&mut cfg);
+    }
 
     // check to see if we are recovering from a clean suspend or not
     #[cfg(feature = "resume")]
@@ -375,6 +378,26 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
 
     assert!(kernel_seen, "no kernel definition");
     assert!(init_seen, "no initial programs found");
+}
+
+#[cfg(feature = "swap")]
+pub fn read_swap_config(cfg: &mut BootConfig) {
+    // Read in the swap arguments: should be located at beginning of the first page of swap.
+    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_page_at(0);
+    let swap_args = KernelArguments::new(page0.as_ptr() as *const usize);
+    for tag in swap_args.iter() {
+        if tag.name == u32::from_le_bytes(*b"IniS") {
+            assert!(tag.size >= 4, "invalid Init size");
+            cfg.init_process_count += 1;
+        } else if tag.name == u32::from_le_bytes(*b"XArg") {
+            // these are actually specified inside the `Swap` arg, this is just
+            // a mirror because this argument is added by default by the image creator
+            println!("swap start: {:x}", tag.data[2]);
+            println!("swap size:  {:x}", tag.data[3]);
+        } else {
+            println!("Unhandled argument in swap: {:x}", tag.name);
+        }
+    }
 }
 
 /// Checks a reserved area of RAM for a pattern with a pre-defined mathematical
