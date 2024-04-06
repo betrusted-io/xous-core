@@ -42,6 +42,7 @@ impl SwapHeader {
         data.write(&(self.mac_offset as u32).to_le_bytes())?; // LE because this is a size field
 
         // serialize the AAD
+        assert!(self.aad.len() < 64, "AAD is limited to 64 bytes");
         data.write(&(self.aad.len() as u32).to_le_bytes())?; // LE because this is a size field
         data.write(&self.aad)?; // BE because this is cryptographic matter
 
@@ -82,10 +83,14 @@ impl SwapWriter {
             nonce_vec.extend_from_slice(&(offset as u32).to_be_bytes());
             nonce_vec.extend_from_slice(&header.partial_nonce.to_be_bytes());
             let nonce = Nonce::from_slice(&nonce_vec);
+            // println!("nonce: {:x?}", nonce);
+            // println!("aad: {:x?}", header.aad);
             let enc = cipher
                 .encrypt(nonce, Payload { aad: &header.aad, msg: &padded_block })
                 .expect("couldn't encrypt block");
             assert!(enc.len() == 0x1010);
+            // println!("data: {:x?}", &enc[..32]);
+            // println!("tag: {:x?}", &enc[0x1000..]);
             f.write(&enc[..0x1000])?;
             macs.extend_from_slice(&enc[0x1000..]);
         }
