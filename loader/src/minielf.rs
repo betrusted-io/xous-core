@@ -355,6 +355,7 @@ impl MiniElf {
 
                 // --- map FLASH pages to virtual memory ---
                 // TODO: handle mapping of swap-located pages to virtual memory
+                #[cfg(feature = "swap")]
                 todo!("Handle swap-located pages mapping into virtual memory");
                 while pages_to_map > 0 {
                     let map_phys_addr = (image_phys_base + section_map_phys_offset) & !(PAGE_SIZE - 1);
