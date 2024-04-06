@@ -38,12 +38,12 @@ impl SwapHeader {
         // note that the nonce is in big-endian format, as is expected for cryptographic matter
         data.write(&self.partial_nonce.to_be_bytes())?;
 
+        // serialize the MAC data offset
+        data.write(&(self.mac_offset as u32).to_le_bytes())?; // LE because this is a size field
+
         // serialize the AAD
         data.write(&(self.aad.len() as u32).to_le_bytes())?; // LE because this is a size field
         data.write(&self.aad)?; // BE because this is cryptographic matter
-
-        // serialize the MAC data offset
-        data.write(&(self.mac_offset as u32).to_le_bytes())?; // LE because this is a size field
 
         output[..data.position() as usize].copy_from_slice(&data.into_inner());
 
