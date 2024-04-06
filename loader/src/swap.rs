@@ -9,14 +9,15 @@ pub struct SwapDescriptor {
     pub flash_offset: u32,
 }
 
+#[derive(Debug)]
 #[repr(C)]
 pub struct SwapSourceHeader {
     pub version: u32,
     pub parital_nonce: [u8; 8],
     pub mac_offset: u32,
     pub aad_len: u32,
-    // consumes up to the remainder of the page
-    pub aad: [u8; 4076],
+    // aad is limited to 64 bytes!
+    pub aad: [u8; 64],
 }
 
 /// An aligned, raw-page structure
