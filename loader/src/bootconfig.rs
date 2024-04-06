@@ -3,6 +3,8 @@ use core::mem;
 #[cfg(not(feature = "atsama5d27"))]
 use core::num::NonZeroUsize;
 
+#[cfg(feature = "swap")]
+use crate::swap::SwapDescriptor;
 use crate::*;
 
 /// In-memory copy of the configuration page. Stage 1 sets up the gross structure,
@@ -51,6 +53,19 @@ pub struct BootConfig {
 
     /// The number of 'Init' tags discovered
     pub init_process_count: usize,
+
+    /// Swap HAL
+    #[cfg(feature = "swap")]
+    pub swap_hal: Option<SwapHal>,
+
+    /// Swap descriptor
+    #[cfg(feature = "swap")]
+    pub swap: Option<&'static SwapDescriptor>,
+
+    /// Swap root page table. Array of root page tables, one per process.
+    /// Kernel does not get swap, so the first entry belongs to PID 2.
+    #[cfg(feature = "swap")]
+    pub swap_page_table: &'static mut [&'static mut PageTable],
 }
 
 impl Default for BootConfig {
@@ -68,6 +83,12 @@ impl Default for BootConfig {
             runtime_page_tracker: Default::default(),
             init_process_count: 0,
             processes: Default::default(),
+            #[cfg(feature = "swap")]
+            swap_hal: None,
+            #[cfg(feature = "swap")]
+            swap: None,
+            #[cfg(feature = "swap")]
+            swap_page_table: Default::default(),
         }
     }
 }
