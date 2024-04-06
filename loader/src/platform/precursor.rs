@@ -1,3 +1,8 @@
+#[cfg(feature = "swap")]
+pub mod swap;
+#[cfg(feature = "swap")]
+pub use swap::*;
+
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_EXT_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_EXT_MEM;
 

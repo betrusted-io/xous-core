@@ -1,10 +1,17 @@
 use cramium_hal::iox::{Iox, IoxDir, IoxEnable, IoxFunction, IoxPort};
-use cramium_hal::sce;
 use cramium_hal::udma;
 use utralib::generated::*;
 
 pub const RAM_SIZE: usize = utralib::generated::HW_SRAM_MEM_LEN;
 pub const RAM_BASE: usize = utralib::generated::HW_SRAM_MEM;
+
+// Locate the hard-wired IFRAM allocations for UDMA
+pub const UART_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
+// RAM needs two buffers of 1k + 16 bytes = 2048 + 16 = 2064 bytes; round up to one page
+pub const SPIM_RAM_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 2 * 4096;
+// Flash will be released after the loader is done: it's only accessed to copy the IniS sectors into swap,
+// then abandoned. It needs 4096 bytes for Rx, and 0 bytes for Tx + 16 bytes for cmd.
+pub const SPIM_FLASH_IFRAM_ADDR: usize = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4 * 4096;
 
 // location of kernel, as offset from the base of ReRAM. This needs to match up with what is in link.x.
 pub const KERNEL_OFFSET: usize = 0x28000;
@@ -121,7 +128,7 @@ pub fn early_init() {
     // the address of the UART buffer is "hard-allocated" at an offset one page from the top of
     // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
     // for things to work.
-    let uart_buf_addr = utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN - 4096;
+    let uart_buf_addr = UART_IFRAM_ADDR;
     let mut udma_uart = unsafe {
         // safety: this is safe to call, because we set up clock and events prior to calling new.
         udma::Uart::get_handle(utra::udma_uart_0::HW_UDMA_UART_0_BASE, uart_buf_addr, uart_buf_addr)
