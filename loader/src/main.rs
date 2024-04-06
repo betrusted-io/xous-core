@@ -22,6 +22,8 @@ mod murmur3;
 mod phase1;
 mod phase2;
 mod platform;
+#[cfg(feature = "swap")]
+mod swap;
 
 use core::{mem, ptr, slice};
 
@@ -31,6 +33,8 @@ use consts::*;
 use minielf::*;
 use phase1::{phase_1, InitialProcess};
 use phase2::{phase_2, ProgramDescription};
+#[cfg(feature = "swap")]
+use platform::SwapHal;
 
 pub type XousPid = u8;
 pub const PAGE_SIZE: usize = 4096;
@@ -121,6 +125,9 @@ fn boot_sequence(args: KernelArguments, _signature: u32, fs_prehash: [u8; 64]) -
 
     let mut cfg = BootConfig { base_addr: args.base as *const usize, args, ..Default::default() };
     read_initial_config(&mut cfg);
+
+    #[cfg(feature = "swap")]
+    let mut swap = SwapHal::new(&cfg);
 
     // check to see if we are recovering from a clean suspend or not
     #[cfg(feature = "resume")]
@@ -354,13 +361,15 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
             assert!(!kernel_seen, "kernel appears twice");
             assert!(tag.size as usize == mem::size_of::<ProgramDescription>(), "invalid XKrn size");
             kernel_seen = true;
-        } else if tag.name == u32::from_le_bytes(*b"IniE")
-            || tag.name == u32::from_le_bytes(*b"IniF")
-            || tag.name == u32::from_le_bytes(*b"IniS")
-        {
+        } else if tag.name == u32::from_le_bytes(*b"IniE") || tag.name == u32::from_le_bytes(*b"IniF") {
             assert!(tag.size >= 4, "invalid Init size");
             init_seen = true;
             cfg.init_process_count += 1;
+        }
+        #[cfg(feature = "swap")]
+        if tag.name == u32::from_le_bytes(*b"Swap") {
+            // safety: the image creator guarantees this data is aligned and initialized properly
+            cfg.swap = Some(unsafe { &*(tag.data.as_ptr() as *const crate::swap::SwapDescriptor) });
         }
     }
 
