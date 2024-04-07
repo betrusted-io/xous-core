@@ -269,4 +269,9 @@ impl SwapHal {
             Err(e) => panic!("Decryption error in swap: {:?}", e),
         }
     }
+
+    /// Grabs a slice of the internal buffer. Useful for re-using the decrypted page
+    /// between elements of the bootloader (saving us from redundant decrypt ops),
+    /// but extremely unsafe because we have to track the use of this buffer manually.
+    pub unsafe fn get_decrypt(&self) -> &[u8] { &self.buf.data }
 }
