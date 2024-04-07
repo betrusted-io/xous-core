@@ -18,6 +18,7 @@ pub struct SwapHal {
     dst_data_area: &'static mut [u8],
     dst_mac_area: &'static mut [u8],
     dst_cipher: Aes256GcmSiv,
+    buf_addr: usize,
     buf: RawPage,
 }
 
@@ -80,6 +81,7 @@ impl SwapHal {
                     )
                 },
                 dst_cipher: Aes256GcmSiv::new(&ram_swap_key.into()),
+                buf_addr: 0,
                 buf: RawPage { data: [0u8; 4096] },
             };
             hal.partial_nonce.copy_from_slice(&ssh.parital_nonce);
@@ -91,7 +93,8 @@ impl SwapHal {
 
     pub fn decrypt_src_page_at(&mut self, offset: usize) -> &[u8] {
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
-        // println!("data area: {:x?}", &self.data_area[..4]);
+        self.buf_addr = offset;
+        // println!("data area: {:x?}", &self.src_data_area[..4]);
         // println!("offset: {:x}", offset);
         self.buf.data.copy_from_slice(&self.src_data_area[offset..offset + 4096]);
         let mut nonce = [0u8; size_of::<Nonce>()];
@@ -114,6 +117,8 @@ impl SwapHal {
         }
     }
 
+    pub fn decrypt_page_addr(&self) -> usize { self.buf_addr }
+
     pub fn buf_as_mut(&mut self) -> &mut [u8] { &mut self.buf.data }
 
     pub fn buf_as_ref(&self) -> &[u8] { &self.buf.data }
@@ -121,6 +126,7 @@ impl SwapHal {
     /// Swap count is fixed at 0 by this routine. The data to be encrypted is provided in
     /// `buf`, and is replaced with part of the encrypted data upon completion of the routine.
     pub fn encrypt_swap_to(&mut self, buf: &mut [u8], dest_offset: usize, src_vaddr: usize, src_pid: u8) {
+        println!("enc_to: pid: {}, src_vaddr: {:x} dest_offset: {:x}", src_pid, src_vaddr, dest_offset);
         assert!(buf.len() == PAGE_SIZE);
         assert!(dest_offset & (PAGE_SIZE - 1) == 0);
         let mut nonce = [0u8; size_of::<Nonce>()];

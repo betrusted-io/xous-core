@@ -35,6 +35,7 @@ pub struct SwapHal {
     swap_mac_start: usize,
     swap_mac_len: usize,
     dst_cipher: Aes256GcmSiv,
+    buf_addr: usize,
     buf: RawPage,
 }
 
@@ -274,6 +275,7 @@ impl SwapHal {
                 swap_mac_start: ram_size_actual,
                 swap_mac_len: mac_size,
                 dst_cipher: Aes256GcmSiv::new((&dest_key).into()),
+                buf_addr: 0,
                 buf,
             };
             hal.aad_storage[..ssh.aad_len as usize].copy_from_slice(&ssh.aad[..ssh.aad_len as usize]);
@@ -289,6 +291,7 @@ impl SwapHal {
 
     pub fn decrypt_src_page_at(&mut self, offset: usize) -> &[u8] {
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
+        self.buf_addr = offset;
         self.flash_spim.mem_read((self.image_start + offset) as u32, &mut self.buf.data);
         let mut nonce = [0u8; size_of::<Nonce>()];
         nonce[..4].copy_from_slice(&(offset as u32).to_be_bytes());
@@ -311,6 +314,8 @@ impl SwapHal {
             Err(e) => panic!("Decryption error from swap image: {:?}", e),
         }
     }
+
+    pub fn decrypt_page_addr(&self) -> usize { self.buf_addr }
 
     pub fn buf_as_mut(&mut self) -> &mut [u8] { &mut self.buf.data }
 
