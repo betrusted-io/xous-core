@@ -383,7 +383,7 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
 #[cfg(feature = "swap")]
 pub fn read_swap_config(cfg: &mut BootConfig) {
     // Read in the swap arguments: should be located at beginning of the first page of swap.
-    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_page_at(0);
+    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_src_page_at(0);
     let swap_args = KernelArguments::new(page0.as_ptr() as *const usize);
     for tag in swap_args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniS") {
