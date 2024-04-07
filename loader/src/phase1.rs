@@ -174,21 +174,26 @@ pub fn copy_args(cfg: &mut BootConfig) {
         //  - arguments are always guaranteed to be aligned to a word boundary by the image creator
         //  - arguments are fully initialized with no UB fields under this transformation
         // +2 is for the tag field
-        let arg_slice = unsafe {
-            core::slice::from_raw_parts(
-                &a as *const KernelArgument as *const usize,
-                a.size as usize / core::mem::size_of::<usize>() + 2,
-            )
-        };
-        println!(
-            "copying arg: 0x{:x}, size: {}. index: {}, len: {}",
-            a.name,
-            a.size,
-            arg_index,
-            arg_slice.len()
-        );
-        merged_arg_slice[arg_index..arg_index + arg_slice.len()].copy_from_slice(arg_slice);
-        arg_index += arg_slice.len();
+        if a.name == u32::from_le_bytes(*b"IniS") {
+            let arg_slice = unsafe {
+                core::slice::from_raw_parts(
+                    a.data.as_ptr().sub(2) as *const usize, // backup by 2 to accommodate the tag field
+                    a.size as usize / core::mem::size_of::<usize>() + 2,
+                )
+            };
+            println!(
+                "copying arg: 0x{:x}, size: {}. index: {}, len: {}, data: {:x?}",
+                a.name,
+                a.size,
+                arg_index,
+                arg_slice.len(),
+                arg_slice
+            );
+            merged_arg_slice[arg_index..arg_index + arg_slice.len()].copy_from_slice(arg_slice);
+            arg_index += arg_slice.len();
+        } else {
+            println!("Unhandled arg type: {:x}", a.name);
+        }
     }
 
     // redirect the arg buffer to point at the newly copied arguments
@@ -413,16 +418,92 @@ fn copy_processes(cfg: &mut BootConfig) {
             TagType::IniS => {
                 // if swap is not enabled, don't pull this code in, to keep the bootloader light-weight
                 #[cfg(feature = "swap")]
-                {
-                    // IniS does not necessarily exist in linear memory space.
+                if let Some(swap) = cfg.swap_hal.as_mut() {
+                    // IniS does not necessarily exist in linear memory space, so it requires special
+                    // handling. Instead of copying the IniS data into RAM, it's copied
+                    // into encrypted swap (e.g. the RAM area (again, not necessarily in
+                    // linear space) reserved for swap processes).
 
-                    // TODO: access IniS image and figure out what regions are "write" and allocate/copy
-                    // those into RAM. We do this because there isn't a 1:1 mapping of these to the
-                    // images on disk which creates a problem for the swapper.
+                    /*
+                    Example of an IniS section:
+                    1    IniS: entrypoint @ 00021e68, loaded from 00001114.  Sections:
+                    Physical offset in swap source image                     Destination range in virtual memory
+                             src_swap_img_addr                                          dst_page_vaddr
+                                  |                                                              |
+                                  v                                                              v
+                    Loaded from 00001114 - Section .gcc_except_table   4056 bytes loading into 00010114..000110ec flags: NONE
+                    Loaded from 000020ec - Section .rodata        19080 bytes loading into 000110f0..00015b78 flags: NONE
+                    Loaded from 00006b74 - Section .eh_frame_hdr   2172 bytes loading into 00015b78..000163f4 flags: EH_HEADER
+                    Loaded from 000073f0 - Section .eh_frame       7740 bytes loading into 000163f4..00018230 flags: EH_FRAME
+                    Loaded from 0000922c - Section .text          67428 bytes loading into 00019230..00029994 flags: EXECUTE
+                    Loaded from 00019990 - Section .data              4 bytes loading into 0002a994..0002a998 flags: WRITE
+                    Loaded from 00019994 - Section .sdata            32 bytes loading into 0002a998..0002a9b8 flags: WRITE
+                    Loaded from 000199b4 - Section .sbss             64 bytes loading into 0002a9b8..0002a9f8 flags: WRITE | NOCOPY
+                    Loaded from 000199f4 - Section .bss             532 bytes loading into 0002a9f8..0002ac0c flags: WRITE | NOCOPY
 
-                    // Then, for regions that *are* aligned, allocate them into the swapper's
-                    // memory space, and copy the data into swap.
-                    todo!("implement inis handling");
+                    Note that we have full control over what swap block we put things into, but the swap block's
+                    address offsets should have a 1:1 correlation to the *virtual* destination addresess. We track
+                    the current swap page with `working_page_swap_offset`.
+                    */
+
+                    _pid += 1;
+                    let mut working_page_swap_offset: Option<usize> = None;
+                    let mut working_buf = [0u8; 4096];
+
+                    println!("tag size: {:x}", tag.size);
+                    println!("tag data: {:x?}", &tag.data);
+                    let inis = MiniElf::new(&tag);
+                    let mut src_swap_img_addr = inis.load_offset as usize;
+
+                    println!("\n\n{} {} has {} sections", tag_type.to_str(), _pid, inis.sections.len());
+                    println!("Swap free page at swap addr: {:x}", cfg.swap_free_page,);
+
+                    let mut last_copy_vaddr = 0;
+                    let mut last_section_perfect_fit = false;
+
+                    for section in inis.sections.iter() {
+                        let flags = section.flags() as u8;
+
+                        let mut dst_page_vaddr = section.virt as usize;
+                        let mut bytes_to_copy = section.len();
+
+                        if let Some(swap_offset) = working_page_swap_offset {
+                            if (last_copy_vaddr & !(PAGE_SIZE - 1)) != (dst_page_vaddr & !(PAGE_SIZE - 1))
+                                || last_section_perfect_fit
+                            {
+                                swap.encrypt_swap_to(
+                                    &mut working_buf,
+                                    swap_offset,
+                                    dst_page_vaddr & !(PAGE_SIZE - 1),
+                                    _pid,
+                                );
+                                cfg.swap_free_page += 1;
+                                working_buf.fill(0);
+                                working_page_swap_offset = Some(cfg.swap_free_page);
+                            }
+                        } else {
+                            // very first time through the loop. working_buf is guaranteed to be zero.
+                            working_page_swap_offset = Some(cfg.swap_free_page);
+                            cfg.swap_free_page += 1;
+                        }
+
+                        // Decrypt the source image data and re-encrypt it to swap for the section at hand.
+                        //   - dst_page_vaddr is the virtual address of the section. We only care about this
+                        //     for tracking offsets in pages, at this stage.
+                        //   - working_page_swap_offset is the current destination swap RAM page
+                        //   - src_swap_img_addr is the offset of the section in source swap FLASH.
+                        //   - no_copy sections need to set the corresponding bytes in swap RAM to zero.
+                        //
+                        //
+                        while bytes_to_copy > 0 {
+                            todo!();
+                        }
+                        // set the vpage based on our current vpage. This allows us to allocate
+                        // a new vpage on the next iteration in case there is surprise padding in
+                        // the section load address.
+                        last_copy_vaddr = dst_page_vaddr;
+                    }
+                    println!("Done with sections");
                 }
             }
             TagType::XKrn => {
