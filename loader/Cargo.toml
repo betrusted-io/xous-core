@@ -32,6 +32,7 @@ xous-pio = { path = "../libs/xous-pio", optional = true, features = [
 aes-gcm-siv = { version = "0.11.1", default-features = false, features = [
     "aes",
 ], optional = true }
+crc = { version = "1.8.1", default-features = false }
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
