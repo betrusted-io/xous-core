@@ -228,6 +228,9 @@ pub fn copy_args(cfg: &mut BootConfig) {
     merged_arg_slice_u8[4..6].copy_from_slice(&digest.sum16().to_le_bytes());
 }
 
+#[cfg(feature = "swap")]
+fn remaining_in_page(addr: usize) -> usize { PAGE_SIZE - (addr & (PAGE_SIZE - 1)) }
+
 #[cfg(not(feature = "swap"))]
 pub fn copy_args(cfg: &mut BootConfig) {
     // Copy the args list to target RAM
@@ -449,6 +452,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                     _pid += 1;
                     let mut working_page_swap_offset: Option<usize> = None;
                     let mut working_buf = [0u8; 4096];
+                    let mut working_buf_dirty = false;
 
                     println!("tag size: {:x}", tag.size);
                     println!("tag data: {:x?}", &tag.data);
@@ -459,7 +463,6 @@ fn copy_processes(cfg: &mut BootConfig) {
                     println!("Swap free page at swap addr: {:x}", cfg.swap_free_page,);
 
                     let mut last_copy_vaddr = 0;
-                    let mut last_section_perfect_fit = false;
 
                     for section in inis.sections.iter() {
                         let flags = section.flags() as u8;
@@ -468,18 +471,19 @@ fn copy_processes(cfg: &mut BootConfig) {
                         let mut bytes_to_copy = section.len();
 
                         if let Some(swap_offset) = working_page_swap_offset {
-                            if (last_copy_vaddr & !(PAGE_SIZE - 1)) != (dst_page_vaddr & !(PAGE_SIZE - 1))
-                                || last_section_perfect_fit
-                            {
+                            if (last_copy_vaddr & !(PAGE_SIZE - 1)) != (dst_page_vaddr & !(PAGE_SIZE - 1)) {
+                                // handle case that the new section destination address is outside of the
+                                // current page
                                 swap.encrypt_swap_to(
                                     &mut working_buf,
-                                    swap_offset,
+                                    swap_offset * 0x1000,
                                     dst_page_vaddr & !(PAGE_SIZE - 1),
                                     _pid,
                                 );
-                                cfg.swap_free_page += 1;
                                 working_buf.fill(0);
                                 working_page_swap_offset = Some(cfg.swap_free_page);
+                                let mut working_buf_dirty = false;
+                                cfg.swap_free_page += 1;
                             }
                         } else {
                             // very first time through the loop. working_buf is guaranteed to be zero.
@@ -496,12 +500,80 @@ fn copy_processes(cfg: &mut BootConfig) {
                         //
                         //
                         while bytes_to_copy > 0 {
-                            todo!();
+                            // here are the cases we have to handle:
+                            //   - the available decrypted data is larger than the target region to encrypt
+                            //   - the available decrypted data is smaller than the target region to encrypt
+                            //   - the available decrypted data is equal to the target region to encrypt
+                            let src_swap_img_page = src_swap_img_addr & !(PAGE_SIZE - 1);
+                            let src_swap_img_offset = src_swap_img_addr & (PAGE_SIZE - 1);
+                            // it's almost free to check, so we check at every loop start
+                            if swap.decrypt_page_addr() != src_swap_img_page {
+                                swap.decrypt_src_page_at(src_swap_img_page);
+                            }
+                            let decrypt_avail = remaining_in_page(src_swap_img_addr);
+                            let dst_page_avail = remaining_in_page(dst_page_vaddr);
+                            let dst_page_offset = dst_page_vaddr & (PAGE_SIZE - 1);
+                            let copyable = if decrypt_avail >= dst_page_avail {
+                                dst_page_avail.min(bytes_to_copy)
+                            } else {
+                                decrypt_avail.min(bytes_to_copy)
+                            };
+                            if !section.no_copy() {
+                                working_buf[dst_page_offset..dst_page_offset + copyable].copy_from_slice(
+                                    &swap.buf_as_ref()[src_swap_img_offset..src_swap_img_offset + copyable],
+                                );
+                                working_buf_dirty = true;
+                            } else {
+                                // do nothing, because working_buff is filled with 0 on alloc
+                                // but, mark the buffer as dirty, because, it still needs to be committed
+                                working_buf_dirty = true;
+                            }
+                            bytes_to_copy -= copyable;
+                            dst_page_vaddr += copyable;
+                            src_swap_img_addr += copyable;
+                            // if we filled up the destination, grab another page.
+                            if (dst_page_vaddr & (PAGE_SIZE - 1)) == 0 {
+                                // we copied exactly dst_page_avail, causing us to wrap around to 0
+                                // write the existing page to swap, and allocate a new swap page
+                                swap.encrypt_swap_to(
+                                    &mut working_buf,
+                                    working_page_swap_offset.take().unwrap() * 0x1000,
+                                    dst_page_vaddr & !(PAGE_SIZE - 1),
+                                    _pid,
+                                );
+                                working_buf.fill(0);
+                                working_page_swap_offset = Some(cfg.swap_free_page);
+                                let mut working_buf_dirty = false;
+                                cfg.swap_free_page += 1;
+                            }
                         }
                         // set the vpage based on our current vpage. This allows us to allocate
                         // a new vpage on the next iteration in case there is surprise padding in
                         // the section load address.
                         last_copy_vaddr = dst_page_vaddr;
+
+                        if true
+                        /* VDBG */
+                        {
+                            println!("Looping to the next section (swap)");
+                            println!(
+                                "  swap_free_page: {:x}, dst_page_vaddr: {:x}, src_swap_img_addr: {:x}",
+                                cfg.swap_free_page, dst_page_vaddr, src_swap_img_addr,
+                            );
+                            println!("  last_copy_vaddr: {:x}", last_copy_vaddr);
+                        }
+                    }
+                    // flush the encryption buffer
+                    if working_buf_dirty {
+                        swap.encrypt_swap_to(
+                            &mut working_buf,
+                            working_page_swap_offset.take().unwrap() * 0x1000,
+                            last_copy_vaddr & !(PAGE_SIZE - 1),
+                            _pid,
+                        );
+                    } else {
+                        // we didn't use the current page, de-allocate it
+                        cfg.swap_free_page -= 1;
                     }
                     println!("Done with sections");
                 }
