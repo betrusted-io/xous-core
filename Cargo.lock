@@ -2798,6 +2798,7 @@ dependencies = [
  "curve25519-dalek-loader",
  "ed25519-dalek-loader",
  "lazy_static",
+ "rand_chacha 0.3.1",
  "sha2-loader",
  "utralib 0.1.24",
  "xous-pio",
