@@ -80,7 +80,7 @@ impl SwapWriter {
             };
             let mut nonce_vec = Vec::new();
             // use BE encoding because nonce is cryptographic matter
-            nonce_vec.extend_from_slice(&(offset as u32).to_be_bytes());
+            nonce_vec.extend_from_slice(&((offset as u32) * 0x1000).to_be_bytes());
             nonce_vec.extend_from_slice(&header.partial_nonce.to_be_bytes());
             let nonce = Nonce::from_slice(&nonce_vec);
             // println!("nonce: {:x?}", nonce);
