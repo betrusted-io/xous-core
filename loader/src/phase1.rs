@@ -102,7 +102,7 @@ pub fn allocate_regions(cfg: &mut BootConfig) {
         rpt_pages += region_length_rounded / PAGE_SIZE;
     }
 
-    // Round the tracker to a multiple of the page size, so as to keep memory
+    // Round the tracker to a multiple of the pointer size, so as to keep memory
     // operations fast.
     rpt_pages = (rpt_pages + mem::size_of::<usize>() - 1) & !(mem::size_of::<usize>() - 1);
 
@@ -121,6 +121,7 @@ pub fn allocate_regions(cfg: &mut BootConfig) {
 
 pub fn allocate_processes(cfg: &mut BootConfig) {
     let process_count = cfg.init_process_count + 1;
+    println!("Allocating tables for {} processes", process_count);
     let table_size = process_count * mem::size_of::<InitialProcess>();
     // Allocate the process table
     cfg.init_size += table_size;
@@ -132,6 +133,97 @@ pub fn allocate_processes(cfg: &mut BootConfig) {
         unsafe { slice::from_raw_parts_mut(processes as *mut InitialProcess, process_count as usize) };
 }
 
+#[cfg(feature = "swap")]
+pub fn copy_args(cfg: &mut BootConfig) {
+    // With swap enabled, copy_args also merges the IniS arguments from the swap region into the kernel
+    // arguments, and patches the length field accordingly.
+
+    // Read in the swap arguments: should be located at beginning of the first page of swap.
+    // Safety: only safe because we know that the decrypt was setup by read_swap_config(), and no pages
+    // were decrypted between then and now!
+    let page0 = unsafe { cfg.swap_hal.as_mut().unwrap().get_decrypt() };
+    let swap_args = KernelArguments::new(page0.as_ptr() as *const usize);
+    let mut j = swap_args.iter();
+    // skip the first argument
+    let swap_xarg = j.next().expect("couldn't read initial swap tag");
+
+    // Merge the args list to target RAM
+    // Reserve space for the primary arg list + swap args - swap's XArg structure (7 words long)
+    println!("length of swap arg: {}", swap_xarg.data[0] as usize);
+    let final_len = cfg.args.size() + swap_xarg.data[0] as usize - 7;
+    cfg.init_size += final_len;
+    let runtime_arg_buffer = cfg.get_top();
+    // places the boot image kernel arguments
+    unsafe {
+        #[allow(clippy::cast_ptr_alignment)]
+        memcpy(runtime_arg_buffer, cfg.args.base as *const usize, cfg.args.size() as usize)
+    };
+    // safety: this should be aligned, allowing this conversion. Note that we do violate a safety condition
+    // in that we haven't fully initialized the region (the swap arg extension area is uninit), but I think
+    // it's OK because we will write only to that region (but I suppose in practice, Rust could assume the
+    // untouched data is 0 or something and try an optimization based on that).
+    let merged_arg_slice =
+        unsafe { core::slice::from_raw_parts_mut(runtime_arg_buffer as *mut usize, final_len) };
+    let mut arg_index = cfg.args.size();
+    println!("orig arg size: {}, new size: {}", cfg.args.size(), final_len);
+
+    // append the swap arguments, and patch the size field accordingly
+    for a in j {
+        // turn the argument into a raw slice
+        // this is safe because:
+        //  - arguments are always guaranteed to be aligned to a word boundary by the image creator
+        //  - arguments are fully initialized with no UB fields under this transformation
+        // +2 is for the tag field
+        let arg_slice = unsafe {
+            core::slice::from_raw_parts(
+                &a as *const KernelArgument as *const usize,
+                a.size as usize / core::mem::size_of::<usize>() + 2,
+            )
+        };
+        println!(
+            "copying arg: 0x{:x}, size: {}. index: {}, len: {}",
+            a.name,
+            a.size,
+            arg_index,
+            arg_slice.len()
+        );
+        merged_arg_slice[arg_index..arg_index + arg_slice.len()].copy_from_slice(arg_slice);
+        arg_index += arg_slice.len();
+    }
+
+    // redirect the arg buffer to point at the newly copied arguments
+    cfg.args = KernelArguments::new(runtime_arg_buffer);
+
+    // extract the new XArg field, pointing into RAM
+    let args = cfg.args;
+    let mut i = args.iter();
+    let xarg = i.next().expect("couldn't read initial tag");
+    // patch the total length of the arguments - just jam the value into the data field of the XArg by
+    // dead-reckoning to the offset
+    assert!(merged_arg_slice[2] == xarg.data[0] as usize); // sanity checks the dead-reckoning
+    merged_arg_slice[2] = arg_index;
+    use crc::{crc16, Hasher16};
+    // compute the new CRC
+    let mut digest = crc16::Digest::new(crc16::X25);
+    // safe because we know the entire region can map into a u8 slice with no UB
+    let xarg_data = unsafe {
+        core::slice::from_raw_parts(
+            xarg.data.as_ptr() as *const u8,
+            xarg.data.len() * core::mem::size_of::<u32>(),
+        )
+    };
+    digest.write(&xarg_data);
+    // patch the CRC
+    let mut merged_arg_slice_u8 = unsafe {
+        core::slice::from_raw_parts_mut(
+            runtime_arg_buffer as *mut u8,
+            final_len * core::mem::size_of::<u32>(),
+        )
+    };
+    merged_arg_slice_u8[4..6].copy_from_slice(&digest.sum16().to_le_bytes());
+}
+
+#[cfg(not(feature = "swap"))]
 pub fn copy_args(cfg: &mut BootConfig) {
     // Copy the args list to target RAM
     cfg.init_size += cfg.args.size();
@@ -319,15 +411,19 @@ fn copy_processes(cfg: &mut BootConfig) {
                 println!("Done with sections");
             }
             TagType::IniS => {
-                // IniS does not necessarily exist in linear memory space.
+                // if swap is not enabled, don't pull this code in, to keep the bootloader light-weight
+                #[cfg(feature = "swap")]
+                {
+                    // IniS does not necessarily exist in linear memory space.
 
-                // TODO: access IniS image and figure out what regions are "write" and allocate/copy
-                // those into RAM. We do this because there isn't a 1:1 mapping of these to the
-                // images on disk which creates a problem for the swapper.
+                    // TODO: access IniS image and figure out what regions are "write" and allocate/copy
+                    // those into RAM. We do this because there isn't a 1:1 mapping of these to the
+                    // images on disk which creates a problem for the swapper.
 
-                // Then, for regions that *are* aligned, allocate them into the swapper's
-                // memory space, and copy the data into swap.
-                todo!("implement inis handling");
+                    // Then, for regions that *are* aligned, allocate them into the swapper's
+                    // memory space, and copy the data into swap.
+                    todo!("implement inis handling");
+                }
             }
             TagType::XKrn => {
                 let prog = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
