@@ -66,6 +66,10 @@ pub struct BootConfig {
     /// Kernel does not get swap, so the first entry belongs to PID 2.
     #[cfg(feature = "swap")]
     pub swap_page_table: &'static mut [&'static mut PageTable],
+
+    /// Offset of the current free page in swap
+    #[cfg(feature = "swap")]
+    pub swap_free_page: usize,
 }
 
 impl Default for BootConfig {
@@ -89,6 +93,8 @@ impl Default for BootConfig {
             swap: None,
             #[cfg(feature = "swap")]
             swap_page_table: Default::default(),
+            #[cfg(feature = "swap")]
+            swap_free_page: 0,
         }
     }
 }
