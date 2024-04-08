@@ -210,10 +210,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // ----- renode configs --------
         Some("renode-image") => {
             builder.target_renode().add_services(&user_pkgs).add_apps(&get_cratespecs());
+            builder.add_loader_feature("resume");
+            // builder.add_loader_feature("debug-print");
         }
         Some("renode-image-debug") => {
             builder
                 .target_renode()
+                .add_loader_feature("resume")
                 .add_services(&user_pkgs)
                 .stream(BuildStream::Debug)
                 .add_apps(&get_cratespecs());
