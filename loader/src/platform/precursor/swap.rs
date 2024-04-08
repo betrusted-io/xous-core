@@ -3,7 +3,6 @@ use core::mem::size_of;
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
 use utralib::generated::*;
 
-use super::RAM_BASE;
 use crate::bootconfig::BootConfig;
 use crate::println;
 use crate::swap::*;
