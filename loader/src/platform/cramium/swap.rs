@@ -14,6 +14,7 @@ use crate::platform::{SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR};
 use crate::println;
 use crate::swap::*;
 use crate::PAGE_SIZE;
+use crate::SDBG;
 
 /// hard coded at offset 0 of SPI FLASH for now, until we figure out if and how to move this around.
 const SWAP_IMG_START: usize = 0;
@@ -232,8 +233,17 @@ impl SwapHal {
 
             // compute offsets for swap
             let mac_size = (swap.ram_size as usize / 4096) * size_of::<Tag>();
-            let mac_size_to_page = (mac_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
+            let mac_size_to_page = (mac_size + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
             let ram_size_actual = (swap.ram_size as usize & !(PAGE_SIZE - 1)) - mac_size_to_page;
+            if SDBG {
+                println!(
+                    "mac area size: {:x}, ram_size_actual: {:x}, swap.ram_size: {:x}, mac offset: {:x}",
+                    mac_size,
+                    ram_size_actual,
+                    swap.ram_size,
+                    swap.ram_offset as usize + ram_size_actual
+                );
+            }
 
             // generate a random key for swap
             let mut trng = sce::trng::Trng::new(utralib::generated::HW_TRNG_BASE as usize);
@@ -291,6 +301,9 @@ impl SwapHal {
 
     pub fn decrypt_src_page_at(&mut self, offset: usize) -> &[u8] {
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
+        assert!(offset >= 0x1000);
+        // compensate for the unencrypted header that is not included in the `src_data_area` slice
+        let offset = offset - 0x1000;
         self.buf_addr = offset;
         self.flash_spim.mem_read((self.image_start + offset) as u32, &mut self.buf.data);
         let mut nonce = [0u8; size_of::<Nonce>()];
@@ -334,7 +347,7 @@ impl SwapHal {
         let vpage_masked = src_vaddr & !(PAGE_SIZE - 1);
         nonce[9..12].copy_from_slice(&(vpage_masked as u32).to_be_bytes()[..3]);
         let aad: &[u8] = &[];
-        match self.src_cipher.encrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf) {
+        match self.dst_cipher.encrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf) {
             Ok(tag) => {
                 self.ram_spim.mem_ram_write(dest_offset as u32, buf);
                 self.ram_spim.mem_ram_write(
@@ -362,7 +375,7 @@ impl SwapHal {
         self.ram_spim
             .mem_read((self.swap_mac_start + (src_offset / PAGE_SIZE) * size_of::<Tag>()) as u32, &mut tag);
         self.ram_spim.mem_read(src_offset as u32, &mut self.buf.data);
-        match self.src_cipher.decrypt_in_place_detached(
+        match self.dst_cipher.decrypt_in_place_detached(
             Nonce::from_slice(&nonce),
             aad,
             &mut self.buf.data,

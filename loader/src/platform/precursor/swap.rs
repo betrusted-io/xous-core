@@ -7,6 +7,7 @@ use crate::bootconfig::BootConfig;
 use crate::println;
 use crate::swap::*;
 use crate::PAGE_SIZE;
+use crate::SDBG;
 
 pub struct SwapHal {
     src_data_area: &'static [u8],
@@ -33,8 +34,17 @@ impl SwapHal {
             // compute the MAC area needed for the total RAM size. This is a slight over-estimate
             // because once we remove the MAC area, we need even less storage, but it's a small error.
             let mac_size = (swap.ram_size as usize / 4096) * size_of::<Tag>();
-            let mac_size_to_page = (mac_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
+            let mac_size_to_page = (mac_size + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
             let ram_size_actual = (swap.ram_size as usize & !(PAGE_SIZE - 1)) - mac_size_to_page;
+            if SDBG {
+                println!(
+                    "mac area size: {:x}, ram_size_actual: {:x}, swap.ram_size: {:x}, mac offset: {:x}",
+                    mac_size,
+                    ram_size_actual,
+                    swap.ram_size,
+                    swap.ram_offset as usize + ram_size_actual
+                );
+            }
 
             // access the hardware TRNG manually to generate a per-boot random key for RAM swap
             let trng = CSR::new(utra::trng_kernel::HW_TRNG_KERNEL_BASE as *mut u32);
@@ -92,6 +102,9 @@ impl SwapHal {
 
     pub fn decrypt_src_page_at(&mut self, offset: usize) -> &[u8] {
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
+        assert!(offset >= 0x1000);
+        // compensate for the unencrypted header that is not included in the `src_data_area` slice
+        let offset = offset - 0x1000;
         self.buf_addr = offset;
         // println!("data area: {:x?}", &self.src_data_area[..4]);
         // println!("offset: {:x}", offset);
@@ -125,7 +138,7 @@ impl SwapHal {
     /// Swap count is fixed at 0 by this routine. The data to be encrypted is provided in
     /// `buf`, and is replaced with part of the encrypted data upon completion of the routine.
     pub fn encrypt_swap_to(&mut self, buf: &mut [u8], dest_offset: usize, src_vaddr: usize, src_pid: u8) {
-        println!("enc_to: pid: {}, src_vaddr: {:x} dest_offset: {:x}", src_pid, src_vaddr, dest_offset);
+        // println!("enc_to: pid: {}, src_vaddr: {:x} dest_offset: {:x}", src_pid, src_vaddr, dest_offset);
         assert!(buf.len() == PAGE_SIZE);
         assert!(dest_offset & (PAGE_SIZE - 1) == 0);
         let mut nonce = [0u8; size_of::<Nonce>()];
@@ -136,19 +149,23 @@ impl SwapHal {
         let vpage_masked = src_vaddr & !(PAGE_SIZE - 1);
         nonce[9..12].copy_from_slice(&(vpage_masked as u32).to_be_bytes()[..3]);
         let aad: &[u8] = &[];
-        match self.src_cipher.encrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf) {
+        match self.dst_cipher.encrypt_in_place_detached(Nonce::from_slice(&nonce), aad, buf) {
             Ok(tag) => {
                 self.dst_data_area[dest_offset..dest_offset + PAGE_SIZE].copy_from_slice(buf);
                 let mac_offset = (dest_offset / PAGE_SIZE) * size_of::<Tag>();
                 self.dst_mac_area[mac_offset..mac_offset + size_of::<Tag>()].copy_from_slice(tag.as_slice());
+                // println!("Nonce: {:x?}, tag: {:x?}", &nonce, tag.as_slice());
+                // println!("dst_mac_area: {:x?}", &self.dst_mac_area[..32]);
             }
             Err(e) => panic!("Encryption error to swap ram: {:?}", e),
         }
     }
 
-    /// Swap count is fixed at 0 by this routine. The data to be encrypted is
-    /// assumed to already be in `self.buf`
+    /// Used to examine contents of swap RAM. Swap count is fixed at 0 by this routine. Decrypted data is
+    /// returned as a slice.
     pub fn decrypt_swap_from(&mut self, src_offset: usize, dst_vaddr: usize, dst_pid: u8) -> &[u8] {
+        // println!("Decrypt swap:");
+        // println!("  offset: {:x}, vaddr: {:x}, pid: {}", src_offset, dst_vaddr, dst_pid);
         assert!(src_offset & (PAGE_SIZE - 1) == 0);
         let mut nonce = [0u8; size_of::<Nonce>()];
         nonce[0..4].copy_from_slice(&[0u8; 4]); // this is the `swap_count` field
@@ -161,8 +178,10 @@ impl SwapHal {
         let mut tag = [0u8; size_of::<Tag>()];
         let mac_offset = (src_offset / PAGE_SIZE) * size_of::<Tag>();
         tag.copy_from_slice(&self.dst_mac_area[mac_offset..mac_offset + size_of::<Tag>()]);
+        // println!("dst_mac_area: {:x?}", &self.dst_mac_area[..32]);
         self.buf.data.copy_from_slice(&self.dst_data_area[src_offset..src_offset + PAGE_SIZE]);
-        match self.src_cipher.decrypt_in_place_detached(
+        // println!("Nonce: {:x?}, tag: {:x?}", &nonce, &tag);
+        match self.dst_cipher.decrypt_in_place_detached(
             Nonce::from_slice(&nonce),
             aad,
             &mut self.buf.data,
