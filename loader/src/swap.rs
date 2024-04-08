@@ -33,8 +33,7 @@ pub struct SwapSourceHeader {
     pub aad: [u8; 64],
 }
 
-/// An aligned, raw-page structure
-#[repr(C, align(4096))]
+#[repr(C)]
 pub struct RawPage {
     pub data: [u8; 4096],
 }
